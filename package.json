@@ -1,14 +1,27 @@
 {
   "name": "Roxysu",
   "version": "1.0.50",
+  "overrides": {
+    "bun": "npm:bun-types"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "bun run --watch src/index.ts"
   },
   "dependencies": {
-    "elysia": "latest"
+    "@elysia/eden": "^1.4.10",
+    "@elysia/html": "^1.4.1",
+    "@elysiajs/static": "^1.4.10",
+    "elysia": "^1.4.29",
+    "react": "^19",
+    "react-dom": "^19",
+    "realm": "^20.2.0",
+    "tailwindcss": "4"
   },
   "devDependencies": {
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "bun-plugin-tailwind": "^0.1.2",
     "bun-types": "latest"
   },
   "module": "src/index.js"

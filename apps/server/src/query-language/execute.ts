@@ -123,24 +123,6 @@ function orderBySql(sortBy: PracticeSortBy, sortDir: PracticeSortDir): string {
   }
 }
 
-function accuracyBucketExpr(): string {
-  return `
-    CASE
-      WHEN ps.best_accuracy IS NULL THEN 'unplayed'
-      WHEN ps.best_accuracy < 0.1 THEN '0-10'
-      WHEN ps.best_accuracy < 0.2 THEN '10-20'
-      WHEN ps.best_accuracy < 0.3 THEN '20-30'
-      WHEN ps.best_accuracy < 0.4 THEN '30-40'
-      WHEN ps.best_accuracy < 0.5 THEN '40-50'
-      WHEN ps.best_accuracy < 0.6 THEN '50-60'
-      WHEN ps.best_accuracy < 0.7 THEN '60-70'
-      WHEN ps.best_accuracy < 0.8 THEN '70-80'
-      WHEN ps.best_accuracy < 0.9 THEN '80-90'
-      ELSE '90-100'
-    END
-  `;
-}
-
 function missesBucketExpr(): string {
   return `
     CASE
@@ -156,39 +138,6 @@ function missesBucketExpr(): string {
   `;
 }
 
-function scoreBucketExpr(): string {
-  return `
-    CASE
-      WHEN ps.best_score IS NULL THEN 'unplayed'
-      WHEN ps.best_score < 100000 THEN '0-100k'
-      WHEN ps.best_score < 200000 THEN '100-200k'
-      WHEN ps.best_score < 300000 THEN '200-300k'
-      WHEN ps.best_score < 400000 THEN '300-400k'
-      WHEN ps.best_score < 500000 THEN '400-500k'
-      WHEN ps.best_score < 600000 THEN '500-600k'
-      WHEN ps.best_score < 700000 THEN '600-700k'
-      WHEN ps.best_score < 800000 THEN '700-800k'
-      WHEN ps.best_score < 900000 THEN '800-900k'
-      WHEN ps.best_score < 1000000 THEN '900k-1M'
-      ELSE '1M+'
-    END
-  `;
-}
-
-const ACCURACY_BINS: Omit<DistributionBin, "count">[] = [
-  { key: "unplayed", label: "Unplayed" },
-  { key: "0-10", label: "0–10%" },
-  { key: "10-20", label: "10–20%" },
-  { key: "20-30", label: "20–30%" },
-  { key: "30-40", label: "30–40%" },
-  { key: "40-50", label: "40–50%" },
-  { key: "50-60", label: "50–60%" },
-  { key: "60-70", label: "60–70%" },
-  { key: "70-80", label: "70–80%" },
-  { key: "80-90", label: "80–90%" },
-  { key: "90-100", label: "90–100%" },
-];
-
 const MISSES_BINS: Omit<DistributionBin, "count">[] = [
   { key: "unplayed", label: "Unplayed" },
   { key: "51+", label: "51+" },
@@ -200,34 +149,40 @@ const MISSES_BINS: Omit<DistributionBin, "count">[] = [
   { key: "0", label: "0 (FC)" },
 ];
 
-const SCORE_BINS: Omit<DistributionBin, "count">[] = [
-  { key: "unplayed", label: "Unplayed" },
-  { key: "0-100k", label: "0–100k" },
-  { key: "100-200k", label: "100–200k" },
-  { key: "200-300k", label: "200–300k" },
-  { key: "300-400k", label: "300–400k" },
-  { key: "400-500k", label: "400–500k" },
-  { key: "500-600k", label: "500–600k" },
-  { key: "600-700k", label: "600–700k" },
-  { key: "700-800k", label: "700–800k" },
-  { key: "800-900k", label: "800–900k" },
-  { key: "900k-1M", label: "900k–1M" },
-  { key: "1M+", label: "1M+" },
-];
+/** Pick a nice percent step so ~8–12 bins cover [min, max]. */
+function chooseAccuracyStepPct(minAcc: number, maxAcc: number): number {
+  const spanPct = Math.max((maxAcc - minAcc) * 100, 0.01);
+  const raw = spanPct / 10;
+  const nice = [0.5, 1, 2, 2.5, 5, 10];
+  return nice.find((s) => s >= raw) ?? 10;
+}
 
-function metricConfig(metric: PracticeMetric): {
-  expr: string;
-  bins: Omit<DistributionBin, "count">[];
-} {
-  switch (metric) {
-    case "misses":
-      return { expr: missesBucketExpr(), bins: MISSES_BINS };
-    case "score":
-      return { expr: scoreBucketExpr(), bins: SCORE_BINS };
-    case "accuracy":
-    default:
-      return { expr: accuracyBucketExpr(), bins: ACCURACY_BINS };
+/** Pick a nice score step so ~8–12 bins cover [min, max]. */
+function chooseScoreStep(minScore: number, maxScore: number): number {
+  const span = Math.max(maxScore - minScore, 1);
+  const raw = span / 10;
+  const nice = [
+    5_000, 10_000, 25_000, 50_000, 100_000, 200_000, 250_000, 500_000, 1_000_000,
+  ];
+  return nice.find((s) => s >= raw) ?? Math.ceil(raw / 100_000) * 100_000;
+}
+
+function formatScoreShort(n: number): string {
+  if (n >= 1_000_000) {
+    const m = n / 1_000_000;
+    return Number.isInteger(m) ? `${m}M` : `${parseFloat(m.toFixed(2))}M`;
   }
+  if (n >= 1_000) {
+    const k = n / 1_000;
+    return Number.isInteger(k) ? `${k}k` : `${parseFloat(k.toFixed(1))}k`;
+  }
+  return String(Math.round(n));
+}
+
+function formatAccLabel(fromPct: number, toPct: number): string {
+  const fmt = (n: number) =>
+    Number.isInteger(n) ? String(n) : parseFloat(n.toFixed(1)).toString();
+  return `${fmt(fromPct)}–${fmt(toPct)}%`;
 }
 
 function resolveFilter(query: string | undefined): {
@@ -342,6 +297,194 @@ export function countMatches(db: Db, query: string): number {
   return Number(countRow?.n ?? 0);
 }
 
+function distributionMisses(
+  db: Db,
+  where: string,
+  params: unknown[],
+): DistributionBin[] {
+  const distSql = `
+    SELECT (${missesBucketExpr()}) AS bucket, COUNT(*) AS count
+    ${BASE_FROM}
+    ${where}
+    GROUP BY bucket
+  `;
+  const rows = db.$client
+    .query(distSql)
+    .all(...asBindings(params)) as { bucket: string; count: number }[];
+  const counts = new Map(rows.map((r) => [r.bucket, Number(r.count)]));
+  return MISSES_BINS.map((b) => ({
+    ...b,
+    count: counts.get(b.key) ?? 0,
+  })).filter((b) => b.count > 0);
+}
+
+function distributionAccuracy(
+  db: Db,
+  where: string,
+  params: unknown[],
+): DistributionBin[] {
+  const rangeSql = `
+    SELECT
+      MIN(ps.best_accuracy) AS min_acc,
+      MAX(ps.best_accuracy) AS max_acc,
+      SUM(CASE WHEN ps.best_accuracy IS NULL THEN 1 ELSE 0 END) AS unplayed,
+      SUM(CASE WHEN ps.best_accuracy IS NOT NULL THEN 1 ELSE 0 END) AS played
+    ${BASE_FROM}
+    ${where}
+  `;
+  const range = db.$client.query(rangeSql).get(...asBindings(params)) as {
+    min_acc: number | null;
+    max_acc: number | null;
+    unplayed: number;
+    played: number;
+  } | null;
+
+  const bins: DistributionBin[] = [];
+  const unplayed = Number(range?.unplayed ?? 0);
+  if (unplayed > 0) {
+    bins.push({ key: "unplayed", label: "Unplayed", count: unplayed });
+  }
+
+  const played = Number(range?.played ?? 0);
+  if (range?.min_acc == null || range.max_acc == null || played <= 0) {
+    return bins;
+  }
+
+  const maxAcc = Number(range.max_acc);
+  // Use ~5th percentile as the lower edge for step sizing so a few bad
+  // outliers don't force coarse 10% buckets across 0–100%.
+  const pOffset = Math.max(0, Math.floor(played * 0.05));
+  const pRow = db.$client
+    .query(
+      `
+      SELECT ps.best_accuracy AS acc
+      ${BASE_FROM}
+      ${where}
+        AND ps.best_accuracy IS NOT NULL
+      ORDER BY ps.best_accuracy ASC
+      LIMIT 1 OFFSET ?
+    `,
+    )
+    .get(...asBindings([...params, pOffset])) as { acc: number } | null;
+  const effectiveMin = Number(pRow?.acc ?? range.min_acc);
+  const stepPct = chooseAccuracyStepPct(effectiveMin, maxAcc);
+
+  const distSql = `
+    SELECT
+      CAST(FLOOR(ps.best_accuracy * 100.0 / ?) * ? AS REAL) AS bucket_start,
+      COUNT(*) AS count
+    ${BASE_FROM}
+    ${where}
+      AND ps.best_accuracy IS NOT NULL
+    GROUP BY bucket_start
+    ORDER BY bucket_start ASC
+  `;
+  const rows = db.$client
+    .query(distSql)
+    .all(...asBindings([stepPct, stepPct, ...params])) as {
+    bucket_start: number;
+    count: number;
+  }[];
+
+  for (const row of rows) {
+    const from = Number(row.bucket_start);
+    const to = Math.min(from + stepPct, 100);
+    const count = Number(row.count);
+    if (count <= 0) continue;
+    bins.push({
+      key: `${from}-${to}`,
+      label:
+        from >= 100 || (from === to && from === 100)
+          ? "100%"
+          : formatAccLabel(from, to),
+      count,
+    });
+  }
+
+  return bins;
+}
+
+function distributionScore(
+  db: Db,
+  where: string,
+  params: unknown[],
+): DistributionBin[] {
+  const rangeSql = `
+    SELECT
+      MIN(ps.best_score) AS min_score,
+      MAX(ps.best_score) AS max_score,
+      SUM(CASE WHEN ps.best_score IS NULL THEN 1 ELSE 0 END) AS unplayed,
+      SUM(CASE WHEN ps.best_score IS NOT NULL THEN 1 ELSE 0 END) AS played
+    ${BASE_FROM}
+    ${where}
+  `;
+  const range = db.$client.query(rangeSql).get(...asBindings(params)) as {
+    min_score: number | null;
+    max_score: number | null;
+    unplayed: number;
+    played: number;
+  } | null;
+
+  const bins: DistributionBin[] = [];
+  const unplayed = Number(range?.unplayed ?? 0);
+  if (unplayed > 0) {
+    bins.push({ key: "unplayed", label: "Unplayed", count: unplayed });
+  }
+
+  const played = Number(range?.played ?? 0);
+  if (range?.min_score == null || range.max_score == null || played <= 0) {
+    return bins;
+  }
+
+  const maxScore = Number(range.max_score);
+  const pOffset = Math.max(0, Math.floor(played * 0.05));
+  const pRow = db.$client
+    .query(
+      `
+      SELECT ps.best_score AS score
+      ${BASE_FROM}
+      ${where}
+        AND ps.best_score IS NOT NULL
+      ORDER BY ps.best_score ASC
+      LIMIT 1 OFFSET ?
+    `,
+    )
+    .get(...asBindings([...params, pOffset])) as { score: number } | null;
+  const effectiveMin = Number(pRow?.score ?? range.min_score);
+  const step = chooseScoreStep(effectiveMin, maxScore);
+
+  const distSql = `
+    SELECT
+      CAST(FLOOR(ps.best_score * 1.0 / ?) * ? AS INTEGER) AS bucket_start,
+      COUNT(*) AS count
+    ${BASE_FROM}
+    ${where}
+      AND ps.best_score IS NOT NULL
+    GROUP BY bucket_start
+    ORDER BY bucket_start ASC
+  `;
+  const rows = db.$client
+    .query(distSql)
+    .all(...asBindings([step, step, ...params])) as {
+    bucket_start: number;
+    count: number;
+  }[];
+
+  for (const row of rows) {
+    const from = Number(row.bucket_start);
+    const to = from + step;
+    const count = Number(row.count);
+    if (count <= 0) continue;
+    bins.push({
+      key: `${from}-${to}`,
+      label: `${formatScoreShort(from)}–${formatScoreShort(to)}`,
+      count,
+    });
+  }
+
+  return bins;
+}
+
 export function practiceDistribution(
   db: Db,
   query: string | undefined,
@@ -353,24 +496,16 @@ export function practiceDistribution(
 } {
   const filter = resolveFilter(query);
   const where = baseWhere(filter.sql);
-  const { expr, bins: template } = metricConfig(metric);
+  const params = filter.params;
 
-  const distSql = `
-    SELECT (${expr}) AS bucket, COUNT(*) AS count
-    ${BASE_FROM}
-    ${where}
-    GROUP BY bucket
-  `;
-  const rows = db.$client
-    .query(distSql)
-    .all(...asBindings(filter.params)) as { bucket: string; count: number }[];
+  const bins =
+    metric === "misses"
+      ? distributionMisses(db, where, params)
+      : metric === "score"
+        ? distributionScore(db, where, params)
+        : distributionAccuracy(db, where, params);
 
-  const counts = new Map(rows.map((r) => [r.bucket, Number(r.count)]));
-  const bins = template.map((b) => ({
-    ...b,
-    count: counts.get(b.key) ?? 0,
-  }));
   const total = bins.reduce((sum, b) => sum + b.count, 0);
-
   return { metric, total, bins };
 }
+

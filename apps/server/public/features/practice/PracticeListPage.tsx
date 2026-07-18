@@ -67,6 +67,92 @@ function isMetric(value: unknown): value is PracticeMetric {
   return METRIC_OPTIONS.some((o) => o.value === value);
 }
 
+/** Remove prior chart/distribution filters so a new bar click replaces them. */
+function stripDistributionFilters(query: string): string {
+  return query
+    .replace(/\bplayed:never\b/gi, " ")
+    .replace(/\b(?:acc|accuracy|misses|miss|score)(?::\S+|(?:>=|<=|>|<|=)\S+)/gi, " ")
+    .replace(/\b(?:AND|OR)\s+(?=(?:AND|OR)\b|$)/gi, " ")
+    .replace(/(^|\s)(?:AND|OR)\b/gi, " ")
+    .replace(/\(\s*\)/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function cleanupMergedQuery(query: string): string {
+  return query
+    .replace(/\s+/g, " ")
+    .replace(/\bAND\s+AND\b/gi, "AND")
+    .replace(/^\s*(?:AND|OR)\s+/i, "")
+    .replace(/\s+(?:AND|OR)\s*$/i, "")
+    .replace(/\(\s*\)/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function formatNum(n: number): string {
+  if (Number.isInteger(n)) return String(n);
+  return parseFloat(n.toFixed(4)).toString();
+}
+
+function binToQueryClause(
+  metric: PracticeMetric,
+  bin: { key: string; label: string },
+): string | null {
+  if (bin.key === "unplayed") return "played:never";
+
+  if (metric === "misses") {
+    switch (bin.key) {
+      case "0":
+        return "misses:0";
+      case "1":
+        return "misses:1";
+      case "2-5":
+        return "misses:2..5";
+      case "6-10":
+        return "misses:6..10";
+      case "11-25":
+        return "misses:11..25";
+      case "26-50":
+        return "misses:26..50";
+      case "51+":
+        return "misses>=51";
+      default:
+        return null;
+    }
+  }
+
+  const parts = bin.key.split("-");
+  if (parts.length !== 2) return null;
+  const from = Number(parts[0]);
+  const to = Number(parts[1]);
+  if (!Number.isFinite(from) || !Number.isFinite(to)) return null;
+
+  if (metric === "accuracy") {
+    // Match histogram buckets: [from, to) except exact 100%.
+    if (from >= 100) return "acc>=100";
+    if (to >= 100) return `acc>=${formatNum(from)}`;
+    return `acc>=${formatNum(from)} AND acc<${formatNum(to)}`;
+  }
+
+  // score — same half-open buckets as the chart
+  if (from === to) return `score>=${formatNum(from)}`;
+  return `score>=${formatNum(from)} AND score<${formatNum(to)}`;
+}
+
+function mergeRangeIntoQuery(
+  current: string,
+  metric: PracticeMetric,
+  bin: { key: string; label: string },
+): string | null {
+  const clause = binToQueryClause(metric, bin);
+  if (!clause) return null;
+  const base = stripDistributionFilters(current);
+  if (!base) return clause;
+  // Plain text → keep as free-text term ANDed with the range.
+  return cleanupMergedQuery(`${base} ${clause}`);
+}
+
 function readStoredPracticeSearch(): StoredPracticeSearch {
   try {
     const raw = localStorage.getItem(PRACTICE_SEARCH_KEY);
@@ -118,6 +204,7 @@ export function PracticeListPage() {
   const [sortBy, setSortBy] = useState<PracticeSortBy>(stored.sortBy);
   const [sortDir, setSortDir] = useState<PracticeSortDir>(stored.sortDir);
   const [metric, setMetric] = useState<PracticeMetric>(stored.metric);
+  const [queryHistory, setQueryHistory] = useState<string[]>([]);
 
   function persist(next: Partial<StoredPracticeSearch> & { q?: string }) {
     const state: StoredPracticeSearch = {
@@ -171,11 +258,26 @@ export function PracticeListPage() {
   const bins =
     distribution && "bins" in distribution ? distribution.bins : null;
 
-  function applySearch(nextQ: string) {
+  function applySearch(nextQ: string, opts?: { fromChart?: boolean }) {
+    if (opts?.fromChart) {
+      setQueryHistory((prev) => [...prev, submitted]);
+    } else {
+      setQueryHistory([]);
+    }
     setQ(nextQ);
     setSubmitted(nextQ);
     setPage(1);
     persist({ q: nextQ, page: 1 });
+  }
+
+  function undoQuery() {
+    if (queryHistory.length === 0) return;
+    const previous = queryHistory[queryHistory.length - 1] ?? "";
+    setQueryHistory((prev) => prev.slice(0, -1));
+    setQ(previous);
+    setSubmitted(previous);
+    setPage(1);
+    persist({ q: previous, page: 1 });
   }
 
   return (
@@ -222,27 +324,44 @@ export function PracticeListPage() {
               Best-score distribution
             </h2>
             <p className="mt-0.5 text-xs text-[#8b93a7]">
-              Across all maps matching the current query (not just this page).
+              Across all maps matching the current query — click a bar to filter
+              that range.
             </p>
           </div>
-          <label className="flex items-center gap-2 text-xs text-[#8b93a7]">
-            Show
-            <select
-              className={selectClass}
-              value={metric}
-              onChange={(e) => {
-                const next = e.target.value as PracticeMetric;
-                setMetric(next);
-                persist({ metric: next });
-              }}
-            >
-              {METRIC_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            {queryHistory.length > 0 ? (
+              <button
+                type="button"
+                onClick={undoQuery}
+                className="rounded-md border border-white/10 px-2.5 py-2 text-xs text-[#a8b0c0] hover:border-white/20 hover:text-white"
+                title={
+                  queryHistory[queryHistory.length - 1]
+                    ? `Restore: ${queryHistory[queryHistory.length - 1]}`
+                    : "Clear range filter"
+                }
+              >
+                Undo filter
+              </button>
+            ) : null}
+            <label className="flex items-center gap-2 text-xs text-[#8b93a7]">
+              Show
+              <select
+                className={selectClass}
+                value={metric}
+                onChange={(e) => {
+                  const next = e.target.value as PracticeMetric;
+                  setMetric(next);
+                  persist({ metric: next });
+                }}
+              >
+                {METRIC_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
         </div>
 
         {distLoading ? (
@@ -284,7 +403,18 @@ export function PracticeListPage() {
                   "maps",
                 ]}
               />
-              <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+              <Bar
+                dataKey="count"
+                radius={[4, 4, 0, 0]}
+                cursor="pointer"
+                onClick={(_data, index) => {
+                  const bin = bins[index];
+                  if (!bin) return;
+                  const next = mergeRangeIntoQuery(submitted, metric, bin);
+                  if (next == null) return;
+                  applySearch(next, { fromChart: true });
+                }}
+              >
                 {bins.map((bin) => (
                   <Cell
                     key={bin.key}

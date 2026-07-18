@@ -8,10 +8,13 @@ export type FieldTerm =
   | { type: "difficulty"; value: string; prefix?: boolean }
   | { type: "stars"; min?: number; max?: number; op?: ComparisonOp; value?: number }
   | { type: "mods"; value: string }
-  | { type: "acc"; op: ComparisonOp; value: number }
+  | { type: "acc"; min?: number; max?: number; op?: ComparisonOp; value?: number }
+  | { type: "misses"; min?: number; max?: number; op?: ComparisonOp; value?: number }
+  | { type: "score"; min?: number; max?: number; op?: ComparisonOp; value?: number }
   | { type: "retry"; op: ComparisonOp; value: number }
   | { type: "mastery"; op: ComparisonOp; value: number }
   | { type: "played"; days: number }
+  | { type: "played"; never: true }
   | { type: "pp"; op: ComparisonOp; value: number }
   | { type: "text"; value: string };
 

@@ -45,8 +45,33 @@ function compileTerm(term: FieldTerm, params: unknown[]): string {
           AND s.delete_pending = 0
           AND s.mods LIKE ${push(`%${term.value}%`)} ESCAPE '\\'
       )`;
-    case "acc":
-      return `ps.best_accuracy ${term.op} ${push(term.value / 100)}`;
+    case "acc": {
+      if (term.min != null && term.max != null) {
+        return `ps.best_accuracy BETWEEN ${push(term.min / 100)} AND ${push(term.max / 100)}`;
+      }
+      if (term.op != null && term.value != null) {
+        return `ps.best_accuracy ${term.op} ${push(term.value / 100)}`;
+      }
+      return "1=1";
+    }
+    case "misses": {
+      if (term.min != null && term.max != null) {
+        return `ps.best_misses BETWEEN ${push(term.min)} AND ${push(term.max)}`;
+      }
+      if (term.op != null && term.value != null) {
+        return `ps.best_misses ${term.op} ${push(term.value)}`;
+      }
+      return "1=1";
+    }
+    case "score": {
+      if (term.min != null && term.max != null) {
+        return `ps.best_score BETWEEN ${push(term.min)} AND ${push(term.max)}`;
+      }
+      if (term.op != null && term.value != null) {
+        return `ps.best_score ${term.op} ${push(term.value)}`;
+      }
+      return "1=1";
+    }
     case "retry":
       return `COALESCE(rs.max_retry, 0) ${term.op} ${push(term.value)}`;
     case "mastery":
@@ -54,6 +79,10 @@ function compileTerm(term: FieldTerm, params: unknown[]): string {
     case "pp":
       return `COALESCE(ps.best_pp, 0) ${term.op} ${push(term.value)}`;
     case "played": {
+      if ("never" in term && term.never) {
+        return `(ps.play_count IS NULL OR ps.play_count = 0)`;
+      }
+      if (!("days" in term)) return "1=1";
       const since = Date.now() - term.days * 24 * 60 * 60 * 1000;
       return `ps.last_played_at IS NOT NULL AND ps.last_played_at >= ${push(since)}`;
     }

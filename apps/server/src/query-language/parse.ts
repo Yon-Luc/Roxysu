@@ -92,7 +92,7 @@ function parseFieldTerm(raw: string): FieldTerm {
   const colon = raw.indexOf(":");
   if (colon === -1) {
     // Could be acc>98 style without field prefix... support field+op glued
-    const glued = raw.match(/^(acc|retry|mastery|pp|stars)(>=|<=|>|<|=)(-?\d+(?:\.\d+)?)$/i);
+    const glued = raw.match(/^(acc|retry|mastery|pp|stars|misses|miss|score)(>=|<=|>|<|=)(-?\d+(?:\.\d+)?)$/i);
     if (glued) {
       const field = glued[1]!.toLowerCase();
       const op = glued[2] as ComparisonOp;
@@ -102,6 +102,8 @@ function parseFieldTerm(raw: string): FieldTerm {
       if (field === "mastery") return { type: "mastery", op, value };
       if (field === "pp") return { type: "pp", op, value };
       if (field === "stars") return { type: "stars", op, value };
+      if (field === "misses" || field === "miss") return { type: "misses", op, value };
+      if (field === "score") return { type: "score", op, value };
     }
     return { type: "text", value: raw };
   }
@@ -137,12 +139,41 @@ function parseFieldTerm(raw: string): FieldTerm {
     }
     case "acc":
     case "accuracy": {
+      const r = parseRange(value);
+      if (r?.min != null && r?.max != null) {
+        return { type: "acc", min: r.min, max: r.max };
+      }
       if (value.match(/^\d/)) {
         return { type: "acc", op: ">=", value: Number(value) };
       }
       const cmp = parseComparison(value);
       if (!cmp) throw new QueryParseError(`Invalid acc value: ${value}`);
       return { type: "acc", ...cmp };
+    }
+    case "miss":
+    case "misses": {
+      const r = parseRange(value);
+      if (r?.min != null && r?.max != null) {
+        return { type: "misses", min: r.min, max: r.max };
+      }
+      if (value.match(/^\d/)) {
+        return { type: "misses", op: "=", value: Number(value) };
+      }
+      const cmp = parseComparison(value);
+      if (!cmp) throw new QueryParseError(`Invalid misses value: ${value}`);
+      return { type: "misses", ...cmp };
+    }
+    case "score": {
+      const r = parseRange(value);
+      if (r?.min != null && r?.max != null) {
+        return { type: "score", min: r.min, max: r.max };
+      }
+      if (value.match(/^\d/)) {
+        return { type: "score", op: ">=", value: Number(value) };
+      }
+      const cmp = parseComparison(value);
+      if (!cmp) throw new QueryParseError(`Invalid score value: ${value}`);
+      return { type: "score", ...cmp };
     }
     case "retry": {
       if (value.match(/^\d/)) return { type: "retry", op: ">=", value: Number(value) };
@@ -163,8 +194,11 @@ function parseFieldTerm(raw: string): FieldTerm {
       return { type: "pp", ...cmp };
     }
     case "played": {
+      if (value.toLowerCase() === "never") {
+        return { type: "played", never: true };
+      }
       const days = parsePlayed(value);
-      if (days == null) throw new QueryParseError(`Invalid played value: ${value} (expected lastNd)`);
+      if (days == null) throw new QueryParseError(`Invalid played value: ${value} (expected lastNd or never)`);
       return { type: "played", days };
     }
     default:
@@ -274,6 +308,6 @@ export function looksLikeQuery(q: string): boolean {
   if (/[()]/.test(trimmed)) return true;
   if (/\b(AND|OR|NOT)\b/i.test(trimmed)) return true;
   if (/:\S/.test(trimmed)) return true;
-  if (/\b(acc|retry|mastery|pp|stars)(>=|<=|>|<|=)/i.test(trimmed)) return true;
+  if (/\b(acc|retry|mastery|pp|stars|misses|miss|score)(>=|<=|>|<|=)/i.test(trimmed)) return true;
   return false;
 }

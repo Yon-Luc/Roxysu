@@ -152,6 +152,8 @@ const MISSES_BINS: Omit<DistributionBin, "count">[] = [
 /** Pick a nice percent step so ~8–12 bins cover [min, max]. */
 function chooseAccuracyStepPct(minAcc: number, maxAcc: number): number {
   const spanPct = Math.max((maxAcc - minAcc) * 100, 0.01);
+  // Drill-down into a narrow window (e.g. after clicking a 2% bar).
+  if (spanPct < 2) return 0.1;
   const raw = spanPct / 10;
   const nice = [0.5, 1, 2, 2.5, 5, 10];
   return nice.find((s) => s >= raw) ?? 10;
@@ -368,31 +370,39 @@ function distributionAccuracy(
     .get(...asBindings([...params, pOffset])) as { acc: number } | null;
   const effectiveMin = Number(pRow?.acc ?? range.min_acc);
   const stepPct = chooseAccuracyStepPct(effectiveMin, maxAcc);
+  // Bucket in tenths-of-a-percent integers to avoid float drift at 0.1% steps.
+  const stepTenths = Math.max(1, Math.round(stepPct * 10));
 
   const distSql = `
     SELECT
-      CAST(FLOOR(ps.best_accuracy * 100.0 / ?) * ? AS REAL) AS bucket_start,
+      CAST(FLOOR(ps.best_accuracy * 1000.0 / ?) * ? AS INTEGER) AS bucket_tenths,
       COUNT(*) AS count
     ${BASE_FROM}
     ${where}
       AND ps.best_accuracy IS NOT NULL
-    GROUP BY bucket_start
-    ORDER BY bucket_start ASC
+    GROUP BY bucket_tenths
+    ORDER BY bucket_tenths ASC
   `;
   const rows = db.$client
     .query(distSql)
-    .all(...asBindings([stepPct, stepPct, ...params])) as {
-    bucket_start: number;
+    .all(...asBindings([stepTenths, stepTenths, ...params])) as {
+    bucket_tenths: number;
     count: number;
   }[];
 
   for (const row of rows) {
-    const from = Number(row.bucket_start);
-    const to = Math.min(from + stepPct, 100);
+    const fromTenths = Number(row.bucket_tenths);
+    const toTenths = Math.min(fromTenths + stepTenths, 1000);
+    const from = fromTenths / 10;
+    const to = toTenths / 10;
     const count = Number(row.count);
     if (count <= 0) continue;
+    const keyFrom =
+      fromTenths % 10 === 0 ? String(fromTenths / 10) : (fromTenths / 10).toFixed(1);
+    const keyTo =
+      toTenths % 10 === 0 ? String(toTenths / 10) : (toTenths / 10).toFixed(1);
     bins.push({
-      key: `${from}-${to}`,
+      key: `${keyFrom}-${keyTo}`,
       label:
         from >= 100 || (from === to && from === 100)
           ? "100%"

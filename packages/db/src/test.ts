@@ -1,12 +1,16 @@
-import { createDb, scores } from "./client.bun";
+import { ensureDb, scores } from "./client.bun";
 
-const db = createDb("./test.sqlite");
+const db = ensureDb("./test.sqlite");
 
 db.insert(scores)
   .values({
-    beatmapId: "12345",
-    accuracy: 9850,
+    id: "00000000-0000-0000-0000-000000000001",
+    onlineId: 0,
+    legacyOnlineId: 0,
+    beatmapId: null,
+    accuracy: 0.985,
     playedAt: new Date(),
+    totalScore: 1_000_000,
   })
   .run();
 

@@ -17,3 +17,9 @@ export function loadOsuSchema(
 ): ExportedRealmSchema {
   return JSON.parse(readFileSync(schemaPath, "utf8")) as ExportedRealmSchema;
 }
+
+export function expectedSchemaVersion(
+  schemaPath?: string,
+): number {
+  return loadOsuSchema(schemaPath).schemaVersion;
+}

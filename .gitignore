@@ -10,8 +10,5 @@ dist/
 *.sqlite-shm
 *.sqlite-wal
 
-# drizzle
-packages/db/drizzle/meta/
-
 # nix
 .direnv/

@@ -1,8 +1,249 @@
-import { sqliteTable, integer, text } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
+import {
+  sqliteTable,
+  text,
+  integer,
+  real,
+  primaryKey,
+  index,
+} from "drizzle-orm/sqlite-core";
 
-export const scores = sqliteTable("scores", {
-  id: integer("id").primaryKey(),
-  beatmapId: text("beatmap_id").notNull(),
-  accuracy: integer("accuracy").notNull(),
-  playedAt: integer("played_at", { mode: "timestamp" }).notNull(),
+// ---------------------------------------------------------------------------
+// Raw import tables — written only by realm-reader
+// ---------------------------------------------------------------------------
+
+export const rulesets = sqliteTable(
+  "rulesets",
+  {
+    shortName: text("short_name").primaryKey(),
+    onlineId: integer("online_id").notNull(),
+    name: text("name"),
+    available: integer("available", { mode: "boolean" }).notNull().default(false),
+  },
+  (t) => ({
+    onlineIdIdx: index("rulesets_online_id_idx").on(t.onlineId),
+  }),
+);
+
+export const beatmapSets = sqliteTable(
+  "beatmap_sets",
+  {
+    id: text("id").primaryKey(),
+    onlineId: integer("online_id").notNull(),
+    dateAdded: integer("date_added", { mode: "timestamp_ms" }).notNull(),
+    dateSubmitted: integer("date_submitted", { mode: "timestamp_ms" }),
+    dateRanked: integer("date_ranked", { mode: "timestamp_ms" }),
+    status: integer("status").notNull(),
+    deletePending: integer("delete_pending", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    hash: text("hash"),
+    protected: integer("protected", { mode: "boolean" }).notNull().default(false),
+  },
+  (t) => ({
+    onlineIdIdx: index("beatmap_sets_online_id_idx").on(t.onlineId),
+  }),
+);
+
+export const beatmaps = sqliteTable(
+  "beatmaps",
+  {
+    id: text("id").primaryKey(),
+    onlineId: integer("online_id").notNull(),
+    setId: text("set_id")
+      .notNull()
+      .references(() => beatmapSets.id),
+    difficultyName: text("difficulty_name"),
+    rulesetShortName: text("ruleset_short_name"),
+    status: integer("status").notNull(),
+    length: real("length").notNull(),
+    bpm: real("bpm").notNull(),
+    starRating: real("star_rating").notNull(),
+    md5Hash: text("md5_hash"),
+    hash: text("hash"),
+    hidden: integer("hidden", { mode: "boolean" }).notNull().default(false),
+    totalObjectCount: integer("total_object_count").notNull().default(0),
+    endTimeObjectCount: integer("end_time_object_count").notNull().default(0),
+    lastPlayed: integer("last_played", { mode: "timestamp_ms" }),
+
+    // Difficulty (embedded)
+    drainRate: real("drain_rate"),
+    circleSize: real("circle_size"),
+    overallDifficulty: real("overall_difficulty"),
+    approachRate: real("approach_rate"),
+    sliderMultiplier: real("slider_multiplier"),
+    sliderTickRate: real("slider_tick_rate"),
+
+    // Metadata (flattened)
+    title: text("title"),
+    titleUnicode: text("title_unicode"),
+    artist: text("artist"),
+    artistUnicode: text("artist_unicode"),
+    source: text("source"),
+    tags: text("tags"),
+    previewTime: integer("preview_time"),
+    audioFile: text("audio_file"),
+    backgroundFile: text("background_file"),
+    mapperOnlineId: integer("mapper_online_id"),
+    mapperUsername: text("mapper_username"),
+
+    offset: real("offset"),
+    lastLocalUpdate: integer("last_local_update", { mode: "timestamp_ms" }),
+    lastOnlineUpdate: integer("last_online_update", { mode: "timestamp_ms" }),
+  },
+  (t) => ({
+    onlineIdIdx: index("beatmaps_online_id_idx").on(t.onlineId),
+    md5HashIdx: index("beatmaps_md5_hash_idx").on(t.md5Hash),
+    setIdIdx: index("beatmaps_set_id_idx").on(t.setId),
+  }),
+);
+
+export const scores = sqliteTable(
+  "scores",
+  {
+    id: text("id").primaryKey(),
+    onlineId: integer("online_id").notNull(),
+    legacyOnlineId: integer("legacy_online_id").notNull(),
+    beatmapId: text("beatmap_id").references(() => beatmaps.id),
+    beatmapHash: text("beatmap_hash"),
+    rulesetShortName: text("ruleset_short_name"),
+    clientVersion: text("client_version"),
+    totalScore: integer("total_score").notNull().default(0),
+    totalScoreWithoutMods: integer("total_score_without_mods").notNull().default(0),
+    legacyTotalScore: integer("legacy_total_score"),
+    maxCombo: integer("max_combo").notNull().default(0),
+    combo: integer("combo").notNull().default(0),
+    accuracy: real("accuracy").notNull().default(0),
+    pp: real("pp"),
+    rank: integer("rank").notNull().default(0),
+    mods: text("mods"),
+    statistics: text("statistics"),
+    maximumStatistics: text("maximum_statistics"),
+    playedAt: integer("played_at", { mode: "timestamp_ms" }).notNull(),
+    userOnlineId: integer("user_online_id"),
+    userUsername: text("user_username"),
+    isLegacyScore: integer("is_legacy_score", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    deletePending: integer("delete_pending", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    hash: text("hash"),
+  },
+  (t) => ({
+    onlineIdIdx: index("scores_online_id_idx").on(t.onlineId),
+    legacyOnlineIdIdx: index("scores_legacy_online_id_idx").on(t.legacyOnlineId),
+    beatmapIdIdx: index("scores_beatmap_id_idx").on(t.beatmapId),
+    playedAtIdx: index("scores_played_at_idx").on(t.playedAt),
+  }),
+);
+
+export const imports = sqliteTable("imports", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  kind: text("kind", { enum: ["full", "incremental"] }).notNull(),
+  status: text("status", {
+    enum: ["running", "success", "failed", "locked"],
+  }).notNull(),
+  startedAt: integer("started_at", { mode: "timestamp_ms" }).notNull(),
+  finishedAt: integer("finished_at", { mode: "timestamp_ms" }),
+  realmSchemaVersion: integer("realm_schema_version").notNull(),
+  beatmapSetsUpserted: integer("beatmap_sets_upserted").notNull().default(0),
+  beatmapsUpserted: integer("beatmaps_upserted").notNull().default(0),
+  scoresUpserted: integer("scores_upserted").notNull().default(0),
+  error: text("error"),
+});
+
+// ---------------------------------------------------------------------------
+// Derived / user tables — written only by server
+// ---------------------------------------------------------------------------
+
+export const sessions = sqliteTable("sessions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  startedAt: integer("started_at", { mode: "timestamp_ms" }).notNull(),
+  endedAt: integer("ended_at", { mode: "timestamp_ms" }),
+  scoreCount: integer("score_count").notNull().default(0),
+  rulesetShortName: text("ruleset_short_name"),
+});
+
+export const mastery = sqliteTable("mastery", {
+  beatmapId: text("beatmap_id")
+    .primaryKey()
+    .references(() => beatmaps.id),
+  level: real("level").notNull().default(0),
+  playCount: integer("play_count").notNull().default(0),
+  bestAccuracy: real("best_accuracy"),
+  bestPp: real("best_pp"),
+  lastPlayedAt: integer("last_played_at", { mode: "timestamp_ms" }),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+});
+
+export const tags = sqliteTable("tags", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull().unique(),
+  color: text("color"),
+});
+
+export const beatmapTags = sqliteTable(
+  "beatmap_tags",
+  {
+    beatmapId: text("beatmap_id")
+      .notNull()
+      .references(() => beatmaps.id),
+    tagId: integer("tag_id")
+      .notNull()
+      .references(() => tags.id),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.beatmapId, t.tagId] }),
+  }),
+);
+
+export const notes = sqliteTable("notes", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  beatmapId: text("beatmap_id")
+    .notNull()
+    .references(() => beatmaps.id),
+  body: text("body").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch() * 1000)`),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch() * 1000)`),
+});
+
+export const settings = sqliteTable("settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+});
+
+export const dailyStats = sqliteTable("daily_stats", {
+  day: text("day").primaryKey(),
+  playCount: integer("play_count").notNull().default(0),
+  totalPp: real("total_pp").notNull().default(0),
+  avgAccuracy: real("avg_accuracy"),
+});
+
+export const weeklyStats = sqliteTable("weekly_stats", {
+  weekStart: text("week_start").primaryKey(),
+  playCount: integer("play_count").notNull().default(0),
+  totalPp: real("total_pp").notNull().default(0),
+  avgAccuracy: real("avg_accuracy"),
+});
+
+export const mapperStats = sqliteTable("mapper_stats", {
+  mapperOnlineId: integer("mapper_online_id").primaryKey(),
+  mapperUsername: text("mapper_username"),
+  playCount: integer("play_count").notNull().default(0),
+  totalPp: real("total_pp").notNull().default(0),
+  avgAccuracy: real("avg_accuracy"),
+});
+
+export const scoreMetrics = sqliteTable("score_metrics", {
+  scoreId: text("score_id")
+    .primaryKey()
+    .references(() => scores.id),
+  retryIndex: integer("retry_index"),
+  isPb: integer("is_pb", { mode: "boolean" }).notNull().default(false),
+  sessionId: integer("session_id").references(() => sessions.id),
 });

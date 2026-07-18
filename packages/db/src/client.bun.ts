@@ -1,12 +1,28 @@
 import { drizzle } from "drizzle-orm/bun-sqlite";
+import { migrate } from "drizzle-orm/bun-sqlite/migrator";
 import { Database } from "bun:sqlite";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import * as schema from "./schema";
 
-export function createDb(path: string) {
-  const sqlite = new Database(path);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const migrationsFolder = path.join(__dirname, "..", "drizzle");
+
+export type Db = ReturnType<typeof createDb>;
+
+export function createDb(dbPath: string) {
+  const sqlite = new Database(dbPath);
   sqlite.exec("PRAGMA journal_mode = WAL;");
   sqlite.exec("PRAGMA busy_timeout = 5000;");
   return drizzle(sqlite, { schema });
 }
 
+/** Open SQLite and apply pending Drizzle migrations. */
+export function ensureDb(dbPath: string) {
+  const db = createDb(dbPath);
+  migrate(db, { migrationsFolder });
+  return db;
+}
+
+export { eq, sql, getTableColumns } from "drizzle-orm";
 export * from "./schema";

@@ -1,35 +1,70 @@
-import { createDb } from "@roxysu/db/client.node";
-import path from "node:path";
-import Realm from "realm";
-import { loadOsuSchema } from "./schema";
+import { ensureDb } from "@roxysu/db/client.node";
+import {
+  RealmLockedError,
+  SchemaVersionMismatchError,
+  defaultDbPath,
+  defaultRealmPath,
+  recordLockedImport,
+  runFullSync,
+} from "./sync";
 
-const db = createDb(process.env.DB_PATH ?? "../server/data.sqlite");
-console.log("realm-reader starting up, DB connected via @roxysu/db");
+const RETRY_MS = Number(process.env.REALM_RETRY_MS ?? 10_000);
+const RESYNC_MS = Number(process.env.REALM_RESYNC_MS ?? 60_000);
 
-const realmPath =
-  process.env.REALM_PATH ??
-  path.join(process.env.HOME ?? "", ".local/share/osu/client.realm");
-
-const { schemaVersion, schema } = loadOsuSchema();
-
-try {
-  const realm = new Realm({
-    path: realmPath,
-    schema,
-    schemaVersion,
-    readOnly: true,
-  });
-
-  console.log("✅ Realm opened successfully");
-  console.log("Path:", realm.path);
-  console.log("schemaVersion:", realm.schemaVersion);
-  console.log(
-    "Schemas:",
-    realm.schema.map((s) => s.name).join(", "),
-  );
-
-  realm.close();
-} catch (err) {
-  console.error("❌ Failed to open Realm");
-  console.error(err);
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+async function main() {
+  const dbPath = defaultDbPath();
+  const realmPath = defaultRealmPath();
+
+  console.log("realm-reader starting");
+  console.log("  DB_PATH   ", dbPath);
+  console.log("  REALM_PATH", realmPath);
+
+  const db = ensureDb(dbPath);
+  console.log("SQLite ready (migrations applied)");
+
+  let lockLogged = false;
+
+  for (;;) {
+    try {
+      const result = runFullSync(db, realmPath);
+      lockLogged = false;
+      console.log(
+        `sync ok — rulesets=${result.rulesetsUpserted} sets=${result.beatmapSetsUpserted} beatmaps=${result.beatmapsUpserted} scores=${result.scoresUpserted} (realm v${result.realmSchemaVersion})`,
+      );
+      await sleep(RESYNC_MS);
+    } catch (err) {
+      if (err instanceof RealmLockedError) {
+        if (!lockLogged) {
+          console.warn(
+            `realm locked (osu!lazer open?) — retrying every ${RETRY_MS}ms`,
+          );
+          try {
+            recordLockedImport(db, err.message);
+          } catch {
+            // ignore ledger write failures during lock
+          }
+          lockLogged = true;
+        }
+        await sleep(RETRY_MS);
+        continue;
+      }
+
+      if (err instanceof SchemaVersionMismatchError) {
+        console.error(err.message);
+        process.exit(1);
+      }
+
+      console.error("sync failed:", err);
+      await sleep(RETRY_MS);
+    }
+  }
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

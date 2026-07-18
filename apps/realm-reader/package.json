@@ -14,6 +14,7 @@
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "sync-once": "tsx src/sync-once.ts",
     "export-schema": "tsx src/export-schema.ts"
   }
 }

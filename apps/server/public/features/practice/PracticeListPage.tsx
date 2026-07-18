@@ -10,10 +10,44 @@ import {
   formatStars,
 } from "../../lib/format";
 
+const PRACTICE_SEARCH_KEY = "roxysu:practice-search";
+
+type StoredPracticeSearch = {
+  q: string;
+  page: number;
+};
+
+function readStoredPracticeSearch(): StoredPracticeSearch {
+  try {
+    const raw = localStorage.getItem(PRACTICE_SEARCH_KEY);
+    if (!raw) return { q: "", page: 1 };
+    const parsed = JSON.parse(raw) as Partial<StoredPracticeSearch>;
+    return {
+      q: typeof parsed.q === "string" ? parsed.q : "",
+      page:
+        typeof parsed.page === "number" &&
+        Number.isFinite(parsed.page) &&
+        parsed.page >= 1
+          ? Math.floor(parsed.page)
+          : 1,
+    };
+  } catch {
+    return { q: "", page: 1 };
+  }
+}
+
+function writeStoredPracticeSearch(q: string, page: number) {
+  localStorage.setItem(
+    PRACTICE_SEARCH_KEY,
+    JSON.stringify({ q, page } satisfies StoredPracticeSearch),
+  );
+}
+
 export function PracticeListPage() {
-  const [q, setQ] = useState("");
-  const [page, setPage] = useState(1);
-  const [submitted, setSubmitted] = useState("");
+  const [stored] = useState(readStoredPracticeSearch);
+  const [q, setQ] = useState(stored.q);
+  const [page, setPage] = useState(stored.page);
+  const [submitted, setSubmitted] = useState(stored.q);
 
   const { data, isLoading, error, isFetching } = useQuery({
     queryKey: ["practice", { page, q: submitted }],
@@ -34,6 +68,13 @@ export function PracticeListPage() {
     ? Math.max(1, Math.ceil(list.total / list.pageSize))
     : 1;
 
+  function applySearch(nextQ: string, nextPage: number) {
+    setQ(nextQ);
+    setSubmitted(nextQ);
+    setPage(nextPage);
+    writeStoredPracticeSearch(nextQ, nextPage);
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -52,8 +93,7 @@ export function PracticeListPage() {
           className="flex gap-2"
           onSubmit={(e) => {
             e.preventDefault();
-            setPage(1);
-            setSubmitted(q.trim());
+            applySearch(q.trim(), 1);
           }}
         >
           <input
@@ -135,7 +175,11 @@ export function PracticeListPage() {
             <button
               type="button"
               disabled={page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              onClick={() => {
+                const next = Math.max(1, page - 1);
+                setPage(next);
+                writeStoredPracticeSearch(submitted, next);
+              }}
               className="rounded-md border border-white/10 px-3 py-1.5 text-sm text-white disabled:opacity-40"
             >
               Previous
@@ -143,7 +187,11 @@ export function PracticeListPage() {
             <button
               type="button"
               disabled={page >= totalPages}
-              onClick={() => setPage((p) => p + 1)}
+              onClick={() => {
+                const next = page + 1;
+                setPage(next);
+                writeStoredPracticeSearch(submitted, next);
+              }}
               className="rounded-md border border-white/10 px-3 py-1.5 text-sm text-white disabled:opacity-40"
             >
               Next

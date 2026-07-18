@@ -1,0 +1,34 @@
+import type { QueryClient } from "@tanstack/react-query";
+
+const LIVE_EVENTS = new Set([
+  "sync.finished",
+  "score.imported",
+  "dashboard.updated",
+]);
+
+/** Subscribe to server SSE and invalidate React Query caches on live events. */
+export function connectLiveUpdates(queryClient: QueryClient): () => void {
+  const source = new EventSource("/api/events");
+
+  const onLive = () => {
+    void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    void queryClient.invalidateQueries({ queryKey: ["system"] });
+    void queryClient.invalidateQueries({ queryKey: ["practice"] });
+    void queryClient.invalidateQueries({ queryKey: ["beatmap"] });
+  };
+
+  for (const name of LIVE_EVENTS) {
+    source.addEventListener(name, onLive);
+  }
+
+  source.onerror = () => {
+    // Browser auto-reconnects EventSource
+  };
+
+  return () => {
+    for (const name of LIVE_EVENTS) {
+      source.removeEventListener(name, onLive);
+    }
+    source.close();
+  };
+}

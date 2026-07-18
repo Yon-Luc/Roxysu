@@ -1,17 +1,12 @@
-import { Elysia } from "elysia";
+import { app } from "./app";
+import { db } from "./db";
+import { startPollLoop } from "./sse";
 
-import { staticPlugin } from "@elysiajs/static";
-const app = new Elysia()
-  .use(
-    await staticPlugin({
-      assets: "public",
-      prefix: "/",
-      indexHTML: true,
-      bunFullstack: true,
-    }),
-  )
-  .listen(3000);
-console.log("🦊 Running at http://localhost:3000/public");
+app.listen(3000);
+startPollLoop(db);
+
 console.log(
-  `🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`,
+  `🦊 Roxysu running at http://${app.server?.hostname}:${app.server?.port}`,
 );
+
+export type { App } from "./app";

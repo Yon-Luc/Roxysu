@@ -11,8 +11,11 @@
   "dependencies": {
     "@elysia/eden": "^1.4.10",
     "@elysia/html": "^1.4.1",
-    "@roxysu/db": "workspace:*",
     "@elysiajs/static": "^1.4.10",
+    "@roxysu/db": "workspace:*",
+    "@tanstack/react-query": "^5.101.2",
+    "@tanstack/react-router": "^1.170.18",
+    "drizzle-orm": "0.36.4",
     "elysia": "^1.4.29",
     "react": "^19",
     "react-dom": "^19",

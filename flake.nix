@@ -20,7 +20,7 @@
     ];
   in {
     devShells.${system}.default = pkgs.mkShell {
-      buildInputs = [pkgs.bun pkgs.nodejs_22] ++ nativeDeps;
+      buildInputs = [pkgs.bun pkgs.nodejs_24] ++ nativeDeps;
 
       # Fallback build toolchain for node-gyp, in case a package's
       # prebuilt binary doesn't match the installed Node/Bun ABI.

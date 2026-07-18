@@ -26,7 +26,8 @@ export type SessionEngineResult = {
 
 /**
  * Group scores into sessions by 30-minute inactivity gaps.
- * Rebuilds sessions and updates score_metrics.session_id.
+ * Reuses existing session IDs when buckets still map to the same scores,
+ * so IDs stay stable across sync/analytics rebuilds.
  */
 export async function runSessionEngine(db: Db): Promise<SessionEngineResult> {
   const rows = await db
@@ -42,18 +43,26 @@ export async function runSessionEngine(db: Db): Promise<SessionEngineResult> {
   const started: number[] = [];
   const finished: number[] = [];
 
-  // Preserve nothing — full rebuild
-  await db.delete(sessions);
+  const existingSessions = await db.select().from(sessions);
+  const existingById = new Map(existingSessions.map((s) => [s.id, s]));
+
+  const allMetrics = await db.select().from(scoreMetrics);
+  const metricsByScore = new Map(allMetrics.map((m) => [m.scoreId, m]));
+  const sessionByScore = new Map(
+    allMetrics.map((m) => [m.scoreId, m.sessionId] as const),
+  );
 
   if (rows.length === 0) {
-    const existing = await db.select().from(scoreMetrics);
-    for (const m of existing) {
+    for (const m of allMetrics) {
       if (m.sessionId != null) {
         await db
           .update(scoreMetrics)
           .set({ sessionId: null })
           .where(eq(scoreMetrics.scoreId, m.scoreId));
       }
+    }
+    if (existingSessions.length > 0) {
+      await db.delete(sessions);
     }
     return { started, finished };
   }
@@ -93,30 +102,69 @@ export async function runSessionEngine(db: Db): Promise<SessionEngineResult> {
 
   const now = Date.now();
   const scoreToSession = new Map<string, number>();
+  const claimedSessionIds = new Set<number>();
 
   for (const bucket of buckets) {
     const isOpen = now - bucket.endedAt.getTime() <= SESSION_GAP_MS;
-    const inserted = await db
-      .insert(sessions)
-      .values({
-        startedAt: bucket.startedAt,
-        endedAt: isOpen ? null : bucket.endedAt,
-        scoreCount: bucket.scoreIds.length,
-        rulesetShortName: bucket.rulesetShortName,
-      })
-      .returning({ id: sessions.id });
 
-    const sessionId = inserted[0]!.id;
-    if (isOpen) started.push(sessionId);
-    else finished.push(sessionId);
+    // Prefer the earliest score's prior session, then any unclaimed match.
+    let sessionId: number | null = null;
+    for (const scoreId of bucket.scoreIds) {
+      const prev = sessionByScore.get(scoreId);
+      if (
+        prev != null &&
+        existingById.has(prev) &&
+        !claimedSessionIds.has(prev)
+      ) {
+        sessionId = prev;
+        break;
+      }
+    }
+
+    const prevRow = sessionId != null ? existingById.get(sessionId) : undefined;
+    const wasOpen = prevRow != null && prevRow.endedAt == null;
+
+    if (sessionId != null) {
+      claimedSessionIds.add(sessionId);
+      await db
+        .update(sessions)
+        .set({
+          startedAt: bucket.startedAt,
+          endedAt: isOpen ? null : bucket.endedAt,
+          scoreCount: bucket.scoreIds.length,
+          rulesetShortName: bucket.rulesetShortName,
+        })
+        .where(eq(sessions.id, sessionId));
+
+      if (isOpen && !wasOpen) started.push(sessionId);
+      if (!isOpen && wasOpen) finished.push(sessionId);
+    } else {
+      const inserted = await db
+        .insert(sessions)
+        .values({
+          startedAt: bucket.startedAt,
+          endedAt: isOpen ? null : bucket.endedAt,
+          scoreCount: bucket.scoreIds.length,
+          rulesetShortName: bucket.rulesetShortName,
+        })
+        .returning({ id: sessions.id });
+
+      sessionId = inserted[0]!.id;
+      claimedSessionIds.add(sessionId);
+      if (isOpen) started.push(sessionId);
+    }
 
     for (const scoreId of bucket.scoreIds) {
       scoreToSession.set(scoreId, sessionId);
     }
   }
 
-  const allMetrics = await db.select().from(scoreMetrics);
-  const metricsByScore = new Map(allMetrics.map((m) => [m.scoreId, m]));
+  const orphanIds = existingSessions
+    .map((s) => s.id)
+    .filter((id) => !claimedSessionIds.has(id));
+  if (orphanIds.length > 0) {
+    await db.delete(sessions).where(inArray(sessions.id, orphanIds));
+  }
 
   for (const [scoreId, sessionId] of scoreToSession) {
     const existing = metricsByScore.get(scoreId);
@@ -140,9 +188,9 @@ export async function runSessionEngine(db: Db): Promise<SessionEngineResult> {
   for (const id of started) {
     publish({ type: "session.started", sessionId: id });
   }
-  // Only emit finished for sessions that just closed relative to "now" —
-  // skip flooding SSE with historical session rebuilds.
-  void finished;
+  for (const id of finished) {
+    publish({ type: "session.finished", sessionId: id });
+  }
 
   return { started, finished };
 }

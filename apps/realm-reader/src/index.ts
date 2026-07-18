@@ -1,27 +1,32 @@
-import { createDb, scores } from "@roxysu/db/client.node";
+import { createDb } from "@roxysu/db/client.node";
+import path from "node:path";
 import Realm from "realm";
+import { loadOsuSchema } from "./schema";
 
 const db = createDb(process.env.DB_PATH ?? "../server/data.sqlite");
-
 console.log("realm-reader starting up, DB connected via @roxysu/db");
 
-const path = "/home/yonluc/.local/share/osu/client.realm";
+const realmPath =
+  process.env.REALM_PATH ??
+  path.join(process.env.HOME ?? "", ".local/share/osu/client.realm");
 
-if (!path) {
-  console.error("Usage: node test-realm.js <path-to-realm>");
-  process.exit(1);
-}
+const { schemaVersion, schema } = loadOsuSchema();
 
 try {
-  // Let Realm use the schema version embedded in the file (osu! = 51).
   const realm = new Realm({
-    path,
+    path: realmPath,
+    schema,
+    schemaVersion,
     readOnly: true,
   });
 
   console.log("✅ Realm opened successfully");
   console.log("Path:", realm.path);
-  console.log("Schemas:", realm.schema.map((s) => s.name).join(", "));
+  console.log("schemaVersion:", realm.schemaVersion);
+  console.log(
+    "Schemas:",
+    realm.schema.map((s) => s.name).join(", "),
+  );
 
   realm.close();
 } catch (err) {

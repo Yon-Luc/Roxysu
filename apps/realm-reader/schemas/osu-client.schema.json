@@ -1,0 +1,832 @@
+{
+  "exportedAt": "2026-07-18T21:39:23.243Z",
+  "realmPath": "/home/yonluc/.local/share/osu/client.realm",
+  "schemaVersion": 51,
+  "schema": [
+    {
+      "name": "Beatmap",
+      "primaryKey": "ID",
+      "embedded": false,
+      "properties": {
+        "ID": {
+          "type": "uuid",
+          "optional": false,
+          "indexed": true,
+          "mapTo": "ID"
+        },
+        "DifficultyName": {
+          "type": "string",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "DifficultyName"
+        },
+        "Ruleset": {
+          "type": "object",
+          "optional": true,
+          "indexed": false,
+          "objectType": "Ruleset",
+          "mapTo": "Ruleset"
+        },
+        "Difficulty": {
+          "type": "object",
+          "optional": true,
+          "indexed": false,
+          "objectType": "BeatmapDifficulty",
+          "mapTo": "Difficulty"
+        },
+        "Metadata": {
+          "type": "object",
+          "optional": true,
+          "indexed": false,
+          "objectType": "BeatmapMetadata",
+          "mapTo": "Metadata"
+        },
+        "UserSettings": {
+          "type": "object",
+          "optional": true,
+          "indexed": false,
+          "objectType": "BeatmapUserSettings",
+          "mapTo": "UserSettings"
+        },
+        "BeatmapSet": {
+          "type": "object",
+          "optional": true,
+          "indexed": false,
+          "objectType": "BeatmapSet",
+          "mapTo": "BeatmapSet"
+        },
+        "Status": {
+          "type": "int",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "Status"
+        },
+        "OnlineID": {
+          "type": "int",
+          "optional": false,
+          "indexed": true,
+          "mapTo": "OnlineID"
+        },
+        "Length": {
+          "type": "double",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "Length"
+        },
+        "BPM": {
+          "type": "double",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "BPM"
+        },
+        "Hash": {
+          "type": "string",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "Hash"
+        },
+        "StarRating": {
+          "type": "double",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "StarRating"
+        },
+        "MD5Hash": {
+          "type": "string",
+          "optional": true,
+          "indexed": true,
+          "mapTo": "MD5Hash"
+        },
+        "OnlineMD5Hash": {
+          "type": "string",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "OnlineMD5Hash"
+        },
+        "LastLocalUpdate": {
+          "type": "date",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "LastLocalUpdate"
+        },
+        "LastOnlineUpdate": {
+          "type": "date",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "LastOnlineUpdate"
+        },
+        "Hidden": {
+          "type": "bool",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "Hidden"
+        },
+        "EndTimeObjectCount": {
+          "type": "int",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "EndTimeObjectCount"
+        },
+        "TotalObjectCount": {
+          "type": "int",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "TotalObjectCount"
+        },
+        "LastPlayed": {
+          "type": "date",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "LastPlayed"
+        },
+        "BeatDivisor": {
+          "type": "int",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "BeatDivisor"
+        },
+        "EditorTimestamp": {
+          "type": "double",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "EditorTimestamp"
+        }
+      }
+    },
+    {
+      "name": "BeatmapCollection",
+      "primaryKey": "ID",
+      "embedded": false,
+      "properties": {
+        "ID": {
+          "type": "uuid",
+          "optional": false,
+          "indexed": true,
+          "mapTo": "ID"
+        },
+        "Name": {
+          "type": "string",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "Name"
+        },
+        "BeatmapMD5Hashes": {
+          "type": "list",
+          "optional": true,
+          "indexed": false,
+          "objectType": "string",
+          "mapTo": "BeatmapMD5Hashes"
+        },
+        "LastModified": {
+          "type": "date",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "LastModified"
+        }
+      }
+    },
+    {
+      "name": "BeatmapDifficulty",
+      "embedded": true,
+      "properties": {
+        "DrainRate": {
+          "type": "float",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "DrainRate"
+        },
+        "CircleSize": {
+          "type": "float",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "CircleSize"
+        },
+        "OverallDifficulty": {
+          "type": "float",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "OverallDifficulty"
+        },
+        "ApproachRate": {
+          "type": "float",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "ApproachRate"
+        },
+        "SliderMultiplier": {
+          "type": "double",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "SliderMultiplier"
+        },
+        "SliderTickRate": {
+          "type": "double",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "SliderTickRate"
+        }
+      }
+    },
+    {
+      "name": "BeatmapMetadata",
+      "embedded": false,
+      "properties": {
+        "Title": {
+          "type": "string",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "Title"
+        },
+        "TitleUnicode": {
+          "type": "string",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "TitleUnicode"
+        },
+        "Artist": {
+          "type": "string",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "Artist"
+        },
+        "ArtistUnicode": {
+          "type": "string",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "ArtistUnicode"
+        },
+        "Author": {
+          "type": "object",
+          "optional": true,
+          "indexed": false,
+          "objectType": "RealmUser",
+          "mapTo": "Author"
+        },
+        "Source": {
+          "type": "string",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "Source"
+        },
+        "Tags": {
+          "type": "string",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "Tags"
+        },
+        "PreviewTime": {
+          "type": "int",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "PreviewTime"
+        },
+        "AudioFile": {
+          "type": "string",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "AudioFile"
+        },
+        "BackgroundFile": {
+          "type": "string",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "BackgroundFile"
+        },
+        "UserTags": {
+          "type": "list",
+          "optional": true,
+          "indexed": false,
+          "objectType": "string",
+          "mapTo": "UserTags"
+        }
+      }
+    },
+    {
+      "name": "BeatmapSet",
+      "primaryKey": "ID",
+      "embedded": false,
+      "properties": {
+        "ID": {
+          "type": "uuid",
+          "optional": false,
+          "indexed": true,
+          "mapTo": "ID"
+        },
+        "OnlineID": {
+          "type": "int",
+          "optional": false,
+          "indexed": true,
+          "mapTo": "OnlineID"
+        },
+        "DateAdded": {
+          "type": "date",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "DateAdded"
+        },
+        "DateSubmitted": {
+          "type": "date",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "DateSubmitted"
+        },
+        "DateRanked": {
+          "type": "date",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "DateRanked"
+        },
+        "Beatmaps": {
+          "type": "list",
+          "optional": false,
+          "indexed": false,
+          "objectType": "Beatmap",
+          "mapTo": "Beatmaps"
+        },
+        "Files": {
+          "type": "list",
+          "optional": false,
+          "indexed": false,
+          "objectType": "RealmNamedFileUsage",
+          "mapTo": "Files"
+        },
+        "Status": {
+          "type": "int",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "Status"
+        },
+        "DeletePending": {
+          "type": "bool",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "DeletePending"
+        },
+        "Hash": {
+          "type": "string",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "Hash"
+        },
+        "Protected": {
+          "type": "bool",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "Protected"
+        }
+      }
+    },
+    {
+      "name": "BeatmapUserSettings",
+      "embedded": true,
+      "properties": {
+        "Offset": {
+          "type": "double",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "Offset"
+        }
+      }
+    },
+    {
+      "name": "File",
+      "primaryKey": "Hash",
+      "embedded": false,
+      "properties": {
+        "Hash": {
+          "type": "string",
+          "optional": true,
+          "indexed": true,
+          "mapTo": "Hash"
+        }
+      }
+    },
+    {
+      "name": "KeyBinding",
+      "primaryKey": "ID",
+      "embedded": false,
+      "properties": {
+        "ID": {
+          "type": "uuid",
+          "optional": false,
+          "indexed": true,
+          "mapTo": "ID"
+        },
+        "RulesetName": {
+          "type": "string",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "RulesetName"
+        },
+        "Variant": {
+          "type": "int",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "Variant"
+        },
+        "Action": {
+          "type": "int",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "Action"
+        },
+        "KeyCombination": {
+          "type": "string",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "KeyCombination"
+        }
+      }
+    },
+    {
+      "name": "ModPreset",
+      "primaryKey": "ID",
+      "embedded": false,
+      "properties": {
+        "ID": {
+          "type": "uuid",
+          "optional": false,
+          "indexed": true,
+          "mapTo": "ID"
+        },
+        "Ruleset": {
+          "type": "object",
+          "optional": true,
+          "indexed": false,
+          "objectType": "Ruleset",
+          "mapTo": "Ruleset"
+        },
+        "Name": {
+          "type": "string",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "Name"
+        },
+        "Description": {
+          "type": "string",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "Description"
+        },
+        "Mods": {
+          "type": "string",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "Mods"
+        },
+        "DeletePending": {
+          "type": "bool",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "DeletePending"
+        }
+      }
+    },
+    {
+      "name": "RealmNamedFileUsage",
+      "embedded": true,
+      "properties": {
+        "File": {
+          "type": "object",
+          "optional": true,
+          "indexed": false,
+          "objectType": "File",
+          "mapTo": "File"
+        },
+        "Filename": {
+          "type": "string",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "Filename"
+        }
+      }
+    },
+    {
+      "name": "RealmUser",
+      "embedded": true,
+      "properties": {
+        "OnlineID": {
+          "type": "int",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "OnlineID"
+        },
+        "Username": {
+          "type": "string",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "Username"
+        },
+        "CountryCode": {
+          "type": "string",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "CountryCode"
+        }
+      }
+    },
+    {
+      "name": "Ruleset",
+      "primaryKey": "ShortName",
+      "embedded": false,
+      "properties": {
+        "ShortName": {
+          "type": "string",
+          "optional": true,
+          "indexed": true,
+          "mapTo": "ShortName"
+        },
+        "OnlineID": {
+          "type": "int",
+          "optional": false,
+          "indexed": true,
+          "mapTo": "OnlineID"
+        },
+        "Name": {
+          "type": "string",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "Name"
+        },
+        "InstantiationInfo": {
+          "type": "string",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "InstantiationInfo"
+        },
+        "LastAppliedDifficultyVersion": {
+          "type": "int",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "LastAppliedDifficultyVersion"
+        },
+        "Available": {
+          "type": "bool",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "Available"
+        }
+      }
+    },
+    {
+      "name": "RulesetSetting",
+      "embedded": false,
+      "properties": {
+        "RulesetName": {
+          "type": "string",
+          "optional": true,
+          "indexed": true,
+          "mapTo": "RulesetName"
+        },
+        "Variant": {
+          "type": "int",
+          "optional": false,
+          "indexed": true,
+          "mapTo": "Variant"
+        },
+        "Key": {
+          "type": "string",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "Key"
+        },
+        "Value": {
+          "type": "string",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "Value"
+        }
+      }
+    },
+    {
+      "name": "Score",
+      "primaryKey": "ID",
+      "embedded": false,
+      "properties": {
+        "ID": {
+          "type": "uuid",
+          "optional": false,
+          "indexed": true,
+          "mapTo": "ID"
+        },
+        "BeatmapInfo": {
+          "type": "object",
+          "optional": true,
+          "indexed": false,
+          "objectType": "Beatmap",
+          "mapTo": "BeatmapInfo"
+        },
+        "ClientVersion": {
+          "type": "string",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "ClientVersion"
+        },
+        "BeatmapHash": {
+          "type": "string",
+          "optional": true,
+          "indexed": true,
+          "mapTo": "BeatmapHash"
+        },
+        "Ruleset": {
+          "type": "object",
+          "optional": true,
+          "indexed": false,
+          "objectType": "Ruleset",
+          "mapTo": "Ruleset"
+        },
+        "Files": {
+          "type": "list",
+          "optional": false,
+          "indexed": false,
+          "objectType": "RealmNamedFileUsage",
+          "mapTo": "Files"
+        },
+        "Hash": {
+          "type": "string",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "Hash"
+        },
+        "DeletePending": {
+          "type": "bool",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "DeletePending"
+        },
+        "TotalScore": {
+          "type": "int",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "TotalScore"
+        },
+        "TotalScoreWithoutMods": {
+          "type": "int",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "TotalScoreWithoutMods"
+        },
+        "TotalScoreVersion": {
+          "type": "int",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "TotalScoreVersion"
+        },
+        "LegacyTotalScore": {
+          "type": "int",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "LegacyTotalScore"
+        },
+        "BackgroundReprocessingFailed": {
+          "type": "bool",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "BackgroundReprocessingFailed"
+        },
+        "MaxCombo": {
+          "type": "int",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "MaxCombo"
+        },
+        "Accuracy": {
+          "type": "double",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "Accuracy"
+        },
+        "Date": {
+          "type": "date",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "Date"
+        },
+        "PP": {
+          "type": "double",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "PP"
+        },
+        "OnlineID": {
+          "type": "int",
+          "optional": false,
+          "indexed": true,
+          "mapTo": "OnlineID"
+        },
+        "LegacyOnlineID": {
+          "type": "int",
+          "optional": false,
+          "indexed": true,
+          "mapTo": "LegacyOnlineID"
+        },
+        "User": {
+          "type": "object",
+          "optional": true,
+          "indexed": false,
+          "objectType": "RealmUser",
+          "mapTo": "User"
+        },
+        "Mods": {
+          "type": "string",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "Mods"
+        },
+        "Statistics": {
+          "type": "string",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "Statistics"
+        },
+        "MaximumStatistics": {
+          "type": "string",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "MaximumStatistics"
+        },
+        "Rank": {
+          "type": "int",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "Rank"
+        },
+        "Combo": {
+          "type": "int",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "Combo"
+        },
+        "IsLegacyScore": {
+          "type": "bool",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "IsLegacyScore"
+        },
+        "Pauses": {
+          "type": "list",
+          "optional": false,
+          "indexed": false,
+          "objectType": "int",
+          "mapTo": "Pauses"
+        }
+      }
+    },
+    {
+      "name": "Skin",
+      "primaryKey": "ID",
+      "embedded": false,
+      "properties": {
+        "ID": {
+          "type": "uuid",
+          "optional": false,
+          "indexed": true,
+          "mapTo": "ID"
+        },
+        "Name": {
+          "type": "string",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "Name"
+        },
+        "Creator": {
+          "type": "string",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "Creator"
+        },
+        "InstantiationInfo": {
+          "type": "string",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "InstantiationInfo"
+        },
+        "Hash": {
+          "type": "string",
+          "optional": true,
+          "indexed": false,
+          "mapTo": "Hash"
+        },
+        "Protected": {
+          "type": "bool",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "Protected"
+        },
+        "Files": {
+          "type": "list",
+          "optional": false,
+          "indexed": false,
+          "objectType": "RealmNamedFileUsage",
+          "mapTo": "Files"
+        },
+        "DeletePending": {
+          "type": "bool",
+          "optional": false,
+          "indexed": false,
+          "mapTo": "DeletePending"
+        }
+      }
+    }
+  ]
+}

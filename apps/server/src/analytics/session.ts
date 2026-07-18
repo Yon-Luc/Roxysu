@@ -6,6 +6,7 @@ import {
   desc,
   inArray,
   type Db,
+  beatmaps,
   scores,
   scoreMetrics,
   sessions,
@@ -154,6 +155,47 @@ export async function getCurrentSession(db: Db) {
     .orderBy(desc(sessions.startedAt))
     .limit(1);
   return current ?? null;
+}
+
+export async function getSessionById(db: Db, id: number) {
+  const [row] = await db
+    .select()
+    .from(sessions)
+    .where(eq(sessions.id, id))
+    .limit(1);
+  return row ?? null;
+}
+
+export async function listSessionScores(db: Db, sessionId: number) {
+  return db
+    .select({
+      id: scores.id,
+      beatmapId: scores.beatmapId,
+      accuracy: scores.accuracy,
+      pp: scores.pp,
+      maxCombo: scores.maxCombo,
+      mods: scores.mods,
+      rank: scores.rank,
+      totalScore: scores.totalScore,
+      rulesetShortName: scores.rulesetShortName,
+      playedAt: scores.playedAt,
+      isPb: scoreMetrics.isPb,
+      retryIndex: scoreMetrics.retryIndex,
+      title: beatmaps.title,
+      artist: beatmaps.artist,
+      difficultyName: beatmaps.difficultyName,
+      starRating: beatmaps.starRating,
+    })
+    .from(scoreMetrics)
+    .innerJoin(scores, eq(scoreMetrics.scoreId, scores.id))
+    .leftJoin(beatmaps, eq(scores.beatmapId, beatmaps.id))
+    .where(
+      and(
+        eq(scoreMetrics.sessionId, sessionId),
+        eq(scores.deletePending, false),
+      ),
+    )
+    .orderBy(desc(scores.playedAt), desc(scores.id));
 }
 
 export async function listSessions(db: Db, limit = 50) {

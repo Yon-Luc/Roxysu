@@ -90,6 +90,13 @@ export async function fetchSessions() {
   return unwrap(await api.api.sessions.get(), "/api/sessions");
 }
 
+export async function fetchSession(id: string | number) {
+  return unwrap(
+    await api.api.sessions({ id: String(id) }).get(),
+    `/api/sessions/${id}`,
+  );
+}
+
 export async function fetchCollections() {
   return unwrap(await api.api.collections.get(), "/api/collections");
 }
@@ -148,5 +155,9 @@ export type BeatmapProfile = Exclude<
 >;
 export type RecentScore = Dashboard["recentScores"][number];
 export type SessionsPayload = Awaited<ReturnType<typeof fetchSessions>>;
+export type SessionDetail = Exclude<
+  Awaited<ReturnType<typeof fetchSession>>,
+  { error: string }
+>;
 export type CollectionsPayload = Awaited<ReturnType<typeof fetchCollections>>;
 export type SettingsPayload = Awaited<ReturnType<typeof fetchSettings>>;

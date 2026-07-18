@@ -114,12 +114,18 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
           ) : (
             <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto text-sm">
               {sessions.map((s) => (
-                <li
-                  key={s.id}
-                  className="flex justify-between gap-2 text-[#a8b0c0]"
-                >
-                  <span>{formatRelativeTime(s.startedAt)}</span>
-                  <span className="tabular-nums">{s.scoreCount} plays</span>
+                <li key={s.id}>
+                  <Link
+                    to="/sessions/$sessionId"
+                    params={{
+                      sessionId:
+                        s.endedAt == null ? "current" : String(s.id),
+                    }}
+                    className="flex justify-between gap-2 text-[#a8b0c0] hover:text-white"
+                  >
+                    <span>{formatRelativeTime(s.startedAt)}</span>
+                    <span className="tabular-nums">{s.scoreCount} plays</span>
+                  </Link>
                 </li>
               ))}
             </ul>

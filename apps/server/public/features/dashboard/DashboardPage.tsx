@@ -73,14 +73,23 @@ export function DashboardPage() {
               : "—"
           }
         />
-        <Stat
-          label="Current session"
-          value={
-            session
-              ? `${session.scoreCount} plays · ${formatRelativeTime(session.startedAt)}`
-              : "None"
-          }
-        />
+        {session ? (
+          <Link
+            to="/sessions/$sessionId"
+            params={{ sessionId: "current" }}
+            className="rounded-lg border border-white/10 bg-[#151922] px-4 py-3 transition hover:border-emerald-500/30 hover:bg-emerald-500/5"
+          >
+            <div className="text-xs uppercase tracking-wider text-[#8b93a7]">
+              Current session
+            </div>
+            <div className="mt-1 text-xl font-semibold tabular-nums text-white">
+              {session.scoreCount} plays ·{" "}
+              {formatRelativeTime(session.startedAt)}
+            </div>
+          </Link>
+        ) : (
+          <Stat label="Current session" value="None" />
+        )}
       </section>
 
       <section className="grid gap-4 lg:grid-cols-2">

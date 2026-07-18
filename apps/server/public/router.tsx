@@ -10,6 +10,7 @@ import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { PracticeListPage } from "./features/practice/PracticeListPage";
 import { PracticeProfilePage } from "./features/practice/PracticeProfilePage";
 import { SessionsPage } from "./features/sessions/SessionsPage";
+import { SessionDetailPage } from "./features/sessions/SessionDetailPage";
 import { CollectionsPage } from "./features/collections/CollectionsPage";
 import { CollectionResultsPage } from "./features/collections/CollectionResultsPage";
 import { SettingsPage } from "./features/settings/SettingsPage";
@@ -49,6 +50,15 @@ const sessionsRoute = createRoute({
   component: SessionsPage,
 });
 
+const sessionDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/sessions/$sessionId",
+  component: function SessionDetailRoute() {
+    const { sessionId } = sessionDetailRoute.useParams();
+    return <SessionDetailPage sessionId={sessionId} />;
+  },
+});
+
 const collectionsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/collections",
@@ -75,6 +85,7 @@ const routeTree = rootRoute.addChildren([
   practiceRoute,
   practiceProfileRoute,
   sessionsRoute,
+  sessionDetailRoute,
   collectionsRoute,
   collectionResultsRoute,
   settingsRoute,

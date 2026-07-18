@@ -34,6 +34,11 @@ import { loadOsuSchema } from "./schema";
 
 const BATCH_SIZE = 500;
 
+/** Realm uuid PKs require a BSON.UUID instance, not a plain string. */
+function realmUuid(id: string): Realm.BSON.UUID {
+  return new Realm.BSON.UUID(id);
+}
+
 export class RealmLockedError extends Error {
   constructor(message: string) {
     super(message);
@@ -564,7 +569,10 @@ export function runIncrementalSync(db: Db, realmPath: string): SyncResult {
         if (row.beatmapId) {
           // Ensure beatmap parent exists for new scores
           if (!beatmapIds.has(row.beatmapId)) {
-            const bm = realm.objectForPrimaryKey("Beatmap", row.beatmapId);
+            const bm = realm.objectForPrimaryKey(
+              "Beatmap",
+              realmUuid(row.beatmapId),
+            );
             if (bm) {
               const mapped = mapBeatmap(bm as never);
               if (mapped) {
@@ -600,7 +608,7 @@ export function runIncrementalSync(db: Db, realmPath: string): SyncResult {
 
     const setRows: BeatmapSetRow[] = [];
     for (const setId of setIdsNeeded) {
-      const obj = realm.objectForPrimaryKey("BeatmapSet", setId);
+      const obj = realm.objectForPrimaryKey("BeatmapSet", realmUuid(setId));
       if (!obj) continue;
       const row = mapBeatmapSet(obj as never);
       if (row) setRows.push(row);

@@ -94,7 +94,7 @@ export function DashboardPage() {
                 <XAxis
                   dataKey="weekStart"
                   tick={{ fill: "#8b93a7", fontSize: 11 }}
-                  tickFormatter={(v: string) => v.slice(5)}
+                  tickFormatter={(v) => String(v).slice(5)}
                 />
                 <YAxis tick={{ fill: "#8b93a7", fontSize: 11 }} width={36} />
                 <Tooltip
@@ -126,7 +126,7 @@ export function DashboardPage() {
                 <XAxis
                   dataKey="day"
                   tick={{ fill: "#8b93a7", fontSize: 11 }}
-                  tickFormatter={(v: string) => v.slice(5)}
+                  tickFormatter={(v) => String(v).slice(5)}
                 />
                 <YAxis
                   yAxisId="pp"

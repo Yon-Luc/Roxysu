@@ -4,6 +4,10 @@ const LIVE_EVENTS = new Set([
   "sync.finished",
   "score.imported",
   "dashboard.updated",
+  "mastery.updated",
+  "session.started",
+  "session.finished",
+  "collection.updated",
 ]);
 
 /** Subscribe to server SSE and invalidate React Query caches on live events. */
@@ -15,6 +19,9 @@ export function connectLiveUpdates(queryClient: QueryClient): () => void {
     void queryClient.invalidateQueries({ queryKey: ["system"] });
     void queryClient.invalidateQueries({ queryKey: ["practice"] });
     void queryClient.invalidateQueries({ queryKey: ["beatmap"] });
+    void queryClient.invalidateQueries({ queryKey: ["sessions"] });
+    void queryClient.invalidateQueries({ queryKey: ["collections"] });
+    void queryClient.invalidateQueries({ queryKey: ["settings"] });
   };
 
   for (const name of LIVE_EVENTS) {

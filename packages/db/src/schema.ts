@@ -174,7 +174,20 @@ export const mastery = sqliteTable("mastery", {
   bestAccuracy: real("best_accuracy"),
   bestPp: real("best_pp"),
   lastPlayedAt: integer("last_played_at", { mode: "timestamp_ms" }),
+  formulaId: text("formula_id").notNull().default("simple"),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+});
+
+export const collections = sqliteTable("collections", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  query: text("query").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch() * 1000)`),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch() * 1000)`),
 });
 
 export const tags = sqliteTable("tags", {

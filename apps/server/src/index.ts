@@ -2,9 +2,11 @@ import { closeDb } from "@roxysu/db/client.bun";
 import { app } from "./app";
 import { db } from "./db";
 import { startPollLoop } from "./sse";
+import { startAnalyticsPipeline } from "./analytics/pipeline";
 
 app.listen(3000);
 const stopPoll = startPollLoop(db);
+const stopAnalytics = startAnalyticsPipeline(db);
 
 console.log(
   `🦊 Roxysu running at http://${app.server?.hostname}:${app.server?.port}`,
@@ -17,6 +19,7 @@ async function shutdown(signal: string) {
   shuttingDown = true;
   console.log(`\nshutting down (${signal})…`);
 
+  stopAnalytics();
   stopPoll();
   try {
     await app.stop(true);

@@ -1,8 +1,9 @@
 import { Elysia, t } from "elysia";
-import { count, desc, eq, max } from "drizzle-orm";
-import { beatmaps, scores } from "@roxysu/db/client.bun";
+import { and, count, desc, eq, max } from "drizzle-orm";
+import { beatmaps, mastery, scores } from "@roxysu/db/client.bun";
 import { dbPlugin } from "../db";
 import { toIso } from "../shared/serialize";
+import { listSessionsForBeatmap } from "../analytics/session";
 
 export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
   .use(dbPlugin)
@@ -23,7 +24,9 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
       const recentScores = await db
         .select()
         .from(scores)
-        .where(eq(scores.beatmapId, params.id))
+        .where(
+          and(eq(scores.beatmapId, params.id), eq(scores.deletePending, false)),
+        )
         .orderBy(desc(scores.playedAt))
         .limit(50);
 
@@ -35,7 +38,17 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
           lastPlayedAt: max(scores.playedAt),
         })
         .from(scores)
-        .where(eq(scores.beatmapId, params.id));
+        .where(
+          and(eq(scores.beatmapId, params.id), eq(scores.deletePending, false)),
+        );
+
+      const [masteryRow] = await db
+        .select()
+        .from(mastery)
+        .where(eq(mastery.beatmapId, params.id))
+        .limit(1);
+
+      const sessionRows = await listSessionsForBeatmap(db, params.id);
 
       return {
         beatmap: {
@@ -76,11 +89,26 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
           rulesetShortName: s.rulesetShortName,
           playedAt: toIso(s.playedAt),
         })),
-        // Phase 5–6 placeholders
-        mastery: null,
-        notes: [],
-        tags: [],
-        sessions: [],
+        mastery: masteryRow
+          ? {
+              level: masteryRow.level,
+              playCount: masteryRow.playCount,
+              bestAccuracy: masteryRow.bestAccuracy,
+              bestPp: masteryRow.bestPp,
+              lastPlayedAt: toIso(masteryRow.lastPlayedAt),
+              formulaId: masteryRow.formulaId,
+              updatedAt: toIso(masteryRow.updatedAt),
+            }
+          : null,
+        notes: [] as Array<{ id: number; body: string }>,
+        tags: [] as Array<{ id: number; name: string; color: string | null }>,
+        sessions: sessionRows.map((s) => ({
+          id: s.id,
+          startedAt: toIso(s.startedAt)!,
+          endedAt: toIso(s.endedAt),
+          scoreCount: s.scoreCount,
+          rulesetShortName: s.rulesetShortName,
+        })),
       };
     },
     {

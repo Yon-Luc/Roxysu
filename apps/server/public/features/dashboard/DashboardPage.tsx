@@ -1,5 +1,17 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import type { ReactNode } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { fetchDashboard } from "../../lib/api";
 import {
   formatAccuracy,
@@ -28,6 +40,10 @@ export function DashboardPage() {
   }
 
   const last = data.sync.lastImport;
+  const session = data.currentSession;
+  const weekly = data.weeklyActivity ?? [];
+  const ppTrend = data.ppTrend ?? [];
+  const accTrend = data.accuracyTrend ?? [];
 
   return (
     <div className="space-y-10">
@@ -40,7 +56,7 @@ export function DashboardPage() {
         </p>
       </div>
 
-      <section className="grid gap-4 sm:grid-cols-3">
+      <section className="grid gap-4 sm:grid-cols-4">
         <Stat
           label="Scores indexed"
           value={data.sync.scoreCount.toLocaleString()}
@@ -57,6 +73,100 @@ export function DashboardPage() {
               : "—"
           }
         />
+        <Stat
+          label="Current session"
+          value={
+            session
+              ? `${session.scoreCount} plays · ${formatRelativeTime(session.startedAt)}`
+              : "None"
+          }
+        />
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-2">
+        <ChartCard title="Weekly activity">
+          {weekly.length === 0 ? (
+            <EmptyChart />
+          ) : (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={weekly}>
+                <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
+                <XAxis
+                  dataKey="weekStart"
+                  tick={{ fill: "#8b93a7", fontSize: 11 }}
+                  tickFormatter={(v: string) => v.slice(5)}
+                />
+                <YAxis tick={{ fill: "#8b93a7", fontSize: 11 }} width={36} />
+                <Tooltip
+                  contentStyle={{
+                    background: "#151922",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    borderRadius: 8,
+                  }}
+                />
+                <Bar dataKey="playCount" fill="#6b8afd" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+
+        <ChartCard title="PP / accuracy trend">
+          {ppTrend.length === 0 && accTrend.length === 0 ? (
+            <EmptyChart />
+          ) : (
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart
+                data={ppTrend.map((p, i) => ({
+                  day: p.day,
+                  totalPp: p.totalPp,
+                  avgAccuracy: (accTrend[i]?.avgAccuracy ?? 0) * 100,
+                }))}
+              >
+                <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
+                <XAxis
+                  dataKey="day"
+                  tick={{ fill: "#8b93a7", fontSize: 11 }}
+                  tickFormatter={(v: string) => v.slice(5)}
+                />
+                <YAxis
+                  yAxisId="pp"
+                  tick={{ fill: "#8b93a7", fontSize: 11 }}
+                  width={40}
+                />
+                <YAxis
+                  yAxisId="acc"
+                  orientation="right"
+                  tick={{ fill: "#8b93a7", fontSize: 11 }}
+                  width={36}
+                  domain={[0, 100]}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: "#151922",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    borderRadius: 8,
+                  }}
+                />
+                <Line
+                  yAxisId="pp"
+                  type="monotone"
+                  dataKey="totalPp"
+                  stroke="#6b8afd"
+                  dot={false}
+                  strokeWidth={2}
+                />
+                <Line
+                  yAxisId="acc"
+                  type="monotone"
+                  dataKey="avgAccuracy"
+                  stroke="#5ecf9a"
+                  dot={false}
+                  strokeWidth={2}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
       </section>
 
       <section>
@@ -114,17 +224,6 @@ export function DashboardPage() {
           </ul>
         )}
       </section>
-
-      <section className="grid gap-4 sm:grid-cols-2">
-        <Placeholder
-          title="Weekly activity"
-          body="Charts arrive with the Statistics Engine (Phase 5)."
-        />
-        <Placeholder
-          title="PP / accuracy trend"
-          body="Trend series will live here once derived stats are computed."
-        />
-      </section>
     </div>
   );
 }
@@ -142,11 +241,25 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Placeholder({ title, body }: { title: string; body: string }) {
+function ChartCard({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
   return (
-    <div className="rounded-lg border border-dashed border-white/15 bg-[#151922]/50 px-4 py-5">
-      <h3 className="text-sm font-medium text-[#a8b0c0]">{title}</h3>
-      <p className="mt-1 text-sm text-[#6b7385]">{body}</p>
+    <div className="rounded-lg border border-white/10 bg-[#151922] px-4 py-4">
+      <h3 className="mb-3 text-sm font-medium text-[#a8b0c0]">{title}</h3>
+      {children}
     </div>
+  );
+}
+
+function EmptyChart() {
+  return (
+    <p className="py-12 text-center text-sm text-[#6b7385]">
+      No derived stats yet — analytics pipeline will fill this after sync.
+    </p>
   );
 }

@@ -1,15 +1,29 @@
 import { Elysia } from "elysia";
+import { dbPlugin } from "../db";
+import { toIso } from "../shared/serialize";
+import { getCurrentSession, listSessions } from "../analytics/session";
 
-/** Session Engine is Phase 5 — return empty list for now. */
-export const sessionRoutes = new Elysia({ prefix: "/sessions" }).get(
-  "/",
-  () => ({
-    items: [] as Array<{
-      id: number;
-      startedAt: string;
-      endedAt: string | null;
-      scoreCount: number;
-      rulesetShortName: string | null;
-    }>,
-  }),
-);
+export const sessionRoutes = new Elysia({ prefix: "/sessions" })
+  .use(dbPlugin)
+  .get("/", async ({ db }) => {
+    const items = await listSessions(db, 100);
+    const current = await getCurrentSession(db);
+    return {
+      current: current
+        ? {
+            id: current.id,
+            startedAt: toIso(current.startedAt),
+            endedAt: toIso(current.endedAt),
+            scoreCount: current.scoreCount,
+            rulesetShortName: current.rulesetShortName,
+          }
+        : null,
+      items: items.map((s) => ({
+        id: s.id,
+        startedAt: toIso(s.startedAt)!,
+        endedAt: toIso(s.endedAt),
+        scoreCount: s.scoreCount,
+        rulesetShortName: s.rulesetShortName,
+      })),
+    };
+  });

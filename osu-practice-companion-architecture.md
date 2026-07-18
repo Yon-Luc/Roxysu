@@ -43,11 +43,9 @@ A local-first analytics platform for **osu!lazer** that continuously indexes the
 
 ### Planned frontend additions (not yet wired)
 
-- TanStack Query
-- TanStack Table
-- TanStack Router
-- Recharts
+- TanStack Table (optional denser score tables)
 
+Wired: TanStack Query, TanStack Router, Recharts.
 ## Architecture
 
 ```text
@@ -88,6 +86,9 @@ SQLite supports multiple processes against the same file, but a few rules keep i
 
 `realm-reader` only writes to SQLite — it has no way to push events to the browser directly. `server` detects new data by **polling** SQLite every 1–2s for rows newer than the last-seen id/timestamp in `imports`, then emits the appropriate Event Bus event. This is simpler than building a second IPC channel between the two processes, and at this data volume/latency requirement it's more than sufficient — nothing here needs sub-second push semantics.
 
+## Realm Sync Strategy
+
+`realm-reader` prefers **watermark incremental sync** (`Score.Date` / `Beatmap.LastLocalUpdate` vs SQLite maxima), writing `imports.kind = "incremental"`. Every N cycles (default 10) — or on first run / `REALM_FULL_SYNC=1` — it runs a **full reconcile**: upsert all objects and delete SQLite orphans not present in Realm. Soft-deleted Realm objects are upserted with `delete_pending = true` (not skipped). Realm `addListener` change notifications are intentionally not used while lazer may exclusive-lock the file; polling + watermarks match the latency model above.
 ## Monorepo
 
 ```text
@@ -170,15 +171,14 @@ SQLite stores:
 
 ## Core Tables
 
-- beatmaps
+- beatmaps / beatmap_sets / rulesets (raw)
 - scores
 - sessions
-- collections
-- collection_filters
+- collections (canonical `query` text — no separate filter JSON table)
 - tags
 - beatmap_tags
 - notes
-- mastery
+- mastery (`formula_id` records which mastery formula produced `level`)
 - imports
 - settings
 - daily_stats
@@ -186,16 +186,22 @@ SQLite stores:
 - mapper_stats
 - score_metrics
 
+## Mastery Formulas
+
+Mastery is pluggable via an in-process registry (`apps/server/src/analytics/mastery/`):
+
+- Active formula id stored in `settings` key `mastery.formula` (default `simple`).
+- Shipping formulas: `simple` (acc + play count + PP), `practice` (acc + retries + consistency).
+- Switching formula via `/api/settings` recomputes all mastery rows.
+
 ## Analytics Engines
 
 - Session Engine
-- Mastery Engine
-- Progression Engine
+- Mastery Engine (pluggable formulas)
+- Progression Engine (dashboard trend read-models)
 - Retry Engine
 - Statistics Engine
-- Collection Engine
-- Search Engine
-
+- Collection Engine / Search Engine (query language)
 ## Workspaces
 
 ### Dashboard
@@ -280,33 +286,31 @@ This would be added as a **third isolated adapter**, not a replacement for Realm
 
 ## Roadmap
 
-### Phase 1 — Foundation *(in progress)*
+### Phase 1 — Foundation *(done)*
 - Workspace scaffold: `apps/server` (Bun/Elysia), `apps/realm-reader` (Node), `packages/db` (shared Drizzle schema, dual clients)
 - NixOS devShell for native module builds
-- SQLite schema + Drizzle client proven end-to-end (insert/select round-trip)
-- Next: real Realm JS integration in `realm-reader` — read `client.realm`, map to raw tables
+- SQLite schema + Drizzle migrations
+- Realm JS integration — read `client.realm`, map to raw tables
 
-### Phase 2
-- Live sync (Realm change notifications → SQLite writes)
+### Phase 2 *(done)*
+- Watermark incremental sync + periodic full reconcile (deletions)
 - HTTP API
 - SSE (via server poll loop)
 
-### Phase 3
+### Phase 3 *(done)*
 - Dashboard
 - Practice list
 - Practice profile
 
-### Phase 4
-- Query language
-- Smart collections
+### Phase 4 *(done)*
+- Query language (boolean AND/OR/NOT)
+- Smart collections (query strings)
 - Search
 
-### Phase 5
-- Analytics
-- Mastery
-- Sessions
-- Progression
-- Retry analysis
+### Phase 5 *(done)*
+- Analytics pipeline (Retry → Session → Mastery → Statistics)
+- Pluggable mastery formulas
+- Sessions, progression trends, retry metrics
 
 ### Phase 6
 - Notes

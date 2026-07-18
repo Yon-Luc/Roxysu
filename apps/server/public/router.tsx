@@ -9,6 +9,10 @@ import { AppShell } from "./components/AppShell";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { PracticeListPage } from "./features/practice/PracticeListPage";
 import { PracticeProfilePage } from "./features/practice/PracticeProfilePage";
+import { SessionsPage } from "./features/sessions/SessionsPage";
+import { CollectionsPage } from "./features/collections/CollectionsPage";
+import { CollectionResultsPage } from "./features/collections/CollectionResultsPage";
+import { SettingsPage } from "./features/settings/SettingsPage";
 
 const rootRoute = createRootRoute({
   component: () => (
@@ -39,10 +43,41 @@ const practiceProfileRoute = createRoute({
   },
 });
 
+const sessionsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/sessions",
+  component: SessionsPage,
+});
+
+const collectionsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/collections",
+  component: CollectionsPage,
+});
+
+const collectionResultsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/collections/$collectionId",
+  component: function CollectionResultsRoute() {
+    const { collectionId } = collectionResultsRoute.useParams();
+    return <CollectionResultsPage collectionId={collectionId} />;
+  },
+});
+
+const settingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings",
+  component: SettingsPage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   practiceRoute,
   practiceProfileRoute,
+  sessionsRoute,
+  collectionsRoute,
+  collectionResultsRoute,
+  settingsRoute,
 ]);
 
 export const router = createRouter({

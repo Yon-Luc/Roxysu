@@ -3,6 +3,14 @@ import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { fetchSystemStatus } from "../lib/api";
 
+const nav = [
+  { to: "/", label: "Dashboard", exact: true },
+  { to: "/practice", label: "Practice" },
+  { to: "/sessions", label: "Sessions" },
+  { to: "/collections", label: "Collections" },
+  { to: "/settings", label: "Settings" },
+] as const;
+
 export function AppShell({ children }: { children: ReactNode }) {
   const { data: status } = useQuery({
     queryKey: ["system", "status"],
@@ -30,20 +38,19 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Link to="/" className="text-lg font-semibold tracking-tight text-white">
               Roxysu
             </Link>
-            <nav className="flex gap-1 text-sm">
-              <Link
-                to="/"
-                className="rounded-md px-3 py-1.5 text-[#a8b0c0] hover:bg-white/5 hover:text-white [&.active]:bg-white/10 [&.active]:text-white"
-                activeOptions={{ exact: true }}
-              >
-                Dashboard
-              </Link>
-              <Link
-                to="/practice"
-                className="rounded-md px-3 py-1.5 text-[#a8b0c0] hover:bg-white/5 hover:text-white [&.active]:bg-white/10 [&.active]:text-white"
-              >
-                Practice
-              </Link>
+            <nav className="flex flex-wrap gap-1 text-sm">
+              {nav.map((item) => (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  className="rounded-md px-3 py-1.5 text-[#a8b0c0] hover:bg-white/5 hover:text-white [&.active]:bg-white/10 [&.active]:text-white"
+                  {...("exact" in item && item.exact
+                    ? { activeOptions: { exact: true } }
+                    : {})}
+                >
+                  {item.label}
+                </Link>
+              ))}
             </nav>
           </div>
           <div className="flex items-center gap-3 text-xs text-[#8b93a7]">

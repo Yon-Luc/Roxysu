@@ -4,12 +4,16 @@ import {
   SchemaVersionMismatchError,
   defaultDbPath,
   defaultRealmPath,
+  hasSuccessfulImport,
   recordLockedImport,
   runFullSync,
+  runIncrementalSync,
 } from "./sync";
 
 const RETRY_MS = Number(process.env.REALM_RETRY_MS ?? 10_000);
 const RESYNC_MS = Number(process.env.REALM_RESYNC_MS ?? 60_000);
+const FULL_EVERY_N = Number(process.env.REALM_FULL_EVERY_N ?? 10);
+const FORCE_FULL = process.env.REALM_FULL_SYNC === "1";
 
 let shuttingDown = false;
 let wakeSleep: (() => void) | null = null;
@@ -45,19 +49,35 @@ async function main() {
   console.log("realm-reader starting");
   console.log("  DB_PATH   ", dbPath);
   console.log("  REALM_PATH", realmPath);
+  console.log("  FULL_EVERY", FULL_EVERY_N);
 
   const db = ensureDb(dbPath);
   console.log("SQLite ready (migrations applied)");
 
   let lockLogged = false;
+  let cycle = 0;
 
   try {
     while (!shuttingDown) {
       try {
-        const result = runFullSync(db, realmPath);
+        const needFull =
+          FORCE_FULL ||
+          !hasSuccessfulImport(db) ||
+          cycle % FULL_EVERY_N === 0;
+
+        const result = needFull
+          ? runFullSync(db, realmPath)
+          : runIncrementalSync(db, realmPath);
+
         lockLogged = false;
+        cycle += 1;
+
+        const del =
+          result.kind === "full"
+            ? ` del(scores=${result.scoresDeleted} maps=${result.beatmapsDeleted} sets=${result.beatmapSetsDeleted})`
+            : "";
         console.log(
-          `sync ok — rulesets=${result.rulesetsUpserted} sets=${result.beatmapSetsUpserted} beatmaps=${result.beatmapsUpserted} scores=${result.scoresUpserted} (realm v${result.realmSchemaVersion})`,
+          `sync ${result.kind} — rulesets=${result.rulesetsUpserted} sets=${result.beatmapSetsUpserted} beatmaps=${result.beatmapsUpserted} scores=${result.scoresUpserted}${del} (realm v${result.realmSchemaVersion})`,
         );
         if (!shuttingDown) await sleep(RESYNC_MS);
       } catch (err) {

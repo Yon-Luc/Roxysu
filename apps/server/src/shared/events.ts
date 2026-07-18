@@ -1,6 +1,11 @@
 export type AppEvent =
   | { type: "sync.finished"; importId: number }
   | { type: "score.imported"; scoreCount: number }
+  | { type: "score.updated" }
+  | { type: "session.started"; sessionId: number }
+  | { type: "session.finished"; sessionId: number }
+  | { type: "mastery.updated" }
+  | { type: "collection.updated"; collectionId?: number }
   | { type: "dashboard.updated" };
 
 type Listener = (event: AppEvent) => void;

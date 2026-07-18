@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { fetchPracticeList } from "../../lib/api";
+import { fetchPracticeList, type PracticeItem } from "../../lib/api";
 import {
   formatAccuracy,
   formatPp,
@@ -20,7 +20,18 @@ export function PracticeListPage() {
       fetchPracticeList({ page, pageSize: 24, q: submitted || undefined }),
   });
 
-  const totalPages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
+  const list =
+    data && "items" in data && Array.isArray(data.items)
+      ? {
+          items: data.items,
+          total: data.total ?? 0,
+          pageSize: data.pageSize ?? 24,
+          queryMode: "queryMode" in data ? data.queryMode : undefined,
+        }
+      : null;
+  const totalPages = list
+    ? Math.max(1, Math.ceil(list.total / list.pageSize))
+    : 1;
 
   return (
     <div className="space-y-6">
@@ -30,7 +41,8 @@ export function PracticeListPage() {
             Practice
           </h1>
           <p className="mt-1 text-sm text-[#8b93a7]">
-            Beatmaps from your library, sorted by last played.
+            Text text or query language — e.g.{" "}
+            <code className="text-[#a8b0c0]">mode:mania stars:5..6</code>
           </p>
         </div>
         <form
@@ -45,8 +57,8 @@ export function PracticeListPage() {
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search title, artist, mapper…"
-            className="w-64 rounded-md border border-white/10 bg-[#151922] px-3 py-2 text-sm text-white placeholder:text-[#6b7385] outline-none focus:border-white/25"
+            placeholder="Search or mode:mania mastery>50…"
+            className="w-72 rounded-md border border-white/10 bg-[#151922] px-3 py-2 text-sm text-white placeholder:text-[#6b7385] outline-none focus:border-white/25"
           />
           <button
             type="submit"
@@ -61,13 +73,16 @@ export function PracticeListPage() {
         <p className="text-[#8b93a7]">Loading practice list…</p>
       ) : error ? (
         <p className="text-rose-300">Failed to load: {error.message}</p>
-      ) : !data || data.items.length === 0 ? (
+      ) : !list || list.items.length === 0 ? (
         <p className="text-sm text-[#8b93a7]">No beatmaps match.</p>
       ) : (
         <>
           <div className="flex items-center justify-between text-xs text-[#8b93a7]">
             <span>
-              {data.total.toLocaleString()} maps
+              {list.total.toLocaleString()} maps
+              {"queryMode" in list && list.queryMode === "structured"
+                ? " · query"
+                : ""}
               {isFetching ? " · refreshing…" : ""}
             </span>
             <span>
@@ -76,18 +91,27 @@ export function PracticeListPage() {
           </div>
 
           <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {data.items.map((item) => (
+            {list.items.map((item: PracticeItem) => (
               <li key={item.id}>
                 <Link
                   to="/practice/$beatmapId"
                   params={{ beatmapId: item.id }}
                   className="block h-full rounded-lg border border-white/10 bg-[#151922] p-4 transition hover:border-white/20 hover:bg-[#181c26]"
                 >
-                  <div className="truncate text-sm text-[#8b93a7]">
-                    {item.artist ?? "Unknown artist"}
-                  </div>
-                  <div className="mt-0.5 truncate font-medium text-white">
-                    {item.title ?? "Untitled"}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm text-[#8b93a7]">
+                        {item.artist ?? "Unknown artist"}
+                      </div>
+                      <div className="mt-0.5 truncate font-medium text-white">
+                        {item.title ?? "Untitled"}
+                      </div>
+                    </div>
+                    {item.masteryLevel != null ? (
+                      <span className="shrink-0 rounded bg-white/10 px-1.5 py-0.5 text-xs tabular-nums text-[#a8b0c0]">
+                        {item.masteryLevel.toFixed(0)}
+                      </span>
+                    ) : null}
                   </div>
                   <div className="mt-1 truncate text-xs text-[#8b93a7]">
                     [{item.difficultyName ?? "—"}] · {formatStars(item.starRating)}

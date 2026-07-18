@@ -20,7 +20,7 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
     return <p className="text-[#8b93a7]">Loading practice profile…</p>;
   }
 
-  if (error || !data) {
+  if (error || !data || !("beatmap" in data) || !data.beatmap) {
     return (
       <div className="space-y-3">
         <Link to="/practice" className="text-sm text-[#8b93a7] hover:text-white">
@@ -33,7 +33,11 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
     );
   }
 
-  const { beatmap, stats, recentScores } = data;
+  const beatmap = data.beatmap;
+  const stats = data.stats!;
+  const recentScores = data.recentScores ?? [];
+  const mastery = data.mastery;
+  const sessions = data.sessions ?? [];
 
   return (
     <div className="space-y-8">
@@ -61,10 +65,40 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
         />
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-3">
-        <Placeholder title="Mastery" body="Phase 5 — Mastery Engine." />
-        <Placeholder title="Charts" body="Phase 5 — Progression / stats." />
-        <Placeholder title="Notes & tags" body="Phase 6 — user annotations." />
+      <section className="grid gap-4 sm:grid-cols-2">
+        <div className="rounded-lg border border-white/10 bg-[#151922] px-4 py-4">
+          <h3 className="text-sm font-medium text-[#a8b0c0]">Mastery</h3>
+          {mastery ? (
+            <div className="mt-2 space-y-1">
+              <div className="text-3xl font-semibold tabular-nums text-white">
+                {mastery.level.toFixed(1)}
+              </div>
+              <p className="text-xs text-[#8b93a7]">
+                Formula: {mastery.formulaId} · {mastery.playCount} plays
+              </p>
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-[#6b7385]">No mastery yet.</p>
+          )}
+        </div>
+        <div className="rounded-lg border border-white/10 bg-[#151922] px-4 py-4">
+          <h3 className="text-sm font-medium text-[#a8b0c0]">Sessions</h3>
+          {sessions.length === 0 ? (
+            <p className="mt-2 text-sm text-[#6b7385]">No sessions linked.</p>
+          ) : (
+            <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto text-sm">
+              {sessions.map((s) => (
+                <li
+                  key={s.id}
+                  className="flex justify-between gap-2 text-[#a8b0c0]"
+                >
+                  <span>{formatRelativeTime(s.startedAt)}</span>
+                  <span className="tabular-nums">{s.scoreCount} plays</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </section>
 
       <section>
@@ -104,15 +138,6 @@ function MiniStat({ label, value }: { label: string; value: string }) {
         {label}
       </div>
       <div className="mt-0.5 font-medium tabular-nums text-white">{value}</div>
-    </div>
-  );
-}
-
-function Placeholder({ title, body }: { title: string; body: string }) {
-  return (
-    <div className="rounded-lg border border-dashed border-white/15 bg-[#151922]/50 px-4 py-4">
-      <h3 className="text-sm font-medium text-[#a8b0c0]">{title}</h3>
-      <p className="mt-1 text-xs text-[#6b7385]">{body}</p>
     </div>
   );
 }

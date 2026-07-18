@@ -1,8 +1,11 @@
 import { Elysia } from "elysia";
 import { beatmapRoutes } from "./beatmaps";
+import { collectionRoutes } from "./collections";
 import { dashboardRoutes } from "./dashboard";
 import { practiceRoutes } from "./practice";
+import { searchRoutes } from "./search";
 import { sessionRoutes } from "./sessions";
+import { settingsRoutes } from "./settings";
 import { systemRoutes } from "./system";
 
 export const apiRoutes = new Elysia({ prefix: "/api" })
@@ -10,4 +13,7 @@ export const apiRoutes = new Elysia({ prefix: "/api" })
   .use(dashboardRoutes)
   .use(practiceRoutes)
   .use(beatmapRoutes)
-  .use(sessionRoutes);
+  .use(sessionRoutes)
+  .use(searchRoutes)
+  .use(collectionRoutes)
+  .use(settingsRoutes);

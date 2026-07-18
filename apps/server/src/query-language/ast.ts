@@ -1,0 +1,29 @@
+export type ComparisonOp = ">" | "<" | ">=" | "<=" | "=";
+
+export type FieldTerm =
+  | { type: "mode"; value: string }
+  | { type: "mapper"; value: string }
+  | { type: "title"; value: string; prefix?: boolean }
+  | { type: "artist"; value: string; prefix?: boolean }
+  | { type: "difficulty"; value: string; prefix?: boolean }
+  | { type: "stars"; min?: number; max?: number; op?: ComparisonOp; value?: number }
+  | { type: "mods"; value: string }
+  | { type: "acc"; op: ComparisonOp; value: number }
+  | { type: "retry"; op: ComparisonOp; value: number }
+  | { type: "mastery"; op: ComparisonOp; value: number }
+  | { type: "played"; days: number }
+  | { type: "pp"; op: ComparisonOp; value: number }
+  | { type: "text"; value: string };
+
+export type AstNode =
+  | { type: "term"; term: FieldTerm }
+  | { type: "and"; left: AstNode; right: AstNode }
+  | { type: "or"; left: AstNode; right: AstNode }
+  | { type: "not"; node: AstNode };
+
+export class QueryParseError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "QueryParseError";
+  }
+}

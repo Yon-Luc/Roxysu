@@ -46,7 +46,6 @@ export function mapRuleset(obj: RealmObj): RulesetRow | null {
 }
 
 export function mapBeatmapSet(obj: RealmObj): BeatmapSetRow | null {
-  if (obj.DeletePending) return null;
   return {
     id: uuidString(obj.ID),
     onlineId: Number(obj.OnlineID ?? 0),
@@ -54,7 +53,7 @@ export function mapBeatmapSet(obj: RealmObj): BeatmapSetRow | null {
     dateSubmitted: toDate(obj.DateSubmitted),
     dateRanked: toDate(obj.DateRanked),
     status: Number(obj.Status ?? 0),
-    deletePending: false,
+    deletePending: Boolean(obj.DeletePending),
     hash: (obj.Hash as string | null) ?? null,
     protected: Boolean(obj.Protected),
   };
@@ -63,7 +62,6 @@ export function mapBeatmapSet(obj: RealmObj): BeatmapSetRow | null {
 export function mapBeatmap(obj: RealmObj): BeatmapRow | null {
   const set = obj.BeatmapSet as RealmObj | null | undefined;
   if (!set?.ID) return null;
-  if (set.DeletePending) return null;
 
   const difficulty = obj.Difficulty as RealmObj | null | undefined;
   const metadata = obj.Metadata as RealmObj | null | undefined;
@@ -118,8 +116,6 @@ export function mapBeatmap(obj: RealmObj): BeatmapRow | null {
 }
 
 export function mapScore(obj: RealmObj): ScoreRow | null {
-  if (obj.DeletePending) return null;
-
   const beatmap = obj.BeatmapInfo as RealmObj | null | undefined;
   const ruleset = obj.Ruleset as RealmObj | null | undefined;
   const user = obj.User as RealmObj | null | undefined;
@@ -148,7 +144,7 @@ export function mapScore(obj: RealmObj): ScoreRow | null {
     userOnlineId: user != null ? Number(user.OnlineID ?? 0) : null,
     userUsername: (user?.Username as string | null) ?? null,
     isLegacyScore: Boolean(obj.IsLegacyScore),
-    deletePending: false,
+    deletePending: Boolean(obj.DeletePending),
     hash: (obj.Hash as string | null) ?? null,
   };
 }

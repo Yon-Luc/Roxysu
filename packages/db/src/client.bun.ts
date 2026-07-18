@@ -28,5 +28,27 @@ export function closeDb(db: Db) {
   db.$client.close();
 }
 
-export { eq, sql, getTableColumns } from "drizzle-orm";
+export {
+  eq,
+  sql,
+  getTableColumns,
+  max,
+  and,
+  desc,
+  inArray,
+  gt,
+  count,
+  asc,
+  ne,
+  or,
+  like,
+  gte,
+  lte,
+  isNull,
+  isNotNull,
+  not,
+  avg,
+  sum,
+  min,
+} from "drizzle-orm";
 export * from "./schema";

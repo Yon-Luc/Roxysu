@@ -3,6 +3,12 @@ import { count, desc, eq } from "drizzle-orm";
 import { beatmaps, imports, scores } from "@roxysu/db/client.bun";
 import { dbPlugin } from "../db";
 import { toIso } from "../shared/serialize";
+import { getCurrentSession } from "../analytics/session";
+import {
+  getAccuracyTrend,
+  getPpTrend,
+  getWeeklyActivity,
+} from "../analytics/progression";
 
 export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
   .use(dbPlugin)
@@ -26,16 +32,27 @@ export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
       })
       .from(scores)
       .leftJoin(beatmaps, eq(scores.beatmapId, beatmaps.id))
+      .where(eq(scores.deletePending, false))
       .orderBy(desc(scores.playedAt))
       .limit(25);
 
     const [beatmapCount] = await db.select({ n: count() }).from(beatmaps);
-    const [scoreCount] = await db.select({ n: count() }).from(scores);
+    const [scoreCount] = await db
+      .select({ n: count() })
+      .from(scores)
+      .where(eq(scores.deletePending, false));
     const [lastImport] = await db
       .select()
       .from(imports)
       .orderBy(desc(imports.id))
       .limit(1);
+
+    const current = await getCurrentSession(db);
+    const [weeklyActivity, ppTrend, accuracyTrend] = await Promise.all([
+      getWeeklyActivity(db, 12),
+      getPpTrend(db, 30),
+      getAccuracyTrend(db, 30),
+    ]);
 
     return {
       recentScores: recentScores.map((s) => ({
@@ -70,10 +87,17 @@ export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
             }
           : null,
       },
-      // Phase 5 placeholders
-      weeklyActivity: null,
-      ppTrend: null,
-      accuracyTrend: null,
-      currentSession: null,
+      weeklyActivity,
+      ppTrend,
+      accuracyTrend,
+      currentSession: current
+        ? {
+            id: current.id,
+            startedAt: toIso(current.startedAt),
+            endedAt: toIso(current.endedAt),
+            scoreCount: current.scoreCount,
+            rulesetShortName: current.rulesetShortName,
+          }
+        : null,
     };
   });

@@ -15,7 +15,6 @@
     "elysia": "^1.4.29",
     "react": "^19",
     "react-dom": "^19",
-    "realm": "^20.2.0",
     "tailwindcss": "4"
   },
   "devDependencies": {

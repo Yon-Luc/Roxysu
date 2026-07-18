@@ -9,7 +9,7 @@ function App() {
 
   return (
     <main>
-      <h2>{count}</h2>
+      <h2 className="text-2xl font-bold">{count}</h2>
       <button onClick={increase}>Increase</button>
     </main>
   );

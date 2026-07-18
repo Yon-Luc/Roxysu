@@ -1,4 +1,4 @@
-import { createDb, scores } from "@roxysu/db";
+import { createDb, scores } from "@roxysu/db/client.node";
 
 const db = createDb(process.env.DB_PATH ?? "../server/data.sqlite");
 

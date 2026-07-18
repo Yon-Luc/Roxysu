@@ -2,14 +2,18 @@
   "name": "@roxysu/db",
   "version": "0.0.1",
   "private": true,
-  "main": "src/client.ts",
-  "types": "src/client.ts",
+  "exports": {
+    "./schema": "./src/schema.ts",
+    "./client.node": "./src/client.node.ts",
+    "./client.bun": "./src/client.bun.ts"
+  },
   "dependencies": {
     "drizzle-orm": "^0.36.0",
     "better-sqlite3": "^12.10.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.11",
-    "drizzle-kit": "^0.28.0"
+    "drizzle-kit": "^0.28.0",
+    "bun-types": "^1.3.14"
   }
 }

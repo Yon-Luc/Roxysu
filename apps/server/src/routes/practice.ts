@@ -1,9 +1,58 @@
 import { Elysia, t } from "elysia";
-import { and, count, desc, eq, like, max, or, sql } from "drizzle-orm";
-import { beatmaps, mastery, scores } from "@roxysu/db/client.bun";
 import { dbPlugin } from "../db";
 import { toIso } from "../shared/serialize";
-import { looksLikeQuery, searchBeatmaps, QueryParseError } from "../query-language";
+import {
+  looksLikeQuery,
+  searchBeatmaps,
+  practiceDistribution,
+  QueryParseError,
+  type PracticeSortBy,
+  type PracticeSortDir,
+  type PracticeMetric,
+} from "../query-language";
+
+const SORT_BY = [
+  "lastPlayed",
+  "accuracy",
+  "misses",
+  "score",
+  "pp",
+  "mastery",
+  "stars",
+] as const satisfies readonly PracticeSortBy[];
+
+const SORT_DIR = ["asc", "desc"] as const satisfies readonly PracticeSortDir[];
+
+const METRICS = [
+  "accuracy",
+  "misses",
+  "score",
+] as const satisfies readonly PracticeMetric[];
+
+function parseSortBy(value: string | undefined): PracticeSortBy {
+  return (SORT_BY as readonly string[]).includes(value ?? "")
+    ? (value as PracticeSortBy)
+    : "lastPlayed";
+}
+
+function parseSortDir(value: string | undefined): PracticeSortDir {
+  return (SORT_DIR as readonly string[]).includes(value ?? "")
+    ? (value as PracticeSortDir)
+    : "desc";
+}
+
+function parseMetric(value: string | undefined): PracticeMetric {
+  return (METRICS as readonly string[]).includes(value ?? "")
+    ? (value as PracticeMetric)
+    : "accuracy";
+}
+
+function toStructuredQuery(q: string | undefined): string | undefined {
+  const trimmed = q?.trim();
+  if (!trimmed) return undefined;
+  if (looksLikeQuery(trimmed)) return trimmed;
+  return `title:${trimmed} OR artist:${trimmed} OR mapper:${trimmed} OR diff:${trimmed}`;
+}
 
 function mapCard(r: {
   id: string;
@@ -17,6 +66,8 @@ function mapCard(r: {
   playCount: number;
   bestAccuracy: number | null;
   bestPp: number | null;
+  bestScore: number | null;
+  bestMisses: number | null;
   lastPlayedAt: number | Date | null;
   masteryLevel?: number | null;
 }) {
@@ -32,6 +83,8 @@ function mapCard(r: {
     playCount: Number(r.playCount ?? 0),
     bestAccuracy: r.bestAccuracy ?? null,
     bestPp: r.bestPp ?? null,
+    bestScore: r.bestScore ?? null,
+    bestMisses: r.bestMisses ?? null,
     lastPlayedAt: toIso(r.lastPlayedAt),
     masteryLevel: r.masteryLevel ?? null,
   };
@@ -45,112 +98,72 @@ export const practiceRoutes = new Elysia({ prefix: "/practice" })
       const page = Math.max(1, query.page ?? 1);
       const pageSize = Math.min(100, Math.max(1, query.pageSize ?? 24));
       const q = query.q?.trim();
+      const sortBy = parseSortBy(query.sortBy);
+      const sortDir = parseSortDir(query.sortDir);
+      const structured = toStructuredQuery(q);
+      const queryMode =
+        q && looksLikeQuery(q) ? ("structured" as const) : ("text" as const);
 
-      if (q && looksLikeQuery(q)) {
-        try {
-          const result = searchBeatmaps(db, q, { page, pageSize });
-          return {
-            page: result.page,
-            pageSize: result.pageSize,
-            total: result.total,
-            queryMode: "structured" as const,
-            items: result.items.map((r) =>
-              mapCard({
-                ...r,
-                lastPlayedAt: r.lastPlayedAt,
-              }),
-            ),
-          };
-        } catch (err) {
-          if (err instanceof QueryParseError) {
-            set.status = 400;
-            return { error: err.message };
-          }
-          throw err;
+      try {
+        const result = searchBeatmaps(db, structured, {
+          page,
+          pageSize,
+          sortBy,
+          sortDir,
+        });
+        return {
+          page: result.page,
+          pageSize: result.pageSize,
+          total: result.total,
+          sortBy,
+          sortDir,
+          queryMode,
+          items: result.items.map((r) =>
+            mapCard({
+              ...r,
+              lastPlayedAt: r.lastPlayedAt,
+            }),
+          ),
+        };
+      } catch (err) {
+        if (err instanceof QueryParseError) {
+          set.status = 400;
+          return { error: err.message };
         }
+        throw err;
       }
-
-      const offset = (page - 1) * pageSize;
-
-      const playStats = db
-        .select({
-          beatmapId: scores.beatmapId,
-          playCount: count(scores.id).as("play_count"),
-          bestAccuracy: max(scores.accuracy).as("best_accuracy"),
-          bestPp: max(scores.pp).as("best_pp"),
-          lastPlayedAt: max(scores.playedAt).as("last_played_at"),
-        })
-        .from(scores)
-        .where(
-          and(sql`${scores.beatmapId} IS NOT NULL`, eq(scores.deletePending, false)),
-        )
-        .groupBy(scores.beatmapId)
-        .as("play_stats");
-
-      const searchFilter = q
-        ? or(
-            like(beatmaps.title, `%${q}%`),
-            like(beatmaps.artist, `%${q}%`),
-            like(beatmaps.mapperUsername, `%${q}%`),
-            like(beatmaps.difficultyName, `%${q}%`),
-          )
-        : undefined;
-
-      const whereClause = searchFilter
-        ? and(eq(beatmaps.hidden, false), searchFilter)
-        : eq(beatmaps.hidden, false);
-
-      const [totalRow] = await db
-        .select({ n: count() })
-        .from(beatmaps)
-        .where(whereClause);
-
-      const rows = await db
-        .select({
-          id: beatmaps.id,
-          title: beatmaps.title,
-          artist: beatmaps.artist,
-          difficultyName: beatmaps.difficultyName,
-          starRating: beatmaps.starRating,
-          bpm: beatmaps.bpm,
-          rulesetShortName: beatmaps.rulesetShortName,
-          mapperUsername: beatmaps.mapperUsername,
-          lastPlayed: beatmaps.lastPlayed,
-          playCount: playStats.playCount,
-          bestAccuracy: playStats.bestAccuracy,
-          bestPp: playStats.bestPp,
-          lastPlayedAt: playStats.lastPlayedAt,
-          masteryLevel: mastery.level,
-        })
-        .from(beatmaps)
-        .leftJoin(playStats, eq(beatmaps.id, playStats.beatmapId))
-        .leftJoin(mastery, eq(beatmaps.id, mastery.beatmapId))
-        .where(whereClause)
-        .orderBy(
-          sql`COALESCE(${playStats.lastPlayedAt}, ${beatmaps.lastPlayed}) DESC NULLS LAST`,
-        )
-        .limit(pageSize)
-        .offset(offset);
-
-      return {
-        page,
-        pageSize,
-        total: totalRow?.n ?? 0,
-        queryMode: "text" as const,
-        items: rows.map((r) =>
-          mapCard({
-            ...r,
-            lastPlayedAt: r.lastPlayedAt ?? r.lastPlayed,
-            masteryLevel: r.masteryLevel,
-          }),
-        ),
-      };
     },
     {
       query: t.Object({
         page: t.Optional(t.Numeric()),
         pageSize: t.Optional(t.Numeric()),
         q: t.Optional(t.String()),
+        sortBy: t.Optional(t.String()),
+        sortDir: t.Optional(t.String()),
+      }),
+    },
+  )
+  .get(
+    "/distribution",
+    async ({ db, query, set }) => {
+      const q = query.q?.trim();
+      const metric = parseMetric(query.metric);
+      const structured = toStructuredQuery(q);
+
+      try {
+        return practiceDistribution(db, structured, metric);
+      } catch (err) {
+        if (err instanceof QueryParseError) {
+          set.status = 400;
+          return { error: err.message };
+        }
+        throw err;
+      }
+    },
+    {
+      query: t.Object({
+        q: t.Optional(t.String()),
+        metric: t.Optional(t.String()),
       }),
     },
   );

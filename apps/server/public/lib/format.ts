@@ -8,6 +8,17 @@ export function formatPp(value: number | null | undefined): string {
   return `${value.toFixed(0)}pp`;
 }
 
+export function formatScore(value: number | null | undefined): string {
+  if (value == null) return "—";
+  return value.toLocaleString();
+}
+
+export function formatMisses(value: number | null | undefined): string {
+  if (value == null) return "—";
+  if (value === 0) return "FC";
+  return `${value}x miss`;
+}
+
 export function formatStars(value: number | null | undefined): string {
   if (value == null) return "—";
   return `${value.toFixed(2)}★`;

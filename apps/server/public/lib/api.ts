@@ -33,10 +33,25 @@ export async function fetchDashboard() {
   return unwrap(await api.api.dashboard.get(), "/api/dashboard");
 }
 
+export type PracticeSortBy =
+  | "lastPlayed"
+  | "accuracy"
+  | "misses"
+  | "score"
+  | "pp"
+  | "mastery"
+  | "stars";
+
+export type PracticeSortDir = "asc" | "desc";
+
+export type PracticeMetric = "accuracy" | "misses" | "score";
+
 export async function fetchPracticeList(params: {
   page?: number;
   pageSize?: number;
   q?: string;
+  sortBy?: PracticeSortBy;
+  sortDir?: PracticeSortDir;
 }) {
   return unwrap(
     await api.api.practice.get({
@@ -44,9 +59,26 @@ export async function fetchPracticeList(params: {
         page: params.page,
         pageSize: params.pageSize,
         q: params.q,
+        sortBy: params.sortBy,
+        sortDir: params.sortDir,
       },
     }),
     "/api/practice",
+  );
+}
+
+export async function fetchPracticeDistribution(params: {
+  q?: string;
+  metric?: PracticeMetric;
+}) {
+  return unwrap(
+    await api.api.practice.distribution.get({
+      query: {
+        q: params.q,
+        metric: params.metric,
+      },
+    }),
+    "/api/practice/distribution",
   );
 }
 
@@ -106,6 +138,10 @@ export type PracticeList = Exclude<
   { error: string }
 >;
 export type PracticeItem = PracticeList["items"][number];
+export type PracticeDistribution = Exclude<
+  Awaited<ReturnType<typeof fetchPracticeDistribution>>,
+  { error: string }
+>;
 export type BeatmapProfile = Exclude<
   Awaited<ReturnType<typeof fetchBeatmap>>,
   { error: string }

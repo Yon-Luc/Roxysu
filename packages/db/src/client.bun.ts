@@ -24,5 +24,9 @@ export function ensureDb(dbPath: string) {
   return db;
 }
 
+export function closeDb(db: Db) {
+  db.$client.close();
+}
+
 export { eq, sql, getTableColumns } from "drizzle-orm";
 export * from "./schema";

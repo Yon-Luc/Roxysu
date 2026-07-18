@@ -7,6 +7,8 @@ import {
   formatPp,
   formatRelativeTime,
   formatStars,
+  osuClientBeatmapUrl,
+  osuWebBeatmapUrl,
 } from "../../lib/format";
 
 export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
@@ -38,6 +40,8 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
   const recentScores = data.recentScores ?? [];
   const mastery = data.mastery;
   const sessions = data.sessions ?? [];
+  const clientUrl = osuClientBeatmapUrl(beatmap.onlineId);
+  const webUrl = osuWebBeatmapUrl(beatmap.onlineId, beatmap.setOnlineId);
 
   return (
     <div className="space-y-8">
@@ -53,6 +57,28 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
           {beatmap.bpm.toFixed(0)} BPM
           {beatmap.mapperUsername ? ` · mapped by ${beatmap.mapperUsername}` : ""}
         </p>
+        {(clientUrl || webUrl) && (
+          <div className="mt-3 flex flex-wrap gap-3 text-sm">
+            {clientUrl && (
+              <a
+                href={clientUrl}
+                className="text-[#7eb8ff] hover:text-white"
+              >
+                Open in osu!
+              </a>
+            )}
+            {webUrl && (
+              <a
+                href={webUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-[#8b93a7] hover:text-white"
+              >
+                View on website
+              </a>
+            )}
+          </div>
+        )}
       </div>
 
       <section className="grid gap-3 sm:grid-cols-4">

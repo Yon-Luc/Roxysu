@@ -1,6 +1,6 @@
 import { Elysia, t } from "elysia";
 import { and, count, desc, eq, max } from "drizzle-orm";
-import { beatmaps, mastery, scores } from "@roxysu/db/client.bun";
+import { beatmaps, beatmapSets, mastery, scores } from "@roxysu/db/client.bun";
 import { dbPlugin } from "../db";
 import { toIso } from "../shared/serialize";
 import { listSessionsForBeatmap } from "../analytics/session";
@@ -10,16 +10,22 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
   .get(
     "/:id",
     async ({ db, params, set }) => {
-      const [beatmap] = await db
-        .select()
+      const [row] = await db
+        .select({
+          beatmap: beatmaps,
+          setOnlineId: beatmapSets.onlineId,
+        })
         .from(beatmaps)
+        .leftJoin(beatmapSets, eq(beatmaps.setId, beatmapSets.id))
         .where(eq(beatmaps.id, params.id))
         .limit(1);
 
-      if (!beatmap) {
+      if (!row) {
         set.status = 404;
         return { error: "Beatmap not found" };
       }
+
+      const { beatmap, setOnlineId } = row;
 
       const recentScores = await db
         .select()
@@ -54,6 +60,7 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
         beatmap: {
           id: beatmap.id,
           onlineId: beatmap.onlineId,
+          setOnlineId: setOnlineId ?? null,
           title: beatmap.title,
           titleUnicode: beatmap.titleUnicode,
           artist: beatmap.artist,

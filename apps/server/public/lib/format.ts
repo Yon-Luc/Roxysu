@@ -49,3 +49,23 @@ export function formatMods(mods: string | null | undefined): string {
   }
   return mods;
 }
+
+/** Open a difficulty in the local osu! client (stable / lazer). */
+export function osuClientBeatmapUrl(
+  onlineId: number | null | undefined,
+): string | null {
+  if (onlineId == null || onlineId <= 0) return null;
+  return `osu://b/${onlineId}`;
+}
+
+/** Open a difficulty on the osu! website. */
+export function osuWebBeatmapUrl(
+  onlineId: number | null | undefined,
+  setOnlineId?: number | null,
+): string | null {
+  if (onlineId == null || onlineId <= 0) return null;
+  if (setOnlineId != null && setOnlineId > 0) {
+    return `https://osu.ppy.sh/beatmapsets/${setOnlineId}#osu/${onlineId}`;
+  }
+  return `https://osu.ppy.sh/b/${onlineId}`;
+}

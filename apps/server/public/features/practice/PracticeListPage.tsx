@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { QueryLanguageHelpButton } from "../../components/QueryLanguageHelpModal";
 import { fetchPracticeList, type PracticeItem } from "../../lib/api";
 import {
   formatAccuracy,
@@ -41,8 +42,10 @@ export function PracticeListPage() {
             Practice
           </h1>
           <p className="mt-1 text-sm text-[#8b93a7]">
-            Text text or query language — e.g.{" "}
+            Plain text or query language — e.g.{" "}
             <code className="text-[#a8b0c0]">mode:mania stars:5..6</code>
+            {" · "}
+            <QueryLanguageHelpButton />
           </p>
         </div>
         <form

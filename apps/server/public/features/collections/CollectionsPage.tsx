@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { QueryLanguageHelpButton } from "../../components/QueryLanguageHelpModal";
 import {
   createCollection,
   deleteCollection,
@@ -42,6 +43,8 @@ export function CollectionsPage() {
         <p className="mt-1 text-sm text-[#8b93a7]">
           Smart collections store query strings — e.g.{" "}
           <code className="text-[#a8b0c0]">stars:6..7 mapper:Lasse</code>
+          {" · "}
+          <QueryLanguageHelpButton />
         </p>
       </div>
 

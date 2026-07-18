@@ -5,7 +5,6 @@ import {
   defaultDbPath,
   defaultRealmPath,
   hasSuccessfulImport,
-  recordLockedImport,
   runFullSync,
   runIncrementalSync,
 } from "./sync";
@@ -86,11 +85,6 @@ async function main() {
             console.warn(
               `realm locked (osu!lazer open?) — retrying every ${RETRY_MS}ms`,
             );
-            try {
-              recordLockedImport(db, err.message);
-            } catch {
-              // ignore ledger write failures during lock
-            }
             lockLogged = true;
           }
           if (!shuttingDown) await sleep(RETRY_MS);

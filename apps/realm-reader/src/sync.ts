@@ -67,6 +67,40 @@ function isLockError(err: unknown): boolean {
   );
 }
 
+function isSqliteBusy(err: unknown): boolean {
+  if (err && typeof err === "object" && "code" in err) {
+    const code = String((err as { code: unknown }).code);
+    if (code === "SQLITE_BUSY" || code === "SQLITE_LOCKED") return true;
+  }
+  const msg = err instanceof Error ? err.message : String(err);
+  const lower = msg.toLowerCase();
+  return lower.includes("database is locked") || lower.includes("sqlite_busy");
+}
+
+/** Sync sleep for busy-retry backoff (better-sqlite3 is synchronous). */
+function sleepSync(ms: number) {
+  const buf = new Int32Array(new SharedArrayBuffer(4));
+  Atomics.wait(buf, 0, 0, ms);
+}
+
+const BUSY_RETRIES = 8;
+
+function withBusyRetry<T>(fn: () => T): T {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < BUSY_RETRIES; attempt++) {
+    try {
+      return fn();
+    } catch (err) {
+      lastErr = err;
+      if (!isSqliteBusy(err) || attempt === BUSY_RETRIES - 1) throw err;
+      // Exponential backoff: 50, 100, 200, … ms (capped), plus jitter.
+      const delay = Math.min(2_000, 50 * 2 ** attempt) + Math.floor(Math.random() * 50);
+      sleepSync(delay);
+    }
+  }
+  throw lastErr;
+}
+
 /** Build onConflictDoUpdate `set` for every column except the primary key(s). */
 function conflictSet(
   table: Parameters<typeof getTableColumns>[0],
@@ -106,13 +140,16 @@ function upsertBatches(
   const set = conflictSet(table, primaryKeyNames);
 
   for (const batch of chunk(rows, BATCH_SIZE)) {
-    db.insert(table)
-      .values(batch as never[])
-      .onConflictDoUpdate({
-        target: target as never,
-        set: set as never,
-      })
-      .run();
+    withBusyRetry(() =>
+      db
+        .insert(table)
+        .values(batch as never[])
+        .onConflictDoUpdate({
+          target: target as never,
+          set: set as never,
+        })
+        .run(),
+    );
   }
   return rows.length;
 }
@@ -126,10 +163,12 @@ function deleteByIds(
   if (ids.length === 0) return 0;
   let deleted = 0;
   for (const batch of chunk(ids, BATCH_SIZE)) {
-    const result = db
-      .delete(table)
-      .where(inArray(idColumn as never, batch))
-      .run();
+    const result = withBusyRetry(() =>
+      db
+        .delete(table)
+        .where(inArray(idColumn as never, batch))
+        .run(),
+    );
     deleted += result.changes;
   }
   return deleted;
@@ -166,39 +205,13 @@ function openRealm(realmPath: string): Realm {
   }
 }
 
-function assertSchemaVersion(realm: Realm, kind: "full" | "incremental", db: Db) {
+function assertSchemaVersion(realm: Realm) {
   const expected = loadOsuSchema().schemaVersion;
   const actual = realm.schemaVersion;
   if (actual !== expected) {
-    realm.close();
-    const err = new SchemaVersionMismatchError(expected, actual);
-    db.insert(imports)
-      .values({
-        kind,
-        status: "failed",
-        startedAt: new Date(),
-        finishedAt: new Date(),
-        realmSchemaVersion: actual,
-        error: err.message,
-      })
-      .run();
-    throw err;
+    throw new SchemaVersionMismatchError(expected, actual);
   }
   return actual;
-}
-
-export function recordLockedImport(db: Db, errorMessage: string) {
-  const expected = loadOsuSchema().schemaVersion;
-  db.insert(imports)
-    .values({
-      kind: "full",
-      status: "locked",
-      startedAt: new Date(),
-      finishedAt: new Date(),
-      realmSchemaVersion: expected,
-      error: errorMessage,
-    })
-    .run();
 }
 
 export function hasSuccessfulImport(db: Db): boolean {
@@ -323,13 +336,25 @@ function reconcileDeletes(
   if (orphanBeatmaps.length > 0) {
     // scores referencing orphan beatmaps: null out beatmap_id first
     for (const batch of chunk(orphanBeatmaps, BATCH_SIZE)) {
-      db.update(scores)
-        .set({ beatmapId: null })
-        .where(inArray(scores.beatmapId, batch))
-        .run();
-      db.delete(mastery).where(inArray(mastery.beatmapId, batch)).run();
-      db.delete(notes).where(inArray(notes.beatmapId, batch)).run();
-      db.delete(beatmapTags).where(inArray(beatmapTags.beatmapId, batch)).run();
+      withBusyRetry(() =>
+        db
+          .update(scores)
+          .set({ beatmapId: null })
+          .where(inArray(scores.beatmapId, batch))
+          .run(),
+      );
+      withBusyRetry(() =>
+        db.delete(mastery).where(inArray(mastery.beatmapId, batch)).run(),
+      );
+      withBusyRetry(() =>
+        db.delete(notes).where(inArray(notes.beatmapId, batch)).run(),
+      );
+      withBusyRetry(() =>
+        db
+          .delete(beatmapTags)
+          .where(inArray(beatmapTags.beatmapId, batch))
+          .run(),
+      );
     }
     deleteByIds(db, beatmaps, beatmaps.id as never, orphanBeatmaps);
   }
@@ -360,45 +385,63 @@ function finishImport(
     scoresUpserted: number;
   },
 ) {
-  db.update(imports)
-    .set({
-      status: "success",
-      finishedAt: new Date(),
-      beatmapSetsUpserted: counts.beatmapSetsUpserted,
-      beatmapsUpserted: counts.beatmapsUpserted,
-      scoresUpserted: counts.scoresUpserted,
-    })
-    .where(eq(imports.id, importId))
-    .run();
+  withBusyRetry(() =>
+    db
+      .update(imports)
+      .set({
+        status: "success",
+        finishedAt: new Date(),
+        beatmapSetsUpserted: counts.beatmapSetsUpserted,
+        beatmapsUpserted: counts.beatmapsUpserted,
+        scoresUpserted: counts.scoresUpserted,
+      })
+      .where(eq(imports.id, importId))
+      .run(),
+  );
 }
 
 function failImport(db: Db, importId: number, err: unknown) {
-  db.update(imports)
-    .set({
-      status: "failed",
-      finishedAt: new Date(),
-      error: err instanceof Error ? err.message : String(err),
-    })
-    .where(eq(imports.id, importId))
-    .run();
+  const status = err instanceof RealmLockedError ? "locked" : "failed";
+  withBusyRetry(() =>
+    db
+      .update(imports)
+      .set({
+        status,
+        finishedAt: new Date(),
+        error: err instanceof Error ? err.message : String(err),
+      })
+      .where(eq(imports.id, importId))
+      .run(),
+  );
 }
 
 export function runFullSync(db: Db, realmPath: string): SyncResult {
-  const realm = openRealm(realmPath);
-  const actual = assertSchemaVersion(realm, "full", db);
+  // Claim the writer early so the server analytics pipeline can yield.
+  const importRow = withBusyRetry(() =>
+    db
+      .insert(imports)
+      .values({
+        kind: "full",
+        status: "running",
+        startedAt: new Date(),
+        realmSchemaVersion: 0,
+      })
+      .returning({ id: imports.id })
+      .get(),
+  );
 
-  const importRow = db
-    .insert(imports)
-    .values({
-      kind: "full",
-      status: "running",
-      startedAt: new Date(),
-      realmSchemaVersion: actual,
-    })
-    .returning({ id: imports.id })
-    .get();
-
+  let realm: Realm | undefined;
   try {
+    realm = openRealm(realmPath);
+    const actual = assertSchemaVersion(realm);
+    withBusyRetry(() =>
+      db
+        .update(imports)
+        .set({ realmSchemaVersion: actual })
+        .where(eq(imports.id, importRow.id))
+        .run(),
+    );
+
     const collected = collectMappedRows(realm);
 
     const rulesetsUpserted = upsertBatches(
@@ -454,7 +497,7 @@ export function runFullSync(db: Db, realmPath: string): SyncResult {
     failImport(db, importRow.id, err);
     throw err;
   } finally {
-    realm.close();
+    realm?.close();
   }
 }
 
@@ -465,21 +508,31 @@ export function runIncrementalSync(db: Db, realmPath: string): SyncResult {
     return runFullSync(db, realmPath);
   }
 
-  const realm = openRealm(realmPath);
-  const actual = assertSchemaVersion(realm, "incremental", db);
+  const importRow = withBusyRetry(() =>
+    db
+      .insert(imports)
+      .values({
+        kind: "incremental",
+        status: "running",
+        startedAt: new Date(),
+        realmSchemaVersion: 0,
+      })
+      .returning({ id: imports.id })
+      .get(),
+  );
 
-  const importRow = db
-    .insert(imports)
-    .values({
-      kind: "incremental",
-      status: "running",
-      startedAt: new Date(),
-      realmSchemaVersion: actual,
-    })
-    .returning({ id: imports.id })
-    .get();
-
+  let realm: Realm | undefined;
   try {
+    realm = openRealm(realmPath);
+    const actual = assertSchemaVersion(realm);
+    withBusyRetry(() =>
+      db
+        .update(imports)
+        .set({ realmSchemaVersion: actual })
+        .where(eq(imports.id, importRow.id))
+        .run(),
+    );
+
     const setIdsNeeded = new Set<string>();
     const rulesetShortNames = new Set<string>();
     const beatmapRows: BeatmapRow[] = [];
@@ -621,7 +674,7 @@ export function runIncrementalSync(db: Db, realmPath: string): SyncResult {
     failImport(db, importRow.id, err);
     throw err;
   } finally {
-    realm.close();
+    realm?.close();
   }
 }
 

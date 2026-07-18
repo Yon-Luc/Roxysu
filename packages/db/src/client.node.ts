@@ -8,12 +8,16 @@ import * as schema from "./schema";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const migrationsFolder = path.join(__dirname, "..", "drizzle");
 
+/** Wait this long for another process to release the write lock. */
+const BUSY_TIMEOUT_MS = 30_000;
+
 export type Db = ReturnType<typeof createDb>;
 
 export function createDb(dbPath: string) {
-  const sqlite = new Database(dbPath);
+  const sqlite = new Database(dbPath, { timeout: BUSY_TIMEOUT_MS });
   sqlite.pragma("journal_mode = WAL");
-  sqlite.pragma("busy_timeout = 5000");
+  sqlite.pragma(`busy_timeout = ${BUSY_TIMEOUT_MS}`);
+  sqlite.pragma("synchronous = NORMAL");
   return drizzle(sqlite, { schema });
 }
 

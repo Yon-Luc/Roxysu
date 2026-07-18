@@ -191,13 +191,13 @@ const ACCURACY_BINS: Omit<DistributionBin, "count">[] = [
 
 const MISSES_BINS: Omit<DistributionBin, "count">[] = [
   { key: "unplayed", label: "Unplayed" },
-  { key: "0", label: "0 (FC)" },
-  { key: "1", label: "1" },
-  { key: "2-5", label: "2–5" },
-  { key: "6-10", label: "6–10" },
-  { key: "11-25", label: "11–25" },
-  { key: "26-50", label: "26–50" },
   { key: "51+", label: "51+" },
+  { key: "26-50", label: "26–50" },
+  { key: "11-25", label: "11–25" },
+  { key: "6-10", label: "6–10" },
+  { key: "2-5", label: "2–5" },
+  { key: "1", label: "1" },
+  { key: "0", label: "0 (FC)" },
 ];
 
 const SCORE_BINS: Omit<DistributionBin, "count">[] = [

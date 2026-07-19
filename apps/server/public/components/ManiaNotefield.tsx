@@ -1,10 +1,9 @@
 import { useEffect, useRef } from "react";
 import type { BeatmapPreview } from "../lib/api";
 
-const SCROLL_PX_PER_MS = 0.55;
+const DEFAULT_SCROLL_PX_PER_MS = 0.55;
 const RECEPTOR_Y_RATIO = 0.88;
 const TAP_HEIGHT = 14;
-const LOOKAHEAD_MS = 2200;
 const LOOKBEHIND_MS = 200;
 
 type Note = BeatmapPreview["notes"][number];
@@ -14,6 +13,8 @@ type ManiaNotefieldProps = {
   notes: Note[];
   /** Returns current playback time in milliseconds (read each frame). */
   getCurrentTimeMs: () => number;
+  /** Pixels the notefield scrolls per millisecond. */
+  scrollPxPerMs?: number;
   className?: string;
 };
 
@@ -45,12 +46,14 @@ export function ManiaNotefield({
   columnCount,
   notes,
   getCurrentTimeMs,
+  scrollPxPerMs = DEFAULT_SCROLL_PX_PER_MS,
   className = "",
 }: ManiaNotefieldProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const notesRef = useRef<Note[]>([]);
   const columnsRef = useRef(columnCount);
   const getTimeRef = useRef(getCurrentTimeMs);
+  const scrollRef = useRef(scrollPxPerMs);
 
   // Keep notes sorted by start for windowed drawing.
   notesRef.current = (() => {
@@ -66,6 +69,7 @@ export function ManiaNotefield({
   })();
   columnsRef.current = columnCount;
   getTimeRef.current = getCurrentTimeMs;
+  scrollRef.current = Math.max(0.05, scrollPxPerMs);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -98,6 +102,7 @@ export function ManiaNotefield({
       if (!running) return;
       const cols = Math.max(1, columnsRef.current);
       const t = getTimeRef.current();
+      const scroll = scrollRef.current;
       const noteList = notesRef.current;
       const w = canvas!.clientWidth;
       const h = canvas!.clientHeight;
@@ -105,6 +110,7 @@ export function ManiaNotefield({
       const colW = w / cols;
       const gap = Math.max(1, colW * 0.04);
       const noteW = colW - gap * 2;
+      const lookaheadMs = receptorY / scroll + 200;
 
       ctx!.clearRect(0, 0, w, h);
 
@@ -132,7 +138,7 @@ export function ManiaNotefield({
       }
 
       const windowStart = t - LOOKBEHIND_MS;
-      const windowEnd = t + LOOKAHEAD_MS;
+      const windowEnd = t + lookaheadMs;
       // Walk a bit earlier so long notes that started before the window still draw.
       const startIdx = Math.max(0, bisectLeft(noteList, windowStart - 8000) - 1);
 
@@ -146,9 +152,9 @@ export function ManiaNotefield({
         const color = COLUMN_COLORS[col % COLUMN_COLORS.length]!;
         const isHold = note.endMs > note.startMs + 20;
 
-        const startY = receptorY - (note.startMs - t) * SCROLL_PX_PER_MS;
+        const startY = receptorY - (note.startMs - t) * scroll;
         if (isHold) {
-          const endY = receptorY - (note.endMs - t) * SCROLL_PX_PER_MS;
+          const endY = receptorY - (note.endMs - t) * scroll;
           const top = Math.min(startY, endY);
           const bottom = Math.max(startY, endY);
           const height = Math.max(TAP_HEIGHT, bottom - top);
@@ -186,3 +192,5 @@ export function ManiaNotefield({
     />
   );
 }
+
+export const PREVIEW_SCROLL_DEFAULT = DEFAULT_SCROLL_PX_PER_MS;

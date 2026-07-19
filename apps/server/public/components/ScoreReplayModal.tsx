@@ -18,7 +18,10 @@ import {
 import {
   JUDGMENT_COLORS,
   ManiaNotefield,
+  migratePreviewScroll,
   PREVIEW_SCROLL_DEFAULT,
+  PREVIEW_SCROLL_MAX,
+  PREVIEW_SCROLL_MIN,
   type ReplayJudgmentResult,
 } from "./ManiaNotefield";
 
@@ -63,10 +66,8 @@ function loadPrefs(): PreviewPrefs {
       rate: RATES.includes(parsed.rate as (typeof RATES)[number])
         ? (parsed.rate as number)
         : DEFAULT_PREFS.rate,
-      scroll: clamp(
+      scroll: migratePreviewScroll(
         typeof parsed.scroll === "number" ? parsed.scroll : DEFAULT_PREFS.scroll,
-        0.15,
-        1.4,
       ),
     };
   } catch {
@@ -412,7 +413,7 @@ function ScoreReplayModal({
     const base = candidates.length > 0 ? Math.max(...candidates) : 1;
     return Math.max(base, currentMs, 1);
   })();
-  const scrollLabel = Math.round((prefs.scroll / PREVIEW_SCROLL_DEFAULT) * 100);
+  const scrollLabel = Math.round(prefs.scroll);
 
   return (
     <div
@@ -510,7 +511,7 @@ function ScoreReplayModal({
                       notes={data.beatmap.notes}
                       frames={data.frames}
                       judgments={data.judgments}
-                      scrollPxPerMs={prefs.scroll}
+                      scrollSpeed={prefs.scroll}
                       getCurrentTimeMs={() => {
                         const audio = audioRef.current;
                         if (audio && Number.isFinite(audio.currentTime)) {
@@ -636,12 +637,12 @@ function ScoreReplayModal({
                   </label>
 
                   <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-muted sm:max-w-xs">
-                    <span className="shrink-0">Scroll {scrollLabel}%</span>
+                    <span className="shrink-0">Scroll {scrollLabel}</span>
                     <input
                       type="range"
-                      min={0.15}
-                      max={1.4}
-                      step={0.05}
+                      min={PREVIEW_SCROLL_MIN}
+                      max={PREVIEW_SCROLL_MAX}
+                      step={1}
                       value={prefs.scroll}
                       onInput={(e) => {
                         const scroll = Number(e.currentTarget.value);

@@ -15,7 +15,10 @@ import {
 } from "../lib/format";
 import {
   ManiaNotefield,
+  migratePreviewScroll,
   PREVIEW_SCROLL_DEFAULT,
+  PREVIEW_SCROLL_MAX,
+  PREVIEW_SCROLL_MIN,
 } from "./ManiaNotefield";
 
 const PREFS_KEY = "rx-beatmap-preview";
@@ -48,10 +51,8 @@ function loadPrefs(): PreviewPrefs {
       rate: RATES.includes(parsed.rate as (typeof RATES)[number])
         ? (parsed.rate as number)
         : DEFAULT_PREFS.rate,
-      scroll: clamp(
+      scroll: migratePreviewScroll(
         typeof parsed.scroll === "number" ? parsed.scroll : DEFAULT_PREFS.scroll,
-        0.15,
-        1.4,
       ),
     };
   } catch {
@@ -238,7 +239,7 @@ function BeatmapPreviewModal({
         e.preventDefault();
         setPrefs((p) => ({
           ...p,
-          scroll: clamp(Math.round((p.scroll - 0.05) * 100) / 100, 0.15, 1.4),
+          scroll: Math.max(PREVIEW_SCROLL_MIN, p.scroll - 1),
         }));
         return;
       }
@@ -246,7 +247,7 @@ function BeatmapPreviewModal({
         e.preventDefault();
         setPrefs((p) => ({
           ...p,
-          scroll: clamp(Math.round((p.scroll + 0.05) * 100) / 100, 0.15, 1.4),
+          scroll: Math.min(PREVIEW_SCROLL_MAX, p.scroll + 1),
         }));
         return;
       }
@@ -363,7 +364,7 @@ function BeatmapPreviewModal({
     const base = candidates.length > 0 ? Math.max(...candidates) : 1;
     return Math.max(base, currentMs, 1);
   })();
-  const scrollLabel = Math.round((prefs.scroll / PREVIEW_SCROLL_DEFAULT) * 100);
+  const scrollLabel = Math.round(prefs.scroll);
 
   return (
     <div
@@ -431,7 +432,7 @@ function BeatmapPreviewModal({
                     <ManiaNotefield
                       columnCount={data.columnCount}
                       notes={data.notes}
-                      scrollPxPerMs={prefs.scroll}
+                      scrollSpeed={prefs.scroll}
                       getCurrentTimeMs={() => {
                         const audio = audioRef.current;
                         if (audio && Number.isFinite(audio.currentTime)) {
@@ -572,12 +573,12 @@ function BeatmapPreviewModal({
                   </label>
 
                   <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-muted sm:max-w-xs">
-                    <span className="shrink-0">Scroll {scrollLabel}%</span>
+                    <span className="shrink-0">Scroll {scrollLabel}</span>
                     <input
                       type="range"
-                      min={0.15}
-                      max={1.4}
-                      step={0.05}
+                      min={PREVIEW_SCROLL_MIN}
+                      max={PREVIEW_SCROLL_MAX}
+                      step={1}
                       value={prefs.scroll}
                       onInput={(e) => {
                         const scroll = Number(e.currentTarget.value);

@@ -8,7 +8,11 @@ import {
   type NoteShape,
 } from "../lib/previewSkin";
 
-const DEFAULT_SCROLL_PX_PER_MS = 0.55;
+/** osu!lazer mania: timeRangeMs = MAX_TIME_RANGE / scrollSpeed (speed 1–40). */
+const OSU_MAX_TIME_RANGE_MS = 11485;
+const PREVIEW_SCROLL_MIN = 1;
+const PREVIEW_SCROLL_MAX = 40;
+const PREVIEW_SCROLL_DEFAULT = 20;
 const RECEPTOR_Y_RATIO = 0.88;
 const BASE_TAP_HEIGHT = 14;
 /** Max fraction of column width used for circle/arrow noteheads. */
@@ -43,8 +47,11 @@ type ManiaNotefieldProps = {
   notes: Note[];
   /** Returns current playback time in milliseconds (read each frame). */
   getCurrentTimeMs: () => number;
-  /** Pixels the notefield scrolls per millisecond. */
-  scrollPxPerMs?: number;
+  /**
+   * osu!mania scroll speed (1–40). Notes take
+   * `11485 / scrollSpeed` ms to travel top → receptor.
+   */
+  scrollSpeed?: number;
   /** Override skin (e.g. live editor preview). Falls back to stored skin. */
   skinOverride?: KeymodeSkin;
   /** Replay key frames (bitmask per column). */
@@ -348,11 +355,28 @@ function buildHeadJudgmentMap(
   return map;
 }
 
+function clampScrollSpeed(speed: number): number {
+  return Math.min(
+    PREVIEW_SCROLL_MAX,
+    Math.max(PREVIEW_SCROLL_MIN, speed),
+  );
+}
+
+/** Convert legacy px/ms prefs (≤2) to an approximate osu scroll speed. */
+export function migratePreviewScroll(raw: number): number {
+  if (!Number.isFinite(raw)) return PREVIEW_SCROLL_DEFAULT;
+  if (raw > 2) return clampScrollSpeed(raw);
+  const refReceptorY = 500;
+  return clampScrollSpeed(
+    Math.round((OSU_MAX_TIME_RANGE_MS * raw) / refReceptorY),
+  );
+}
+
 export function ManiaNotefield({
   columnCount,
   notes,
   getCurrentTimeMs,
-  scrollPxPerMs = DEFAULT_SCROLL_PX_PER_MS,
+  scrollSpeed = PREVIEW_SCROLL_DEFAULT,
   skinOverride,
   frames,
   judgments,
@@ -362,7 +386,7 @@ export function ManiaNotefield({
   const notesRef = useRef<Note[]>([]);
   const columnsRef = useRef(columnCount);
   const getTimeRef = useRef(getCurrentTimeMs);
-  const scrollRef = useRef(scrollPxPerMs);
+  const scrollSpeedRef = useRef(scrollSpeed);
   const framesRef = useRef<NotefieldFrame[]>([]);
   const headJudgmentsRef = useRef<Map<number, NotefieldJudgment>>(new Map());
   const storedSkin = usePreviewSkin();
@@ -383,7 +407,7 @@ export function ManiaNotefield({
   })();
   columnsRef.current = columnCount;
   getTimeRef.current = getCurrentTimeMs;
-  scrollRef.current = Math.max(0.05, scrollPxPerMs);
+  scrollSpeedRef.current = clampScrollSpeed(scrollSpeed);
   framesRef.current = frames ?? [];
   headJudgmentsRef.current = buildHeadJudgmentMap(judgments);
 
@@ -428,7 +452,6 @@ export function ManiaNotefield({
       if (!running) return;
       const cols = Math.max(1, columnsRef.current);
       const t = getTimeRef.current();
-      const scroll = scrollRef.current;
       const noteList = notesRef.current;
       const shape = skinRef.current.shape;
       const frameList = framesRef.current;
@@ -436,8 +459,11 @@ export function ManiaNotefield({
       const w = canvas!.clientWidth;
       const h = canvas!.clientHeight;
       const receptorY = h * RECEPTOR_Y_RATIO;
+      const timeRangeMs =
+        OSU_MAX_TIME_RANGE_MS / scrollSpeedRef.current;
+      const scroll = Math.max(0.05, receptorY / timeRangeMs);
       const colW = w / cols;
-      const lookaheadMs = receptorY / scroll + 200;
+      const lookaheadMs = timeRangeMs + 200;
 
       const frameIdx = frameList.length > 0 ? bisectFrame(frameList, t) : -1;
       const keys = frameIdx >= 0 ? frameList[frameIdx]!.keys : 0;
@@ -564,5 +590,9 @@ export function ManiaNotefield({
   );
 }
 
-export const PREVIEW_SCROLL_DEFAULT = DEFAULT_SCROLL_PX_PER_MS;
-export { JUDGMENT_COLORS };
+export {
+  JUDGMENT_COLORS,
+  PREVIEW_SCROLL_DEFAULT,
+  PREVIEW_SCROLL_MAX,
+  PREVIEW_SCROLL_MIN,
+};

@@ -29,6 +29,13 @@
       "when": 1784421309749,
       "tag": "0003_famous_sentinels",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1784456400000,
+      "tag": "0004_sunny_dan_ratings",
+      "breakpoints": true
     }
   ]
 }

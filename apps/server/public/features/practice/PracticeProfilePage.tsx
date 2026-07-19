@@ -40,6 +40,16 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
   const stats = data.stats!;
   const recentScores = data.recentScores ?? [];
   const mastery = data.mastery;
+  const sunnyDan =
+    data && "sunnyDan" in data
+      ? (data as { sunnyDan?: {
+          estDiff: string | null;
+          sunnyStar: number | null;
+          columnCount: number | null;
+          lnRatio: number | null;
+          error: string | null;
+        } | null }).sunnyDan
+      : null;
   const sessions = data.sessions ?? [];
   const clientUrl = osuClientBeatmapUrl(beatmap.onlineId);
   const webUrl = osuWebBeatmapUrl(beatmap.onlineId, beatmap.setOnlineId);
@@ -72,6 +82,7 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
               {beatmap.mapperUsername
                 ? ` · mapped by ${beatmap.mapperUsername}`
                 : ""}
+              {sunnyDan?.estDiff ? ` · Sunny ${sunnyDan.estDiff}` : ""}
             </p>
             {(clientUrl || webUrl) && (
               <div className="mt-4 flex flex-wrap gap-2">
@@ -106,7 +117,7 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
         />
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-2">
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <div className="rx-panel px-5 py-5">
           <h3 className="text-sm font-bold text-ink">Mastery</h3>
           {mastery ? (
@@ -122,6 +133,33 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
             <p className="mt-3 text-sm text-faint">No mastery yet.</p>
           )}
         </div>
+        {beatmap.rulesetShortName === "mania" && (
+          <div className="rx-panel px-5 py-5">
+            <h3 className="text-sm font-bold text-ink">Sunny dan</h3>
+            {sunnyDan?.estDiff ? (
+              <div className="mt-3 space-y-1">
+                <div className="font-display text-2xl font-extrabold text-accent">
+                  {sunnyDan.estDiff}
+                </div>
+                <p className="text-xs text-muted">
+                  {sunnyDan.sunnyStar != null
+                    ? `${sunnyDan.sunnyStar.toFixed(2)}★ rework`
+                    : "rework"}
+                  {sunnyDan.columnCount != null
+                    ? ` · ${sunnyDan.columnCount}K`
+                    : ""}
+                  {sunnyDan.lnRatio != null
+                    ? ` · LN ${(sunnyDan.lnRatio * 100).toFixed(0)}%`
+                    : ""}
+                </p>
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-faint">
+                {sunnyDan?.error ?? "Not available"}
+              </p>
+            )}
+          </div>
+        )}
         <div className="rx-panel px-5 py-5">
           <h3 className="text-sm font-bold text-ink">Sessions</h3>
           {sessions.length === 0 ? (

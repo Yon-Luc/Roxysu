@@ -278,3 +278,30 @@ export const scoreMetrics = sqliteTable("score_metrics", {
   isPb: integer("is_pb", { mode: "boolean" }).notNull().default(false),
   sessionId: integer("session_id").references(() => sessions.id),
 });
+
+/**
+ * Cached map-analysis results (e.g. Sunny → dan estimate).
+ * Written only by server; keyed by beatmap + algorithm.
+ */
+export const beatmapDanRatings = sqliteTable(
+  "beatmap_dan_ratings",
+  {
+    beatmapId: text("beatmap_id")
+      .notNull()
+      .references(() => beatmaps.id),
+    /** Estimator id, e.g. "sunny". */
+    algorithm: text("algorithm").notNull(),
+    /** Beatmap content hash when computed (invalidate on mismatch). */
+    beatmapHash: text("beatmap_hash"),
+    sunnyStar: real("sunny_star"),
+    lnRatio: real("ln_ratio"),
+    columnCount: integer("column_count"),
+    /** Human-readable dan label, e.g. "Reform 5 mid" or "Regular 7 high". */
+    estDiff: text("est_diff"),
+    error: text("error"),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.beatmapId, t.algorithm] }),
+  }),
+);

@@ -14,8 +14,15 @@ import { SessionDetailPage } from "./features/sessions/SessionDetailPage";
 import { CollectionsPage } from "./features/collections/CollectionsPage";
 import { CollectionResultsPage } from "./features/collections/CollectionResultsPage";
 import { SettingsPage } from "./features/settings/SettingsPage";
+import { OverlayPage } from "./features/overlay/OverlayPage";
 
 const rootRoute = createRootRoute({
+  component: () => <Outlet />,
+});
+
+const appRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  id: "app",
   component: () => (
     <AppShell>
       <Outlet />
@@ -24,19 +31,19 @@ const rootRoute = createRootRoute({
 });
 
 const indexRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => appRoute,
   path: "/",
   component: DashboardPage,
 });
 
 const practiceRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => appRoute,
   path: "/practice",
   component: PracticeListPage,
 });
 
 const practiceProfileRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => appRoute,
   path: "/practice/$beatmapId",
   component: function PracticeProfileRoute() {
     const { beatmapId } = practiceProfileRoute.useParams();
@@ -45,13 +52,13 @@ const practiceProfileRoute = createRoute({
 });
 
 const sessionsRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => appRoute,
   path: "/sessions",
   component: SessionsPage,
 });
 
 const sessionDetailRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => appRoute,
   path: "/sessions/$sessionId",
   component: function SessionDetailRoute() {
     const { sessionId } = sessionDetailRoute.useParams();
@@ -60,13 +67,13 @@ const sessionDetailRoute = createRoute({
 });
 
 const collectionsRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => appRoute,
   path: "/collections",
   component: CollectionsPage,
 });
 
 const collectionResultsRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => appRoute,
   path: "/collections/$collectionId",
   component: function CollectionResultsRoute() {
     const { collectionId } = collectionResultsRoute.useParams();
@@ -75,20 +82,41 @@ const collectionResultsRoute = createRoute({
 });
 
 const settingsRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => appRoute,
   path: "/settings",
   component: SettingsPage,
 });
 
+const overlayRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/overlay",
+  validateSearch: (search: Record<string, unknown>) => ({
+    limit:
+      search.limit == null || search.limit === ""
+        ? undefined
+        : Number(search.limit),
+    // Default is a solid panel; `clear` keeps only text + light row tint.
+    bg:
+      search.bg === "clear" || search.bg === "solid" ? search.bg : undefined,
+  }),
+  component: function OverlayRoute() {
+    const { limit, bg } = overlayRoute.useSearch();
+    return <OverlayPage limit={limit} bg={bg} />;
+  },
+});
+
 const routeTree = rootRoute.addChildren([
-  indexRoute,
-  practiceRoute,
-  practiceProfileRoute,
-  sessionsRoute,
-  sessionDetailRoute,
-  collectionsRoute,
-  collectionResultsRoute,
-  settingsRoute,
+  appRoute.addChildren([
+    indexRoute,
+    practiceRoute,
+    practiceProfileRoute,
+    sessionsRoute,
+    sessionDetailRoute,
+    collectionsRoute,
+    collectionResultsRoute,
+    settingsRoute,
+  ]),
+  overlayRoute,
 ]);
 
 export const router = createRouter({

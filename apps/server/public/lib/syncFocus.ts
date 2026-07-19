@@ -1,6 +1,15 @@
+/** OBS Browser Source (and preview) uses the hash overlay route. */
+function isOverlayRoute(): boolean {
+  const hash = window.location.hash.replace(/^#/, "");
+  return hash === "/overlay" || hash.startsWith("/overlay?");
+}
+
 /**
  * Pause realm-reader while this tab is unfocused/hidden so opening client.realm
  * does not contend with osu!lazer score submission. Resumes on focus.
+ *
+ * Overlay tabs always report focused so an OBS Browser Source keeps syncing
+ * while the streamer is in-game.
  */
 export function connectSyncFocus(): () => void {
   let lastSent: boolean | null = null;
@@ -23,6 +32,10 @@ export function connectSyncFocus(): () => void {
   };
 
   const syncFromFocus = () => {
+    if (isOverlayRoute()) {
+      send(true);
+      return;
+    }
     send(document.visibilityState === "visible" && document.hasFocus());
   };
 
@@ -30,6 +43,7 @@ export function connectSyncFocus(): () => void {
   document.addEventListener("visibilitychange", syncFromFocus);
   window.addEventListener("focus", syncFromFocus);
   window.addEventListener("blur", syncFromFocus);
+  window.addEventListener("hashchange", syncFromFocus);
 
   const onPageHide = () => send(false);
   window.addEventListener("pagehide", onPageHide);
@@ -38,6 +52,7 @@ export function connectSyncFocus(): () => void {
     document.removeEventListener("visibilitychange", syncFromFocus);
     window.removeEventListener("focus", syncFromFocus);
     window.removeEventListener("blur", syncFromFocus);
+    window.removeEventListener("hashchange", syncFromFocus);
     window.removeEventListener("pagehide", onPageHide);
     if (lastSent !== false) {
       lastSent = null;

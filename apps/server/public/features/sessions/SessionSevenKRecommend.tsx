@@ -35,7 +35,7 @@ const FOCUS_OPTIONS: { id: RecommendFocus; label: string; hint: string }[] = [
   {
     id: "push",
     label: "Push",
-    hint: "Maps ~15% above your estimated 7K skill.",
+    hint: "Slightly above your 90–95% clear level on rice/LN (neighboring dans).",
   },
   {
     id: "consistency",
@@ -213,26 +213,32 @@ export function SessionSevenKRecommend({
         ) : null}
 
         {skill ? (
-          <div className="grid gap-2 sm:grid-cols-3">
-            <SkillStat
-              label="Overall"
-              value={formatSkill(skill.overall)}
-              note={
-                skill.coldStart
-                  ? "Cold start"
-                  : `${skill.samplePlays} plays`
-              }
-            />
-            <SkillStat
-              label="RC"
-              value={formatSkill(skill.rc)}
-              note={`${skill.rcPlays} plays`}
-            />
-            <SkillStat
-              label="LN"
-              value={formatSkill(skill.ln)}
-              note={`${skill.lnPlays} plays`}
-            />
+          <div className="space-y-2">
+            <div className="grid gap-2 sm:grid-cols-3">
+              <SkillStat
+                label="Comfort"
+                value={formatSkill(skill.overall)}
+                note={
+                  skill.coldStart
+                    ? "Cold start"
+                    : `${skill.samplePlays} plays`
+                }
+              />
+              <SkillStat
+                label="RC clear"
+                value={formatSkill(skill.peakRc)}
+                note={`${skill.clearRcMaps ?? 0} maps @ 90–95%`}
+              />
+              <SkillStat
+                label="LN clear"
+                value={formatSkill(skill.peakLn)}
+                note={`${skill.clearLnMaps ?? 0} maps @ 90–95%`}
+              />
+            </div>
+            <p className="text-xs text-faint">
+              Push aims ~8% above your 90–95% clear Sunny (neighboring dans).
+              Consistency uses comfort skill.
+            </p>
           </div>
         ) : null}
 

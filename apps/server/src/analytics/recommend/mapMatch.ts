@@ -56,6 +56,7 @@ export function calculateMapMatch(
   map: CandidateMap,
   skill: SevenKSkillProfile,
   targetSkillset: SkillAxis | null = null,
+  skillMode: "comfort" | "peak" = "comfort",
 ): MapMatchResult {
   const axis: SkillAxis =
     targetSkillset && targetSkillset !== "overall"
@@ -67,7 +68,7 @@ export function calculateMapMatch(
   const adjusted = baseSunny + adjustment;
   const mmr = baseSunny * BASE_SUNNY_WEIGHT + adjusted * PERFORMANCE_WEIGHT;
 
-  const playerSkill = skillForAxis(skill, axis);
+  const playerSkill = skillForAxis(skill, axis, skillMode);
   const relativeDifficulty =
     playerSkill > 0 ? mmr / playerSkill : 1;
 

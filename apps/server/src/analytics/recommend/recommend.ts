@@ -271,11 +271,14 @@ function pickCandidatesInRange(
     overlayParams: unknown[];
     excludeIds: string[];
     pool: number;
+    skillMode?: "comfort" | "peak";
   },
 ): { rows: CandidateRow[]; matches: ReturnType<typeof calculateMapMatch>[] } {
+  const skillMode = opts.skillMode ?? "comfort";
   const playerSkill = skillForAxis(
     skill,
     opts.axis ?? "overall",
+    skillMode,
   );
   if (playerSkill <= 0) return { rows: [], matches: [] };
 
@@ -337,6 +340,7 @@ function pickCandidatesInRange(
       },
       skill,
       targetSkillset,
+      skillMode,
     );
 
     if (
@@ -366,35 +370,67 @@ function recommendPush(
   overlay: { sql: string | null; params: unknown[] },
   excludeIds: string[],
 ): RecommendItem[] {
-  const { rows, matches } = pickCandidatesInRange(db, skill, {
-    targetRatio: 1.15,
-    tolerance: 0.1,
-    axis: null,
+  // Push baseline = average Sunny of 90–95% clears per axis (dan-style).
+  // Target slightly above that clear level so suggestions sit in neighboring dans.
+  const perAxis = Math.max(count, Math.ceil(count * 1.5));
+  const rc = pickCandidatesInRange(db, skill, {
+    targetRatio: 1.08,
+    tolerance: 0.14,
+    axis: "rc",
     overlaySql: overlay.sql,
     overlayParams: overlay.params,
     excludeIds,
-    pool: count * 4,
+    pool: perAxis * 3,
+    skillMode: "peak",
+  });
+  const ln = pickCandidatesInRange(db, skill, {
+    targetRatio: 1.08,
+    tolerance: 0.14,
+    axis: "ln",
+    overlaySql: overlay.sql,
+    overlayParams: overlay.params,
+    excludeIds,
+    pool: perAxis * 3,
+    skillMode: "peak",
   });
 
-  const paired = rows.map((row, i) => ({ row, match: matches[i]! }));
+  const seen = new Set<string>();
+  const paired: Array<{
+    row: CandidateRow;
+    match: ReturnType<typeof calculateMapMatch>;
+  }> = [];
+  for (const [rows, matches] of [
+    [rc.rows, rc.matches] as const,
+    [ln.rows, ln.matches] as const,
+  ]) {
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i]!;
+      if (seen.has(row.id)) continue;
+      seen.add(row.id);
+      paired.push({ row, match: matches[i]! });
+    }
+  }
+
   paired.sort((a, b) => {
     if (a.match.playCount !== b.match.playCount) {
       return a.match.playCount - b.match.playCount;
     }
     return (
-      Math.abs(a.match.relativeDifficulty - 1.15) -
-      Math.abs(b.match.relativeDifficulty - 1.15)
+      Math.abs(a.match.relativeDifficulty - 1.08) -
+      Math.abs(b.match.relativeDifficulty - 1.08)
     );
   });
 
   return paired.slice(0, count).map(({ row, match }) => {
     const diffPercent = (match.relativeDifficulty - 1) * 100;
+    const axisLabel = match.axis === "ln" ? "LN" : "RC";
+    const dan = row.sunnyEstDiff ? ` · ${row.sunnyEstDiff}` : "";
     return toItem(
       row,
       match,
       "push",
       null,
-      `Push map: ${diffPercent >= 0 ? "+" : ""}${diffPercent.toFixed(0)}% above current level (${formatSunny(match.sunnyStar)} Sunny)`,
+      `Push ${axisLabel}: ${diffPercent >= 0 ? "+" : ""}${diffPercent.toFixed(0)}% above your 90–95% clear level (${formatSunny(match.sunnyStar)} Sunny${dan})`,
     );
   });
 }
@@ -563,6 +599,9 @@ function summaryFor(
   }
 
   const cold = skill.coldStart ? " (cold start)" : "";
+  if (focus === "push") {
+    return `Found ${count} maps for pushing above your 90–95% clear level (~${formatSunny(skill.peakOverall)} Sunny)${cold}`;
+  }
   return `Found ${count} maps for ${focusLabel} at skill level ${formatSunny(skill.overall)}${cold}`;
 }
 

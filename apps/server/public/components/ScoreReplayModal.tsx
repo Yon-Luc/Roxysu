@@ -58,6 +58,10 @@ type PreviewPrefs = {
   fullscreen: boolean;
   /** Fullscreen playfield max-width (% of dialog). */
   fieldWidth: number;
+  /** Timing visualizer center X (% of playfield). */
+  timingX: number;
+  /** Timing visualizer center Y (% of playfield). */
+  timingY: number;
   /** Opt-in miss/timing/pattern tools. Default off. */
   analysis: boolean;
 };
@@ -68,6 +72,8 @@ const DEFAULT_PREFS: PreviewPrefs = {
   scroll: PREVIEW_SCROLL_DEFAULT,
   fullscreen: false,
   fieldWidth: FIELD_WIDTH_DEFAULT,
+  timingX: 50,
+  timingY: 78,
   analysis: false,
 };
 
@@ -98,6 +104,20 @@ function loadPrefs(): PreviewPrefs {
           : DEFAULT_PREFS.fieldWidth,
         FIELD_WIDTH_MIN,
         FIELD_WIDTH_MAX,
+      ),
+      timingX: clamp(
+        typeof parsed.timingX === "number"
+          ? parsed.timingX
+          : DEFAULT_PREFS.timingX,
+        0,
+        100,
+      ),
+      timingY: clamp(
+        typeof parsed.timingY === "number"
+          ? parsed.timingY
+          : DEFAULT_PREFS.timingY,
+        0,
+        100,
       ),
       analysis:
         typeof parsed.analysis === "boolean"

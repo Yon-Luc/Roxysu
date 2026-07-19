@@ -25,7 +25,7 @@ import {
   LiveManiaPlay,
   type PracticeRange,
 } from "../lib/liveManiaPlay";
-import type { JudgmentSummary } from "../lib/maniaWindows";
+import { maniaHitWindows, type JudgmentSummary } from "../lib/maniaWindows";
 import {
   ManiaNotefield,
   migratePreviewScroll,
@@ -34,6 +34,11 @@ import {
   PREVIEW_SCROLL_MIN,
   type NotefieldJudgment,
 } from "./ManiaNotefield";
+import {
+  TimingVisualizer,
+  TIMING_VIS_X_DEFAULT,
+  TIMING_VIS_Y_DEFAULT,
+} from "./TimingVisualizer";
 
 const PREFS_KEY = "rx-beatmap-preview";
 const SKIP_MS = 5000;
@@ -50,6 +55,10 @@ type PreviewPrefs = {
   fullscreen: boolean;
   /** Fullscreen playfield max-width (% of dialog). */
   fieldWidth: number;
+  /** Timing visualizer center X (% of playfield). */
+  timingX: number;
+  /** Timing visualizer center Y (% of playfield). */
+  timingY: number;
   /** Preserved for ScoreReplayModal; unused here. */
   analysis?: boolean;
 };
@@ -62,6 +71,8 @@ const DEFAULT_PREFS: PreviewPrefs = {
   scroll: PREVIEW_SCROLL_DEFAULT,
   fullscreen: false,
   fieldWidth: FIELD_WIDTH_DEFAULT,
+  timingX: TIMING_VIS_X_DEFAULT,
+  timingY: TIMING_VIS_Y_DEFAULT,
 };
 
 const EMPTY_SUMMARY: JudgmentSummary = {
@@ -105,6 +116,20 @@ function loadPrefs(): PreviewPrefs {
           : DEFAULT_PREFS.fieldWidth,
         FIELD_WIDTH_MIN,
         FIELD_WIDTH_MAX,
+      ),
+      timingX: clamp(
+        typeof parsed.timingX === "number"
+          ? parsed.timingX
+          : DEFAULT_PREFS.timingX,
+        0,
+        100,
+      ),
+      timingY: clamp(
+        typeof parsed.timingY === "number"
+          ? parsed.timingY
+          : DEFAULT_PREFS.timingY,
+        0,
+        100,
       ),
       analysis:
         typeof parsed.analysis === "boolean" ? parsed.analysis : undefined,
@@ -857,15 +882,30 @@ function BeatmapPreviewModal({
                 }
               >
                 {data.supported && data.columnCount > 0 ? (
-                  <div className="h-full w-full overflow-hidden rounded-xl">
-                    <ManiaNotefield
-                      columnCount={data.columnCount}
-                      notes={fieldNotes}
-                      scrollSpeed={prefs.scroll}
-                      liveHeldMask={isPlay ? liveHeldMask : null}
-                      judgments={isPlay ? liveJudgments : undefined}
-                      getCurrentTimeMs={mapTimeMs}
-                    />
+                  <div className="relative h-full w-full">
+                    <div className="h-full w-full overflow-hidden rounded-xl">
+                      <ManiaNotefield
+                        columnCount={data.columnCount}
+                        notes={fieldNotes}
+                        scrollSpeed={prefs.scroll}
+                        liveHeldMask={isPlay ? liveHeldMask : null}
+                        judgments={isPlay ? liveJudgments : undefined}
+                        getCurrentTimeMs={mapTimeMs}
+                      />
+                    </div>
+                    {isPlay ? (
+                      <TimingVisualizer
+                        judgments={liveJudgments}
+                        windows={maniaHitWindows(
+                          data.overallDifficulty ?? 0,
+                        )}
+                        xPct={prefs.timingX}
+                        yPct={prefs.timingY}
+                        onMove={(timingX, timingY) =>
+                          setPrefs((p) => ({ ...p, timingX, timingY }))
+                        }
+                      />
+                    ) : null}
                   </div>
                 ) : (
                   <div className="flex h-full min-h-[16rem] items-center justify-center rounded-xl bg-black/40 px-6 text-center text-sm text-muted">

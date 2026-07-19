@@ -7,6 +7,7 @@ import {
   hasSuccessfulImport,
   runFullSync,
   runIncrementalSync,
+  runReconcileSync,
 } from "./sync";
 
 const RETRY_MS = Number(process.env.REALM_RETRY_MS ?? 10_000);
@@ -116,25 +117,25 @@ async function main() {
       if (!allowed) break;
 
       try {
-        const needFull =
-          FORCE_FULL ||
-          !hasSuccessfulImport(db) ||
-          cycle % FULL_EVERY_N === 0;
+        const needBootstrap = FORCE_FULL || !hasSuccessfulImport(db);
+        const needReconcile = !needBootstrap && cycle % FULL_EVERY_N === 0;
 
-        const result = needFull
+        const result = needBootstrap
           ? runFullSync(db, realmPath)
-          : runIncrementalSync(db, realmPath);
+          : needReconcile
+            ? runReconcileSync(db, realmPath)
+            : runIncrementalSync(db, realmPath);
 
         lockLogged = false;
         cycle += 1;
         lastSyncAt = Date.now();
 
         const del =
-          result.kind === "full"
+          result.scoresDeleted || result.beatmapsDeleted || result.beatmapSetsDeleted
             ? ` del(scores=${result.scoresDeleted} maps=${result.beatmapsDeleted} sets=${result.beatmapSetsDeleted})`
             : "";
         console.log(
-          `sync ${result.kind} — rulesets=${result.rulesetsUpserted} sets=${result.beatmapSetsUpserted} beatmaps=${result.beatmapsUpserted} scores=${result.scoresUpserted}${del} (realm v${result.realmSchemaVersion})`,
+          `sync ${result.kind} — rulesets=${result.rulesetsUpserted} sets=${result.beatmapSetsUpserted} beatmaps=${result.beatmapsUpserted} scores=${result.scoresUpserted} changed=${result.rowsChanged}${del} (realm v${result.realmSchemaVersion})`,
         );
       } catch (err) {
         if (err instanceof RealmLockedError) {

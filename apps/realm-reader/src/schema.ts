@@ -12,14 +12,18 @@ export type ExportedRealmSchema = {
   schema: ObjectSchema[];
 };
 
+let cached: ExportedRealmSchema | null = null;
+let cachedPath: string | null = null;
+
 export function loadOsuSchema(
   schemaPath = path.join(__dirname, "..", "schemas", "osu-client.schema.json"),
 ): ExportedRealmSchema {
-  return JSON.parse(readFileSync(schemaPath, "utf8")) as ExportedRealmSchema;
+  if (cached && cachedPath === schemaPath) return cached;
+  cached = JSON.parse(readFileSync(schemaPath, "utf8")) as ExportedRealmSchema;
+  cachedPath = schemaPath;
+  return cached;
 }
 
-export function expectedSchemaVersion(
-  schemaPath?: string,
-): number {
+export function expectedSchemaVersion(schemaPath?: string): number {
   return loadOsuSchema(schemaPath).schemaVersion;
 }

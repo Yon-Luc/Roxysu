@@ -6,6 +6,8 @@ import { publish, subscribe, type AppEvent } from "./shared/events";
 type PollState = {
   lastImportId: number;
   lastImportStatus: string | null;
+  lastImportRowsChanged: number;
+  lastImportDeletes: number;
   scoreCount: number;
   maxPlayedAt: number | null;
 };
@@ -21,6 +23,10 @@ async function readState(db: Db): Promise<PollState> {
     .select({
       id: imports.id,
       status: imports.status,
+      rowsChanged: imports.rowsChanged,
+      scoresDeleted: imports.scoresDeleted,
+      beatmapsDeleted: imports.beatmapsDeleted,
+      beatmapSetsDeleted: imports.beatmapSetsDeleted,
     })
     .from(imports)
     .orderBy(desc(imports.id))
@@ -33,9 +39,16 @@ async function readState(db: Db): Promise<PollState> {
     })
     .from(scores);
 
+  const deletes =
+    (lastImport?.scoresDeleted ?? 0) +
+    (lastImport?.beatmapsDeleted ?? 0) +
+    (lastImport?.beatmapSetsDeleted ?? 0);
+
   return {
     lastImportId: lastImport?.id ?? 0,
     lastImportStatus: lastImport?.status ?? null,
+    lastImportRowsChanged: lastImport?.rowsChanged ?? 0,
+    lastImportDeletes: deletes,
     scoreCount: scoreRow?.n ?? 0,
     maxPlayedAt: playedAtMs(scoreRow?.maxPlayed),
   };
@@ -50,14 +63,18 @@ export function startPollLoop(db: Db, intervalMs = 1500): () => void {
     try {
       const next = await readState(db);
       if (prev) {
-        if (
+        const importAdvanced =
           next.lastImportId > prev.lastImportId ||
           (next.lastImportId === prev.lastImportId &&
             next.lastImportStatus !== prev.lastImportStatus &&
-            next.lastImportStatus === "success")
-        ) {
-          publish({ type: "sync.finished", importId: next.lastImportId });
+            next.lastImportStatus === "success");
+
+        if (importAdvanced && next.lastImportStatus === "success") {
+          // Always refresh status UI; only rebuild analytics when data changed.
           publish({ type: "dashboard.updated" });
+          if (next.lastImportRowsChanged > 0 || next.lastImportDeletes > 0) {
+            publish({ type: "sync.finished", importId: next.lastImportId });
+          }
         }
 
         if (

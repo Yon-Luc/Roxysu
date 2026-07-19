@@ -39,6 +39,10 @@ export const systemRoutes = new Elysia({ prefix: "/system" })
             beatmapSetsUpserted: lastImport.beatmapSetsUpserted,
             beatmapsUpserted: lastImport.beatmapsUpserted,
             scoresUpserted: lastImport.scoresUpserted,
+            rowsChanged: lastImport.rowsChanged,
+            scoresDeleted: lastImport.scoresDeleted,
+            beatmapsDeleted: lastImport.beatmapsDeleted,
+            beatmapSetsDeleted: lastImport.beatmapSetsDeleted,
             error: lastImport.error,
           }
         : null,

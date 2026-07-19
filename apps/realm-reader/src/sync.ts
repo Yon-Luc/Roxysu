@@ -15,6 +15,7 @@ import {
   and,
   desc,
   inArray,
+  count,
   type Db,
 } from "@roxysu/db/client.node";
 import path from "node:path";
@@ -33,6 +34,9 @@ import {
 import { loadOsuSchema } from "./schema";
 
 const BATCH_SIZE = 500;
+
+/** Above this many changed IDs, analytics should full-rebuild (null delta payload). */
+const FULL_ANALYTICS_ID_THRESHOLD = 5_000;
 
 /** Realm uuid PKs require a BSON.UUID instance, not a plain string. */
 function realmUuid(id: string): Realm.BSON.UUID {
@@ -98,8 +102,8 @@ function withBusyRetry<T>(fn: () => T): T {
     } catch (err) {
       lastErr = err;
       if (!isSqliteBusy(err) || attempt === BUSY_RETRIES - 1) throw err;
-      // Exponential backoff: 50, 100, 200, … ms (capped), plus jitter.
-      const delay = Math.min(2_000, 50 * 2 ** attempt) + Math.floor(Math.random() * 50);
+      const delay =
+        Math.min(2_000, 50 * 2 ** attempt) + Math.floor(Math.random() * 50);
       sleepSync(delay);
     }
   }
@@ -120,6 +124,36 @@ function conflictSet(
   return set;
 }
 
+function sqliteTableName(
+  table: typeof rulesets | typeof beatmapSets | typeof beatmaps | typeof scores,
+): string {
+  if (table === rulesets) return "rulesets";
+  if (table === beatmapSets) return "beatmap_sets";
+  if (table === beatmaps) return "beatmaps";
+  return "scores";
+}
+
+/** Only apply conflict updates when at least one non-PK column differs. */
+function conflictSetWhere(
+  table: typeof rulesets | typeof beatmapSets | typeof beatmaps | typeof scores,
+  primaryKeyNames: string[],
+) {
+  const columns = getTableColumns(table);
+  const resolvedName = sqliteTableName(table);
+
+  const parts: ReturnType<typeof sql>[] = [];
+  for (const [name, col] of Object.entries(columns)) {
+    if (primaryKeyNames.includes(name)) continue;
+    parts.push(
+      sql.raw(
+        `excluded.\`${col.name}\` IS DISTINCT FROM \`${resolvedName}\`.\`${col.name}\``,
+      ),
+    );
+  }
+  if (parts.length === 0) return undefined;
+  return sql.join(parts, sql` OR `);
+}
+
 function chunk<T>(items: T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < items.length; i += size) {
@@ -128,13 +162,18 @@ function chunk<T>(items: T[], size: number): T[][] {
   return out;
 }
 
+type UpsertResult = {
+  attempted: number;
+  changed: number;
+};
+
 function upsertBatches(
   db: Db,
   table: typeof rulesets | typeof beatmapSets | typeof beatmaps | typeof scores,
   rows: Record<string, unknown>[],
   primaryKeyNames: string[],
-) {
-  if (rows.length === 0) return 0;
+): UpsertResult {
+  if (rows.length === 0) return { attempted: 0, changed: 0 };
   const columns = getTableColumns(table) as Record<string, { name: string }>;
   const targetCols = primaryKeyNames.map((k) => {
     const col = columns[k];
@@ -143,25 +182,36 @@ function upsertBatches(
   });
   const target = targetCols.length === 1 ? targetCols[0]! : targetCols;
   const set = conflictSet(table, primaryKeyNames);
+  const setWhere = conflictSetWhere(table, primaryKeyNames);
 
+  let changed = 0;
   for (const batch of chunk(rows, BATCH_SIZE)) {
-    withBusyRetry(() =>
+    const result = withBusyRetry(() =>
       db
         .insert(table)
         .values(batch as never[])
         .onConflictDoUpdate({
           target: target as never,
           set: set as never,
+          ...(setWhere ? { setWhere } : {}),
         })
         .run(),
     );
+    changed += result.changes;
   }
-  return rows.length;
+  return { attempted: rows.length, changed };
 }
 
 function deleteByIds(
   db: Db,
-  table: typeof scores | typeof beatmaps | typeof beatmapSets | typeof scoreMetrics | typeof mastery | typeof notes | typeof beatmapTags,
+  table:
+    | typeof scores
+    | typeof beatmaps
+    | typeof beatmapSets
+    | typeof scoreMetrics
+    | typeof mastery
+    | typeof notes
+    | typeof beatmapTags,
   idColumn: { name: string },
   ids: string[],
 ) {
@@ -179,12 +229,15 @@ function deleteByIds(
   return deleted;
 }
 
+export type SyncKind = "full" | "incremental" | "reconcile";
+
 export type SyncResult = {
-  kind: "full" | "incremental";
+  kind: SyncKind;
   beatmapSetsUpserted: number;
   beatmapsUpserted: number;
   scoresUpserted: number;
   rulesetsUpserted: number;
+  rowsChanged: number;
   scoresDeleted: number;
   beatmapsDeleted: number;
   beatmapSetsDeleted: number;
@@ -316,14 +369,51 @@ function collectMappedRows(realm: Realm): {
   };
 }
 
-/** Remove SQLite rows that no longer exist in Realm (full reconcile only). */
+/** Collect primary keys only — used by periodic reconcile. */
+function collectRealmIdSets(realm: Realm): {
+  realmScoreIds: Set<string>;
+  realmBeatmapIds: Set<string>;
+  realmSetIds: Set<string>;
+} {
+  const realmSetIds = new Set<string>();
+  for (const obj of realm.objects("BeatmapSet")) {
+    const id = (obj as { ID?: unknown }).ID;
+    if (id != null) realmSetIds.add(String(id));
+  }
+
+  const realmBeatmapIds = new Set<string>();
+  for (const obj of realm.objects("Beatmap")) {
+    const id = (obj as { ID?: unknown }).ID;
+    if (id != null) realmBeatmapIds.add(String(id));
+  }
+
+  const realmScoreIds = new Set<string>();
+  for (const obj of realm.objects("Score")) {
+    const id = (obj as { ID?: unknown }).ID;
+    if (id != null) realmScoreIds.add(String(id));
+  }
+
+  return { realmScoreIds, realmBeatmapIds, realmSetIds };
+}
+
+/** Remove SQLite rows that no longer exist in Realm (full/reconcile only). */
 function reconcileDeletes(
   db: Db,
   realmScoreIds: Set<string>,
   realmBeatmapIds: Set<string>,
   realmSetIds: Set<string>,
-): { scoresDeleted: number; beatmapsDeleted: number; beatmapSetsDeleted: number } {
-  const sqliteScoreIds = db.select({ id: scores.id }).from(scores).all().map((r) => r.id);
+): {
+  scoresDeleted: number;
+  beatmapsDeleted: number;
+  beatmapSetsDeleted: number;
+  deletedScoreIds: string[];
+  deletedBeatmapIds: string[];
+} {
+  const sqliteScoreIds = db
+    .select({ id: scores.id })
+    .from(scores)
+    .all()
+    .map((r) => r.id);
   const orphanScores = sqliteScoreIds.filter((id) => !realmScoreIds.has(id));
 
   if (orphanScores.length > 0) {
@@ -336,10 +426,11 @@ function reconcileDeletes(
     .from(beatmaps)
     .all()
     .map((r) => r.id);
-  const orphanBeatmaps = sqliteBeatmapIds.filter((id) => !realmBeatmapIds.has(id));
+  const orphanBeatmaps = sqliteBeatmapIds.filter(
+    (id) => !realmBeatmapIds.has(id),
+  );
 
   if (orphanBeatmaps.length > 0) {
-    // scores referencing orphan beatmaps: null out beatmap_id first
     for (const batch of chunk(orphanBeatmaps, BATCH_SIZE)) {
       withBusyRetry(() =>
         db
@@ -348,19 +439,10 @@ function reconcileDeletes(
           .where(inArray(scores.beatmapId, batch))
           .run(),
       );
-      withBusyRetry(() =>
-        db.delete(mastery).where(inArray(mastery.beatmapId, batch)).run(),
-      );
-      withBusyRetry(() =>
-        db.delete(notes).where(inArray(notes.beatmapId, batch)).run(),
-      );
-      withBusyRetry(() =>
-        db
-          .delete(beatmapTags)
-          .where(inArray(beatmapTags.beatmapId, batch))
-          .run(),
-      );
     }
+    deleteByIds(db, mastery, mastery.beatmapId as never, orphanBeatmaps);
+    deleteByIds(db, notes, notes.beatmapId as never, orphanBeatmaps);
+    deleteByIds(db, beatmapTags, beatmapTags.beatmapId as never, orphanBeatmaps);
     deleteByIds(db, beatmaps, beatmaps.id as never, orphanBeatmaps);
   }
 
@@ -378,7 +460,15 @@ function reconcileDeletes(
     scoresDeleted: orphanScores.length,
     beatmapsDeleted: orphanBeatmaps.length,
     beatmapSetsDeleted: orphanSets.length,
+    deletedScoreIds: orphanScores,
+    deletedBeatmapIds: orphanBeatmaps,
   };
+}
+
+function encodeChangedIds(ids: string[] | null): string | null {
+  if (ids == null) return null;
+  if (ids.length > FULL_ANALYTICS_ID_THRESHOLD) return null;
+  return JSON.stringify(ids);
 }
 
 function finishImport(
@@ -388,6 +478,12 @@ function finishImport(
     beatmapSetsUpserted: number;
     beatmapsUpserted: number;
     scoresUpserted: number;
+    rowsChanged: number;
+    scoresDeleted: number;
+    beatmapsDeleted: number;
+    beatmapSetsDeleted: number;
+    changedScoreIds: string[] | null;
+    changedBeatmapIds: string[] | null;
   },
 ) {
   withBusyRetry(() =>
@@ -399,6 +495,12 @@ function finishImport(
         beatmapSetsUpserted: counts.beatmapSetsUpserted,
         beatmapsUpserted: counts.beatmapsUpserted,
         scoresUpserted: counts.scoresUpserted,
+        rowsChanged: counts.rowsChanged,
+        scoresDeleted: counts.scoresDeleted,
+        beatmapsDeleted: counts.beatmapsDeleted,
+        beatmapSetsDeleted: counts.beatmapSetsDeleted,
+        changedScoreIds: encodeChangedIds(counts.changedScoreIds),
+        changedBeatmapIds: encodeChangedIds(counts.changedBeatmapIds),
       })
       .where(eq(imports.id, importId))
       .run(),
@@ -420,13 +522,12 @@ function failImport(db: Db, importId: number, err: unknown) {
   );
 }
 
-export function runFullSync(db: Db, realmPath: string): SyncResult {
-  // Claim the writer early so the server analytics pipeline can yield.
-  const importRow = withBusyRetry(() =>
+function claimImport(db: Db, kind: SyncKind) {
+  return withBusyRetry(() =>
     db
       .insert(imports)
       .values({
-        kind: "full",
+        kind,
         status: "running",
         startedAt: new Date(),
         realmSchemaVersion: 0,
@@ -434,18 +535,27 @@ export function runFullSync(db: Db, realmPath: string): SyncResult {
       .returning({ id: imports.id })
       .get(),
   );
+}
+
+function setImportSchemaVersion(db: Db, importId: number, version: number) {
+  withBusyRetry(() =>
+    db
+      .update(imports)
+      .set({ realmSchemaVersion: version })
+      .where(eq(imports.id, importId))
+      .run(),
+  );
+}
+
+/** Bootstrap / forced full: remap + upsert everything, then reconcile orphans. */
+export function runFullSync(db: Db, realmPath: string): SyncResult {
+  const importRow = claimImport(db, "full");
 
   let realm: Realm | undefined;
   try {
     realm = openRealm(realmPath);
     const actual = assertSchemaVersion(realm);
-    withBusyRetry(() =>
-      db
-        .update(imports)
-        .set({ realmSchemaVersion: actual })
-        .where(eq(imports.id, importRow.id))
-        .run(),
-    );
+    setImportSchemaVersion(db, importRow.id, actual);
 
     const collected = collectMappedRows(realm);
 
@@ -481,18 +591,177 @@ export function runFullSync(db: Db, realmPath: string): SyncResult {
       collected.realmSetIds,
     );
 
+    const rowsChanged =
+      rulesetsUpserted.changed +
+      beatmapSetsUpserted.changed +
+      beatmapsUpserted.changed +
+      scoresUpserted.changed +
+      deleted.scoresDeleted +
+      deleted.beatmapsDeleted +
+      deleted.beatmapSetsDeleted;
+
+    // Full bootstrap → null delta (server runs full analytics).
     finishImport(db, importRow.id, {
-      beatmapSetsUpserted,
-      beatmapsUpserted,
-      scoresUpserted,
+      beatmapSetsUpserted: beatmapSetsUpserted.attempted,
+      beatmapsUpserted: beatmapsUpserted.attempted,
+      scoresUpserted: scoresUpserted.attempted,
+      rowsChanged,
+      scoresDeleted: deleted.scoresDeleted,
+      beatmapsDeleted: deleted.beatmapsDeleted,
+      beatmapSetsDeleted: deleted.beatmapSetsDeleted,
+      changedScoreIds: null,
+      changedBeatmapIds: null,
     });
 
     return {
       kind: "full",
-      beatmapSetsUpserted,
-      beatmapsUpserted,
-      scoresUpserted,
-      rulesetsUpserted,
+      beatmapSetsUpserted: beatmapSetsUpserted.attempted,
+      beatmapsUpserted: beatmapsUpserted.attempted,
+      scoresUpserted: scoresUpserted.attempted,
+      rulesetsUpserted: rulesetsUpserted.attempted,
+      rowsChanged,
+      scoresDeleted: deleted.scoresDeleted,
+      beatmapsDeleted: deleted.beatmapsDeleted,
+      beatmapSetsDeleted: deleted.beatmapSetsDeleted,
+      realmSchemaVersion: actual,
+    };
+  } catch (err) {
+    failImport(db, importRow.id, err);
+    throw err;
+  } finally {
+    realm?.close();
+  }
+}
+
+/**
+ * Periodic orphan check: ID sets only (no full remapping/upsert of maps/scores).
+ * Soft-delete flags are picked up on incremental when counts diverge.
+ */
+export function runReconcileSync(db: Db, realmPath: string): SyncResult {
+  const importRow = claimImport(db, "reconcile");
+
+  let realm: Realm | undefined;
+  try {
+    realm = openRealm(realmPath);
+    const actual = assertSchemaVersion(realm);
+    setImportSchemaVersion(db, importRow.id, actual);
+
+    const sqliteScoreCount =
+      db.select({ n: count() }).from(scores).get()?.n ?? 0;
+    const sqliteBeatmapCount =
+      db.select({ n: count() }).from(beatmaps).get()?.n ?? 0;
+    const sqliteSetCount =
+      db.select({ n: count() }).from(beatmapSets).get()?.n ?? 0;
+
+    const realmScoreCount = realm.objects("Score").length;
+    const realmBeatmapCount = realm.objects("Beatmap").length;
+    const realmSetCount = realm.objects("BeatmapSet").length;
+
+    let deleted = {
+      scoresDeleted: 0,
+      beatmapsDeleted: 0,
+      beatmapSetsDeleted: 0,
+      deletedScoreIds: [] as string[],
+      deletedBeatmapIds: [] as string[],
+    };
+
+    // Counts match → no hard orphans; skip ID-set build.
+    if (
+      sqliteScoreCount !== realmScoreCount ||
+      sqliteBeatmapCount !== realmBeatmapCount ||
+      sqliteSetCount !== realmSetCount
+    ) {
+      const ids = collectRealmIdSets(realm);
+      deleted = reconcileDeletes(
+        db,
+        ids.realmScoreIds,
+        ids.realmBeatmapIds,
+        ids.realmSetIds,
+      );
+    }
+
+    // Soft-delete count gate: if pending counts diverge, map those objects.
+    let softScoreChanged = 0;
+    let softSetChanged = 0;
+    const changedScoreIds: string[] = [...deleted.deletedScoreIds];
+    const changedBeatmapIds: string[] = [...deleted.deletedBeatmapIds];
+
+    const realmSoftScores = realm
+      .objects("Score")
+      .filtered("DeletePending == true");
+    const realmSoftSets = realm
+      .objects("BeatmapSet")
+      .filtered("DeletePending == true");
+    const sqliteSoftScores =
+      db
+        .select({ n: count() })
+        .from(scores)
+        .where(eq(scores.deletePending, true))
+        .get()?.n ?? 0;
+    const sqliteSoftSets =
+      db
+        .select({ n: count() })
+        .from(beatmapSets)
+        .where(eq(beatmapSets.deletePending, true))
+        .get()?.n ?? 0;
+
+    if (realmSoftScores.length !== sqliteSoftScores) {
+      const scoreRows: ScoreRow[] = [];
+      for (const obj of realmSoftScores) {
+        const row = mapScore(obj as never);
+        if (row) {
+          scoreRows.push(row);
+          changedScoreIds.push(row.id);
+        }
+      }
+      softScoreChanged = upsertBatches(
+        db,
+        scores,
+        scoreRows as Record<string, unknown>[],
+        ["id"],
+      ).changed;
+    }
+
+    if (realmSoftSets.length !== sqliteSoftSets) {
+      const setRows: BeatmapSetRow[] = [];
+      for (const obj of realmSoftSets) {
+        const row = mapBeatmapSet(obj as never);
+        if (row) setRows.push(row);
+      }
+      softSetChanged = upsertBatches(
+        db,
+        beatmapSets,
+        setRows as Record<string, unknown>[],
+        ["id"],
+      ).changed;
+    }
+
+    const rowsChanged =
+      deleted.scoresDeleted +
+      deleted.beatmapsDeleted +
+      deleted.beatmapSetsDeleted +
+      softScoreChanged +
+      softSetChanged;
+
+    finishImport(db, importRow.id, {
+      beatmapSetsUpserted: 0,
+      beatmapsUpserted: 0,
+      scoresUpserted: 0,
+      rowsChanged,
+      scoresDeleted: deleted.scoresDeleted,
+      beatmapsDeleted: deleted.beatmapsDeleted,
+      beatmapSetsDeleted: deleted.beatmapSetsDeleted,
+      changedScoreIds,
+      changedBeatmapIds,
+    });
+
+    return {
+      kind: "reconcile",
+      beatmapSetsUpserted: 0,
+      beatmapsUpserted: 0,
+      scoresUpserted: 0,
+      rulesetsUpserted: 0,
+      rowsChanged,
       scoresDeleted: deleted.scoresDeleted,
       beatmapsDeleted: deleted.beatmapsDeleted,
       beatmapSetsDeleted: deleted.beatmapSetsDeleted,
@@ -508,41 +777,24 @@ export function runFullSync(db: Db, realmPath: string): SyncResult {
 
 export function runIncrementalSync(db: Db, realmPath: string): SyncResult {
   const watermarks = getWatermarks(db);
-  // No data yet — fall back to full
   if (watermarks.maxPlayedAt == null && watermarks.maxLastLocalUpdate == null) {
     return runFullSync(db, realmPath);
   }
 
-  const importRow = withBusyRetry(() =>
-    db
-      .insert(imports)
-      .values({
-        kind: "incremental",
-        status: "running",
-        startedAt: new Date(),
-        realmSchemaVersion: 0,
-      })
-      .returning({ id: imports.id })
-      .get(),
-  );
+  const importRow = claimImport(db, "incremental");
 
   let realm: Realm | undefined;
   try {
     realm = openRealm(realmPath);
     const actual = assertSchemaVersion(realm);
-    withBusyRetry(() =>
-      db
-        .update(imports)
-        .set({ realmSchemaVersion: actual })
-        .where(eq(imports.id, importRow.id))
-        .run(),
-    );
+    setImportSchemaVersion(db, importRow.id, actual);
 
     const setIdsNeeded = new Set<string>();
     const rulesetShortNames = new Set<string>();
     const beatmapRows: BeatmapRow[] = [];
     const scoreRows: ScoreRow[] = [];
     const beatmapIds = new Set<string>();
+    const scoreIds = new Set<string>();
 
     if (watermarks.maxLastLocalUpdate) {
       const filtered = realm
@@ -566,8 +818,8 @@ export function runIncrementalSync(db: Db, realmPath: string): SyncResult {
         const row = mapScore(obj as never);
         if (!row) continue;
         scoreRows.push(row);
+        scoreIds.add(row.id);
         if (row.beatmapId) {
-          // Ensure beatmap parent exists for new scores
           if (!beatmapIds.has(row.beatmapId)) {
             const bm = realm.objectForPrimaryKey(
               "Beatmap",
@@ -592,18 +844,42 @@ export function runIncrementalSync(db: Db, realmPath: string): SyncResult {
       }
     }
 
-    // Soft-deleted scores/sets changed without Date/LastLocalUpdate bumps —
-    // also pick up DeletePending=true that we may have previously skipped.
-    for (const obj of realm.objects("Score").filtered("DeletePending == true")) {
-      const row = mapScore(obj as never);
-      if (!row) continue;
-      if (!scoreRows.some((s) => s.id === row.id)) scoreRows.push(row);
-    }
-    for (const obj of realm
+    // Soft-delete: only scan when Realm pending count ≠ SQLite pending count.
+    const realmSoftScores = realm
+      .objects("Score")
+      .filtered("DeletePending == true");
+    const realmSoftSets = realm
       .objects("BeatmapSet")
-      .filtered("DeletePending == true")) {
-      const row = mapBeatmapSet(obj as never);
-      if (row) setIdsNeeded.add(row.id);
+      .filtered("DeletePending == true");
+    const sqliteSoftScores =
+      db
+        .select({ n: count() })
+        .from(scores)
+        .where(eq(scores.deletePending, true))
+        .get()?.n ?? 0;
+    const sqliteSoftSets =
+      db
+        .select({ n: count() })
+        .from(beatmapSets)
+        .where(eq(beatmapSets.deletePending, true))
+        .get()?.n ?? 0;
+
+    if (realmSoftScores.length !== sqliteSoftScores) {
+      for (const obj of realmSoftScores) {
+        const row = mapScore(obj as never);
+        if (!row) continue;
+        if (!scoreIds.has(row.id)) {
+          scoreRows.push(row);
+          scoreIds.add(row.id);
+        }
+      }
+    }
+
+    if (realmSoftSets.length !== sqliteSoftSets) {
+      for (const obj of realmSoftSets) {
+        const row = mapBeatmapSet(obj as never);
+        if (row) setIdsNeeded.add(row.id);
+      }
     }
 
     const setRows: BeatmapSetRow[] = [];
@@ -625,11 +901,24 @@ export function runIncrementalSync(db: Db, realmPath: string): SyncResult {
       }
     }
 
-    // Null beatmap refs that still aren't in SQLite after this batch
-    const knownBeatmapIds = new Set([
-      ...db.select({ id: beatmaps.id }).from(beatmaps).all().map((r) => r.id),
-      ...beatmapIds,
-    ]);
+    // Targeted FK check: only the beatmap IDs referenced by this delta.
+    const candidateBeatmapIds = [
+      ...new Set(
+        scoreRows
+          .map((r) => r.beatmapId)
+          .filter((id): id is string => id != null),
+      ),
+    ].filter((id) => !beatmapIds.has(id));
+
+    const knownBeatmapIds = new Set(beatmapIds);
+    for (const batch of chunk(candidateBeatmapIds, BATCH_SIZE)) {
+      const found = db
+        .select({ id: beatmaps.id })
+        .from(beatmaps)
+        .where(inArray(beatmaps.id, batch))
+        .all();
+      for (const row of found) knownBeatmapIds.add(row.id);
+    }
     for (const row of scoreRows) {
       if (row.beatmapId && !knownBeatmapIds.has(row.beatmapId)) {
         row.beatmapId = null;
@@ -661,18 +950,35 @@ export function runIncrementalSync(db: Db, realmPath: string): SyncResult {
       ["id"],
     );
 
+    const rowsChanged =
+      rulesetsUpserted.changed +
+      beatmapSetsUpserted.changed +
+      beatmapsUpserted.changed +
+      scoresUpserted.changed;
+
+    const changedScoreIds = [...scoreIds];
+    const changedBeatmapIds = [...beatmapIds];
+
     finishImport(db, importRow.id, {
-      beatmapSetsUpserted,
-      beatmapsUpserted,
-      scoresUpserted,
+      beatmapSetsUpserted: beatmapSetsUpserted.attempted,
+      beatmapsUpserted: beatmapsUpserted.attempted,
+      scoresUpserted: scoresUpserted.attempted,
+      rowsChanged,
+      scoresDeleted: 0,
+      beatmapsDeleted: 0,
+      beatmapSetsDeleted: 0,
+      // If nothing actually wrote, empty arrays → analytics can no-op via rowsChanged.
+      changedScoreIds: rowsChanged > 0 ? changedScoreIds : [],
+      changedBeatmapIds: rowsChanged > 0 ? changedBeatmapIds : [],
     });
 
     return {
       kind: "incremental",
-      beatmapSetsUpserted,
-      beatmapsUpserted,
-      scoresUpserted,
-      rulesetsUpserted,
+      beatmapSetsUpserted: beatmapSetsUpserted.attempted,
+      beatmapsUpserted: beatmapsUpserted.attempted,
+      scoresUpserted: scoresUpserted.attempted,
+      rulesetsUpserted: rulesetsUpserted.attempted,
+      rowsChanged,
       scoresDeleted: 0,
       beatmapsDeleted: 0,
       beatmapSetsDeleted: 0,

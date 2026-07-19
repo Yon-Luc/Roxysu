@@ -89,6 +89,7 @@ export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
               finishedAt: toIso(lastImport.finishedAt),
               beatmapsUpserted: lastImport.beatmapsUpserted,
               scoresUpserted: lastImport.scoresUpserted,
+              rowsChanged: lastImport.rowsChanged,
               error: lastImport.error,
             }
           : null,

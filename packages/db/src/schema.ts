@@ -142,7 +142,9 @@ export const scores = sqliteTable(
 
 export const imports = sqliteTable("imports", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  kind: text("kind", { enum: ["full", "incremental"] }).notNull(),
+  kind: text("kind", {
+    enum: ["full", "incremental", "reconcile"],
+  }).notNull(),
   status: text("status", {
     enum: ["running", "success", "failed", "locked"],
   }).notNull(),
@@ -152,6 +154,20 @@ export const imports = sqliteTable("imports", {
   beatmapSetsUpserted: integer("beatmap_sets_upserted").notNull().default(0),
   beatmapsUpserted: integer("beatmaps_upserted").notNull().default(0),
   scoresUpserted: integer("scores_upserted").notNull().default(0),
+  /** Rows actually inserted/updated (excludes no-op conflict updates). */
+  rowsChanged: integer("rows_changed").notNull().default(0),
+  scoresDeleted: integer("scores_deleted").notNull().default(0),
+  beatmapsDeleted: integer("beatmaps_deleted").notNull().default(0),
+  beatmapSetsDeleted: integer("beatmap_sets_deleted").notNull().default(0),
+  /**
+   * JSON string[] of score IDs touched by this import, or null when analytics
+   * should do a full rebuild (bootstrap / large full sync).
+   */
+  changedScoreIds: text("changed_score_ids"),
+  /**
+   * JSON string[] of beatmap IDs touched by this import, or null for full rebuild.
+   */
+  changedBeatmapIds: text("changed_beatmap_ids"),
   error: text("error"),
 });
 

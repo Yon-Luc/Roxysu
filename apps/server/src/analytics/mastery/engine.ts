@@ -1,6 +1,7 @@
 import {
   and,
   eq,
+  inArray,
   isNotNull,
   settings,
   mastery,
@@ -45,11 +46,20 @@ function toMs(value: Date | number): number {
   return value instanceof Date ? value.getTime() : value;
 }
 
-export async function runMasteryEngine(db: Db): Promise<void> {
+export type MasteryEngineOptions = {
+  /** When set, only recompute these beatmaps (delete+upsert partition). */
+  beatmapIds?: string[];
+};
+
+export async function runMasteryEngine(
+  db: Db,
+  options?: MasteryEngineOptions,
+): Promise<void> {
   const formulaId = await getActiveFormulaId(db);
   const formula = getFormula(formulaId)!;
+  const scopeIds = options?.beatmapIds;
 
-  const scoreRows = await db
+  const scoreQuery = db
     .select({
       id: scores.id,
       beatmapId: scores.beatmapId,
@@ -60,7 +70,17 @@ export async function runMasteryEngine(db: Db): Promise<void> {
     })
     .from(scores)
     .leftJoin(scoreMetrics, eq(scores.id, scoreMetrics.scoreId))
-    .where(and(eq(scores.deletePending, false), isNotNull(scores.beatmapId)));
+    .where(
+      scopeIds && scopeIds.length > 0
+        ? and(
+            eq(scores.deletePending, false),
+            isNotNull(scores.beatmapId),
+            inArray(scores.beatmapId, scopeIds),
+          )
+        : and(eq(scores.deletePending, false), isNotNull(scores.beatmapId)),
+    );
+
+  const scoreRows = await scoreQuery;
 
   type Agg = {
     scores: MasteryScoreInput[];
@@ -125,7 +145,13 @@ export async function runMasteryEngine(db: Db): Promise<void> {
     };
   });
 
-  await db.delete(mastery);
+  if (scopeIds && scopeIds.length > 0) {
+    // Drop stale mastery for scoped maps with no remaining scores.
+    await db.delete(mastery).where(inArray(mastery.beatmapId, scopeIds));
+  } else {
+    await db.delete(mastery);
+  }
+
   const BATCH = 500;
   for (let i = 0; i < rows.length; i += BATCH) {
     const batch = rows.slice(i, i + BATCH);

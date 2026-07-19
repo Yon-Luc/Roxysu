@@ -14,6 +14,7 @@ import {
 import { QueryLanguageHelpButton } from "../../components/QueryLanguageHelpModal";
 import { BeatmapCover } from "../../components/BeatmapCover";
 import { BeatmapPreviewButton } from "../../components/BeatmapPreviewModal";
+import { CopyBeatmapSearchButton } from "../../components/CopyBeatmapSearchButton";
 import { PageTitle } from "../../components/PageTitle";
 import {
   fetchPracticeDistribution,
@@ -490,11 +491,11 @@ export function PracticeListPage() {
         <>
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {list.items.map((item: PracticeItem) => (
-              <li key={item.id}>
+              <li key={item.id} className="rx-card flex flex-col">
                 <Link
                   to="/practice/$beatmapId"
                   params={{ beatmapId: item.id }}
-                  className="rx-card"
+                  className="block min-h-0 flex-1"
                 >
                   <div className="relative">
                     <BeatmapCover
@@ -510,7 +511,7 @@ export function PracticeListPage() {
                       </span>
                     ) : null}
                   </div>
-                  <div className="p-4">
+                  <div className="p-4 pb-2">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <div className="truncate text-sm text-muted">
@@ -544,11 +545,15 @@ export function PracticeListPage() {
                       <span>{formatPp(item.bestPp)}</span>
                       <span>{formatRelativeTime(item.lastPlayedAt)}</span>
                     </div>
-                    <div className="mt-3">
-                      <BeatmapPreviewButton beatmapId={item.id} />
-                    </div>
                   </div>
                 </Link>
+                <div className="flex flex-wrap gap-2 px-4 pb-4">
+                  <BeatmapPreviewButton beatmapId={item.id} />
+                  <CopyBeatmapSearchButton
+                    title={item.title}
+                    difficultyName={item.difficultyName}
+                  />
+                </div>
               </li>
             ))}
           </ul>

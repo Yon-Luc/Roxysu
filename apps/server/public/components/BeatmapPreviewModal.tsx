@@ -6,6 +6,7 @@ import {
   useState,
   type FormEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import { fetchBeatmapPreview } from "../lib/api";
 import {
   localBeatmapAudioUrl,
@@ -86,12 +87,15 @@ export function BeatmapPreviewButton({
       >
         Preview
       </button>
-      {open ? (
-        <BeatmapPreviewModal
-          beatmapId={beatmapId}
-          onClose={() => setOpen(false)}
-        />
-      ) : null}
+      {open
+        ? createPortal(
+            <BeatmapPreviewModal
+              beatmapId={beatmapId}
+              onClose={() => setOpen(false)}
+            />,
+            document.body,
+          )
+        : null}
     </>
   );
 }

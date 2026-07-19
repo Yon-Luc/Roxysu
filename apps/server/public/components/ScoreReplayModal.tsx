@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -24,6 +25,11 @@ import {
   PREVIEW_SCROLL_MIN,
   type ReplayJudgmentResult,
 } from "./ManiaNotefield";
+import {
+  buildReplayAnalysis,
+  MissSeekMarkers,
+  ReplayAnalysisPanel,
+} from "./ReplayAnalysisPanel";
 
 const PREFS_KEY = "rx-beatmap-preview";
 const SKIP_MS = 5000;
@@ -44,12 +50,17 @@ type PreviewPrefs = {
   volume: number;
   rate: number;
   scroll: number;
+  fullscreen: boolean;
+  /** Opt-in miss/timing/pattern tools. Default off. */
+  analysis: boolean;
 };
 
 const DEFAULT_PREFS: PreviewPrefs = {
   volume: 0.85,
   rate: 1,
   scroll: PREVIEW_SCROLL_DEFAULT,
+  fullscreen: false,
+  analysis: false,
 };
 
 function loadPrefs(): PreviewPrefs {
@@ -69,6 +80,14 @@ function loadPrefs(): PreviewPrefs {
       scroll: migratePreviewScroll(
         typeof parsed.scroll === "number" ? parsed.scroll : DEFAULT_PREFS.scroll,
       ),
+      fullscreen:
+        typeof parsed.fullscreen === "boolean"
+          ? parsed.fullscreen
+          : DEFAULT_PREFS.fullscreen,
+      analysis:
+        typeof parsed.analysis === "boolean"
+          ? parsed.analysis
+          : DEFAULT_PREFS.analysis,
     };
   } catch {
     return DEFAULT_PREFS;
@@ -161,11 +180,18 @@ function ScoreReplayModal({
     accuracy: 1,
     last: null as ReplayJudgmentResult | null,
   });
+  const [activeMissTMs, setActiveMissTMs] = useState<number | null>(null);
 
   const { data, error, isLoading } = useQuery({
     queryKey: ["score-replay", scoreId],
     queryFn: () => fetchScoreReplay(scoreId),
   });
+
+  const analysisOn = prefs.analysis;
+  const analysis = useMemo(() => {
+    if (!analysisOn || !data || data.error) return null;
+    return buildReplayAnalysis(data as ScoreReplay);
+  }, [analysisOn, data]);
 
   const audioUrl = localBeatmapAudioUrl(data?.beatmap.audioFileHash);
   const bgUrl =
@@ -211,6 +237,12 @@ function ScoreReplayModal({
     setCurrentMs(next);
   }
 
+  function jumpToMiss(tMs: number) {
+    // Nudge slightly before the miss so the note is still visible.
+    seekTo(Math.max(0, tMs - 400));
+    setActiveMissTMs(tMs);
+  }
+
   function seekBy(deltaMs: number) {
     const audio = audioRef.current;
     const base = audio ? (audio.currentTime || 0) * 1000 : 0;
@@ -229,27 +261,67 @@ function ScoreReplayModal({
     }
   }
 
+  function stopPlayback() {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.pause();
+    seekTo(0);
+    setPlaying(false);
+  }
+
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
     dialogRef.current?.focus();
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
-    function onKeyDown(e: KeyboardEvent) {
-      const tag = (e.target as HTMLElement | null)?.tagName;
-      const typing =
-        tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+    function isTextEntry(el: EventTarget | null): boolean {
+      if (!(el instanceof HTMLElement)) return false;
+      const tag = el.tagName;
+      if (tag === "TEXTAREA" || tag === "SELECT") return true;
+      if (tag === "INPUT") {
+        const type = (el as HTMLInputElement).type;
+        return (
+          type === "text" ||
+          type === "search" ||
+          type === "email" ||
+          type === "password" ||
+          type === "number" ||
+          type === ""
+        );
+      }
+      return el.isContentEditable;
+    }
 
+    function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.preventDefault();
+        if (prefsRef.current.fullscreen) {
+          setPrefs((p) => ({ ...p, fullscreen: false }));
+          return;
+        }
         onCloseRef.current();
         return;
       }
-      if (typing) return;
 
+      // Space always play/pause (even when seek/volume sliders are focused).
       if (e.key === " " || e.key === "k" || e.key === "K") {
+        if (isTextEntry(e.target)) return;
         e.preventDefault();
         togglePlay();
+        return;
+      }
+
+      if (isTextEntry(e.target)) return;
+
+      if (e.key === "f" || e.key === "F") {
+        e.preventDefault();
+        setPrefs((p) => ({ ...p, fullscreen: !p.fullscreen }));
+        return;
+      }
+      if (e.key === "s" || e.key === "S") {
+        e.preventDefault();
+        stopPlayback();
         return;
       }
       if (e.key === "ArrowLeft" || e.key === "j" || e.key === "J") {
@@ -264,7 +336,7 @@ function ScoreReplayModal({
       }
       if (e.key === "Home" || e.key === "0") {
         e.preventDefault();
-        seekTo(0);
+        stopPlayback();
       }
     }
 
@@ -284,6 +356,7 @@ function ScoreReplayModal({
     setDurationMs(0);
     setPlaying(false);
     setHud({ combo: 0, accuracy: 1, last: null });
+    setActiveMissTMs(null);
   }, [scoreId, audioUrl]);
 
   useEffect(() => {
@@ -414,10 +487,15 @@ function ScoreReplayModal({
     return Math.max(base, currentMs, 1);
   })();
   const scrollLabel = Math.round(prefs.scroll);
+  const fullscreen = prefs.fullscreen;
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/80 p-0 sm:items-center sm:p-3 md:p-5"
+      className={
+        fullscreen
+          ? "fixed inset-0 z-50 flex items-stretch justify-center bg-black/90 p-0"
+          : "fixed inset-0 z-50 flex items-stretch justify-center bg-black/80 p-0 sm:items-center sm:p-3 md:p-5"
+      }
       onClick={onClose}
       role="presentation"
     >
@@ -427,7 +505,11 @@ function ScoreReplayModal({
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="relative flex h-full max-h-none w-full max-w-none flex-col overflow-hidden rounded-none bg-canvas shadow-2xl shadow-black/70 outline-none sm:h-[min(96vh,58rem)] sm:max-w-6xl sm:rounded-2xl"
+        className={
+          fullscreen
+            ? "relative flex h-full w-full max-h-none max-w-none flex-col overflow-hidden rounded-none bg-canvas shadow-2xl shadow-black/70 outline-none"
+            : "relative flex h-full max-h-none w-full max-w-none flex-col overflow-hidden rounded-none bg-canvas shadow-2xl shadow-black/70 outline-none sm:h-[min(96vh,58rem)] sm:max-w-6xl sm:rounded-2xl"
+        }
         onClick={(e) => e.stopPropagation()}
       >
         <div
@@ -452,14 +534,34 @@ function ScoreReplayModal({
               <p className="mt-0.5 truncate text-sm text-muted">{subtitle}</p>
             ) : null}
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="shrink-0 rounded-full px-3 py-1 text-sm text-muted transition hover:bg-highlight hover:text-ink"
-            aria-label="Close"
-          >
-            Esc
-          </button>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={() =>
+                setPrefs((p) => ({ ...p, fullscreen: !p.fullscreen }))
+              }
+              className="rounded-full px-3 py-1 text-sm text-muted transition hover:bg-highlight hover:text-ink"
+              aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+              aria-pressed={fullscreen}
+              title="F"
+            >
+              {fullscreen ? "Window" : "Full"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (prefs.fullscreen) {
+                  setPrefs((p) => ({ ...p, fullscreen: false }));
+                  return;
+                }
+                onClose();
+              }}
+              className="rounded-full px-3 py-1 text-sm text-muted transition hover:bg-highlight hover:text-ink"
+              aria-label={fullscreen ? "Exit fullscreen" : "Close"}
+            >
+              Esc
+            </button>
+          </div>
         </div>
 
         <div className="relative flex min-h-0 flex-1 flex-col">
@@ -475,57 +577,85 @@ function ScoreReplayModal({
             </p>
           ) : data ? (
             <>
-              <div className="relative mx-auto min-h-0 w-full max-w-2xl flex-1 px-3 py-2 sm:max-w-3xl sm:px-6 sm:py-4">
-                <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex justify-between gap-3 sm:inset-x-6 sm:top-5">
-                  <div className="rounded-lg bg-black/55 px-3 py-2 backdrop-blur">
-                    <div className="text-[10px] font-semibold uppercase tracking-wide text-faint">
-                      Combo
-                    </div>
-                    <div className="font-display text-2xl font-bold tabular-nums text-ink">
-                      {hud.combo}
-                      <span className="text-base text-muted">x</span>
-                    </div>
-                  </div>
-                  <div className="rounded-lg bg-black/55 px-3 py-2 text-right backdrop-blur">
-                    <div className="text-[10px] font-semibold uppercase tracking-wide text-faint">
-                      Accuracy
-                    </div>
-                    <div className="font-display text-2xl font-bold tabular-nums text-ink">
-                      {formatAccuracy(hud.accuracy)}
-                    </div>
-                    {hud.last ? (
-                      <div
-                        className="mt-0.5 text-xs font-bold uppercase tracking-wide"
-                        style={{ color: JUDGMENT_COLORS[hud.last] }}
-                      >
-                        {hud.last}
+              <div
+                className={
+                  analysisOn
+                    ? "relative flex min-h-0 flex-1 flex-col sm:flex-row"
+                    : "relative flex min-h-0 flex-1 flex-col"
+                }
+              >
+                <div
+                  className={
+                    fullscreen
+                      ? "relative mx-auto min-h-0 w-full max-w-4xl flex-1 px-2 py-1 sm:max-w-5xl sm:px-4 sm:py-2"
+                      : analysisOn
+                        ? "relative mx-auto min-h-0 w-full min-w-0 flex-1 px-3 py-2 sm:px-4 sm:py-3"
+                        : "relative mx-auto min-h-0 w-full max-w-2xl flex-1 px-3 py-2 sm:max-w-3xl sm:px-6 sm:py-4"
+                  }
+                >
+                  <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex justify-between gap-3 sm:inset-x-6 sm:top-5">
+                    <div className="rounded-lg bg-black/55 px-3 py-2 backdrop-blur">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-faint">
+                        Combo
                       </div>
-                    ) : null}
+                      <div className="font-display text-2xl font-bold tabular-nums text-ink">
+                        {hud.combo}
+                        <span className="text-base text-muted">x</span>
+                      </div>
+                    </div>
+                    <div className="rounded-lg bg-black/55 px-3 py-2 text-right backdrop-blur">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-faint">
+                        Accuracy
+                      </div>
+                      <div className="font-display text-2xl font-bold tabular-nums text-ink">
+                        {formatAccuracy(hud.accuracy)}
+                      </div>
+                      {hud.last ? (
+                        <div
+                          className="mt-0.5 text-xs font-bold uppercase tracking-wide"
+                          style={{ color: JUDGMENT_COLORS[hud.last] }}
+                        >
+                          {hud.last}
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
+
+                  {data.beatmap.columnCount > 0 ? (
+                    <div className="h-full w-full overflow-hidden rounded-xl">
+                      <ManiaNotefield
+                        columnCount={data.beatmap.columnCount}
+                        notes={data.beatmap.notes}
+                        frames={data.frames}
+                        judgments={data.judgments}
+                        highlightMissNotes={analysisOn}
+                        scrollSpeed={prefs.scroll}
+                        getCurrentTimeMs={() => {
+                          const audio = audioRef.current;
+                          if (audio && Number.isFinite(audio.currentTime)) {
+                            return audio.currentTime * 1000;
+                          }
+                          return currentMs;
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex h-full min-h-[16rem] items-center justify-center rounded-xl bg-black/40 px-6 text-center text-sm text-muted">
+                      Could not load mania notes for this score.
+                    </div>
+                  )}
                 </div>
 
-                {data.beatmap.columnCount > 0 ? (
-                  <div className="h-full w-full overflow-hidden rounded-xl">
-                    <ManiaNotefield
-                      columnCount={data.beatmap.columnCount}
-                      notes={data.beatmap.notes}
-                      frames={data.frames}
-                      judgments={data.judgments}
-                      scrollSpeed={prefs.scroll}
-                      getCurrentTimeMs={() => {
-                        const audio = audioRef.current;
-                        if (audio && Number.isFinite(audio.currentTime)) {
-                          return audio.currentTime * 1000;
-                        }
-                        return currentMs;
-                      }}
+                {analysisOn && analysis ? (
+                  <div className="h-56 shrink-0 sm:h-auto sm:w-72 sm:max-w-[40%] md:w-80">
+                    <ReplayAnalysisPanel
+                      data={data as ScoreReplay}
+                      analysis={analysis}
+                      onJumpToMiss={jumpToMiss}
+                      activeMissTMs={activeMissTMs}
                     />
                   </div>
-                ) : (
-                  <div className="flex h-full min-h-[16rem] items-center justify-center rounded-xl bg-black/40 px-6 text-center text-sm text-muted">
-                    Could not load mania notes for this score.
-                  </div>
-                )}
+                ) : null}
               </div>
 
               <div className="border-t border-white/10 bg-black/50 px-4 py-3 backdrop-blur sm:px-6 sm:py-4">
@@ -540,23 +670,32 @@ function ScoreReplayModal({
                   </p>
                 ) : null}
 
-                <ReplayStatsBar data={data} />
+                <ReplayStatsBar data={data as ScoreReplay} />
 
-                <div className="mb-3 flex items-center gap-3">
+                <div className="relative mb-3 flex items-center gap-3">
                   <span className="w-16 shrink-0 tabular-nums text-xs text-muted sm:w-20">
                     {formatClock(currentMs)}
                   </span>
-                  <input
-                    type="range"
-                    min={0}
-                    max={Math.max(1, Math.floor(maxDuration))}
-                    step={10}
-                    value={Math.min(currentMs, maxDuration)}
-                    onInput={onSeek}
-                    disabled={!audioUrl}
-                    className="min-w-0 flex-1 accent-[var(--accent)]"
-                    aria-label="Seek"
-                  />
+                  <div className="relative min-w-0 flex-1">
+                    {analysisOn && analysis ? (
+                      <MissSeekMarkers
+                        misses={analysis.misses}
+                        maxDuration={maxDuration}
+                        onJump={jumpToMiss}
+                      />
+                    ) : null}
+                    <input
+                      type="range"
+                      min={0}
+                      max={Math.max(1, Math.floor(maxDuration))}
+                      step={10}
+                      value={Math.min(currentMs, maxDuration)}
+                      onInput={onSeek}
+                      disabled={!audioUrl}
+                      className="relative z-[1] min-w-0 w-full accent-[var(--accent)]"
+                      aria-label="Seek"
+                    />
+                  </div>
                   <span className="w-16 shrink-0 text-right tabular-nums text-xs text-muted sm:w-20">
                     {formatClock(maxDuration)}
                   </span>
@@ -591,9 +730,9 @@ function ScoreReplayModal({
                     type="button"
                     className="rx-btn"
                     disabled={!audioUrl}
-                    onClick={() => seekTo(0)}
+                    onClick={stopPlayback}
                   >
-                    Start
+                    Stop
                   </button>
 
                   <div className="mx-1 hidden h-6 w-px bg-white/10 sm:block" />
@@ -651,6 +790,22 @@ function ScoreReplayModal({
                       className="min-w-[4rem] flex-1 accent-[var(--accent)]"
                       aria-label="Scroll speed"
                     />
+                  </label>
+
+                  <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
+                    <input
+                      type="checkbox"
+                      checked={prefs.analysis}
+                      onChange={(e) =>
+                        setPrefs((p) => ({
+                          ...p,
+                          analysis: e.target.checked,
+                        }))
+                      }
+                      className="accent-[var(--accent)]"
+                      aria-label="Analysis mode"
+                    />
+                    <span className="shrink-0">Analysis</span>
                   </label>
                 </div>
               </div>

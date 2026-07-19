@@ -34,6 +34,8 @@ export type NotefieldJudgment = {
   noteIndex: number;
   tMs: number;
   result: ReplayJudgmentResult;
+  /** Hit offset in ms (press−start or release−end); null on miss. */
+  errorMs?: number | null;
   isTail?: boolean;
 };
 
@@ -58,6 +60,11 @@ type ManiaNotefieldProps = {
   frames?: NotefieldFrame[];
   /** Precomputed judgments keyed by note index (head result used for color). */
   judgments?: NotefieldJudgment[];
+  /**
+   * Analysis mode: draw a red rectangle around missed notes
+   * (skin colors unchanged).
+   */
+  highlightMissNotes?: boolean;
   className?: string;
 };
 
@@ -241,6 +248,42 @@ function drawTap(
   drawFlat(ctx, x, y, w, h, color, alpha);
 }
 
+/** Analysis miss marker — rectangle frame around the note (keeps skin color). */
+function drawMissRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+) {
+  const pad = 4;
+  ctx.save();
+  ctx.strokeStyle = JUDGMENT_COLORS.miss;
+  ctx.lineWidth = 5;
+  ctx.lineJoin = "round";
+  ctx.globalAlpha = 1;
+  ctx.strokeRect(x - pad, y - h / 2 - pad, w + pad * 2, h + pad * 2);
+  ctx.restore();
+}
+
+/** Rectangle around an LN body (head → tail span). */
+function drawMissHoldRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  top: number,
+  w: number,
+  height: number,
+) {
+  const pad = 4;
+  ctx.save();
+  ctx.strokeStyle = JUDGMENT_COLORS.miss;
+  ctx.lineWidth = 5;
+  ctx.lineJoin = "round";
+  ctx.globalAlpha = 1;
+  ctx.strokeRect(x - pad, top - pad, w + pad * 2, height + pad * 2);
+  ctx.restore();
+}
+
 function drawHoldBody(
   ctx: CanvasRenderingContext2D,
   shape: NoteShape,
@@ -380,6 +423,7 @@ export function ManiaNotefield({
   skinOverride,
   frames,
   judgments,
+  highlightMissNotes = false,
   className = "",
 }: ManiaNotefieldProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -389,6 +433,7 @@ export function ManiaNotefield({
   const scrollSpeedRef = useRef(scrollSpeed);
   const framesRef = useRef<NotefieldFrame[]>([]);
   const headJudgmentsRef = useRef<Map<number, NotefieldJudgment>>(new Map());
+  const highlightMissRef = useRef(highlightMissNotes);
   const storedSkin = usePreviewSkin();
   const keymodeSkin = skinOverride ?? resolveKeymodeSkin(storedSkin, columnCount);
   const skinRef = useRef(keymodeSkin);
@@ -410,6 +455,7 @@ export function ManiaNotefield({
   scrollSpeedRef.current = clampScrollSpeed(scrollSpeed);
   framesRef.current = frames ?? [];
   headJudgmentsRef.current = buildHeadJudgmentMap(judgments);
+  highlightMissRef.current = highlightMissNotes;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -491,6 +537,7 @@ export function ManiaNotefield({
       const windowStart = t;
       const windowEnd = t + lookaheadMs;
       const startIdx = Math.max(0, bisectLeft(noteList, windowStart - 8000) - 1);
+      const markMisses = highlightMissRef.current;
 
       for (let i = startIdx; i < noteList.length; i += 1) {
         const note = noteList[i]!;
@@ -503,14 +550,18 @@ export function ManiaNotefield({
         const isHold = note.endMs > note.startMs + 20;
 
         const judgment = headMap.get(i);
+        const isMiss = judgment?.result === "miss";
         const judged = judgment != null && t >= judgment.tMs;
-        const noteColor = judged
-          ? JUDGMENT_COLORS[judgment.result]
+        // Analysis: keep skin color on misses; mark with a rect instead.
+        const useJudgmentColor = judged && !(markMisses && isMiss);
+        const noteColor = useJudgmentColor
+          ? JUDGMENT_COLORS[judgment!.result]
           : skin.noteColor;
-        const lnColor = judged
-          ? JUDGMENT_COLORS[judgment.result]
+        const lnColor = useJudgmentColor
+          ? JUDGMENT_COLORS[judgment!.result]
           : skin.lnColor;
-        const alpha = judged && judgment.result === "miss" ? 0.35 : 0.95;
+        const alpha =
+          judged && isMiss && !markMisses ? 0.35 : 0.95;
 
         const startY = receptorY - (note.startMs - t) * scroll;
         if (isHold) {
@@ -519,13 +570,17 @@ export function ManiaNotefield({
           const bottom = Math.max(startY, endY);
           const height = Math.max(tapH, bottom - top);
           drawHoldBody(ctx!, shape, x, top, noteW, height, lnColor);
-          if (note.startMs >= t || (judged && judgment.result !== "miss")) {
-            if (note.startMs >= t) {
-              drawTap(ctx!, shape, x, startY, noteW, tapH, noteColor, alpha);
-            }
+          if (note.startMs >= t) {
+            drawTap(ctx!, shape, x, startY, noteW, tapH, noteColor, alpha);
+          }
+          if (markMisses && isMiss) {
+            drawMissHoldRect(ctx!, x, top, noteW, height);
           }
         } else if (note.startMs >= t) {
           drawTap(ctx!, shape, x, startY, noteW, tapH, noteColor, alpha);
+          if (markMisses && isMiss) {
+            drawMissRect(ctx!, x, startY, noteW, tapH);
+          }
         } else if (judged && t - judgment.tMs < 120) {
           // Brief flash at receptor after hit.
           const flashY = receptorY;

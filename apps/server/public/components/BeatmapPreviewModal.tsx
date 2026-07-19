@@ -29,12 +29,16 @@ type PreviewPrefs = {
   volume: number;
   rate: number;
   scroll: number;
+  fullscreen: boolean;
+  /** Preserved for ScoreReplayModal; unused here. */
+  analysis?: boolean;
 };
 
 const DEFAULT_PREFS: PreviewPrefs = {
   volume: 0.85,
   rate: 1,
   scroll: PREVIEW_SCROLL_DEFAULT,
+  fullscreen: false,
 };
 
 function loadPrefs(): PreviewPrefs {
@@ -54,6 +58,12 @@ function loadPrefs(): PreviewPrefs {
       scroll: migratePreviewScroll(
         typeof parsed.scroll === "number" ? parsed.scroll : DEFAULT_PREFS.scroll,
       ),
+      fullscreen:
+        typeof parsed.fullscreen === "boolean"
+          ? parsed.fullscreen
+          : DEFAULT_PREFS.fullscreen,
+      analysis:
+        typeof parsed.analysis === "boolean" ? parsed.analysis : undefined,
     };
   } catch {
     return DEFAULT_PREFS;
@@ -204,11 +214,20 @@ function BeatmapPreviewModal({
 
       if (e.key === "Escape") {
         e.preventDefault();
+        if (prefsRef.current.fullscreen) {
+          setPrefs((p) => ({ ...p, fullscreen: false }));
+          return;
+        }
         onCloseRef.current();
         return;
       }
       if (typing) return;
 
+      if (e.key === "f" || e.key === "F") {
+        e.preventDefault();
+        setPrefs((p) => ({ ...p, fullscreen: !p.fullscreen }));
+        return;
+      }
       if (e.key === " " || e.key === "k" || e.key === "K") {
         e.preventDefault();
         togglePlay();
@@ -365,10 +384,15 @@ function BeatmapPreviewModal({
     return Math.max(base, currentMs, 1);
   })();
   const scrollLabel = Math.round(prefs.scroll);
+  const fullscreen = prefs.fullscreen;
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/80 p-0 sm:items-center sm:p-3 md:p-5"
+      className={
+        fullscreen
+          ? "fixed inset-0 z-50 flex items-stretch justify-center bg-black/90 p-0"
+          : "fixed inset-0 z-50 flex items-stretch justify-center bg-black/80 p-0 sm:items-center sm:p-3 md:p-5"
+      }
       onClick={onClose}
       role="presentation"
     >
@@ -378,7 +402,11 @@ function BeatmapPreviewModal({
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="relative flex h-full max-h-none w-full max-w-none flex-col overflow-hidden rounded-none bg-canvas shadow-2xl shadow-black/70 outline-none sm:h-[min(96vh,58rem)] sm:max-w-6xl sm:rounded-2xl"
+        className={
+          fullscreen
+            ? "relative flex h-full w-full max-h-none max-w-none flex-col overflow-hidden rounded-none bg-canvas shadow-2xl shadow-black/70 outline-none"
+            : "relative flex h-full max-h-none w-full max-w-none flex-col overflow-hidden rounded-none bg-canvas shadow-2xl shadow-black/70 outline-none sm:h-[min(96vh,58rem)] sm:max-w-6xl sm:rounded-2xl"
+        }
         onClick={(e) => e.stopPropagation()}
       >
         <div
@@ -403,14 +431,34 @@ function BeatmapPreviewModal({
               <p className="mt-0.5 truncate text-sm text-muted">{subtitle}</p>
             ) : null}
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="shrink-0 rounded-full px-3 py-1 text-sm text-muted transition hover:bg-highlight hover:text-ink"
-            aria-label="Close"
-          >
-            Esc
-          </button>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={() =>
+                setPrefs((p) => ({ ...p, fullscreen: !p.fullscreen }))
+              }
+              className="rounded-full px-3 py-1 text-sm text-muted transition hover:bg-highlight hover:text-ink"
+              aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+              aria-pressed={fullscreen}
+              title="F"
+            >
+              {fullscreen ? "Window" : "Full"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (prefs.fullscreen) {
+                  setPrefs((p) => ({ ...p, fullscreen: false }));
+                  return;
+                }
+                onClose();
+              }}
+              className="rounded-full px-3 py-1 text-sm text-muted transition hover:bg-highlight hover:text-ink"
+              aria-label={fullscreen ? "Exit fullscreen" : "Close"}
+            >
+              Esc
+            </button>
+          </div>
         </div>
 
         <div className="relative flex min-h-0 flex-1 flex-col">
@@ -426,7 +474,13 @@ function BeatmapPreviewModal({
             </p>
           ) : data ? (
             <>
-              <div className="relative mx-auto min-h-0 w-full max-w-2xl flex-1 px-3 py-2 sm:max-w-3xl sm:px-6 sm:py-4">
+              <div
+                className={
+                  fullscreen
+                    ? "relative mx-auto min-h-0 w-full max-w-4xl flex-1 px-2 py-1 sm:max-w-5xl sm:px-4 sm:py-2"
+                    : "relative mx-auto min-h-0 w-full max-w-2xl flex-1 px-3 py-2 sm:max-w-3xl sm:px-6 sm:py-4"
+                }
+              >
                 {data.supported && data.columnCount > 0 ? (
                   <div className="h-full w-full overflow-hidden rounded-xl">
                     <ManiaNotefield
@@ -591,8 +645,8 @@ function BeatmapPreviewModal({
                 </div>
 
                 <p className="mt-2 hidden text-[11px] text-faint sm:block">
-                  Space play · ← → skip 5s · Home start · P preview · [ ] scroll ·
-                  , . rate
+                  Space play · ← → skip 5s · Home start · P preview · F fullscreen ·
+                  [ ] scroll · , . rate
                   {" · "}
                   <a href="#/skin" className="text-subtle underline-offset-2 hover:underline">
                     Edit skin

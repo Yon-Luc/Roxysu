@@ -4,3 +4,7 @@ import "./global.css";
 
 const root = createRoot(document.getElementById("root")!);
 root.render(<App />);
+
+if ("serviceWorker" in navigator) {
+	void navigator.serviceWorker.register("/sw.js");
+}

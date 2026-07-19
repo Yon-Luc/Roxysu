@@ -20,15 +20,17 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const importStatus = status?.lastImport?.status;
   const syncLabel =
-    importStatus === "running"
-      ? "Syncing…"
-      : importStatus === "success"
-        ? "Synced"
-        : importStatus === "failed"
-          ? "Sync failed"
-          : importStatus === "locked"
-            ? "Locked"
-            : "No sync yet";
+    status?.syncPaused
+      ? "Paused"
+      : importStatus === "running"
+        ? "Syncing…"
+        : importStatus === "success"
+          ? "Synced"
+          : importStatus === "failed"
+            ? "Sync failed"
+            : importStatus === "locked"
+              ? "Locked"
+              : "No sync yet";
 
   return (
     <div className="min-h-screen bg-[#0e1015] text-[#e8eaef]">
@@ -56,20 +58,24 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-3 text-xs text-[#8b93a7]">
             <span
               className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 ${
-                importStatus === "running"
-                  ? "bg-amber-500/15 text-amber-300"
-                  : importStatus === "failed"
-                    ? "bg-rose-500/15 text-rose-300"
-                    : "bg-emerald-500/10 text-emerald-300"
+                status?.syncPaused
+                  ? "bg-sky-500/15 text-sky-300"
+                  : importStatus === "running"
+                    ? "bg-amber-500/15 text-amber-300"
+                    : importStatus === "failed"
+                      ? "bg-rose-500/15 text-rose-300"
+                      : "bg-emerald-500/10 text-emerald-300"
               }`}
             >
               <span
                 className={`size-1.5 rounded-full ${
-                  importStatus === "running"
-                    ? "animate-pulse bg-amber-400"
-                    : importStatus === "failed"
-                      ? "bg-rose-400"
-                      : "bg-emerald-400"
+                  status?.syncPaused
+                    ? "bg-sky-400"
+                    : importStatus === "running"
+                      ? "animate-pulse bg-amber-400"
+                      : importStatus === "failed"
+                        ? "bg-rose-400"
+                        : "bg-emerald-400"
                 }`}
               />
               {syncLabel}

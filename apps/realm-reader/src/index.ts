@@ -1,4 +1,4 @@
-import { closeDb, ensureDb } from "@roxysu/db/client.node";
+import { closeDb, ensureDb, eq, settings, type Db } from "@roxysu/db/client.node";
 import {
   RealmLockedError,
   SchemaVersionMismatchError,
@@ -11,8 +11,12 @@ import {
 
 const RETRY_MS = Number(process.env.REALM_RETRY_MS ?? 10_000);
 const RESYNC_MS = Number(process.env.REALM_RESYNC_MS ?? 60_000);
+const PAUSE_POLL_MS = Number(process.env.REALM_PAUSE_POLL_MS ?? 2_000);
 const FULL_EVERY_N = Number(process.env.REALM_FULL_EVERY_N ?? 10);
 const FORCE_FULL = process.env.REALM_FULL_SYNC === "1";
+
+/** Mirrors apps/server/src/routes/system.ts — web UI writes this via /api/system/sync-focus. */
+const SYNC_UI_FOCUSED_KEY = "sync.ui_focused";
 
 let shuttingDown = false;
 let wakeSleep: (() => void) | null = null;
@@ -38,6 +42,55 @@ function requestShutdown() {
   wakeSleep?.();
 }
 
+/** Explicit "0" means the web UI is unfocused; unset/"1" allows sync (headless-friendly). */
+function isSyncPaused(db: Db): boolean {
+  const row = db
+    .select({ value: settings.value })
+    .from(settings)
+    .where(eq(settings.key, SYNC_UI_FOCUSED_KEY))
+    .limit(1)
+    .get();
+  return row?.value === "0";
+}
+
+async function waitUntilSyncAllowed(
+  db: Db,
+  lastSyncAt: number | null,
+): Promise<boolean> {
+  let pauseLogged = false;
+
+  while (!shuttingDown) {
+    if (isSyncPaused(db)) {
+      if (!pauseLogged) {
+        console.log(
+          "sync paused (web UI unfocused) — waiting until focus returns",
+        );
+        pauseLogged = true;
+      }
+      await sleep(PAUSE_POLL_MS);
+      continue;
+    }
+
+    if (pauseLogged) {
+      console.log("sync resumed (web UI focused)");
+      pauseLogged = false;
+    }
+
+    if (lastSyncAt != null) {
+      const elapsed = Date.now() - lastSyncAt;
+      if (elapsed < RESYNC_MS) {
+        await sleep(RESYNC_MS - elapsed);
+        // Re-check pause after waiting — user may have left again.
+        continue;
+      }
+    }
+
+    return true;
+  }
+
+  return false;
+}
+
 async function main() {
   process.on("SIGINT", requestShutdown);
   process.on("SIGTERM", requestShutdown);
@@ -55,9 +108,13 @@ async function main() {
 
   let lockLogged = false;
   let cycle = 0;
+  let lastSyncAt: number | null = null;
 
   try {
     while (!shuttingDown) {
+      const allowed = await waitUntilSyncAllowed(db, lastSyncAt);
+      if (!allowed) break;
+
       try {
         const needFull =
           FORCE_FULL ||
@@ -70,6 +127,7 @@ async function main() {
 
         lockLogged = false;
         cycle += 1;
+        lastSyncAt = Date.now();
 
         const del =
           result.kind === "full"
@@ -78,7 +136,6 @@ async function main() {
         console.log(
           `sync ${result.kind} — rulesets=${result.rulesetsUpserted} sets=${result.beatmapSetsUpserted} beatmaps=${result.beatmapsUpserted} scores=${result.scoresUpserted}${del} (realm v${result.realmSchemaVersion})`,
         );
-        if (!shuttingDown) await sleep(RESYNC_MS);
       } catch (err) {
         if (err instanceof RealmLockedError) {
           if (!lockLogged) {

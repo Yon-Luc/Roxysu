@@ -1,4 +1,5 @@
 import { Elysia } from "elysia";
+import { audioRoutes } from "./audio";
 import { beatmapRoutes } from "./beatmaps";
 import { collectionRoutes } from "./collections";
 import { coverRoutes } from "./covers";
@@ -15,6 +16,7 @@ export const apiRoutes = new Elysia({ prefix: "/api" })
   .use(practiceRoutes)
   .use(beatmapRoutes)
   .use(coverRoutes)
+  .use(audioRoutes)
   .use(sessionRoutes)
   .use(searchRoutes)
   .use(collectionRoutes)

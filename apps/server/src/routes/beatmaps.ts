@@ -1,10 +1,16 @@
 import { Elysia, t } from "elysia";
+import { readFileSync } from "node:fs";
 import { and, count, desc, eq, max } from "drizzle-orm";
 import { beatmaps, beatmapSets, mastery, scores } from "@roxysu/db/client.bun";
 import { dbPlugin } from "../db";
 import { toIso } from "../shared/serialize";
 import { listSessionsForBeatmap } from "../analytics/session";
 import { getOrComputeSunnyDan } from "../map-analysis/computeSunnyDan";
+import { OsuFileParser } from "../map-analysis/parser/osuFileParser.js";
+import {
+  defaultOsuDataPath,
+  resolveLazerFilePath,
+} from "../shared/lazer-files";
 
 export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
   .use(dbPlugin)
@@ -83,6 +89,8 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
           approachRate: beatmap.approachRate,
           status: beatmap.status,
           lastPlayed: toIso(beatmap.lastPlayed),
+          previewTime: beatmap.previewTime,
+          audioFileHash: beatmap.audioFileHash,
           backgroundFileHash: beatmap.backgroundFileHash,
         },
         stats: {
@@ -123,6 +131,108 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
           scoreCount: s.scoreCount,
           rulesetShortName: s.rulesetShortName,
         })),
+      };
+    },
+    {
+      params: t.Object({
+        id: t.String(),
+      }),
+    },
+  )
+  .get(
+    "/:id/preview",
+    async ({ db, params, set }) => {
+      const [row] = await db
+        .select({
+          id: beatmaps.id,
+          hash: beatmaps.hash,
+          rulesetShortName: beatmaps.rulesetShortName,
+          previewTime: beatmaps.previewTime,
+          audioFileHash: beatmaps.audioFileHash,
+          backgroundFileHash: beatmaps.backgroundFileHash,
+          title: beatmaps.title,
+          artist: beatmaps.artist,
+          difficultyName: beatmaps.difficultyName,
+          setOnlineId: beatmapSets.onlineId,
+          length: beatmaps.length,
+        })
+        .from(beatmaps)
+        .leftJoin(beatmapSets, eq(beatmaps.setId, beatmapSets.id))
+        .where(eq(beatmaps.id, params.id))
+        .limit(1);
+
+      if (!row) {
+        set.status = 404;
+        return { error: "Beatmap not found" };
+      }
+
+      const base = {
+        id: row.id,
+        title: row.title,
+        artist: row.artist,
+        difficultyName: row.difficultyName,
+        setOnlineId: row.setOnlineId ?? null,
+        rulesetShortName: row.rulesetShortName,
+        previewTime: row.previewTime,
+        audioFileHash: row.audioFileHash,
+        backgroundFileHash: row.backgroundFileHash,
+        lengthMs: Math.round((row.length ?? 0) * 1000),
+        supported: false as boolean,
+        columnCount: 0,
+        notes: [] as Array<{ column: number; startMs: number; endMs: number }>,
+      };
+
+      if (row.rulesetShortName !== "mania") {
+        return { ...base, supported: false };
+      }
+
+      if (!row.hash) {
+        set.status = 404;
+        return { error: "Beatmap file hash missing" };
+      }
+
+      const filePath = resolveLazerFilePath(row.hash, defaultOsuDataPath());
+      if (!filePath) {
+        set.status = 404;
+        return { error: "Could not resolve beatmap file" };
+      }
+
+      let osuText: string;
+      try {
+        osuText = readFileSync(filePath, "utf8");
+      } catch {
+        set.status = 404;
+        return { error: "Beatmap file not found in lazer files store" };
+      }
+
+      const parser = new OsuFileParser(osuText);
+      parser.process();
+
+      if (parser.status === "NotMania" || parser.gameMode !== "3") {
+        return { ...base, supported: false };
+      }
+
+      if (parser.status === "Fail" || parser.columnCount <= 0) {
+        set.status = 422;
+        return { error: "Failed to parse beatmap" };
+      }
+
+      const notes: Array<{ column: number; startMs: number; endMs: number }> =
+        [];
+      for (let i = 0; i < parser.noteStarts.length; i += 1) {
+        notes.push({
+          column: parser.columns[i]!,
+          startMs: parser.noteStarts[i]!,
+          endMs: parser.noteEnds[i]!,
+        });
+      }
+      notes.sort((a, b) => a.startMs - b.startMs || a.column - b.column);
+
+      return {
+        ...base,
+        supported: true,
+        columnCount: parser.columnCount,
+        notes,
       };
     },
     {

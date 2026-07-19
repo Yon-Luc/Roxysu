@@ -138,6 +138,13 @@ export async function fetchBeatmap(id: string) {
   return unwrap(await api.api.beatmaps({ id }).get(), `/api/beatmaps/${id}`);
 }
 
+export async function fetchBeatmapPreview(id: string) {
+  return unwrap(
+    await api.api.beatmaps({ id }).preview.get(),
+    `/api/beatmaps/${id}/preview`,
+  );
+}
+
 export async function fetchSessions() {
   return unwrap(await api.api.sessions.get(), "/api/sessions");
 }
@@ -235,6 +242,10 @@ export type PracticeRecommend = Exclude<
 >;
 export type BeatmapProfile = Exclude<
   Awaited<ReturnType<typeof fetchBeatmap>>,
+  { error: string }
+>;
+export type BeatmapPreview = Exclude<
+  Awaited<ReturnType<typeof fetchBeatmapPreview>>,
   { error: string }
 >;
 export type RecentScore = Dashboard["recentScores"][number];

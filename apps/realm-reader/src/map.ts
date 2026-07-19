@@ -90,6 +90,7 @@ export function mapBeatmap(obj: RealmObj): BeatmapRow | null {
   const userSettings = obj.UserSettings as RealmObj | null | undefined;
   const ruleset = obj.Ruleset as RealmObj | null | undefined;
   const backgroundFile = (metadata?.BackgroundFile as string | null) ?? null;
+  const audioFile = (metadata?.AudioFile as string | null) ?? null;
 
   return {
     id: uuidString(obj.ID),
@@ -126,7 +127,8 @@ export function mapBeatmap(obj: RealmObj): BeatmapRow | null {
     tags: (metadata?.Tags as string | null) ?? null,
     previewTime:
       metadata?.PreviewTime != null ? Number(metadata.PreviewTime) : null,
-    audioFile: (metadata?.AudioFile as string | null) ?? null,
+    audioFile,
+    audioFileHash: resolveNamedFileHash(set, audioFile),
     backgroundFile,
     backgroundFileHash: resolveNamedFileHash(set, backgroundFile),
     mapperOnlineId: author != null ? Number(author.OnlineID ?? 0) : null,

@@ -116,3 +116,13 @@ export function localBeatmapCoverUrl(
   }
   return `/api/covers/${backgroundFileHash.toLowerCase()}`;
 }
+
+/** Local audio served from lazer's files/ store via Roxysu. */
+export function localBeatmapAudioUrl(
+  audioFileHash: string | null | undefined,
+): string | null {
+  if (!audioFileHash || !/^[0-9a-f]{64}$/i.test(audioFileHash)) {
+    return null;
+  }
+  return `/api/audio/${audioFileHash.toLowerCase()}`;
+}

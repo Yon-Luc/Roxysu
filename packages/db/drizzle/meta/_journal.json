@@ -36,6 +36,13 @@
       "when": 1784456400000,
       "tag": "0004_sunny_dan_ratings",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1784460000000,
+      "tag": "0005_audio_file_hash",
+      "breakpoints": true
     }
   ]
 }

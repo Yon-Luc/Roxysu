@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { BeatmapCover } from "../../components/BeatmapCover";
+import { BeatmapPreviewButton } from "../../components/BeatmapPreviewModal";
 import { CopyBeatmapSearchButton } from "../../components/CopyBeatmapSearchButton";
 import {
   fetchPracticeRecommend,
@@ -331,6 +332,7 @@ export function SessionSevenKRecommend({
                     </div>
                   </Link>
                   <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                    <BeatmapPreviewButton beatmapId={item.id} />
                     <CopyBeatmapSearchButton
                       title={item.title}
                       difficultyName={item.difficultyName}

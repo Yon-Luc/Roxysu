@@ -83,6 +83,8 @@ export const beatmaps = sqliteTable(
     tags: text("tags"),
     previewTime: integer("preview_time"),
     audioFile: text("audio_file"),
+    /** SHA-256 of the audio file in lazer's hashed files/ store. */
+    audioFileHash: text("audio_file_hash"),
     backgroundFile: text("background_file"),
     /** SHA-256 of the background file in lazer's hashed files/ store. */
     backgroundFileHash: text("background_file_hash"),

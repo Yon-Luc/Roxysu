@@ -1,7 +1,9 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { fetchSystemStatus } from "../lib/api";
+
+const SIDEBAR_OPEN_KEY = "roxysu.sidebarOpen";
 
 const nav = [
   { to: "/", label: "Home", exact: true, icon: HomeIcon },
@@ -11,7 +13,31 @@ const nav = [
   { to: "/settings", label: "Settings", icon: SettingsIcon },
 ] as const;
 
+function readSidebarOpen(): boolean {
+  try {
+    const raw = localStorage.getItem(SIDEBAR_OPEN_KEY);
+    if (raw === null) return true;
+    return raw !== "false";
+  } catch {
+    return true;
+  }
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
+  const [sidebarOpen, setSidebarOpen] = useState(readSidebarOpen);
+
+  function toggleSidebar() {
+    setSidebarOpen((open) => {
+      const next = !open;
+      try {
+        localStorage.setItem(SIDEBAR_OPEN_KEY, String(next));
+      } catch {
+        // ignore quota / private mode
+      }
+      return next;
+    });
+  }
+
   const { data: status } = useQuery({
     queryKey: ["system", "status"],
     queryFn: fetchSystemStatus,
@@ -43,18 +69,34 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-canvas text-ink">
       {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col bg-sidebar p-3 md:flex">
-        <Link
-          to="/"
-          className="mb-6 flex items-center gap-2.5 px-3 pt-2 transition hover:opacity-90"
-        >
-          <span className="flex size-8 items-center justify-center rounded-full bg-accent text-sm font-extrabold text-black">
-            R
-          </span>
-          <span className="font-display text-xl font-extrabold tracking-tight">
-            Roxysu
-          </span>
-        </Link>
+      <aside
+        className={`fixed inset-y-0 left-0 z-30 hidden w-60 flex-col bg-sidebar p-3 transition-transform duration-200 ease-out md:flex ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+        aria-hidden={!sidebarOpen}
+      >
+        <div className="mb-6 flex items-center gap-1 px-1 pt-2">
+          <Link
+            to="/"
+            className="flex min-w-0 flex-1 items-center gap-2.5 px-2 transition hover:opacity-90"
+          >
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent text-sm font-extrabold text-black">
+              R
+            </span>
+            <span className="font-display text-xl font-extrabold tracking-tight">
+              Roxysu
+            </span>
+          </Link>
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            className="flex size-8 shrink-0 items-center justify-center rounded-md text-faint transition hover:bg-highlight hover:text-ink"
+            aria-label="Hide menu"
+            title="Hide menu"
+          >
+            <PanelLeftCloseIcon className="size-4" />
+          </button>
+        </div>
 
         <nav className="flex flex-1 flex-col gap-1">
           {nav.map((item) => {
@@ -63,6 +105,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Link
                 key={item.to}
                 to={item.to}
+                tabIndex={sidebarOpen ? undefined : -1}
                 className="group flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-bold text-muted transition hover:text-ink [&.active]:bg-highlight [&.active]:text-ink"
                 {...("exact" in item && item.exact
                   ? { activeOptions: { exact: true } }
@@ -110,6 +153,22 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
+      {/* Reopen control when sidebar is hidden (desktop) */}
+      <button
+        type="button"
+        onClick={toggleSidebar}
+        className={`fixed left-3 top-3 z-40 hidden size-9 items-center justify-center rounded-md border border-white/10 bg-sidebar/90 text-muted shadow-lg backdrop-blur transition hover:border-white/20 hover:text-ink md:flex ${
+          sidebarOpen
+            ? "pointer-events-none -translate-x-2 opacity-0"
+            : "translate-x-0 opacity-100"
+        }`}
+        aria-label="Show menu"
+        title="Show menu"
+        tabIndex={sidebarOpen ? -1 : undefined}
+      >
+        <PanelLeftOpenIcon className="size-4" />
+      </button>
+
       {/* Mobile top brand bar */}
       <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-white/5 bg-canvas/90 px-4 py-3 backdrop-blur-md md:hidden">
         <Link to="/" className="flex items-center gap-2">
@@ -144,7 +203,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         </span>
       </header>
 
-      <main className="relative min-h-screen p-0 pb-24 md:ml-60 md:p-2 md:pb-2">
+      <main
+        className={`relative min-h-screen p-0 pb-24 transition-[margin] duration-200 ease-out md:p-2 md:pb-2 ${
+          sidebarOpen ? "md:ml-60" : "md:ml-0"
+        }`}
+      >
         <div className="relative min-h-[calc(100vh-0.5rem)] overflow-hidden rounded-none bg-canvas md:min-h-[calc(100vh-1rem)] md:rounded-xl">
           <div
             aria-hidden
@@ -180,6 +243,26 @@ export function AppShell({ children }: { children: ReactNode }) {
         })}
       </nav>
     </div>
+  );
+}
+
+function PanelLeftCloseIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M9 4v16" />
+      <path d="M14 9l-3 3 3 3" />
+    </svg>
+  );
+}
+
+function PanelLeftOpenIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M9 4v16" />
+      <path d="M11 9l3 3-3 3" />
+    </svg>
   );
 }
 

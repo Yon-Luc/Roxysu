@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { QueryLanguageHelpButton } from "../../components/QueryLanguageHelpModal";
 import { BeatmapCover } from "../../components/BeatmapCover";
+import { PageTitle } from "../../components/PageTitle";
 import {
   fetchPracticeDistribution,
   fetchPracticeList,
@@ -283,7 +284,7 @@ export function PracticeListPage() {
     <div className="space-y-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="rx-title">Practice</h1>
+          <PageTitle>Practice</PageTitle>
           <p className="rx-subtitle">
             Plain text or query language — e.g.{" "}
             <code className="text-subtle">mode:mania stars:5..6</code>

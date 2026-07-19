@@ -15,6 +15,7 @@ import {
   formatPrimaryRating,
   useRatingDisplayMode,
 } from "../../lib/ratingDisplay";
+import roxyIcon from "../../roxy.png";
 
 export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
   const ratingMode = useRatingDisplayMode();
@@ -78,9 +79,16 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
             <p className="text-sm font-medium text-subtle">
               {beatmap.artist}
             </p>
-            <h1 className="mt-1 font-display text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
-              {beatmap.title}
-            </h1>
+            <div className="mt-1 flex flex-wrap items-center gap-3">
+              <img
+                src={roxyIcon}
+                alt=""
+                className="size-14 shrink-0 rounded-full object-cover sm:size-16"
+              />
+              <h1 className="font-display text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
+                {beatmap.title}
+              </h1>
+            </div>
             <p className="mt-2 text-sm text-muted">
               [{beatmap.difficultyName}] ·{" "}
               {formatPrimaryRating({

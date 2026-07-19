@@ -40,7 +40,7 @@ const FOCUS_OPTIONS: { id: RecommendFocus; label: string; hint: string }[] = [
   {
     id: "consistency",
     label: "Consistency",
-    hint: "Maps near comfort for accuracy practice.",
+    hint: "Maps around your 96–99% rice/LN level (farm / polish dans).",
   },
   {
     id: "deficit",
@@ -214,30 +214,31 @@ export function SessionSevenKRecommend({
 
         {skill ? (
           <div className="space-y-2">
-            <div className="grid gap-2 sm:grid-cols-3">
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               <SkillStat
-                label="Comfort"
-                value={formatSkill(skill.overall)}
-                note={
-                  skill.coldStart
-                    ? "Cold start"
-                    : `${skill.samplePlays} plays`
-                }
-              />
-              <SkillStat
-                label="RC clear"
+                label="RC @ 90–95%"
                 value={formatSkill(skill.peakRc)}
-                note={`${skill.clearRcMaps ?? 0} maps @ 90–95%`}
+                note={`${skill.clearRcMaps ?? 0} maps · Push`}
               />
               <SkillStat
-                label="LN clear"
+                label="LN @ 90–95%"
                 value={formatSkill(skill.peakLn)}
-                note={`${skill.clearLnMaps ?? 0} maps @ 90–95%`}
+                note={`${skill.clearLnMaps ?? 0} maps · Push`}
+              />
+              <SkillStat
+                label="RC @ 96–99%"
+                value={formatSkill(skill.consistencyRc)}
+                note={`${skill.consistencyRcMaps ?? 0} maps · Consistency`}
+              />
+              <SkillStat
+                label="LN @ 96–99%"
+                value={formatSkill(skill.consistencyLn)}
+                note={`${skill.consistencyLnMaps ?? 0} maps · Consistency`}
               />
             </div>
             <p className="text-xs text-faint">
-              Push aims ~8% above your 90–95% clear Sunny (neighboring dans).
-              Consistency uses comfort skill.
+              Push aims ~8% above your 90–95% clears. Consistency picks around
+              your 96–99% dan level.
             </p>
           </div>
         ) : null}

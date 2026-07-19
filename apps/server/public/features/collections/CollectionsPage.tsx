@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { PageTitle } from "../../components/PageTitle";
 import { QueryLanguageHelpButton } from "../../components/QueryLanguageHelpModal";
 import {
   createCollection,
@@ -37,7 +38,7 @@ export function CollectionsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="rx-title">Collections</h1>
+        <PageTitle>Collections</PageTitle>
         <p className="rx-subtitle">
           Smart collections store query strings — e.g.{" "}
           <code className="text-subtle">stars:6..7 mapper:Lasse</code>

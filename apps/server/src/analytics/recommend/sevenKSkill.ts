@@ -12,15 +12,18 @@ const MIN_PLAYS_FOR_SKILL = 5;
 /** Cap how many recent 7K scores we scan for comfort skill. */
 const MAX_SKILL_PLAYS = 500;
 
-/** Min distinct maps in the 90–95% band before clear-level is trusted. */
+/** Min distinct maps in an accuracy band before that level is trusted. */
 const MIN_CLEAR_MAPS = 3;
 
-/** Push clear band: scores that feel like a solid but not farm clear. */
-const CLEAR_ACC_MIN = 0.9;
-const CLEAR_ACC_MAX = 0.95;
+/** Push band: solid clears that are not farm yet. */
+const PUSH_ACC_MIN = 0.9;
+const PUSH_ACC_MAX = 0.95;
+const PUSH_ACC_CENTER = 0.925;
 
-/** Ideal center of the clear band (92.5%). */
-const CLEAR_ACC_CENTER = 0.925;
+/** Consistency band: high-acc farm / polish level. */
+const CONSISTENCY_ACC_MIN = 0.96;
+const CONSISTENCY_ACC_MAX = 0.99;
+const CONSISTENCY_ACC_CENTER = 0.975;
 
 /** Recency decay per play index (Companella uses 0.95). */
 const RECENCY_DECAY = 0.95;
@@ -72,6 +75,11 @@ function emptySkill(partial: Partial<SevenKSkillProfile> = {}): SevenKSkillProfi
     peakLn: 0,
     clearRcMaps: 0,
     clearLnMaps: 0,
+    consistencyOverall: 0,
+    consistencyRc: 0,
+    consistencyLn: 0,
+    consistencyRcMaps: 0,
+    consistencyLnMaps: 0,
     samplePlays: 0,
     rcPlays: 0,
     lnPlays: 0,
@@ -123,9 +131,13 @@ function loadRecentSevenKPlays(db: Db): SkillPlayRow[] {
 }
 
 /**
- * Maps with at least one score in the 90–95% band — the dan-style "clear level".
+ * Maps with at least one score in [accMin, accMax) — dan-style level for that band.
  */
-function loadClearBandMaps(db: Db): ClearMapRow[] {
+function loadAccBandMaps(
+  db: Db,
+  accMin: number,
+  accMax: number,
+): ClearMapRow[] {
   const rows = db.$client
     .query(
       `
@@ -152,7 +164,7 @@ function loadClearBandMaps(db: Db): ClearMapRow[] {
       GROUP BY b.id
     `,
     )
-    .all(CLEAR_ACC_MIN, CLEAR_ACC_MAX) as Array<{
+    .all(accMin, accMax) as Array<{
     beatmapId: string;
     sunnyStar: number;
     lnRatio: number | null;
@@ -172,12 +184,14 @@ function loadClearBandMaps(db: Db): ClearMapRow[] {
 }
 
 /**
- * Average Sunny of 90–95% clears on an axis.
- * Weight: band play count × closeness to 92.5% × mild recency.
+ * Average Sunny of maps in an accuracy band on an axis.
+ * Weight: band play count × closeness to band center × mild recency.
  */
 function clearLevelFromMaps(
   maps: ClearMapRow[],
   axis: "rc" | "ln" | "all",
+  accCenter: number,
+  halfWidth: number,
 ): { level: number; mapCount: number } {
   const filtered =
     axis === "all"
@@ -193,9 +207,8 @@ function clearLevelFromMaps(
   const points: Array<{ value: number; weight: number }> = [];
   for (const map of filtered) {
     if (!(map.sunnyStar > 0)) continue;
-    const accDist = Math.abs(map.avgBandAcc - CLEAR_ACC_CENTER);
-    // 92.5% → 1, edges of 90/95 → ~0.5
-    const accProximity = Math.max(0.35, 1 - accDist / 0.05);
+    const accDist = Math.abs(map.avgBandAcc - accCenter);
+    const accProximity = Math.max(0.35, 1 - accDist / Math.max(halfWidth, 0.01));
     const recency = 0.5 + 0.5 * ((map.lastPlayedAt - oldest) / span);
     const weight = Math.max(1, map.bandPlays) * accProximity * recency;
     points.push({ value: map.sunnyStar, weight });
@@ -286,8 +299,9 @@ function coldStartFromMastery(db: Db): SevenKSkillProfile {
 
 /**
  * Estimate 7K skill:
- * - comfort (overall/rc/ln): recent plays, recency × acc weight
- * - clear / peak*: average Sunny of maps cleared in the 90–95% band (Push base)
+ * - comfort (overall/rc/ln): recent plays, recency × acc weight (Deficit / Skillset)
+ * - peak*: average Sunny of maps with 90–95% scores (Push base)
+ * - consistency*: average Sunny of maps with 96–99% scores (Consistency base)
  */
 export function estimateSevenKSkill(db: Db): SevenKSkillProfile {
   backfillSunnyDanSync(db, { limit: 120 });
@@ -303,10 +317,34 @@ export function estimateSevenKSkill(db: Db): SevenKSkillProfile {
     plays = loadRecentSevenKPlays(db);
   }
 
-  const clearMaps = loadClearBandMaps(db);
-  const clearRc = clearLevelFromMaps(clearMaps, "rc");
-  const clearLn = clearLevelFromMaps(clearMaps, "ln");
-  const clearAll = clearLevelFromMaps(clearMaps, "all");
+  const pushMaps = loadAccBandMaps(db, PUSH_ACC_MIN, PUSH_ACC_MAX);
+  const clearRc = clearLevelFromMaps(pushMaps, "rc", PUSH_ACC_CENTER, 0.025);
+  const clearLn = clearLevelFromMaps(pushMaps, "ln", PUSH_ACC_CENTER, 0.025);
+  const clearAll = clearLevelFromMaps(pushMaps, "all", PUSH_ACC_CENTER, 0.025);
+
+  const farmMaps = loadAccBandMaps(
+    db,
+    CONSISTENCY_ACC_MIN,
+    CONSISTENCY_ACC_MAX,
+  );
+  const farmRc = clearLevelFromMaps(
+    farmMaps,
+    "rc",
+    CONSISTENCY_ACC_CENTER,
+    0.015,
+  );
+  const farmLn = clearLevelFromMaps(
+    farmMaps,
+    "ln",
+    CONSISTENCY_ACC_CENTER,
+    0.015,
+  );
+  const farmAll = clearLevelFromMaps(
+    farmMaps,
+    "all",
+    CONSISTENCY_ACC_CENTER,
+    0.015,
+  );
 
   const withSunny = plays
     .filter(
@@ -316,22 +354,35 @@ export function estimateSevenKSkill(db: Db): SevenKSkillProfile {
     .slice()
     .reverse();
 
+  const bandOrFallback = (
+    band: { level: number; mapCount: number },
+    fallback: number,
+  ) =>
+    band.mapCount >= MIN_CLEAR_MAPS && band.level > 0 ? band.level : fallback;
+
   if (withSunny.length < MIN_PLAYS_FOR_SKILL) {
     const fallback = coldStartFromMastery(db);
     if (fallback.overall > 0) {
       return {
         ...fallback,
-        peakOverall: clearAll.level > 0 ? clearAll.level : fallback.overall,
-        peakRc: clearRc.level > 0 ? clearRc.level : fallback.rc,
-        peakLn: clearLn.level > 0 ? clearLn.level : fallback.ln,
+        peakOverall: bandOrFallback(clearAll, fallback.overall),
+        peakRc: bandOrFallback(clearRc, fallback.rc),
+        peakLn: bandOrFallback(clearLn, fallback.ln),
         clearRcMaps: clearRc.mapCount,
         clearLnMaps: clearLn.mapCount,
+        consistencyOverall: bandOrFallback(farmAll, fallback.overall),
+        consistencyRc: bandOrFallback(farmRc, fallback.rc),
+        consistencyLn: bandOrFallback(farmLn, fallback.ln),
+        consistencyRcMaps: farmRc.mapCount,
+        consistencyLnMaps: farmLn.mapCount,
       };
     }
     return emptySkill({
       samplePlays: withSunny.length,
       clearRcMaps: clearRc.mapCount,
       clearLnMaps: clearLn.mapCount,
+      consistencyRcMaps: farmRc.mapCount,
+      consistencyLnMaps: farmLn.mapCount,
     });
   }
 
@@ -353,34 +404,23 @@ export function estimateSevenKSkill(db: Db): SevenKSkillProfile {
   const rc = weightedMean(rcPoints);
   const ln = weightedMean(lnPoints);
   const overall = weightedMean(allPoints);
-
-  // Prefer 90–95% clear average for Push; fall back to comfort if too few maps.
-  const peakRc =
-    clearRc.mapCount >= MIN_CLEAR_MAPS && clearRc.level > 0
-      ? clearRc.level
-      : rc > 0
-        ? rc
-        : overall;
-  const peakLn =
-    clearLn.mapCount >= MIN_CLEAR_MAPS && clearLn.level > 0
-      ? clearLn.level
-      : ln > 0
-        ? ln
-        : overall;
-  const peakOverall =
-    clearAll.mapCount >= MIN_CLEAR_MAPS && clearAll.level > 0
-      ? clearAll.level
-      : overall;
+  const comfortRc = rc > 0 ? rc : overall;
+  const comfortLn = ln > 0 ? ln : overall;
 
   return {
     overall,
-    rc: rc > 0 ? rc : overall,
-    ln: ln > 0 ? ln : overall,
-    peakOverall,
-    peakRc,
-    peakLn,
+    rc: comfortRc,
+    ln: comfortLn,
+    peakOverall: bandOrFallback(clearAll, overall),
+    peakRc: bandOrFallback(clearRc, comfortRc),
+    peakLn: bandOrFallback(clearLn, comfortLn),
     clearRcMaps: clearRc.mapCount,
     clearLnMaps: clearLn.mapCount,
+    consistencyOverall: bandOrFallback(farmAll, overall),
+    consistencyRc: bandOrFallback(farmRc, comfortRc),
+    consistencyLn: bandOrFallback(farmLn, comfortLn),
+    consistencyRcMaps: farmRc.mapCount,
+    consistencyLnMaps: farmLn.mapCount,
     samplePlays: withSunny.length,
     rcPlays: rcPoints.length,
     lnPlays: lnPoints.length,
@@ -391,15 +431,25 @@ export function estimateSevenKSkill(db: Db): SevenKSkillProfile {
 export function skillForAxis(
   skill: SevenKSkillProfile,
   axis: SkillAxis | null | undefined,
-  mode: "comfort" | "peak" = "comfort",
+  mode: "comfort" | "peak" | "consistency" = "comfort",
 ): number {
   if (mode === "peak") {
-    // "peak" fields store 90–95% clear-level Sunny (Push baseline).
     if (!axis || axis === "overall") return skill.peakOverall;
     if (axis === "rc") {
       return skill.peakRc > 0 ? skill.peakRc : skill.peakOverall;
     }
     return skill.peakLn > 0 ? skill.peakLn : skill.peakOverall;
+  }
+  if (mode === "consistency") {
+    if (!axis || axis === "overall") return skill.consistencyOverall;
+    if (axis === "rc") {
+      return skill.consistencyRc > 0
+        ? skill.consistencyRc
+        : skill.consistencyOverall;
+    }
+    return skill.consistencyLn > 0
+      ? skill.consistencyLn
+      : skill.consistencyOverall;
   }
   if (!axis || axis === "overall") return skill.overall;
   if (axis === "rc") return skill.rc > 0 ? skill.rc : skill.overall;

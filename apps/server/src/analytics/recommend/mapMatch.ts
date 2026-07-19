@@ -56,7 +56,7 @@ export function calculateMapMatch(
   map: CandidateMap,
   skill: SevenKSkillProfile,
   targetSkillset: SkillAxis | null = null,
-  skillMode: "comfort" | "peak" = "comfort",
+  skillMode: "comfort" | "peak" | "consistency" = "comfort",
 ): MapMatchResult {
   const axis: SkillAxis =
     targetSkillset && targetSkillset !== "overall"

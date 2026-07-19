@@ -9,13 +9,12 @@ export type RecommendFocus =
 export type SkillAxis = "rc" | "ln" | "overall";
 
 export type SevenKSkillProfile = {
-  /** Comfort / volume-weighted skill (good for Consistency). */
+  /** Comfort / volume-weighted skill (Deficit / Skillset fallback). */
   overall: number;
   rc: number;
   ln: number;
   /**
-   * Push baseline: average Sunny of maps with scores in the 90–95% band
-   * (dan-style clear level), per axis. Field names kept as peak* for API stability.
+   * Push baseline: average Sunny of maps with scores in the 90–95% band.
    */
   peakOverall: number;
   peakRc: number;
@@ -23,6 +22,14 @@ export type SevenKSkillProfile = {
   /** Distinct maps contributing to the 90–95% clear average. */
   clearRcMaps: number;
   clearLnMaps: number;
+  /**
+   * Consistency baseline: average Sunny of maps with scores in the 96–99% band.
+   */
+  consistencyOverall: number;
+  consistencyRc: number;
+  consistencyLn: number;
+  consistencyRcMaps: number;
+  consistencyLnMaps: number;
   /** Scores with Sunny used in the comfort estimate. */
   samplePlays: number;
   rcPlays: number;

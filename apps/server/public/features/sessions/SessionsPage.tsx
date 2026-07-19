@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { PageTitle } from "../../components/PageTitle";
 import { fetchSessions } from "../../lib/api";
 import { formatRelativeTime } from "../../lib/format";
 
@@ -24,7 +25,7 @@ export function SessionsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="rx-title">Sessions</h1>
+        <PageTitle>Sessions</PageTitle>
         <p className="rx-subtitle">
           Automatic play groups (30 min inactivity starts a new session).
         </p>

@@ -13,6 +13,7 @@ import {
   YAxis,
 } from "recharts";
 import { BeatmapCover } from "../../components/BeatmapCover";
+import { PageTitle } from "../../components/PageTitle";
 import { fetchDashboard } from "../../lib/api";
 import {
   formatAccuracy,
@@ -61,7 +62,7 @@ export function DashboardPage() {
   return (
     <div className="space-y-10">
       <div>
-        <h1 className="rx-title">Home</h1>
+        <PageTitle>Home</PageTitle>
         <p className="rx-subtitle">
           Recent plays from your local osu!lazer database.
         </p>

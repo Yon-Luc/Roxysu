@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { BeatmapCover } from "../../components/BeatmapCover";
+import { PageTitle } from "../../components/PageTitle";
 import { fetchCollectionResults } from "../../lib/api";
 import {
   formatAccuracy,
@@ -51,7 +52,7 @@ export function CollectionResultsPage({
         <Link to="/collections" className="rx-back">
           ← Collections
         </Link>
-        <h1 className="mt-3 rx-title">{collection.name}</h1>
+        <PageTitle className="mt-3">{collection.name}</PageTitle>
         <p className="mt-2 font-mono text-sm text-muted">{collection.query}</p>
         <p className="mt-1 text-xs text-faint">
           {total.toLocaleString()} matches

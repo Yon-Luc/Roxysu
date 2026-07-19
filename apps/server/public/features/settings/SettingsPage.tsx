@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { PageTitle } from "../../components/PageTitle";
 import {
   fetchSettings,
   fetchSunnyDanJob,
@@ -91,7 +92,7 @@ export function SettingsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="rx-title">Settings</h1>
+        <PageTitle>Settings</PageTitle>
         <p className="rx-subtitle">
           Display preferences and tools — mastery formulas recompute all levels
           when changed.

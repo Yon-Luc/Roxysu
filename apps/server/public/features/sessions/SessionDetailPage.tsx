@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { BeatmapCover } from "../../components/BeatmapCover";
+import { PageTitle } from "../../components/PageTitle";
 import { fetchSession } from "../../lib/api";
 import {
   formatAccuracy,
@@ -98,7 +99,7 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
             ← Sessions
           </Link>
           <div className="mt-3 flex flex-wrap items-center gap-3">
-            <h1 className="rx-title">Start a session</h1>
+            <PageTitle>Start a session</PageTitle>
           </div>
           <p className="rx-subtitle">
             No live session yet. Pick a map below — the next sync after you play
@@ -141,9 +142,9 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
           ← Sessions
         </Link>
         <div className="mt-3 flex flex-wrap items-center gap-3">
-          <h1 className="rx-title">
+          <PageTitle>
             {isLive ? "Current session" : `Session #${session.id}`}
-          </h1>
+          </PageTitle>
           {isLive ? (
             <span className="rx-chip bg-accent-glow text-accent">
               <span className="relative flex h-1.5 w-1.5">

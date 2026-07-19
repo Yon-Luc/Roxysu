@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { fetchSystemStatus } from "../lib/api";
+import roxyIcon from "../roxy.png";
 
 const SIDEBAR_OPEN_KEY = "roxysu.sidebarOpen";
 
@@ -80,9 +81,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             to="/"
             className="flex min-w-0 flex-1 items-center gap-2.5 px-2 transition hover:opacity-90"
           >
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent text-sm font-extrabold text-black">
-              R
-            </span>
+            <img
+              src={roxyIcon}
+              alt=""
+              className="size-8 shrink-0 rounded-full object-cover"
+            />
             <span className="font-display text-xl font-extrabold tracking-tight">
               Roxysu
             </span>
@@ -172,9 +175,11 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* Mobile top brand bar */}
       <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-white/5 bg-canvas/90 px-4 py-3 backdrop-blur-md md:hidden">
         <Link to="/" className="flex items-center gap-2">
-          <span className="flex size-7 items-center justify-center rounded-full bg-accent text-xs font-extrabold text-black">
-            R
-          </span>
+          <img
+            src={roxyIcon}
+            alt=""
+            className="size-7 shrink-0 rounded-full object-cover"
+          />
           <span className="font-display text-lg font-extrabold">Roxysu</span>
         </Link>
         <span

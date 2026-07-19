@@ -7,6 +7,7 @@ import {
   inArray,
   type Db,
   beatmaps,
+  beatmapSets,
   scores,
   scoreMetrics,
   sessions,
@@ -233,10 +234,13 @@ export async function listSessionScores(db: Db, sessionId: number) {
       artist: beatmaps.artist,
       difficultyName: beatmaps.difficultyName,
       starRating: beatmaps.starRating,
+      setOnlineId: beatmapSets.onlineId,
+      backgroundFileHash: beatmaps.backgroundFileHash,
     })
     .from(scoreMetrics)
     .innerJoin(scores, eq(scoreMetrics.scoreId, scores.id))
     .leftJoin(beatmaps, eq(scores.beatmapId, beatmaps.id))
+    .leftJoin(beatmapSets, eq(beatmaps.setId, beatmapSets.id))
     .where(
       and(
         eq(scoreMetrics.sessionId, sessionId),

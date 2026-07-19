@@ -12,6 +12,7 @@ import {
   YAxis,
 } from "recharts";
 import { QueryLanguageHelpButton } from "../../components/QueryLanguageHelpModal";
+import { BeatmapCover } from "../../components/BeatmapCover";
 import {
   fetchPracticeDistribution,
   fetchPracticeList,
@@ -495,34 +496,43 @@ export function PracticeListPage() {
                 <Link
                   to="/practice/$beatmapId"
                   params={{ beatmapId: item.id }}
-                  className="block h-full rounded-lg border border-white/10 bg-[#151922] p-4 transition hover:border-white/20 hover:bg-[#181c26]"
+                  className="block h-full overflow-hidden rounded-lg border border-white/10 bg-[#151922] transition hover:border-white/20 hover:bg-[#181c26]"
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm text-[#8b93a7]">
-                        {item.artist ?? "Unknown artist"}
+                  <BeatmapCover
+                    backgroundFileHash={item.backgroundFileHash}
+                    setOnlineId={item.setOnlineId}
+                    size="card"
+                    className="aspect-[2.2/1] w-full"
+                    alt=""
+                  />
+                  <div className="p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm text-[#8b93a7]">
+                          {item.artist ?? "Unknown artist"}
+                        </div>
+                        <div className="mt-0.5 truncate font-medium text-white">
+                          {item.title ?? "Untitled"}
+                        </div>
                       </div>
-                      <div className="mt-0.5 truncate font-medium text-white">
-                        {item.title ?? "Untitled"}
-                      </div>
+                      {item.masteryLevel != null ? (
+                        <span className="shrink-0 rounded bg-white/10 px-1.5 py-0.5 text-xs tabular-nums text-[#a8b0c0]">
+                          {item.masteryLevel.toFixed(0)}
+                        </span>
+                      ) : null}
                     </div>
-                    {item.masteryLevel != null ? (
-                      <span className="shrink-0 rounded bg-white/10 px-1.5 py-0.5 text-xs tabular-nums text-[#a8b0c0]">
-                        {item.masteryLevel.toFixed(0)}
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="mt-1 truncate text-xs text-[#8b93a7]">
-                    [{item.difficultyName ?? "—"}] · {formatStars(item.starRating)}
-                    {item.mapperUsername ? ` · ${item.mapperUsername}` : ""}
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs tabular-nums text-[#a8b0c0]">
-                    <span>{item.playCount} plays</span>
-                    <span>{formatAccuracy(item.bestAccuracy)}</span>
-                    <span>{formatMisses(item.bestMisses)}</span>
-                    <span>{formatScore(item.bestScore)}</span>
-                    <span>{formatPp(item.bestPp)}</span>
-                    <span>{formatRelativeTime(item.lastPlayedAt)}</span>
+                    <div className="mt-1 truncate text-xs text-[#8b93a7]">
+                      [{item.difficultyName ?? "—"}] · {formatStars(item.starRating)}
+                      {item.mapperUsername ? ` · ${item.mapperUsername}` : ""}
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs tabular-nums text-[#a8b0c0]">
+                      <span>{item.playCount} plays</span>
+                      <span>{formatAccuracy(item.bestAccuracy)}</span>
+                      <span>{formatMisses(item.bestMisses)}</span>
+                      <span>{formatScore(item.bestScore)}</span>
+                      <span>{formatPp(item.bestPp)}</span>
+                      <span>{formatRelativeTime(item.lastPlayedAt)}</span>
+                    </div>
                   </div>
                 </Link>
               </li>

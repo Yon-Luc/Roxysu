@@ -59,6 +59,27 @@ export function mapBeatmapSet(obj: RealmObj): BeatmapSetRow | null {
   };
 }
 
+/** Match a set file by logical name → SHA-256 in lazer's files/ store. */
+function resolveNamedFileHash(
+  set: RealmObj,
+  filename: string | null | undefined,
+): string | null {
+  if (!filename) return null;
+  const files = set.Files as RealmObj[] | null | undefined;
+  if (!files || files.length === 0) return null;
+
+  const target = filename.replace(/\\/g, "/").toLowerCase();
+  for (const usage of files) {
+    const name = usage.Filename as string | null | undefined;
+    if (!name) continue;
+    if (name.replace(/\\/g, "/").toLowerCase() !== target) continue;
+    const file = usage.File as RealmObj | null | undefined;
+    const hash = file?.Hash as string | null | undefined;
+    if (hash && /^[0-9a-f]{64}$/i.test(hash)) return hash.toLowerCase();
+  }
+  return null;
+}
+
 export function mapBeatmap(obj: RealmObj): BeatmapRow | null {
   const set = obj.BeatmapSet as RealmObj | null | undefined;
   if (!set?.ID) return null;
@@ -68,6 +89,7 @@ export function mapBeatmap(obj: RealmObj): BeatmapRow | null {
   const author = metadata?.Author as RealmObj | null | undefined;
   const userSettings = obj.UserSettings as RealmObj | null | undefined;
   const ruleset = obj.Ruleset as RealmObj | null | undefined;
+  const backgroundFile = (metadata?.BackgroundFile as string | null) ?? null;
 
   return {
     id: uuidString(obj.ID),
@@ -105,7 +127,8 @@ export function mapBeatmap(obj: RealmObj): BeatmapRow | null {
     previewTime:
       metadata?.PreviewTime != null ? Number(metadata.PreviewTime) : null,
     audioFile: (metadata?.AudioFile as string | null) ?? null,
-    backgroundFile: (metadata?.BackgroundFile as string | null) ?? null,
+    backgroundFile,
+    backgroundFileHash: resolveNamedFileHash(set, backgroundFile),
     mapperOnlineId: author != null ? Number(author.OnlineID ?? 0) : null,
     mapperUsername: (author?.Username as string | null) ?? null,
 

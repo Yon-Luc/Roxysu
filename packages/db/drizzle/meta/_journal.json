@@ -15,6 +15,13 @@
       "when": 1784414127034,
       "tag": "0001_rich_northstar",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1784420629724,
+      "tag": "0002_slimy_king_bedlam",
+      "breakpoints": true
     }
   ]
 }

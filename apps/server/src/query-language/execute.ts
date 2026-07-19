@@ -12,6 +12,8 @@ export type PracticeCardRow = {
   bpm: number;
   rulesetShortName: string | null;
   mapperUsername: string | null;
+  setOnlineId: number | null;
+  backgroundFileHash: string | null;
   playCount: number;
   bestAccuracy: number | null;
   bestPp: number | null;
@@ -82,6 +84,8 @@ const SELECT_COLS = `
   b.bpm AS bpm,
   b.ruleset_short_name AS rulesetShortName,
   b.mapper_username AS mapperUsername,
+  CASE WHEN bs.online_id > 0 THEN bs.online_id ELSE NULL END AS setOnlineId,
+  b.background_file_hash AS backgroundFileHash,
   COALESCE(ps.play_count, 0) AS playCount,
   ps.best_accuracy AS bestAccuracy,
   ps.best_pp AS bestPp,
@@ -200,6 +204,7 @@ function resolveFilter(query: string | undefined): {
 function mapRow(r: PracticeCardRow): PracticeCardRow {
   return {
     ...r,
+    setOnlineId: r.setOnlineId != null ? Number(r.setOnlineId) : null,
     playCount: Number(r.playCount ?? 0),
     bestScore: r.bestScore != null ? Number(r.bestScore) : null,
     bestMisses: r.bestMisses != null ? Number(r.bestMisses) : null,

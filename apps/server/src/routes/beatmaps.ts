@@ -78,6 +78,7 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
           approachRate: beatmap.approachRate,
           status: beatmap.status,
           lastPlayed: toIso(beatmap.lastPlayed),
+          backgroundFileHash: beatmap.backgroundFileHash,
         },
         stats: {
           playCount: Number(stats?.playCount ?? 0),

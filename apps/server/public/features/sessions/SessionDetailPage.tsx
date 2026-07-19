@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
+import { BeatmapCover } from "../../components/BeatmapCover";
 import { fetchSession } from "../../lib/api";
 import {
   formatAccuracy,
@@ -123,7 +124,14 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
               const isFresh = freshIds.has(score.id);
               const body = (
                 <>
-                  <div className="min-w-0">
+                  <BeatmapCover
+                    backgroundFileHash={score.backgroundFileHash}
+                    setOnlineId={score.setOnlineId}
+                    size="list"
+                    className="h-12 w-[72px] shrink-0 rounded"
+                    alt=""
+                  />
+                  <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="truncate font-medium text-white">
                         {score.artist ?? "Unknown"} — {score.title ?? "Untitled"}
@@ -175,12 +183,12 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
                     <Link
                       to="/practice/$beatmapId"
                       params={{ beatmapId: score.beatmapId }}
-                      className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 transition hover:bg-white/[0.03]"
+                      className="flex flex-wrap items-center gap-3 px-4 py-3 transition hover:bg-white/[0.03]"
                     >
                       {body}
                     </Link>
                   ) : (
-                    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                    <div className="flex flex-wrap items-center gap-3 px-4 py-3">
                       {body}
                     </div>
                   )}

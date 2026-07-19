@@ -80,3 +80,24 @@ export function osuWebBeatmapUrl(
   }
   return `https://osu.ppy.sh/b/${onlineId}`;
 }
+
+export type OsuCoverSize = "list" | "card" | "cover" | "slimcover";
+
+/** Beatmapset cover from osu! CDN (null for local/unsubmitted sets). */
+export function osuBeatmapCoverUrl(
+  setOnlineId: number | null | undefined,
+  size: OsuCoverSize = "card",
+): string | null {
+  if (setOnlineId == null || setOnlineId <= 0) return null;
+  return `https://assets.ppy.sh/beatmapsets/${setOnlineId}/covers/${size}.jpg`;
+}
+
+/** Local background served from lazer's files/ store via Roxysu. */
+export function localBeatmapCoverUrl(
+  backgroundFileHash: string | null | undefined,
+): string | null {
+  if (!backgroundFileHash || !/^[0-9a-f]{64}$/i.test(backgroundFileHash)) {
+    return null;
+  }
+  return `/api/covers/${backgroundFileHash.toLowerCase()}`;
+}

@@ -63,6 +63,8 @@ function mapCard(r: {
   bpm: number;
   rulesetShortName: string | null;
   mapperUsername: string | null;
+  setOnlineId: number | null;
+  backgroundFileHash: string | null;
   playCount: number;
   bestAccuracy: number | null;
   bestPp: number | null;
@@ -80,6 +82,8 @@ function mapCard(r: {
     bpm: r.bpm,
     rulesetShortName: r.rulesetShortName,
     mapperUsername: r.mapperUsername,
+    setOnlineId: r.setOnlineId,
+    backgroundFileHash: r.backgroundFileHash,
     playCount: Number(r.playCount ?? 0),
     bestAccuracy: r.bestAccuracy ?? null,
     bestPp: r.bestPp ?? null,

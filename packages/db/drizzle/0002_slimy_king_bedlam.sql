@@ -1,0 +1,1 @@
+ALTER TABLE `beatmaps` ADD `background_file_hash` text;

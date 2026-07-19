@@ -12,6 +12,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { BeatmapCover } from "../../components/BeatmapCover";
 import { fetchDashboard } from "../../lib/api";
 import {
   formatAccuracy,
@@ -191,7 +192,14 @@ export function DashboardPage() {
             {data.recentScores.map((score) => {
               const body = (
                 <>
-                  <div className="min-w-0">
+                  <BeatmapCover
+                    backgroundFileHash={score.backgroundFileHash}
+                    setOnlineId={score.setOnlineId}
+                    size="list"
+                    className="h-12 w-[72px] shrink-0 rounded"
+                    alt=""
+                  />
+                  <div className="min-w-0 flex-1">
                     <div className="truncate font-medium text-white">
                       {score.artist ?? "Unknown"} — {score.title ?? "Untitled"}
                       {score.difficultyName ? (
@@ -218,12 +226,12 @@ export function DashboardPage() {
                     <Link
                       to="/practice/$beatmapId"
                       params={{ beatmapId: score.beatmapId }}
-                      className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 transition hover:bg-white/[0.03]"
+                      className="flex flex-wrap items-center gap-3 px-4 py-3 transition hover:bg-white/[0.03]"
                     >
                       {body}
                     </Link>
                   ) : (
-                    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                    <div className="flex flex-wrap items-center gap-3 px-4 py-3">
                       {body}
                     </div>
                   )}

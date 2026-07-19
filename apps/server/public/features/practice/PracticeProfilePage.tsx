@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { BeatmapCover } from "../../components/BeatmapCover";
 import { fetchBeatmap } from "../../lib/api";
 import {
   formatAccuracy,
@@ -49,36 +50,50 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
         <Link to="/practice" className="text-sm text-[#8b93a7] hover:text-white">
           ← Practice
         </Link>
-        <h1 className="mt-3 text-2xl font-semibold tracking-tight text-white">
-          {beatmap.artist} — {beatmap.title}
-        </h1>
-        <p className="mt-1 text-[#a8b0c0]">
-          [{beatmap.difficultyName}] · {formatStars(beatmap.starRating)} ·{" "}
-          {beatmap.bpm.toFixed(0)} BPM
-          {beatmap.mapperUsername ? ` · mapped by ${beatmap.mapperUsername}` : ""}
-        </p>
-        {(clientUrl || webUrl) && (
-          <div className="mt-3 flex flex-wrap gap-3 text-sm">
-            {clientUrl && (
-              <a
-                href={clientUrl}
-                className="text-[#7eb8ff] hover:text-white"
-              >
-                Open in osu!
-              </a>
-            )}
-            {webUrl && (
-              <a
-                href={webUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="text-[#8b93a7] hover:text-white"
-              >
-                View on website
-              </a>
+        <div className="relative mt-3 overflow-hidden rounded-lg border border-white/10">
+          <BeatmapCover
+            backgroundFileHash={beatmap.backgroundFileHash}
+            setOnlineId={beatmap.setOnlineId}
+            size="cover"
+            className="aspect-[21/9] w-full max-h-56 sm:max-h-64"
+            alt=""
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#0e1015] via-[#0e1015]/55 to-transparent" />
+          <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5">
+            <h1 className="text-2xl font-semibold tracking-tight text-white">
+              {beatmap.artist} — {beatmap.title}
+            </h1>
+            <p className="mt-1 text-[#a8b0c0]">
+              [{beatmap.difficultyName}] · {formatStars(beatmap.starRating)} ·{" "}
+              {beatmap.bpm.toFixed(0)} BPM
+              {beatmap.mapperUsername
+                ? ` · mapped by ${beatmap.mapperUsername}`
+                : ""}
+            </p>
+            {(clientUrl || webUrl) && (
+              <div className="mt-3 flex flex-wrap gap-3 text-sm">
+                {clientUrl && (
+                  <a
+                    href={clientUrl}
+                    className="text-[#7eb8ff] hover:text-white"
+                  >
+                    Open in osu!
+                  </a>
+                )}
+                {webUrl && (
+                  <a
+                    href={webUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[#8b93a7] hover:text-white"
+                  >
+                    View on website
+                  </a>
+                )}
+              </div>
             )}
           </div>
-        )}
+        </div>
       </div>
 
       <section className="grid gap-3 sm:grid-cols-4">

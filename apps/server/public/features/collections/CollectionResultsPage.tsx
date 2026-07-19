@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { BeatmapCover } from "../../components/BeatmapCover";
 import { fetchCollectionResults } from "../../lib/api";
 import {
   formatAccuracy,
@@ -72,27 +73,36 @@ export function CollectionResultsPage({
               <Link
                 to="/practice/$beatmapId"
                 params={{ beatmapId: item.id }}
-                className="block h-full rounded-lg border border-white/10 bg-[#151922] p-4 transition hover:border-white/20"
+                className="block h-full overflow-hidden rounded-lg border border-white/10 bg-[#151922] transition hover:border-white/20"
               >
-                <div className="truncate text-sm text-[#8b93a7]">
-                  {item.artist}
-                </div>
-                <div className="truncate font-medium text-white">
-                  {item.title}
-                </div>
-                <div className="mt-1 text-xs text-[#8b93a7]">
-                  [{item.difficultyName}] · {formatStars(item.starRating)}
-                </div>
-                <div className="mt-2 flex gap-3 text-xs tabular-nums text-[#a8b0c0]">
-                  <span>
-                    {item.masteryLevel != null
-                      ? item.masteryLevel.toFixed(0)
-                      : "—"}{" "}
-                    mastery
-                  </span>
-                  <span>{formatAccuracy(item.bestAccuracy)}</span>
-                  <span>{formatPp(item.bestPp)}</span>
-                  <span>{formatRelativeTime(item.lastPlayedAt)}</span>
+                <BeatmapCover
+                  backgroundFileHash={item.backgroundFileHash}
+                  setOnlineId={item.setOnlineId}
+                  size="card"
+                  className="aspect-[2.2/1] w-full"
+                  alt=""
+                />
+                <div className="p-4">
+                  <div className="truncate text-sm text-[#8b93a7]">
+                    {item.artist}
+                  </div>
+                  <div className="truncate font-medium text-white">
+                    {item.title}
+                  </div>
+                  <div className="mt-1 text-xs text-[#8b93a7]">
+                    [{item.difficultyName}] · {formatStars(item.starRating)}
+                  </div>
+                  <div className="mt-2 flex gap-3 text-xs tabular-nums text-[#a8b0c0]">
+                    <span>
+                      {item.masteryLevel != null
+                        ? item.masteryLevel.toFixed(0)
+                        : "—"}{" "}
+                      mastery
+                    </span>
+                    <span>{formatAccuracy(item.bestAccuracy)}</span>
+                    <span>{formatPp(item.bestPp)}</span>
+                    <span>{formatRelativeTime(item.lastPlayedAt)}</span>
+                  </div>
                 </div>
               </Link>
             </li>

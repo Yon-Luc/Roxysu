@@ -44,6 +44,8 @@ export const searchRoutes = new Elysia({ prefix: "/search" })
             bpm: r.bpm,
             rulesetShortName: r.rulesetShortName,
             mapperUsername: r.mapperUsername,
+            setOnlineId: r.setOnlineId,
+            backgroundFileHash: r.backgroundFileHash,
             playCount: r.playCount,
             bestAccuracy: r.bestAccuracy,
             bestPp: r.bestPp,

@@ -1,6 +1,6 @@
 import { Elysia } from "elysia";
 import { count, desc, eq } from "drizzle-orm";
-import { beatmaps, imports, scores } from "@roxysu/db/client.bun";
+import { beatmaps, beatmapSets, imports, scores } from "@roxysu/db/client.bun";
 import { dbPlugin } from "../db";
 import { toIso } from "../shared/serialize";
 import { getCurrentSession } from "../analytics/session";
@@ -29,9 +29,12 @@ export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
         artist: beatmaps.artist,
         difficultyName: beatmaps.difficultyName,
         starRating: beatmaps.starRating,
+        setOnlineId: beatmapSets.onlineId,
+        backgroundFileHash: beatmaps.backgroundFileHash,
       })
       .from(scores)
       .leftJoin(beatmaps, eq(scores.beatmapId, beatmaps.id))
+      .leftJoin(beatmapSets, eq(beatmaps.setId, beatmapSets.id))
       .where(eq(scores.deletePending, false))
       .orderBy(desc(scores.playedAt))
       .limit(25);
@@ -70,6 +73,9 @@ export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
         artist: s.artist,
         difficultyName: s.difficultyName,
         starRating: s.starRating,
+        setOnlineId:
+          s.setOnlineId != null && s.setOnlineId > 0 ? s.setOnlineId : null,
+        backgroundFileHash: s.backgroundFileHash,
       })),
       sync: {
         beatmapCount: beatmapCount?.n ?? 0,

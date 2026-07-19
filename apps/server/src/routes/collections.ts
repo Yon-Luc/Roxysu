@@ -188,6 +188,8 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
                 bpm: r.bpm,
                 rulesetShortName: r.rulesetShortName,
                 mapperUsername: r.mapperUsername,
+                setOnlineId: r.setOnlineId,
+                backgroundFileHash: r.backgroundFileHash,
                 playCount: r.playCount,
                 bestAccuracy: r.bestAccuracy,
                 bestPp: r.bestPp,

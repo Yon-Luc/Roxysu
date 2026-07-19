@@ -10,7 +10,8 @@
     "realm"
   ],
   "scripts": {
-    "dev": "concurrently \"bun run --cwd apps/server dev\" \"bun run --filter '@roxysu/realm-reader' dev\""
+    "dev": "concurrently \"bun run --cwd apps/server dev\" \"bun run --filter '@roxysu/realm-reader' dev\"",
+    "test": "bun run --cwd apps/server test"
   },
   "devDependencies": {
     "concurrently": "^9.0.0"

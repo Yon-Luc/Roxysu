@@ -3,7 +3,7 @@ import type { App } from "@server/app";
 
 /** End-to-end typed client for the Elysia server (same origin). */
 export const api = treaty<App>(
-  typeof window !== "undefined" ? window.location.host : "localhost:3000",
+  typeof window !== "undefined" ? window.location.host : "localhost:4321",
 );
 
 function unwrap<T>(

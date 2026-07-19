@@ -1,6 +1,6 @@
 {
   "exportedAt": "2026-07-18T22:25:56.724Z",
-  "realmPath": "/home/yonluc/.local/share/osu/client.realm",
+  "realmPath": "<osu-data>/client.realm",
   "schemaVersion": 51,
   "schema": [
     {

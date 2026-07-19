@@ -5,6 +5,10 @@ node_modules/
 dist/
 *.tsbuildinfo
 
+# local env overrides (see .env.example)
+.env
+.env.local
+
 # sqlite runtime data — don't commit the actual local db
 *.sqlite
 *.sqlite-shm

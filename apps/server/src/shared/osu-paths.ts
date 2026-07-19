@@ -1,4 +1,5 @@
 import path from "node:path";
+import os from "node:os";
 import { existsSync, statSync } from "node:fs";
 
 /** Settings KV key for the osu!lazer data directory override. */
@@ -21,9 +22,26 @@ export type ResolvedOsuPaths = {
   status: OsuPathStatus;
 };
 
-/** Linux default: `$HOME/.local/share/osu`. */
-export function platformDefaultOsuDataPath(): string {
-  return path.join(process.env.HOME ?? "", ".local/share/osu");
+/**
+ * Default osu!lazer data directory for the current OS.
+ * Windows: `%APPDATA%\osu`
+ * macOS: `~/Library/Application Support/osu`
+ * Linux: `~/.local/share/osu`
+ */
+export function platformDefaultOsuDataPath(
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+  homedir: () => string = () => os.homedir(),
+): string {
+  if (platform === "win32") {
+    const appData =
+      env.APPDATA?.trim() || path.join(homedir(), "AppData", "Roaming");
+    return path.join(appData, "osu");
+  }
+  if (platform === "darwin") {
+    return path.join(homedir(), "Library", "Application Support", "osu");
+  }
+  return path.join(homedir(), ".local", "share", "osu");
 }
 
 /**

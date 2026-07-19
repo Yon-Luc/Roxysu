@@ -33,6 +33,7 @@ import {
   type ScoreRow,
 } from "./map";
 import { loadOsuSchema } from "./schema";
+import { platformDefaultOsuDataPath } from "./osu-paths";
 
 const BATCH_SIZE = 500;
 
@@ -1035,7 +1036,7 @@ export function defaultRealmPath(): string {
   if (process.env.OSU_DATA_PATH) {
     return path.join(process.env.OSU_DATA_PATH, "client.realm");
   }
-  return path.join(process.env.HOME ?? "", ".local/share/osu/client.realm");
+  return path.join(platformDefaultOsuDataPath(), "client.realm");
 }
 
 export function defaultDbPath(): string {

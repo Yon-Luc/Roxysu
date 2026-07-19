@@ -6,7 +6,7 @@ Roxysu indexes your lazer play history (read-only), computes practice-focused an
 
 It never modifies osu!lazer data. Everything stays offline on your computer.
 
-Open **http://localhost:3000/** after starting the app.
+Open **http://localhost:4321/** after starting the app.
 
 ---
 
@@ -94,9 +94,10 @@ Deeper design notes live in [`osu-practice-companion-architecture.md`](./osu-pra
 ### Prerequisites
 
 - [Bun](https://bun.sh/)
-- [Node.js](https://nodejs.org/) (for realm-reader)
+- [Node.js](https://nodejs.org/) LTS (for realm-reader)
 - osu!lazer installed with local play history
 - On NixOS: `nix develop` (or direnv via `.envrc`) for Bun, Node, and native-module libraries
+- On Windows: if `bun install` fails building `realm` / `better-sqlite3`, install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (Desktop development with C++) and retry
 
 ### Install & run
 
@@ -105,7 +106,7 @@ bun install
 bun run dev
 ```
 
-That starts the server on port **3000** and the continuous Realm sync loop. Open http://localhost:3000/.
+That starts the server on port **4321** and the continuous Realm sync loop. Open http://localhost:4321/.
 
 Useful one-offs:
 
@@ -119,19 +120,34 @@ bun run --filter '@roxysu/realm-reader' sync-once
 # Database migrations
 bun run --filter '@roxysu/db' db:generate
 bun run --filter '@roxysu/db' db:migrate
+
+# Unit tests
+bun test
 ```
 
 ### Environment
 
+Copy [`.env.example`](./.env.example) if you want overrides. All variables are optional.
+
 | Variable | Default / purpose |
 | --- | --- |
-| `REALM_PATH` | `$HOME/.local/share/osu/client.realm` |
+| `REALM_PATH` | `{osu data}/client.realm` |
 | `DB_PATH` | `apps/server/data.sqlite` |
-| `OSU_DATA_PATH` | Parent of the realm (or `$HOME/.local/share/osu`) — used for covers / `.osu` files |
+| `OSU_DATA_PATH` | Platform default (see below) — used for covers / `.osu` files |
 | `REALM_FULL_SYNC=1` | Force a full reconcile on reader start |
 | `REALM_RESYNC_MS` | Poll interval (default `60000`) |
 
-Linux paths are inferred when unset. You can also set the osu!lazer data folder in **Settings** (folder that contains `client.realm` and `files/`). Precedence: `OSU_DATA_PATH` / `REALM_PATH` env → Settings override → `$HOME/.local/share/osu`.
+**Default osu!lazer data folder** (when env/Settings unset):
+
+| OS | Path |
+| --- | --- |
+| Windows | `%APPDATA%\osu` |
+| macOS | `~/Library/Application Support/osu` |
+| Linux | `~/.local/share/osu` |
+
+You can also set the osu!lazer data folder in **Settings** (folder that contains `client.realm` and `files/`). Precedence: `OSU_DATA_PATH` / `REALM_PATH` env → Settings override → platform default.
+
+If the UI looks empty after first start, wait for the realm-reader to finish an initial sync (or check Settings that the lazer path is correct).
 
 ---
 

@@ -2,12 +2,13 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import Realm from "realm";
+import { platformDefaultOsuDataPath } from "./osu-paths";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const realmPath =
   process.env.REALM_PATH ??
-  path.join(process.env.HOME ?? "", ".local/share/osu/client.realm");
+  path.join(platformDefaultOsuDataPath(), "client.realm");
 
 const outPath =
   process.env.SCHEMA_OUT ??

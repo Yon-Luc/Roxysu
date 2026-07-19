@@ -66,9 +66,13 @@ export function beatmapSearchText(
   title: string | null | undefined,
   difficultyName?: string | null,
 ): string {
-  const stripBrackets = (s: string) => s.replace(/[\[\]]/g, "").trim();
-  const name = stripBrackets(title?.trim() || "Untitled") || "Untitled";
-  const diff = difficultyName ? stripBrackets(difficultyName.trim()) : "";
+  const sanitize = (s: string) =>
+    s
+      .replace(/[\[\]]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  const name = sanitize(title?.trim() || "Untitled") || "Untitled";
+  const diff = difficultyName ? sanitize(difficultyName.trim()) : "";
   return diff ? `${name} ${diff}` : name;
 }
 

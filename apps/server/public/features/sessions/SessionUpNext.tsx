@@ -11,6 +11,7 @@ import {
   formatAccuracy,
   formatRelativeTime,
   formatStars,
+  osuClientBeatmapUrl,
 } from "../../lib/format";
 
 const PREFS_KEY = "rx-session-up-next";
@@ -469,46 +470,56 @@ export function SessionUpNext({
             Showing {items.length} of {total.toLocaleString()} matches
           </p>
           <ul className="space-y-0.5">
-            {items.map((item) => (
-              <li key={item.id}>
-                <Link
-                  to="/practice/$beatmapId"
-                  params={{ beatmapId: item.id }}
-                  className="rx-row"
-                >
-                  <BeatmapCover
-                    backgroundFileHash={item.backgroundFileHash}
-                    setOnlineId={item.setOnlineId}
-                    size="list"
-                    className="h-12 w-12 shrink-0 rounded shadow-md shadow-black/40"
-                    alt=""
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate font-semibold text-ink">
-                      {item.title ?? "Untitled"}
+            {items.map((item) => {
+              const clientUrl = osuClientBeatmapUrl(item.onlineId);
+              return (
+                <li key={item.id} className="rx-row">
+                  <Link
+                    to="/practice/$beatmapId"
+                    params={{ beatmapId: item.id }}
+                    className="flex min-w-0 flex-1 items-center gap-3"
+                  >
+                    <BeatmapCover
+                      backgroundFileHash={item.backgroundFileHash}
+                      setOnlineId={item.setOnlineId}
+                      size="list"
+                      className="h-12 w-12 shrink-0 rounded shadow-md shadow-black/40"
+                      alt=""
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-semibold text-ink">
+                        {item.title ?? "Untitled"}
+                      </div>
+                      <div className="mt-0.5 truncate text-sm text-muted">
+                        {item.artist ?? "Unknown"}
+                        {item.difficultyName
+                          ? ` · ${item.difficultyName}`
+                          : ""}
+                        {" · "}
+                        {formatStars(item.starRating)}
+                      </div>
                     </div>
-                    <div className="mt-0.5 truncate text-sm text-muted">
-                      {item.artist ?? "Unknown"}
-                      {item.difficultyName ? ` · ${item.difficultyName}` : ""}
-                      {" · "}
-                      {formatStars(item.starRating)}
+                    <div className="hidden shrink-0 text-right sm:block">
+                      <div className="font-semibold tabular-nums text-ink">
+                        {item.bestAccuracy != null
+                          ? formatAccuracy(item.bestAccuracy)
+                          : "—"}
+                      </div>
+                      <div className="text-xs tabular-nums text-muted">
+                        {item.lastPlayedAt
+                          ? formatRelativeTime(item.lastPlayedAt)
+                          : "Never played"}
+                      </div>
                     </div>
-                  </div>
-                  <div className="hidden shrink-0 text-right sm:block">
-                    <div className="font-semibold tabular-nums text-ink">
-                      {item.bestAccuracy != null
-                        ? formatAccuracy(item.bestAccuracy)
-                        : "—"}
-                    </div>
-                    <div className="text-xs tabular-nums text-muted">
-                      {item.lastPlayedAt
-                        ? formatRelativeTime(item.lastPlayedAt)
-                        : "Never played"}
-                    </div>
-                  </div>
-                </Link>
-              </li>
-            ))}
+                  </Link>
+                  {clientUrl ? (
+                    <a href={clientUrl} className="rx-btn shrink-0">
+                      Open in osu!
+                    </a>
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}

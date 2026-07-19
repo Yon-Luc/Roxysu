@@ -14,3 +14,10 @@ export {
   SUNNY_ALGORITHM,
 } from "./computeSunnyDan";
 export { estDiff, LN_DAN_RATIO_THRESHOLD } from "./estDiff";
+export {
+  getSunnyDanJobState,
+  getSunnyDanCoverage,
+  startSunnyDanBackfill,
+  stopSunnyDanBackfill,
+  countSunnyDanMissing,
+} from "./sunnyDanJob";

@@ -7,6 +7,11 @@ import {
   setActiveFormulaId,
 } from "../analytics/mastery/engine";
 import { publish } from "../shared/events";
+import {
+  getSunnyDanJobState,
+  startSunnyDanBackfill,
+  stopSunnyDanBackfill,
+} from "../map-analysis/sunnyDanJob";
 
 export const settingsRoutes = new Elysia({ prefix: "/settings" })
   .use(dbPlugin)
@@ -21,8 +26,12 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
           description: f.description,
         })),
       },
+      sunnyDan: getSunnyDanJobState(db),
     };
   })
+  .get("/sunny-dan", ({ db }) => getSunnyDanJobState(db))
+  .post("/sunny-dan/start", ({ db }) => startSunnyDanBackfill(db))
+  .post("/sunny-dan/stop", ({ db }) => stopSunnyDanBackfill(db))
   .patch(
     "/",
     async ({ db, body, set }) => {
@@ -49,6 +58,7 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
             description: f.description,
           })),
         },
+        sunnyDan: getSunnyDanJobState(db),
       };
     },
     {

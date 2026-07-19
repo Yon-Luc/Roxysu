@@ -495,10 +495,34 @@ export function relabelSunnyDanSync(db: Db): number {
  */
 export function backfillSunnyDanSync(
   db: Db,
-  opts: { limit?: number } = {},
+  opts: { limit?: number; includeFailed?: boolean } = {},
 ): { computed: number; remaining: number; relabeled: number } {
   const relabeled = relabelSunnyDanSync(db);
   const limit = Math.max(1, Math.min(500, opts.limit ?? 80));
+  const includeFailed = opts.includeFailed === true;
+
+  const missingClause = includeFailed
+    ? `
+        (
+          dr.beatmap_id IS NULL
+          OR dr.est_diff IS NULL
+          OR (
+            b.hash IS NOT NULL
+            AND dr.beatmap_hash IS NOT NULL
+            AND dr.beatmap_hash != b.hash
+          )
+        )
+      `
+    : `
+        (
+          dr.beatmap_id IS NULL
+          OR (
+            b.hash IS NOT NULL
+            AND dr.beatmap_hash IS NOT NULL
+            AND dr.beatmap_hash != b.hash
+          )
+        )
+      `;
 
   const missing = db.$client
     .query(
@@ -509,14 +533,7 @@ export function backfillSunnyDanSync(
         ON dr.beatmap_id = b.id AND dr.algorithm = ?
       WHERE b.hidden = 0
         AND lower(COALESCE(b.ruleset_short_name, '')) = 'mania'
-        AND (
-          dr.beatmap_id IS NULL
-          OR (
-            b.hash IS NOT NULL
-            AND dr.beatmap_hash IS NOT NULL
-            AND dr.beatmap_hash != b.hash
-          )
-        )
+        AND ${missingClause}
       LIMIT ?
     `,
     )
@@ -535,14 +552,7 @@ export function backfillSunnyDanSync(
         ON dr.beatmap_id = b.id AND dr.algorithm = ?
       WHERE b.hidden = 0
         AND lower(COALESCE(b.ruleset_short_name, '')) = 'mania'
-        AND (
-          dr.beatmap_id IS NULL
-          OR (
-            b.hash IS NOT NULL
-            AND dr.beatmap_hash IS NOT NULL
-            AND dr.beatmap_hash != b.hash
-          )
-        )
+        AND ${missingClause}
     `,
     )
     .get(SUNNY_ALGORITHM) as { n: number } | null;

@@ -158,6 +158,27 @@ export async function patchSettings(body: { masteryFormulaId?: string }) {
   return unwrap(await api.api.settings.patch(body), "/api/settings");
 }
 
+export async function fetchSunnyDanJob() {
+  return unwrap(
+    await api.api.settings["sunny-dan"].get(),
+    "/api/settings/sunny-dan",
+  );
+}
+
+export async function startSunnyDanJob() {
+  return unwrap(
+    await api.api.settings["sunny-dan"].start.post(),
+    "/api/settings/sunny-dan/start",
+  );
+}
+
+export async function stopSunnyDanJob() {
+  return unwrap(
+    await api.api.settings["sunny-dan"].stop.post(),
+    "/api/settings/sunny-dan/stop",
+  );
+}
+
 export type SystemStatus = Awaited<ReturnType<typeof fetchSystemStatus>>;
 export type Dashboard = Awaited<ReturnType<typeof fetchDashboard>>;
 export type PracticeList = Exclude<

@@ -8,6 +8,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { fetchBeatmapPreview, type BeatmapPreview } from "../lib/api";
+import { AudioClock, sampleAudioClock } from "../lib/audioClock";
 import {
   formatAccuracy,
   localBeatmapAudioUrl,
@@ -161,6 +162,7 @@ function BeatmapPreviewModal({
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const clockRef = useRef(new AudioClock());
   const previewSeekDone = useRef(false);
   const previewTimeRef = useRef<number | null>(null);
   const audioUrlRef = useRef<string | null>(null);
@@ -220,14 +222,12 @@ function BeatmapPreviewModal({
     if (!audio) return;
     audio.volume = prefs.volume;
     audio.playbackRate = prefs.rate;
+    // Keep interpolator continuous across rate changes.
+    sampleAudioClock(clockRef.current, audio);
   }, [prefs.volume, prefs.rate, audioUrl]);
 
   function mapTimeMs(): number {
-    const audio = audioRef.current;
-    if (audio && Number.isFinite(audio.currentTime)) {
-      return audio.currentTime * 1000;
-    }
-    return currentMs;
+    return sampleAudioClock(clockRef.current, audioRef.current, currentMs);
   }
 
   function syncLiveHud() {
@@ -296,13 +296,15 @@ function BeatmapPreviewModal({
     const max = (audio.duration || 0) * 1000;
     const next = clamp(ms, 0, max > 0 ? max : ms);
     audio.currentTime = next / 1000;
+    clockRef.current.set(next, {
+      playing: !audio.paused && !audio.ended,
+      rate: audio.playbackRate > 0 ? audio.playbackRate : 1,
+    });
     setCurrentMs(next);
   }
 
   function seekBy(deltaMs: number) {
-    const audio = audioRef.current;
-    const base = audio ? (audio.currentTime || 0) * 1000 : 0;
-    seekTo(base + deltaMs);
+    seekTo(mapTimeMs() + deltaMs);
   }
 
   function togglePlay() {
@@ -529,6 +531,7 @@ function BeatmapPreviewModal({
 
   useEffect(() => {
     previewSeekDone.current = false;
+    clockRef.current.set(0, { playing: false, rate: prefsRef.current.rate });
     setAudioError(null);
     setCurrentMs(0);
     setDurationMs(0);
@@ -538,22 +541,46 @@ function BeatmapPreviewModal({
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !audioUrl) return;
+    const clock = clockRef.current;
 
     function seekPreviewIfNeeded() {
       if (previewSeekDone.current) return;
       if (modeRef.current === "play") {
         const start = practiceRange?.fromMs ?? 0;
         audio!.currentTime = start / 1000;
+        clock.set(start, {
+          playing: !audio!.paused && !audio!.ended,
+          rate: audio!.playbackRate > 0 ? audio!.playbackRate : 1,
+        });
         setCurrentMs(start);
       } else if (previewTime != null && previewTime > 0) {
         audio!.currentTime = previewTime / 1000;
+        clock.set(previewTime, {
+          playing: !audio!.paused && !audio!.ended,
+          rate: audio!.playbackRate > 0 ? audio!.playbackRate : 1,
+        });
         setCurrentMs(previewTime);
       }
       previewSeekDone.current = true;
     }
 
+    function syncClockFromAudio() {
+      const ms = (audio!.currentTime || 0) * 1000;
+      clock.observe(ms, {
+        playing: !audio!.paused && !audio!.ended,
+        rate: audio!.playbackRate > 0 ? audio!.playbackRate : 1,
+      });
+      setCurrentMs(ms);
+    }
+
     function onTimeUpdate() {
-      setCurrentMs((audio!.currentTime || 0) * 1000);
+      syncClockFromAudio();
+    }
+    function onSeeking() {
+      syncClockFromAudio();
+    }
+    function onSeeked() {
+      syncClockFromAudio();
     }
     function onLoadedMetadata() {
       setDurationMs((audio!.duration || 0) * 1000);
@@ -563,12 +590,15 @@ function BeatmapPreviewModal({
       seekPreviewIfNeeded();
     }
     function onPlay() {
+      syncClockFromAudio();
       setPlaying(true);
     }
     function onPause() {
+      syncClockFromAudio();
       setPlaying(false);
     }
     function onEnded() {
+      syncClockFromAudio();
       setPlaying(false);
     }
     function onError() {
@@ -579,6 +609,8 @@ function BeatmapPreviewModal({
     audio.playbackRate = prefsRef.current.rate;
 
     audio.addEventListener("timeupdate", onTimeUpdate);
+    audio.addEventListener("seeking", onSeeking);
+    audio.addEventListener("seeked", onSeeked);
     audio.addEventListener("loadedmetadata", onLoadedMetadata);
     audio.addEventListener("canplay", onCanPlay);
     audio.addEventListener("play", onPlay);
@@ -594,6 +626,8 @@ function BeatmapPreviewModal({
     return () => {
       audio.pause();
       audio.removeEventListener("timeupdate", onTimeUpdate);
+      audio.removeEventListener("seeking", onSeeking);
+      audio.removeEventListener("seeked", onSeeked);
       audio.removeEventListener("loadedmetadata", onLoadedMetadata);
       audio.removeEventListener("canplay", onCanPlay);
       audio.removeEventListener("play", onPlay);
@@ -811,13 +845,7 @@ function BeatmapPreviewModal({
                       scrollSpeed={prefs.scroll}
                       liveHeldMask={isPlay ? liveHeldMask : null}
                       judgments={isPlay ? liveJudgments : undefined}
-                      getCurrentTimeMs={() => {
-                        const audio = audioRef.current;
-                        if (audio && Number.isFinite(audio.currentTime)) {
-                          return audio.currentTime * 1000;
-                        }
-                        return currentMs;
-                      }}
+                      getCurrentTimeMs={mapTimeMs}
                     />
                   </div>
                 ) : (

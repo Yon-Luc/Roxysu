@@ -59,6 +59,8 @@ type PreviewPrefs = {
   timingX: number;
   /** Timing visualizer center Y (% of playfield). */
   timingY: number;
+  /** Solid black backdrop while in Play mode. */
+  blackBg: boolean;
   /** Preserved for ScoreReplayModal; unused here. */
   analysis?: boolean;
 };
@@ -73,6 +75,7 @@ const DEFAULT_PREFS: PreviewPrefs = {
   fieldWidth: FIELD_WIDTH_DEFAULT,
   timingX: TIMING_VIS_X_DEFAULT,
   timingY: TIMING_VIS_Y_DEFAULT,
+  blackBg: false,
 };
 
 const EMPTY_SUMMARY: JudgmentSummary = {
@@ -131,6 +134,10 @@ function loadPrefs(): PreviewPrefs {
         0,
         100,
       ),
+      blackBg:
+        typeof parsed.blackBg === "boolean"
+          ? parsed.blackBg
+          : DEFAULT_PREFS.blackBg,
       analysis:
         typeof parsed.analysis === "boolean" ? parsed.analysis : undefined,
     };
@@ -712,6 +719,7 @@ function BeatmapPreviewModal({
       ? resolveKeybinds(keybindsAll, data.columnCount)
       : [];
   const isPlay = mode === "play";
+  const solidBlack = isPlay && prefs.blackBg;
   // Full chart on the field so judgment noteIndex stays aligned; practiceRange
   // only limits which notes LiveManiaPlay judges.
   const fieldNotes = data?.notes ?? [];
@@ -739,15 +747,24 @@ function BeatmapPreviewModal({
         }
         onClick={(e) => e.stopPropagation()}
       >
-        <div
-          className="pointer-events-none absolute inset-0 bg-cover bg-center"
-          style={bgUrl ? { backgroundImage: `url(${bgUrl})` } : undefined}
-          aria-hidden
-        />
-        <div
-          className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/70 via-black/80 to-black/92"
-          aria-hidden
-        />
+        {solidBlack ? (
+          <div
+            className="pointer-events-none absolute inset-0 bg-black"
+            aria-hidden
+          />
+        ) : (
+          <>
+            <div
+              className="pointer-events-none absolute inset-0 bg-cover bg-center"
+              style={bgUrl ? { backgroundImage: `url(${bgUrl})` } : undefined}
+              aria-hidden
+            />
+            <div
+              className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/70 via-black/80 to-black/92"
+              aria-hidden
+            />
+          </>
+        )}
 
         <div className="relative flex items-start justify-between gap-4 border-b border-white/10 px-4 py-3 sm:px-6 sm:py-4">
           <div className="min-w-0">
@@ -1118,6 +1135,22 @@ function BeatmapPreviewModal({
                       />
                     </label>
                   ) : null}
+
+                  <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
+                    <input
+                      type="checkbox"
+                      checked={prefs.blackBg}
+                      onChange={(e) =>
+                        setPrefs((p) => ({
+                          ...p,
+                          blackBg: e.target.checked,
+                        }))
+                      }
+                      className="accent-[var(--accent)]"
+                      aria-label="Black background in Play mode"
+                    />
+                    <span className="shrink-0">Black bg</span>
+                  </label>
                 </div>
 
                 <p className="mt-2 hidden text-[11px] text-faint sm:block">

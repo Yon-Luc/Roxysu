@@ -62,6 +62,8 @@ type PreviewPrefs = {
   timingX: number;
   /** Timing visualizer center Y (% of playfield). */
   timingY: number;
+  /** Solid black backdrop while in Play mode (preview modal). */
+  blackBg: boolean;
   /** Opt-in miss/timing/pattern tools. Default off. */
   analysis: boolean;
 };
@@ -74,6 +76,7 @@ const DEFAULT_PREFS: PreviewPrefs = {
   fieldWidth: FIELD_WIDTH_DEFAULT,
   timingX: 50,
   timingY: 78,
+  blackBg: false,
   analysis: false,
 };
 
@@ -119,6 +122,10 @@ function loadPrefs(): PreviewPrefs {
         0,
         100,
       ),
+      blackBg:
+        typeof parsed.blackBg === "boolean"
+          ? parsed.blackBg
+          : DEFAULT_PREFS.blackBg,
       analysis:
         typeof parsed.analysis === "boolean"
           ? parsed.analysis

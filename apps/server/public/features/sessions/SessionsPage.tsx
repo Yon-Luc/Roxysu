@@ -56,7 +56,7 @@ export function SessionsPage() {
                   : ""}
               </div>
             </div>
-            <span className="shrink-0 rounded-full bg-accent px-4 py-2 text-sm font-bold text-black transition group-hover:scale-105">
+            <span className="shrink-0 rounded-full bg-accent px-4 py-2 text-sm font-bold text-white transition group-hover:scale-105">
               Open live
             </span>
           </div>
@@ -79,7 +79,7 @@ export function SessionsPage() {
                 Get map recommendations, then play to open a live session.
               </div>
             </div>
-            <span className="shrink-0 rounded-full bg-accent px-4 py-2 text-sm font-bold text-black transition group-hover:scale-105">
+            <span className="shrink-0 rounded-full bg-accent px-4 py-2 text-sm font-bold text-white transition group-hover:scale-105">
               Open
             </span>
           </div>

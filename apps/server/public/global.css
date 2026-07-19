@@ -13,11 +13,11 @@
   --color-subtle: #b3b3b3;
   --color-muted: #a7a7a7;
   --color-faint: #6a6a6a;
-  --color-accent: #1ed760;
-  --color-accent-dim: #1db954;
-  --color-accent-glow: rgba(30, 215, 96, 0.18);
-  --color-chart: #1ed760;
-  --color-chart-alt: #4c8dff;
+  --color-accent: #7c8fe0;
+  --color-accent-dim: #6b7bcf;
+  --color-accent-glow: rgba(124, 143, 224, 0.18);
+  --color-chart: #7c8fe0;
+  --color-chart-alt: #e879a8;
 }
 
 html,
@@ -157,7 +157,7 @@ a {
   padding: 0.625rem 1.25rem;
   font-size: 0.875rem;
   font-weight: 700;
-  color: #000;
+  color: #fff;
   transition:
     background 0.15s ease,
     transform 0.15s ease;

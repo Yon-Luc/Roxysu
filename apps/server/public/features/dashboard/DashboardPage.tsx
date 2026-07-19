@@ -126,7 +126,7 @@ export function DashboardPage() {
                   tickLine={false}
                 />
                 <Tooltip contentStyle={tooltipStyle} />
-                <Bar dataKey="playCount" fill="#1ed760" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="playCount" fill="#7c8fe0" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -173,7 +173,7 @@ export function DashboardPage() {
                   yAxisId="pp"
                   type="monotone"
                   dataKey="totalPp"
-                  stroke="#4c8dff"
+                  stroke="#e879a8"
                   dot={false}
                   strokeWidth={2.5}
                 />
@@ -181,7 +181,7 @@ export function DashboardPage() {
                   yAxisId="acc"
                   type="monotone"
                   dataKey="avgAccuracy"
-                  stroke="#1ed760"
+                  stroke="#7c8fe0"
                   dot={false}
                   strokeWidth={2.5}
                 />

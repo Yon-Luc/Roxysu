@@ -419,7 +419,7 @@ export function PracticeListPage() {
                     fill={
                       bin.key === "unplayed"
                         ? "rgba(167, 167, 167, 0.45)"
-                        : "#1ed760"
+                        : "#7c8fe0"
                     }
                   />
                 ))}

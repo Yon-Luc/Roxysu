@@ -28,6 +28,7 @@ export function KeybindModal({ open, onClose }: KeybindModalProps) {
 function KeybindModalInner({ onClose }: { onClose: () => void }) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
+  const columnBtnRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const binds = useKeybinds();
   const [keys, setKeys] = useState<Keymode>(7);
   const [capturing, setCapturing] = useState<number | null>(null);
@@ -62,7 +63,13 @@ function KeybindModalInner({ onClose }: { onClose: () => void }) {
         e.stopPropagation();
         if (isModifierOnlyCode(e.code)) return;
         setColumnKeybind(keys, col, e.code);
-        setCapturing(null);
+        const next = col + 1;
+        if (next < layout.length) {
+          setCapturing(next);
+          queueMicrotask(() => columnBtnRefs.current[next]?.focus());
+        } else {
+          setCapturing(null);
+        }
         return;
       }
 
@@ -182,6 +189,9 @@ function KeybindModalInner({ onClose }: { onClose: () => void }) {
                   </span>
                   <button
                     type="button"
+                    ref={(el) => {
+                      columnBtnRefs.current[i] = el;
+                    }}
                     className={`min-w-0 flex-1 rounded-lg px-3 py-2 text-left font-mono text-sm transition ${
                       active
                         ? "bg-accent-glow ring-1 ring-accent/60 text-ink"

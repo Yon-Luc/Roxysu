@@ -11,6 +11,7 @@ import {
   type PracticeSortDir,
   type PracticeMetric,
 } from "../query-language";
+import { recommendSevenK } from "../analytics/recommend";
 
 const SORT_BY = [
   "lastPlayed",
@@ -216,6 +217,80 @@ export const practiceRoutes = new Elysia({ prefix: "/practice" })
       query: t.Object({
         q: t.Optional(t.String()),
         metric: t.Optional(t.String()),
+      }),
+    },
+  )
+  .get(
+    "/recommend",
+    async ({ db, query, set }) => {
+      const exclude = (query.exclude ?? "")
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean);
+
+      try {
+        const batch = recommendSevenK(db, {
+          focus: query.focus,
+          skillset: query.skillset,
+          count: query.count ?? 10,
+          excludeIds: exclude,
+          q: query.q?.trim() || undefined,
+        });
+
+        return {
+          focus: batch.focus,
+          targetSkillset: batch.targetSkillset,
+          skill: batch.skill,
+          summary: batch.summary,
+          totalMapsConsidered: batch.totalMapsConsidered,
+          needsSunnyBackfill: batch.needsSunnyBackfill,
+          recommendations: batch.recommendations.map((r) => ({
+            ...mapCard({
+              id: r.id,
+              title: r.title,
+              artist: r.artist,
+              difficultyName: r.difficultyName,
+              starRating: r.starRating,
+              bpm: r.bpm,
+              rulesetShortName: r.rulesetShortName,
+              mapperUsername: r.mapperUsername,
+              onlineId: r.onlineId,
+              setOnlineId: r.setOnlineId,
+              backgroundFileHash: r.backgroundFileHash,
+              playCount: r.playCount,
+              bestAccuracy: r.bestAccuracy,
+              bestPp: r.bestPp,
+              bestScore: r.bestScore,
+              bestMisses: r.bestMisses,
+              lastPlayedAt: r.lastPlayedAt,
+              masteryLevel: r.masteryLevel,
+              sunnyEstDiff: r.sunnyEstDiff,
+              sunnyStar: r.sunnyStar,
+            }),
+            relativeDifficulty: r.relativeDifficulty,
+            confidence: r.confidence,
+            mmr: r.mmr,
+            lnRatio: r.lnRatio,
+            axis: r.axis,
+            reasoning: r.reasoning,
+            targetSkillset: r.targetSkillset,
+          })),
+        };
+      } catch (err) {
+        if (err instanceof QueryParseError) {
+          set.status = 400;
+          return { error: err.message };
+        }
+        throw err;
+      }
+    },
+    {
+      query: t.Object({
+        focus: t.Optional(t.String()),
+        skillset: t.Optional(t.String()),
+        count: t.Optional(t.Numeric()),
+        exclude: t.Optional(t.String()),
+        q: t.Optional(t.String()),
       }),
     },
   );

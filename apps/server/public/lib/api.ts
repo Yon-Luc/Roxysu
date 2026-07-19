@@ -102,6 +102,38 @@ export async function fetchPracticeSample(params: {
   );
 }
 
+export type RecommendFocus =
+  | "push"
+  | "consistency"
+  | "deficit"
+  | "skillset";
+
+export type RecommendSkillset = "rc" | "ln";
+
+export async function fetchPracticeRecommend(params: {
+  focus?: RecommendFocus;
+  skillset?: RecommendSkillset;
+  count?: number;
+  exclude?: string[];
+  q?: string;
+}) {
+  return unwrap(
+    await api.api.practice.recommend.get({
+      query: {
+        focus: params.focus,
+        skillset: params.skillset,
+        count: params.count,
+        exclude:
+          params.exclude && params.exclude.length > 0
+            ? params.exclude.join(",")
+            : undefined,
+        q: params.q,
+      },
+    }),
+    "/api/practice/recommend",
+  );
+}
+
 export async function fetchBeatmap(id: string) {
   return unwrap(await api.api.beatmaps({ id }).get(), `/api/beatmaps/${id}`);
 }
@@ -195,6 +227,10 @@ export type PracticeDistribution = Exclude<
 >;
 export type PracticeSample = Exclude<
   Awaited<ReturnType<typeof fetchPracticeSample>>,
+  { error: string }
+>;
+export type PracticeRecommend = Exclude<
+  Awaited<ReturnType<typeof fetchPracticeRecommend>>,
   { error: string }
 >;
 export type BeatmapProfile = Exclude<

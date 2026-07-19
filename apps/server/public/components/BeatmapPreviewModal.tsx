@@ -27,6 +27,15 @@ import {
 } from "../lib/liveManiaPlay";
 import { maniaHitWindows, type JudgmentSummary } from "../lib/maniaWindows";
 import {
+  HIT_POSITION_MAX,
+  HIT_POSITION_MIN,
+  LANE_COVER_MAX,
+  LANE_COVER_MIN,
+  getPreviewSkin,
+  setPreviewSkin,
+  usePreviewSkin,
+} from "../lib/previewSkin";
+import {
   ManiaNotefield,
   migratePreviewScroll,
   PREVIEW_SCROLL_DEFAULT,
@@ -219,6 +228,7 @@ function BeatmapPreviewModal({
   const practiceRangeRef = useRef(practiceRange);
   const keybindsAll = useKeybinds();
   const bindsRef = useRef<string[]>([]);
+  const skin = usePreviewSkin();
 
   const [prefs, setPrefs] = useState<PreviewPrefs>(() => loadPrefs());
   const prefsRef = useRef(prefs);
@@ -1112,6 +1122,44 @@ function BeatmapPreviewModal({
                       }}
                       className="min-w-[4rem] flex-1 accent-[var(--accent)]"
                       aria-label="Scroll speed"
+                    />
+                  </label>
+
+                  <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-muted sm:max-w-xs">
+                    <span className="shrink-0">
+                      Hit {Math.round(skin.hitPosition * 100)}%
+                    </span>
+                    <input
+                      type="range"
+                      min={HIT_POSITION_MIN}
+                      max={HIT_POSITION_MAX}
+                      step={0.01}
+                      value={skin.hitPosition}
+                      onInput={(e) => {
+                        const hitPosition = Number(e.currentTarget.value);
+                        setPreviewSkin({ ...getPreviewSkin(), hitPosition });
+                      }}
+                      className="min-w-[4rem] flex-1 accent-[var(--accent)]"
+                      aria-label="Hit position"
+                    />
+                  </label>
+
+                  <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-muted sm:max-w-xs">
+                    <span className="shrink-0">
+                      Cover {Math.round(skin.laneCover * 100)}%
+                    </span>
+                    <input
+                      type="range"
+                      min={LANE_COVER_MIN}
+                      max={LANE_COVER_MAX}
+                      step={0.01}
+                      value={skin.laneCover}
+                      onInput={(e) => {
+                        const laneCover = Number(e.currentTarget.value);
+                        setPreviewSkin({ ...getPreviewSkin(), laneCover });
+                      }}
+                      className="min-w-[4rem] flex-1 accent-[var(--accent)]"
+                      aria-label="Lane cover"
                     />
                   </label>
 

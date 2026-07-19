@@ -310,7 +310,8 @@ export function SettingsPage() {
       <section className="rx-panel p-5">
         <h2 className="text-sm font-bold text-ink">Preview skin</h2>
         <p className="mt-1 text-sm text-muted">
-          Customize note shape, colors, and size per column for 4K–10K previews.
+          Customize note shape, colors, size, hit position, and lane cover for
+          4K–10K previews.
         </p>
         <Link to="/skin" className="rx-btn-primary mt-4 inline-flex">
           Open skin editor

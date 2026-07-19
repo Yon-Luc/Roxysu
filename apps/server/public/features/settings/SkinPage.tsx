@@ -4,6 +4,10 @@ import { ManiaNotefield } from "../../components/ManiaNotefield";
 import {
   KEYMODES,
   NOTE_SHAPES,
+  HIT_POSITION_MAX,
+  HIT_POSITION_MIN,
+  LANE_COVER_MAX,
+  LANE_COVER_MIN,
   defaultKeymodeSkin,
   getPreviewSkin,
   resetKeymodeSkin,
@@ -135,8 +139,8 @@ export function SkinPage() {
         <div>
           <PageTitle>Preview skin</PageTitle>
           <p className="rx-subtitle">
-            Customize note shape, colors, and size per column for each keymode.
-            Applies to beatmap preview.
+            Customize note shape, colors, size, hit position, and lane cover for
+            each keymode. Applies to beatmap preview.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -187,6 +191,50 @@ export function SkinPage() {
                   {s.label}
                 </button>
               ))}
+            </div>
+          </div>
+
+          <div className="rx-panel p-4">
+            <h2 className="text-sm font-bold text-ink">Playfield</h2>
+            <p className="mt-1 text-xs text-muted">
+              Hit position moves the receptor line. Lane cover blacks out the
+              top so the visible field looks shorter.
+            </p>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <label className="flex flex-col gap-1 text-xs text-muted">
+                <span>
+                  Hit position {Math.round(skin.hitPosition * 100)}%
+                </span>
+                <input
+                  type="range"
+                  min={HIT_POSITION_MIN}
+                  max={HIT_POSITION_MAX}
+                  step={0.01}
+                  value={skin.hitPosition}
+                  onInput={(e) => {
+                    const hitPosition = Number(e.currentTarget.value);
+                    const prev = getPreviewSkin();
+                    setPreviewSkin({ ...prev, hitPosition });
+                  }}
+                  className="accent-[var(--accent)]"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs text-muted">
+                <span>Lane cover {Math.round(skin.laneCover * 100)}%</span>
+                <input
+                  type="range"
+                  min={LANE_COVER_MIN}
+                  max={LANE_COVER_MAX}
+                  step={0.01}
+                  value={skin.laneCover}
+                  onInput={(e) => {
+                    const laneCover = Number(e.currentTarget.value);
+                    const prev = getPreviewSkin();
+                    setPreviewSkin({ ...prev, laneCover });
+                  }}
+                  className="accent-[var(--accent)]"
+                />
+              </label>
             </div>
           </div>
 

@@ -1,6 +1,10 @@
 import { useEffect, useRef } from "react";
 import type { BeatmapPreview } from "../lib/api";
 import {
+  HIT_POSITION_MAX,
+  HIT_POSITION_MIN,
+  LANE_COVER_MAX,
+  LANE_COVER_MIN,
   resolveKeymodeSkin,
   usePreviewSkin,
   type ColumnSkin,
@@ -13,7 +17,6 @@ const OSU_MAX_TIME_RANGE_MS = 11485;
 const PREVIEW_SCROLL_MIN = 1;
 const PREVIEW_SCROLL_MAX = 40;
 const PREVIEW_SCROLL_DEFAULT = 20;
-const RECEPTOR_Y_RATIO = 0.88;
 const BASE_TAP_HEIGHT = 14;
 /** Max fraction of column width used for circle/arrow noteheads. */
 const SHAPED_WIDTH_CAP = 0.85;
@@ -410,6 +413,10 @@ function clampScrollSpeed(speed: number): number {
   );
 }
 
+function clamp(n: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, n));
+}
+
 /** Convert legacy px/ms prefs (≤2) to an approximate osu scroll speed. */
 export function migratePreviewScroll(raw: number): number {
   if (!Number.isFinite(raw)) return PREVIEW_SCROLL_DEFAULT;
@@ -445,6 +452,18 @@ export function ManiaNotefield({
   const keymodeSkin = skinOverride ?? resolveKeymodeSkin(storedSkin, columnCount);
   const skinRef = useRef(keymodeSkin);
   skinRef.current = keymodeSkin;
+  const hitPositionRef = useRef(storedSkin.hitPosition);
+  hitPositionRef.current = clamp(
+    storedSkin.hitPosition,
+    HIT_POSITION_MIN,
+    HIT_POSITION_MAX,
+  );
+  const laneCoverRef = useRef(storedSkin.laneCover);
+  laneCoverRef.current = clamp(
+    storedSkin.laneCover,
+    LANE_COVER_MIN,
+    LANE_COVER_MAX,
+  );
 
   notesRef.current = (() => {
     if (notes.length <= 1) return notes;
@@ -512,7 +531,13 @@ export function ManiaNotefield({
       const headMap = headJudgmentsRef.current;
       const w = canvas!.clientWidth;
       const h = canvas!.clientHeight;
-      const receptorY = h * RECEPTOR_Y_RATIO;
+      const hitPosition = hitPositionRef.current;
+      const receptorY = h * hitPosition;
+      // Cover may not reach the receptor — leave a small gap so the hit line stays visible.
+      const coverH = Math.min(
+        h * laneCoverRef.current,
+        Math.max(0, receptorY - 12),
+      );
       const timeRangeMs =
         OSU_MAX_TIME_RANGE_MS / scrollSpeedRef.current;
       const scroll = Math.max(0.05, receptorY / timeRangeMs);
@@ -538,14 +563,14 @@ export function ManiaNotefield({
       for (let c = 1; c < cols; c += 1) {
         const x = c * colW;
         ctx!.beginPath();
-        ctx!.moveTo(x, 0);
+        ctx!.moveTo(x, coverH);
         ctx!.lineTo(x, h);
         ctx!.stroke();
       }
 
       ctx!.save();
       ctx!.beginPath();
-      ctx!.rect(0, 0, w, receptorY);
+      ctx!.rect(0, coverH, w, Math.max(0, receptorY - coverH));
       ctx!.clip();
 
       const windowStart = t;
@@ -637,6 +662,12 @@ export function ManiaNotefield({
 
       ctx!.fillStyle = "rgba(0, 0, 0, 0.55)";
       ctx!.fillRect(0, receptorY + 1.5, w, h - receptorY);
+
+      // Solid black lane cover — hides the top of the playfield.
+      if (coverH > 0) {
+        ctx!.fillStyle = "#000000";
+        ctx!.fillRect(0, 0, w, coverH);
+      }
 
       raf = requestAnimationFrame(draw);
     }

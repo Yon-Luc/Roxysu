@@ -22,8 +22,22 @@ export type KeymodeSkin = {
   uniformColors: boolean;
 };
 
+/** Receptor Y as a fraction of playfield height (0 = top, 1 = bottom). */
+export const HIT_POSITION_DEFAULT = 0.88;
+export const HIT_POSITION_MIN = 0.55;
+export const HIT_POSITION_MAX = 0.95;
+
+/** Fraction of playfield height covered from the top with black. */
+export const LANE_COVER_DEFAULT = 0;
+export const LANE_COVER_MIN = 0;
+export const LANE_COVER_MAX = 0.7;
+
 export type PreviewSkin = {
   keymodes: Record<Keymode, KeymodeSkin>;
+  /** Receptor / hit line position (fraction of height from top). */
+  hitPosition: number;
+  /** Top lane cover height (fraction of playfield height). */
+  laneCover: number;
 };
 
 export const NOTE_SHAPES: { id: NoteShape; label: string }[] = [
@@ -76,6 +90,8 @@ export function defaultPreviewSkin(): PreviewSkin {
       9: defaultKeymodeSkin(9),
       10: defaultKeymodeSkin(10),
     },
+    hitPosition: HIT_POSITION_DEFAULT,
+    laneCover: LANE_COVER_DEFAULT,
   };
 }
 
@@ -127,12 +143,32 @@ function parseSkin(raw: string | null): PreviewSkin {
   const defaults = defaultPreviewSkin();
   if (!raw) return defaults;
   try {
-    const parsed = JSON.parse(raw) as { keymodes?: Partial<Record<string, unknown>> };
+    const parsed = JSON.parse(raw) as {
+      keymodes?: Partial<Record<string, unknown>>;
+      hitPosition?: unknown;
+      laneCover?: unknown;
+    };
     const keymodes = { ...defaults.keymodes };
     for (const keys of KEYMODES) {
       keymodes[keys] = parseKeymodeSkin(parsed.keymodes?.[String(keys)], keys);
     }
-    return { keymodes };
+    return {
+      keymodes,
+      hitPosition: clamp(
+        typeof parsed.hitPosition === "number"
+          ? parsed.hitPosition
+          : defaults.hitPosition,
+        HIT_POSITION_MIN,
+        HIT_POSITION_MAX,
+      ),
+      laneCover: clamp(
+        typeof parsed.laneCover === "number"
+          ? parsed.laneCover
+          : defaults.laneCover,
+        LANE_COVER_MIN,
+        LANE_COVER_MAX,
+      ),
+    };
   } catch {
     return defaults;
   }

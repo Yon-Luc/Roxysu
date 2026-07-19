@@ -3,12 +3,12 @@ import {
   RealmLockedError,
   SchemaVersionMismatchError,
   defaultDbPath,
-  defaultRealmPath,
   hasSuccessfulImport,
   runFullSync,
   runIncrementalSync,
   runReconcileSync,
 } from "./sync";
+import { resolveRealmPathFromDb } from "./osu-paths";
 
 const RETRY_MS = Number(process.env.REALM_RETRY_MS ?? 10_000);
 const RESYNC_MS = Number(process.env.REALM_RESYNC_MS ?? 60_000);
@@ -109,16 +109,15 @@ async function main() {
   process.on("SIGTERM", requestShutdown);
 
   const dbPath = defaultDbPath();
-  const realmPath = defaultRealmPath();
 
   console.log("realm-reader starting");
   console.log("  DB_PATH   ", dbPath);
-  console.log("  REALM_PATH", realmPath);
   console.log("  FULL_EVERY", FULL_EVERY_N);
 
   const db = ensureDb(dbPath);
   console.log("SQLite ready (migrations applied)");
 
+  let lastRealmPath: string | null = null;
   let lockLogged = false;
   let cycle = 0;
   let lastSyncAt: number | null = null;
@@ -127,6 +126,12 @@ async function main() {
     while (!shuttingDown) {
       const allowed = await waitUntilSyncAllowed(db, lastSyncAt);
       if (!allowed) break;
+
+      const realmPath = resolveRealmPathFromDb(db);
+      if (realmPath !== lastRealmPath) {
+        console.log("  REALM_PATH", realmPath);
+        lastRealmPath = realmPath;
+      }
 
       try {
         const needBootstrap = FORCE_FULL || !hasSuccessfulImport(db);

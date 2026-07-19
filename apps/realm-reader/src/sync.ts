@@ -1030,10 +1030,12 @@ export function runIncrementalSync(db: Db, realmPath: string): SyncResult {
 }
 
 export function defaultRealmPath(): string {
-  return (
-    process.env.REALM_PATH ??
-    path.join(process.env.HOME ?? "", ".local/share/osu/client.realm")
-  );
+  // Env-only fallback for scripts that do not open settings; prefer resolveRealmPathFromDb.
+  if (process.env.REALM_PATH) return process.env.REALM_PATH;
+  if (process.env.OSU_DATA_PATH) {
+    return path.join(process.env.OSU_DATA_PATH, "client.realm");
+  }
+  return path.join(process.env.HOME ?? "", ".local/share/osu/client.realm");
 }
 
 export function defaultDbPath(): string {

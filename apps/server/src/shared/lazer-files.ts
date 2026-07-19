@@ -1,13 +1,12 @@
 import path from "node:path";
 import { existsSync } from "node:fs";
+import { getOsuDataPath } from "./osu-paths";
 
-/** Default lazer data dir (sibling of client.realm). */
+export { getOsuDataPath } from "./osu-paths";
+
+/** Effective lazer data dir (env → settings cache → platform default). */
 export function defaultOsuDataPath(): string {
-  if (process.env.OSU_DATA_PATH) return process.env.OSU_DATA_PATH;
-  if (process.env.REALM_PATH) {
-    return path.dirname(process.env.REALM_PATH);
-  }
-  return path.join(process.env.HOME ?? "", ".local/share/osu");
+  return getOsuDataPath();
 }
 
 const SHA256_HEX = /^[0-9a-f]{64}$/i;

@@ -203,6 +203,7 @@ export async function fetchSettings() {
 export async function patchSettings(body: {
   masteryFormulaId?: string;
   pauseWhenUnfocused?: boolean;
+  osuDataPath?: string | null;
 }) {
   return unwrap(await api.api.settings.patch(body), "/api/settings");
 }

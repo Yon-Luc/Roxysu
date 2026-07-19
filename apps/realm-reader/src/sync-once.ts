@@ -12,13 +12,16 @@ import {
   imports,
   sql,
 } from "@roxysu/db/client.node";
-import { defaultDbPath, defaultRealmPath, runFullSync } from "./sync";
+import { defaultDbPath, runFullSync } from "./sync";
+import { resolveRealmPathFromDb } from "./osu-paths";
 
 const db = ensureDb(defaultDbPath());
 let exitCode = 0;
 
 try {
-  const result = runFullSync(db, defaultRealmPath());
+  const realmPath = resolveRealmPathFromDb(db);
+  console.log("REALM_PATH", realmPath);
+  const result = runFullSync(db, realmPath);
   console.log("RESULT", result);
 
   const counts = {

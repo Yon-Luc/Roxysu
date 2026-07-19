@@ -131,7 +131,7 @@ bun run --filter '@roxysu/db' db:migrate
 | `REALM_FULL_SYNC=1` | Force a full reconcile on reader start |
 | `REALM_RESYNC_MS` | Poll interval (default `60000`) |
 
-Linux paths are inferred when unset; point `REALM_PATH` / `OSU_DATA_PATH` elsewhere if your lazer data lives somewhere else.
+Linux paths are inferred when unset. You can also set the osu!lazer data folder in **Settings** (folder that contains `client.realm` and `files/`). Precedence: `OSU_DATA_PATH` / `REALM_PATH` env → Settings override → `$HOME/.local/share/osu`.
 
 ---
 

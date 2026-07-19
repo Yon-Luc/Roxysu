@@ -1,11 +1,9 @@
 import { Elysia, t } from "elysia";
 import {
-  defaultOsuDataPath,
+  getOsuDataPath,
   isLazerFileHash,
   resolveLazerFilePath,
 } from "../shared/lazer-files";
-
-const osuDataPath = defaultOsuDataPath();
 
 function sniffImageMime(bytes: Uint8Array): string | null {
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
@@ -62,7 +60,7 @@ export const coverRoutes = new Elysia({ prefix: "/covers" }).get(
       return { error: "Invalid file hash" };
     }
 
-    const filePath = resolveLazerFilePath(hash, osuDataPath);
+    const filePath = resolveLazerFilePath(hash, getOsuDataPath());
     if (!filePath) {
       set.status = 400;
       return { error: "Invalid file hash" };

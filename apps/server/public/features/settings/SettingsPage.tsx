@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { PageTitle } from "../../components/PageTitle";
 import {
   fetchSettings,
@@ -21,6 +22,14 @@ export function SettingsPage() {
     queryKey: ["settings"],
     queryFn: fetchSettings,
   });
+
+  const [osuPathDraft, setOsuPathDraft] = useState("");
+
+  useEffect(() => {
+    if (data?.paths) {
+      setOsuPathDraft(data.paths.osuDataPath ?? "");
+    }
+  }, [data?.paths]);
 
   const sunnyDanQuery = useQuery({
     queryKey: ["settings", "sunny-dan"],
@@ -48,6 +57,14 @@ export function SettingsPage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["settings"] });
       void queryClient.invalidateQueries({ queryKey: ["system", "status"] });
+    },
+  });
+
+  const pathMut = useMutation({
+    mutationFn: (osuDataPath: string | null) => patchSettings({ osuDataPath }),
+    onSuccess: (next) => {
+      queryClient.setQueryData(["settings"], next);
+      setOsuPathDraft(next.paths.osuDataPath ?? "");
     },
   });
 
@@ -90,6 +107,10 @@ export function SettingsPage() {
         )
       : 0;
 
+  const paths = data.paths;
+  const pathDirty =
+    (osuPathDraft.trim() || null) !== (paths.osuDataPath ?? null);
+
   return (
     <div className="space-y-8">
       <div>
@@ -99,6 +120,84 @@ export function SettingsPage() {
           when changed.
         </p>
       </div>
+
+      <section className="rx-panel p-5">
+        <h2 className="text-sm font-bold text-ink">osu!lazer data folder</h2>
+        <p className="mt-1 text-sm text-muted">
+          Folder that contains <span className="font-mono">client.realm</span>{" "}
+          and <span className="font-mono">files/</span>. Override when the
+          default path is wrong (Flatpak, custom install, etc.).
+        </p>
+
+        <label className="mt-4 block">
+          <span className="text-xs font-semibold uppercase tracking-wide text-faint">
+            Custom path
+          </span>
+          <input
+            type="text"
+            value={osuPathDraft}
+            onChange={(e) => setOsuPathDraft(e.target.value)}
+            placeholder={paths.resolvedOsuDataPath}
+            disabled={pathMut.isPending || paths.source === "env"}
+            className="mt-1.5 w-full rounded-xl border border-line bg-elevated/50 px-3 py-2 font-mono text-sm text-ink placeholder:text-faint focus:border-accent focus:outline-none disabled:opacity-60"
+            spellCheck={false}
+            autoComplete="off"
+          />
+        </label>
+
+        <div className="mt-3 space-y-1 text-sm text-muted">
+          <p>
+            Using{" "}
+            <span className="font-mono text-ink">
+              {paths.resolvedOsuDataPath}
+            </span>{" "}
+            ({pathSourceLabel(paths.source)})
+          </p>
+          <p className="font-mono text-xs text-faint">
+            realm → {paths.resolvedRealmPath}
+          </p>
+          <p className="text-xs">{pathStatusLabel(paths.status)}</p>
+          {paths.source === "env" ? (
+            <p className="text-xs text-amber-200/90">
+              <span className="font-mono">OSU_DATA_PATH</span> or{" "}
+              <span className="font-mono">REALM_PATH</span> is set — env wins
+              over this setting.
+            </p>
+          ) : null}
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="rx-btn-primary"
+            disabled={
+              pathMut.isPending ||
+              paths.source === "env" ||
+              !pathDirty ||
+              !osuPathDraft.trim()
+            }
+            onClick={() => pathMut.mutate(osuPathDraft.trim())}
+          >
+            {pathMut.isPending ? "Saving…" : "Save path"}
+          </button>
+          <button
+            type="button"
+            className="rx-btn"
+            disabled={
+              pathMut.isPending ||
+              paths.source === "env" ||
+              paths.osuDataPath == null
+            }
+            onClick={() => pathMut.mutate(null)}
+          >
+            Clear override
+          </button>
+        </div>
+
+        {pathMut.error ? (
+          <p className="mt-3 text-sm text-rose-300">{pathMut.error.message}</p>
+        ) : null}
+      </section>
 
       <section className="rx-panel p-5">
         <h2 className="text-sm font-bold text-ink">Mastery formula</h2>
@@ -300,6 +399,30 @@ export function SettingsPage() {
       </section>
     </div>
   );
+}
+
+function pathSourceLabel(source: string): string {
+  switch (source) {
+    case "env":
+      return "from environment";
+    case "settings":
+      return "from settings";
+    default:
+      return "default";
+  }
+}
+
+function pathStatusLabel(status: {
+  exists: boolean;
+  hasRealm: boolean;
+  hasFiles: boolean;
+}): string {
+  if (!status.exists) return "Directory not found";
+  const bits = [
+    status.hasRealm ? "client.realm found" : "client.realm missing",
+    status.hasFiles ? "files/ found" : "files/ missing",
+  ];
+  return bits.join(" · ");
 }
 
 function statusLabel(status: string | undefined): string {

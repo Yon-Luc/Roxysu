@@ -1,11 +1,9 @@
 import { Elysia, t } from "elysia";
 import {
-  defaultOsuDataPath,
+  getOsuDataPath,
   isLazerFileHash,
   resolveLazerFilePath,
 } from "../shared/lazer-files";
-
-const osuDataPath = defaultOsuDataPath();
 
 function sniffAudioMime(bytes: Uint8Array): string | null {
   // MP3 with ID3 tag
@@ -62,7 +60,7 @@ export const audioRoutes = new Elysia({ prefix: "/audio" }).get(
       return { error: "Invalid file hash" };
     }
 
-    const filePath = resolveLazerFilePath(hash, osuDataPath);
+    const filePath = resolveLazerFilePath(hash, getOsuDataPath());
     if (!filePath) {
       set.status = 400;
       return { error: "Invalid file hash" };

@@ -38,12 +38,18 @@ import {
 const PREFS_KEY = "rx-beatmap-preview";
 const SKIP_MS = 5000;
 const RATES = [0.5, 0.75, 1, 1.25, 1.5] as const;
+/** Fullscreen playfield width as % of the modal (saved). */
+const FIELD_WIDTH_MIN = 40;
+const FIELD_WIDTH_MAX = 100;
+const FIELD_WIDTH_DEFAULT = 55;
 
 type PreviewPrefs = {
   volume: number;
   rate: number;
   scroll: number;
   fullscreen: boolean;
+  /** Fullscreen playfield max-width (% of dialog). */
+  fieldWidth: number;
   /** Preserved for ScoreReplayModal; unused here. */
   analysis?: boolean;
 };
@@ -55,6 +61,7 @@ const DEFAULT_PREFS: PreviewPrefs = {
   rate: 1,
   scroll: PREVIEW_SCROLL_DEFAULT,
   fullscreen: false,
+  fieldWidth: FIELD_WIDTH_DEFAULT,
 };
 
 const EMPTY_SUMMARY: JudgmentSummary = {
@@ -92,6 +99,13 @@ function loadPrefs(): PreviewPrefs {
         typeof parsed.fullscreen === "boolean"
           ? parsed.fullscreen
           : DEFAULT_PREFS.fullscreen,
+      fieldWidth: clamp(
+        typeof parsed.fieldWidth === "number"
+          ? parsed.fieldWidth
+          : DEFAULT_PREFS.fieldWidth,
+        FIELD_WIDTH_MIN,
+        FIELD_WIDTH_MAX,
+      ),
       analysis:
         typeof parsed.analysis === "boolean" ? parsed.analysis : undefined,
     };
@@ -833,8 +847,13 @@ function BeatmapPreviewModal({
               <div
                 className={
                   fullscreen
-                    ? "relative mx-auto min-h-0 w-full max-w-4xl flex-1 px-2 py-1 sm:max-w-5xl sm:px-4 sm:py-2"
+                    ? "relative mx-auto min-h-0 w-full flex-1 px-2 py-1 sm:px-4 sm:py-2"
                     : "relative mx-auto min-h-0 w-full max-w-2xl flex-1 px-3 py-2 sm:max-w-3xl sm:px-6 sm:py-4"
+                }
+                style={
+                  fullscreen
+                    ? { maxWidth: `${prefs.fieldWidth}%` }
+                    : undefined
                 }
               >
                 {data.supported && data.columnCount > 0 ? (
@@ -857,10 +876,29 @@ function BeatmapPreviewModal({
                 )}
               </div>
 
-              <div className="border-t border-white/10 bg-black/50 px-4 py-3 backdrop-blur sm:px-6 sm:py-4">
+              <div
+                className={
+                  isPlay
+                    ? "group/ctrl absolute inset-x-0 bottom-0 z-20"
+                    : "border-t border-white/10 bg-black/50 px-4 py-3 backdrop-blur sm:px-6 sm:py-4"
+                }
+              >
+                {isPlay ? (
+                  <div
+                    className="absolute inset-x-0 bottom-0 h-12"
+                    aria-hidden
+                  />
+                ) : null}
                 {audioUrl ? (
                   <audio ref={audioRef} src={audioUrl} preload="auto" />
                 ) : null}
+                <div
+                  className={
+                    isPlay
+                      ? "pointer-events-none relative translate-y-full border-t border-white/10 bg-black/50 px-4 py-3 opacity-0 backdrop-blur transition duration-200 group-hover/ctrl:pointer-events-auto group-hover/ctrl:translate-y-0 group-hover/ctrl:opacity-100 group-focus-within/ctrl:pointer-events-auto group-focus-within/ctrl:translate-y-0 group-focus-within/ctrl:opacity-100 sm:px-6 sm:py-4"
+                      : undefined
+                  }
+                >
 
                 {audioError || !audioUrl ? (
                   <p className="mb-3 text-sm text-amber-200/90">
@@ -1019,6 +1057,27 @@ function BeatmapPreviewModal({
                       aria-label="Scroll speed"
                     />
                   </label>
+
+                  {fullscreen ? (
+                    <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-muted sm:max-w-xs">
+                      <span className="shrink-0">
+                        Size {Math.round(prefs.fieldWidth)}%
+                      </span>
+                      <input
+                        type="range"
+                        min={FIELD_WIDTH_MIN}
+                        max={FIELD_WIDTH_MAX}
+                        step={1}
+                        value={prefs.fieldWidth}
+                        onInput={(e) => {
+                          const fieldWidth = Number(e.currentTarget.value);
+                          setPrefs((p) => ({ ...p, fieldWidth }));
+                        }}
+                        className="min-w-[4rem] flex-1 accent-[var(--accent)]"
+                        aria-label="Playfield size"
+                      />
+                    </label>
+                  ) : null}
                 </div>
 
                 <p className="mt-2 hidden text-[11px] text-faint sm:block">
@@ -1049,6 +1108,7 @@ function BeatmapPreviewModal({
                     </>
                   )}
                 </p>
+                </div>
               </div>
             </>
           ) : null}

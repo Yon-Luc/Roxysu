@@ -35,6 +35,10 @@ import {
 const PREFS_KEY = "rx-beatmap-preview";
 const SKIP_MS = 5000;
 const RATES = [0.5, 0.75, 1, 1.25, 1.5] as const;
+/** Fullscreen playfield width as % of the modal (saved). */
+const FIELD_WIDTH_MIN = 40;
+const FIELD_WIDTH_MAX = 100;
+const FIELD_WIDTH_DEFAULT = 55;
 
 /** Mania accuracy contribution — Perfect is 305 (matches lazer/stable display). */
 const RESULT_WEIGHT: Record<ReplayJudgmentResult, number> = {
@@ -52,6 +56,8 @@ type PreviewPrefs = {
   rate: number;
   scroll: number;
   fullscreen: boolean;
+  /** Fullscreen playfield max-width (% of dialog). */
+  fieldWidth: number;
   /** Opt-in miss/timing/pattern tools. Default off. */
   analysis: boolean;
 };
@@ -61,6 +67,7 @@ const DEFAULT_PREFS: PreviewPrefs = {
   rate: 1,
   scroll: PREVIEW_SCROLL_DEFAULT,
   fullscreen: false,
+  fieldWidth: FIELD_WIDTH_DEFAULT,
   analysis: false,
 };
 
@@ -85,6 +92,13 @@ function loadPrefs(): PreviewPrefs {
         typeof parsed.fullscreen === "boolean"
           ? parsed.fullscreen
           : DEFAULT_PREFS.fullscreen,
+      fieldWidth: clamp(
+        typeof parsed.fieldWidth === "number"
+          ? parsed.fieldWidth
+          : DEFAULT_PREFS.fieldWidth,
+        FIELD_WIDTH_MIN,
+        FIELD_WIDTH_MAX,
+      ),
       analysis:
         typeof parsed.analysis === "boolean"
           ? parsed.analysis
@@ -628,10 +642,15 @@ function ScoreReplayModal({
                 <div
                   className={
                     fullscreen
-                      ? "relative mx-auto min-h-0 w-full max-w-4xl flex-1 px-2 py-1 sm:max-w-5xl sm:px-4 sm:py-2"
+                      ? "relative mx-auto min-h-0 w-full flex-1 px-2 py-1 sm:px-4 sm:py-2"
                       : analysisOn
                         ? "relative mx-auto min-h-0 w-full min-w-0 flex-1 px-3 py-2 sm:px-4 sm:py-3"
                         : "relative mx-auto min-h-0 w-full max-w-2xl flex-1 px-3 py-2 sm:max-w-3xl sm:px-6 sm:py-4"
+                  }
+                  style={
+                    fullscreen
+                      ? { maxWidth: `${prefs.fieldWidth}%` }
+                      : undefined
                   }
                 >
                   <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex justify-between gap-3 sm:inset-x-6 sm:top-5">
@@ -826,6 +845,27 @@ function ScoreReplayModal({
                       aria-label="Scroll speed"
                     />
                   </label>
+
+                  {fullscreen ? (
+                    <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-muted sm:max-w-xs">
+                      <span className="shrink-0">
+                        Size {Math.round(prefs.fieldWidth)}%
+                      </span>
+                      <input
+                        type="range"
+                        min={FIELD_WIDTH_MIN}
+                        max={FIELD_WIDTH_MAX}
+                        step={1}
+                        value={prefs.fieldWidth}
+                        onInput={(e) => {
+                          const fieldWidth = Number(e.currentTarget.value);
+                          setPrefs((p) => ({ ...p, fieldWidth }));
+                        }}
+                        className="min-w-[4rem] flex-1 accent-[var(--accent)]"
+                        aria-label="Playfield size"
+                      />
+                    </label>
+                  ) : null}
 
                   <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
                     <input

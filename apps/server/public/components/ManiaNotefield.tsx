@@ -4,7 +4,6 @@ import type { BeatmapPreview } from "../lib/api";
 const DEFAULT_SCROLL_PX_PER_MS = 0.55;
 const RECEPTOR_Y_RATIO = 0.88;
 const TAP_HEIGHT = 14;
-const LOOKBEHIND_MS = 200;
 
 type Note = BeatmapPreview["notes"][number];
 
@@ -127,24 +126,21 @@ export function ManiaNotefield({
         ctx!.stroke();
       }
 
-      ctx!.fillStyle = "rgba(255, 255, 255, 0.85)";
-      ctx!.fillRect(0, receptorY - 1.5, w, 3);
-      for (let c = 0; c < cols; c += 1) {
-        const color = COLUMN_COLORS[c % COLUMN_COLORS.length]!;
-        ctx!.fillStyle = color;
-        ctx!.globalAlpha = 0.35;
-        ctx!.fillRect(c * colW + gap, receptorY - 4, noteW, 8);
-        ctx!.globalAlpha = 1;
-      }
+      // Notes only above the receptor — anything past the hit line is clipped.
+      ctx!.save();
+      ctx!.beginPath();
+      ctx!.rect(0, 0, w, receptorY);
+      ctx!.clip();
 
-      const windowStart = t - LOOKBEHIND_MS;
+      const windowStart = t;
       const windowEnd = t + lookaheadMs;
-      // Walk a bit earlier so long notes that started before the window still draw.
+      // Walk earlier so long notes that started before now still draw above the receptor.
       const startIdx = Math.max(0, bisectLeft(noteList, windowStart - 8000) - 1);
 
       for (let i = startIdx; i < noteList.length; i += 1) {
         const note = noteList[i]!;
         if (note.startMs > windowEnd) break;
+        // Fully past the hit line — nothing left to show.
         if (note.endMs < windowStart) continue;
 
         const col = Math.min(cols - 1, Math.max(0, note.column));
@@ -161,16 +157,36 @@ export function ManiaNotefield({
           ctx!.fillStyle = color;
           ctx!.globalAlpha = 0.55;
           ctx!.fillRect(x, top, noteW, height);
-          ctx!.globalAlpha = 0.95;
-          ctx!.fillRect(x, startY - TAP_HEIGHT / 2, noteW, TAP_HEIGHT);
+          // Head only while it hasn't crossed the receptor yet.
+          if (note.startMs >= t) {
+            ctx!.globalAlpha = 0.95;
+            ctx!.fillRect(x, startY - TAP_HEIGHT / 2, noteW, TAP_HEIGHT);
+          }
           ctx!.globalAlpha = 1;
-        } else {
+        } else if (note.startMs >= t) {
           ctx!.fillStyle = color;
           ctx!.globalAlpha = 0.95;
           ctx!.fillRect(x, startY - TAP_HEIGHT / 2, noteW, TAP_HEIGHT);
           ctx!.globalAlpha = 1;
         }
       }
+
+      ctx!.restore();
+
+      // Receptor drawn on top so notes never appear below the hit position.
+      ctx!.fillStyle = "rgba(255, 255, 255, 0.85)";
+      ctx!.fillRect(0, receptorY - 1.5, w, 3);
+      for (let c = 0; c < cols; c += 1) {
+        const color = COLUMN_COLORS[c % COLUMN_COLORS.length]!;
+        ctx!.fillStyle = color;
+        ctx!.globalAlpha = 0.35;
+        ctx!.fillRect(c * colW + gap, receptorY - 4, noteW, 8);
+        ctx!.globalAlpha = 1;
+      }
+
+      // Dim the area under the receptor so past notes can't show through.
+      ctx!.fillStyle = "rgba(0, 0, 0, 0.55)";
+      ctx!.fillRect(0, receptorY + 1.5, w, h - receptorY);
 
       raf = requestAnimationFrame(draw);
     }

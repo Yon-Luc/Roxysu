@@ -4,7 +4,7 @@ import { db } from "./db";
 import { startPollLoop } from "./sse";
 import { startAnalyticsPipeline } from "./analytics/pipeline";
 
-app.listen(3000);
+app.listen(4321);
 const stopPoll = startPollLoop(db);
 const stopAnalytics = startAnalyticsPipeline(db);
 

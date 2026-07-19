@@ -11,6 +11,10 @@ import {
 const DEFAULT_SCROLL_PX_PER_MS = 0.55;
 const RECEPTOR_Y_RATIO = 0.88;
 const BASE_TAP_HEIGHT = 14;
+/** Max fraction of column width used for circle/arrow noteheads. */
+const SHAPED_WIDTH_CAP = 0.85;
+/** Hold stem width as a fraction of notehead width. */
+const LN_STEM_RATIO = 0.6;
 
 type Note = BeatmapPreview["notes"][number];
 
@@ -59,6 +63,12 @@ const JUDGMENT_COLORS: Record<ReplayJudgmentResult, string> = {
   miss: "#f87171",
 };
 
+type NoteGeom = {
+  x: number;
+  noteW: number;
+  tapH: number;
+};
+
 function bisectLeft(notes: Note[], timeMs: number): number {
   let lo = 0;
   let hi = notes.length;
@@ -81,6 +91,44 @@ function bisectFrame(frames: NotefieldFrame[], timeMs: number): number {
   return lo - 1;
 }
 
+/** Column-centered note geometry; circle/arrow use square noteheads. */
+function noteGeom(
+  shape: NoteShape,
+  col: number,
+  colW: number,
+  skin: ColumnSkin,
+): NoteGeom {
+  if (shape === "flat") {
+    const gap = Math.max(1, colW * (1 - skin.widthScale) * 0.5);
+    const noteW = colW - gap * 2;
+    return {
+      x: col * colW + gap,
+      noteW,
+      tapH: BASE_TAP_HEIGHT * skin.heightScale,
+    };
+  }
+
+  const baseW = Math.min(colW * skin.widthScale, colW * SHAPED_WIDTH_CAP);
+  const size = Math.max(8, Math.min(baseW * skin.heightScale, colW * 0.95));
+  return {
+    x: col * colW + (colW - size) / 2,
+    noteW: size,
+    tapH: size,
+  };
+}
+
+function strokeOutline(
+  ctx: CanvasRenderingContext2D,
+  alpha: number,
+  lineWidth = 1.5,
+) {
+  ctx.strokeStyle = "rgba(0, 0, 0, 0.45)";
+  ctx.lineWidth = lineWidth;
+  ctx.globalAlpha = alpha;
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
 function drawFlat(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -100,17 +148,50 @@ function drawCircle(
   ctx: CanvasRenderingContext2D,
   cx: number,
   cy: number,
-  rx: number,
-  ry: number,
+  r: number,
   color: string,
   alpha: number,
 ) {
   ctx.fillStyle = color;
   ctx.globalAlpha = alpha;
   ctx.beginPath();
-  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+  strokeOutline(ctx, alpha);
+  // Soft inner highlight for depth.
+  ctx.globalAlpha = alpha * 0.35;
+  ctx.fillStyle = "rgba(255, 255, 255, 0.55)";
+  ctx.beginPath();
+  ctx.arc(cx - r * 0.22, cy - r * 0.22, r * 0.35, 0, Math.PI * 2);
   ctx.fill();
   ctx.globalAlpha = 1;
+}
+
+/** Build a down-pointing arrow path (tip toward receptor). */
+function arrowPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+) {
+  const top = y - h / 2;
+  const bottom = y + h / 2;
+  const midX = x + w / 2;
+  // Wider head, shorter shaft — closer to square VSRG noteheads.
+  const headTop = top + h * 0.42;
+  const shaftW = w * 0.34;
+  const shaftLeft = midX - shaftW / 2;
+  const shaftRight = midX + shaftW / 2;
+  ctx.beginPath();
+  ctx.moveTo(midX, bottom);
+  ctx.lineTo(x + w, headTop);
+  ctx.lineTo(shaftRight, headTop);
+  ctx.lineTo(shaftRight, top);
+  ctx.lineTo(shaftLeft, top);
+  ctx.lineTo(shaftLeft, headTop);
+  ctx.lineTo(x, headTop);
+  ctx.closePath();
 }
 
 /** Down-pointing arrow (toward receptor). */
@@ -123,21 +204,11 @@ function drawArrow(
   color: string,
   alpha: number,
 ) {
-  const top = y - h / 2;
-  const bottom = y + h / 2;
-  const midX = x + w / 2;
   ctx.fillStyle = color;
   ctx.globalAlpha = alpha;
-  ctx.beginPath();
-  ctx.moveTo(midX, bottom);
-  ctx.lineTo(x + w, top + h * 0.35);
-  ctx.lineTo(x + w * 0.68, top + h * 0.35);
-  ctx.lineTo(x + w * 0.68, top);
-  ctx.lineTo(x + w * 0.32, top);
-  ctx.lineTo(x + w * 0.32, top + h * 0.35);
-  ctx.lineTo(x, top + h * 0.35);
-  ctx.closePath();
+  arrowPath(ctx, x, y, w, h);
   ctx.fill();
+  strokeOutline(ctx, alpha);
   ctx.globalAlpha = 1;
 }
 
@@ -152,7 +223,8 @@ function drawTap(
   alpha: number,
 ) {
   if (shape === "circle") {
-    drawCircle(ctx, x + w / 2, y, w / 2, Math.max(h / 2, 4), color, alpha);
+    const r = Math.min(w, h) / 2;
+    drawCircle(ctx, x + w / 2, y, r, color, alpha);
     return;
   }
   if (shape === "arrow") {
@@ -173,19 +245,94 @@ function drawHoldBody(
 ) {
   ctx.fillStyle = color;
   ctx.globalAlpha = 0.55;
+
+  if (shape === "flat") {
+    ctx.fillRect(x, top, w, height);
+    ctx.globalAlpha = 1;
+    return;
+  }
+
+  const stemW = w * LN_STEM_RATIO;
+  const stemX = x + (w - stemW) / 2;
+  const bottom = top + height;
+
   if (shape === "circle") {
-    const r = w / 2;
-    const bottom = top + height;
+    const r = stemW / 2;
+    const cyTop = top + r;
+    const cyBot = Math.max(cyTop, bottom - r);
     ctx.beginPath();
-    ctx.moveTo(x, top + r);
-    ctx.arc(x + r, top + r, r, Math.PI, 0);
-    ctx.lineTo(x + w, Math.max(top + r, bottom - r));
-    ctx.arc(x + r, Math.max(top + r, bottom - r), r, 0, Math.PI);
+    ctx.moveTo(stemX, cyTop);
+    ctx.arc(stemX + r, cyTop, r, Math.PI, 0);
+    ctx.lineTo(stemX + stemW, cyBot);
+    ctx.arc(stemX + r, cyBot, r, 0, Math.PI);
     ctx.closePath();
     ctx.fill();
   } else {
-    ctx.fillRect(x, top, w, height);
+    // Arrow: slightly tapered stem toward the tip direction (down).
+    const taper = stemW * 0.12;
+    ctx.beginPath();
+    ctx.moveTo(stemX, top);
+    ctx.lineTo(stemX + stemW, top);
+    ctx.lineTo(stemX + stemW - taper, bottom);
+    ctx.lineTo(stemX + taper, bottom);
+    ctx.closePath();
+    ctx.fill();
   }
+
+  ctx.globalAlpha = 1;
+}
+
+function drawReceptor(
+  ctx: CanvasRenderingContext2D,
+  shape: NoteShape,
+  x: number,
+  receptorY: number,
+  noteW: number,
+  tapH: number,
+  color: string,
+  held: boolean,
+) {
+  const alpha = held ? 0.95 : 0.35;
+  const fill = held ? "#ffffff" : color;
+
+  if (shape === "flat") {
+    ctx.fillStyle = fill;
+    ctx.globalAlpha = alpha;
+    ctx.fillRect(x, receptorY - (held ? 6 : 4), noteW, held ? 12 : 8);
+    ctx.globalAlpha = 1;
+    return;
+  }
+
+  if (shape === "circle") {
+    const r = Math.min(noteW, tapH) / 2;
+    const cx = x + noteW / 2;
+    ctx.globalAlpha = alpha;
+    if (held) {
+      ctx.fillStyle = fill;
+      ctx.beginPath();
+      ctx.arc(cx, receptorY, r * 0.55, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.strokeStyle = fill;
+    ctx.lineWidth = held ? 3 : 2;
+    ctx.beginPath();
+    ctx.arc(cx, receptorY, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    return;
+  }
+
+  // Arrow receptor: outline matching note silhouette.
+  ctx.globalAlpha = alpha;
+  if (held) {
+    ctx.fillStyle = fill;
+    arrowPath(ctx, x, receptorY, noteW, tapH);
+    ctx.fill();
+  }
+  ctx.strokeStyle = fill;
+  ctx.lineWidth = held ? 2.5 : 1.75;
+  arrowPath(ctx, x, receptorY, noteW, tapH);
+  ctx.stroke();
   ctx.globalAlpha = 1;
 }
 
@@ -326,10 +473,7 @@ export function ManiaNotefield({
 
         const col = Math.min(cols - 1, Math.max(0, note.column));
         const skin = colSkin(col);
-        const gap = Math.max(1, colW * (1 - skin.widthScale) * 0.5);
-        const noteW = colW - gap * 2;
-        const x = col * colW + gap;
-        const tapH = BASE_TAP_HEIGHT * skin.heightScale;
+        const { x, noteW, tapH } = noteGeom(shape, col, colW, skin);
         const isHold = note.endMs > note.startMs + 20;
 
         const judgment = headMap.get(i);
@@ -360,13 +504,16 @@ export function ManiaNotefield({
           // Brief flash at receptor after hit.
           const flashY = receptorY;
           const flashAlpha = 1 - (t - judgment.tMs) / 120;
+          const flashScale = 1.15;
+          const fw = noteW * flashScale;
+          const fh = tapH * flashScale;
           drawTap(
             ctx!,
             shape,
-            x,
+            x + (noteW - fw) / 2,
             flashY,
-            noteW,
-            tapH * 1.15,
+            fw,
+            fh,
             noteColor,
             flashAlpha,
           );
@@ -379,18 +526,18 @@ export function ManiaNotefield({
       ctx!.fillRect(0, receptorY - 1.5, w, 3);
       for (let c = 0; c < cols; c += 1) {
         const skin = colSkin(c);
-        const gap = Math.max(1, colW * (1 - skin.widthScale) * 0.5);
-        const noteW = colW - gap * 2;
+        const { x, noteW, tapH } = noteGeom(shape, c, colW, skin);
         const held = (keys & (1 << c)) !== 0;
-        ctx!.fillStyle = held ? "#ffffff" : skin.noteColor;
-        ctx!.globalAlpha = held ? 0.95 : 0.35;
-        ctx!.fillRect(
-          c * colW + gap,
-          receptorY - (held ? 6 : 4),
+        drawReceptor(
+          ctx!,
+          shape,
+          x,
+          receptorY,
           noteW,
-          held ? 12 : 8,
+          tapH,
+          skin.noteColor,
+          held,
         );
-        ctx!.globalAlpha = 1;
       }
 
       ctx!.fillStyle = "rgba(0, 0, 0, 0.55)";

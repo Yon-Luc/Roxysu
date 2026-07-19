@@ -221,7 +221,10 @@ export function SkinPage() {
                       />
                     </label>
                     <label className="flex flex-col gap-1 text-xs text-muted">
-                      <span>Height {Math.round(col.heightScale * 100)}%</span>
+                      <span>
+                        {keySkin.shape === "flat" ? "Height" : "Size"}{" "}
+                        {Math.round(col.heightScale * 100)}%
+                      </span>
                       <input
                         type="range"
                         min={0.5}

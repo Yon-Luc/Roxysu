@@ -18,6 +18,8 @@ export type ColumnSkin = {
 export type KeymodeSkin = {
   shape: NoteShape;
   columns: ColumnSkin[];
+  /** When true, note/LN colors from column 1 apply to all columns. */
+  uniformColors: boolean;
 };
 
 export type PreviewSkin = {
@@ -60,6 +62,7 @@ export function defaultKeymodeSkin(keys: Keymode): KeymodeSkin {
   return {
     shape: "flat",
     columns: Array.from({ length: keys }, (_, i) => defaultColumn(i)),
+    uniformColors: false,
   };
 }
 
@@ -116,6 +119,7 @@ function parseKeymodeSkin(raw: unknown, keys: Keymode): KeymodeSkin {
   return {
     shape,
     columns: Array.from({ length: keys }, (_, i) => parseColumn(cols[i], i)),
+    uniformColors: k.uniformColors === true,
   };
 }
 
@@ -224,5 +228,6 @@ export function resolveKeymodeSkin(
     columns: Array.from({ length: Math.max(1, columnCount) }, (_, i) =>
       parseColumn(base.columns[i % base.columns.length], i),
     ),
+    uniformColors: base.uniformColors,
   };
 }

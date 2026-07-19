@@ -67,7 +67,11 @@ export function SkinPage() {
   }, [playing]);
 
   function updateKeymode(
-    patch: Partial<{ shape: NoteShape; columns: ColumnSkin[] }>,
+    patch: Partial<{
+      shape: NoteShape;
+      columns: ColumnSkin[];
+      uniformColors: boolean;
+    }>,
   ) {
     const prev = getPreviewSkin();
     setPreviewSkin({
@@ -84,10 +88,45 @@ export function SkinPage() {
   }
 
   function updateColumn(index: number, patch: Partial<ColumnSkin>) {
-    const columns = keySkin.columns.map((c, i) =>
-      i === index ? { ...c, ...patch } : c,
-    );
-    updateKeymode({ columns });
+    const applyColorsToAll =
+      keySkin.uniformColors &&
+      index === 0 &&
+      (patch.noteColor !== undefined || patch.lnColor !== undefined);
+
+    if (applyColorsToAll) {
+      const { noteColor, lnColor, ...scalePatch } = patch;
+      updateKeymode({
+        columns: keySkin.columns.map((c, i) => ({
+          ...c,
+          ...(noteColor !== undefined ? { noteColor } : {}),
+          ...(lnColor !== undefined ? { lnColor } : {}),
+          ...(i === 0 ? scalePatch : {}),
+        })),
+      });
+      return;
+    }
+
+    updateKeymode({
+      columns: keySkin.columns.map((c, i) =>
+        i === index ? { ...c, ...patch } : c,
+      ),
+    });
+  }
+
+  function setUniformColors(enabled: boolean) {
+    if (!enabled) {
+      updateKeymode({ uniformColors: false });
+      return;
+    }
+    const first = keySkin.columns[0]!;
+    updateKeymode({
+      uniformColors: true,
+      columns: keySkin.columns.map((c) => ({
+        ...c,
+        noteColor: first.noteColor,
+        lnColor: first.lnColor,
+      })),
+    });
   }
 
   return (
@@ -152,95 +191,121 @@ export function SkinPage() {
           </div>
 
           <div className="rx-panel overflow-hidden p-0">
-            <div className="flex items-center justify-between gap-3 border-b border-white/5 px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/5 px-4 py-3">
               <h2 className="text-sm font-bold text-ink">Columns</h2>
-              <button
-                type="button"
-                className="rx-btn text-xs"
-                onClick={() =>
-                  updateKeymode({ columns: defaultKeymodeSkin(keys).columns })
-                }
-              >
-                Reset colors
-              </button>
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
+                  <input
+                    type="checkbox"
+                    checked={keySkin.uniformColors}
+                    onChange={(e) => setUniformColors(e.target.checked)}
+                    className="accent-[var(--accent)]"
+                  />
+                  Same color for all columns
+                </label>
+                <button
+                  type="button"
+                  className="rx-btn text-xs"
+                  onClick={() =>
+                    updateKeymode({
+                      columns: defaultKeymodeSkin(keys).columns,
+                    })
+                  }
+                >
+                  Reset colors
+                </button>
+              </div>
             </div>
             <ul className="divide-y divide-white/5">
-              {keySkin.columns.map((col, i) => (
-                <li key={i} className="space-y-3 px-4 py-4">
-                  <div className="flex items-center gap-3">
-                    <span className="w-16 text-xs font-bold uppercase tracking-wider text-faint">
-                      Col {i + 1}
-                    </span>
-                    <div
-                      className="h-4 w-4 rounded-sm ring-1 ring-white/20"
-                      style={{ background: col.noteColor }}
-                      aria-hidden
-                    />
-                    <div
-                      className="h-4 w-4 rounded-sm ring-1 ring-white/20"
-                      style={{ background: col.lnColor }}
-                      aria-hidden
-                    />
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="flex items-center gap-2 text-xs text-muted">
-                      <span className="w-16 shrink-0">Note</span>
-                      <input
-                        type="color"
-                        value={col.noteColor}
-                        onChange={(e) =>
-                          updateColumn(i, { noteColor: e.target.value })
-                        }
-                        className="h-8 w-full cursor-pointer rounded bg-transparent"
-                      />
-                    </label>
-                    <label className="flex items-center gap-2 text-xs text-muted">
-                      <span className="w-16 shrink-0">LN body</span>
-                      <input
-                        type="color"
-                        value={col.lnColor}
-                        onChange={(e) =>
-                          updateColumn(i, { lnColor: e.target.value })
-                        }
-                        className="h-8 w-full cursor-pointer rounded bg-transparent"
-                      />
-                    </label>
-                    <label className="flex flex-col gap-1 text-xs text-muted">
-                      <span>Width {Math.round(col.widthScale * 100)}%</span>
-                      <input
-                        type="range"
-                        min={0.4}
-                        max={1}
-                        step={0.01}
-                        value={col.widthScale}
-                        onInput={(e) => {
-                          const widthScale = Number(e.currentTarget.value);
-                          updateColumn(i, { widthScale });
-                        }}
-                        className="accent-[var(--accent)]"
-                      />
-                    </label>
-                    <label className="flex flex-col gap-1 text-xs text-muted">
-                      <span>
-                        {keySkin.shape === "flat" ? "Height" : "Size"}{" "}
-                        {Math.round(col.heightScale * 100)}%
+              {keySkin.columns.map((col, i) => {
+                const showColors = !keySkin.uniformColors || i === 0;
+                return (
+                  <li key={i} className="space-y-3 px-4 py-4">
+                    <div className="flex items-center gap-3">
+                      <span className="w-16 text-xs font-bold uppercase tracking-wider text-faint">
+                        Col {i + 1}
                       </span>
-                      <input
-                        type="range"
-                        min={0.5}
-                        max={2}
-                        step={0.05}
-                        value={col.heightScale}
-                        onInput={(e) => {
-                          const heightScale = Number(e.currentTarget.value);
-                          updateColumn(i, { heightScale });
-                        }}
-                        className="accent-[var(--accent)]"
+                      <div
+                        className="h-4 w-4 rounded-sm ring-1 ring-white/20"
+                        style={{ background: col.noteColor }}
+                        aria-hidden
                       />
-                    </label>
-                  </div>
-                </li>
-              ))}
+                      <div
+                        className="h-4 w-4 rounded-sm ring-1 ring-white/20"
+                        style={{ background: col.lnColor }}
+                        aria-hidden
+                      />
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {showColors ? (
+                        <>
+                          <label className="flex items-center gap-2 text-xs text-muted">
+                            <span className="w-16 shrink-0">Note</span>
+                            <input
+                              type="color"
+                              value={col.noteColor}
+                              onChange={(e) =>
+                                updateColumn(i, {
+                                  noteColor: e.target.value,
+                                })
+                              }
+                              className="h-8 w-full cursor-pointer rounded bg-transparent"
+                            />
+                          </label>
+                          <label className="flex items-center gap-2 text-xs text-muted">
+                            <span className="w-16 shrink-0">LN body</span>
+                            <input
+                              type="color"
+                              value={col.lnColor}
+                              onChange={(e) =>
+                                updateColumn(i, {
+                                  lnColor: e.target.value,
+                                })
+                              }
+                              className="h-8 w-full cursor-pointer rounded bg-transparent"
+                            />
+                          </label>
+                        </>
+                      ) : null}
+                      <label className="flex flex-col gap-1 text-xs text-muted">
+                        <span>Width {Math.round(col.widthScale * 100)}%</span>
+                        <input
+                          type="range"
+                          min={0.4}
+                          max={1}
+                          step={0.01}
+                          value={col.widthScale}
+                          onInput={(e) => {
+                            const widthScale = Number(e.currentTarget.value);
+                            updateColumn(i, { widthScale });
+                          }}
+                          className="accent-[var(--accent)]"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1 text-xs text-muted">
+                        <span>
+                          {keySkin.shape === "flat" ? "Height" : "Size"}{" "}
+                          {Math.round(col.heightScale * 100)}%
+                        </span>
+                        <input
+                          type="range"
+                          min={0.5}
+                          max={2}
+                          step={0.05}
+                          value={col.heightScale}
+                          onInput={(e) => {
+                            const heightScale = Number(
+                              e.currentTarget.value,
+                            );
+                            updateColumn(i, { heightScale });
+                          }}
+                          className="accent-[var(--accent)]"
+                        />
+                      </label>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         </div>

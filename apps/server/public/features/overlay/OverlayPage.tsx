@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { focusManager, useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { BeatmapCover } from "../../components/BeatmapCover";
 import { fetchDashboard, fetchSession } from "../../lib/api";
@@ -11,6 +11,8 @@ import {
 
 const DEFAULT_LIMIT = 8;
 const OVERLAY_CLASS = "overlay-mode";
+/** OBS Browser Sources often background the page; poll instead of relying on SSE alone. */
+const OVERLAY_POLL_MS = 2_000;
 
 type OverlayBg = "solid" | "clear";
 
@@ -34,6 +36,13 @@ function clampLimit(raw: unknown): number {
   return Math.min(Math.floor(n), 25);
 }
 
+const overlayQueryOpts = {
+  staleTime: 0,
+  refetchInterval: OVERLAY_POLL_MS,
+  refetchIntervalInBackground: true,
+  networkMode: "always" as const,
+};
+
 export function OverlayPage({
   limit: limitProp,
   bg: bgProp,
@@ -46,14 +55,18 @@ export function OverlayPage({
 
   useEffect(() => {
     document.documentElement.classList.add(OVERLAY_CLASS);
+    // Keep React Query treating this page as focused (OBS CEF is often "hidden").
+    focusManager.setFocused(true);
     return () => {
       document.documentElement.classList.remove(OVERLAY_CLASS);
+      focusManager.setFocused(undefined);
     };
   }, []);
 
   const sessionQuery = useQuery({
     queryKey: ["sessions", "current"],
     queryFn: () => fetchSession("current"),
+    ...overlayQueryOpts,
   });
 
   const idle =
@@ -74,6 +87,7 @@ export function OverlayPage({
     queryKey: ["dashboard"],
     queryFn: fetchDashboard,
     enabled: idle,
+    ...overlayQueryOpts,
   });
 
   const liveScores: OverlayScore[] =

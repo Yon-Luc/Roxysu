@@ -8,8 +8,9 @@ function isOverlayRoute(): boolean {
  * Pause realm-reader while this tab is unfocused/hidden so opening client.realm
  * does not contend with osu!lazer score submission. Resumes on focus.
  *
- * Overlay tabs always report focused so an OBS Browser Source keeps syncing
- * while the streamer is in-game.
+ * Overlay tabs only ever resume sync (never pause): OBS CEF is usually
+ * unfocused, and a blurred main Roxysu tab must not freeze imports while the
+ * overlay is live. A short heartbeat re-asserts focus if another tab paused.
  */
 export function connectSyncFocus(): () => void {
   let lastSent: boolean | null = null;
@@ -45,16 +46,28 @@ export function connectSyncFocus(): () => void {
   window.addEventListener("blur", syncFromFocus);
   window.addEventListener("hashchange", syncFromFocus);
 
-  const onPageHide = () => send(false);
+  // Overlay: never pause on hide/close — leave sync running for the stream.
+  const onPageHide = () => {
+    if (isOverlayRoute()) return;
+    send(false);
+  };
   window.addEventListener("pagehide", onPageHide);
 
+  // Re-assert overlay focus in case another Roxysu tab paused sync.
+  const heartbeat = window.setInterval(() => {
+    if (!isOverlayRoute()) return;
+    lastSent = null;
+    send(true);
+  }, 3_000);
+
   return () => {
+    window.clearInterval(heartbeat);
     document.removeEventListener("visibilitychange", syncFromFocus);
     window.removeEventListener("focus", syncFromFocus);
     window.removeEventListener("blur", syncFromFocus);
     window.removeEventListener("hashchange", syncFromFocus);
     window.removeEventListener("pagehide", onPageHide);
-    if (lastSent !== false) {
+    if (!isOverlayRoute() && lastSent !== false) {
       lastSent = null;
       send(false);
     }

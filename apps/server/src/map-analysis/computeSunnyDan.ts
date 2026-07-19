@@ -511,15 +511,34 @@ export function relabelSunnyDanSync(db: Db): number {
 /**
  * Compute Sunny dan for mania maps missing a fresh rating.
  * Sync so query-language search can fill coverage before filtering.
+ *
+ * By default prefers never-attempted / stale-hash maps and skips permanent
+ * failures so a full backfill cannot get stuck reprocessing the same errors.
  */
 export function backfillSunnyDanSync(
   db: Db,
-  opts: { limit?: number; includeFailed?: boolean } = {},
-): { computed: number; remaining: number; relabeled: number } {
-  const relabeled = relabelSunnyDanSync(db);
+  opts: {
+    limit?: number;
+    /** Also retry rows that previously failed (est_diff null). Default false. */
+    includeFailed?: boolean;
+    /** Skip relabel pass (job already relabels once at start). */
+    skipRelabel?: boolean;
+  } = {},
+): {
+  /** Rows selected this batch. */
+  attempted: number;
+  /** Rows that ended with a non-null est_diff after this batch. */
+  succeeded: number;
+  remaining: number;
+  relabeled: number;
+  /** @deprecated alias of attempted — kept for older call sites */
+  computed: number;
+} {
+  const relabeled = opts.skipRelabel ? 0 : relabelSunnyDanSync(db);
   const limit = Math.max(1, Math.min(500, opts.limit ?? 80));
   const includeFailed = opts.includeFailed === true;
 
+  // Prefer never-attempted, then stale hash, then (optionally) prior failures.
   const missingClause = includeFailed
     ? `
         (
@@ -553,13 +572,33 @@ export function backfillSunnyDanSync(
       WHERE b.hidden = 0
         AND lower(COALESCE(b.ruleset_short_name, '')) = 'mania'
         AND ${missingClause}
+      ORDER BY
+        CASE
+          WHEN dr.beatmap_id IS NULL THEN 0
+          WHEN b.hash IS NOT NULL
+            AND dr.beatmap_hash IS NOT NULL
+            AND dr.beatmap_hash != b.hash THEN 1
+          ELSE 2
+        END,
+        b.id
       LIMIT ?
     `,
     )
     .all(SUNNY_ALGORITHM, limit) as MissingSunnyRow[];
 
+  let succeeded = 0;
   for (const row of missing) {
     computeOneSunnySync(db, row.id, row.hash, row.ruleset_short_name);
+    const updated = db.$client
+      .query(
+        `
+        SELECT est_diff AS estDiff
+        FROM beatmap_dan_ratings
+        WHERE beatmap_id = ? AND algorithm = ?
+      `,
+      )
+      .get(row.id, SUNNY_ALGORITHM) as { estDiff: string | null } | null;
+    if (updated?.estDiff) succeeded += 1;
   }
 
   const remainingRow = db.$client
@@ -576,9 +615,12 @@ export function backfillSunnyDanSync(
     )
     .get(SUNNY_ALGORITHM) as { n: number } | null;
 
+  const attempted = missing.length;
   return {
-    computed: missing.length,
+    attempted,
+    succeeded,
     remaining: Number(remainingRow?.n ?? 0),
     relabeled,
+    computed: attempted,
   };
 }

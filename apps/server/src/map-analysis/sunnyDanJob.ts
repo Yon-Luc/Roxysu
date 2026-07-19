@@ -23,8 +23,10 @@ export type SunnyDanCoverage = {
 export type SunnyDanJobState = {
   status: SunnyDanJobStatus;
   coverage: SunnyDanCoverage;
-  /** Maps computed in the current/last run. */
+  /** Successful new labels written in the current/last run. */
   computedThisRun: number;
+  /** Maps attempted in the current/last run (includes parse failures). */
+  attemptedThisRun: number;
   startedAt: string | null;
   finishedAt: string | null;
   error: string | null;
@@ -37,6 +39,7 @@ const YIELD_MS = 10;
 let job: {
   status: SunnyDanJobStatus;
   computedThisRun: number;
+  attemptedThisRun: number;
   startedAt: Date | null;
   finishedAt: Date | null;
   error: string | null;
@@ -45,6 +48,7 @@ let job: {
 } = {
   status: "idle",
   computedThisRun: 0,
+  attemptedThisRun: 0,
   startedAt: null,
   finishedAt: null,
   error: null,
@@ -52,7 +56,10 @@ let job: {
   db: null,
 };
 
-/** Mania maps still needing a successful Sunny dan label. */
+/**
+ * Mania maps still needing a first successful Sunny dan label.
+ * Excludes permanent failures (est_diff null + error set) so jobs can finish.
+ */
 export function countSunnyDanMissing(db: Db): number {
   const row = db.$client
     .query(
@@ -65,7 +72,6 @@ export function countSunnyDanMissing(db: Db): number {
         AND lower(COALESCE(b.ruleset_short_name, '')) = 'mania'
         AND (
           dr.beatmap_id IS NULL
-          OR dr.est_diff IS NULL
           OR (
             b.hash IS NOT NULL
             AND dr.beatmap_hash IS NOT NULL
@@ -129,6 +135,7 @@ export function getSunnyDanJobState(db: Db): SunnyDanJobState {
     status: job.status,
     coverage: getSunnyDanCoverage(db),
     computedThisRun: job.computedThisRun,
+    attemptedThisRun: job.attemptedThisRun,
     startedAt: job.startedAt?.toISOString() ?? null,
     finishedAt: job.finishedAt?.toISOString() ?? null,
     error: job.error,
@@ -175,13 +182,17 @@ function runBatch(): void {
   if (job.status !== "running") return;
 
   try {
+    // Skip permanent failures so we don't spin on the same ~dozens of
+    // unparsable maps and starve the real backlog.
     const result = backfillSunnyDanSync(db, {
       limit: BATCH_SIZE,
-      includeFailed: true,
+      includeFailed: false,
+      skipRelabel: true,
     });
-    job.computedThisRun += result.computed;
+    job.attemptedThisRun += result.attempted;
+    job.computedThisRun += result.succeeded;
 
-    if (result.computed === 0 || result.remaining === 0) {
+    if (result.attempted === 0 || result.remaining === 0) {
       finish("completed");
       return;
     }
@@ -202,6 +213,7 @@ export function startSunnyDanBackfill(db: Db): SunnyDanJobState {
 
   job.status = "running";
   job.computedThisRun = 0;
+  job.attemptedThisRun = 0;
   job.startedAt = new Date();
   job.finishedAt = null;
   job.error = null;

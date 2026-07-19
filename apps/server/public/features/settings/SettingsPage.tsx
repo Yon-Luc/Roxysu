@@ -202,10 +202,13 @@ export function SettingsPage() {
             <p className="text-xs text-faint">
               {statusLabel(sunnyDan.status)}
               {running
-                ? ` · ${sunnyDan.computedThisRun.toLocaleString()} this run`
+                ? ` · +${sunnyDan.computedThisRun.toLocaleString()} labeled this run`
                 : null}
               {sunnyDan.status === "completed" && sunnyDan.computedThisRun > 0
-                ? ` · ${sunnyDan.computedThisRun.toLocaleString()} computed`
+                ? ` · +${sunnyDan.computedThisRun.toLocaleString()} labeled`
+                : null}
+              {coverage && coverage.failed > 0 && !running
+                ? ` · ${coverage.failed.toLocaleString()} unparsable skipped`
                 : null}
             </p>
           </div>

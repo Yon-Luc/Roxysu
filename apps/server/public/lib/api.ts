@@ -154,7 +154,10 @@ export async function fetchSettings() {
   return unwrap(await api.api.settings.get(), "/api/settings");
 }
 
-export async function patchSettings(body: { masteryFormulaId?: string }) {
+export async function patchSettings(body: {
+  masteryFormulaId?: string;
+  pauseWhenUnfocused?: boolean;
+}) {
   return unwrap(await api.api.settings.patch(body), "/api/settings");
 }
 

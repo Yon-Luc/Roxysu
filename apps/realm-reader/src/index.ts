@@ -16,8 +16,9 @@ const PAUSE_POLL_MS = Number(process.env.REALM_PAUSE_POLL_MS ?? 2_000);
 const FULL_EVERY_N = Number(process.env.REALM_FULL_EVERY_N ?? 10);
 const FORCE_FULL = process.env.REALM_FULL_SYNC === "1";
 
-/** Mirrors apps/server/src/routes/system.ts — web UI writes this via /api/system/sync-focus. */
+/** Mirrors apps/server/src/routes/system.ts — web UI writes these via settings / sync-focus. */
 const SYNC_UI_FOCUSED_KEY = "sync.ui_focused";
+const SYNC_PAUSE_WHEN_UNFOCUSED_KEY = "sync.pause_when_unfocused";
 
 let shuttingDown = false;
 let wakeSleep: (() => void) | null = null;
@@ -43,15 +44,26 @@ function requestShutdown() {
   wakeSleep?.();
 }
 
-/** Explicit "0" means the web UI is unfocused; unset/"1" allows sync (headless-friendly). */
+/**
+ * Pause only when the opt-in setting is on and the web UI reported unfocused.
+ * Missing pause setting (default OFF) or unset/"1" focus allows sync (headless-friendly).
+ */
 function isSyncPaused(db: Db): boolean {
-  const row = db
+  const pauseEnabled = db
+    .select({ value: settings.value })
+    .from(settings)
+    .where(eq(settings.key, SYNC_PAUSE_WHEN_UNFOCUSED_KEY))
+    .limit(1)
+    .get();
+  if (pauseEnabled?.value !== "1") return false;
+
+  const focused = db
     .select({ value: settings.value })
     .from(settings)
     .where(eq(settings.key, SYNC_UI_FOCUSED_KEY))
     .limit(1)
     .get();
-  return row?.value === "0";
+  return focused?.value === "0";
 }
 
 async function waitUntilSyncAllowed(
@@ -64,7 +76,7 @@ async function waitUntilSyncAllowed(
     if (isSyncPaused(db)) {
       if (!pauseLogged) {
         console.log(
-          "sync paused (web UI unfocused) — waiting until focus returns",
+          "sync paused (pause-when-unfocused + web UI unfocused) — waiting until focus returns",
         );
         pauseLogged = true;
       }

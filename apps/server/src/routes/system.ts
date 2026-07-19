@@ -7,6 +7,9 @@ import { toIso } from "../shared/serialize";
 /** Written by the web UI; read by realm-reader to avoid opening client.realm while unfocused. */
 export const SYNC_UI_FOCUSED_KEY = "sync.ui_focused";
 
+/** Opt-in: when "1", realm-reader honors sync.ui_focused. Missing/"0" = never pause. */
+export const SYNC_PAUSE_WHEN_UNFOCUSED_KEY = "sync.pause_when_unfocused";
+
 export const systemRoutes = new Elysia({ prefix: "/system" })
   .use(dbPlugin)
   .get("/status", async ({ db }) => {
@@ -22,12 +25,18 @@ export const systemRoutes = new Elysia({ prefix: "/system" })
       .from(settings)
       .where(eq(settings.key, SYNC_UI_FOCUSED_KEY))
       .limit(1);
+    const [pauseWhenUnfocusedRow] = await db
+      .select()
+      .from(settings)
+      .where(eq(settings.key, SYNC_PAUSE_WHEN_UNFOCUSED_KEY))
+      .limit(1);
 
     return {
       beatmapCount: beatmapCount?.n ?? 0,
       scoreCount: scoreCount?.n ?? 0,
-      /** Explicit false means the web UI asked realm-reader to pause Realm opens. */
-      syncPaused: focusRow?.value === "0",
+      /** True only when pause-when-unfocused is enabled and the web UI reported unfocused. */
+      syncPaused:
+        pauseWhenUnfocusedRow?.value === "1" && focusRow?.value === "0",
       lastImport: lastImport
         ? {
             id: lastImport.id,

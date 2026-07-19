@@ -5,14 +5,16 @@ function isOverlayRoute(): boolean {
 }
 
 /**
- * Pause realm-reader while this tab is unfocused/hidden so opening client.realm
- * does not contend with osu!lazer score submission. Resumes on focus.
+ * When enabled, pause realm-reader while this tab is unfocused/hidden so opening
+ * client.realm does not contend with osu!lazer score submission. Resumes on focus.
+ *
+ * When disabled (default), send focused:true once and do not track blur/visibility.
  *
  * Overlay tabs only ever resume sync (never pause): OBS CEF is usually
  * unfocused, and a blurred main Roxysu tab must not freeze imports while the
  * overlay is live. A short heartbeat re-asserts focus if another tab paused.
  */
-export function connectSyncFocus(): () => void {
+export function connectSyncFocus(enabled: boolean): () => void {
   let lastSent: boolean | null = null;
   let disposed = false;
 
@@ -31,6 +33,13 @@ export function connectSyncFocus(): () => void {
       lastSent = null;
     });
   };
+
+  if (!enabled) {
+    send(true);
+    return () => {
+      disposed = true;
+    };
+  }
 
   const syncFromFocus = () => {
     if (isOverlayRoute()) {
@@ -67,10 +76,6 @@ export function connectSyncFocus(): () => void {
     window.removeEventListener("blur", syncFromFocus);
     window.removeEventListener("hashchange", syncFromFocus);
     window.removeEventListener("pagehide", onPageHide);
-    if (!isOverlayRoute() && lastSent !== false) {
-      lastSent = null;
-      send(false);
-    }
     disposed = true;
   };
 }

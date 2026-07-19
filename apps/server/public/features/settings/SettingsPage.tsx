@@ -40,6 +40,15 @@ export function SettingsPage() {
     },
   });
 
+  const syncMut = useMutation({
+    mutationFn: (pauseWhenUnfocused: boolean) =>
+      patchSettings({ pauseWhenUnfocused }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["settings"] });
+      void queryClient.invalidateQueries({ queryKey: ["system", "status"] });
+    },
+  });
+
   const startDan = useMutation({
     mutationFn: startSunnyDanJob,
     onSuccess: (state) => {
@@ -127,6 +136,34 @@ export function SettingsPage() {
         ) : null}
         {mut.error ? (
           <p className="mt-3 text-sm text-rose-300">{mut.error.message}</p>
+        ) : null}
+      </section>
+
+      <section className="rx-panel p-5">
+        <h2 className="text-sm font-bold text-ink">Live sync</h2>
+        <p className="mt-1 text-sm text-muted">
+          Optionally pause Realm imports while Roxysu is unfocused so lazer isn’t
+          fighting for the file during score submission. Off by default.
+        </p>
+        <label className="mt-4 flex cursor-pointer gap-3 rounded-xl bg-elevated/50 px-4 py-3 hover:bg-elevated">
+          <input
+            type="checkbox"
+            checked={data.sync.pauseWhenUnfocused}
+            disabled={syncMut.isPending}
+            onChange={(e) => syncMut.mutate(e.target.checked)}
+            className="mt-1 accent-[var(--color-accent)]"
+          />
+          <div>
+            <div className="font-bold text-ink">
+              Pause sync when Roxysu is unfocused
+            </div>
+            <div className="mt-0.5 text-sm text-muted">
+              When enabled, imports resume after you focus this window again.
+            </div>
+          </div>
+        </label>
+        {syncMut.error ? (
+          <p className="mt-3 text-sm text-rose-300">{syncMut.error.message}</p>
         ) : null}
       </section>
 

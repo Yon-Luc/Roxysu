@@ -29,7 +29,7 @@ type RecPrefs = {
 
 const DEFAULT_PREFS: RecPrefs = {
   focus: "push",
-  skillset: "rc",
+  skillset: "both",
 };
 
 const FOCUS_OPTIONS: { id: RecommendFocus; label: string; hint: string }[] = [
@@ -46,13 +46,19 @@ const FOCUS_OPTIONS: { id: RecommendFocus; label: string; hint: string }[] = [
   {
     id: "deficit",
     label: "Deficit",
-    hint: "Targets your weaker RC or LN axis.",
+    hint: "Targets your weaker Rice or LN axis.",
   },
   {
     id: "skillset",
     label: "Skillset",
-    hint: "Focus RC or LN maps at your level.",
+    hint: "Focus Rice, LN, or both at your level.",
   },
+];
+
+const AXIS_OPTIONS: { id: RecommendSkillset; label: string }[] = [
+  { id: "both", label: "Both" },
+  { id: "rc", label: "Rice" },
+  { id: "ln", label: "LN" },
 ];
 
 function loadPrefs(): RecPrefs {
@@ -68,7 +74,12 @@ function loadPrefs(): RecPrefs {
         parsed.focus === "push"
           ? parsed.focus
           : DEFAULT_PREFS.focus,
-      skillset: parsed.skillset === "ln" ? "ln" : "rc",
+      skillset:
+        parsed.skillset === "ln" ||
+        parsed.skillset === "rc" ||
+        parsed.skillset === "both"
+          ? parsed.skillset
+          : DEFAULT_PREFS.skillset,
     };
   } catch {
     return DEFAULT_PREFS;
@@ -111,7 +122,7 @@ export function SessionSevenKRecommend({
     queryFn: () =>
       fetchPracticeRecommend({
         focus: prefs.focus,
-        skillset: prefs.focus === "skillset" ? prefs.skillset : undefined,
+        skillset: prefs.focus === "deficit" ? undefined : prefs.skillset,
         count: 8,
         exclude: excludeBeatmapIds,
       }),
@@ -147,7 +158,7 @@ export function SessionSevenKRecommend({
               7K recommendations
             </h2>
             <p className="mt-1 text-sm text-muted">
-              Companella-style picks from your library using Sunny skill and RC/LN
+              Companella-style picks from your library using Sunny skill and Rice/LN
               axes.
             </p>
           </div>
@@ -184,16 +195,11 @@ export function SessionSevenKRecommend({
         </div>
         <p className="text-xs text-faint">{focusHint}</p>
 
-        {prefs.focus === "skillset" ? (
+        {prefs.focus !== "deficit" ? (
           <div>
-            <div className="rx-label mb-2">Skill axis</div>
+            <div className="rx-label mb-2">Maps</div>
             <div className="flex flex-wrap gap-2">
-              {(
-                [
-                  { id: "rc" as const, label: "RC" },
-                  { id: "ln" as const, label: "LN" },
-                ] as const
-              ).map((s) => (
+              {AXIS_OPTIONS.map((s) => (
                 <button
                   key={s.id}
                   type="button"
@@ -217,7 +223,7 @@ export function SessionSevenKRecommend({
           <div className="space-y-2">
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               <SkillStat
-                label="RC @ 90–95%"
+                label="Rice @ 90–95%"
                 value={formatSkill(skill.peakRc)}
                 note={`${skill.clearRcMaps ?? 0} maps · Push`}
               />
@@ -227,7 +233,7 @@ export function SessionSevenKRecommend({
                 note={`${skill.clearLnMaps ?? 0} maps · Push`}
               />
               <SkillStat
-                label="RC @ 96–99%"
+                label="Rice @ 96–99%"
                 value={formatSkill(skill.consistencyRc)}
                 note={`${skill.consistencyRcMaps ?? 0} maps · Consistency`}
               />

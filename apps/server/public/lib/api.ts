@@ -108,7 +108,7 @@ export type RecommendFocus =
   | "deficit"
   | "skillset";
 
-export type RecommendSkillset = "rc" | "ln";
+export type RecommendSkillset = "both" | "rc" | "ln";
 
 export async function fetchPracticeRecommend(params: {
   focus?: RecommendFocus;

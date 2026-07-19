@@ -363,51 +363,46 @@ function pickCandidatesInRange(
   };
 }
 
+function axesForFilter(axisFilter: "rc" | "ln" | null): Array<"rc" | "ln"> {
+  return axisFilter ? [axisFilter] : ["rc", "ln"];
+}
+
 function recommendPush(
   db: Db,
   skill: SevenKSkillProfile,
   count: number,
   overlay: { sql: string | null; params: unknown[] },
   excludeIds: string[],
+  axisFilter: "rc" | "ln" | null = null,
 ): RecommendItem[] {
   // Push baseline = average Sunny of 90–95% clears per axis (dan-style).
   // Target slightly above that clear level so suggestions sit in neighboring dans.
+  const axes = axesForFilter(axisFilter);
   const perAxis = Math.max(count, Math.ceil(count * 1.5));
-  const rc = pickCandidatesInRange(db, skill, {
-    targetRatio: 1.08,
-    tolerance: 0.14,
-    axis: "rc",
-    overlaySql: overlay.sql,
-    overlayParams: overlay.params,
-    excludeIds,
-    pool: perAxis * 3,
-    skillMode: "peak",
-  });
-  const ln = pickCandidatesInRange(db, skill, {
-    targetRatio: 1.08,
-    tolerance: 0.14,
-    axis: "ln",
-    overlaySql: overlay.sql,
-    overlayParams: overlay.params,
-    excludeIds,
-    pool: perAxis * 3,
-    skillMode: "peak",
-  });
+  const pools = axes.map((axis) =>
+    pickCandidatesInRange(db, skill, {
+      targetRatio: 1.08,
+      tolerance: 0.14,
+      axis,
+      overlaySql: overlay.sql,
+      overlayParams: overlay.params,
+      excludeIds,
+      pool: perAxis * 3,
+      skillMode: "peak",
+    }),
+  );
 
   const seen = new Set<string>();
   const paired: Array<{
     row: CandidateRow;
     match: ReturnType<typeof calculateMapMatch>;
   }> = [];
-  for (const [rows, matches] of [
-    [rc.rows, rc.matches] as const,
-    [ln.rows, ln.matches] as const,
-  ]) {
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i]!;
+  for (const pool of pools) {
+    for (let i = 0; i < pool.rows.length; i++) {
+      const row = pool.rows[i]!;
       if (seen.has(row.id)) continue;
       seen.add(row.id);
-      paired.push({ row, match: matches[i]! });
+      paired.push({ row, match: pool.matches[i]! });
     }
   }
 
@@ -423,13 +418,13 @@ function recommendPush(
 
   return paired.slice(0, count).map(({ row, match }) => {
     const diffPercent = (match.relativeDifficulty - 1) * 100;
-    const axisLabel = match.axis === "ln" ? "LN" : "RC";
+    const axisLabel = match.axis === "ln" ? "LN" : "Rice";
     const dan = row.sunnyEstDiff ? ` · ${row.sunnyEstDiff}` : "";
     return toItem(
       row,
       match,
       "push",
-      null,
+      axisFilter,
       `Push ${axisLabel}: ${diffPercent >= 0 ? "+" : ""}${diffPercent.toFixed(0)}% above your 90–95% clear level (${formatSunny(match.sunnyStar)} Sunny${dan})`,
     );
   });
@@ -441,44 +436,35 @@ function recommendConsistency(
   count: number,
   overlay: { sql: string | null; params: unknown[] },
   excludeIds: string[],
+  axisFilter: "rc" | "ln" | null = null,
 ): RecommendItem[] {
   // Consistency baseline = average Sunny of 96–99% scores per axis.
+  const axes = axesForFilter(axisFilter);
   const perAxis = Math.max(count, Math.ceil(count * 1.5));
-  const rc = pickCandidatesInRange(db, skill, {
-    targetRatio: 1.0,
-    tolerance: 0.12,
-    axis: "rc",
-    overlaySql: overlay.sql,
-    overlayParams: overlay.params,
-    excludeIds,
-    pool: perAxis * 3,
-    skillMode: "consistency",
-  });
-  const ln = pickCandidatesInRange(db, skill, {
-    targetRatio: 1.0,
-    tolerance: 0.12,
-    axis: "ln",
-    overlaySql: overlay.sql,
-    overlayParams: overlay.params,
-    excludeIds,
-    pool: perAxis * 3,
-    skillMode: "consistency",
-  });
+  const pools = axes.map((axis) =>
+    pickCandidatesInRange(db, skill, {
+      targetRatio: 1.0,
+      tolerance: 0.12,
+      axis,
+      overlaySql: overlay.sql,
+      overlayParams: overlay.params,
+      excludeIds,
+      pool: perAxis * 3,
+      skillMode: "consistency",
+    }),
+  );
 
   const seen = new Set<string>();
   const paired: Array<{
     row: CandidateRow;
     match: ReturnType<typeof calculateMapMatch>;
   }> = [];
-  for (const [rows, matches] of [
-    [rc.rows, rc.matches] as const,
-    [ln.rows, ln.matches] as const,
-  ]) {
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i]!;
+  for (const pool of pools) {
+    for (let i = 0; i < pool.rows.length; i++) {
+      const row = pool.rows[i]!;
       if (seen.has(row.id)) continue;
       seen.add(row.id);
-      paired.push({ row, match: matches[i]! });
+      paired.push({ row, match: pool.matches[i]! });
     }
   }
 
@@ -513,7 +499,7 @@ function recommendConsistency(
 
   const items: RecommendItem[] = [];
   for (const { row, match } of [...played, ...unplayed]) {
-    const axisLabel = match.axis === "ln" ? "LN" : "RC";
+    const axisLabel = match.axis === "ln" ? "LN" : "Rice";
     const dan = row.sunnyEstDiff ? ` · ${row.sunnyEstDiff}` : "";
     if (match.playCount > 0 && match.bestAccuracy != null) {
       const accPct = (match.bestAccuracy * 100).toFixed(2);
@@ -522,7 +508,7 @@ function recommendConsistency(
           row,
           match,
           "consistency",
-          null,
+          axisFilter,
           `Consistency ${axisLabel}: polish toward 99%+ (best ${accPct}% · ${formatSunny(match.sunnyStar)} Sunny${dan})`,
         ),
       );
@@ -532,7 +518,7 @@ function recommendConsistency(
           row,
           match,
           "consistency",
-          null,
+          axisFilter,
           `Consistency ${axisLabel}: around your 96–99% level (${formatSunny(match.sunnyStar)} Sunny${dan})`,
         ),
       );
@@ -544,30 +530,53 @@ function recommendConsistency(
 function recommendSkillset(
   db: Db,
   skill: SevenKSkillProfile,
-  axis: "rc" | "ln",
+  axisFilter: "rc" | "ln" | null,
   count: number,
   overlay: { sql: string | null; params: unknown[] },
   excludeIds: string[],
 ): RecommendItem[] {
-  const { rows, matches } = pickCandidatesInRange(db, skill, {
-    targetRatio: 1.0,
-    tolerance: 0.2,
-    axis,
-    overlaySql: overlay.sql,
-    overlayParams: overlay.params,
-    excludeIds,
-    pool: count * 3,
-  });
+  const axes = axesForFilter(axisFilter);
+  const perAxis = Math.max(count, Math.ceil(count * 1.5));
+  const pools = axes.map((axis) =>
+    pickCandidatesInRange(db, skill, {
+      targetRatio: 1.0,
+      tolerance: 0.2,
+      axis,
+      overlaySql: overlay.sql,
+      overlayParams: overlay.params,
+      excludeIds,
+      pool: perAxis * 3,
+    }),
+  );
 
-  const label = axis.toUpperCase();
-  return rows.slice(0, count).map((row, i) => {
-    const match = matches[i]!;
+  const seen = new Set<string>();
+  const paired: Array<{
+    row: CandidateRow;
+    match: ReturnType<typeof calculateMapMatch>;
+  }> = [];
+  for (const pool of pools) {
+    for (let i = 0; i < pool.rows.length; i++) {
+      const row = pool.rows[i]!;
+      if (seen.has(row.id)) continue;
+      seen.add(row.id);
+      paired.push({ row, match: pool.matches[i]! });
+    }
+  }
+
+  paired.sort(
+    (a, b) =>
+      Math.abs(a.match.relativeDifficulty - 1.0) -
+      Math.abs(b.match.relativeDifficulty - 1.0),
+  );
+
+  return paired.slice(0, count).map(({ row, match }) => {
+    const axisLabel = match.axis === "ln" ? "LN" : "Rice";
     return toItem(
       row,
       match,
       "skillset",
-      axis,
-      `Good ${label} practice at your level (${formatSunny(match.sunnyStar)} Sunny)`,
+      axisFilter,
+      `Good ${axisLabel} practice at your level (${formatSunny(match.sunnyStar)} Sunny)`,
     );
   });
 }
@@ -595,7 +604,7 @@ function recommendDeficit(
     pool: count * 3,
   });
 
-  const label = weak.toUpperCase();
+  const label = weak === "ln" ? "LN" : "Rice";
   return rows.slice(0, count).map((row, i) => {
     const match = matches[i]!;
     const deficitText =
@@ -612,15 +621,23 @@ function recommendDeficit(
   });
 }
 
+function axisFilterLabel(skillset: SkillAxis | null): string {
+  if (skillset === "ln") return "LN";
+  if (skillset === "rc") return "Rice";
+  return "Rice/LN";
+}
+
 function summaryFor(
   focus: RecommendFocus,
   skillset: SkillAxis | null,
   skill: SevenKSkillProfile,
   count: number,
 ): string {
+  const axisNote =
+    focus === "deficit" ? "" : ` (${axisFilterLabel(skillset)})`;
   const focusLabel =
-    focus === "skillset" && skillset
-      ? `${skillset.toUpperCase()} practice`
+    focus === "skillset"
+      ? `${axisFilterLabel(skillset)} practice`
       : focus === "consistency"
         ? "consistency/accuracy improvement"
         : focus === "push"
@@ -635,10 +652,10 @@ function summaryFor(
 
   const cold = skill.coldStart ? " (cold start)" : "";
   if (focus === "push") {
-    return `Found ${count} maps for pushing above your 90–95% clear level (~${formatSunny(skill.peakOverall)} Sunny)${cold}`;
+    return `Found ${count} maps for pushing above your 90–95% clear level (~${formatSunny(skill.peakOverall)} Sunny)${axisNote}${cold}`;
   }
   if (focus === "consistency") {
-    return `Found ${count} maps around your 96–99% level (~${formatSunny(skill.consistencyOverall)} Sunny)${cold}`;
+    return `Found ${count} maps around your 96–99% level (~${formatSunny(skill.consistencyOverall)} Sunny)${axisNote}${cold}`;
   }
   return `Found ${count} maps for ${focusLabel} at skill level ${formatSunny(skill.overall)}${cold}`;
 }
@@ -659,11 +676,20 @@ function parseFocus(value: string | undefined): RecommendFocus {
   return "push";
 }
 
-function parseSkillset(
-  value: string | null | undefined,
-): "rc" | "ln" | null {
+/** Parsed axis filter: rc/ln limit the pool; both/null = no axis limit. */
+type AxisFilter = "rc" | "ln" | "both" | null;
+
+function parseSkillset(value: string | null | undefined): AxisFilter {
   const v = (value ?? "").toLowerCase();
-  if (v === "rc" || v === "ln") return v;
+  if (v === "rc" || v === "rice") return "rc";
+  if (v === "ln") return "ln";
+  if (v === "both") return "both";
+  return null;
+}
+
+/** Map API skillset to a SQL axis filter (`null` = Rice + LN). */
+function toAxisFilter(skillset: AxisFilter): "rc" | "ln" | null {
+  if (skillset === "rc" || skillset === "ln") return skillset;
   return null;
 }
 
@@ -699,25 +725,29 @@ export function recommendSevenK(
   const overlay = { sql: overlaySql, params: overlayParams };
   const totalMapsConsidered = countSevenKWithSunny(db);
 
+  // Companella defaults skillset focus to the player's strongest axis when unset.
+  if (focus === "skillset" && skillset === null) {
+    skillset = skill.rc >= skill.ln ? "rc" : "ln";
+  }
+
+  const axisFilter = toAxisFilter(skillset);
+  const resolvedSkillset: SkillAxis | null =
+    focus === "deficit" ? null : axisFilter;
+
   if (skill.overall <= 0 || totalMapsConsidered === 0) {
     return {
       focus,
-      targetSkillset: skillset,
+      targetSkillset: resolvedSkillset,
       skill,
-      summary: summaryFor(focus, skillset, skill, 0),
+      summary: summaryFor(focus, resolvedSkillset, skill, 0),
       totalMapsConsidered,
       needsSunnyBackfill,
       recommendations: [],
     };
   }
 
-  // Companella defaults skillset focus to the player's strongest axis.
-  if (focus === "skillset" && !skillset) {
-    skillset = skill.rc >= skill.ln ? "rc" : "ln";
-  }
-
   let recommendations: RecommendItem[] = [];
-  let resolvedSkillset: SkillAxis | null = null;
+  let batchSkillset: SkillAxis | null = resolvedSkillset;
 
   switch (focus) {
     case "consistency":
@@ -727,11 +757,12 @@ export function recommendSevenK(
         count,
         overlay,
         excludeIds,
+        axisFilter,
       );
       break;
     case "deficit": {
       const weak = weakestAxis(skill);
-      resolvedSkillset = weak;
+      batchSkillset = weak;
       recommendations = recommendDeficit(
         db,
         skill,
@@ -742,11 +773,11 @@ export function recommendSevenK(
       break;
     }
     case "skillset":
-      resolvedSkillset = skillset ?? "rc";
+      batchSkillset = axisFilter;
       recommendations = recommendSkillset(
         db,
         skill,
-        skillset ?? "rc",
+        axisFilter,
         count,
         overlay,
         excludeIds,
@@ -754,15 +785,22 @@ export function recommendSevenK(
       break;
     case "push":
     default:
-      recommendations = recommendPush(db, skill, count, overlay, excludeIds);
+      recommendations = recommendPush(
+        db,
+        skill,
+        count,
+        overlay,
+        excludeIds,
+        axisFilter,
+      );
       break;
   }
 
   return {
     focus,
-    targetSkillset: resolvedSkillset,
+    targetSkillset: batchSkillset,
     skill,
-    summary: summaryFor(focus, resolvedSkillset, skill, recommendations.length),
+    summary: summaryFor(focus, batchSkillset, skill, recommendations.length),
     totalMapsConsidered,
     needsSunnyBackfill,
     recommendations,

@@ -18,7 +18,17 @@ export type FieldTerm =
   | { type: "played"; days: number }
   | { type: "played"; never: true }
   | { type: "pp"; op: ComparisonOp; value: number }
-  | { type: "text"; value: string };
+  | { type: "text"; value: string }
+  /** Sunny dan label substring (est_diff), e.g. Reform / Alpha / Regular. */
+  | { type: "dan"; value: string; prefix?: boolean }
+  /** Sunny rework star rating (numeric). */
+  | {
+      type: "sunny";
+      min?: number;
+      max?: number;
+      op?: ComparisonOp;
+      value?: number;
+    };
 
 export type AstNode =
   | { type: "term"; term: FieldTerm }

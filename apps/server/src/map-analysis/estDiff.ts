@@ -12,6 +12,9 @@ type DanIndex = Record<
 
 const DAN_INDEX = DAN_INDEX_RAW as DanIndex;
 
+/** LN ratio at/above this uses LN dan; below uses RC/Regular dan. */
+export const LN_DAN_RATIO_THRESHOLD = 0.2;
+
 function intervalLookup(
   sr: number,
   table: DanInterval[],
@@ -28,8 +31,9 @@ function intervalLookup(
 }
 
 /**
- * Map Sunny rework stars → dan label using osumania_map_analyser interval tables.
- * Mix maps (LN ratio ≥ 0.15) get `RC || LN`.
+ * Map Sunny rework stars → a single dan label.
+ * - LN ratio &lt; 20% → RC / Regular table
+ * - LN ratio ≥ 20% → LN table
  */
 export function estDiff(
   sr: number,
@@ -39,11 +43,11 @@ export function estDiff(
   const keys = DAN_INDEX[columnCount];
   if (!keys) return "Unknown difficulty";
 
-  const rcTable = keys.RC.default;
-  const rcDiff = intervalLookup(sr, rcTable, "Unknown RC difficulty");
-  if (lnRatio < 0.15) return rcDiff;
+  if (lnRatio >= LN_DAN_RATIO_THRESHOLD) {
+    const lnTable = keys.LN.default;
+    return intervalLookup(sr, lnTable, "Unknown LN difficulty");
+  }
 
-  const lnTable = keys.LN.default;
-  const lnDiff = intervalLookup(sr, lnTable, "Unknown LN difficulty");
-  return `${rcDiff} || ${lnDiff}`;
+  const rcTable = keys.RC.default;
+  return intervalLookup(sr, rcTable, "Unknown RC difficulty");
 }

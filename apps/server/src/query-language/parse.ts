@@ -45,6 +45,26 @@ function tokenize(input: string): Token[] {
     }
 
     while (i < s.length && !/\s/.test(s[i]!) && s[i] !== "(" && s[i] !== ")") {
+      // Allow field:"value with spaces" as a single token.
+      if (
+        s[i] === ":" &&
+        i + 1 < s.length &&
+        (s[i + 1] === '"' || s[i + 1] === "'")
+      ) {
+        raw += ":";
+        i += 1;
+        const quote = s[i]!;
+        raw += quote;
+        i += 1;
+        while (i < s.length && s[i] !== quote) {
+          raw += s[i];
+          i += 1;
+        }
+        if (i >= s.length) throw new QueryParseError("Unclosed quote");
+        raw += s[i];
+        i += 1;
+        continue;
+      }
       raw += s[i];
       i += 1;
     }
@@ -92,7 +112,7 @@ function parseFieldTerm(raw: string): FieldTerm {
   const colon = raw.indexOf(":");
   if (colon === -1) {
     // Could be acc>98 style without field prefix... support field+op glued
-    const glued = raw.match(/^(acc|retry|mastery|pp|stars|misses|miss|score|keys|key|lns|ln)(>=|<=|>|<|=)(-?\d+(?:\.\d+)?)$/i);
+    const glued = raw.match(/^(acc|retry|mastery|pp|stars|misses|miss|score|keys|key|lns|ln|sunny|danstars|sunnystars)(>=|<=|>|<|=)(-?\d+(?:\.\d+)?)$/i);
     if (glued) {
       const field = glued[1]!.toLowerCase();
       const op = glued[2] as ComparisonOp;
@@ -106,12 +126,21 @@ function parseFieldTerm(raw: string): FieldTerm {
       if (field === "score") return { type: "score", op, value };
       if (field === "key" || field === "keys") return { type: "key", op, value };
       if (field === "ln" || field === "lns") return { type: "ln", op, value };
+      if (field === "sunny" || field === "danstars" || field === "sunnystars") {
+        return { type: "sunny", op, value };
+      }
     }
     return { type: "text", value: raw };
   }
 
   const field = raw.slice(0, colon).toLowerCase();
   let value = raw.slice(colon + 1);
+  if (
+    (value.startsWith('"') && value.endsWith('"') && value.length >= 2) ||
+    (value.startsWith("'") && value.endsWith("'") && value.length >= 2)
+  ) {
+    value = value.slice(1, -1);
+  }
   let prefix = false;
   if (value.startsWith("^")) {
     prefix = true;
@@ -214,6 +243,17 @@ function parseFieldTerm(raw: string): FieldTerm {
       const days = parsePlayed(value);
       if (days == null) throw new QueryParseError(`Invalid played value: ${value} (expected lastNd or never)`);
       return { type: "played", days };
+    }
+    case "dan": {
+      if (!value) throw new QueryParseError("Invalid dan value: empty");
+      return { type: "dan", value, prefix };
+    }
+    case "sunny":
+    case "danstars":
+    case "sunnystars": {
+      const r = parseRange(value);
+      if (!r) throw new QueryParseError(`Invalid sunny value: ${value}`);
+      return { type: "sunny", ...r };
     }
     default:
       throw new QueryParseError(`Unknown field: ${field}`);
@@ -322,6 +362,6 @@ export function looksLikeQuery(q: string): boolean {
   if (/[()]/.test(trimmed)) return true;
   if (/\b(AND|OR|NOT)\b/i.test(trimmed)) return true;
   if (/:\S/.test(trimmed)) return true;
-  if (/\b(acc|retry|mastery|pp|stars|misses|miss|score|keys|key|lns|ln)(>=|<=|>|<|=)/i.test(trimmed)) return true;
+  if (/\b(acc|retry|mastery|pp|stars|misses|miss|score|keys|key|lns|ln|sunny|danstars|sunnystars)(>=|<=|>|<|=)/i.test(trimmed)) return true;
   return false;
 }

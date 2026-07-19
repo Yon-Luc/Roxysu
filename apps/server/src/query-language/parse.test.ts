@@ -10,6 +10,7 @@ describe("looksLikeQuery", () => {
     expect(looksLikeQuery("acc>98")).toBe(true);
     expect(looksLikeQuery("key=7")).toBe(true);
     expect(looksLikeQuery("ln<10")).toBe(true);
+    expect(looksLikeQuery("sunny>7")).toBe(true);
     expect(looksLikeQuery("hello world")).toBe(false);
   });
 });
@@ -67,6 +68,30 @@ describe("parseQuery", () => {
     expect(parseQuery("lns:0..20")).toEqual({
       type: "term",
       term: { type: "ln", min: 0, max: 20 },
+    });
+    expect(parseQuery("dan:Reform")).toEqual({
+      type: "term",
+      term: { type: "dan", value: "Reform", prefix: false },
+    });
+    expect(parseQuery("dan:^Alpha")).toEqual({
+      type: "term",
+      term: { type: "dan", value: "Alpha", prefix: true },
+    });
+    expect(parseQuery('dan:"Regular 4"')).toEqual({
+      type: "term",
+      term: { type: "dan", value: "Regular 4", prefix: false },
+    });
+    expect(parseQuery("sunny:5..6")).toEqual({
+      type: "term",
+      term: { type: "sunny", min: 5, max: 6 },
+    });
+    expect(parseQuery("sunny>7")).toEqual({
+      type: "term",
+      term: { type: "sunny", op: ">", value: 7 },
+    });
+    expect(parseQuery("danstars>=8")).toEqual({
+      type: "term",
+      term: { type: "sunny", op: ">=", value: 8 },
     });
   });
 
@@ -127,6 +152,22 @@ describe("compileQuery", () => {
     expect(compiled.sql).toContain("end_time_object_count");
     expect(compiled.sql).toContain("total_object_count");
     expect(compiled.params).toEqual(["mania", 10]);
+  });
+
+  test("compiles dan label substring against sunny ratings", () => {
+    const ast = parseQuery("dan:Reform");
+    const compiled = compileQuery(ast);
+    expect(compiled.sql).toContain("dr.est_diff");
+    expect(compiled.sql).toContain("LIKE");
+    expect(compiled.params).toEqual(["%Reform%"]);
+  });
+
+  test("compiles sunny star range", () => {
+    const ast = parseQuery("sunny:5..6");
+    const compiled = compileQuery(ast);
+    expect(compiled.sql).toContain("dr.sunny_star");
+    expect(compiled.sql).toContain("BETWEEN");
+    expect(compiled.params).toEqual([5, 6]);
   });
 
 

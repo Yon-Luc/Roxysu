@@ -21,6 +21,17 @@ const FIELDS: { field: string; meaning: string; example: string }[] = [
     meaning: "Mania long-note % (implies mode:mania)",
     example: "ln<10",
   },
+  {
+    field: "dan",
+    meaning:
+      "Sunny dan label (RC/Regular if LN&lt;20%, LN dan if LN≥20%). Quote multi-word labels.",
+    example: 'dan:"Regular 4"',
+  },
+  {
+    field: "sunny / danstars",
+    meaning: "Sunny rework star rating (range or comparison)",
+    example: "sunny:5..6",
+  },
   { field: "mods / mod", meaning: "Mods used on a score", example: "mods:DT" },
   { field: "acc / accuracy", meaning: "Best accuracy % (range or comparison)", example: "acc:90..92" },
   { field: "misses / miss", meaning: "Best (fewest) miss count", example: "misses:0" },
@@ -39,6 +50,10 @@ const EXAMPLES = [
   "mode:mania stars:5..6",
   "key=7 stars:5..6",
   "key=7 ln<10",
+  "key=4 dan:Reform",
+  'key=7 dan:"Regular 4"',
+  "key=7 dan:Regular sunny:6..8",
+  "dan:Alpha OR dan:Beta",
   "mapper:Lasse OR mapper:Sotarks",
   "(mode:osu OR mode:mania) stars:6..7",
   "acc>98 NOT mods:NF",

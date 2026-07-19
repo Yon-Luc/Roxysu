@@ -6,5 +6,10 @@
  * - https://github.com/sunnyxxy/Star-Rating-Rebirth (Sunny Rework)
  */
 export { runSunnyEstimatorFromText } from "./sunnyEstimator";
-export { getOrComputeSunnyDan, SUNNY_ALGORITHM } from "./computeSunnyDan";
-export { estDiff } from "./estDiff";
+export {
+  getOrComputeSunnyDan,
+  backfillSunnyDanSync,
+  relabelSunnyDanSync,
+  SUNNY_ALGORITHM,
+} from "./computeSunnyDan";
+export { estDiff, LN_DAN_RATIO_THRESHOLD } from "./estDiff";

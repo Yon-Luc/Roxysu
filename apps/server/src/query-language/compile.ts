@@ -109,6 +109,20 @@ function compileTerm(term: FieldTerm, params: unknown[]): string {
       const since = Date.now() - term.days * 24 * 60 * 60 * 1000;
       return `(ps.last_played_at IS NOT NULL AND ps.last_played_at >= ${push(since)})`;
     }
+    case "dan": {
+      // Sunny dan label (est_diff); case-insensitive substring / prefix.
+      const pat = push(likePattern(term.value, term.prefix));
+      return `(dr.est_diff IS NOT NULL AND lower(dr.est_diff) LIKE lower(${pat}) ESCAPE '\\')`;
+    }
+    case "sunny": {
+      if (term.min != null && term.max != null) {
+        return `dr.sunny_star BETWEEN ${push(term.min)} AND ${push(term.max)}`;
+      }
+      if (term.op != null && term.value != null) {
+        return `dr.sunny_star ${term.op} ${push(term.value)}`;
+      }
+      return "dr.sunny_star IS NOT NULL";
+    }
     case "text": {
       const pat = push(`%${term.value}%`);
       const p2 = push(`%${term.value}%`);

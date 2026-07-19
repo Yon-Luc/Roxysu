@@ -3,6 +3,7 @@ import { compileQuery } from "./compile";
 import { QueryParseError } from "./ast";
 
 export { parseQuery, looksLikeQuery, compileQuery, QueryParseError };
+export { astUsesDanRating } from "./astUsesDan";
 export {
   searchBeatmaps,
   sampleBeatmaps,

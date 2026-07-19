@@ -226,6 +226,8 @@ function BeatmapPreviewModal({
   const livePlayRef = useRef<LiveManiaPlay | null>(null);
   const dataRef = useRef<BeatmapPreview | undefined>(undefined);
   const practiceRangeRef = useRef(practiceRange);
+  /** Map time where the current Play / Test session started (R restarts here). */
+  const playStartMsRef = useRef(practiceRange?.fromMs ?? 0);
   const keybindsAll = useKeybinds();
   const bindsRef = useRef<string[]>([]);
   const skin = usePreviewSkin();
@@ -294,6 +296,22 @@ function BeatmapPreviewModal({
     setLiveSummary(play.summary);
   }
 
+  /** Practice window for live judge: prop range ∩ session start (test-from-here). */
+  function effectivePracticeRange(): PracticeRange | null {
+    const start = playStartMsRef.current;
+    const prop = practiceRangeRef.current;
+    if (prop) {
+      return {
+        fromMs: Math.max(prop.fromMs, start),
+        toMs: prop.toMs,
+      };
+    }
+    if (start > 0) {
+      return { fromMs: start, toMs: Number.POSITIVE_INFINITY };
+    }
+    return null;
+  }
+
   function ensureLivePlay(): LiveManiaPlay | null {
     const chart = dataRef.current;
     if (!chart?.supported || chart.columnCount <= 0) return null;
@@ -310,7 +328,7 @@ function BeatmapPreviewModal({
       notes: chart.notes,
       columnCount: chart.columnCount,
       overallDifficulty: od,
-      practiceRange: practiceRangeRef.current,
+      practiceRange: effectivePracticeRange(),
     });
     livePlayRef.current = play;
     return play;
@@ -322,7 +340,7 @@ function BeatmapPreviewModal({
     setLiveHeldMask(0);
     setLiveJudgments([]);
     setLiveSummary(EMPTY_SUMMARY);
-    seekTo(practiceRange?.fromMs ?? 0);
+    seekTo(playStartMsRef.current);
     const audio = audioRef.current;
     if (audio && audioUrlRef.current) {
       void audio.play().catch(() => {
@@ -331,13 +349,29 @@ function BeatmapPreviewModal({
     }
   }
 
+  /** Start Play from the map beginning (or practiceRange.fromMs). */
   function enterPlayMode() {
+    playStartMsRef.current = practiceRangeRef.current?.fromMs ?? 0;
+    livePlayRef.current = null;
+    setMode("play");
+    modeRef.current = "play";
+    restartPlay();
+  }
+
+  /** Start Play from the current preview scrub position. */
+  function enterTestFromHere() {
+    if (!dataRef.current?.supported || dataRef.current.columnCount <= 0) {
+      return;
+    }
+    playStartMsRef.current = Math.max(0, mapTimeMs());
+    livePlayRef.current = null;
     setMode("play");
     modeRef.current = "play";
     restartPlay();
   }
 
   function enterPreviewMode() {
+    playStartMsRef.current = practiceRangeRef.current?.fromMs ?? 0;
     setMode("preview");
     modeRef.current = "preview";
     livePlayRef.current = null;
@@ -509,6 +543,16 @@ function BeatmapPreviewModal({
         setPrefs((p) => ({ ...p, fullscreen: !p.fullscreen }));
         return;
       }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (dataRef.current?.supported) enterPlayMode();
+        return;
+      }
+      if (e.key === "t" || e.key === "T") {
+        e.preventDefault();
+        if (dataRef.current?.supported) enterTestFromHere();
+        return;
+      }
       if (e.key === " " || e.key === "k" || e.key === "K") {
         e.preventDefault();
         togglePlay();
@@ -602,7 +646,7 @@ function BeatmapPreviewModal({
     function seekPreviewIfNeeded() {
       if (previewSeekDone.current) return;
       if (modeRef.current === "play") {
-        const start = practiceRange?.fromMs ?? 0;
+        const start = playStartMsRef.current;
         audio!.currentTime = start / 1000;
         clock.set(start, {
           playing: !audio!.paused && !audio!.ended,
@@ -810,6 +854,7 @@ function BeatmapPreviewModal({
                       : "text-muted hover:text-ink"
                   }`}
                   onClick={enterPlayMode}
+                  title="Play from start (Enter)"
                 >
                   Play
                 </button>
@@ -1011,7 +1056,7 @@ function BeatmapPreviewModal({
                         className="rx-btn"
                         disabled={!audioUrl}
                         onClick={restartPlay}
-                        title="Restart (R)"
+                        title="Restart from session start (R)"
                       >
                         Restart
                       </button>
@@ -1065,6 +1110,15 @@ function BeatmapPreviewModal({
                           Preview
                         </button>
                       ) : null}
+                      <button
+                        type="button"
+                        className="rx-btn-primary"
+                        disabled={!audioUrl || !data.supported}
+                        onClick={enterTestFromHere}
+                        title="Play from here (T)"
+                      >
+                        Test
+                      </button>
                     </>
                   )}
 
@@ -1217,8 +1271,8 @@ function BeatmapPreviewModal({
                     </>
                   ) : (
                     <>
-                      Space play · ← → skip 5s · Home start · P preview · F
-                      fullscreen · [ ] scroll · , . rate
+                      Enter play · T test here · Space play · ← → skip 5s · Home
+                      start · P preview · F fullscreen · [ ] scroll · , . rate
                       {" · "}
                       <a
                         href="#/skin"

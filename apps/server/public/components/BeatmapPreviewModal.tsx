@@ -486,8 +486,8 @@ function BeatmapPreviewModal({
 
       if (e.key === "Escape") {
         e.preventDefault();
-        if (prefsRef.current.fullscreen) {
-          setPrefs((p) => ({ ...p, fullscreen: false }));
+        if (modeRef.current === "play") {
+          enterPreviewMode();
           return;
         }
         onCloseRef.current();
@@ -875,14 +875,15 @@ function BeatmapPreviewModal({
             <button
               type="button"
               onClick={() => {
-                if (prefs.fullscreen) {
-                  setPrefs((p) => ({ ...p, fullscreen: false }));
+                if (isPlay) {
+                  enterPreviewMode();
                   return;
                 }
                 onClose();
               }}
               className="rounded-full px-3 py-1 text-sm text-muted transition hover:bg-highlight hover:text-ink"
-              aria-label={fullscreen ? "Exit fullscreen" : "Close"}
+              aria-label={isPlay ? "Back to preview" : "Close"}
+              title={isPlay ? "Back to preview (Esc)" : "Close (Esc)"}
             >
               Esc
             </button>
@@ -1260,7 +1261,7 @@ function BeatmapPreviewModal({
                     <>
                       Keys{" "}
                       {binds.map((c) => formatKeyCode(c)).join(" ")} · R restart
-                      · Esc close
+                      · Esc preview
                       {" · "}
                       <a
                         href="#/settings"

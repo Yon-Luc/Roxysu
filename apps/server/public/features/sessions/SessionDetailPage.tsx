@@ -13,8 +13,7 @@ import {
   formatPrimaryRating,
   useRatingDisplayMode,
 } from "../../lib/ratingDisplay";
-import { SessionUpNext } from "./SessionUpNext";
-import { SessionSevenKRecommend } from "./SessionSevenKRecommend";
+import { SessionSuggest } from "./SessionSuggest";
 
 export function SessionDetailPage({ sessionId }: { sessionId: string }) {
   const ratingMode = useRatingDisplayMode();
@@ -107,13 +106,11 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
           </p>
         </div>
 
-        <SessionUpNext
+        <SessionSuggest
           isIdle
           rulesetShortName={null}
           excludeBeatmapIds={[]}
         />
-
-        <SessionSevenKRecommend excludeBeatmapIds={[]} />
       </div>
     );
   }
@@ -179,14 +176,11 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
       </section>
 
       {isCurrentHub ? (
-        <>
-          <SessionUpNext
-            isIdle={false}
-            rulesetShortName={session.rulesetShortName}
-            excludeBeatmapIds={excludeBeatmapIds}
-          />
-          <SessionSevenKRecommend excludeBeatmapIds={excludeBeatmapIds} />
-        </>
+        <SessionSuggest
+          isIdle={false}
+          rulesetShortName={session.rulesetShortName}
+          excludeBeatmapIds={excludeBeatmapIds}
+        />
       ) : null}
 
       <section>

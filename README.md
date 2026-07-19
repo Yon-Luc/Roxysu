@@ -22,7 +22,7 @@ Browse every map you’ve played as practice cards — play count, best accuracy
 Per-beatmap deep dive: cover art, stats, mastery, recent scores, sessions on that map, and (for mania) Sunny dan estimates. Copy a search string for use in-game.
 
 ### Sessions
-Scores are auto-grouped into sessions by inactivity gaps. Browse past sessions, or open the live **current session** hub (SSE-updated as new plays land). **Up Next** suggests maps in an accuracy band you want to improve or reach, with staleness and star filters. **7K recommendations** estimate your Sunny skill (RC/LN split) and rank library maps for Push, Consistency, Deficit, or Skillset focus — run Sunny dan backfill in Settings first for best results.
+Scores are auto-grouped into sessions by inactivity gaps. Browse past sessions, or open the live **current session** hub (SSE-updated as new plays land). Under **Suggest maps**, switch between **Up Next** (query-language accuracy/staleness filters) and **7K recommendations** (Sunny skill estimate with Push / Consistency / Deficit / Skillset). Run Sunny dan backfill in Settings first for best 7K results.
 
 ### Smart collections
 Collections are saved query strings, not static lists — they stay up to date as your library grows. Create, delete, and paginate match results.

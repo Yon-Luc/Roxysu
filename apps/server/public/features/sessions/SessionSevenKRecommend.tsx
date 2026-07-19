@@ -85,8 +85,11 @@ function formatSkill(n: number): string {
 
 export function SessionSevenKRecommend({
   excludeBeatmapIds,
+  embedded = false,
 }: {
   excludeBeatmapIds: string[];
+  /** When true, omit the outer section title (parent provides tabs). */
+  embedded?: boolean;
 }) {
   const ratingMode = useRatingDisplayMode();
   const [prefs, setPrefs] = useState<RecPrefs>(() => loadPrefs());
@@ -122,28 +125,44 @@ export function SessionSevenKRecommend({
 
   return (
     <section className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="font-display text-2xl font-bold tracking-tight text-ink">
-            7K recommendations
-          </h2>
-          <p className="mt-1 text-sm text-muted">
-            Companella-style picks from your library using Sunny skill and RC/LN
-            axes.
-          </p>
+      {embedded ? (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <button
+            type="button"
+            className="rx-btn"
+            onClick={() => {
+              setShuffleKey((k) => k + 1);
+              void refetch();
+            }}
+            disabled={isFetching}
+          >
+            {isFetching ? "Refreshing…" : "Refresh"}
+          </button>
         </div>
-        <button
-          type="button"
-          className="rx-btn"
-          onClick={() => {
-            setShuffleKey((k) => k + 1);
-            void refetch();
-          }}
-          disabled={isFetching}
-        >
-          {isFetching ? "Refreshing…" : "Refresh"}
-        </button>
-      </div>
+      ) : (
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="font-display text-2xl font-bold tracking-tight text-ink">
+              7K recommendations
+            </h2>
+            <p className="mt-1 text-sm text-muted">
+              Companella-style picks from your library using Sunny skill and RC/LN
+              axes.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="rx-btn"
+            onClick={() => {
+              setShuffleKey((k) => k + 1);
+              void refetch();
+            }}
+            disabled={isFetching}
+          >
+            {isFetching ? "Refreshing…" : "Refresh"}
+          </button>
+        </div>
+      )}
 
       <div className="rx-panel space-y-4 p-4">
         <div className="flex flex-wrap gap-2">

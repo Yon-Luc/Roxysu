@@ -177,10 +177,13 @@ export function SessionUpNext({
   isIdle,
   rulesetShortName,
   excludeBeatmapIds,
+  embedded = false,
 }: {
   isIdle: boolean;
   rulesetShortName: string | null;
   excludeBeatmapIds: string[];
+  /** When true, omit the outer section title (parent provides tabs). */
+  embedded?: boolean;
 }) {
   const ratingMode = useRatingDisplayMode();
   const [prefs, setPrefs] = useState<UpNextPrefs>(() => loadPrefs());
@@ -251,18 +254,43 @@ export function SessionUpNext({
 
   return (
     <section className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="font-display text-2xl font-bold tracking-tight text-ink">
-            Up next
-          </h2>
-          <p className="mt-1 text-sm text-muted">
-            {isIdle
-              ? "Pick a map to start — plays will open a live session after sync."
-              : "Suggested maps for this session. Already-played maps are excluded."}
-          </p>
+      {embedded ? null : (
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="font-display text-2xl font-bold tracking-tight text-ink">
+              Up next
+            </h2>
+            <p className="mt-1 text-sm text-muted">
+              {isIdle
+                ? "Pick a map to start — plays will open a live session after sync."
+                : "Suggested maps for this session. Already-played maps are excluded."}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="rx-btn"
+              onClick={() => {
+                setShuffleKey((k) => k + 1);
+                void refetch();
+              }}
+              disabled={isFetching || !sampleQuery}
+            >
+              {isFetching ? "Shuffling…" : "Shuffle"}
+            </button>
+            <Link
+              to="/practice"
+              className="rx-btn"
+              onClick={() => openInPractice(sampleQuery)}
+            >
+              Open in Practice
+            </Link>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+      )}
+
+      {embedded ? (
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <button
             type="button"
             className="rx-btn"
@@ -282,7 +310,7 @@ export function SessionUpNext({
             Open in Practice
           </Link>
         </div>
-      </div>
+      ) : null}
 
       <div className="rx-panel space-y-4 p-4">
         <div className="flex flex-wrap gap-2">

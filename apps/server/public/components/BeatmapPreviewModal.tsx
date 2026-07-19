@@ -592,6 +592,10 @@ function BeatmapPreviewModal({
                 <p className="mt-2 hidden text-[11px] text-faint sm:block">
                   Space play · ← → skip 5s · Home start · P preview · [ ] scroll ·
                   , . rate
+                  {" · "}
+                  <a href="#/skin" className="text-subtle underline-offset-2 hover:underline">
+                    Edit skin
+                  </a>
                 </p>
               </div>
             </>

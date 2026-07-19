@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { PageTitle } from "../../components/PageTitle";
 import {
   fetchSettings,
@@ -203,6 +204,16 @@ export function SettingsPage() {
             );
           })}
         </div>
+      </section>
+
+      <section className="rx-panel p-5">
+        <h2 className="text-sm font-bold text-ink">Preview skin</h2>
+        <p className="mt-1 text-sm text-muted">
+          Customize note shape, colors, and size per column for 4K–10K previews.
+        </p>
+        <Link to="/skin" className="rx-btn-primary mt-4 inline-flex">
+          Open skin editor
+        </Link>
       </section>
 
       <section className="rx-panel p-5">

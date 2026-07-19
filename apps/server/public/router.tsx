@@ -14,6 +14,7 @@ import { SessionDetailPage } from "./features/sessions/SessionDetailPage";
 import { CollectionsPage } from "./features/collections/CollectionsPage";
 import { CollectionResultsPage } from "./features/collections/CollectionResultsPage";
 import { SettingsPage } from "./features/settings/SettingsPage";
+import { SkinPage } from "./features/settings/SkinPage";
 import { OverlayPage } from "./features/overlay/OverlayPage";
 
 const rootRoute = createRootRoute({
@@ -87,6 +88,12 @@ const settingsRoute = createRoute({
   component: SettingsPage,
 });
 
+const skinRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/skin",
+  component: SkinPage,
+});
+
 const overlayRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/overlay",
@@ -114,6 +121,7 @@ const routeTree = rootRoute.addChildren([
     sessionDetailRoute,
     collectionsRoute,
     collectionResultsRoute,
+    skinRoute,
     settingsRoute,
   ]),
   overlayRoute,

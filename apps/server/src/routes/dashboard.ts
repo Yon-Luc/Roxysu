@@ -1,6 +1,12 @@
 import { Elysia } from "elysia";
-import { count, desc, eq } from "drizzle-orm";
-import { beatmaps, beatmapSets, imports, scores } from "@roxysu/db/client.bun";
+import { and, count, desc, eq } from "drizzle-orm";
+import {
+  beatmapDanRatings,
+  beatmaps,
+  beatmapSets,
+  imports,
+  scores,
+} from "@roxysu/db/client.bun";
 import { dbPlugin } from "../db";
 import { toIso } from "../shared/serialize";
 import { getCurrentSession } from "../analytics/session";
@@ -9,6 +15,7 @@ import {
   getPpTrend,
   getWeeklyActivity,
 } from "../analytics/progression";
+import { SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
 
 export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
   .use(dbPlugin)
@@ -31,10 +38,19 @@ export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
         starRating: beatmaps.starRating,
         setOnlineId: beatmapSets.onlineId,
         backgroundFileHash: beatmaps.backgroundFileHash,
+        sunnyEstDiff: beatmapDanRatings.estDiff,
+        sunnyStar: beatmapDanRatings.sunnyStar,
       })
       .from(scores)
       .leftJoin(beatmaps, eq(scores.beatmapId, beatmaps.id))
       .leftJoin(beatmapSets, eq(beatmaps.setId, beatmapSets.id))
+      .leftJoin(
+        beatmapDanRatings,
+        and(
+          eq(beatmapDanRatings.beatmapId, beatmaps.id),
+          eq(beatmapDanRatings.algorithm, SUNNY_ALGORITHM),
+        ),
+      )
       .where(eq(scores.deletePending, false))
       .orderBy(desc(scores.playedAt))
       .limit(25);
@@ -73,6 +89,8 @@ export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
         artist: s.artist,
         difficultyName: s.difficultyName,
         starRating: s.starRating,
+        sunnyEstDiff: s.sunnyEstDiff ?? null,
+        sunnyStar: s.sunnyStar ?? null,
         setOnlineId:
           s.setOnlineId != null && s.setOnlineId > 0 ? s.setOnlineId : null,
         backgroundFileHash: s.backgroundFileHash,

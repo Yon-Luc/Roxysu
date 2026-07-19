@@ -29,6 +29,8 @@ export type PracticeCardRow = {
   masteryLevel: number | null;
   /** Sunny dan label when computed (RC/LN split). */
   sunnyEstDiff: string | null;
+  /** Sunny rework star rating when computed. */
+  sunnyStar: number | null;
 };
 
 export type PracticeSortBy =
@@ -104,7 +106,8 @@ const SELECT_COLS = `
   ps.best_misses AS bestMisses,
   ps.last_played_at AS lastPlayedAt,
   m.level AS masteryLevel,
-  dr.est_diff AS sunnyEstDiff
+  dr.est_diff AS sunnyEstDiff,
+  dr.sunny_star AS sunnyStar
 `;
 
 function baseWhere(extra: string): string {
@@ -234,6 +237,7 @@ function mapRow(r: PracticeCardRow): PracticeCardRow {
     bestMisses: r.bestMisses != null ? Number(r.bestMisses) : null,
     masteryLevel: r.masteryLevel != null ? Number(r.masteryLevel) : null,
     sunnyEstDiff: r.sunnyEstDiff ?? null,
+    sunnyStar: r.sunnyStar != null ? Number(r.sunnyStar) : null,
   };
 }
 
@@ -253,8 +257,10 @@ function enrichSunnyLabels(
 
   const labels = ensureSunnyDanForIdsSync(db, missingDanIds);
   for (const item of mapped) {
-    const label = labels.get(item.id);
-    if (label) item.sunnyEstDiff = label;
+    const rating = labels.get(item.id);
+    if (!rating) continue;
+    item.sunnyEstDiff = rating.estDiff;
+    if (rating.sunnyStar != null) item.sunnyStar = rating.sunnyStar;
   }
   return mapped;
 }

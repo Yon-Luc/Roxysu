@@ -61,6 +61,17 @@ export function formatMods(mods: string | null | undefined): string {
   return mods;
 }
 
+/** Text for pasting into osu! song select search. */
+export function beatmapSearchText(
+  title: string | null | undefined,
+  difficultyName?: string | null,
+): string {
+  const stripBrackets = (s: string) => s.replace(/[\[\]]/g, "").trim();
+  const name = stripBrackets(title?.trim() || "Untitled") || "Untitled";
+  const diff = difficultyName ? stripBrackets(difficultyName.trim()) : "";
+  return diff ? `${name} ${diff}` : name;
+}
+
 /** Open a difficulty in the local osu! client (stable / lazer). */
 export function osuClientBeatmapUrl(
   onlineId: number | null | undefined,

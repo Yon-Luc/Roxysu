@@ -390,15 +390,20 @@ function computeOneSunnySync(
   }
 }
 
+export type SunnyDanEnsureResult = {
+  estDiff: string;
+  sunnyStar: number | null;
+};
+
 /**
  * Ensure Sunny dan exists for the given beatmap ids (mania only).
- * Returns id → estDiff for maps that have a label after this call.
+ * Returns id → rating for maps that have a label after this call.
  */
 export function ensureSunnyDanForIdsSync(
   db: Db,
   ids: string[],
-): Map<string, string> {
-  const out = new Map<string, string>();
+): Map<string, SunnyDanEnsureResult> {
+  const out = new Map<string, SunnyDanEnsureResult>();
   const unique = [...new Set(ids.filter(Boolean))];
   if (unique.length === 0) return out;
 
@@ -408,7 +413,8 @@ export function ensureSunnyDanForIdsSync(
       `
       SELECT b.id AS id, b.hash AS hash,
              b.ruleset_short_name AS rulesetShortName,
-             dr.est_diff AS estDiff
+             dr.est_diff AS estDiff,
+             dr.sunny_star AS sunnyStar
       FROM beatmaps b
       LEFT JOIN beatmap_dan_ratings dr
         ON dr.beatmap_id = b.id AND dr.algorithm = ?
@@ -420,11 +426,15 @@ export function ensureSunnyDanForIdsSync(
     hash: string | null;
     rulesetShortName: string | null;
     estDiff: string | null;
+    sunnyStar: number | null;
   }>;
 
   for (const row of rows) {
     if (row.estDiff) {
-      out.set(row.id, row.estDiff);
+      out.set(row.id, {
+        estDiff: row.estDiff,
+        sunnyStar: row.sunnyStar != null ? Number(row.sunnyStar) : null,
+      });
       continue;
     }
     if (row.rulesetShortName !== "mania") continue;
@@ -432,13 +442,22 @@ export function ensureSunnyDanForIdsSync(
     const updated = db.$client
       .query(
         `
-        SELECT est_diff AS estDiff
+        SELECT est_diff AS estDiff, sunny_star AS sunnyStar
         FROM beatmap_dan_ratings
         WHERE beatmap_id = ? AND algorithm = ?
       `,
       )
-      .get(row.id, SUNNY_ALGORITHM) as { estDiff: string | null } | null;
-    if (updated?.estDiff) out.set(row.id, updated.estDiff);
+      .get(row.id, SUNNY_ALGORITHM) as {
+      estDiff: string | null;
+      sunnyStar: number | null;
+    } | null;
+    if (updated?.estDiff) {
+      out.set(row.id, {
+        estDiff: updated.estDiff,
+        sunnyStar:
+          updated.sunnyStar != null ? Number(updated.sunnyStar) : null,
+      });
+    }
   }
 
   return out;

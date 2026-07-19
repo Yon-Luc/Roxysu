@@ -8,11 +8,15 @@ import {
   formatMods,
   formatPp,
   formatRelativeTime,
-  formatStars,
 } from "../../lib/format";
+import {
+  formatPrimaryRating,
+  useRatingDisplayMode,
+} from "../../lib/ratingDisplay";
 import { SessionUpNext } from "./SessionUpNext";
 
 export function SessionDetailPage({ sessionId }: { sessionId: string }) {
+  const ratingMode = useRatingDisplayMode();
   const isCurrentHub = sessionId === "current";
 
   const { data, isLoading, error, isFetching } = useQuery({
@@ -222,7 +226,13 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
                       {score.artist ?? "Unknown"}
                       {score.difficultyName ? ` · ${score.difficultyName}` : ""}
                       {" · "}
-                      {formatStars(score.starRating)} · {formatMods(score.mods)}
+                      {formatPrimaryRating({
+                        mode: ratingMode,
+                        starRating: score.starRating,
+                        sunnyEstDiff: score.sunnyEstDiff,
+                        sunnyStar: score.sunnyStar,
+                      })}{" "}
+                      · {formatMods(score.mods)}
                       {score.retryIndex != null && score.retryIndex > 0
                         ? ` · retry #${score.retryIndex}`
                         : ""}

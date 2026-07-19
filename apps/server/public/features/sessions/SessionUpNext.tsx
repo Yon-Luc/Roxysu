@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { BeatmapCover } from "../../components/BeatmapCover";
+import { CopyBeatmapSearchButton } from "../../components/CopyBeatmapSearchButton";
 import { QueryLanguageHelpButton } from "../../components/QueryLanguageHelpModal";
 import {
   fetchPracticeSample,
@@ -10,9 +11,12 @@ import {
 import {
   formatAccuracy,
   formatRelativeTime,
-  formatStars,
   osuClientBeatmapUrl,
 } from "../../lib/format";
+import {
+  formatPrimaryRating,
+  useRatingDisplayMode,
+} from "../../lib/ratingDisplay";
 
 const PREFS_KEY = "rx-session-up-next";
 const PRACTICE_SEARCH_KEY = "roxysu:practice-search";
@@ -178,6 +182,7 @@ export function SessionUpNext({
   rulesetShortName: string | null;
   excludeBeatmapIds: string[];
 }) {
+  const ratingMode = useRatingDisplayMode();
   const [prefs, setPrefs] = useState<UpNextPrefs>(() => loadPrefs());
   const [shuffleKey, setShuffleKey] = useState(0);
   const [queryDirty, setQueryDirty] = useState(false);
@@ -496,7 +501,12 @@ export function SessionUpNext({
                           ? ` · ${item.difficultyName}`
                           : ""}
                         {" · "}
-                        {formatStars(item.starRating)}
+                        {formatPrimaryRating({
+                          mode: ratingMode,
+                          starRating: item.starRating,
+                          sunnyEstDiff: item.sunnyEstDiff,
+                          sunnyStar: item.sunnyStar,
+                        })}
                       </div>
                     </div>
                     <div className="hidden shrink-0 text-right sm:block">
@@ -512,11 +522,18 @@ export function SessionUpNext({
                       </div>
                     </div>
                   </Link>
-                  {clientUrl ? (
-                    <a href={clientUrl} className="rx-btn shrink-0">
-                      Open in osu!
-                    </a>
-                  ) : null}
+                  <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                    <CopyBeatmapSearchButton
+                      title={item.title}
+                      difficultyName={item.difficultyName}
+                      className="rx-btn"
+                    />
+                    {clientUrl ? (
+                      <a href={clientUrl} className="rx-btn">
+                        Open in osu!
+                      </a>
+                    ) : null}
+                  </div>
                 </li>
               );
             })}

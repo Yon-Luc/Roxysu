@@ -6,9 +6,15 @@ import {
   startSunnyDanJob,
   stopSunnyDanJob,
 } from "../../lib/api";
+import {
+  ratingDisplayOptions,
+  setRatingDisplayMode,
+  useRatingDisplayMode,
+} from "../../lib/ratingDisplay";
 
 export function SettingsPage() {
   const queryClient = useQueryClient();
+  const ratingMode = useRatingDisplayMode();
   const { data, isLoading, error } = useQuery({
     queryKey: ["settings"],
     queryFn: fetchSettings,
@@ -78,7 +84,8 @@ export function SettingsPage() {
       <div>
         <h1 className="rx-title">Settings</h1>
         <p className="rx-subtitle">
-          Switch mastery formulas to experiment — changing recomputes all levels.
+          Display preferences and tools — mastery formulas recompute all levels
+          when changed.
         </p>
       </div>
 
@@ -121,6 +128,43 @@ export function SettingsPage() {
         {mut.error ? (
           <p className="mt-3 text-sm text-rose-300">{mut.error.message}</p>
         ) : null}
+      </section>
+
+      <section className="rx-panel p-5">
+        <h2 className="text-sm font-bold text-ink">Difficulty display</h2>
+        <p className="mt-1 text-sm text-muted">
+          Choose what appears in place of star rating across the app. Falls back
+          to osu! stars when Sunny data is missing.
+        </p>
+        <div className="mt-4 space-y-2">
+          {ratingDisplayOptions().map((opt) => {
+            const active = opt.id === ratingMode;
+            return (
+              <label
+                key={opt.id}
+                className={`flex cursor-pointer gap-3 rounded-xl px-4 py-3 transition ${
+                  active
+                    ? "bg-accent-glow ring-1 ring-accent/50"
+                    : "bg-elevated/50 hover:bg-elevated"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="ratingDisplay"
+                  checked={active}
+                  onChange={() => setRatingDisplayMode(opt.id)}
+                  className="mt-1 accent-[var(--color-accent)]"
+                />
+                <div>
+                  <div className="font-bold text-ink">{opt.label}</div>
+                  <div className="mt-0.5 text-sm text-muted">
+                    {opt.description}
+                  </div>
+                </div>
+              </label>
+            );
+          })}
+        </div>
       </section>
 
       <section className="rx-panel p-5">

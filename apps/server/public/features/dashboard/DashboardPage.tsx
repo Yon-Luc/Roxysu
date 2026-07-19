@@ -19,8 +19,11 @@ import {
   formatMods,
   formatPp,
   formatRelativeTime,
-  formatStars,
 } from "../../lib/format";
+import {
+  formatPrimaryRating,
+  useRatingDisplayMode,
+} from "../../lib/ratingDisplay";
 
 const chartTick = { fill: "#a7a7a7", fontSize: 11 };
 const tooltipStyle = {
@@ -31,6 +34,7 @@ const tooltipStyle = {
 };
 
 export function DashboardPage() {
+  const ratingMode = useRatingDisplayMode();
   const { data, isLoading, error } = useQuery({
     queryKey: ["dashboard"],
     queryFn: fetchDashboard,
@@ -222,7 +226,13 @@ export function DashboardPage() {
                       {score.artist ?? "Unknown"}
                       {score.difficultyName ? ` · ${score.difficultyName}` : ""}
                       {" · "}
-                      {formatStars(score.starRating)} · {formatMods(score.mods)}
+                      {formatPrimaryRating({
+                        mode: ratingMode,
+                        starRating: score.starRating,
+                        sunnyEstDiff: score.sunnyEstDiff,
+                        sunnyStar: score.sunnyStar,
+                      })}{" "}
+                      · {formatMods(score.mods)}
                     </div>
                   </div>
                   <div className="hidden shrink-0 text-right sm:block">

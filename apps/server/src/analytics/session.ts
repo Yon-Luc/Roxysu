@@ -6,6 +6,7 @@ import {
   desc,
   inArray,
   type Db,
+  beatmapDanRatings,
   beatmaps,
   beatmapSets,
   scores,
@@ -13,6 +14,7 @@ import {
   sessions,
 } from "@roxysu/db/client.bun";
 import { publish } from "../shared/events";
+import { SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
 
 const SESSION_GAP_MS = 30 * 60 * 1000;
 
@@ -236,11 +238,20 @@ export async function listSessionScores(db: Db, sessionId: number) {
       starRating: beatmaps.starRating,
       setOnlineId: beatmapSets.onlineId,
       backgroundFileHash: beatmaps.backgroundFileHash,
+      sunnyEstDiff: beatmapDanRatings.estDiff,
+      sunnyStar: beatmapDanRatings.sunnyStar,
     })
     .from(scoreMetrics)
     .innerJoin(scores, eq(scoreMetrics.scoreId, scores.id))
     .leftJoin(beatmaps, eq(scores.beatmapId, beatmaps.id))
     .leftJoin(beatmapSets, eq(beatmaps.setId, beatmapSets.id))
+    .leftJoin(
+      beatmapDanRatings,
+      and(
+        eq(beatmapDanRatings.beatmapId, beatmaps.id),
+        eq(beatmapDanRatings.algorithm, SUNNY_ALGORITHM),
+      ),
+    )
     .where(
       and(
         eq(scoreMetrics.sessionId, sessionId),

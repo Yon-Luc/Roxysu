@@ -1,18 +1,23 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { BeatmapCover } from "../../components/BeatmapCover";
+import { CopyBeatmapSearchButton } from "../../components/CopyBeatmapSearchButton";
 import { fetchBeatmap } from "../../lib/api";
 import {
   formatAccuracy,
   formatMods,
   formatPp,
   formatRelativeTime,
-  formatStars,
   osuClientBeatmapUrl,
   osuWebBeatmapUrl,
 } from "../../lib/format";
+import {
+  formatPrimaryRating,
+  useRatingDisplayMode,
+} from "../../lib/ratingDisplay";
 
 export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
+  const ratingMode = useRatingDisplayMode();
   const { data, isLoading, error } = useQuery({
     queryKey: ["beatmap", beatmapId],
     queryFn: () => fetchBeatmap(beatmapId),
@@ -77,32 +82,42 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
               {beatmap.title}
             </h1>
             <p className="mt-2 text-sm text-muted">
-              [{beatmap.difficultyName}] · {formatStars(beatmap.starRating)} ·{" "}
-              {beatmap.bpm.toFixed(0)} BPM
+              [{beatmap.difficultyName}] ·{" "}
+              {formatPrimaryRating({
+                mode: ratingMode,
+                starRating: beatmap.starRating,
+                sunnyEstDiff: sunnyDan?.estDiff,
+                sunnyStar: sunnyDan?.sunnyStar,
+              })}{" "}
+              · {beatmap.bpm.toFixed(0)} BPM
               {beatmap.mapperUsername
                 ? ` · mapped by ${beatmap.mapperUsername}`
                 : ""}
-              {sunnyDan?.estDiff ? ` · Sunny ${sunnyDan.estDiff}` : ""}
+              {ratingMode === "osu" && sunnyDan?.estDiff
+                ? ` · Sunny ${sunnyDan.estDiff}`
+                : ""}
             </p>
-            {(clientUrl || webUrl) && (
-              <div className="mt-4 flex flex-wrap gap-2">
-                {clientUrl && (
-                  <a href={clientUrl} className="rx-btn-primary">
-                    Open in osu!
-                  </a>
-                )}
-                {webUrl && (
-                  <a
-                    href={webUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rx-btn"
-                  >
-                    View on website
-                  </a>
-                )}
-              </div>
-            )}
+            <div className="mt-4 flex flex-wrap gap-2">
+              {clientUrl && (
+                <a href={clientUrl} className="rx-btn-primary">
+                  Open in osu!
+                </a>
+              )}
+              <CopyBeatmapSearchButton
+                title={beatmap.title}
+                difficultyName={beatmap.difficultyName}
+              />
+              {webUrl && (
+                <a
+                  href={webUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rx-btn"
+                >
+                  View on website
+                </a>
+              )}
+            </div>
           </div>
         </div>
       </div>

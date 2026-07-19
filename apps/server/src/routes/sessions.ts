@@ -52,6 +52,8 @@ async function sessionDetailPayload(
       artist: s.artist,
       difficultyName: s.difficultyName,
       starRating: s.starRating,
+      sunnyEstDiff: s.sunnyEstDiff ?? null,
+      sunnyStar: s.sunnyStar ?? null,
       setOnlineId:
         s.setOnlineId != null && s.setOnlineId > 0 ? s.setOnlineId : null,
       backgroundFileHash: s.backgroundFileHash,

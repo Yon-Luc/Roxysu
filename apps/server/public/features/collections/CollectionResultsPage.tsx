@@ -6,14 +6,18 @@ import {
   formatAccuracy,
   formatPp,
   formatRelativeTime,
-  formatStars,
 } from "../../lib/format";
+import {
+  formatPrimaryRating,
+  useRatingDisplayMode,
+} from "../../lib/ratingDisplay";
 
 export function CollectionResultsPage({
   collectionId,
 }: {
   collectionId: string;
 }) {
+  const ratingMode = useRatingDisplayMode();
   const id = Number(collectionId);
   const { data, isLoading, error } = useQuery({
     queryKey: ["collections", id, "results"],
@@ -76,7 +80,13 @@ export function CollectionResultsPage({
                   <div className="truncate text-sm text-muted">{item.artist}</div>
                   <div className="truncate font-bold text-ink">{item.title}</div>
                   <div className="mt-1 text-xs text-muted">
-                    [{item.difficultyName}] · {formatStars(item.starRating)}
+                    [{item.difficultyName}] ·{" "}
+                    {formatPrimaryRating({
+                      mode: ratingMode,
+                      starRating: item.starRating,
+                      sunnyEstDiff: item.sunnyEstDiff,
+                      sunnyStar: item.sunnyStar,
+                    })}
                   </div>
                   <div className="mt-2 flex gap-3 text-xs tabular-nums text-subtle">
                     <span>

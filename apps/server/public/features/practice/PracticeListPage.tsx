@@ -27,8 +27,11 @@ import {
   formatPp,
   formatRelativeTime,
   formatScore,
-  formatStars,
 } from "../../lib/format";
+import {
+  formatPrimaryRating,
+  useRatingDisplayMode,
+} from "../../lib/ratingDisplay";
 
 const PRACTICE_SEARCH_KEY = "roxysu:practice-search";
 
@@ -192,6 +195,7 @@ function writeStoredPracticeSearch(state: StoredPracticeSearch) {
 }
 
 export function PracticeListPage() {
+  const ratingMode = useRatingDisplayMode();
   const [stored] = useState(readStoredPracticeSearch);
   const [q, setQ] = useState(stored.q);
   const [page, setPage] = useState(stored.page);
@@ -498,7 +502,7 @@ export function PracticeListPage() {
                       className="aspect-[2.2/1] w-full"
                       alt=""
                     />
-                    {item.sunnyEstDiff ? (
+                    {ratingMode !== "dan" && item.sunnyEstDiff ? (
                       <span className="absolute bottom-2 left-2 max-w-[calc(100%-1rem)] truncate rounded bg-canvas/85 px-2 py-1 text-[11px] font-semibold leading-none text-ink shadow-sm ring-1 ring-white/10 backdrop-blur-sm">
                         {item.sunnyEstDiff}
                       </span>
@@ -521,7 +525,13 @@ export function PracticeListPage() {
                       ) : null}
                     </div>
                     <div className="mt-1 truncate text-xs text-muted">
-                      [{item.difficultyName ?? "—"}] · {formatStars(item.starRating)}
+                      [{item.difficultyName ?? "—"}] ·{" "}
+                      {formatPrimaryRating({
+                        mode: ratingMode,
+                        starRating: item.starRating,
+                        sunnyEstDiff: item.sunnyEstDiff,
+                        sunnyStar: item.sunnyStar,
+                      })}
                       {item.mapperUsername ? ` · ${item.mapperUsername}` : ""}
                     </div>
                     <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs tabular-nums text-subtle">

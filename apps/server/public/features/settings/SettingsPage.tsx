@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { KeybindModal } from "../../components/KeybindModal";
 import { PageTitle } from "../../components/PageTitle";
 import {
   fetchSettings,
@@ -24,6 +25,7 @@ export function SettingsPage() {
   });
 
   const [osuPathDraft, setOsuPathDraft] = useState("");
+  const [keybindOpen, setKeybindOpen] = useState(false);
 
   useEffect(() => {
     if (data?.paths) {
@@ -313,6 +315,25 @@ export function SettingsPage() {
         <Link to="/skin" className="rx-btn-primary mt-4 inline-flex">
           Open skin editor
         </Link>
+      </section>
+
+      <section className="rx-panel p-5">
+        <h2 className="text-sm font-bold text-ink">Keybinds</h2>
+        <p className="mt-1 text-sm text-muted">
+          Choose keys per column for each keymode when testing maps in preview
+          Play mode.
+        </p>
+        <button
+          type="button"
+          className="rx-btn-primary mt-4"
+          onClick={() => setKeybindOpen(true)}
+        >
+          Edit keybinds
+        </button>
+        <KeybindModal
+          open={keybindOpen}
+          onClose={() => setKeybindOpen(false)}
+        />
       </section>
 
       <section className="rx-panel p-5">

@@ -154,6 +154,7 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
           title: beatmaps.title,
           artist: beatmaps.artist,
           difficultyName: beatmaps.difficultyName,
+          overallDifficulty: beatmaps.overallDifficulty,
           setOnlineId: beatmapSets.onlineId,
           length: beatmaps.length,
         })
@@ -178,6 +179,7 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
         audioFileHash: row.audioFileHash,
         backgroundFileHash: row.backgroundFileHash,
         lengthMs: Math.round(row.length ?? 0),
+        overallDifficulty: row.overallDifficulty ?? 0,
         supported: false as boolean,
         columnCount: 0,
         notes: [] as Array<{ column: number; startMs: number; endMs: number }>,

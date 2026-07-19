@@ -58,6 +58,11 @@ type ManiaNotefieldProps = {
   skinOverride?: KeymodeSkin;
   /** Replay key frames (bitmask per column). */
   frames?: NotefieldFrame[];
+  /**
+   * Live play held columns (bitmask). When set, overrides `frames` for
+   * receptor lighting.
+   */
+  liveHeldMask?: number | null;
   /** Precomputed judgments keyed by note index (head result used for color). */
   judgments?: NotefieldJudgment[];
   /**
@@ -422,6 +427,7 @@ export function ManiaNotefield({
   scrollSpeed = PREVIEW_SCROLL_DEFAULT,
   skinOverride,
   frames,
+  liveHeldMask = null,
   judgments,
   highlightMissNotes = false,
   className = "",
@@ -432,6 +438,7 @@ export function ManiaNotefield({
   const getTimeRef = useRef(getCurrentTimeMs);
   const scrollSpeedRef = useRef(scrollSpeed);
   const framesRef = useRef<NotefieldFrame[]>([]);
+  const liveHeldMaskRef = useRef<number | null>(null);
   const headJudgmentsRef = useRef<Map<number, NotefieldJudgment>>(new Map());
   const highlightMissRef = useRef(highlightMissNotes);
   const storedSkin = usePreviewSkin();
@@ -454,6 +461,7 @@ export function ManiaNotefield({
   getTimeRef.current = getCurrentTimeMs;
   scrollSpeedRef.current = clampScrollSpeed(scrollSpeed);
   framesRef.current = frames ?? [];
+  liveHeldMaskRef.current = liveHeldMask ?? null;
   headJudgmentsRef.current = buildHeadJudgmentMap(judgments);
   highlightMissRef.current = highlightMissNotes;
 
@@ -512,7 +520,13 @@ export function ManiaNotefield({
       const lookaheadMs = timeRangeMs + 200;
 
       const frameIdx = frameList.length > 0 ? bisectFrame(frameList, t) : -1;
-      const keys = frameIdx >= 0 ? frameList[frameIdx]!.keys : 0;
+      const liveMask = liveHeldMaskRef.current;
+      const keys =
+        liveMask != null
+          ? liveMask
+          : frameIdx >= 0
+            ? frameList[frameIdx]!.keys
+            : 0;
 
       ctx!.clearRect(0, 0, w, h);
 

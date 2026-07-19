@@ -7,18 +7,31 @@ import {
   type FormEvent,
 } from "react";
 import { createPortal } from "react-dom";
-import { fetchBeatmapPreview } from "../lib/api";
+import { fetchBeatmapPreview, type BeatmapPreview } from "../lib/api";
 import {
+  formatAccuracy,
   localBeatmapAudioUrl,
   localBeatmapCoverUrl,
   osuBeatmapCoverUrl,
 } from "../lib/format";
+import {
+  codeToColumn,
+  formatKeyCode,
+  resolveKeybinds,
+  useKeybinds,
+} from "../lib/keybinds";
+import {
+  LiveManiaPlay,
+  type PracticeRange,
+} from "../lib/liveManiaPlay";
+import type { JudgmentSummary } from "../lib/maniaWindows";
 import {
   ManiaNotefield,
   migratePreviewScroll,
   PREVIEW_SCROLL_DEFAULT,
   PREVIEW_SCROLL_MAX,
   PREVIEW_SCROLL_MIN,
+  type NotefieldJudgment,
 } from "./ManiaNotefield";
 
 const PREFS_KEY = "rx-beatmap-preview";
@@ -34,11 +47,27 @@ type PreviewPrefs = {
   analysis?: boolean;
 };
 
+type ModalMode = "preview" | "play";
+
 const DEFAULT_PREFS: PreviewPrefs = {
   volume: 0.85,
   rate: 1,
   scroll: PREVIEW_SCROLL_DEFAULT,
   fullscreen: false,
+};
+
+const EMPTY_SUMMARY: JudgmentSummary = {
+  accuracy: 1,
+  combo: 0,
+  maxCombo: 0,
+  counts: {
+    perfect: 0,
+    great: 0,
+    good: 0,
+    ok: 0,
+    meh: 0,
+    miss: 0,
+  },
 };
 
 function loadPrefs(): PreviewPrefs {
@@ -77,11 +106,16 @@ function clamp(n: number, min: number, max: number) {
 type BeatmapPreviewButtonProps = {
   beatmapId: string;
   className?: string;
+  /** Open directly in Play mode (e.g. future miss-practice entry). */
+  initialMode?: ModalMode;
+  practiceRange?: PracticeRange | null;
 };
 
 export function BeatmapPreviewButton({
   beatmapId,
   className,
+  initialMode = "preview",
+  practiceRange = null,
 }: BeatmapPreviewButtonProps) {
   const [open, setOpen] = useState(false);
 
@@ -103,6 +137,8 @@ export function BeatmapPreviewButton({
             <BeatmapPreviewModal
               beatmapId={beatmapId}
               onClose={() => setOpen(false)}
+              initialMode={initialMode}
+              practiceRange={practiceRange}
             />,
             document.body,
           )
@@ -114,9 +150,13 @@ export function BeatmapPreviewButton({
 function BeatmapPreviewModal({
   beatmapId,
   onClose,
+  initialMode = "preview",
+  practiceRange = null,
 }: {
   beatmapId: string;
   onClose: () => void;
+  initialMode?: ModalMode;
+  practiceRange?: PracticeRange | null;
 }) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -125,17 +165,27 @@ function BeatmapPreviewModal({
   const previewTimeRef = useRef<number | null>(null);
   const audioUrlRef = useRef<string | null>(null);
   const onCloseRef = useRef(onClose);
+  const modeRef = useRef<ModalMode>(initialMode);
+  const livePlayRef = useRef<LiveManiaPlay | null>(null);
+  const dataRef = useRef<BeatmapPreview | undefined>(undefined);
+  const practiceRangeRef = useRef(practiceRange);
+  const keybindsAll = useKeybinds();
+  const bindsRef = useRef<string[]>([]);
 
   const [prefs, setPrefs] = useState<PreviewPrefs>(() => loadPrefs());
   const prefsRef = useRef(prefs);
+  const [mode, setMode] = useState<ModalMode>(initialMode);
   const [playing, setPlaying] = useState(false);
   const [currentMs, setCurrentMs] = useState(0);
   const [durationMs, setDurationMs] = useState(0);
   const [audioError, setAudioError] = useState<string | null>(null);
+  const [liveHeldMask, setLiveHeldMask] = useState(0);
+  const [liveJudgments, setLiveJudgments] = useState<NotefieldJudgment[]>([]);
+  const [liveSummary, setLiveSummary] = useState<JudgmentSummary>(EMPTY_SUMMARY);
 
   const { data, error, isLoading } = useQuery({
     queryKey: ["beatmap-preview", beatmapId],
-    queryFn: () => fetchBeatmapPreview(beatmapId),
+    queryFn: () => fetchBeatmapPreview(beatmapId) as Promise<BeatmapPreview>,
   });
 
   const audioUrl = localBeatmapAudioUrl(data?.audioFileHash);
@@ -149,6 +199,13 @@ function BeatmapPreviewModal({
   previewTimeRef.current = previewTime;
   audioUrlRef.current = audioUrl;
   onCloseRef.current = onClose;
+  modeRef.current = mode;
+  dataRef.current = data;
+  practiceRangeRef.current = practiceRange;
+
+  if (data?.supported && data.columnCount > 0) {
+    bindsRef.current = resolveKeybinds(keybindsAll, data.columnCount);
+  }
 
   useEffect(() => {
     try {
@@ -164,6 +221,74 @@ function BeatmapPreviewModal({
     audio.volume = prefs.volume;
     audio.playbackRate = prefs.rate;
   }, [prefs.volume, prefs.rate, audioUrl]);
+
+  function mapTimeMs(): number {
+    const audio = audioRef.current;
+    if (audio && Number.isFinite(audio.currentTime)) {
+      return audio.currentTime * 1000;
+    }
+    return currentMs;
+  }
+
+  function syncLiveHud() {
+    const play = livePlayRef.current;
+    if (!play) return;
+    setLiveHeldMask(play.heldMask);
+    setLiveJudgments([...play.judgments]);
+    setLiveSummary(play.summary);
+  }
+
+  function ensureLivePlay(): LiveManiaPlay | null {
+    const chart = dataRef.current;
+    if (!chart?.supported || chart.columnCount <= 0) return null;
+    const od = chart.overallDifficulty ?? 0;
+    const existing = livePlayRef.current;
+    if (
+      existing &&
+      existing.columnCount === chart.columnCount &&
+      existing.overallDifficulty === od
+    ) {
+      return existing;
+    }
+    const play = new LiveManiaPlay({
+      notes: chart.notes,
+      columnCount: chart.columnCount,
+      overallDifficulty: od,
+      practiceRange: practiceRangeRef.current,
+    });
+    livePlayRef.current = play;
+    return play;
+  }
+
+  function restartPlay() {
+    const play = ensureLivePlay();
+    play?.reset();
+    setLiveHeldMask(0);
+    setLiveJudgments([]);
+    setLiveSummary(EMPTY_SUMMARY);
+    seekTo(practiceRange?.fromMs ?? 0);
+    const audio = audioRef.current;
+    if (audio && audioUrlRef.current) {
+      void audio.play().catch(() => {
+        setAudioError("Playback blocked — click play again");
+      });
+    }
+  }
+
+  function enterPlayMode() {
+    setMode("play");
+    modeRef.current = "play";
+    restartPlay();
+  }
+
+  function enterPreviewMode() {
+    setMode("preview");
+    modeRef.current = "preview";
+    livePlayRef.current = null;
+    setLiveHeldMask(0);
+    setLiveJudgments([]);
+    setLiveSummary(EMPTY_SUMMARY);
+  }
 
   function seekTo(ms: number) {
     const audio = audioRef.current;
@@ -201,6 +326,61 @@ function BeatmapPreviewModal({
     });
   }
 
+  // Auto-start when opened directly in Play mode (e.g. future miss practice).
+  useEffect(() => {
+    if (initialMode !== "play") return;
+    if (!data?.supported || data.columnCount <= 0) return;
+    enterPlayMode();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.id, data?.supported, initialMode]);
+
+  // Recreate live judge when chart / OD / practice window changes.
+  useEffect(() => {
+    livePlayRef.current = null;
+    if (modeRef.current === "play" && data?.supported) {
+      ensureLivePlay()?.reset();
+      setLiveHeldMask(0);
+      setLiveJudgments([]);
+      setLiveSummary(EMPTY_SUMMARY);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- rebuild when chart identity changes
+  }, [beatmapId, data?.id, data?.overallDifficulty, practiceRange]);
+
+  // Tick live judge while in play mode.
+  useEffect(() => {
+    if (mode !== "play") return;
+    let raf = 0;
+    let running = true;
+    let lastJudgmentCount = -1;
+    let lastHeld = -1;
+    let lastCombo = -1;
+    function loop() {
+      if (!running) return;
+      const play = livePlayRef.current ?? ensureLivePlay();
+      if (play) {
+        play.tick(mapTimeMs());
+        const summary = play.summary;
+        if (
+          play.judgments.length !== lastJudgmentCount ||
+          play.heldMask !== lastHeld ||
+          summary.combo !== lastCombo
+        ) {
+          lastJudgmentCount = play.judgments.length;
+          lastHeld = play.heldMask;
+          lastCombo = summary.combo;
+          syncLiveHud();
+        }
+      }
+      raf = requestAnimationFrame(loop);
+    }
+    raf = requestAnimationFrame(loop);
+    return () => {
+      running = false;
+      cancelAnimationFrame(raf);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, data?.id]);
+
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
     dialogRef.current?.focus();
@@ -222,6 +402,49 @@ function BeatmapPreviewModal({
         return;
       }
       if (typing) return;
+
+      if (modeRef.current === "play") {
+        if (e.repeat) return;
+        const col = codeToColumn(bindsRef.current, e.code);
+        if (col >= 0) {
+          e.preventDefault();
+          const play = livePlayRef.current ?? ensureLivePlay();
+          if (play) {
+            play.press(col, mapTimeMs());
+            syncLiveHud();
+          }
+          return;
+        }
+        if (e.key === " " || e.key === "k" || e.key === "K") {
+          // Space may be a column bind (handled above); otherwise toggle.
+          e.preventDefault();
+          togglePlay();
+          return;
+        }
+        if (e.key === "r" || e.key === "R") {
+          e.preventDefault();
+          restartPlay();
+          return;
+        }
+        if (e.key === "f" || e.key === "F") {
+          e.preventDefault();
+          setPrefs((p) => ({ ...p, fullscreen: !p.fullscreen }));
+          return;
+        }
+        if (e.key === "[" || e.key === "]") {
+          e.preventDefault();
+          const dir = e.key === "[" ? -1 : 1;
+          setPrefs((p) => ({
+            ...p,
+            scroll: clamp(
+              p.scroll + dir,
+              PREVIEW_SCROLL_MIN,
+              PREVIEW_SCROLL_MAX,
+            ),
+          }));
+        }
+        return;
+      }
 
       if (e.key === "f" || e.key === "F") {
         e.preventDefault();
@@ -281,12 +504,27 @@ function BeatmapPreviewModal({
       }
     }
 
+    function onKeyUp(e: KeyboardEvent) {
+      if (modeRef.current !== "play") return;
+      const col = codeToColumn(bindsRef.current, e.code);
+      if (col < 0) return;
+      e.preventDefault();
+      const play = livePlayRef.current ?? ensureLivePlay();
+      if (play) {
+        play.release(col, mapTimeMs());
+        syncLiveHud();
+      }
+    }
+
     document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("keyup", onKeyUp);
     return () => {
       document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("keyup", onKeyUp);
       document.body.style.overflow = previousOverflow;
       prev?.focus();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -303,7 +541,11 @@ function BeatmapPreviewModal({
 
     function seekPreviewIfNeeded() {
       if (previewSeekDone.current) return;
-      if (previewTime != null && previewTime > 0) {
+      if (modeRef.current === "play") {
+        const start = practiceRange?.fromMs ?? 0;
+        audio!.currentTime = start / 1000;
+        setCurrentMs(start);
+      } else if (previewTime != null && previewTime > 0) {
         audio!.currentTime = previewTime / 1000;
         setCurrentMs(previewTime);
       }
@@ -359,9 +601,10 @@ function BeatmapPreviewModal({
       audio.removeEventListener("ended", onEnded);
       audio.removeEventListener("error", onError);
     };
-  }, [audioUrl, previewTime]);
+  }, [audioUrl, previewTime, practiceRange]);
 
   function onSeek(e: FormEvent<HTMLInputElement>) {
+    if (mode === "play") return;
     const next = Number(e.currentTarget.value);
     seekTo(next);
   }
@@ -372,7 +615,13 @@ function BeatmapPreviewModal({
         .join(" · ")
     : "Beatmap preview";
   const subtitle = data
-    ? [data.artist, data.columnCount > 0 ? `${data.columnCount}K` : null]
+    ? [
+        data.artist,
+        data.columnCount > 0 ? `${data.columnCount}K` : null,
+        data.supported
+          ? `OD ${(data.overallDifficulty ?? 0).toFixed(1)}`
+          : null,
+      ]
         .filter(Boolean)
         .join(" · ")
     : null;
@@ -385,6 +634,14 @@ function BeatmapPreviewModal({
   })();
   const scrollLabel = Math.round(prefs.scroll);
   const fullscreen = prefs.fullscreen;
+  const binds =
+    data?.supported && data.columnCount > 0
+      ? resolveKeybinds(keybindsAll, data.columnCount)
+      : [];
+  const isPlay = mode === "play";
+  // Full chart on the field so judgment noteIndex stays aligned; practiceRange
+  // only limits which notes LiveManiaPlay judges.
+  const fieldNotes = data?.notes ?? [];
 
   return (
     <div
@@ -432,6 +689,32 @@ function BeatmapPreviewModal({
             ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-1">
+            {data?.supported ? (
+              <div className="mr-1 flex rounded-full bg-black/40 p-0.5 ring-1 ring-white/10">
+                <button
+                  type="button"
+                  className={`rounded-full px-3 py-1 text-sm transition ${
+                    !isPlay
+                      ? "bg-accent-glow text-ink"
+                      : "text-muted hover:text-ink"
+                  }`}
+                  onClick={enterPreviewMode}
+                >
+                  Preview
+                </button>
+                <button
+                  type="button"
+                  className={`rounded-full px-3 py-1 text-sm transition ${
+                    isPlay
+                      ? "bg-accent-glow text-ink"
+                      : "text-muted hover:text-ink"
+                  }`}
+                  onClick={enterPlayMode}
+                >
+                  Play
+                </button>
+              </div>
+            ) : null}
             <button
               type="button"
               onClick={() =>
@@ -474,6 +757,45 @@ function BeatmapPreviewModal({
             </p>
           ) : data ? (
             <>
+              {isPlay ? (
+                <div className="relative flex flex-wrap items-center justify-center gap-x-4 gap-y-1 border-b border-white/10 bg-black/40 px-4 py-2 text-sm tabular-nums backdrop-blur">
+                  <span className="font-bold text-ink">
+                    {liveSummary.combo}x
+                  </span>
+                  <span className="text-muted">
+                    {formatAccuracy(liveSummary.accuracy)}
+                  </span>
+                  <span className="text-faint">
+                    max {liveSummary.maxCombo}x
+                  </span>
+                  <span className="hidden text-xs text-subtle sm:inline">
+                    <span className="text-[#ffe566]">
+                      {liveSummary.counts.perfect}
+                    </span>
+                    {" / "}
+                    <span className="text-[#7dd3fc]">
+                      {liveSummary.counts.great}
+                    </span>
+                    {" / "}
+                    <span className="text-[#86efac]">
+                      {liveSummary.counts.good}
+                    </span>
+                    {" / "}
+                    <span className="text-[#fdba74]">
+                      {liveSummary.counts.ok}
+                    </span>
+                    {" / "}
+                    <span className="text-[#f9a8d4]">
+                      {liveSummary.counts.meh}
+                    </span>
+                    {" / "}
+                    <span className="text-[#f87171]">
+                      {liveSummary.counts.miss}
+                    </span>
+                  </span>
+                </div>
+              ) : null}
+
               <div
                 className={
                   fullscreen
@@ -485,8 +807,10 @@ function BeatmapPreviewModal({
                   <div className="h-full w-full overflow-hidden rounded-xl">
                     <ManiaNotefield
                       columnCount={data.columnCount}
-                      notes={data.notes}
+                      notes={fieldNotes}
                       scrollSpeed={prefs.scroll}
+                      liveHeldMask={isPlay ? liveHeldMask : null}
+                      judgments={isPlay ? liveJudgments : undefined}
                       getCurrentTimeMs={() => {
                         const audio = audioRef.current;
                         if (audio && Number.isFinite(audio.currentTime)) {
@@ -528,8 +852,8 @@ function BeatmapPreviewModal({
                     step={10}
                     value={Math.min(currentMs, maxDuration)}
                     onInput={onSeek}
-                    disabled={!audioUrl}
-                    className="min-w-0 flex-1 accent-[var(--accent)]"
+                    disabled={!audioUrl || isPlay}
+                    className="min-w-0 flex-1 accent-[var(--accent)] disabled:opacity-40"
                     aria-label="Seek"
                   />
                   <span className="w-16 shrink-0 text-right tabular-nums text-xs text-muted sm:w-20">
@@ -538,53 +862,78 @@ function BeatmapPreviewModal({
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                  <button
-                    type="button"
-                    className="rx-btn"
-                    disabled={!audioUrl}
-                    onClick={() => seekBy(-SKIP_MS)}
-                    title="Skip back 5s (←)"
-                  >
-                    −5s
-                  </button>
-                  <button
-                    type="button"
-                    className="rx-btn-primary min-w-[5.5rem]"
-                    onClick={togglePlay}
-                    disabled={!audioUrl}
-                    title="Play / pause (Space)"
-                  >
-                    {playing ? "Pause" : "Play"}
-                  </button>
-                  <button
-                    type="button"
-                    className="rx-btn"
-                    disabled={!audioUrl}
-                    onClick={() => seekBy(SKIP_MS)}
-                    title="Skip forward 5s (→)"
-                  >
-                    +5s
-                  </button>
-                  <button
-                    type="button"
-                    className="rx-btn"
-                    disabled={!audioUrl}
-                    onClick={() => seekTo(0)}
-                    title="Restart (Home)"
-                  >
-                    Start
-                  </button>
-                  {previewTime != null && previewTime > 0 ? (
-                    <button
-                      type="button"
-                      className="rx-btn"
-                      disabled={!audioUrl}
-                      onClick={() => seekTo(previewTime)}
-                      title="Jump to preview point (P)"
-                    >
-                      Preview
-                    </button>
-                  ) : null}
+                  {isPlay ? (
+                    <>
+                      <button
+                        type="button"
+                        className="rx-btn-primary min-w-[5.5rem]"
+                        onClick={togglePlay}
+                        disabled={!audioUrl}
+                        title="Play / pause"
+                      >
+                        {playing ? "Pause" : "Play"}
+                      </button>
+                      <button
+                        type="button"
+                        className="rx-btn"
+                        disabled={!audioUrl}
+                        onClick={restartPlay}
+                        title="Restart (R)"
+                      >
+                        Restart
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        className="rx-btn"
+                        disabled={!audioUrl}
+                        onClick={() => seekBy(-SKIP_MS)}
+                        title="Skip back 5s (←)"
+                      >
+                        −5s
+                      </button>
+                      <button
+                        type="button"
+                        className="rx-btn-primary min-w-[5.5rem]"
+                        onClick={togglePlay}
+                        disabled={!audioUrl}
+                        title="Play / pause (Space)"
+                      >
+                        {playing ? "Pause" : "Play"}
+                      </button>
+                      <button
+                        type="button"
+                        className="rx-btn"
+                        disabled={!audioUrl}
+                        onClick={() => seekBy(SKIP_MS)}
+                        title="Skip forward 5s (→)"
+                      >
+                        +5s
+                      </button>
+                      <button
+                        type="button"
+                        className="rx-btn"
+                        disabled={!audioUrl}
+                        onClick={() => seekTo(0)}
+                        title="Restart (Home)"
+                      >
+                        Start
+                      </button>
+                      {previewTime != null && previewTime > 0 ? (
+                        <button
+                          type="button"
+                          className="rx-btn"
+                          disabled={!audioUrl}
+                          onClick={() => seekTo(previewTime)}
+                          title="Jump to preview point (P)"
+                        >
+                          Preview
+                        </button>
+                      ) : null}
+                    </>
+                  )}
 
                   <div className="mx-1 hidden h-6 w-px bg-white/10 sm:block" />
 
@@ -645,12 +994,32 @@ function BeatmapPreviewModal({
                 </div>
 
                 <p className="mt-2 hidden text-[11px] text-faint sm:block">
-                  Space play · ← → skip 5s · Home start · P preview · F fullscreen ·
-                  [ ] scroll · , . rate
-                  {" · "}
-                  <a href="#/skin" className="text-subtle underline-offset-2 hover:underline">
-                    Edit skin
-                  </a>
+                  {isPlay ? (
+                    <>
+                      Keys{" "}
+                      {binds.map((c) => formatKeyCode(c)).join(" ")} · R restart
+                      · Esc close
+                      {" · "}
+                      <a
+                        href="#/settings"
+                        className="text-subtle underline-offset-2 hover:underline"
+                      >
+                        Edit keybinds
+                      </a>
+                    </>
+                  ) : (
+                    <>
+                      Space play · ← → skip 5s · Home start · P preview · F
+                      fullscreen · [ ] scroll · , . rate
+                      {" · "}
+                      <a
+                        href="#/skin"
+                        className="text-subtle underline-offset-2 hover:underline"
+                      >
+                        Edit skin
+                      </a>
+                    </>
+                  )}
                 </p>
               </div>
             </>

@@ -176,7 +176,7 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
         previewTime: row.previewTime,
         audioFileHash: row.audioFileHash,
         backgroundFileHash: row.backgroundFileHash,
-        lengthMs: Math.round((row.length ?? 0) * 1000),
+        lengthMs: Math.round(row.length ?? 0),
         supported: false as boolean,
         columnCount: 0,
         notes: [] as Array<{ column: number; startMs: number; endMs: number }>,

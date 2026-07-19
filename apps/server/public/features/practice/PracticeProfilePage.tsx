@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { BeatmapCover } from "../../components/BeatmapCover";
+import { BeatmapPreviewButton } from "../../components/BeatmapPreviewModal";
 import { CopyBeatmapSearchButton } from "../../components/CopyBeatmapSearchButton";
 import { fetchBeatmap } from "../../lib/api";
 import {
@@ -106,6 +107,7 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
                 : ""}
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
+              <BeatmapPreviewButton beatmapId={beatmap.id} />
               {clientUrl && (
                 <a href={clientUrl} className="rx-btn-primary">
                   Open in osu!

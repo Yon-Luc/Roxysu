@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { QueryLanguageHelpButton } from "../../components/QueryLanguageHelpModal";
 import { BeatmapCover } from "../../components/BeatmapCover";
+import { BeatmapPreviewButton } from "../../components/BeatmapPreviewModal";
 import { PageTitle } from "../../components/PageTitle";
 import {
   fetchPracticeDistribution,
@@ -542,6 +543,9 @@ export function PracticeListPage() {
                       <span>{formatScore(item.bestScore)}</span>
                       <span>{formatPp(item.bestPp)}</span>
                       <span>{formatRelativeTime(item.lastPlayedAt)}</span>
+                    </div>
+                    <div className="mt-3">
+                      <BeatmapPreviewButton beatmapId={item.id} />
                     </div>
                   </div>
                 </Link>

@@ -352,12 +352,13 @@ function BeatmapPreviewModal({
         .filter(Boolean)
         .join(" · ")
     : null;
-  const maxDuration = Math.max(
-    durationMs,
-    data?.lengthMs ?? 0,
-    currentMs,
-    1,
-  );
+  const maxDuration = (() => {
+    const candidates = [durationMs, data?.lengthMs ?? 0].filter(
+      (n) => Number.isFinite(n) && n > 0 && n < 24 * 60 * 60 * 1000,
+    );
+    const base = candidates.length > 0 ? Math.max(...candidates) : 1;
+    return Math.max(base, currentMs, 1);
+  })();
   const scrollLabel = Math.round((prefs.scroll / PREVIEW_SCROLL_DEFAULT) * 100);
 
   return (

@@ -490,13 +490,20 @@ export function PracticeListPage() {
                   params={{ beatmapId: item.id }}
                   className="rx-card"
                 >
-                  <BeatmapCover
-                    backgroundFileHash={item.backgroundFileHash}
-                    setOnlineId={item.setOnlineId}
-                    size="card"
-                    className="aspect-[2.2/1] w-full"
-                    alt=""
-                  />
+                  <div className="relative">
+                    <BeatmapCover
+                      backgroundFileHash={item.backgroundFileHash}
+                      setOnlineId={item.setOnlineId}
+                      size="card"
+                      className="aspect-[2.2/1] w-full"
+                      alt=""
+                    />
+                    {item.sunnyEstDiff ? (
+                      <span className="absolute bottom-2 left-2 max-w-[calc(100%-1rem)] truncate rounded bg-canvas/85 px-2 py-1 text-[11px] font-semibold leading-none text-ink shadow-sm ring-1 ring-white/10 backdrop-blur-sm">
+                        {item.sunnyEstDiff}
+                      </span>
+                    ) : null}
+                  </div>
                   <div className="p-4">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">

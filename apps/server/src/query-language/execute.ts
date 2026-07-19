@@ -3,7 +3,7 @@ import { parseQuery } from "./parse";
 import { compileQuery } from "./compile";
 import type { AstNode } from "./ast";
 import { astUsesDanRating } from "./astUsesDan";
-import { backfillSunnyDanSync } from "../map-analysis/computeSunnyDan";
+import { backfillSunnyDanSync, ensureSunnyDanForIdsSync } from "../map-analysis/computeSunnyDan";
 
 /** Max maps to compute per dan/sunny query so first filter stays responsive. */
 const DAN_QUERY_BACKFILL_LIMIT = 120;
@@ -27,6 +27,8 @@ export type PracticeCardRow = {
   bestMisses: number | null;
   lastPlayedAt: number | null;
   masteryLevel: number | null;
+  /** Sunny dan label when computed (RC/LN split). */
+  sunnyEstDiff: string | null;
 };
 
 export type PracticeSortBy =
@@ -101,7 +103,8 @@ const SELECT_COLS = `
   ps.best_score AS bestScore,
   ps.best_misses AS bestMisses,
   ps.last_played_at AS lastPlayedAt,
-  m.level AS masteryLevel
+  m.level AS masteryLevel,
+  dr.est_diff AS sunnyEstDiff
 `;
 
 function baseWhere(extra: string): string {
@@ -230,7 +233,30 @@ function mapRow(r: PracticeCardRow): PracticeCardRow {
     bestScore: r.bestScore != null ? Number(r.bestScore) : null,
     bestMisses: r.bestMisses != null ? Number(r.bestMisses) : null,
     masteryLevel: r.masteryLevel != null ? Number(r.masteryLevel) : null,
+    sunnyEstDiff: r.sunnyEstDiff ?? null,
   };
+}
+
+function enrichSunnyLabels(
+  db: Db,
+  items: PracticeCardRow[],
+): PracticeCardRow[] {
+  const mapped = items.map(mapRow);
+  const missingDanIds = mapped
+    .filter(
+      (item) =>
+        !item.sunnyEstDiff &&
+        (item.rulesetShortName ?? "").toLowerCase() === "mania",
+    )
+    .map((item) => item.id);
+  if (missingDanIds.length === 0) return mapped;
+
+  const labels = ensureSunnyDanForIdsSync(db, missingDanIds);
+  for (const item of mapped) {
+    const label = labels.get(item.id);
+    if (label) item.sunnyEstDiff = label;
+  }
+  return mapped;
 }
 
 export function executeAst(
@@ -283,7 +309,7 @@ function executeFilter(
     .all(...bindings, opts.limit, opts.offset) as PracticeCardRow[];
 
   return {
-    items: items.map(mapRow),
+    items: enrichSunnyLabels(db, items),
     total: Number(countRow?.n ?? 0),
   };
 }
@@ -361,7 +387,7 @@ export function sampleBeatmaps(
     .all(...bindings, count) as PracticeCardRow[];
 
   return {
-    items: items.map(mapRow),
+    items: enrichSunnyLabels(db, items),
     total: Number(countRow?.n ?? 0),
   };
 }

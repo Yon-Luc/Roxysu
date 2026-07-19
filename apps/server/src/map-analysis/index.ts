@@ -10,6 +10,7 @@ export {
   getOrComputeSunnyDan,
   backfillSunnyDanSync,
   relabelSunnyDanSync,
+  ensureSunnyDanForIdsSync,
   SUNNY_ALGORITHM,
 } from "./computeSunnyDan";
 export { estDiff, LN_DAN_RATIO_THRESHOLD } from "./estDiff";

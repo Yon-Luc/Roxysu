@@ -391,6 +391,60 @@ function computeOneSunnySync(
 }
 
 /**
+ * Ensure Sunny dan exists for the given beatmap ids (mania only).
+ * Returns id → estDiff for maps that have a label after this call.
+ */
+export function ensureSunnyDanForIdsSync(
+  db: Db,
+  ids: string[],
+): Map<string, string> {
+  const out = new Map<string, string>();
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (unique.length === 0) return out;
+
+  const placeholders = unique.map(() => "?").join(",");
+  const rows = db.$client
+    .query(
+      `
+      SELECT b.id AS id, b.hash AS hash,
+             b.ruleset_short_name AS rulesetShortName,
+             dr.est_diff AS estDiff
+      FROM beatmaps b
+      LEFT JOIN beatmap_dan_ratings dr
+        ON dr.beatmap_id = b.id AND dr.algorithm = ?
+      WHERE b.id IN (${placeholders})
+    `,
+    )
+    .all(SUNNY_ALGORITHM, ...unique) as Array<{
+    id: string;
+    hash: string | null;
+    rulesetShortName: string | null;
+    estDiff: string | null;
+  }>;
+
+  for (const row of rows) {
+    if (row.estDiff) {
+      out.set(row.id, row.estDiff);
+      continue;
+    }
+    if (row.rulesetShortName !== "mania") continue;
+    computeOneSunnySync(db, row.id, row.hash, row.rulesetShortName);
+    const updated = db.$client
+      .query(
+        `
+        SELECT est_diff AS estDiff
+        FROM beatmap_dan_ratings
+        WHERE beatmap_id = ? AND algorithm = ?
+      `,
+      )
+      .get(row.id, SUNNY_ALGORITHM) as { estDiff: string | null } | null;
+    if (updated?.estDiff) out.set(row.id, updated.estDiff);
+  }
+
+  return out;
+}
+
+/**
  * Re-apply current RC/LN label rules to cached Sunny ratings (no .osu re-read).
  * Used after threshold/rule changes (e.g. 20% LN split).
  */

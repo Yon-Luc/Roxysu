@@ -74,6 +74,7 @@ function mapCard(r: {
   bestMisses: number | null;
   lastPlayedAt: number | Date | null;
   masteryLevel?: number | null;
+  sunnyEstDiff?: string | null;
 }) {
   return {
     id: r.id,
@@ -94,6 +95,7 @@ function mapCard(r: {
     bestMisses: r.bestMisses ?? null,
     lastPlayedAt: toIso(r.lastPlayedAt),
     masteryLevel: r.masteryLevel ?? null,
+    sunnyEstDiff: r.sunnyEstDiff ?? null,
   };
 }
 

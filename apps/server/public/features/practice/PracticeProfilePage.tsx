@@ -20,13 +20,13 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
   });
 
   if (isLoading) {
-    return <p className="text-[#8b93a7]">Loading practice profile…</p>;
+    return <p className="text-muted">Loading practice profile…</p>;
   }
 
   if (error || !data || !("beatmap" in data) || !data.beatmap) {
     return (
       <div className="space-y-3">
-        <Link to="/practice" className="text-sm text-[#8b93a7] hover:text-white">
+        <Link to="/practice" className="rx-back">
           ← Practice
         </Link>
         <p className="text-rose-300">
@@ -47,23 +47,26 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
   return (
     <div className="space-y-8">
       <div>
-        <Link to="/practice" className="text-sm text-[#8b93a7] hover:text-white">
+        <Link to="/practice" className="rx-back">
           ← Practice
         </Link>
-        <div className="relative mt-3 overflow-hidden rounded-lg border border-white/10">
+        <div className="relative mt-4 overflow-hidden rounded-xl">
           <BeatmapCover
             backgroundFileHash={beatmap.backgroundFileHash}
             setOnlineId={beatmap.setOnlineId}
             size="cover"
-            className="aspect-[21/9] w-full max-h-56 sm:max-h-64"
+            className="aspect-[21/9] w-full max-h-64 sm:max-h-72"
             alt=""
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#0e1015] via-[#0e1015]/55 to-transparent" />
-          <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5">
-            <h1 className="text-2xl font-semibold tracking-tight text-white">
-              {beatmap.artist} — {beatmap.title}
+          <div className="absolute inset-0 bg-gradient-to-t from-canvas via-canvas/60 to-transparent" />
+          <div className="absolute inset-x-0 bottom-0 p-5 sm:p-7">
+            <p className="text-sm font-medium text-subtle">
+              {beatmap.artist}
+            </p>
+            <h1 className="mt-1 font-display text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
+              {beatmap.title}
             </h1>
-            <p className="mt-1 text-[#a8b0c0]">
+            <p className="mt-2 text-sm text-muted">
               [{beatmap.difficultyName}] · {formatStars(beatmap.starRating)} ·{" "}
               {beatmap.bpm.toFixed(0)} BPM
               {beatmap.mapperUsername
@@ -71,12 +74,9 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
                 : ""}
             </p>
             {(clientUrl || webUrl) && (
-              <div className="mt-3 flex flex-wrap gap-3 text-sm">
+              <div className="mt-4 flex flex-wrap gap-2">
                 {clientUrl && (
-                  <a
-                    href={clientUrl}
-                    className="text-[#7eb8ff] hover:text-white"
-                  >
+                  <a href={clientUrl} className="rx-btn-primary">
                     Open in osu!
                   </a>
                 )}
@@ -85,7 +85,7 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
                     href={webUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-[#8b93a7] hover:text-white"
+                    className="rx-btn"
                   >
                     View on website
                   </a>
@@ -107,27 +107,27 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
       </section>
 
       <section className="grid gap-4 sm:grid-cols-2">
-        <div className="rounded-lg border border-white/10 bg-[#151922] px-4 py-4">
-          <h3 className="text-sm font-medium text-[#a8b0c0]">Mastery</h3>
+        <div className="rx-panel px-5 py-5">
+          <h3 className="text-sm font-bold text-ink">Mastery</h3>
           {mastery ? (
-            <div className="mt-2 space-y-1">
-              <div className="text-3xl font-semibold tabular-nums text-white">
+            <div className="mt-3 space-y-1">
+              <div className="font-display text-4xl font-extrabold tabular-nums text-accent">
                 {mastery.level.toFixed(1)}
               </div>
-              <p className="text-xs text-[#8b93a7]">
+              <p className="text-xs text-muted">
                 Formula: {mastery.formulaId} · {mastery.playCount} plays
               </p>
             </div>
           ) : (
-            <p className="mt-2 text-sm text-[#6b7385]">No mastery yet.</p>
+            <p className="mt-3 text-sm text-faint">No mastery yet.</p>
           )}
         </div>
-        <div className="rounded-lg border border-white/10 bg-[#151922] px-4 py-4">
-          <h3 className="text-sm font-medium text-[#a8b0c0]">Sessions</h3>
+        <div className="rx-panel px-5 py-5">
+          <h3 className="text-sm font-bold text-ink">Sessions</h3>
           {sessions.length === 0 ? (
-            <p className="mt-2 text-sm text-[#6b7385]">No sessions linked.</p>
+            <p className="mt-3 text-sm text-faint">No sessions linked.</p>
           ) : (
-            <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto text-sm">
+            <ul className="mt-3 max-h-40 space-y-0.5 overflow-y-auto">
               {sessions.map((s) => (
                 <li key={s.id}>
                   <Link
@@ -136,10 +136,14 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
                       sessionId:
                         s.endedAt == null ? "current" : String(s.id),
                     }}
-                    className="flex justify-between gap-2 text-[#a8b0c0] hover:text-white"
+                    className="rx-row justify-between !px-2 !py-1.5 text-sm"
                   >
-                    <span>{formatRelativeTime(s.startedAt)}</span>
-                    <span className="tabular-nums">{s.scoreCount} plays</span>
+                    <span className="text-subtle">
+                      {formatRelativeTime(s.startedAt)}
+                    </span>
+                    <span className="tabular-nums text-muted">
+                      {s.scoreCount} plays
+                    </span>
                   </Link>
                 </li>
               ))}
@@ -149,25 +153,22 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
       </section>
 
       <section>
-        <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-[#8b93a7]">
+        <h2 className="mb-3 font-display text-2xl font-bold tracking-tight text-ink">
           Score timeline
         </h2>
         {recentScores.length === 0 ? (
-          <p className="text-sm text-[#8b93a7]">No scores on this map yet.</p>
+          <p className="text-sm text-muted">No scores on this map yet.</p>
         ) : (
-          <ul className="divide-y divide-white/5 overflow-hidden rounded-lg border border-white/10 bg-[#151922]">
+          <ul className="space-y-0.5">
             {recentScores.map((score) => (
-              <li
-                key={score.id}
-                className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
-              >
-                <div className="text-sm text-[#a8b0c0]">
+              <li key={score.id} className="rx-row justify-between">
+                <div className="text-sm text-subtle">
                   {formatRelativeTime(score.playedAt)} · {formatMods(score.mods)}
                 </div>
-                <div className="flex gap-4 text-sm tabular-nums text-white">
+                <div className="flex gap-4 text-sm font-semibold tabular-nums text-ink">
                   <span>{formatAccuracy(score.accuracy)}</span>
-                  <span className="text-[#a8b0c0]">{formatPp(score.pp)}</span>
-                  <span className="text-[#8b93a7]">{score.maxCombo}x</span>
+                  <span className="text-subtle">{formatPp(score.pp)}</span>
+                  <span className="text-muted">{score.maxCombo}x</span>
                 </div>
               </li>
             ))}
@@ -180,11 +181,9 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
 
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-white/10 bg-[#151922] px-3 py-2.5">
-      <div className="text-[11px] uppercase tracking-wider text-[#8b93a7]">
-        {label}
-      </div>
-      <div className="mt-0.5 font-medium tabular-nums text-white">{value}</div>
+    <div className="rx-stat">
+      <div className="rx-label">{label}</div>
+      <div className="mt-1.5 text-lg font-bold tabular-nums text-ink">{value}</div>
     </div>
   );
 }

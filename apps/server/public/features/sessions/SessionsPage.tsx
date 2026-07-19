@@ -10,7 +10,7 @@ export function SessionsPage() {
   });
 
   if (isLoading) {
-    return <p className="text-[#8b93a7]">Loading sessions…</p>;
+    return <p className="text-muted">Loading sessions…</p>;
   }
 
   if (error || !data) {
@@ -22,12 +22,10 @@ export function SessionsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-white">
-          Sessions
-        </h1>
-        <p className="mt-1 text-sm text-[#8b93a7]">
+        <h1 className="rx-title">Sessions</h1>
+        <p className="rx-subtitle">
           Automatic play groups (30 min inactivity starts a new session).
         </p>
       </div>
@@ -36,36 +34,38 @@ export function SessionsPage() {
         <Link
           to="/sessions/$sessionId"
           params={{ sessionId: "current" }}
-          className="block rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 transition hover:border-emerald-400/50 hover:bg-emerald-500/15"
+          className="group relative block overflow-hidden rounded-xl bg-gradient-to-br from-accent/20 via-surface to-surface p-5 transition hover:from-accent/30"
         >
           <div className="flex items-center justify-between gap-3">
             <div>
-              <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-emerald-300">
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-accent">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-accent" />
                 </span>
-                Current session
+                Now playing
               </div>
-              <div className="mt-1 text-white">
-                {data.current.scoreCount} plays · started{" "}
-                {formatRelativeTime(data.current.startedAt)}
+              <div className="mt-2 font-display text-2xl font-bold text-ink">
+                {data.current.scoreCount} plays
+              </div>
+              <div className="mt-1 text-sm text-muted">
+                Started {formatRelativeTime(data.current.startedAt)}
                 {data.current.rulesetShortName
                   ? ` · ${data.current.rulesetShortName}`
                   : ""}
               </div>
             </div>
-            <span className="shrink-0 text-sm text-emerald-300/80">
-              Open live →
+            <span className="shrink-0 rounded-full bg-accent px-4 py-2 text-sm font-bold text-black transition group-hover:scale-105">
+              Open live
             </span>
           </div>
         </Link>
       ) : null}
 
       {data.items.length === 0 ? (
-        <p className="text-sm text-[#8b93a7]">No sessions yet.</p>
+        <p className="text-sm text-muted">No sessions yet.</p>
       ) : (
-        <ul className="divide-y divide-white/5 overflow-hidden rounded-lg border border-white/10 bg-[#151922]">
+        <ul className="space-y-0.5">
           {data.items.map((s) => {
             const isOpen = s.endedAt == null;
             return (
@@ -75,24 +75,24 @@ export function SessionsPage() {
                   params={{
                     sessionId: isOpen ? "current" : String(s.id),
                   }}
-                  className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 transition hover:bg-white/[0.03]"
+                  className="rx-row justify-between"
                 >
-                  <div>
-                    <div className="font-medium text-white">
+                  <div className="min-w-0">
+                    <div className="font-semibold text-ink">
                       {isOpen ? "Current session" : `Session #${s.id}`}
                       {isOpen ? (
-                        <span className="ml-2 text-xs text-emerald-300">
+                        <span className="ml-2 text-xs font-bold text-accent">
                           live
                         </span>
                       ) : null}
                     </div>
-                    <div className="mt-0.5 text-xs text-[#8b93a7]">
+                    <div className="mt-0.5 text-sm text-muted">
                       {formatRelativeTime(s.startedAt)}
                       {s.endedAt ? ` → ${formatRelativeTime(s.endedAt)}` : ""}
                       {s.rulesetShortName ? ` · ${s.rulesetShortName}` : ""}
                     </div>
                   </div>
-                  <div className="text-sm tabular-nums text-[#a8b0c0]">
+                  <div className="shrink-0 text-sm font-semibold tabular-nums text-subtle">
                     {s.scoreCount} plays
                   </div>
                 </Link>

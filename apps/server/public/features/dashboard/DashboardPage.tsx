@@ -22,6 +22,14 @@ import {
   formatStars,
 } from "../../lib/format";
 
+const chartTick = { fill: "#a7a7a7", fontSize: 11 };
+const tooltipStyle = {
+  background: "#242424",
+  border: "none",
+  borderRadius: 8,
+  boxShadow: "0 8px 24px rgba(0,0,0,0.45)",
+};
+
 export function DashboardPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["dashboard"],
@@ -29,7 +37,7 @@ export function DashboardPage() {
   });
 
   if (isLoading) {
-    return <p className="text-[#8b93a7]">Loading dashboard…</p>;
+    return <p className="text-muted">Loading dashboard…</p>;
   }
 
   if (error || !data) {
@@ -49,15 +57,13 @@ export function DashboardPage() {
   return (
     <div className="space-y-10">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-white">
-          Dashboard
-        </h1>
-        <p className="mt-1 text-sm text-[#8b93a7]">
+        <h1 className="rx-title">Home</h1>
+        <p className="rx-subtitle">
           Recent plays from your local osu!lazer database.
         </p>
       </div>
 
-      <section className="grid gap-4 sm:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Stat
           label="Scores indexed"
           value={data.sync.scoreCount.toLocaleString()}
@@ -78,13 +84,13 @@ export function DashboardPage() {
           <Link
             to="/sessions/$sessionId"
             params={{ sessionId: "current" }}
-            className="rounded-lg border border-white/10 bg-[#151922] px-4 py-3 transition hover:border-emerald-500/30 hover:bg-emerald-500/5"
+            className="rx-stat block transition hover:bg-elevated hover:ring-1 hover:ring-accent/40"
           >
-            <div className="text-xs uppercase tracking-wider text-[#8b93a7]">
-              Current session
+            <div className="rx-label text-accent">Current session</div>
+            <div className="mt-2 text-2xl font-bold tabular-nums text-ink">
+              {session.scoreCount} plays
             </div>
-            <div className="mt-1 text-xl font-semibold tabular-nums text-white">
-              {session.scoreCount} plays ·{" "}
+            <div className="mt-1 text-xs text-muted">
               {formatRelativeTime(session.startedAt)}
             </div>
           </Link>
@@ -103,18 +109,19 @@ export function DashboardPage() {
                 <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
                 <XAxis
                   dataKey="weekStart"
-                  tick={{ fill: "#8b93a7", fontSize: 11 }}
+                  tick={chartTick}
                   tickFormatter={(v) => String(v).slice(5)}
+                  axisLine={false}
+                  tickLine={false}
                 />
-                <YAxis tick={{ fill: "#8b93a7", fontSize: 11 }} width={36} />
-                <Tooltip
-                  contentStyle={{
-                    background: "#151922",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: 8,
-                  }}
+                <YAxis
+                  tick={chartTick}
+                  width={36}
+                  axisLine={false}
+                  tickLine={false}
                 />
-                <Bar dataKey="playCount" fill="#6b8afd" radius={[4, 4, 0, 0]} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Bar dataKey="playCount" fill="#1ed760" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -135,43 +142,43 @@ export function DashboardPage() {
                 <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
                 <XAxis
                   dataKey="day"
-                  tick={{ fill: "#8b93a7", fontSize: 11 }}
+                  tick={chartTick}
                   tickFormatter={(v) => String(v).slice(5)}
+                  axisLine={false}
+                  tickLine={false}
                 />
                 <YAxis
                   yAxisId="pp"
-                  tick={{ fill: "#8b93a7", fontSize: 11 }}
+                  tick={chartTick}
                   width={40}
+                  axisLine={false}
+                  tickLine={false}
                 />
                 <YAxis
                   yAxisId="acc"
                   orientation="right"
-                  tick={{ fill: "#8b93a7", fontSize: 11 }}
+                  tick={chartTick}
                   width={36}
                   domain={[0, 100]}
+                  axisLine={false}
+                  tickLine={false}
                 />
-                <Tooltip
-                  contentStyle={{
-                    background: "#151922",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: 8,
-                  }}
-                />
+                <Tooltip contentStyle={tooltipStyle} />
                 <Line
                   yAxisId="pp"
                   type="monotone"
                   dataKey="totalPp"
-                  stroke="#6b8afd"
+                  stroke="#4c8dff"
                   dot={false}
-                  strokeWidth={2}
+                  strokeWidth={2.5}
                 />
                 <Line
                   yAxisId="acc"
                   type="monotone"
                   dataKey="avgAccuracy"
-                  stroke="#5ecf9a"
+                  stroke="#1ed760"
                   dot={false}
-                  strokeWidth={2}
+                  strokeWidth={2.5}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -180,15 +187,23 @@ export function DashboardPage() {
       </section>
 
       <section>
-        <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-[#8b93a7]">
-          Recent scores
-        </h2>
+        <div className="mb-4 flex items-end justify-between gap-3">
+          <h2 className="font-display text-2xl font-bold tracking-tight text-ink">
+            Recent scores
+          </h2>
+          <Link
+            to="/practice"
+            className="text-sm font-bold text-muted transition hover:text-accent"
+          >
+            Practice →
+          </Link>
+        </div>
         {data.recentScores.length === 0 ? (
-          <p className="text-sm text-[#8b93a7]">
+          <p className="text-sm text-muted">
             No scores yet. Run realm-reader to sync your client.realm.
           </p>
         ) : (
-          <ul className="divide-y divide-white/5 overflow-hidden rounded-lg border border-white/10 bg-[#151922]">
+          <ul className="space-y-0.5">
             {data.recentScores.map((score) => {
               const body = (
                 <>
@@ -196,27 +211,27 @@ export function DashboardPage() {
                     backgroundFileHash={score.backgroundFileHash}
                     setOnlineId={score.setOnlineId}
                     size="list"
-                    className="h-12 w-[72px] shrink-0 rounded"
+                    className="h-12 w-12 shrink-0 rounded shadow-md shadow-black/40"
                     alt=""
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate font-medium text-white">
-                      {score.artist ?? "Unknown"} — {score.title ?? "Untitled"}
-                      {score.difficultyName ? (
-                        <span className="text-[#8b93a7]">
-                          {" "}
-                          [{score.difficultyName}]
-                        </span>
-                      ) : null}
+                    <div className="truncate font-semibold text-ink">
+                      {score.title ?? "Untitled"}
                     </div>
-                    <div className="mt-0.5 text-xs text-[#8b93a7]">
-                      {formatStars(score.starRating)} · {formatMods(score.mods)}{" "}
-                      · {formatRelativeTime(score.playedAt)}
+                    <div className="mt-0.5 truncate text-sm text-muted">
+                      {score.artist ?? "Unknown"}
+                      {score.difficultyName ? ` · ${score.difficultyName}` : ""}
+                      {" · "}
+                      {formatStars(score.starRating)} · {formatMods(score.mods)}
                     </div>
                   </div>
-                  <div className="flex shrink-0 gap-4 text-sm tabular-nums">
-                    <span>{formatAccuracy(score.accuracy)}</span>
-                    <span className="text-[#a8b0c0]">{formatPp(score.pp)}</span>
+                  <div className="hidden shrink-0 text-right sm:block">
+                    <div className="font-semibold tabular-nums text-ink">
+                      {formatAccuracy(score.accuracy)}
+                    </div>
+                    <div className="text-xs tabular-nums text-muted">
+                      {formatPp(score.pp)} · {formatRelativeTime(score.playedAt)}
+                    </div>
                   </div>
                 </>
               );
@@ -226,14 +241,12 @@ export function DashboardPage() {
                     <Link
                       to="/practice/$beatmapId"
                       params={{ beatmapId: score.beatmapId }}
-                      className="flex flex-wrap items-center gap-3 px-4 py-3 transition hover:bg-white/[0.03]"
+                      className="rx-row"
                     >
                       {body}
                     </Link>
                   ) : (
-                    <div className="flex flex-wrap items-center gap-3 px-4 py-3">
-                      {body}
-                    </div>
+                    <div className="rx-row">{body}</div>
                   )}
                 </li>
               );
@@ -247,13 +260,9 @@ export function DashboardPage() {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-white/10 bg-[#151922] px-4 py-3">
-      <div className="text-xs uppercase tracking-wider text-[#8b93a7]">
-        {label}
-      </div>
-      <div className="mt-1 text-xl font-semibold tabular-nums text-white">
-        {value}
-      </div>
+    <div className="rx-stat">
+      <div className="rx-label">{label}</div>
+      <div className="mt-2 text-2xl font-bold tabular-nums text-ink">{value}</div>
     </div>
   );
 }
@@ -266,8 +275,8 @@ function ChartCard({
   children: ReactNode;
 }) {
   return (
-    <div className="rounded-lg border border-white/10 bg-[#151922] px-4 py-4">
-      <h3 className="mb-3 text-sm font-medium text-[#a8b0c0]">{title}</h3>
+    <div className="rx-panel px-4 py-4 sm:px-5">
+      <h3 className="mb-4 text-sm font-bold text-ink">{title}</h3>
       {children}
     </div>
   );
@@ -275,7 +284,7 @@ function ChartCard({
 
 function EmptyChart() {
   return (
-    <p className="py-12 text-center text-sm text-[#6b7385]">
+    <p className="py-12 text-center text-sm text-faint">
       No derived stats yet — analytics pipeline will fill this after sync.
     </p>
   );

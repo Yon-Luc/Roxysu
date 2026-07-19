@@ -51,13 +51,13 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
   }, [sessionId]);
 
   if (isLoading) {
-    return <p className="text-[#8b93a7]">Loading session…</p>;
+    return <p className="text-muted">Loading session…</p>;
   }
 
   if (error || !data || !("session" in data) || !data.session) {
     return (
       <div className="space-y-3">
-        <Link to="/sessions" className="text-sm text-[#8b93a7] hover:text-white">
+        <Link to="/sessions" className="rx-back">
           ← Sessions
         </Link>
         <p className="text-rose-300">
@@ -72,29 +72,33 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
   const isLive = session.isCurrent;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div>
-        <Link to="/sessions" className="text-sm text-[#8b93a7] hover:text-white">
+        <Link to="/sessions" className="rx-back">
           ← Sessions
         </Link>
         <div className="mt-3 flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight text-white">
+          <h1 className="rx-title">
             {isLive ? "Current session" : `Session #${session.id}`}
           </h1>
           {isLive ? (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs text-emerald-300">
+            <span className="rx-chip bg-accent-glow text-accent">
               <span className="relative flex h-1.5 w-1.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent" />
               </span>
               Live
-              {isFetching ? <span className="text-emerald-400/70">· updating</span> : null}
+              {isFetching ? (
+                <span className="text-accent/70">· updating</span>
+              ) : null}
             </span>
           ) : null}
         </div>
-        <p className="mt-1 text-sm text-[#8b93a7]">
+        <p className="rx-subtitle">
           Started {formatRelativeTime(session.startedAt)}
-          {session.endedAt ? ` · ended ${formatRelativeTime(session.endedAt)}` : ""}
+          {session.endedAt
+            ? ` · ended ${formatRelativeTime(session.endedAt)}`
+            : ""}
           {session.rulesetShortName ? ` · ${session.rulesetShortName}` : ""}
         </p>
       </div>
@@ -109,17 +113,17 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
       </section>
 
       <section>
-        <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-[#8b93a7]">
+        <h2 className="mb-3 font-display text-2xl font-bold tracking-tight text-ink">
           Plays
         </h2>
         {scores.length === 0 ? (
-          <p className="text-sm text-[#8b93a7]">
+          <p className="text-sm text-muted">
             {isLive
               ? "No plays yet — new scores will show up here after sync."
               : "No plays in this session."}
           </p>
         ) : (
-          <ul className="divide-y divide-white/5 overflow-hidden rounded-lg border border-white/10 bg-[#151922]">
+          <ul className="space-y-0.5">
             {scores.map((score) => {
               const isFresh = freshIds.has(score.id);
               const body = (
@@ -128,44 +132,43 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
                     backgroundFileHash={score.backgroundFileHash}
                     setOnlineId={score.setOnlineId}
                     size="list"
-                    className="h-12 w-[72px] shrink-0 rounded"
+                    className="h-12 w-12 shrink-0 rounded shadow-md shadow-black/40"
                     alt=""
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="truncate font-medium text-white">
-                        {score.artist ?? "Unknown"} — {score.title ?? "Untitled"}
-                        {score.difficultyName ? (
-                          <span className="text-[#8b93a7]">
-                            {" "}
-                            [{score.difficultyName}]
-                          </span>
-                        ) : null}
+                      <span className="truncate font-semibold text-ink">
+                        {score.title ?? "Untitled"}
                       </span>
                       {score.isPb ? (
-                        <span className="shrink-0 rounded border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-300">
+                        <span className="shrink-0 rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-300">
                           PB
                         </span>
                       ) : null}
                       {isFresh ? (
-                        <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-emerald-300">
+                        <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-accent">
                           New
                         </span>
                       ) : null}
                     </div>
-                    <div className="mt-0.5 text-xs text-[#8b93a7]">
+                    <div className="mt-0.5 truncate text-sm text-muted">
+                      {score.artist ?? "Unknown"}
+                      {score.difficultyName ? ` · ${score.difficultyName}` : ""}
+                      {" · "}
                       {formatStars(score.starRating)} · {formatMods(score.mods)}
                       {score.retryIndex != null && score.retryIndex > 0
                         ? ` · retry #${score.retryIndex}`
                         : ""}
-                      {" · "}
-                      {formatRelativeTime(score.playedAt)}
                     </div>
                   </div>
-                  <div className="flex shrink-0 gap-4 text-sm tabular-nums">
-                    <span className="text-white">{formatAccuracy(score.accuracy)}</span>
-                    <span className="text-[#a8b0c0]">{formatPp(score.pp)}</span>
-                    <span className="text-[#8b93a7]">{score.maxCombo}x</span>
+                  <div className="hidden shrink-0 text-right sm:block">
+                    <div className="font-semibold tabular-nums text-ink">
+                      {formatAccuracy(score.accuracy)}
+                    </div>
+                    <div className="text-xs tabular-nums text-muted">
+                      {formatPp(score.pp)} · {score.maxCombo}x ·{" "}
+                      {formatRelativeTime(score.playedAt)}
+                    </div>
                   </div>
                 </>
               );
@@ -175,7 +178,7 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
                   key={score.id}
                   className={
                     isFresh
-                      ? "bg-emerald-500/[0.07] transition-colors duration-1000"
+                      ? "rounded-md bg-accent/10 transition-colors duration-1000"
                       : undefined
                   }
                 >
@@ -183,14 +186,12 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
                     <Link
                       to="/practice/$beatmapId"
                       params={{ beatmapId: score.beatmapId }}
-                      className="flex flex-wrap items-center gap-3 px-4 py-3 transition hover:bg-white/[0.03]"
+                      className="rx-row"
                     >
                       {body}
                     </Link>
                   ) : (
-                    <div className="flex flex-wrap items-center gap-3 px-4 py-3">
-                      {body}
-                    </div>
+                    <div className="rx-row">{body}</div>
                   )}
                 </li>
               );
@@ -204,11 +205,9 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
 
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-white/10 bg-[#151922] px-3 py-2.5">
-      <div className="text-[11px] uppercase tracking-wider text-[#8b93a7]">
-        {label}
-      </div>
-      <div className="mt-0.5 font-medium tabular-nums text-white">{value}</div>
+    <div className="rx-stat">
+      <div className="rx-label">{label}</div>
+      <div className="mt-1.5 text-lg font-bold tabular-nums text-ink">{value}</div>
     </div>
   );
 }

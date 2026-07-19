@@ -46,7 +46,7 @@ export function QueryLanguageHelpButton({ className }: { className?: string }) {
         onClick={() => setOpen(true)}
         className={
           className ??
-          "text-sm text-[#8b93a7] underline decoration-white/20 underline-offset-2 hover:text-[#a8b0c0]"
+          "text-sm font-medium text-muted underline decoration-white/20 underline-offset-2 transition hover:text-accent"
         }
       >
         Query language help
@@ -90,24 +90,24 @@ function QueryLanguageHelpModal({ onClose }: { onClose: () => void }) {
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="max-h-[min(90vh,40rem)] w-full max-w-2xl overflow-y-auto rounded-lg border border-white/10 bg-[#151922] shadow-2xl outline-none"
+        className="max-h-[min(90vh,40rem)] w-full max-w-2xl overflow-y-auto rounded-2xl bg-elevated shadow-2xl shadow-black/60 outline-none"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="sticky top-0 flex items-start justify-between gap-4 border-b border-white/10 bg-[#151922]/95 px-5 py-4 backdrop-blur">
+        <div className="sticky top-0 flex items-start justify-between gap-4 border-b border-white/5 bg-elevated/95 px-5 py-4 backdrop-blur">
           <div>
-            <h2 id={titleId} className="text-lg font-semibold text-white">
+            <h2 id={titleId} className="font-display text-xl font-bold text-ink">
               Query language
             </h2>
-            <p className="mt-1 text-sm text-[#8b93a7]">
+            <p className="mt-1 text-sm text-muted">
               Plain text searches titles and artists. Use{" "}
-              <code className="text-[#a8b0c0]">field:value</code> for structured
+              <code className="text-subtle">field:value</code> for structured
               filters.
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md px-2 py-1 text-sm text-[#8b93a7] hover:bg-white/5 hover:text-white"
+            className="rounded-full px-3 py-1 text-sm text-muted transition hover:bg-highlight hover:text-ink"
             aria-label="Close"
           >
             Esc
@@ -116,9 +116,9 @@ function QueryLanguageHelpModal({ onClose }: { onClose: () => void }) {
 
         <div className="space-y-6 px-5 py-5 text-sm">
           <Section title="Fields">
-            <div className="overflow-hidden rounded-md border border-white/10">
+            <div className="overflow-hidden rounded-xl bg-surface">
               <table className="w-full text-left text-xs sm:text-sm">
-                <thead className="bg-white/5 text-[#8b93a7]">
+                <thead className="bg-highlight/60 text-muted">
                   <tr>
                     <th className="px-3 py-2 font-medium">Field</th>
                     <th className="px-3 py-2 font-medium">Meaning</th>
@@ -130,11 +130,11 @@ function QueryLanguageHelpModal({ onClose }: { onClose: () => void }) {
                 <tbody className="divide-y divide-white/5">
                   {FIELDS.map((row) => (
                     <tr key={row.field}>
-                      <td className="px-3 py-2 font-mono text-[#a8b0c0]">
+                      <td className="px-3 py-2 font-mono text-subtle">
                         {row.field}
                       </td>
-                      <td className="px-3 py-2 text-[#c4c9d4]">{row.meaning}</td>
-                      <td className="hidden px-3 py-2 font-mono text-[#8b93a7] sm:table-cell">
+                      <td className="px-3 py-2 text-subtle">{row.meaning}</td>
+                      <td className="hidden px-3 py-2 font-mono text-muted sm:table-cell">
                         {row.example}
                       </td>
                     </tr>
@@ -145,7 +145,7 @@ function QueryLanguageHelpModal({ onClose }: { onClose: () => void }) {
           </Section>
 
           <Section title="Numbers">
-            <ul className="list-disc space-y-1.5 pl-5 text-[#c4c9d4]">
+            <ul className="list-disc space-y-1.5 pl-5 text-subtle">
               <li>
                 Comparisons:{" "}
                 <Code>acc&gt;98</Code>, <Code>mastery&gt;=50</Code>,{" "}
@@ -164,7 +164,7 @@ function QueryLanguageHelpModal({ onClose }: { onClose: () => void }) {
           </Section>
 
           <Section title="Boolean logic">
-            <ul className="list-disc space-y-1.5 pl-5 text-[#c4c9d4]">
+            <ul className="list-disc space-y-1.5 pl-5 text-subtle">
               <li>
                 <Code>AND</Code>, <Code>OR</Code>, <Code>NOT</Code> (case-insensitive)
               </li>
@@ -183,7 +183,7 @@ function QueryLanguageHelpModal({ onClose }: { onClose: () => void }) {
             <ul className="space-y-2">
               {EXAMPLES.map((ex) => (
                 <li key={ex}>
-                  <code className="block rounded-md bg-[#0e1015] px-3 py-2 font-mono text-xs text-[#a8b0c0] sm:text-sm">
+                  <code className="block rounded-xl bg-surface px-3 py-2 font-mono text-xs text-subtle sm:text-sm">
                     {ex}
                   </code>
                 </li>
@@ -199,7 +199,7 @@ function QueryLanguageHelpModal({ onClose }: { onClose: () => void }) {
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section>
-      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#8b93a7]">
+      <h3 className="mb-2 text-xs font-bold uppercase tracking-widest text-faint">
         {title}
       </h3>
       {children}
@@ -209,7 +209,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 
 function Code({ children }: { children: ReactNode }) {
   return (
-    <code className="rounded bg-white/5 px-1 py-0.5 font-mono text-[0.85em] text-[#a8b0c0]">
+    <code className="rounded bg-highlight px-1 py-0.5 font-mono text-[0.85em] text-subtle">
       {children}
     </code>
   );

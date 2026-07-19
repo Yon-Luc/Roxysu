@@ -48,7 +48,7 @@ export function BeatmapCover({
     return (
       <div
         aria-hidden={alt ? undefined : true}
-        className={`bg-gradient-to-br from-[#1a1f2b] to-[#12151c] ${className}`}
+        className={`bg-gradient-to-br from-elevated to-canvas ${className}`}
       />
     );
   }

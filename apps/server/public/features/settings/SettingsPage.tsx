@@ -20,7 +20,7 @@ export function SettingsPage() {
   });
 
   if (isLoading) {
-    return <p className="text-[#8b93a7]">Loading settings…</p>;
+    return <p className="text-muted">Loading settings…</p>;
   }
 
   if (error || !data) {
@@ -34,26 +34,24 @@ export function SettingsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-white">
-          Settings
-        </h1>
-        <p className="mt-1 text-sm text-[#8b93a7]">
+        <h1 className="rx-title">Settings</h1>
+        <p className="rx-subtitle">
           Switch mastery formulas to experiment — changing recomputes all levels.
         </p>
       </div>
 
-      <section className="rounded-lg border border-white/10 bg-[#151922] p-4">
-        <h2 className="text-sm font-medium text-[#a8b0c0]">Mastery formula</h2>
-        <div className="mt-4 space-y-3">
+      <section className="rx-panel p-5">
+        <h2 className="text-sm font-bold text-ink">Mastery formula</h2>
+        <div className="mt-4 space-y-2">
           {data.mastery.formulas.map((f) => {
             const active = f.id === data.mastery.formulaId;
             return (
               <label
                 key={f.id}
-                className={`flex cursor-pointer gap-3 rounded-md border px-3 py-3 ${
+                className={`flex cursor-pointer gap-3 rounded-xl px-4 py-3 transition ${
                   active
-                    ? "border-white/25 bg-white/5"
-                    : "border-white/10 hover:border-white/20"
+                    ? "bg-accent-glow ring-1 ring-accent/50"
+                    : "bg-elevated/50 hover:bg-elevated"
                 }`}
               >
                 <input
@@ -62,14 +60,12 @@ export function SettingsPage() {
                   checked={active}
                   disabled={mut.isPending}
                   onChange={() => mut.mutate(f.id)}
-                  className="mt-1"
+                  className="mt-1 accent-[var(--color-accent)]"
                 />
                 <div>
-                  <div className="font-medium text-white">{f.label}</div>
-                  <div className="mt-0.5 text-sm text-[#8b93a7]">
-                    {f.description}
-                  </div>
-                  <div className="mt-1 font-mono text-xs text-[#6b7385]">
+                  <div className="font-bold text-ink">{f.label}</div>
+                  <div className="mt-0.5 text-sm text-muted">{f.description}</div>
+                  <div className="mt-1 font-mono text-xs text-faint">
                     id: {f.id}
                   </div>
                 </div>
@@ -78,7 +74,7 @@ export function SettingsPage() {
           })}
         </div>
         {mut.isPending ? (
-          <p className="mt-3 text-sm text-[#8b93a7]">Recomputing mastery…</p>
+          <p className="mt-3 text-sm text-muted">Recomputing mastery…</p>
         ) : null}
         {mut.error ? (
           <p className="mt-3 text-sm text-rose-300">{mut.error.message}</p>

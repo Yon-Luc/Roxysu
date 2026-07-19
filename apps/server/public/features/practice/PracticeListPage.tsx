@@ -130,13 +130,11 @@ function binToQueryClause(
   if (!Number.isFinite(from) || !Number.isFinite(to)) return null;
 
   if (metric === "accuracy") {
-    // Match histogram buckets: [from, to) except exact 100%.
     if (from >= 100) return "acc>=100";
     if (to >= 100) return `acc>=${formatNum(from)}`;
     return `acc>=${formatNum(from)} AND acc<${formatNum(to)}`;
   }
 
-  // score — same half-open buckets as the chart
   if (from === to) return `score>=${formatNum(from)}`;
   return `score>=${formatNum(from)} AND score<${formatNum(to)}`;
 }
@@ -150,7 +148,6 @@ function mergeRangeIntoQuery(
   if (!clause) return null;
   const base = stripDistributionFilters(current);
   if (!base) return clause;
-  // Plain text → keep as free-text term ANDed with the range.
   return cleanupMergedQuery(`${base} ${clause}`);
 }
 
@@ -193,9 +190,6 @@ function readStoredPracticeSearch(): StoredPracticeSearch {
 function writeStoredPracticeSearch(state: StoredPracticeSearch) {
   localStorage.setItem(PRACTICE_SEARCH_KEY, JSON.stringify(state));
 }
-
-const selectClass =
-  "rounded-md border border-white/10 bg-[#151922] px-2.5 py-2 text-sm text-white outline-none focus:border-white/25";
 
 export function PracticeListPage() {
   const [stored] = useState(readStoredPracticeSearch);
@@ -282,15 +276,13 @@ export function PracticeListPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-white">
-            Practice
-          </h1>
-          <p className="mt-1 text-sm text-[#8b93a7]">
+          <h1 className="rx-title">Practice</h1>
+          <p className="rx-subtitle">
             Plain text or query language — e.g.{" "}
-            <code className="text-[#a8b0c0]">mode:mania stars:5..6</code>
+            <code className="text-subtle">mode:mania stars:5..6</code>
             {" · "}
             <QueryLanguageHelpButton />
           </p>
@@ -307,24 +299,19 @@ export function PracticeListPage() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search or mode:mania mastery>50…"
-            className="w-72 rounded-md border border-white/10 bg-[#151922] px-3 py-2 text-sm text-white placeholder:text-[#6b7385] outline-none focus:border-white/25"
+            className="rx-input w-72"
           />
-          <button
-            type="submit"
-            className="rounded-md bg-white/10 px-3 py-2 text-sm font-medium text-white hover:bg-white/15"
-          >
+          <button type="submit" className="rx-btn-primary">
             Search
           </button>
         </form>
       </div>
 
-      <section className="rounded-lg border border-white/10 bg-[#151922] px-4 py-4">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+      <section className="rx-panel px-4 py-5 sm:px-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-medium text-white">
-              Best-score distribution
-            </h2>
-            <p className="mt-0.5 text-xs text-[#8b93a7]">
+            <h2 className="text-sm font-bold text-ink">Best-score distribution</h2>
+            <p className="mt-0.5 text-xs text-muted">
               Across all maps matching the current query — click a bar to filter
               that range.
             </p>
@@ -334,7 +321,7 @@ export function PracticeListPage() {
               <button
                 type="button"
                 onClick={undoQuery}
-                className="rounded-md border border-white/10 px-2.5 py-2 text-xs text-[#a8b0c0] hover:border-white/20 hover:text-white"
+                className="rx-btn text-xs"
                 title={
                   queryHistory[queryHistory.length - 1]
                     ? `Restore: ${queryHistory[queryHistory.length - 1]}`
@@ -344,10 +331,10 @@ export function PracticeListPage() {
                 Undo filter
               </button>
             ) : null}
-            <label className="flex items-center gap-2 text-xs text-[#8b93a7]">
+            <label className="flex items-center gap-2 text-xs text-muted">
               Show
               <select
-                className={selectClass}
+                className="rx-select"
                 value={metric}
                 onChange={(e) => {
                   const next = e.target.value as PracticeMetric;
@@ -366,7 +353,7 @@ export function PracticeListPage() {
         </div>
 
         {distLoading ? (
-          <p className="py-10 text-center text-sm text-[#8b93a7]">
+          <p className="py-10 text-center text-sm text-muted">
             Loading distribution…
           </p>
         ) : distError || !bins ? (
@@ -379,25 +366,30 @@ export function PracticeListPage() {
               <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
               <XAxis
                 dataKey="label"
-                tick={{ fill: "#8b93a7", fontSize: 10 }}
+                tick={{ fill: "#a7a7a7", fontSize: 10 }}
                 interval={0}
                 angle={-25}
                 textAnchor="end"
                 height={48}
+                axisLine={false}
+                tickLine={false}
               />
               <YAxis
                 allowDecimals={false}
-                tick={{ fill: "#8b93a7", fontSize: 11 }}
+                tick={{ fill: "#a7a7a7", fontSize: 11 }}
                 width={40}
+                axisLine={false}
+                tickLine={false}
               />
               <Tooltip
                 cursor={{ fill: "rgba(255,255,255,0.04)" }}
                 contentStyle={{
-                  background: "#151922",
-                  border: "1px solid rgba(255,255,255,0.1)",
+                  background: "#242424",
+                  border: "none",
                   borderRadius: 8,
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.45)",
                 }}
-                labelStyle={{ color: "#a8b0c0" }}
+                labelStyle={{ color: "#b3b3b3" }}
                 itemStyle={{ color: "#fff" }}
                 formatter={(value) => [
                   Number(value).toLocaleString(),
@@ -421,8 +413,8 @@ export function PracticeListPage() {
                     key={bin.key}
                     fill={
                       bin.key === "unplayed"
-                        ? "rgba(139, 147, 167, 0.55)"
-                        : "#6b8afd"
+                        ? "rgba(167, 167, 167, 0.45)"
+                        : "#1ed760"
                     }
                   />
                 ))}
@@ -433,11 +425,11 @@ export function PracticeListPage() {
       </section>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2 text-sm text-[#8b93a7]">
+        <div className="flex flex-wrap items-center gap-2 text-sm text-muted">
           <label className="flex items-center gap-2">
             Sort
             <select
-              className={selectClass}
+              className="rx-select"
               value={sortBy}
               onChange={(e) => {
                 const next = e.target.value as PracticeSortBy;
@@ -456,7 +448,7 @@ export function PracticeListPage() {
           <label className="flex items-center gap-2">
             Order
             <select
-              className={selectClass}
+              className="rx-select"
               value={sortDir}
               onChange={(e) => {
                 const next = e.target.value as PracticeSortDir;
@@ -472,7 +464,7 @@ export function PracticeListPage() {
         </div>
 
         {list ? (
-          <div className="text-xs text-[#8b93a7]">
+          <div className="text-xs text-muted">
             {list.total.toLocaleString()} maps
             {list.queryMode === "structured" ? " · query" : ""}
             {isFetching ? " · refreshing…" : ""}
@@ -483,20 +475,20 @@ export function PracticeListPage() {
       </div>
 
       {isLoading ? (
-        <p className="text-[#8b93a7]">Loading practice list…</p>
+        <p className="text-muted">Loading practice list…</p>
       ) : error ? (
         <p className="text-rose-300">Failed to load: {error.message}</p>
       ) : !list || list.items.length === 0 ? (
-        <p className="text-sm text-[#8b93a7]">No beatmaps match.</p>
+        <p className="text-sm text-muted">No beatmaps match.</p>
       ) : (
         <>
-          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {list.items.map((item: PracticeItem) => (
               <li key={item.id}>
                 <Link
                   to="/practice/$beatmapId"
                   params={{ beatmapId: item.id }}
-                  className="block h-full overflow-hidden rounded-lg border border-white/10 bg-[#151922] transition hover:border-white/20 hover:bg-[#181c26]"
+                  className="rx-card"
                 >
                   <BeatmapCover
                     backgroundFileHash={item.backgroundFileHash}
@@ -508,24 +500,24 @@ export function PracticeListPage() {
                   <div className="p-4">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <div className="truncate text-sm text-[#8b93a7]">
+                        <div className="truncate text-sm text-muted">
                           {item.artist ?? "Unknown artist"}
                         </div>
-                        <div className="mt-0.5 truncate font-medium text-white">
+                        <div className="mt-0.5 truncate font-bold text-ink">
                           {item.title ?? "Untitled"}
                         </div>
                       </div>
                       {item.masteryLevel != null ? (
-                        <span className="shrink-0 rounded bg-white/10 px-1.5 py-0.5 text-xs tabular-nums text-[#a8b0c0]">
+                        <span className="shrink-0 rounded-full bg-accent-glow px-2 py-0.5 text-xs font-bold tabular-nums text-accent">
                           {item.masteryLevel.toFixed(0)}
                         </span>
                       ) : null}
                     </div>
-                    <div className="mt-1 truncate text-xs text-[#8b93a7]">
+                    <div className="mt-1 truncate text-xs text-muted">
                       [{item.difficultyName ?? "—"}] · {formatStars(item.starRating)}
                       {item.mapperUsername ? ` · ${item.mapperUsername}` : ""}
                     </div>
-                    <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs tabular-nums text-[#a8b0c0]">
+                    <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs tabular-nums text-subtle">
                       <span>{item.playCount} plays</span>
                       <span>{formatAccuracy(item.bestAccuracy)}</span>
                       <span>{formatMisses(item.bestMisses)}</span>
@@ -548,7 +540,7 @@ export function PracticeListPage() {
                 setPage(next);
                 persist({ page: next });
               }}
-              className="rounded-md border border-white/10 px-3 py-1.5 text-sm text-white disabled:opacity-40"
+              className="rx-btn"
             >
               Previous
             </button>
@@ -560,7 +552,7 @@ export function PracticeListPage() {
                 setPage(next);
                 persist({ page: next });
               }}
-              className="rounded-md border border-white/10 px-3 py-1.5 text-sm text-white disabled:opacity-40"
+              className="rx-btn"
             >
               Next
             </button>

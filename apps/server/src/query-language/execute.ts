@@ -294,6 +294,52 @@ export function searchBeatmaps(
   };
 }
 
+/** Random sample matching a QL filter (optionally excluding beatmap ids). */
+export function sampleBeatmaps(
+  db: Db,
+  query: string | undefined,
+  opts: {
+    count: number;
+    excludeIds?: string[];
+  },
+): { items: PracticeCardRow[]; total: number } {
+  const filter = resolveFilter(query);
+  let filterSql = filter.sql;
+  const params = [...filter.params];
+
+  const exclude = (opts.excludeIds ?? []).filter(Boolean);
+  if (exclude.length > 0) {
+    const placeholders = exclude.map(() => "?").join(",");
+    filterSql = `(${filterSql}) AND b.id NOT IN (${placeholders})`;
+    params.push(...exclude);
+  }
+
+  const where = baseWhere(filterSql);
+  const bindings = asBindings(params);
+  const count = Math.max(1, Math.min(20, Math.floor(opts.count)));
+
+  const countSql = `SELECT COUNT(*) AS n ${BASE_FROM} ${where}`;
+  const countRow = db.$client
+    .query(countSql)
+    .get(...bindings) as { n: number } | null;
+
+  const listSql = `
+    SELECT ${SELECT_COLS}
+    ${BASE_FROM}
+    ${where}
+    ORDER BY RANDOM()
+    LIMIT ?
+  `;
+  const items = db.$client
+    .query(listSql)
+    .all(...bindings, count) as PracticeCardRow[];
+
+  return {
+    items: items.map(mapRow),
+    total: Number(countRow?.n ?? 0),
+  };
+}
+
 export function countMatches(db: Db, query: string): number {
   const filter = resolveFilter(query);
   const where = baseWhere(filter.sql);

@@ -83,6 +83,14 @@ export const sessionRoutes = new Elysia({ prefix: "/sessions" })
           : await getSessionById(db, Number(params.id));
 
       if (!session) {
+        if (params.id === "current") {
+          return {
+            session: null,
+            scores: [],
+            pbCount: 0,
+            idle: true as const,
+          };
+        }
         set.status = 404;
         return { error: "Session not found" };
       }

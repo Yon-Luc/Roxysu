@@ -110,4 +110,10 @@ describe("compileQuery", () => {
     expect(compiled.sql).toContain("circle_size");
     expect(compiled.params).toEqual(["mania", 7]);
   });
+
+  test("compiles NOT played:lastNd with correct parentheses", () => {
+    const ast = parseQuery("acc:90..93 NOT played:last14d");
+    const compiled = compileQuery(ast);
+    expect(compiled.sql).toContain("NOT (ps.last_played_at IS NOT NULL AND");
+  });
 });

@@ -23,7 +23,11 @@ const FIELDS: { field: string; meaning: string; example: string }[] = [
   { field: "retry", meaning: "Retry count", example: "retry>10" },
   { field: "mastery", meaning: "Mastery level", example: "mastery>80" },
   { field: "pp", meaning: "Best PP", example: "pp>=200" },
-  { field: "played", meaning: "Played within N days, or never", example: "played:never" },
+  {
+    field: "played",
+    meaning: "Played within N days, or never (use NOT played:lastNd for stale)",
+    example: "played:never",
+  },
 ];
 
 const EXAMPLES = [
@@ -34,6 +38,7 @@ const EXAMPLES = [
   "acc>98 NOT mods:NF",
   "mode:mania acc:96..98",
   "title:^SL_5 mastery>50",
+  "acc:90..93 NOT played:last14d",
 ];
 
 export function QueryLanguageHelpButton({ className }: { className?: string }) {

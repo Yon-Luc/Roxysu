@@ -95,7 +95,7 @@ function compileTerm(term: FieldTerm, params: unknown[]): string {
       }
       if (!("days" in term)) return "1=1";
       const since = Date.now() - term.days * 24 * 60 * 60 * 1000;
-      return `ps.last_played_at IS NOT NULL AND ps.last_played_at >= ${push(since)}`;
+      return `(ps.last_played_at IS NOT NULL AND ps.last_played_at >= ${push(since)})`;
     }
     case "text": {
       const pat = push(`%${term.value}%`);

@@ -60,7 +60,30 @@ export function SessionsPage() {
             </span>
           </div>
         </Link>
-      ) : null}
+      ) : (
+        <Link
+          to="/sessions/$sessionId"
+          params={{ sessionId: "current" }}
+          className="group relative block overflow-hidden rounded-xl bg-gradient-to-br from-accent/20 via-surface to-surface p-5 transition hover:from-accent/30"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-xs font-bold uppercase tracking-widest text-accent">
+                Ready when you are
+              </div>
+              <div className="mt-2 font-display text-2xl font-bold text-ink">
+                Start a session
+              </div>
+              <div className="mt-1 text-sm text-muted">
+                Get map recommendations, then play to open a live session.
+              </div>
+            </div>
+            <span className="shrink-0 rounded-full bg-accent px-4 py-2 text-sm font-bold text-black transition group-hover:scale-105">
+              Open
+            </span>
+          </div>
+        </Link>
+      )}
 
       {data.items.length === 0 ? (
         <p className="text-sm text-muted">No sessions yet.</p>

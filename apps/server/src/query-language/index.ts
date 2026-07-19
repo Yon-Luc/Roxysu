@@ -5,6 +5,7 @@ import { QueryParseError } from "./ast";
 export { parseQuery, looksLikeQuery, compileQuery, QueryParseError };
 export {
   searchBeatmaps,
+  sampleBeatmaps,
   countMatches,
   executeAst,
   practiceDistribution,

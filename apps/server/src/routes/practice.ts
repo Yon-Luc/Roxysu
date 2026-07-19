@@ -4,6 +4,7 @@ import { toIso } from "../shared/serialize";
 import {
   looksLikeQuery,
   searchBeatmaps,
+  sampleBeatmaps,
   practiceDistribution,
   QueryParseError,
   type PracticeSortBy,
@@ -144,6 +145,47 @@ export const practiceRoutes = new Elysia({ prefix: "/practice" })
         q: t.Optional(t.String()),
         sortBy: t.Optional(t.String()),
         sortDir: t.Optional(t.String()),
+      }),
+    },
+  )
+  .get(
+    "/sample",
+    async ({ db, query, set }) => {
+      const q = query.q?.trim();
+      const count = Math.max(1, Math.min(20, query.count ?? 3));
+      const structured = toStructuredQuery(q);
+      const exclude = (query.exclude ?? "")
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean);
+
+      try {
+        const result = sampleBeatmaps(db, structured, {
+          count,
+          excludeIds: exclude,
+        });
+        return {
+          total: result.total,
+          items: result.items.map((r) =>
+            mapCard({
+              ...r,
+              lastPlayedAt: r.lastPlayedAt,
+            }),
+          ),
+        };
+      } catch (err) {
+        if (err instanceof QueryParseError) {
+          set.status = 400;
+          return { error: err.message };
+        }
+        throw err;
+      }
+    },
+    {
+      query: t.Object({
+        q: t.Optional(t.String()),
+        count: t.Optional(t.Numeric()),
+        exclude: t.Optional(t.String()),
       }),
     },
   )

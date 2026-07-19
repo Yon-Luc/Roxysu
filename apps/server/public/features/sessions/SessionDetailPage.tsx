@@ -10,8 +10,11 @@ import {
   formatRelativeTime,
   formatStars,
 } from "../../lib/format";
+import { SessionUpNext } from "./SessionUpNext";
 
 export function SessionDetailPage({ sessionId }: { sessionId: string }) {
+  const isCurrentHub = sessionId === "current";
+
   const { data, isLoading, error, isFetching } = useQuery({
     queryKey: ["sessions", sessionId],
     queryFn: () => fetchSession(sessionId),
@@ -54,7 +57,7 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
     return <p className="text-muted">Loading session…</p>;
   }
 
-  if (error || !data || !("session" in data) || !data.session) {
+  if (error || !data || !("session" in data)) {
     return (
       <div className="space-y-3">
         <Link to="/sessions" className="rx-back">
@@ -67,9 +70,65 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
     );
   }
 
+  if ("error" in data) {
+    return (
+      <div className="space-y-3">
+        <Link to="/sessions" className="rx-back">
+          ← Sessions
+        </Link>
+        <p className="text-rose-300">{data.error}</p>
+      </div>
+    );
+  }
+
+  const idle = "idle" in data && data.idle === true && data.session == null;
   const session = data.session;
   const scores = data.scores ?? [];
-  const isLive = session.isCurrent;
+  const isLive = Boolean(session?.isCurrent);
+
+  if (idle || (isCurrentHub && !session)) {
+    return (
+      <div className="space-y-8">
+        <div>
+          <Link to="/sessions" className="rx-back">
+            ← Sessions
+          </Link>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <h1 className="rx-title">Start a session</h1>
+          </div>
+          <p className="rx-subtitle">
+            No live session yet. Pick a map below — the next sync after you play
+            opens a current session.
+          </p>
+        </div>
+
+        <SessionUpNext
+          isIdle
+          rulesetShortName={null}
+          excludeBeatmapIds={[]}
+        />
+      </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <div className="space-y-3">
+        <Link to="/sessions" className="rx-back">
+          ← Sessions
+        </Link>
+        <p className="text-rose-300">Session not found</p>
+      </div>
+    );
+  }
+
+  const excludeBeatmapIds = [
+    ...new Set(
+      scores
+        .map((s) => s.beatmapId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
 
   return (
     <div className="space-y-8">
@@ -111,6 +170,14 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
           value={formatSessionDuration(session.startedAt, session.endedAt)}
         />
       </section>
+
+      {isCurrentHub ? (
+        <SessionUpNext
+          isIdle={false}
+          rulesetShortName={session.rulesetShortName}
+          excludeBeatmapIds={excludeBeatmapIds}
+        />
+      ) : null}
 
       <section>
         <h2 className="mb-3 font-display text-2xl font-bold tracking-tight text-ink">

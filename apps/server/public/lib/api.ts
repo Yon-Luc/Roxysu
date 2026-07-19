@@ -82,6 +82,26 @@ export async function fetchPracticeDistribution(params: {
   );
 }
 
+export async function fetchPracticeSample(params: {
+  q?: string;
+  count?: number;
+  exclude?: string[];
+}) {
+  return unwrap(
+    await api.api.practice.sample.get({
+      query: {
+        q: params.q,
+        count: params.count,
+        exclude:
+          params.exclude && params.exclude.length > 0
+            ? params.exclude.join(",")
+            : undefined,
+      },
+    }),
+    "/api/practice/sample",
+  );
+}
+
 export async function fetchBeatmap(id: string) {
   return unwrap(await api.api.beatmaps({ id }).get(), `/api/beatmaps/${id}`);
 }
@@ -147,6 +167,10 @@ export type PracticeList = Exclude<
 export type PracticeItem = PracticeList["items"][number];
 export type PracticeDistribution = Exclude<
   Awaited<ReturnType<typeof fetchPracticeDistribution>>,
+  { error: string }
+>;
+export type PracticeSample = Exclude<
+  Awaited<ReturnType<typeof fetchPracticeSample>>,
   { error: string }
 >;
 export type BeatmapProfile = Exclude<

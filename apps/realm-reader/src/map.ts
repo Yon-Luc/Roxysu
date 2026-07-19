@@ -59,6 +59,13 @@ export function mapBeatmapSet(obj: RealmObj): BeatmapSetRow | null {
   };
 }
 
+function fileUsageHash(usage: RealmObj): string | null {
+  const file = usage.File as RealmObj | null | undefined;
+  const hash = file?.Hash as string | null | undefined;
+  if (hash && /^[0-9a-f]{64}$/i.test(hash)) return hash.toLowerCase();
+  return null;
+}
+
 /** Match a set file by logical name → SHA-256 in lazer's files/ store. */
 function resolveNamedFileHash(
   set: RealmObj,
@@ -73,11 +80,35 @@ function resolveNamedFileHash(
     const name = usage.Filename as string | null | undefined;
     if (!name) continue;
     if (name.replace(/\\/g, "/").toLowerCase() !== target) continue;
-    const file = usage.File as RealmObj | null | undefined;
-    const hash = file?.Hash as string | null | undefined;
-    if (hash && /^[0-9a-f]{64}$/i.test(hash)) return hash.toLowerCase();
+    const hash = fileUsageHash(usage);
+    if (hash) return hash;
   }
   return null;
+}
+
+/**
+ * Resolve the local replay blob hash from Score.Files.
+ * Prefers `*.osr`, then any filename containing "replay", else the first hashed file.
+ */
+function resolveScoreReplayHash(obj: RealmObj): string | null {
+  const files = obj.Files as RealmObj[] | null | undefined;
+  if (!files || files.length === 0) return null;
+
+  let fallback: string | null = null;
+  let replayNamed: string | null = null;
+
+  for (const usage of files) {
+    const hash = fileUsageHash(usage);
+    if (!hash) continue;
+    const name = ((usage.Filename as string | null | undefined) ?? "")
+      .replace(/\\/g, "/")
+      .toLowerCase();
+    if (name.endsWith(".osr")) return hash;
+    if (!replayNamed && name.includes("replay")) replayNamed = hash;
+    if (!fallback) fallback = hash;
+  }
+
+  return replayNamed ?? fallback;
 }
 
 export function mapBeatmap(obj: RealmObj): BeatmapRow | null {
@@ -171,5 +202,6 @@ export function mapScore(obj: RealmObj): ScoreRow | null {
     isLegacyScore: Boolean(obj.IsLegacyScore),
     deletePending: Boolean(obj.DeletePending),
     hash: (obj.Hash as string | null) ?? null,
+    replayFileHash: resolveScoreReplayHash(obj),
   };
 }

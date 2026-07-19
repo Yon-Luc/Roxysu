@@ -12,6 +12,7 @@
     "@elysia/eden": "^1.4.10",
     "@elysia/html": "^1.4.1",
     "@elysiajs/static": "^1.4.10",
+    "@napi-rs/lzma": "^1.5.1",
     "@roxysu/db": "workspace:*",
     "@tanstack/react-query": "^5.101.2",
     "@tanstack/react-router": "^1.170.18",

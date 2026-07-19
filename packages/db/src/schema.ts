@@ -133,6 +133,8 @@ export const scores = sqliteTable(
       .notNull()
       .default(false),
     hash: text("hash"),
+    /** SHA-256 of the local lazer replay blob (Score.Files), when present. */
+    replayFileHash: text("replay_file_hash"),
   },
   (t) => ({
     onlineIdIdx: index("scores_online_id_idx").on(t.onlineId),

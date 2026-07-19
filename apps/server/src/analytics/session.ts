@@ -229,6 +229,7 @@ export async function listSessionScores(db: Db, sessionId: number) {
       rank: scores.rank,
       totalScore: scores.totalScore,
       rulesetShortName: scores.rulesetShortName,
+      replayFileHash: scores.replayFileHash,
       playedAt: scores.playedAt,
       isPb: scoreMetrics.isPb,
       retryIndex: scoreMetrics.retryIndex,

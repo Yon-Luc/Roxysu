@@ -48,6 +48,7 @@ async function sessionDetailPayload(
       playedAt: toIso(s.playedAt)!,
       isPb: s.isPb,
       retryIndex: s.retryIndex,
+      hasReplay: Boolean(s.replayFileHash),
       title: s.title,
       artist: s.artist,
       difficultyName: s.difficultyName,

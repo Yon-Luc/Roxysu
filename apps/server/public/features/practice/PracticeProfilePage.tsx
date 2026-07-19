@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { BeatmapCover } from "../../components/BeatmapCover";
 import { BeatmapPreviewButton } from "../../components/BeatmapPreviewModal";
 import { CopyBeatmapSearchButton } from "../../components/CopyBeatmapSearchButton";
+import { ScoreReplayButton } from "../../components/ScoreReplayModal";
 import { fetchBeatmap } from "../../lib/api";
 import {
   formatAccuracy,
@@ -224,11 +225,18 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
         ) : (
           <ul className="space-y-0.5">
             {recentScores.map((score) => (
-              <li key={score.id} className="rx-row justify-between">
-                <div className="text-sm text-subtle">
+              <li key={score.id} className="rx-row justify-between gap-3">
+                <div className="min-w-0 text-sm text-subtle">
                   {formatRelativeTime(score.playedAt)} · {formatMods(score.mods)}
                 </div>
-                <div className="flex gap-4 text-sm font-semibold tabular-nums text-ink">
+                <div className="flex shrink-0 items-center gap-3 text-sm font-semibold tabular-nums text-ink">
+                  <ScoreReplayButton
+                    scoreId={score.id}
+                    enabled={
+                      score.hasReplay && score.rulesetShortName === "mania"
+                    }
+                    className="rx-btn !px-2.5 !py-1 text-xs font-semibold"
+                  />
                   <span>{formatAccuracy(score.accuracy)}</span>
                   <span className="text-subtle">{formatPp(score.pp)}</span>
                   <span className="text-muted">{score.maxCombo}x</span>

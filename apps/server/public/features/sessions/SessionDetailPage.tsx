@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { BeatmapCover } from "../../components/BeatmapCover";
 import { PageTitle } from "../../components/PageTitle";
+import { ScoreReplayButton } from "../../components/ScoreReplayModal";
 import { fetchSession } from "../../lib/api";
 import {
   formatAccuracy,
@@ -198,7 +199,9 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
           <ul className="space-y-0.5">
             {scores.map((score) => {
               const isFresh = freshIds.has(score.id);
-              const body = (
+              const canRewatch =
+                score.hasReplay && score.rulesetShortName === "mania";
+              const main = (
                 <>
                   <BeatmapCover
                     backgroundFileHash={score.backgroundFileHash}
@@ -260,17 +263,26 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
                       : undefined
                   }
                 >
-                  {score.beatmapId ? (
-                    <Link
-                      to="/practice/$beatmapId"
-                      params={{ beatmapId: score.beatmapId }}
-                      className="rx-row"
-                    >
-                      {body}
-                    </Link>
-                  ) : (
-                    <div className="rx-row">{body}</div>
-                  )}
+                  <div className="rx-row gap-2">
+                    {score.beatmapId ? (
+                      <Link
+                        to="/practice/$beatmapId"
+                        params={{ beatmapId: score.beatmapId }}
+                        className="flex min-w-0 flex-1 items-center gap-3"
+                      >
+                        {main}
+                      </Link>
+                    ) : (
+                      <div className="flex min-w-0 flex-1 items-center gap-3">
+                        {main}
+                      </div>
+                    )}
+                    <ScoreReplayButton
+                      scoreId={score.id}
+                      enabled={canRewatch}
+                      className="rx-btn !px-2.5 !py-1 text-xs"
+                    />
+                  </div>
                 </li>
               );
             })}

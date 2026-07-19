@@ -14,6 +14,26 @@ const BASE_TAP_HEIGHT = 14;
 
 type Note = BeatmapPreview["notes"][number];
 
+export type ReplayJudgmentResult =
+  | "perfect"
+  | "great"
+  | "good"
+  | "ok"
+  | "meh"
+  | "miss";
+
+export type NotefieldJudgment = {
+  noteIndex: number;
+  tMs: number;
+  result: ReplayJudgmentResult;
+  isTail?: boolean;
+};
+
+export type NotefieldFrame = {
+  tMs: number;
+  keys: number;
+};
+
 type ManiaNotefieldProps = {
   columnCount: number;
   notes: Note[];
@@ -23,7 +43,20 @@ type ManiaNotefieldProps = {
   scrollPxPerMs?: number;
   /** Override skin (e.g. live editor preview). Falls back to stored skin. */
   skinOverride?: KeymodeSkin;
+  /** Replay key frames (bitmask per column). */
+  frames?: NotefieldFrame[];
+  /** Precomputed judgments keyed by note index (head result used for color). */
+  judgments?: NotefieldJudgment[];
   className?: string;
+};
+
+const JUDGMENT_COLORS: Record<ReplayJudgmentResult, string> = {
+  perfect: "#ffe566",
+  great: "#7dd3fc",
+  good: "#86efac",
+  ok: "#fdba74",
+  meh: "#f9a8d4",
+  miss: "#f87171",
 };
 
 function bisectLeft(notes: Note[], timeMs: number): number {
@@ -35,6 +68,17 @@ function bisectLeft(notes: Note[], timeMs: number): number {
     else hi = mid;
   }
   return lo;
+}
+
+function bisectFrame(frames: NotefieldFrame[], timeMs: number): number {
+  let lo = 0;
+  let hi = frames.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (frames[mid]!.tMs <= timeMs) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo - 1;
 }
 
 function drawFlat(
@@ -132,7 +176,6 @@ function drawHoldBody(
   if (shape === "circle") {
     const r = w / 2;
     const bottom = top + height;
-    // Capsule: semicircle top + rect + semicircle bottom (clipped later).
     ctx.beginPath();
     ctx.moveTo(x, top + r);
     ctx.arc(x + r, top + r, r, Math.PI, 0);
@@ -146,12 +189,26 @@ function drawHoldBody(
   ctx.globalAlpha = 1;
 }
 
+function buildHeadJudgmentMap(
+  judgments: NotefieldJudgment[] | undefined,
+): Map<number, NotefieldJudgment> {
+  const map = new Map<number, NotefieldJudgment>();
+  if (!judgments) return map;
+  for (const j of judgments) {
+    if (j.isTail) continue;
+    if (!map.has(j.noteIndex)) map.set(j.noteIndex, j);
+  }
+  return map;
+}
+
 export function ManiaNotefield({
   columnCount,
   notes,
   getCurrentTimeMs,
   scrollPxPerMs = DEFAULT_SCROLL_PX_PER_MS,
   skinOverride,
+  frames,
+  judgments,
   className = "",
 }: ManiaNotefieldProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -159,6 +216,8 @@ export function ManiaNotefield({
   const columnsRef = useRef(columnCount);
   const getTimeRef = useRef(getCurrentTimeMs);
   const scrollRef = useRef(scrollPxPerMs);
+  const framesRef = useRef<NotefieldFrame[]>([]);
+  const headJudgmentsRef = useRef<Map<number, NotefieldJudgment>>(new Map());
   const storedSkin = usePreviewSkin();
   const keymodeSkin = skinOverride ?? resolveKeymodeSkin(storedSkin, columnCount);
   const skinRef = useRef(keymodeSkin);
@@ -178,6 +237,8 @@ export function ManiaNotefield({
   columnsRef.current = columnCount;
   getTimeRef.current = getCurrentTimeMs;
   scrollRef.current = Math.max(0.05, scrollPxPerMs);
+  framesRef.current = frames ?? [];
+  headJudgmentsRef.current = buildHeadJudgmentMap(judgments);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -223,11 +284,16 @@ export function ManiaNotefield({
       const scroll = scrollRef.current;
       const noteList = notesRef.current;
       const shape = skinRef.current.shape;
+      const frameList = framesRef.current;
+      const headMap = headJudgmentsRef.current;
       const w = canvas!.clientWidth;
       const h = canvas!.clientHeight;
       const receptorY = h * RECEPTOR_Y_RATIO;
       const colW = w / cols;
       const lookaheadMs = receptorY / scroll + 200;
+
+      const frameIdx = frameList.length > 0 ? bisectFrame(frameList, t) : -1;
+      const keys = frameIdx >= 0 ? frameList[frameIdx]!.keys : 0;
 
       ctx!.clearRect(0, 0, w, h);
 
@@ -266,18 +332,44 @@ export function ManiaNotefield({
         const tapH = BASE_TAP_HEIGHT * skin.heightScale;
         const isHold = note.endMs > note.startMs + 20;
 
+        const judgment = headMap.get(i);
+        const judged = judgment != null && t >= judgment.tMs;
+        const noteColor = judged
+          ? JUDGMENT_COLORS[judgment.result]
+          : skin.noteColor;
+        const lnColor = judged
+          ? JUDGMENT_COLORS[judgment.result]
+          : skin.lnColor;
+        const alpha = judged && judgment.result === "miss" ? 0.35 : 0.95;
+
         const startY = receptorY - (note.startMs - t) * scroll;
         if (isHold) {
           const endY = receptorY - (note.endMs - t) * scroll;
           const top = Math.min(startY, endY);
           const bottom = Math.max(startY, endY);
           const height = Math.max(tapH, bottom - top);
-          drawHoldBody(ctx!, shape, x, top, noteW, height, skin.lnColor);
-          if (note.startMs >= t) {
-            drawTap(ctx!, shape, x, startY, noteW, tapH, skin.noteColor, 0.95);
+          drawHoldBody(ctx!, shape, x, top, noteW, height, lnColor);
+          if (note.startMs >= t || (judged && judgment.result !== "miss")) {
+            if (note.startMs >= t) {
+              drawTap(ctx!, shape, x, startY, noteW, tapH, noteColor, alpha);
+            }
           }
         } else if (note.startMs >= t) {
-          drawTap(ctx!, shape, x, startY, noteW, tapH, skin.noteColor, 0.95);
+          drawTap(ctx!, shape, x, startY, noteW, tapH, noteColor, alpha);
+        } else if (judged && t - judgment.tMs < 120) {
+          // Brief flash at receptor after hit.
+          const flashY = receptorY;
+          const flashAlpha = 1 - (t - judgment.tMs) / 120;
+          drawTap(
+            ctx!,
+            shape,
+            x,
+            flashY,
+            noteW,
+            tapH * 1.15,
+            noteColor,
+            flashAlpha,
+          );
         }
       }
 
@@ -289,9 +381,15 @@ export function ManiaNotefield({
         const skin = colSkin(c);
         const gap = Math.max(1, colW * (1 - skin.widthScale) * 0.5);
         const noteW = colW - gap * 2;
-        ctx!.fillStyle = skin.noteColor;
-        ctx!.globalAlpha = 0.35;
-        ctx!.fillRect(c * colW + gap, receptorY - 4, noteW, 8);
+        const held = (keys & (1 << c)) !== 0;
+        ctx!.fillStyle = held ? "#ffffff" : skin.noteColor;
+        ctx!.globalAlpha = held ? 0.95 : 0.35;
+        ctx!.fillRect(
+          c * colW + gap,
+          receptorY - (held ? 6 : 4),
+          noteW,
+          held ? 12 : 8,
+        );
         ctx!.globalAlpha = 1;
       }
 
@@ -320,3 +418,4 @@ export function ManiaNotefield({
 }
 
 export const PREVIEW_SCROLL_DEFAULT = DEFAULT_SCROLL_PX_PER_MS;
+export { JUDGMENT_COLORS };

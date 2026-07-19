@@ -8,6 +8,7 @@ import {
   rulesets,
   scoreMetrics,
   scores,
+  settings,
   getTableColumns,
   sql,
   eq,
@@ -34,6 +35,9 @@ import {
 import { loadOsuSchema } from "./schema";
 
 const BATCH_SIZE = 500;
+
+/** One-shot flag: remapped scores after replay_file_hash column was added. */
+const REPLAY_HASH_BACKFILL_KEY = "sync.replay_hash_backfill_v1";
 
 /** Above this many changed IDs, analytics should full-rebuild (null delta payload). */
 const FULL_ANALYTICS_ID_THRESHOLD = 5_000;
@@ -736,22 +740,55 @@ export function runReconcileSync(db: Db, realmPath: string): SyncResult {
       ).changed;
     }
 
+    // One-shot: remap all scores so replay_file_hash is populated after migration.
+    let replayBackfillUpserted = 0;
+    let replayBackfillRan = false;
+    const backfillDone =
+      db
+        .select({ value: settings.value })
+        .from(settings)
+        .where(eq(settings.key, REPLAY_HASH_BACKFILL_KEY))
+        .get()?.value === "1";
+    if (!backfillDone) {
+      const scoreRows: ScoreRow[] = [];
+      for (const obj of realm.objects("Score")) {
+        const row = mapScore(obj as never);
+        if (row) scoreRows.push(row);
+      }
+      replayBackfillUpserted = upsertBatches(
+        db,
+        scores,
+        scoreRows as Record<string, unknown>[],
+        ["id"],
+      ).changed;
+      db.insert(settings)
+        .values({ key: REPLAY_HASH_BACKFILL_KEY, value: "1" })
+        .onConflictDoUpdate({
+          target: settings.key,
+          set: { value: "1" },
+        })
+        .run();
+      replayBackfillRan = true;
+    }
+
     const rowsChanged =
       deleted.scoresDeleted +
       deleted.beatmapsDeleted +
       deleted.beatmapSetsDeleted +
       softScoreChanged +
-      softSetChanged;
+      softSetChanged +
+      replayBackfillUpserted;
 
     finishImport(db, importRow.id, {
       beatmapSetsUpserted: 0,
       beatmapsUpserted: 0,
-      scoresUpserted: 0,
+      scoresUpserted: replayBackfillUpserted,
       rowsChanged,
       scoresDeleted: deleted.scoresDeleted,
       beatmapsDeleted: deleted.beatmapsDeleted,
       beatmapSetsDeleted: deleted.beatmapSetsDeleted,
-      changedScoreIds,
+      // Full remapping → null delta so analytics rebuilds.
+      changedScoreIds: replayBackfillRan ? null : changedScoreIds,
       changedBeatmapIds,
     });
 
@@ -759,7 +796,7 @@ export function runReconcileSync(db: Db, realmPath: string): SyncResult {
       kind: "reconcile",
       beatmapSetsUpserted: 0,
       beatmapsUpserted: 0,
-      scoresUpserted: 0,
+      scoresUpserted: replayBackfillUpserted,
       rulesetsUpserted: 0,
       rowsChanged,
       scoresDeleted: deleted.scoresDeleted,

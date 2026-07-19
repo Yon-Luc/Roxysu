@@ -108,6 +108,7 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
           rank: s.rank,
           totalScore: s.totalScore,
           rulesetShortName: s.rulesetShortName,
+          hasReplay: Boolean(s.replayFileHash),
           playedAt: toIso(s.playedAt),
         })),
         mastery: masteryRow

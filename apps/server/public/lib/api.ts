@@ -145,6 +145,13 @@ export async function fetchBeatmapPreview(id: string) {
   );
 }
 
+export async function fetchScoreReplay(id: string) {
+  return unwrap(
+    await api.api.scores({ id }).replay.get(),
+    `/api/scores/${id}/replay`,
+  );
+}
+
 export async function fetchSessions() {
   return unwrap(await api.api.sessions.get(), "/api/sessions");
 }
@@ -246,6 +253,10 @@ export type BeatmapProfile = Exclude<
 >;
 export type BeatmapPreview = Exclude<
   Awaited<ReturnType<typeof fetchBeatmapPreview>>,
+  { error: string }
+>;
+export type ScoreReplay = Exclude<
+  Awaited<ReturnType<typeof fetchScoreReplay>>,
   { error: string }
 >;
 export type RecentScore = Dashboard["recentScores"][number];

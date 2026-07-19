@@ -7,6 +7,7 @@ export type FieldTerm =
   | { type: "artist"; value: string; prefix?: boolean }
   | { type: "difficulty"; value: string; prefix?: boolean }
   | { type: "stars"; min?: number; max?: number; op?: ComparisonOp; value?: number }
+  | { type: "key"; min?: number; max?: number; op?: ComparisonOp; value?: number }
   | { type: "mods"; value: string }
   | { type: "acc"; min?: number; max?: number; op?: ComparisonOp; value?: number }
   | { type: "misses"; min?: number; max?: number; op?: ComparisonOp; value?: number }

@@ -11,6 +11,11 @@ const FIELDS: { field: string; meaning: string; example: string }[] = [
     example: "diff:Insane",
   },
   { field: "stars / star", meaning: "Star rating range or comparison", example: "stars:5..6" },
+  {
+    field: "key / keys",
+    meaning: "Mania key count (implies mode:mania)",
+    example: "key=7",
+  },
   { field: "mods / mod", meaning: "Mods used on a score", example: "mods:DT" },
   { field: "acc / accuracy", meaning: "Best accuracy % (range or comparison)", example: "acc:90..92" },
   { field: "misses / miss", meaning: "Best (fewest) miss count", example: "misses:0" },
@@ -23,6 +28,7 @@ const FIELDS: { field: string; meaning: string; example: string }[] = [
 
 const EXAMPLES = [
   "mode:mania stars:5..6",
+  "key=7 stars:5..6",
   "mapper:Lasse OR mapper:Sotarks",
   "(mode:osu OR mode:mania) stars:6..7",
   "acc>98 NOT mods:NF",

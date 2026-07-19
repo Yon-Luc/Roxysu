@@ -38,6 +38,17 @@ function compileTerm(term: FieldTerm, params: unknown[]): string {
       }
       return "1=1";
     }
+    case "key": {
+      // Mania key count is stored as circle size; key filters always imply mania.
+      const mania = `lower(b.ruleset_short_name) = lower(${push("mania")})`;
+      if (term.min != null && term.max != null) {
+        return `(${mania} AND b.circle_size BETWEEN ${push(term.min)} AND ${push(term.max)})`;
+      }
+      if (term.op != null && term.value != null) {
+        return `(${mania} AND b.circle_size ${term.op} ${push(term.value)})`;
+      }
+      return mania;
+    }
     case "mods":
       return `EXISTS (
         SELECT 1 FROM scores s

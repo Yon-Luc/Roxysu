@@ -8,6 +8,7 @@ describe("looksLikeQuery", () => {
     expect(looksLikeQuery("mode:mania")).toBe(true);
     expect(looksLikeQuery("stars:5..6")).toBe(true);
     expect(looksLikeQuery("acc>98")).toBe(true);
+    expect(looksLikeQuery("key=7")).toBe(true);
     expect(looksLikeQuery("hello world")).toBe(false);
   });
 });
@@ -49,6 +50,14 @@ describe("parseQuery", () => {
     expect(parseQuery("title:^SL_5")).toEqual({
       type: "term",
       term: { type: "title", value: "SL_5", prefix: true },
+    });
+    expect(parseQuery("key=7")).toEqual({
+      type: "term",
+      term: { type: "key", op: "=", value: 7 },
+    });
+    expect(parseQuery("keys:4..7")).toEqual({
+      type: "term",
+      term: { type: "key", min: 4, max: 7 },
     });
   });
 
@@ -92,5 +101,13 @@ describe("compileQuery", () => {
     expect(compiled.sql).toContain("m.level");
     expect(compiled.sql).toContain("best_accuracy");
     expect(compiled.params).toEqual([80, 0.98]);
+  });
+
+  test("compiles key filter as mania + circle size", () => {
+    const ast = parseQuery("key=7");
+    const compiled = compileQuery(ast);
+    expect(compiled.sql).toContain("ruleset_short_name");
+    expect(compiled.sql).toContain("circle_size");
+    expect(compiled.params).toEqual(["mania", 7]);
   });
 });

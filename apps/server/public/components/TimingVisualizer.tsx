@@ -8,7 +8,8 @@ const BAR_H = 28;
 const BAR_W = 300;
 
 export type TimingMark = {
-  errorMs: number | null;
+  /** Hit offset in ms; null/undefined on miss. */
+  errorMs?: number | null;
   result: JudgmentResult;
   /** Stable identity for streaming new marks. */
   noteIndex: number;

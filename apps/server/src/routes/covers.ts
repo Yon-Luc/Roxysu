@@ -1,9 +1,5 @@
 import { Elysia, t } from "elysia";
-import {
-  getOsuDataPath,
-  isLazerFileHash,
-  resolveLazerFilePath,
-} from "../shared/lazer-files";
+import { serveHashedFile } from "../shared/serveHashedFile";
 
 function sniffImageMime(bytes: Uint8Array): string | null {
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
@@ -54,35 +50,20 @@ function sniffImageMime(bytes: Uint8Array): string | null {
 export const coverRoutes = new Elysia({ prefix: "/covers" }).get(
   "/:hash",
   async ({ params, set }) => {
-    const hash = params.hash.toLowerCase();
-    if (!isLazerFileHash(hash)) {
-      set.status = 400;
-      return { error: "Invalid file hash" };
+    const result = await serveHashedFile(
+      params.hash,
+      sniffImageMime,
+      "Cover not found",
+      "Not an image",
+    );
+    if (!result.ok) {
+      set.status = result.status;
+      return { error: result.error };
     }
 
-    const filePath = resolveLazerFilePath(hash, getOsuDataPath());
-    if (!filePath) {
-      set.status = 400;
-      return { error: "Invalid file hash" };
-    }
-
-    const file = Bun.file(filePath);
-    if (!(await file.exists())) {
-      set.status = 404;
-      return { error: "Cover not found" };
-    }
-
-    // Lazer stores files by hash with no extension — sniff content type.
-    const head = new Uint8Array(await file.slice(0, 16).arrayBuffer());
-    const type = sniffImageMime(head);
-    if (!type) {
-      set.status = 415;
-      return { error: "Not an image" };
-    }
-
-    set.headers["content-type"] = type;
+    set.headers["content-type"] = result.contentType;
     set.headers["cache-control"] = "public, max-age=604800, immutable";
-    return file;
+    return result.file;
   },
   {
     params: t.Object({

@@ -6,7 +6,7 @@ import {
   type Db,
 } from "@roxysu/db/client.bun";
 import {
-  defaultOsuDataPath,
+  getOsuDataPath,
   resolveLazerFilePath,
 } from "../shared/lazer-files";
 import { runSunnyEstimatorFromText } from "./sunnyEstimator";
@@ -185,7 +185,7 @@ export async function getOrComputeSunnyDan(
     });
   }
 
-  const filePath = resolveLazerFilePath(beatmap.hash, defaultOsuDataPath());
+  const filePath = resolveLazerFilePath(beatmap.hash, getOsuDataPath());
   if (!filePath) {
     return upsertRating(db, {
       beatmapId,
@@ -331,7 +331,7 @@ function computeOneSunnySync(
     return;
   }
 
-  const filePath = resolveLazerFilePath(hash, defaultOsuDataPath());
+  const filePath = resolveLazerFilePath(hash, getOsuDataPath());
   if (!filePath) {
     upsertRatingSync(db, {
       beatmapId,

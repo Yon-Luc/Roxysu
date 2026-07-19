@@ -3,7 +3,7 @@ import {
   localBeatmapCoverUrl,
   osuBeatmapCoverUrl,
   type OsuCoverSize,
-} from "../lib/format";
+} from "../lib/osuUrls";
 
 type BeatmapCoverProps = {
   backgroundFileHash?: string | null;

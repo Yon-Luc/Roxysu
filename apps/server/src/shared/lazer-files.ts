@@ -4,11 +4,6 @@ import { getOsuDataPath } from "./osu-paths";
 
 export { getOsuDataPath } from "./osu-paths";
 
-/** Effective lazer data dir (env → settings cache → platform default). */
-export function defaultOsuDataPath(): string {
-  return getOsuDataPath();
-}
-
 const SHA256_HEX = /^[0-9a-f]{64}$/i;
 
 export function isLazerFileHash(hash: string): boolean {
@@ -21,7 +16,7 @@ export function isLazerFileHash(hash: string): boolean {
  */
 export function resolveLazerFilePath(
   hash: string,
-  osuDataPath = defaultOsuDataPath(),
+  osuDataPath = getOsuDataPath(),
 ): string | null {
   if (!isLazerFileHash(hash)) return null;
   const h = hash.toLowerCase();
@@ -30,7 +25,7 @@ export function resolveLazerFilePath(
 
 export function lazerFileExists(
   hash: string,
-  osuDataPath = defaultOsuDataPath(),
+  osuDataPath = getOsuDataPath(),
 ): boolean {
   const filePath = resolveLazerFilePath(hash, osuDataPath);
   return filePath != null && existsSync(filePath);

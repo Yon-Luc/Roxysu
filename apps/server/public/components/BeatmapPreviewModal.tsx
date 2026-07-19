@@ -9,12 +9,12 @@ import {
 import { createPortal } from "react-dom";
 import { fetchBeatmapPreview, type BeatmapPreview } from "../lib/api";
 import { AudioClock, sampleAudioClock } from "../lib/audioClock";
+import { formatAccuracy } from "../lib/format";
 import {
-  formatAccuracy,
   localBeatmapAudioUrl,
   localBeatmapCoverUrl,
   osuBeatmapCoverUrl,
-} from "../lib/format";
+} from "../lib/osuUrls";
 import {
   codeToColumn,
   formatKeyCode,

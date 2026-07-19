@@ -85,7 +85,7 @@ Analytics → HTTP API + SSE → React UI
 
 Realm JS (and `better-sqlite3`) don’t run on Bun, so sync lives in its own Node process. Both apps share one schema via `@roxysu/db`; SQLite is the only integration point between them.
 
-Deeper design notes live in [`osu-practice-companion-architecture.md`](./osu-practice-companion-architecture.md).
+Deeper design notes live in [`docs/architecture.md`](./docs/architecture.md).
 
 ---
 

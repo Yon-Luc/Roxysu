@@ -30,11 +30,9 @@ function loadTab(): SuggestTab {
 }
 
 export function SessionSuggest({
-  isIdle,
   rulesetShortName,
   excludeBeatmapIds,
 }: {
-  isIdle: boolean;
   rulesetShortName: string | null;
   excludeBeatmapIds: string[];
 }) {
@@ -81,16 +79,11 @@ export function SessionSuggest({
       <div role="tabpanel">
         {tab === "up-next" ? (
           <SessionUpNext
-            isIdle={isIdle}
             rulesetShortName={rulesetShortName}
             excludeBeatmapIds={excludeBeatmapIds}
-            embedded
           />
         ) : (
-          <SessionSevenKRecommend
-            excludeBeatmapIds={excludeBeatmapIds}
-            embedded
-          />
+          <SessionSevenKRecommend excludeBeatmapIds={excludeBeatmapIds} />
         )}
       </div>
     </section>

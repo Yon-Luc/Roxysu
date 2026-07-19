@@ -1,24 +1,13 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { BeatmapCover } from "../../components/BeatmapCover";
-import { BeatmapPreviewButton } from "../../components/BeatmapPreviewModal";
-import { CopyBeatmapSearchButton } from "../../components/CopyBeatmapSearchButton";
 import {
   fetchPracticeRecommend,
   type PracticeRecommend,
   type RecommendFocus,
   type RecommendSkillset,
 } from "../../lib/api";
-import {
-  formatAccuracy,
-  formatRelativeTime,
-  osuClientBeatmapUrl,
-} from "../../lib/format";
-import {
-  formatPrimaryRating,
-  useRatingDisplayMode,
-} from "../../lib/ratingDisplay";
+import { SessionSuggestMapRow } from "./SessionSuggestMapRow";
 
 const PREFS_KEY = "rx-session-7k-recommend";
 
@@ -97,13 +86,9 @@ function formatSkill(n: number): string {
 
 export function SessionSevenKRecommend({
   excludeBeatmapIds,
-  embedded = false,
 }: {
   excludeBeatmapIds: string[];
-  /** When true, omit the outer section title (parent provides tabs). */
-  embedded?: boolean;
 }) {
-  const ratingMode = useRatingDisplayMode();
   const [prefs, setPrefs] = useState<RecPrefs>(() => loadPrefs());
   const [shuffleKey, setShuffleKey] = useState(0);
 
@@ -137,44 +122,19 @@ export function SessionSevenKRecommend({
 
   return (
     <section className="space-y-4">
-      {embedded ? (
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <button
-            type="button"
-            className="rx-btn"
-            onClick={() => {
-              setShuffleKey((k) => k + 1);
-              void refetch();
-            }}
-            disabled={isFetching}
-          >
-            {isFetching ? "Refreshing…" : "Refresh"}
-          </button>
-        </div>
-      ) : (
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h2 className="font-display text-2xl font-bold tracking-tight text-ink">
-              7K recommendations
-            </h2>
-            <p className="mt-1 text-sm text-muted">
-              Companella-style picks from your library using Sunny skill and Rice/LN
-              axes.
-            </p>
-          </div>
-          <button
-            type="button"
-            className="rx-btn"
-            onClick={() => {
-              setShuffleKey((k) => k + 1);
-              void refetch();
-            }}
-            disabled={isFetching}
-          >
-            {isFetching ? "Refreshing…" : "Refresh"}
-          </button>
-        </div>
-      )}
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <button
+          type="button"
+          className="rx-btn"
+          onClick={() => {
+            setShuffleKey((k) => k + 1);
+            void refetch();
+          }}
+          disabled={isFetching}
+        >
+          {isFetching ? "Refreshing…" : "Refresh"}
+        </button>
+      </div>
 
       <div className="rx-panel space-y-4 p-4">
         <div className="flex flex-wrap gap-2">
@@ -282,75 +242,22 @@ export function SessionSevenKRecommend({
           </p>
           <ul className="space-y-0.5">
             {items.map((item) => {
-              const clientUrl = osuClientBeatmapUrl(item.onlineId);
               const relPct = ((item.relativeDifficulty - 1) * 100).toFixed(0);
               return (
-                <li key={item.id} className="rx-row">
-                  <Link
-                    to="/practice/$beatmapId"
-                    params={{ beatmapId: item.id }}
-                    className="flex min-w-0 flex-1 items-center gap-3"
-                  >
-                    <BeatmapCover
-                      backgroundFileHash={item.backgroundFileHash}
-                      setOnlineId={item.setOnlineId}
-                      size="list"
-                      className="h-12 w-12 shrink-0 rounded shadow-md shadow-black/40"
-                      alt=""
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate font-semibold text-ink">
-                        {item.title ?? "Untitled"}
-                      </div>
-                      <div className="mt-0.5 truncate text-sm text-muted">
-                        {item.artist ?? "Unknown"}
-                        {item.difficultyName
-                          ? ` · ${item.difficultyName}`
-                          : ""}
-                        {" · "}
-                        {formatPrimaryRating({
-                          mode: ratingMode,
-                          starRating: item.starRating,
-                          sunnyEstDiff: item.sunnyEstDiff,
-                          sunnyStar: item.sunnyStar,
-                        })}
-                        {" · "}
-                        <span className="tabular-nums">
-                          {Number(relPct) >= 0 ? "+" : ""}
-                          {relPct}% vs skill
-                        </span>
-                      </div>
-                      <div className="mt-0.5 truncate text-xs text-faint">
-                        {item.reasoning}
-                      </div>
-                    </div>
-                    <div className="hidden shrink-0 text-right sm:block">
-                      <div className="font-semibold tabular-nums text-ink">
-                        {item.bestAccuracy != null
-                          ? formatAccuracy(item.bestAccuracy)
-                          : "—"}
-                      </div>
-                      <div className="text-xs tabular-nums text-muted">
-                        {item.lastPlayedAt
-                          ? formatRelativeTime(item.lastPlayedAt)
-                          : "Never played"}
-                      </div>
-                    </div>
-                  </Link>
-                  <div className="flex shrink-0 flex-wrap justify-end gap-2">
-                    <BeatmapPreviewButton beatmapId={item.id} />
-                    <CopyBeatmapSearchButton
-                      title={item.title}
-                      difficultyName={item.difficultyName}
-                      className="rx-btn"
-                    />
-                    {clientUrl ? (
-                      <a href={clientUrl} className="rx-btn">
-                        Open in osu!
-                      </a>
-                    ) : null}
-                  </div>
-                </li>
+                <SessionSuggestMapRow
+                  key={item.id}
+                  item={item}
+                  metaExtra={
+                    <>
+                      {" · "}
+                      <span className="tabular-nums">
+                        {Number(relPct) >= 0 ? "+" : ""}
+                        {relPct}% vs skill
+                      </span>
+                    </>
+                  }
+                  subtitle={item.reasoning}
+                />
               );
             })}
           </ul>

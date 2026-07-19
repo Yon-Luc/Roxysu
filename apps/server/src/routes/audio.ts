@@ -1,9 +1,5 @@
 import { Elysia, t } from "elysia";
-import {
-  getOsuDataPath,
-  isLazerFileHash,
-  resolveLazerFilePath,
-} from "../shared/lazer-files";
+import { serveHashedFile } from "../shared/serveHashedFile";
 
 function sniffAudioMime(bytes: Uint8Array): string | null {
   // MP3 with ID3 tag
@@ -54,35 +50,21 @@ function sniffAudioMime(bytes: Uint8Array): string | null {
 export const audioRoutes = new Elysia({ prefix: "/audio" }).get(
   "/:hash",
   async ({ params, set }) => {
-    const hash = params.hash.toLowerCase();
-    if (!isLazerFileHash(hash)) {
-      set.status = 400;
-      return { error: "Invalid file hash" };
+    const result = await serveHashedFile(
+      params.hash,
+      sniffAudioMime,
+      "Audio not found",
+      "Not an audio file",
+    );
+    if (!result.ok) {
+      set.status = result.status;
+      return { error: result.error };
     }
 
-    const filePath = resolveLazerFilePath(hash, getOsuDataPath());
-    if (!filePath) {
-      set.status = 400;
-      return { error: "Invalid file hash" };
-    }
-
-    const file = Bun.file(filePath);
-    if (!(await file.exists())) {
-      set.status = 404;
-      return { error: "Audio not found" };
-    }
-
-    const head = new Uint8Array(await file.slice(0, 16).arrayBuffer());
-    const type = sniffAudioMime(head);
-    if (!type) {
-      set.status = 415;
-      return { error: "Not an audio file" };
-    }
-
-    set.headers["content-type"] = type;
+    set.headers["content-type"] = result.contentType;
     set.headers["cache-control"] = "public, max-age=604800, immutable";
     set.headers["accept-ranges"] = "bytes";
-    return file;
+    return result.file;
   },
   {
     params: t.Object({

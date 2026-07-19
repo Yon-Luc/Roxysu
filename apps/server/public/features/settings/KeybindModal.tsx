@@ -9,8 +9,8 @@ import {
   resetKeymodeKeybinds,
   setColumnKeybind,
   useKeybinds,
-} from "../lib/keybinds";
-import { KEYMODES, type Keymode } from "../lib/previewSkin";
+} from "../../lib/keybinds";
+import { KEYMODES, type Keymode } from "../../lib/previewSkin";
 
 type KeybindModalProps = {
   open: boolean;

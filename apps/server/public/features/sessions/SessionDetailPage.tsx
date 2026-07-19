@@ -109,7 +109,6 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
         </div>
 
         <SessionSuggest
-          isIdle
           rulesetShortName={null}
           excludeBeatmapIds={[]}
         />
@@ -179,7 +178,6 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
 
       {isCurrentHub ? (
         <SessionSuggest
-          isIdle={false}
           rulesetShortName={session.rulesetShortName}
           excludeBeatmapIds={excludeBeatmapIds}
         />

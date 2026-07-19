@@ -5,6 +5,9 @@ export type RecommendFocus =
   | "deficit"
   | "skillset";
 
+/** API skillset filter (pool limit); distinct from SkillAxis used in matching. */
+export type RecommendSkillsetFilter = "both" | "rc" | "ln";
+
 /** 7K skill axes (RC vs LN via Sunny ln_ratio threshold). */
 export type SkillAxis = "rc" | "ln" | "overall";
 

@@ -8,7 +8,7 @@ import { listSessionsForBeatmap } from "../analytics/session";
 import { getOrComputeSunnyDan } from "../map-analysis/computeSunnyDan";
 import { OsuFileParser } from "../map-analysis/parser/osuFileParser.js";
 import {
-  defaultOsuDataPath,
+  getOsuDataPath,
   resolveLazerFilePath,
 } from "../shared/lazer-files";
 
@@ -194,7 +194,7 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
         return { error: "Beatmap file hash missing" };
       }
 
-      const filePath = resolveLazerFilePath(row.hash, defaultOsuDataPath());
+      const filePath = resolveLazerFilePath(row.hash, getOsuDataPath());
       if (!filePath) {
         set.status = 404;
         return { error: "Could not resolve beatmap file" };

@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { beatmaps, beatmapSets, scores } from "@roxysu/db/client.bun";
 import { OsuFileParser } from "../map-analysis/parser/osuFileParser.js";
 import {
-  defaultOsuDataPath,
+  getOsuDataPath,
   resolveLazerFilePath,
 } from "../shared/lazer-files";
 import type { Db } from "../db";
@@ -85,7 +85,7 @@ export async function loadChartForScore(
   let usedHash: string | null = null;
   let osuText: string | null = null;
   for (const hash of candidates) {
-    const filePath = resolveLazerFilePath(hash, defaultOsuDataPath());
+    const filePath = resolveLazerFilePath(hash, getOsuDataPath());
     if (!filePath) continue;
     try {
       osuText = readFileSync(filePath, "utf8");

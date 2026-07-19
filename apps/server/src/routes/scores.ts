@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { dbPlugin } from "../db";
 import { toIso } from "../shared/serialize";
 import {
-  defaultOsuDataPath,
+  getOsuDataPath,
   resolveLazerFilePath,
 } from "../shared/lazer-files";
 import { decodeLegacyReplay, isManiaRulesetId } from "../replay/decode";
@@ -34,7 +34,7 @@ export const scoreRoutes = new Elysia({ prefix: "/scores" })
 
       const replayPath = resolveLazerFilePath(
         score.replayFileHash,
-        defaultOsuDataPath(),
+        getOsuDataPath(),
       );
       if (!replayPath) {
         set.status = 404;

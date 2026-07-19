@@ -10,13 +10,12 @@ import {
 import { createPortal } from "react-dom";
 import { fetchScoreReplay, type ScoreReplay } from "../lib/api";
 import { AudioClock, sampleAudioClock } from "../lib/audioClock";
+import { formatAccuracy, formatMods } from "../lib/format";
 import {
-  formatAccuracy,
-  formatMods,
   localBeatmapAudioUrl,
   localBeatmapCoverUrl,
   osuBeatmapCoverUrl,
-} from "../lib/format";
+} from "../lib/osuUrls";
 import {
   JUDGMENT_COLORS,
   ManiaNotefield,

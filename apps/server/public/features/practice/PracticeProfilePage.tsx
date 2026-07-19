@@ -10,9 +10,8 @@ import {
   formatMods,
   formatPp,
   formatRelativeTime,
-  osuClientBeatmapUrl,
-  osuWebBeatmapUrl,
 } from "../../lib/format";
+import { osuClientBeatmapUrl, osuWebBeatmapUrl } from "../../lib/osuUrls";
 import {
   formatPrimaryRating,
   useRatingDisplayMode,

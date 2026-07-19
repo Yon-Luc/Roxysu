@@ -7,6 +7,7 @@ import {
   sampleBeatmaps,
   practiceDistribution,
   QueryParseError,
+  toStructuredQuery,
   type PracticeSortBy,
   type PracticeSortDir,
   type PracticeMetric,
@@ -47,13 +48,6 @@ function parseMetric(value: string | undefined): PracticeMetric {
   return (METRICS as readonly string[]).includes(value ?? "")
     ? (value as PracticeMetric)
     : "accuracy";
-}
-
-function toStructuredQuery(q: string | undefined): string | undefined {
-  const trimmed = q?.trim();
-  if (!trimmed) return undefined;
-  if (looksLikeQuery(trimmed)) return trimmed;
-  return `title:${trimmed} OR artist:${trimmed} OR mapper:${trimmed} OR diff:${trimmed}`;
 }
 
 function mapCard(r: {

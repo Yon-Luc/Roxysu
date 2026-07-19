@@ -1,8 +1,15 @@
 import { parseQuery, looksLikeQuery } from "./parse";
 import { compileQuery } from "./compile";
 import { QueryParseError } from "./ast";
+import { toStructuredQuery } from "./toStructuredQuery";
 
-export { parseQuery, looksLikeQuery, compileQuery, QueryParseError };
+export {
+  parseQuery,
+  looksLikeQuery,
+  compileQuery,
+  QueryParseError,
+  toStructuredQuery,
+};
 export { astUsesDanRating } from "./astUsesDan";
 export {
   searchBeatmaps,

@@ -49,6 +49,18 @@ function compileTerm(term: FieldTerm, params: unknown[]): string {
       }
       return mania;
     }
+    case "ln": {
+      // LN% = end-time objects / total objects * 100 (osu! formula); implies mania.
+      const mania = `lower(b.ruleset_short_name) = lower(${push("mania")})`;
+      const lnPct = `(b.end_time_object_count * 100.0 / MAX(1, b.total_object_count))`;
+      if (term.min != null && term.max != null) {
+        return `(${mania} AND ${lnPct} BETWEEN ${push(term.min)} AND ${push(term.max)})`;
+      }
+      if (term.op != null && term.value != null) {
+        return `(${mania} AND ${lnPct} ${term.op} ${push(term.value)})`;
+      }
+      return mania;
+    }
     case "mods":
       return `EXISTS (
         SELECT 1 FROM scores s

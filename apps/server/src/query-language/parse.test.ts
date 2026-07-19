@@ -9,6 +9,7 @@ describe("looksLikeQuery", () => {
     expect(looksLikeQuery("stars:5..6")).toBe(true);
     expect(looksLikeQuery("acc>98")).toBe(true);
     expect(looksLikeQuery("key=7")).toBe(true);
+    expect(looksLikeQuery("ln<10")).toBe(true);
     expect(looksLikeQuery("hello world")).toBe(false);
   });
 });
@@ -58,6 +59,14 @@ describe("parseQuery", () => {
     expect(parseQuery("keys:4..7")).toEqual({
       type: "term",
       term: { type: "key", min: 4, max: 7 },
+    });
+    expect(parseQuery("ln<10")).toEqual({
+      type: "term",
+      term: { type: "ln", op: "<", value: 10 },
+    });
+    expect(parseQuery("lns:0..20")).toEqual({
+      type: "term",
+      term: { type: "ln", min: 0, max: 20 },
     });
   });
 
@@ -110,6 +119,16 @@ describe("compileQuery", () => {
     expect(compiled.sql).toContain("circle_size");
     expect(compiled.params).toEqual(["mania", 7]);
   });
+
+  test("compiles ln filter as mania + end-time object %", () => {
+    const ast = parseQuery("ln<10");
+    const compiled = compileQuery(ast);
+    expect(compiled.sql).toContain("ruleset_short_name");
+    expect(compiled.sql).toContain("end_time_object_count");
+    expect(compiled.sql).toContain("total_object_count");
+    expect(compiled.params).toEqual(["mania", 10]);
+  });
+
 
   test("compiles NOT played:lastNd with correct parentheses", () => {
     const ast = parseQuery("acc:90..93 NOT played:last14d");

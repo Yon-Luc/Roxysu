@@ -92,7 +92,7 @@ function parseFieldTerm(raw: string): FieldTerm {
   const colon = raw.indexOf(":");
   if (colon === -1) {
     // Could be acc>98 style without field prefix... support field+op glued
-    const glued = raw.match(/^(acc|retry|mastery|pp|stars|misses|miss|score|keys|key)(>=|<=|>|<|=)(-?\d+(?:\.\d+)?)$/i);
+    const glued = raw.match(/^(acc|retry|mastery|pp|stars|misses|miss|score|keys|key|lns|ln)(>=|<=|>|<|=)(-?\d+(?:\.\d+)?)$/i);
     if (glued) {
       const field = glued[1]!.toLowerCase();
       const op = glued[2] as ComparisonOp;
@@ -105,6 +105,7 @@ function parseFieldTerm(raw: string): FieldTerm {
       if (field === "misses" || field === "miss") return { type: "misses", op, value };
       if (field === "score") return { type: "score", op, value };
       if (field === "key" || field === "keys") return { type: "key", op, value };
+      if (field === "ln" || field === "lns") return { type: "ln", op, value };
     }
     return { type: "text", value: raw };
   }
@@ -143,6 +144,12 @@ function parseFieldTerm(raw: string): FieldTerm {
       const r = parseRange(value);
       if (!r) throw new QueryParseError(`Invalid key value: ${value}`);
       return { type: "key", ...r };
+    }
+    case "ln":
+    case "lns": {
+      const r = parseRange(value);
+      if (!r) throw new QueryParseError(`Invalid ln value: ${value}`);
+      return { type: "ln", ...r };
     }
     case "acc":
     case "accuracy": {
@@ -315,6 +322,6 @@ export function looksLikeQuery(q: string): boolean {
   if (/[()]/.test(trimmed)) return true;
   if (/\b(AND|OR|NOT)\b/i.test(trimmed)) return true;
   if (/:\S/.test(trimmed)) return true;
-  if (/\b(acc|retry|mastery|pp|stars|misses|miss|score|keys|key)(>=|<=|>|<|=)/i.test(trimmed)) return true;
+  if (/\b(acc|retry|mastery|pp|stars|misses|miss|score|keys|key|lns|ln)(>=|<=|>|<|=)/i.test(trimmed)) return true;
   return false;
 }

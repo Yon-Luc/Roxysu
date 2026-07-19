@@ -567,13 +567,13 @@ export function ManiaNotefield({
         const isMiss = judgment?.result === "miss";
         const judged = judgment != null && t >= judgment.tMs;
         // Analysis: keep skin color on misses; mark with a rect instead.
-        const useJudgmentColor = judged && !(markMisses && isMiss);
+        // Holds keep skin colors while held — only taps flash judgment color.
+        const useJudgmentColor =
+          judged && !isHold && !(markMisses && isMiss);
         const noteColor = useJudgmentColor
           ? JUDGMENT_COLORS[judgment!.result]
           : skin.noteColor;
-        const lnColor = useJudgmentColor
-          ? JUDGMENT_COLORS[judgment!.result]
-          : skin.lnColor;
+        const lnColor = skin.lnColor;
         const alpha =
           judged && isMiss && !markMisses ? 0.35 : 0.95;
 

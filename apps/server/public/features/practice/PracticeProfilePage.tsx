@@ -1,10 +1,10 @@
 import { Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { BeatmapCover } from "../../components/BeatmapCover";
 import { BeatmapPreviewButton } from "../../components/BeatmapPreviewModal";
 import { CopyBeatmapSearchButton } from "../../components/CopyBeatmapSearchButton";
 import { ScoreReplayButton } from "../../components/ScoreReplayModal";
-import { fetchBeatmap } from "../../lib/api";
+import { fetchBeatmap, fetchMusicDrift } from "../../lib/api";
 import {
   formatAccuracy,
   formatMods,
@@ -24,6 +24,10 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
     queryKey: ["beatmap", beatmapId],
     queryFn: () => fetchBeatmap(beatmapId),
     enabled: Boolean(beatmapId),
+  });
+
+  const musicDriftMut = useMutation({
+    mutationFn: () => fetchMusicDrift(beatmapId),
   });
 
   if (isLoading) {
@@ -70,6 +74,10 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
           bracketDensity: number | null;
           error: string | null;
         } | null }).patternAnalysis
+      : null;
+  const timingAnalysis =
+    data && "timingAnalysis" in data
+      ? (data as { timingAnalysis?: ChartTimingView | null }).timingAnalysis
       : null;
   const sessions = data.sessions ?? [];
   const clientUrl = osuClientBeatmapUrl(beatmap.onlineId);
@@ -254,6 +262,24 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
         </div>
       </section>
 
+      {beatmap.rulesetShortName === "mania" && timingAnalysis != null ? (
+        <section className="rx-panel p-5">
+          <h2 className="text-sm font-bold text-ink">Timing analysis</h2>
+          <TimingAnalysisPanel
+            timing={timingAnalysis}
+            hasAudio={Boolean(beatmap.audioFileHash)}
+            musicDrift={musicDriftMut.data?.musicDrift ?? null}
+            musicDriftLoading={musicDriftMut.isPending}
+            musicDriftError={
+              musicDriftMut.error instanceof Error
+                ? musicDriftMut.error.message
+                : null
+            }
+            onAnalyzeMusic={() => musicDriftMut.mutate()}
+          />
+        </section>
+      ) : null}
+
       <section>
         <h2 className="mb-3 font-display text-2xl font-bold tracking-tight text-ink">
           Score timeline
@@ -339,4 +365,221 @@ function PatternDensityHints({
   if (hints.length === 0) return null;
 
   return <p className="text-xs text-faint">{hints.join(" · ")}</p>;
+}
+
+type TimingIssueView = {
+  kind: string;
+  severity: string;
+  startMs: number;
+  endMs?: number;
+  message: string;
+};
+
+type ChartTimingView = {
+  algorithm: string;
+  metrics: {
+    bpm: number;
+    dominantSnap: number;
+    snapCoverage: number;
+    offSnapRatio: number;
+    peakNotesPerBeat: number;
+    timingPointCount: number;
+  };
+  issues: TimingIssueView[];
+  issueCounts: Record<string, number>;
+  error: string | null;
+};
+
+type MusicDriftView = {
+  audioBpm: number | null;
+  audioBpmConfidence: number;
+  chartBpm: number;
+  driftRatio: number;
+  issues: TimingIssueView[];
+  error: string | null;
+};
+
+const ISSUE_KIND_LABELS: Record<string, string> = {
+  off_snap: "Off snap",
+  inconsistent_snap: "Ambiguous snap",
+  bpm_change: "BPM change",
+  high_density: "High density",
+  ln_off_snap: "LN off snap",
+  overlap: "Overlap",
+  missing_timing_points: "Missing timing",
+};
+
+function formatIssueKind(kind: string): string {
+  return ISSUE_KIND_LABELS[kind] ?? kind;
+}
+
+function severityClass(severity: string): string {
+  switch (severity) {
+    case "error":
+      return "text-rose-300";
+    case "warn":
+      return "text-amber-200/90";
+    default:
+      return "text-muted";
+  }
+}
+
+function TimingAnalysisPanel({
+  timing,
+  hasAudio,
+  musicDrift,
+  musicDriftLoading,
+  musicDriftError,
+  onAnalyzeMusic,
+}: {
+  timing: ChartTimingView;
+  hasAudio: boolean;
+  musicDrift: MusicDriftView | null;
+  musicDriftLoading: boolean;
+  musicDriftError: string | null;
+  onAnalyzeMusic: () => void;
+}) {
+  if (timing.error) {
+    return <p className="mt-3 text-sm text-faint">{timing.error}</p>;
+  }
+
+  const m = timing.metrics;
+  const totalIssues = Object.values(timing.issueCounts).reduce(
+    (sum, n) => sum + (n ?? 0),
+    0,
+  );
+
+  return (
+    <div className="mt-4 space-y-5">
+      <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm tabular-nums text-subtle">
+        <span>
+          Chart BPM{" "}
+          <span className="font-semibold text-ink">{m.bpm.toFixed(1)}</span>
+        </span>
+        <span>
+          Snap{" "}
+          <span className="font-semibold text-ink">1/{m.dominantSnap}</span>
+        </span>
+        <span>
+          Coverage{" "}
+          <span className="font-semibold text-ink">
+            {Math.round(m.snapCoverage * 100)}%
+          </span>
+        </span>
+        <span>
+          Peak density{" "}
+          <span className="font-semibold text-ink">{m.peakNotesPerBeat}</span>
+          /beat
+        </span>
+        {totalIssues > 0 ? (
+          <span>
+            Issues{" "}
+            <span className="font-semibold text-ink">{totalIssues}</span>
+          </span>
+        ) : null}
+      </div>
+
+      {timing.issues.length > 0 ? (
+        <ul className="max-h-48 space-y-1 overflow-y-auto text-sm">
+          {timing.issues.map((issue, idx) => (
+            <li
+              key={`${issue.kind}-${issue.startMs}-${idx}`}
+              className={`flex gap-2 ${severityClass(issue.severity)}`}
+            >
+              <span className="shrink-0 font-mono text-xs text-faint">
+                {formatTimeMs(issue.startMs)}
+              </span>
+              <span className="shrink-0 text-xs uppercase tracking-wide opacity-80">
+                {formatIssueKind(issue.kind)}
+              </span>
+              <span className="min-w-0 text-subtle">{issue.message}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-muted">No timing issues detected on snap grid.</p>
+      )}
+
+      <div className="border-t border-line pt-4">
+        <h3 className="text-xs font-bold uppercase tracking-wide text-faint">
+          Music alignment
+        </h3>
+        <p className="mt-1 text-sm text-muted">
+          Compare note times to beats detected from the chart audio (requires
+          ffmpeg).
+        </p>
+
+        {musicDrift && !musicDrift.error ? (
+          <div className="mt-3 space-y-2 text-sm">
+            <div className="flex flex-wrap gap-x-4 gap-y-1 tabular-nums text-subtle">
+              <span>
+                Audio BPM{" "}
+                <span className="font-semibold text-ink">
+                  {musicDrift.audioBpm?.toFixed(1) ?? "—"}
+                </span>
+              </span>
+              <span>
+                Drift{" "}
+                <span className="font-semibold text-ink">
+                  {Math.round(musicDrift.driftRatio * 100)}%
+                </span>
+              </span>
+              {musicDrift.audioBpmConfidence > 0 ? (
+                <span>
+                  Confidence{" "}
+                  <span className="font-semibold text-ink">
+                    {Math.round(musicDrift.audioBpmConfidence * 100)}%
+                  </span>
+                </span>
+              ) : null}
+            </div>
+            {musicDrift.issues.length > 0 ? (
+              <ul className="max-h-36 space-y-1 overflow-y-auto">
+                {musicDrift.issues.slice(0, 15).map((issue, idx) => (
+                  <li
+                    key={`drift-${issue.startMs}-${idx}`}
+                    className={`text-sm ${severityClass(issue.severity)}`}
+                  >
+                    <span className="font-mono text-xs text-faint">
+                      {formatTimeMs(issue.startMs)}
+                    </span>{" "}
+                    {issue.message}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted">
+                Notes align with detected audio beats.
+              </p>
+            )}
+          </div>
+        ) : musicDrift?.error ? (
+          <p className="mt-3 text-sm text-rose-300">{musicDrift.error}</p>
+        ) : null}
+
+        {musicDriftError ? (
+          <p className="mt-3 text-sm text-rose-300">{musicDriftError}</p>
+        ) : null}
+
+        <button
+          type="button"
+          className="rx-btn-primary mt-3"
+          disabled={!hasAudio || musicDriftLoading}
+          onClick={onAnalyzeMusic}
+        >
+          {musicDriftLoading ? "Analyzing audio…" : "Check music alignment"}
+        </button>
+        {!hasAudio ? (
+          <p className="mt-2 text-xs text-faint">Audio file hash not available.</p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function formatTimeMs(ms: number): string {
+  const sec = Math.max(0, ms / 1000);
+  const mins = Math.floor(sec / 60);
+  const rem = sec - mins * 60;
+  return `${mins}:${rem.toFixed(1).padStart(4, "0")}`;
 }

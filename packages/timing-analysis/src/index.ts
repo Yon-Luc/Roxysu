@@ -3,6 +3,8 @@ export {
   analyzeTimingFromOsuText,
   compareNotesToBeatGrid,
 } from "./analyzeChartTiming";
+export { compareChartToAudio } from "./compareAudio";
+export type { ChartAudioComparison } from "./compareAudio";
 export {
   SNAP_DIVISORS,
   beatLengthToBpm,

@@ -44,3 +44,8 @@ export {
   stopPatternAnalysisBackfill,
   countPatternAnalysisMissing,
 } from "./patternAnalysisJob";
+export {
+  analyzeMusicDrift,
+  getChartTimingAnalysis,
+} from "./computeTimingAnalysis";
+export type { ChartTimingRating, MusicDriftRating } from "./computeTimingAnalysis";

@@ -160,6 +160,13 @@ export async function fetchBeatmapPreview(id: string) {
   );
 }
 
+export async function fetchMusicDrift(beatmapId: string) {
+  return unwrap(
+    await api.api.beatmaps({ id: beatmapId })["music-drift"].post(),
+    `/api/beatmaps/${beatmapId}/music-drift`,
+  );
+}
+
 export async function fetchScoreReplay(id: string) {
   return unwrap(
     await api.api.scores({ id }).replay.get(),

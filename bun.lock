@@ -29,9 +29,11 @@
         "@elysia/html": "^1.4.1",
         "@elysiajs/static": "^1.4.10",
         "@napi-rs/lzma": "^1.5.1",
+        "@roxysu/audio-analysis": "workspace:*",
         "@roxysu/db": "workspace:*",
         "@roxysu/osu-chart": "workspace:*",
         "@roxysu/pattern-7k": "workspace:*",
+        "@roxysu/timing-analysis": "workspace:*",
         "@tanstack/react-query": "^5.101.2",
         "@tanstack/react-router": "^1.170.18",
         "drizzle-orm": "0.36.4",
@@ -89,6 +91,7 @@
       "name": "@roxysu/timing-analysis",
       "version": "0.0.1",
       "dependencies": {
+        "@roxysu/audio-analysis": "workspace:*",
         "@roxysu/osu-chart": "workspace:*",
       },
       "devDependencies": {

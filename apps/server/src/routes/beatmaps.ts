@@ -7,6 +7,10 @@ import { toIso } from "../shared/serialize";
 import { listSessionsForBeatmap } from "../analytics/session";
 import { getOrComputeSunnyDan } from "../map-analysis/computeSunnyDan";
 import { getOrComputePatternAnalysis } from "../map-analysis/computePatternAnalysis";
+import {
+  analyzeMusicDrift,
+  getChartTimingAnalysis,
+} from "../map-analysis/computeTimingAnalysis";
 import { OsuFileParser } from "../map-analysis/parser/osuFileParser.js";
 import {
   getOsuDataPath,
@@ -76,6 +80,11 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
         ? await getOrComputePatternAnalysis(db, params.id)
         : null;
 
+      const timingAnalysis =
+        beatmap.rulesetShortName === "mania"
+          ? await getChartTimingAnalysis(db, params.id)
+          : null;
+
       return {
         beatmap: {
           id: beatmap.id,
@@ -133,6 +142,7 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
           : null,
         sunnyDan,
         patternAnalysis,
+        timingAnalysis,
         notes: [] as Array<{ id: number; body: string }>,
         tags: [] as Array<{ id: number; name: string; color: string | null }>,
         sessions: sessionRows.map((s) => ({
@@ -280,6 +290,37 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
         force: true,
       });
       return { sunnyDan };
+    },
+    {
+      params: t.Object({
+        id: t.String(),
+      }),
+    },
+  )
+  .post(
+    "/:id/music-drift",
+    async ({ db, params, set }) => {
+      const [beatmap] = await db
+        .select({
+          id: beatmaps.id,
+          rulesetShortName: beatmaps.rulesetShortName,
+        })
+        .from(beatmaps)
+        .where(eq(beatmaps.id, params.id))
+        .limit(1);
+
+      if (!beatmap) {
+        set.status = 404;
+        return { error: "Beatmap not found" };
+      }
+
+      if (beatmap.rulesetShortName !== "mania") {
+        set.status = 400;
+        return { error: "Music drift analysis is only available for mania maps" };
+      }
+
+      const musicDrift = await analyzeMusicDrift(db, params.id);
+      return { musicDrift };
     },
     {
       params: t.Object({

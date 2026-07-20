@@ -51,6 +51,7 @@ import {
 const PREFS_KEY = "rx-beatmap-preview";
 const SKIP_MS = 5000;
 const RATES = [0.5, 0.75, 1, 1.25, 1.5] as const;
+type ReplayRate = (typeof RATES)[number];
 /** Fullscreen playfield width as % of the modal (saved). */
 const FIELD_WIDTH_MIN = 40;
 const FIELD_WIDTH_MAX = 100;
@@ -69,7 +70,7 @@ const ACC_SCALE = 305;
 
 type PreviewPrefs = {
   volume: number;
-  rate: number;
+  rate: ReplayRate;
   scroll: number;
   fullscreen: boolean;
   /** Fullscreen playfield max-width (% of dialog). */
@@ -111,6 +112,29 @@ const EMPTY_SUMMARY: JudgmentSummary = {
 };
 
 type ModalMode = "rewatch" | "play";
+type LoadedScoreReplay = ScoreReplay & {
+  beatmap: NonNullable<ScoreReplay["beatmap"]>;
+  playback: NonNullable<ScoreReplay["playback"]>;
+  score: NonNullable<ScoreReplay["score"]>;
+  frames: NonNullable<ScoreReplay["frames"]>;
+  judgments: NonNullable<ScoreReplay["judgments"]>;
+  simulated: NonNullable<ScoreReplay["simulated"]>;
+};
+
+function isLoadedScoreReplay(
+  data: Awaited<ReturnType<typeof fetchScoreReplay>> | undefined,
+): data is LoadedScoreReplay {
+  return Boolean(
+    data &&
+      !("error" in data) &&
+      data.beatmap &&
+      data.playback &&
+      data.score &&
+      data.frames &&
+      data.judgments &&
+      data.simulated,
+  );
+}
 
 function loadPrefs(): PreviewPrefs {
   try {
@@ -124,7 +148,7 @@ function loadPrefs(): PreviewPrefs {
         1,
       ),
       rate: RATES.includes(parsed.rate as (typeof RATES)[number])
-        ? (parsed.rate as number)
+        ? (parsed.rate as ReplayRate)
         : DEFAULT_PREFS.rate,
       scroll: migratePreviewScroll(
         typeof parsed.scroll === "number" ? parsed.scroll : DEFAULT_PREFS.scroll,
@@ -172,8 +196,8 @@ function clamp(n: number, min: number, max: number) {
   return Math.min(max, Math.max(min, n));
 }
 
-function nearestRate(rate: number): number {
-  let best = RATES[0]!;
+function nearestRate(rate: number): ReplayRate {
+  let best: ReplayRate = RATES[0]!;
   let bestDist = Math.abs(rate - best);
   for (const r of RATES) {
     const d = Math.abs(rate - r);
@@ -274,17 +298,18 @@ function ScoreReplayModal({
     queryKey: ["score-replay", scoreId],
     queryFn: () => fetchScoreReplay(scoreId),
   });
+  const replayData = isLoadedScoreReplay(data) ? data : null;
 
   const analysisOn = prefs.analysis;
   const analysis = useMemo(() => {
-    if (!analysisOn || !data || data.error) return null;
-    return buildReplayAnalysis(data as ScoreReplay);
-  }, [analysisOn, data]);
+    if (!analysisOn || !replayData) return null;
+    return buildReplayAnalysis(replayData);
+  }, [analysisOn, replayData]);
 
-  const audioUrl = localBeatmapAudioUrl(data?.beatmap.audioFileHash);
+  const audioUrl = localBeatmapAudioUrl(replayData?.beatmap.audioFileHash);
   const bgUrl =
-    localBeatmapCoverUrl(data?.beatmap.backgroundFileHash) ??
-    osuBeatmapCoverUrl(data?.beatmap.setOnlineId, "cover") ??
+    localBeatmapCoverUrl(replayData?.beatmap.backgroundFileHash) ??
+    osuBeatmapCoverUrl(replayData?.beatmap.setOnlineId, "cover") ??
     null;
 
   prefsRef.current = prefs;
@@ -293,8 +318,11 @@ function ScoreReplayModal({
   modeRef.current = mode;
   dataRef.current = data;
 
-  if (data && !data.error && data.beatmap.columnCount > 0) {
-    bindsRef.current = resolveKeybinds(keybindsAll, data.beatmap.columnCount);
+  if (replayData && replayData.beatmap.columnCount > 0) {
+    bindsRef.current = resolveKeybinds(
+      keybindsAll,
+      replayData.beatmap.columnCount,
+    );
   }
 
   useEffect(() => {
@@ -307,13 +335,13 @@ function ScoreReplayModal({
 
   // Apply DT/HT default rate once when replay loads.
   useEffect(() => {
-    if (!data || rateApplied.current) return;
+    if (!replayData || rateApplied.current) return;
     rateApplied.current = true;
-    const modRate = data.playback.rate;
+    const modRate = replayData.playback.rate;
     if (modRate !== 1) {
       setPrefs((p) => ({ ...p, rate: nearestRate(modRate) }));
     }
-  }, [data]);
+  }, [replayData]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -345,7 +373,9 @@ function ScoreReplayModal({
 
   function ensureLivePlay(): LiveManiaPlay | null {
     const replay = dataRef.current;
-    if (!replay || replay.error || replay.beatmap.columnCount <= 0) return null;
+    if (!isLoadedScoreReplay(replay) || replay.beatmap.columnCount <= 0) {
+      return null;
+    }
     const od = replay.beatmap.overallDifficulty ?? 0;
     const existing = livePlayRef.current;
     if (
@@ -390,7 +420,7 @@ function ScoreReplayModal({
 
   function enterTestFromHere() {
     const replay = dataRef.current;
-    if (!replay || replay.error || replay.beatmap.columnCount <= 0) return;
+    if (!isLoadedScoreReplay(replay) || replay.beatmap.columnCount <= 0) return;
     playStartMsRef.current = Math.max(0, mapTimeMs());
     livePlayRef.current = null;
     setMode("play");
@@ -454,14 +484,14 @@ function ScoreReplayModal({
   // Recreate live judge when chart / OD changes.
   useEffect(() => {
     livePlayRef.current = null;
-    if (modeRef.current === "play" && data && !data.error) {
+    if (modeRef.current === "play" && replayData) {
       ensureLivePlay()?.reset();
       setLiveHeldMask(0);
       setLiveJudgments([]);
       setLiveSummary(EMPTY_SUMMARY);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- rebuild when chart identity changes
-  }, [scoreId, data?.beatmap.id, data?.beatmap.overallDifficulty]);
+  }, [scoreId, replayData?.beatmap.id, replayData?.beatmap.overallDifficulty]);
 
   // Tick live judge while in play mode.
   useEffect(() => {
@@ -595,7 +625,7 @@ function ScoreReplayModal({
       if (e.key === "Enter") {
         e.preventDefault();
         const replay = dataRef.current;
-        if (replay && !replay.error && replay.beatmap.columnCount > 0) {
+        if (isLoadedScoreReplay(replay) && replay.beatmap.columnCount > 0) {
           enterPlayMode();
         }
         return;
@@ -776,8 +806,8 @@ function ScoreReplayModal({
 
   // Live HUD from stored replay judgments (rewatch mode only).
   useEffect(() => {
-    if (mode !== "rewatch" || !data || data.error) return;
-    const judgments = data.judgments;
+    if (mode !== "rewatch" || !replayData) return;
+    const judgments = replayData.judgments;
     let raf = 0;
     let running = true;
 
@@ -812,24 +842,26 @@ function ScoreReplayModal({
       cancelAnimationFrame(raf);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mapTimeMs closes over refs
-  }, [mode, data]);
+  }, [mode, replayData]);
 
   function onSeek(e: FormEvent<HTMLInputElement>) {
     if (mode === "play") return;
     seekTo(Number(e.currentTarget.value));
   }
 
-  const title = data
-    ? [data.beatmap.title ?? "Untitled", data.beatmap.difficultyName]
+  const title = replayData
+    ? [replayData.beatmap.title ?? "Untitled", replayData.beatmap.difficultyName]
         .filter(Boolean)
         .join(" · ")
     : "Score rewatch";
-  const subtitle = data
+  const subtitle = replayData
     ? [
-        data.beatmap.artist,
-        data.beatmap.columnCount > 0 ? `${data.beatmap.columnCount}K` : null,
-        formatMods(data.score.mods),
-        data.score.userUsername,
+        replayData.beatmap.artist,
+        replayData.beatmap.columnCount > 0
+          ? `${replayData.beatmap.columnCount}K`
+          : null,
+        formatMods(replayData.score.mods),
+        replayData.score.userUsername,
       ]
         .filter(Boolean)
         .join(" · ")
@@ -837,7 +869,7 @@ function ScoreReplayModal({
   const maxDuration = (() => {
     const candidates = [
       durationMs,
-      data?.beatmap.lengthMs ?? 0,
+      replayData?.beatmap.lengthMs ?? 0,
     ].filter((n) => Number.isFinite(n) && n > 0 && n < 24 * 60 * 60 * 1000);
     const base = candidates.length > 0 ? Math.max(...candidates) : 1;
     return Math.max(base, currentMs, 1);
@@ -846,12 +878,11 @@ function ScoreReplayModal({
   const fullscreen = prefs.fullscreen;
   const isPlay = mode === "play";
   const canLivePlay = !!(
-    data &&
-    !data.error &&
-    data.beatmap.columnCount > 0
+    replayData &&
+    replayData.beatmap.columnCount > 0
   );
   const binds = canLivePlay
-    ? resolveKeybinds(keybindsAll, data.beatmap.columnCount)
+    ? resolveKeybinds(keybindsAll, replayData.beatmap.columnCount)
     : [];
   const showAnalysis = analysisOn && !isPlay;
 
@@ -1061,14 +1092,14 @@ function ScoreReplayModal({
                     </div>
                   ) : null}
 
-                  {data.beatmap.columnCount > 0 ? (
+                  {replayData?.beatmap.columnCount ? (
                     <div className="relative h-full w-full">
                       <div className="h-full w-full overflow-hidden rounded-xl">
                         <ManiaNotefield
-                          columnCount={data.beatmap.columnCount}
-                          notes={data.beatmap.notes}
-                          frames={isPlay ? undefined : data.frames}
-                          judgments={isPlay ? liveJudgments : data.judgments}
+                          columnCount={replayData.beatmap.columnCount}
+                          notes={replayData.beatmap.notes}
+                          frames={isPlay ? undefined : replayData.frames}
+                          judgments={isPlay ? liveJudgments : replayData.judgments}
                           highlightMissNotes={showAnalysis}
                           scrollSpeed={prefs.scroll}
                           liveHeldMask={isPlay ? liveHeldMask : null}
@@ -1079,7 +1110,7 @@ function ScoreReplayModal({
                         <TimingVisualizer
                           judgments={liveJudgments}
                           windows={maniaHitWindows(
-                            data.beatmap.overallDifficulty ?? 0,
+                            replayData.beatmap.overallDifficulty ?? 0,
                           )}
                           xPct={prefs.timingX}
                           yPct={prefs.timingY}
@@ -1096,10 +1127,10 @@ function ScoreReplayModal({
                   )}
                 </div>
 
-                {showAnalysis && analysis ? (
+                {showAnalysis && analysis && replayData ? (
                   <div className="h-56 shrink-0 sm:h-auto sm:w-72 sm:max-w-[40%] md:w-80">
                     <ReplayAnalysisPanel
-                      data={data as ScoreReplay}
+                      data={replayData}
                       analysis={analysis}
                       onJumpToMiss={jumpToMiss}
                       activeMissTMs={activeMissTMs}
@@ -1140,7 +1171,7 @@ function ScoreReplayModal({
                 ) : null}
 
                 {!isPlay ? (
-                  <ReplayStatsBar data={data as ScoreReplay} />
+                  replayData ? <ReplayStatsBar data={replayData} /> : null
                 ) : null}
 
                 <div className="relative mb-3 flex items-center gap-3">
@@ -1273,7 +1304,7 @@ function ScoreReplayModal({
                       onChange={(e) =>
                         setPrefs((p) => ({
                           ...p,
-                          rate: Number(e.target.value),
+                          rate: nearestRate(Number(e.target.value)),
                         }))
                       }
                       aria-label="Playback rate"
@@ -1375,7 +1406,7 @@ function ScoreReplayModal({
   );
 }
 
-function ReplayStatsBar({ data }: { data: ScoreReplay }) {
+function ReplayStatsBar({ data }: { data: LoadedScoreReplay }) {
   const sim = data.simulated;
   return (
     <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">

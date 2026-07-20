@@ -46,6 +46,7 @@
         "@napi-rs/lzma": "^1.5.1",
         "@roxysu/audio-analysis": "workspace:*",
         "@roxysu/db": "workspace:*",
+        "@roxysu/mapgen-core": "workspace:*",
         "@roxysu/osu-chart": "workspace:*",
         "@roxysu/pattern-7k": "workspace:*",
         "@roxysu/timing-analysis": "workspace:*",

@@ -6,6 +6,8 @@ export type ManiaOsuMetadata = {
   creator: string;
   version: string;
   audioFilename: string;
+  /** Optional background image filename referenced in [Events]. */
+  backgroundFilename?: string;
   previewTime?: number;
 };
 
@@ -87,9 +89,14 @@ export function buildManiaOsuText(chart: ManiaOsuChart): string {
     "",
     "[Events]",
     "//Background and video events",
-    "",
-    "[TimingPoints]",
   ];
+
+  if (md.backgroundFilename) {
+    const escaped = md.backgroundFilename.replace(/"/g, "");
+    lines.push(`0,0,"${escaped}",0,0`);
+  }
+
+  lines.push("", "[TimingPoints]");
 
   for (const [timeMs, beatLengthMs] of chart.timingPoints) {
     lines.push(`${Math.round(timeMs)},${beatLengthMs.toFixed(12)},4,2,0,100,1,0`);

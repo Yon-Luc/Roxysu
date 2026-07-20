@@ -15,6 +15,7 @@ import { CollectionsPage } from "./features/collections/CollectionsPage";
 import { CollectionResultsPage } from "./features/collections/CollectionResultsPage";
 import { SettingsPage } from "./features/settings/SettingsPage";
 import { SkinPage } from "./features/settings/SkinPage";
+import { MapgenPage } from "./features/settings/MapgenPage";
 import { OverlayPage } from "./features/overlay/OverlayPage";
 
 const rootRoute = createRootRoute({
@@ -94,6 +95,12 @@ const skinRoute = createRoute({
   component: SkinPage,
 });
 
+const mapgenRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/mapgen",
+  component: MapgenPage,
+});
+
 const overlayRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/overlay",
@@ -122,6 +129,7 @@ const routeTree = rootRoute.addChildren([
     collectionsRoute,
     collectionResultsRoute,
     skinRoute,
+    mapgenRoute,
     settingsRoute,
   ]),
   overlayRoute,

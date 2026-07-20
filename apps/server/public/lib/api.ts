@@ -286,6 +286,91 @@ export async function stopPatternAnalysisJob() {
   );
 }
 
+export async function fetchMapgenStatus() {
+  return unwrap(await api.api.mapgen.status.get(), "/api/mapgen/status");
+}
+
+export type MapgenGenerateInput = {
+  audio: File;
+  background?: File;
+  title?: string;
+  artist?: string;
+  creator?: string;
+  version?: string;
+  delay?: number;
+  jack?: number;
+  chordjack?: number;
+  chordstream?: number;
+  bracket?: number;
+  ln?: number;
+  bpm?: number;
+  seed?: number;
+  endSec?: number;
+  format?: "zip" | "osu";
+};
+
+export async function generateMapgenPack(
+  input: MapgenGenerateInput,
+): Promise<{
+  blob: Blob;
+  filename: string;
+  bpm: string | null;
+  notes: string | null;
+  dominant: string | null;
+}> {
+  const form = new FormData();
+  form.append("audio", input.audio);
+  if (input.background) form.append("background", input.background);
+  const fields: Record<string, string | number | undefined> = {
+    title: input.title,
+    artist: input.artist,
+    creator: input.creator,
+    version: input.version,
+    delay: input.delay,
+    jack: input.jack,
+    chordjack: input.chordjack,
+    chordstream: input.chordstream,
+    bracket: input.bracket,
+    ln: input.ln,
+    bpm: input.bpm,
+    seed: input.seed,
+    endSec: input.endSec,
+    format: input.format ?? "zip",
+  };
+  for (const [key, value] of Object.entries(fields)) {
+    if (value == null || value === "") continue;
+    form.append(key, String(value));
+  }
+
+  const res = await fetch("/api/mapgen", {
+    method: "POST",
+    body: form,
+  });
+
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const json = (await res.json()) as { error?: string };
+      if (json.error) detail = json.error;
+    } catch {
+      // ignore
+    }
+    throw new Error(detail);
+  }
+
+  const disposition = res.headers.get("Content-Disposition") ?? "";
+  const match = disposition.match(/filename="([^"]+)"/);
+  const filename = match?.[1] ?? "generated.osz";
+
+  return {
+    blob: await res.blob(),
+    filename,
+    bpm: res.headers.get("X-Mapgen-Bpm"),
+    notes: res.headers.get("X-Mapgen-Notes"),
+    dominant: res.headers.get("X-Mapgen-Dominant"),
+  };
+}
+
 export type SystemStatus = Awaited<ReturnType<typeof fetchSystemStatus>>;
 export type Dashboard = Awaited<ReturnType<typeof fetchDashboard>>;
 export type PracticeList = Exclude<

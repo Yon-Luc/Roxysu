@@ -22,6 +22,7 @@ export type MapgenOptions = {
     artist?: string;
     creator?: string;
     version?: string;
+    backgroundFilename?: string;
   };
   audioFilename?: string;
   /** Skip generating notes after this ms (default: full track). */

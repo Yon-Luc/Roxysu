@@ -86,6 +86,7 @@ export function generateMapFromAudio(
       creator: options.metadata?.creator ?? "Roxysu Mapgen",
       version: options.metadata?.version ?? "Generated",
       audioFilename: options.audioFilename ?? "audio.mp3",
+      backgroundFilename: options.metadata?.backgroundFilename,
     },
     difficulty: {
       columnCount,

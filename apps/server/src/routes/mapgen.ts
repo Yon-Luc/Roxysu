@@ -1,0 +1,222 @@
+import { Elysia, t } from "elysia";
+import { mkdirSync, writeFileSync, rmSync, readFileSync } from "node:fs";
+import { join, basename, extname } from "node:path";
+import { tmpdir } from "node:os";
+import { analyzeAudioFile } from "@roxysu/audio-analysis";
+import {
+  analyzeGeneratedPatterns,
+  buildManiaOsuText,
+  generateMapFromAudio,
+} from "@roxysu/mapgen-core";
+import {
+  ffmpegUnavailableMessage,
+  isFfmpegAvailableAt,
+  resolveFfmpegPath,
+} from "../shared/ffmpeg-path";
+import { buildZip } from "../map-analysis/zipStore";
+
+const AUDIO_EXTS = new Set([
+  ".mp3",
+  ".ogg",
+  ".wav",
+  ".flac",
+  ".m4a",
+  ".aac",
+  ".opus",
+]);
+const IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp"]);
+
+function sanitizeFilename(name: string): string {
+  return basename(name).replace(/[^\w.\- ()[\]]+/g, "_");
+}
+
+function parseNum(value: unknown): number | undefined {
+  if (value == null || value === "") return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function parseStr(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const t = value.trim();
+  return t.length > 0 ? t : undefined;
+}
+
+export const mapgenRoutes = new Elysia({ prefix: "/mapgen" })
+  .get("/status", async () => {
+    const ffmpegPath = resolveFfmpegPath();
+    const available = await isFfmpegAvailableAt(ffmpegPath);
+    return {
+      ffmpegAvailable: available,
+      ffmpegPath,
+      message: available ? null : ffmpegUnavailableMessage(ffmpegPath),
+    };
+  })
+  .post(
+    "/",
+    async ({ body, set }) => {
+      const ffmpegPath = resolveFfmpegPath();
+      if (!(await isFfmpegAvailableAt(ffmpegPath))) {
+        set.status = 503;
+        return {
+          error: ffmpegUnavailableMessage(ffmpegPath),
+        };
+      }
+
+      const audio = body.audio;
+      if (!audio || !(audio instanceof File)) {
+        set.status = 400;
+        return { error: "Audio file is required (field: audio)" };
+      }
+
+      const audioName = sanitizeFilename(audio.name || "audio.mp3");
+      const audioExt = extname(audioName).toLowerCase();
+      if (audioExt && !AUDIO_EXTS.has(audioExt)) {
+        set.status = 400;
+        return {
+          error: `Unsupported audio type ${audioExt} (use mp3/ogg/wav/flac)`,
+        };
+      }
+
+      const workDir = join(
+        tmpdir(),
+        `roxysu-mapgen-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      );
+      mkdirSync(workDir, { recursive: true });
+
+      try {
+        const audioPath = join(workDir, audioName);
+        writeFileSync(audioPath, Buffer.from(await audio.arrayBuffer()));
+
+        let backgroundFilename: string | undefined;
+        let backgroundBytes: Uint8Array | undefined;
+        const bg = body.background;
+        if (bg && bg instanceof File && bg.size > 0) {
+          const bgName = sanitizeFilename(bg.name || "bg.jpg");
+          const bgExt = extname(bgName).toLowerCase();
+          if (bgExt && !IMAGE_EXTS.has(bgExt)) {
+            set.status = 400;
+            return {
+              error: `Unsupported image type ${bgExt} (use jpg/png/webp)`,
+            };
+          }
+          backgroundFilename = bgName;
+          backgroundBytes = new Uint8Array(await bg.arrayBuffer());
+          writeFileSync(join(workDir, bgName), backgroundBytes);
+        }
+
+        const audioAnalysis = await analyzeAudioFile(audioPath, { ffmpegPath });
+
+        const title =
+          parseStr(body.title) ??
+          audioName.replace(/\.[^.]+$/, "") ??
+          "Generated Chart";
+        const artist = parseStr(body.artist) ?? "Unknown";
+        const creator = parseStr(body.creator) ?? "Roxysu Mapgen";
+        const version = parseStr(body.version) ?? "Generated";
+
+        const result = generateMapFromAudio(
+          audioAnalysis,
+          {
+            delay: parseNum(body.delay),
+            jack: parseNum(body.jack),
+            chordjack: parseNum(body.chordjack),
+            chordstream: parseNum(body.chordstream),
+            bracket: parseNum(body.bracket),
+            ln: parseNum(body.ln),
+          },
+          {
+            bpm: parseNum(body.bpm),
+            seed: parseNum(body.seed),
+            endMs:
+              parseNum(body.endSec) != null
+                ? parseNum(body.endSec)! * 1000
+                : undefined,
+            snapDivisor: parseNum(body.snapDivisor),
+            segmentBeats: parseNum(body.segmentBeats),
+            audioFilename: audioName,
+            metadata: {
+              title,
+              artist,
+              creator,
+              version,
+              backgroundFilename,
+            },
+          },
+        );
+
+        const osuText = buildManiaOsuText(result.chart);
+        const osuName = `${title.replace(/[^\w.\- ]+/g, "_")} [${version}].osu`;
+        const analysis = analyzeGeneratedPatterns(result.notes);
+
+        const format = parseStr(body.format) ?? "zip";
+        if (format === "osu") {
+          set.headers["Content-Type"] = "application/octet-stream";
+          set.headers["Content-Disposition"] =
+            `attachment; filename="${osuName.replace(/"/g, "")}"`;
+          set.headers["X-Mapgen-Bpm"] = String(result.bpm);
+          set.headers["X-Mapgen-Notes"] = String(result.notes.length);
+          set.headers["X-Mapgen-Dominant"] = analysis.dominantPattern;
+          return new Response(osuText);
+        }
+
+        const entries = [
+          {
+            name: osuName,
+            data: new TextEncoder().encode(osuText),
+          },
+          {
+            name: audioName,
+            data: new Uint8Array(readFileSync(audioPath)),
+          },
+        ];
+        if (backgroundFilename && backgroundBytes) {
+          entries.push({ name: backgroundFilename, data: backgroundBytes });
+        }
+
+        const zip = buildZip(entries);
+        const zipName = `${title.replace(/[^\w.\- ]+/g, "_")}.osz`;
+        set.headers["Content-Type"] = "application/zip";
+        set.headers["Content-Disposition"] =
+          `attachment; filename="${zipName.replace(/"/g, "")}"`;
+        set.headers["X-Mapgen-Bpm"] = String(result.bpm);
+        set.headers["X-Mapgen-Notes"] = String(result.notes.length);
+        set.headers["X-Mapgen-Dominant"] = analysis.dominantPattern;
+        set.headers["X-Mapgen-Segments"] = String(result.segments.length);
+        return new Response(zip);
+      } catch (err) {
+        set.status = 500;
+        return {
+          error: err instanceof Error ? err.message : String(err),
+        };
+      } finally {
+        try {
+          rmSync(workDir, { recursive: true, force: true });
+        } catch {
+          // ignore cleanup errors
+        }
+      }
+    },
+    {
+      body: t.Object({
+        audio: t.File(),
+        background: t.Optional(t.File()),
+        title: t.Optional(t.String()),
+        artist: t.Optional(t.String()),
+        creator: t.Optional(t.String()),
+        version: t.Optional(t.String()),
+        delay: t.Optional(t.String()),
+        jack: t.Optional(t.String()),
+        chordjack: t.Optional(t.String()),
+        chordstream: t.Optional(t.String()),
+        bracket: t.Optional(t.String()),
+        ln: t.Optional(t.String()),
+        bpm: t.Optional(t.String()),
+        seed: t.Optional(t.String()),
+        endSec: t.Optional(t.String()),
+        snapDivisor: t.Optional(t.String()),
+        segmentBeats: t.Optional(t.String()),
+        format: t.Optional(t.String()),
+      }),
+    },
+  );

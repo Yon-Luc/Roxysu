@@ -4,6 +4,7 @@ import { collections } from "@roxysu/db/client.bun";
 import { dbPlugin } from "../db";
 import { toIso } from "../shared/serialize";
 import { publish } from "../shared/events";
+import { syncCollectionsToLazer } from "../shared/syncCollections";
 import {
   countMatches,
   parseQuery,
@@ -31,12 +32,24 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
         name: c.name,
         query: c.query,
         matchCount,
+        lazerSyncedAt: toIso(c.lazerSyncedAt),
         createdAt: toIso(c.createdAt),
         updatedAt: toIso(c.updatedAt),
       };
     });
 
     return { items };
+  })
+  .post("/sync-lazer", async ({ db, set }) => {
+    const outcome = await syncCollectionsToLazer(db);
+    if (!outcome.ok) {
+      if (outcome.error.code === "locked") set.status = 423;
+      else if (outcome.error.code === "schema_mismatch") set.status = 409;
+      else set.status = 500;
+      return { error: outcome.error.error, code: outcome.error.code };
+    }
+    publish({ type: "collection.updated" });
+    return outcome.result;
   })
   .post(
     "/",

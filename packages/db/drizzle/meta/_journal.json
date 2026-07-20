@@ -57,6 +57,13 @@
       "when": 1784467200000,
       "tag": "0007_beatmap_pattern_analysis",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1784470800000,
+      "tag": "0008_collection_lazer_sync",
+      "breakpoints": true
     }
   ]
 }

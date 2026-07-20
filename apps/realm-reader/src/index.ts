@@ -19,6 +19,8 @@ const FORCE_FULL = process.env.REALM_FULL_SYNC === "1";
 /** Mirrors apps/server/src/routes/system.ts — web UI writes these via settings / sync-focus. */
 const SYNC_UI_FOCUSED_KEY = "sync.ui_focused";
 const SYNC_PAUSE_WHEN_UNFOCUSED_KEY = "sync.pause_when_unfocused";
+/** Set to "1" while Roxysu writes collections to client.realm. */
+export const SYNC_REALM_READER_PAUSED_KEY = "sync.realm_reader_paused";
 
 let shuttingDown = false;
 let wakeSleep: (() => void) | null = null;
@@ -49,6 +51,14 @@ function requestShutdown() {
  * Missing pause setting (default OFF) or unset/"1" focus allows sync (headless-friendly).
  */
 function isSyncPaused(db: Db): boolean {
+  const readerPaused = db
+    .select({ value: settings.value })
+    .from(settings)
+    .where(eq(settings.key, SYNC_REALM_READER_PAUSED_KEY))
+    .limit(1)
+    .get();
+  if (readerPaused?.value === "1") return true;
+
   const pauseEnabled = db
     .select({ value: settings.value })
     .from(settings)
@@ -71,22 +81,40 @@ async function waitUntilSyncAllowed(
   lastSyncAt: number | null,
 ): Promise<boolean> {
   let pauseLogged = false;
+  let pauseReason: "reader" | "focus" | null = null;
 
   while (!shuttingDown) {
     if (isSyncPaused(db)) {
-      if (!pauseLogged) {
-        console.log(
-          "sync paused (pause-when-unfocused + web UI unfocused) — waiting until focus returns",
-        );
+      const readerPaused = db
+        .select({ value: settings.value })
+        .from(settings)
+        .where(eq(settings.key, SYNC_REALM_READER_PAUSED_KEY))
+        .limit(1)
+        .get();
+      const reason =
+        readerPaused?.value === "1" ? ("reader" as const) : ("focus" as const);
+
+      if (!pauseLogged || pauseReason !== reason) {
+        if (reason === "reader") {
+          console.log(
+            "sync paused (collection write in progress) — waiting until resume",
+          );
+        } else {
+          console.log(
+            "sync paused (pause-when-unfocused + web UI unfocused) — waiting until focus returns",
+          );
+        }
         pauseLogged = true;
+        pauseReason = reason;
       }
       await sleep(PAUSE_POLL_MS);
       continue;
     }
 
     if (pauseLogged) {
-      console.log("sync resumed (web UI focused)");
+      console.log("sync resumed");
       pauseLogged = false;
+      pauseReason = null;
     }
 
     if (lastSyncAt != null) {

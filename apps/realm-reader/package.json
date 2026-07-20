@@ -15,6 +15,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "sync-once": "tsx src/sync-once.ts",
+    "sync-collections-once": "tsx src/sync-collections-once.ts",
     "export-schema": "tsx src/export-schema.ts"
   }
 }

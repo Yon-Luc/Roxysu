@@ -16,6 +16,7 @@ export {
   searchBeatmaps,
   sampleBeatmaps,
   countMatches,
+  listCollectionMd5Hashes,
   executeAst,
   practiceDistribution,
 } from "./execute";

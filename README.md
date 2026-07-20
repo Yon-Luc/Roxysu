@@ -4,7 +4,7 @@
 
 Roxysu indexes your lazer play history (read-only), computes practice-focused analytics, and serves a local web UI — so you can search scores, track mastery, group sessions, and build smart collections without leaving your machine.
 
-It never modifies osu!lazer data. Everything stays offline on your computer.
+It does not modify osu!lazer data except for one optional, manual action: syncing smart collections into lazer as `!Roxysu`-prefixed beatmap collections (with a backup of `client.realm` first). Everything stays offline on your computer.
 
 Open **http://localhost:4321/** after starting the app.
 
@@ -25,7 +25,7 @@ Per-beatmap deep dive: cover art, stats, mastery, recent scores, sessions on tha
 Scores are auto-grouped into sessions by inactivity gaps. Browse past sessions, or open the live **current session** hub (SSE-updated as new plays land). Under **Suggest maps**, switch between **Up Next** (query-language accuracy/staleness filters) and **7K recommendations** (Sunny skill estimate with Push / Consistency / Deficit / Skillset). Run Sunny dan backfill in Settings first for best 7K results.
 
 ### Smart collections
-Collections are saved query strings, not static lists — they stay up to date as your library grows. Create, delete, and paginate match results.
+Collections are saved query strings, not static lists — they stay up to date as your library grows. Create, delete, and paginate match results. Use **Sync to osu!lazer** (Collections page) to push them into lazer as `!Roxysu {name}` collections — close lazer first; Roxysu backs up `client.realm` before writing.
 
 ### Query language
 One DSL powers practice search, collections, and global search:

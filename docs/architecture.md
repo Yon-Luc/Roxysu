@@ -6,7 +6,7 @@ A local-first analytics platform for **osu!lazer** that continuously indexes the
 
 ## Goals
 
-- Read-only access to osu!lazer Realm
+- Read-only access to osu!lazer Realm (except optional manual collection sync — see below)
 - Live synchronization
 - Local-only (offline)
 - Cross-platform (Linux first, Windows/macOS supported)
@@ -89,6 +89,24 @@ SQLite supports multiple processes against the same file, but a few rules keep i
 ## Realm Sync Strategy
 
 `realm-reader` prefers **watermark incremental sync** (`Score.Date` / `Beatmap.LastLocalUpdate` vs SQLite maxima), writing `imports.kind = "incremental"`. Every N cycles (default 10) — or on first run / `REALM_FULL_SYNC=1` — it runs a **full reconcile**: upsert all objects and delete SQLite orphans not present in Realm. Soft-deleted Realm objects are upserted with `delete_pending = true` (not skipped). Realm `addListener` change notifications are intentionally not used while lazer may exclusive-lock the file; polling + watermarks match the latency model above.
+
+### Collection write-back (manual, scoped exception)
+
+Roxysu is read-only toward lazer **except** for optional collection sync initiated from the web UI (`POST /api/collections/sync-lazer`).
+
+Safety gates:
+
+1. **Manual only** — no background writes to `client.realm`.
+2. **Pause realm-reader** — setting `sync.realm_reader_paused=1` for the duration of the write.
+3. **Lock probe** — abort if lazer holds an exclusive lock (game open).
+4. **Schema version guard** — same check as import sync.
+5. **Backup** — copy `client.realm` to `{DB_DIR}/backups/client.realm.{timestamp}.bak` (keep last 5).
+6. **Scoped writes** — only `BeatmapCollection` rows whose `Name` starts with `!Roxysu `; create/update/delete Roxysu-managed collections only.
+7. **Single Realm transaction** — all changes in one `realm.write()` block.
+
+Flow: server resolves each Roxysu collection query to MD5 hashes → spawns `apps/realm-reader` one-shot `sync-collections-once.ts` → realm-reader upserts collections and stores lazer UUIDs in SQLite (`collections.lazer_collection_id`).
+
+**Restore if needed:** close osu!lazer, replace `client.realm` with a `.bak` from `{DB_DIR}/backups/`, restart lazer.
 ## Monorepo
 
 ```text

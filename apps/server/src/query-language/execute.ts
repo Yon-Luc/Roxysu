@@ -436,6 +436,37 @@ export function countMatches(db: Db, query: string): number {
   return Number(countRow?.n ?? 0);
 }
 
+/** Distinct beatmap MD5 hashes matching a collection query (for lazer sync). */
+export function listCollectionMd5Hashes(
+  db: Db,
+  query: string,
+): { hashes: string[]; skippedNoMd5: number } {
+  const filter = resolveFilter(query);
+  maybeBackfillDan(db, filter.needsDanBackfill);
+  maybeBackfillPattern(db, filter.needsPatternBackfill);
+  const where = baseWhere(filter.sql);
+
+  const totalSql = `SELECT COUNT(*) AS n ${BASE_FROM} ${where}`;
+  const totalRow = db.$client
+    .query(totalSql)
+    .get(...asBindings(filter.params)) as { n: number } | null;
+  const total = Number(totalRow?.n ?? 0);
+
+  const hashSql = `
+    SELECT DISTINCT b.md5_hash AS md5_hash
+    ${BASE_FROM}
+    ${where}
+    AND b.md5_hash IS NOT NULL
+    AND TRIM(b.md5_hash) != ''
+  `;
+  const rows = db.$client
+    .query(hashSql)
+    .all(...asBindings(filter.params)) as { md5_hash: string }[];
+
+  const hashes = rows.map((r) => r.md5_hash);
+  return { hashes, skippedNoMd5: total - hashes.length };
+}
+
 function distributionMisses(
   db: Db,
   where: string,

@@ -204,6 +204,8 @@ export const collections = sqliteTable("collections", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
   query: text("query").notNull(),
+  lazerCollectionId: text("lazer_collection_id"),
+  lazerSyncedAt: integer("lazer_synced_at", { mode: "timestamp_ms" }),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .default(sql`(unixepoch() * 1000)`),

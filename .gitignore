@@ -14,5 +14,8 @@ dist/
 *.sqlite-shm
 *.sqlite-wal
 
+# realm db backups — created before collection sync writes to client.realm
+backups/
+
 # nix
 .direnv/

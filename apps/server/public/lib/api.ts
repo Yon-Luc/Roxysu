@@ -196,6 +196,20 @@ export async function deleteCollection(id: number) {
   );
 }
 
+export type LazerCollectionSyncResult = {
+  created: number;
+  updated: number;
+  deleted: number;
+  skippedNoMd5: number;
+  backupPath: string;
+  syncedAt: string;
+};
+
+export async function syncCollectionsToLazer(): Promise<LazerCollectionSyncResult> {
+  const result = await api.api.collections["sync-lazer"].post();
+  return unwrap(result, "/api/collections/sync-lazer") as LazerCollectionSyncResult;
+}
+
 export async function fetchCollectionResults(
   id: number,
   params?: { page?: number; pageSize?: number },

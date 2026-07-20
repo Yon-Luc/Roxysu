@@ -7,6 +7,8 @@ import {
   analyzeGeneratedPatterns,
   buildManiaOsuText,
   generateMapFromAudio,
+  resolveDanPreset,
+  type MapgenResult,
 } from "@roxysu/mapgen-core";
 import {
   ffmpegUnavailableMessage,
@@ -47,7 +49,7 @@ function parseStr(value: unknown): string | undefined {
 
 function setMapgenHeaders(
   set: { headers: Record<string, string | number> },
-  result: ReturnType<typeof generateMapFromAudio>,
+  result: MapgenResult,
   analysis: ReturnType<typeof analyzeGeneratedPatterns>,
   osuText: string,
 ): void {
@@ -80,9 +82,70 @@ function setMapgenHeaders(
     const sunny = runSunnyEstimatorFromText(osuText);
     set.headers["X-Mapgen-Est-Diff"] = sunny.estDiff;
     set.headers["X-Mapgen-Sunny-Star"] = sunny.star.toFixed(2);
+    set.headers["X-Mapgen-Sunny-Ln"] = String(
+      Math.round(sunny.lnRatio * 100),
+    );
   } catch {
     // Sunny can fail on very short charts; pack is still valid.
   }
+}
+
+/** Try a few density knobs and keep the chart closest to the dan's target★. */
+function generateForDanTarget(
+  audioAnalysis: Parameters<typeof generateMapFromAudio>[0],
+  targets: Parameters<typeof generateMapFromAudio>[1],
+  baseOptions: Parameters<typeof generateMapFromAudio>[2],
+): MapgenResult {
+  const dan = resolveDanPreset(baseOptions?.dan);
+  const base = generateMapFromAudio(audioAnalysis, targets, baseOptions);
+  if (!dan) return base;
+
+  const candidates: Array<{ snapDivisor: number; noteStride: number }> = [
+    { snapDivisor: dan.snapDivisor, noteStride: dan.noteStride },
+    { snapDivisor: 4, noteStride: Math.max(1, dan.noteStride) },
+    { snapDivisor: 4, noteStride: 1 },
+    { snapDivisor: 8, noteStride: 2 },
+    { snapDivisor: 8, noteStride: 1 },
+  ];
+
+  // Deduplicate
+  const seen = new Set<string>();
+  const unique = candidates.filter((c) => {
+    const key = `${c.snapDivisor}:${c.noteStride}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  let best = base;
+  let bestDist = Infinity;
+
+  for (const cand of unique) {
+    const result = generateMapFromAudio(audioAnalysis, targets, {
+      ...baseOptions,
+      snapDivisor: cand.snapDivisor,
+      noteStride: cand.noteStride,
+    });
+    try {
+      const sunny = runSunnyEstimatorFromText(buildManiaOsuText(result.chart));
+      // Prefer correct RC/LN axis, then closest star.
+      const axisPenalty =
+        dan.axis === "ln" && sunny.lnRatio < 0.2
+          ? 5
+          : dan.axis === "rc" && sunny.lnRatio >= 0.2
+            ? 5
+            : 0;
+      const dist = Math.abs(sunny.star - dan.targetStar) + axisPenalty;
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = result;
+      }
+    } catch {
+      // ignore unscorable candidates
+    }
+  }
+
+  return best;
 }
 
 export const mapgenRoutes = new Elysia({ prefix: "/mapgen" })
@@ -161,7 +224,7 @@ export const mapgenRoutes = new Elysia({ prefix: "/mapgen" })
           parseStr(body.version) ??
           (dan ? undefined : "Generated");
 
-        const result = generateMapFromAudio(
+        const result = generateForDanTarget(
           audioAnalysis,
           {
             delay: parseNum(body.delay),

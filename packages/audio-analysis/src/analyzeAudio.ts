@@ -30,7 +30,12 @@ export function analyzeDecodedAudio(
   });
 
   const { bpm, confidence, alternates } = estimateBpm(onsets);
-  const tempoMap = estimateTempoMap(onsets, decoded.durationMs, bpm);
+  const tempoMap = estimateTempoMap(
+    onsets,
+    decoded.durationMs,
+    bpm,
+    confidence,
+  );
 
   const beats =
     tempoMap.length > 1

@@ -212,6 +212,7 @@ export function MapgenPage() {
     estDiff: string | null;
     sunnyStar: string | null;
     lnPct: string | null;
+    sunnyLnPct: string | null;
     timingPoints: string | null;
     bpmMap: string | null;
   } | null>(null);
@@ -272,6 +273,7 @@ export function MapgenPage() {
         estDiff: result.estDiff,
         sunnyStar: result.sunnyStar,
         lnPct: result.lnPct,
+        sunnyLnPct: result.sunnyLnPct,
         timingPoints: result.timingPoints,
         bpmMap: result.bpmMap,
       });
@@ -469,7 +471,10 @@ export function MapgenPage() {
               ? ` · offset ${lastResult.offsetMs}ms`
               : ""}
             {lastResult.notes ? ` · ${lastResult.notes} notes` : ""}
-            {lastResult.lnPct != null ? ` · LN ${lastResult.lnPct}%` : ""}
+            {lastResult.lnPct != null ? ` · LN target ${lastResult.lnPct}%` : ""}
+            {lastResult.sunnyLnPct != null
+              ? ` · Sunny LN ${lastResult.sunnyLnPct}%`
+              : ""}
           </p>
           <p className="mt-1">
             {lastResult.timingPoints

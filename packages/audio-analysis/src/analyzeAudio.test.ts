@@ -3,6 +3,7 @@ import {
   analyzeDecodedAudio,
   detectOnsets,
   estimateBpm,
+  estimateTempoMap,
   synthesizeImpulseTrack,
   synthesizeTwoTempoTrack,
 } from "./index";
@@ -58,13 +59,21 @@ describe("analyzeDecodedAudio", () => {
   });
 
   test("detects BPM change on two-tempo click track", () => {
-    // 120 BPM (500ms) then 160 BPM (375ms)
-    const decoded = synthesizeTwoTempoTrack(500, 32, 375, 32);
+    // Clear 120 → 160 shift with long halves so conservative detector fires.
+    const decoded = synthesizeTwoTempoTrack(500, 60, 375, 60);
     const result = analyzeDecodedAudio(decoded);
     expect(result.tempoMap.length).toBeGreaterThanOrEqual(2);
     const bpms = result.tempoMap.map((s) => s.bpm);
     expect(bpms.some((b) => Math.abs(b - 120) <= 6)).toBe(true);
     expect(bpms.some((b) => Math.abs(b - 160) <= 8)).toBe(true);
     expect(result.timingPoints.length).toBeGreaterThanOrEqual(2);
+  });
+
+  test("keeps single tempo when onset BPM is low-confidence noise", () => {
+    const onsets = [0, 400, 900, 1500, 2200, 4000, 7000, 11000].map(
+      (timeMs) => ({ timeMs, strength: 1 }),
+    );
+    const map = estimateTempoMap(onsets, 20_000, 120, 0.1);
+    expect(map.length).toBe(1);
   });
 });

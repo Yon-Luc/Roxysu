@@ -85,7 +85,7 @@ describe("generateMapFromAudio", () => {
   });
 
   test("writes multiple timing points when audio has tempo changes", () => {
-    const decoded = synthesizeTwoTempoTrack(500, 28, 375, 28);
+    const decoded = synthesizeTwoTempoTrack(500, 60, 375, 60);
     const audio = analyzeDecodedAudio(decoded);
     const result = generateMapFromAudio(
       audio,
@@ -104,24 +104,25 @@ describe("generateMapFromAudio", () => {
     );
   });
 
-  test("dan preset applies density and LN floor for LN axis", () => {
-    const decoded = synthesizeImpulseTrack(500, 32);
+  test("dan LN preset keeps real LN ratio above Sunny threshold", () => {
+    const decoded = synthesizeImpulseTrack(441, 200);
     const audio = analyzeDecodedAudio(decoded);
     const result = generateMapFromAudio(
       audio,
       {},
       {
-        seed: 3,
-        bpm: 120,
+        seed: 9,
+        bpm: 136,
         timingOffsetMs: 0,
-        endMs: 6000,
-        dan: "ln-5",
-        metadata: { title: "Dan", artist: "T" },
+        endMs: 45_000,
+        dan: "ln-8",
+        metadata: { title: "LN8", artist: "T" },
       },
     );
 
-    expect(result.dan?.label).toBe("LN 5");
-    expect(result.targets.ln).toBeGreaterThanOrEqual(0.2);
-    expect(result.chart.metadata.version).toBe("LN 5");
+    const osuText = buildManiaOsuText(result.chart);
+    const parsed = parseOsuChart(osuText);
+    expect(parsed.lnRatio).toBeGreaterThanOrEqual(0.2);
+    expect(result.dan?.label).toBe("LN 8");
   });
 });

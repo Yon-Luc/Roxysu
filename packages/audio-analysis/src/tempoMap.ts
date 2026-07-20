@@ -2,16 +2,23 @@ import { estimateBpm, refineBeatsFromOnsets } from "./beats";
 import type { BeatOnset, TempoSegment } from "./types";
 
 export type TempoMapOptions = {
-  /** Analysis window length. Default: 12s. */
+  /** Analysis window length. Default: 20s. */
   windowMs?: number;
-  /** Hop between windows. Default: 6s. */
+  /** Hop between windows. Default: 10s. */
   hopMs?: number;
-  /** Relative BPM change required to start a new segment. Default: 0.04 (4%). */
+  /** Relative BPM change required to start a new segment. Default: 0.12 (12%). */
   minChangeRatio?: number;
-  /** Absolute BPM delta that always counts as a change. Default: 3. */
+  /** Absolute BPM delta that always counts as a change. Default: 10. */
   minChangeBpm?: number;
-  /** Minimum segment length before allowing another change. Default: 4s. */
+  /** Minimum segment length before allowing another change. Default: 16s. */
   minSegmentMs?: number;
+  /** Minimum local BPM confidence to trust a window. Default: 0.35. */
+  minWindowConfidence?: number;
+  /**
+   * If the global BPM estimate is below this confidence, skip multi-tempo
+   * detection entirely (too noisy). Default: 0.28.
+   */
+  minGlobalConfidenceForMap?: number;
 };
 
 function bpmClose(
@@ -39,7 +46,6 @@ function alignToReference(bpm: number, reference: number): number {
       bestDist = d;
     }
   }
-  // Only snap if clearly the same tempo family (within ~6%).
   if (bestDist / reference <= 0.06) return Math.round(best);
   return Math.round(bpm);
 }
@@ -52,6 +58,22 @@ function onsetsInRange(
   return onsets.filter((o) => o.timeMs >= startMs && o.timeMs < endMs);
 }
 
+function singleSegment(
+  durationMs: number,
+  bpm: number,
+  confidence: number,
+): TempoSegment[] {
+  return [
+    {
+      startMs: 0,
+      endMs: durationMs,
+      bpm,
+      beatLengthMs: 60_000 / bpm,
+      confidence,
+    },
+  ];
+}
+
 type WindowEstimate = {
   startMs: number;
   endMs: number;
@@ -61,40 +83,47 @@ type WindowEstimate = {
 
 /**
  * Estimate a piecewise tempo map from onsets.
- * Sliding windows → local BPM → merge stable stretches → timing segments.
+ * Conservative by default — prefers a single global BPM unless windows show a
+ * clear, sustained tempo change.
  */
 export function estimateTempoMap(
   onsets: BeatOnset[],
   durationMs: number,
   globalBpm: number | null,
+  globalConfidence = 0.5,
   options: TempoMapOptions = {},
 ): TempoSegment[] {
-  const windowMs = options.windowMs ?? 12_000;
-  const hopMs = options.hopMs ?? 6_000;
-  const minChangeRatio = options.minChangeRatio ?? 0.04;
-  const minChangeBpm = options.minChangeBpm ?? 3;
-  const minSegmentMs = options.minSegmentMs ?? 4_000;
+  const windowMs = options.windowMs ?? 20_000;
+  const hopMs = options.hopMs ?? 10_000;
+  const minChangeRatio = options.minChangeRatio ?? 0.12;
+  const minChangeBpm = options.minChangeBpm ?? 10;
+  const minSegmentMs = options.minSegmentMs ?? 16_000;
+  const minWindowConfidence = options.minWindowConfidence ?? 0.35;
+  const minGlobalConfidenceForMap =
+    options.minGlobalConfidenceForMap ?? 0.28;
 
   const fallbackBpm = globalBpm && globalBpm > 0 ? globalBpm : 120;
 
-  if (onsets.length < 8 || durationMs < windowMs * 0.5) {
-    return [
-      {
-        startMs: 0,
-        endMs: durationMs,
-        bpm: fallbackBpm,
-        beatLengthMs: 60_000 / fallbackBpm,
-        confidence: globalBpm != null ? 0.5 : 0.1,
-      },
-    ];
+  // Low global confidence → don't invent a tempo map from noise.
+  if (
+    onsets.length < 16 ||
+    durationMs < windowMs ||
+    globalConfidence < minGlobalConfidenceForMap
+  ) {
+    return singleSegment(
+      durationMs,
+      fallbackBpm,
+      globalBpm != null ? globalConfidence : 0.1,
+    );
   }
 
   const windows: WindowEstimate[] = [];
   for (let start = 0; start < durationMs; start += hopMs) {
     const end = Math.min(durationMs, start + windowMs);
     const local = onsetsInRange(onsets, start, end);
+    if (local.length < 8) continue;
     const est = estimateBpm(local);
-    if (est.bpm == null || est.confidence < 0.15) continue;
+    if (est.bpm == null || est.confidence < minWindowConfidence) continue;
 
     const bpm = globalBpm
       ? alignToReference(est.bpm, globalBpm)
@@ -108,19 +137,19 @@ export function estimateTempoMap(
     });
   }
 
-  if (windows.length === 0) {
-    return [
-      {
-        startMs: 0,
-        endMs: durationMs,
-        bpm: fallbackBpm,
-        beatLengthMs: 60_000 / fallbackBpm,
-        confidence: 0.1,
-      },
-    ];
+  if (windows.length < 3) {
+    return singleSegment(durationMs, fallbackBpm, globalConfidence);
   }
 
-  // Merge consecutive similar windows into raw segments.
+  // How often do windows disagree with the global BPM?
+  const disagree = windows.filter(
+    (w) => !bpmClose(w.bpm, fallbackBpm, minChangeRatio, minChangeBpm),
+  );
+  // Need a sustained minority of clear alternate tempo, not random flicker.
+  if (disagree.length < 2) {
+    return singleSegment(durationMs, fallbackBpm, globalConfidence);
+  }
+
   type RawSeg = {
     startMs: number;
     endMs: number;
@@ -132,26 +161,20 @@ export function estimateTempoMap(
   const raw: RawSeg[] = [];
   for (const w of windows) {
     const last = raw[raw.length - 1];
-    const mid = (w.startMs + w.endMs) / 2;
+    const lastBpm = last ? last.bpmSum / last.weight : 0;
     if (
       last &&
-      bpmClose(w.bpm, last.bpmSum / last.weight, minChangeRatio, minChangeBpm) &&
-      mid - last.startMs >= 0
+      bpmClose(w.bpm, lastBpm, minChangeRatio, minChangeBpm)
     ) {
       last.endMs = Math.max(last.endMs, w.endMs);
       last.bpmSum += w.bpm * w.confidence;
       last.confSum += w.confidence;
       last.weight += w.confidence;
-    } else if (
-      last &&
-      mid - last.startMs < minSegmentMs &&
-      // Too soon for a change — fold into previous
-      true
-    ) {
+    } else if (last && w.startMs - last.startMs < minSegmentMs) {
+      // Too soon for a change — fold into previous, keep prior tempo dominant.
       last.endMs = Math.max(last.endMs, w.endMs);
-      // Keep previous tempo dominant unless new window is much more confident
-      const wWeight = w.confidence * 0.35;
-      last.bpmSum += w.bpm * wWeight;
+      const wWeight = w.confidence * 0.2;
+      last.bpmSum += lastBpm * wWeight;
       last.confSum += wWeight;
       last.weight += wWeight;
     } else {
@@ -165,14 +188,11 @@ export function estimateTempoMap(
     }
   }
 
-  // Extend to cover full duration and snap boundaries to nearby onsets.
   const segments: TempoSegment[] = [];
   for (let i = 0; i < raw.length; i += 1) {
     const seg = raw[i]!;
     const startMs =
-      i === 0
-        ? 0
-        : snapBoundary(onsets, segments[i - 1]!.endMs, seg.startMs);
+      i === 0 ? 0 : snapBoundary(onsets, segments[i - 1]!.endMs, seg.startMs);
     const endMs =
       i === raw.length - 1
         ? durationMs
@@ -185,7 +205,6 @@ export function estimateTempoMap(
     const bpm = Math.round(seg.bpmSum / Math.max(1e-6, seg.weight));
     const confidence = Math.min(1, seg.confSum / Math.max(1, seg.weight));
 
-    // Skip tiny / duplicate segments
     if (
       segments.length > 0 &&
       (endMs - startMs < minSegmentMs * 0.5 ||
@@ -210,18 +229,14 @@ export function estimateTempoMap(
   }
 
   if (segments.length === 0) {
-    return [
-      {
-        startMs: 0,
-        endMs: durationMs,
-        bpm: fallbackBpm,
-        beatLengthMs: 60_000 / fallbackBpm,
-        confidence: 0.1,
-      },
-    ];
+    return singleSegment(durationMs, fallbackBpm, globalConfidence);
   }
 
-  // Ensure contiguous coverage
+  // Too many segments usually means noise, not real tempo changes.
+  if (segments.length > 4) {
+    return singleSegment(durationMs, fallbackBpm, globalConfidence);
+  }
+
   segments[0]!.startMs = 0;
   segments[segments.length - 1]!.endMs = durationMs;
   for (let i = 1; i < segments.length; i += 1) {
@@ -284,19 +299,12 @@ export function refineBeatsFromTempoMap(
       }
     }
 
-    // Guarantee a beat at the segment start (timing-point origin).
-    if (
-      beats.length === 0 ||
-      Math.abs(beats[beats.length - 1]!.timeMs - seg.startMs) > 5
-    ) {
-      if (!beats.some((b) => Math.abs(b.timeMs - seg.startMs) <= 5)) {
-        beats.push({ timeMs: seg.startMs, strength: 0.5 });
-      }
+    if (!beats.some((b) => Math.abs(b.timeMs - seg.startMs) <= 5)) {
+      beats.push({ timeMs: seg.startMs, strength: 0.5 });
     }
   }
 
   beats.sort((a, b) => a.timeMs - b.timeMs);
-  // Dedupe near-duplicates
   const out: BeatOnset[] = [];
   for (const b of beats) {
     const prev = out[out.length - 1];
@@ -325,10 +333,11 @@ export function tempoMapToTimingPoints(
     if (i === 0) {
       t = Math.max(seg.startMs, timingOffsetMs);
     }
-    // Skip zero-length / duplicate times
     if (points.length > 0 && t <= points[points.length - 1]![0]) {
-      // Replace previous if this is a real change at same stamp
-      points[points.length - 1] = [points[points.length - 1]![0], seg.beatLengthMs];
+      points[points.length - 1] = [
+        points[points.length - 1]![0],
+        seg.beatLengthMs,
+      ];
       continue;
     }
     points.push([Math.round(t), seg.beatLengthMs]);
@@ -337,7 +346,6 @@ export function tempoMapToTimingPoints(
   if (points.length === 0) {
     points.push([timingOffsetMs, segments[0]!.beatLengthMs]);
   } else if (points[0]![0] > timingOffsetMs && timingOffsetMs >= 0) {
-    // Ensure first point covers chart start / music offset
     points[0] = [Math.round(timingOffsetMs), points[0]![1]];
   }
 

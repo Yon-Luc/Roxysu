@@ -112,7 +112,11 @@ export const PATTERN_EMITTERS: Record<PatternLabelV2, PatternEmitter> = {
   },
 };
 
-/** Convert a fraction of rice notes to long notes. */
+/**
+ * Convert a fraction of rice notes to long notes.
+ * Notes that fall inside a new hold on the same column are absorbed (removed)
+ * so dense charts actually keep the requested LN ratio instead of aborting holds.
+ */
 export function applyLnRatio(
   notes: ChartNote[],
   lnRatio: number,
@@ -126,41 +130,38 @@ export function applyLnRatio(
       ? beatLengthMs
       : (_note: ChartNote) => beatLengthMs;
 
-  // Avoid stacking holds that would collide on the same column.
-  const byColumn = new Map<number, ChartNote[]>();
-  for (const note of notes) {
-    const list = byColumn.get(note.column) ?? [];
-    list.push(note);
-    byColumn.set(note.column, list);
-  }
-  for (const list of byColumn.values()) {
-    list.sort((a, b) => a.startMs - b.startMs);
-  }
+  const sorted = [...notes].sort(
+    (a, b) => a.startMs - b.startMs || a.column - b.column,
+  );
 
-  return notes.map((note) => {
-    if (note.endMs > note.startMs + 20) return note;
-    if (rng() > lnRatio) return note;
+  const holdUntil = new Map<number, number>();
+  const out: ChartNote[] = [];
 
-    const localBeat = beatLenOf(note);
-    const holdBeats = rng() > 0.7 ? 2 : 1;
-    let endMs = note.startMs + localBeat * holdBeats;
-
-    const colNotes = byColumn.get(note.column) ?? [];
-    const idx = colNotes.findIndex(
-      (n) => n.startMs === note.startMs && n.column === note.column,
-    );
-    const next = idx >= 0 ? colNotes[idx + 1] : undefined;
-    if (next && endMs >= next.startMs - 10) {
-      endMs = Math.max(
-        note.startMs,
-        next.startMs - Math.round(localBeat / 4),
-      );
+  for (const note of sorted) {
+    const blockedUntil = holdUntil.get(note.column) ?? -Infinity;
+    if (note.startMs < blockedUntil - 5) {
+      continue;
     }
-    if (endMs <= note.startMs + 20) return note;
 
-    return {
-      ...note,
-      endMs,
-    };
-  });
+    if (note.endMs > note.startMs + 20) {
+      out.push(note);
+      holdUntil.set(note.column, Math.max(blockedUntil, note.endMs));
+      continue;
+    }
+
+    if (rng() > lnRatio) {
+      out.push(note);
+      continue;
+    }
+
+    const localBeat = Math.max(50, beatLenOf(note));
+    const holdBeats = rng() > 0.65 ? 2 : 1;
+    const endMs = note.startMs + localBeat * holdBeats;
+
+    out.push({ ...note, endMs });
+    holdUntil.set(note.column, endMs);
+  }
+
+  return out;
 }
+

@@ -325,6 +325,7 @@ export async function generateMapgenPack(
   estDiff: string | null;
   sunnyStar: string | null;
   lnPct: string | null;
+  sunnyLnPct: string | null;
   timingPoints: string | null;
   bpmMap: string | null;
 }> {
@@ -386,6 +387,7 @@ export async function generateMapgenPack(
     estDiff: res.headers.get("X-Mapgen-Est-Diff"),
     sunnyStar: res.headers.get("X-Mapgen-Sunny-Star"),
     lnPct: res.headers.get("X-Mapgen-Ln"),
+    sunnyLnPct: res.headers.get("X-Mapgen-Sunny-Ln"),
     timingPoints: res.headers.get("X-Mapgen-Timing-Points"),
     bpmMap: res.headers.get("X-Mapgen-Bpm-Map"),
   };

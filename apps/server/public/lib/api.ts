@@ -82,10 +82,16 @@ export async function fetchPracticeDistribution(params: {
   );
 }
 
-export async function fetchPracticePatterns(params?: { samples?: number }) {
+export async function fetchPracticePatterns(params?: {
+  samples?: number;
+  axis?: "all" | "rc" | "ln";
+}) {
   return unwrap(
     await api.api.practice.patterns.get({
-      query: { samples: params?.samples },
+      query: {
+        samples: params?.samples,
+        axis: params?.axis === "all" ? undefined : params?.axis,
+      },
     }),
     "/api/practice/patterns",
   );

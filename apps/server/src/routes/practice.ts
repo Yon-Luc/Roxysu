@@ -222,11 +222,16 @@ export const practiceRoutes = new Elysia({ prefix: "/practice" })
         1,
         Math.min(8, Math.floor(query.samples ?? 5)),
       );
-      return practicePatternSummary(db, { samplesPerPattern });
+      const axis = query.axis?.trim().toLowerCase();
+      return practicePatternSummary(db, {
+        samplesPerPattern,
+        axis,
+      });
     },
     {
       query: t.Object({
         samples: t.Optional(t.Numeric()),
+        axis: t.Optional(t.String()),
       }),
     },
   )

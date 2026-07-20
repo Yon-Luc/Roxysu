@@ -8,6 +8,22 @@ import {
   useRatingDisplayMode,
 } from "../lib/ratingDisplay";
 
+type PatternAxis = "all" | "rc" | "ln";
+
+const AXIS_TABS: { value: PatternAxis; label: string; hint: string }[] = [
+  { value: "all", label: "All", hint: "Every analyzed 7K map" },
+  {
+    value: "rc",
+    label: "RC",
+    hint: "Mainly rice (<20% LN) — jack, stream, chord patterns",
+  },
+  {
+    value: "ln",
+    label: "LN",
+    hint: "Mainly long notes (≥20% LN) — rice patterns on LN-heavy charts",
+  },
+];
+
 type PatternBrowserModalProps = {
   onClose: () => void;
   onApplyQuery: (query: string) => void;
@@ -53,11 +69,15 @@ function PatternBrowserModal({
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const ratingMode = useRatingDisplayMode();
+  const [axis, setAxis] = useState<PatternAxis>("rc");
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["practice-patterns"],
-    queryFn: () => fetchPracticePatterns({ samples: 5 }),
+  const { data, isLoading, error, isFetching } = useQuery({
+    queryKey: ["practice-patterns", axis],
+    queryFn: () =>
+      fetchPracticePatterns({ samples: 5, axis: axis === "all" ? "all" : axis }),
   });
+
+  const activeTab = AXIS_TABS.find((t) => t.value === axis) ?? AXIS_TABS[0]!;
 
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
@@ -92,27 +112,48 @@ function PatternBrowserModal({
         className="max-h-[min(90vh,44rem)] w-full max-w-3xl overflow-y-auto rounded-2xl bg-elevated shadow-2xl shadow-black/60 outline-none"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="sticky top-0 flex items-start justify-between gap-4 border-b border-white/5 bg-elevated/95 px-5 py-4 backdrop-blur">
-          <div>
-            <h2 id={titleId} className="font-display text-xl font-bold text-ink">
-              7K patterns
-            </h2>
-            <p className="mt-1 text-sm text-muted">
-              Browse dominant pattern groups in your library. Click a pattern to
-              search practice with that filter.
-            </p>
+        <div className="sticky top-0 z-10 border-b border-white/5 bg-elevated/95 backdrop-blur">
+          <div className="flex items-start justify-between gap-4 px-5 py-4">
+            <div>
+              <h2 id={titleId} className="font-display text-xl font-bold text-ink">
+                7K patterns
+              </h2>
+              <p className="mt-1 text-sm text-muted">
+                Browse by dominant rice pattern, split into mainly-RC and mainly-LN
+                maps. Click a group to search practice.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-full px-3 py-1 text-sm text-muted transition hover:bg-highlight hover:text-ink"
+              aria-label="Close"
+            >
+              Esc
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full px-3 py-1 text-sm text-muted transition hover:bg-highlight hover:text-ink"
-            aria-label="Close"
-          >
-            Esc
-          </button>
+
+          <div className="flex gap-1 px-5 pb-3">
+            {AXIS_TABS.map((tab) => (
+              <button
+                key={tab.value}
+                type="button"
+                onClick={() => setAxis(tab.value)}
+                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                  axis === tab.value
+                    ? "bg-accent-glow text-accent"
+                    : "text-muted hover:bg-highlight hover:text-ink"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="space-y-6 px-5 py-5">
+          <p className="text-xs text-muted">{activeTab.hint}</p>
+
           {isLoading ? (
             <p className="py-8 text-center text-sm text-muted">
               Analyzing 7K charts…
@@ -123,18 +164,22 @@ function PatternBrowserModal({
             </p>
           ) : !data || data.patterns.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted">
-              No analyzed 7K patterns yet. Pattern analysis runs when you open
-              this view or search with{" "}
-              <code className="text-subtle">pattern:</code> filters.
+              No analyzed patterns in this group yet.
+              {axis !== "all"
+                ? " Sunny LN classification may still be backfilling — try All or check back shortly."
+                : " Pattern analysis runs when you open this view or search with pattern filters."}
             </p>
           ) : (
             <>
               <p className="text-xs text-muted">
-                {data.analyzed.toLocaleString()} of{" "}
-                {data.total7k.toLocaleString()} 7K maps analyzed
-                {data.remaining > 0
+                {data.analyzed.toLocaleString()} analyzed
+                {axis === "all"
+                  ? ` of ${data.total7k.toLocaleString()} 7K maps`
+                  : ` in ${data.axisTotal7k.toLocaleString()} ${axis.toUpperCase()} maps (${data.total7k.toLocaleString()} 7K total)`}
+                {data.remaining > 0 && axis === "all"
                   ? ` · ${data.remaining.toLocaleString()} still pending`
                   : ""}
+                {isFetching ? " · refreshing…" : ""}
               </p>
 
               {data.patterns.map((group) => (

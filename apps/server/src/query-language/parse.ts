@@ -128,6 +128,15 @@ function normalizePatternValue(raw: string): string {
   return aliases[compact] ?? raw.trim().toLowerCase();
 }
 
+function normalizeAxisValue(raw: string): "rc" | "ln" {
+  const compact = raw.trim().toLowerCase();
+  if (compact === "rc" || compact === "rice") return "rc";
+  if (compact === "ln" || compact === "lnmap") return "ln";
+  throw new QueryParseError(
+    `Invalid axis value: ${raw} (expected rc, rice, ln, or lnmap)`,
+  );
+}
+
 function parseFieldTerm(raw: string): FieldTerm {
   // Bare text (no colon) — free-text search
   const colon = raw.indexOf(":");
@@ -282,6 +291,12 @@ function parseFieldTerm(raw: string): FieldTerm {
       if (!value) throw new QueryParseError("Invalid pattern value: empty");
       return { type: "pattern", value: normalizePatternValue(value), prefix };
     }
+    case "axis":
+    case "rice":
+    case "lnmap": {
+      if (!value) throw new QueryParseError("Invalid axis value: empty");
+      return { type: "axis", value: normalizeAxisValue(value) };
+    }
     default:
       throw new QueryParseError(`Unknown field: ${field}`);
   }
@@ -389,6 +404,7 @@ export function looksLikeQuery(q: string): boolean {
   if (/[()]/.test(trimmed)) return true;
   if (/\b(AND|OR|NOT)\b/i.test(trimmed)) return true;
   if (/:\S/.test(trimmed)) return true;
-  if (/\b(acc|retry|mastery|pp|stars|misses|miss|score|keys|key|lns|ln|sunny|danstars|sunnystars|pattern|dominant|style)(>=|<=|>|<|=)/i.test(trimmed)) return true;
+  if (/\b(acc|retry|mastery|pp|stars|misses|miss|score|keys|key|lns|ln|sunny|danstars|sunnystars|pattern|dominant|style|axis|rice|lnmap)(>=|<=|>|<|=)/i.test(trimmed)) return true;
+  if (/:(rc|rice|ln|lnmap)\b/i.test(trimmed)) return true;
   return false;
 }

@@ -110,6 +110,14 @@ describe("parseQuery", () => {
       type: "term",
       term: { type: "pattern", value: "bracket", prefix: true },
     });
+    expect(parseQuery("axis:rc")).toEqual({
+      type: "term",
+      term: { type: "axis", value: "rc" },
+    });
+    expect(parseQuery("rice:ln")).toEqual({
+      type: "term",
+      term: { type: "axis", value: "ln" },
+    });
   });
 
   test("boolean AND OR NOT and parens", () => {
@@ -201,6 +209,21 @@ describe("compileQuery", () => {
     const compiled = compileQuery(ast);
     expect((compiled.sql.match(/\?/g) ?? []).length).toBe(compiled.params.length);
     expect(compiled.params).toEqual(["mania", 7, "%chordstream%", "%chordstream%"]);
+  });
+
+  test("compiles axis rc against sunny ln_ratio", () => {
+    const ast = parseQuery("key=7 axis:rc pattern:jack");
+    const compiled = compileQuery(ast);
+    expect(compiled.sql).toContain("dr.ln_ratio");
+    expect((compiled.sql.match(/\?/g) ?? []).length).toBe(compiled.params.length);
+    expect(compiled.params).toEqual(["mania", 7, 0.2, "%jack%", "%jack%"]);
+  });
+
+  test("compiles axis ln against sunny ln_ratio", () => {
+    const ast = parseQuery("axis:ln");
+    const compiled = compileQuery(ast);
+    expect(compiled.sql).toContain("dr.ln_ratio >=");
+    expect(compiled.params).toEqual([0.2]);
   });
 
 

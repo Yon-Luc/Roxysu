@@ -30,7 +30,9 @@ export type FieldTerm =
       value?: number;
     }
   /** 7k dominant pattern label (jack, jumpstream, chordjack, bracket, chordstream, stream). */
-  | { type: "pattern"; value: string; prefix?: boolean };
+  | { type: "pattern"; value: string; prefix?: boolean }
+  /** RC vs LN map axis from Sunny ln_ratio (20% split, same as dan). */
+  | { type: "axis"; value: "rc" | "ln" };
 
 export type AstNode =
   | { type: "term"; term: FieldTerm }

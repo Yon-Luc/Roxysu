@@ -38,6 +38,12 @@ const FIELDS: { field: string; meaning: string; example: string }[] = [
       "7k dominant gameplay pattern (jack, jumpstream, chordjack, bracket, chordstream, stream). Computed from chart analysis.",
     example: "pattern:jumpstream key=7",
   },
+  {
+    field: "axis / rice / lnmap",
+    meaning:
+      "RC vs LN map split from Sunny LN ratio (≥20% LN = LN map). Same threshold as dan labels.",
+    example: "key=7 axis:rc pattern:jack",
+  },
   { field: "mods / mod", meaning: "Mods used on a score", example: "mods:DT" },
   { field: "acc / accuracy", meaning: "Best accuracy % (range or comparison)", example: "acc:90..92" },
   { field: "misses / miss", meaning: "Best (fewest) miss count", example: "misses:0" },
@@ -60,6 +66,8 @@ const EXAMPLES = [
   'key=7 dan:"Regular 4"',
   "key=7 dan:Regular sunny:6..8",
   "key=7 pattern:jack",
+  "key=7 axis:rc pattern:jumpstream",
+  "key=7 axis:ln pattern:chordstream",
   "pattern:jumpstream stars:4..6",
   "pattern:bracket key=7",
   "pattern:chordjack OR pattern:chordstream",

@@ -1,4 +1,5 @@
 import type { AstNode, FieldTerm } from "./ast";
+import { LN_DAN_RATIO_THRESHOLD } from "../map-analysis/estDiff";
 
 export type CompiledQuery = {
   /** SQL boolean expression referencing aliases: b, m, ps, rs */
@@ -134,6 +135,12 @@ function compileTerm(term: FieldTerm, params: unknown[]): string {
           OR lower(COALESCE(pa.secondary_pattern, '')) LIKE lower(${secondaryPat}) ESCAPE '\\'
         )
       )`;
+    }
+    case "axis": {
+      if (term.value === "ln") {
+        return `(dr.ln_ratio IS NOT NULL AND dr.ln_ratio >= ${push(LN_DAN_RATIO_THRESHOLD)})`;
+      }
+      return `(dr.ln_ratio IS NOT NULL AND dr.ln_ratio < ${push(LN_DAN_RATIO_THRESHOLD)})`;
     }
     case "text": {
       const pat = push(`%${term.value}%`);

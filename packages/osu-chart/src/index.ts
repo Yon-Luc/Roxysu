@@ -1,3 +1,7 @@
+export {
+  buildManiaOsuText,
+} from "./write";
+export type { ManiaOsuChart, ManiaOsuDifficulty, ManiaOsuMetadata } from "./write";
 export { OsuFileParser } from "./osuFileParser.js";
 export {
   isHold,

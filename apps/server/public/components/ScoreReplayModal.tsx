@@ -12,6 +12,17 @@ import { fetchScoreReplay, type ScoreReplay } from "../lib/api";
 import { AudioClock, sampleAudioClock } from "../lib/audioClock";
 import { formatAccuracy, formatMods } from "../lib/format";
 import {
+  codeToColumn,
+  formatKeyCode,
+  resolveKeybinds,
+  useKeybinds,
+} from "../lib/keybinds";
+import {
+  LiveManiaPlay,
+  type PracticeRange,
+} from "../lib/liveManiaPlay";
+import { maniaHitWindows, type JudgmentSummary } from "../lib/maniaWindows";
+import {
   localBeatmapAudioUrl,
   localBeatmapCoverUrl,
   osuBeatmapCoverUrl,
@@ -23,6 +34,7 @@ import {
   PREVIEW_SCROLL_DEFAULT,
   PREVIEW_SCROLL_MAX,
   PREVIEW_SCROLL_MIN,
+  type NotefieldJudgment,
   type ReplayJudgmentResult,
 } from "./ManiaNotefield";
 import {
@@ -30,6 +42,11 @@ import {
   MissSeekMarkers,
   ReplayAnalysisPanel,
 } from "./ReplayAnalysisPanel";
+import {
+  TimingVisualizer,
+  TIMING_VIS_X_DEFAULT,
+  TIMING_VIS_Y_DEFAULT,
+} from "./TimingVisualizer";
 
 const PREFS_KEY = "rx-beatmap-preview";
 const SKIP_MS = 5000;
@@ -73,11 +90,27 @@ const DEFAULT_PREFS: PreviewPrefs = {
   scroll: PREVIEW_SCROLL_DEFAULT,
   fullscreen: false,
   fieldWidth: FIELD_WIDTH_DEFAULT,
-  timingX: 50,
-  timingY: 78,
+  timingX: TIMING_VIS_X_DEFAULT,
+  timingY: TIMING_VIS_Y_DEFAULT,
   blackBg: false,
   analysis: false,
 };
+
+const EMPTY_SUMMARY: JudgmentSummary = {
+  accuracy: 1,
+  combo: 0,
+  maxCombo: 0,
+  counts: {
+    perfect: 0,
+    great: 0,
+    good: 0,
+    ok: 0,
+    meh: 0,
+    miss: 0,
+  },
+};
+
+type ModalMode = "rewatch" | "play";
 
 function loadPrefs(): PreviewPrefs {
   try {
@@ -210,9 +243,19 @@ function ScoreReplayModal({
   const audioUrlRef = useRef<string | null>(null);
   const onCloseRef = useRef(onClose);
   const rateApplied = useRef(false);
+  const modeRef = useRef<ModalMode>("rewatch");
+  const livePlayRef = useRef<LiveManiaPlay | null>(null);
+  const dataRef = useRef<Awaited<ReturnType<typeof fetchScoreReplay>> | undefined>(
+    undefined,
+  );
+  /** Map time where the current Play / Test session started (R restarts here). */
+  const playStartMsRef = useRef(0);
+  const keybindsAll = useKeybinds();
+  const bindsRef = useRef<string[]>([]);
 
   const [prefs, setPrefs] = useState<PreviewPrefs>(() => loadPrefs());
   const prefsRef = useRef(prefs);
+  const [mode, setMode] = useState<ModalMode>("rewatch");
   const [playing, setPlaying] = useState(false);
   const [currentMs, setCurrentMs] = useState(0);
   const [durationMs, setDurationMs] = useState(0);
@@ -223,6 +266,9 @@ function ScoreReplayModal({
     last: null as ReplayJudgmentResult | null,
   });
   const [activeMissTMs, setActiveMissTMs] = useState<number | null>(null);
+  const [liveHeldMask, setLiveHeldMask] = useState(0);
+  const [liveJudgments, setLiveJudgments] = useState<NotefieldJudgment[]>([]);
+  const [liveSummary, setLiveSummary] = useState<JudgmentSummary>(EMPTY_SUMMARY);
 
   const { data, error, isLoading } = useQuery({
     queryKey: ["score-replay", scoreId],
@@ -244,6 +290,12 @@ function ScoreReplayModal({
   prefsRef.current = prefs;
   audioUrlRef.current = audioUrl;
   onCloseRef.current = onClose;
+  modeRef.current = mode;
+  dataRef.current = data;
+
+  if (data && !data.error && data.beatmap.columnCount > 0) {
+    bindsRef.current = resolveKeybinds(keybindsAll, data.beatmap.columnCount);
+  }
 
   useEffect(() => {
     try {
@@ -273,6 +325,87 @@ function ScoreReplayModal({
 
   function mapTimeMs(): number {
     return sampleAudioClock(clockRef.current, audioRef.current, currentMs);
+  }
+
+  function syncLiveHud() {
+    const play = livePlayRef.current;
+    if (!play) return;
+    setLiveHeldMask(play.heldMask);
+    setLiveJudgments([...play.judgments]);
+    setLiveSummary(play.summary);
+  }
+
+  function effectivePracticeRange(): PracticeRange | null {
+    const start = playStartMsRef.current;
+    if (start > 0) {
+      return { fromMs: start, toMs: Number.POSITIVE_INFINITY };
+    }
+    return null;
+  }
+
+  function ensureLivePlay(): LiveManiaPlay | null {
+    const replay = dataRef.current;
+    if (!replay || replay.error || replay.beatmap.columnCount <= 0) return null;
+    const od = replay.beatmap.overallDifficulty ?? 0;
+    const existing = livePlayRef.current;
+    if (
+      existing &&
+      existing.columnCount === replay.beatmap.columnCount &&
+      existing.overallDifficulty === od
+    ) {
+      return existing;
+    }
+    const play = new LiveManiaPlay({
+      notes: replay.beatmap.notes,
+      columnCount: replay.beatmap.columnCount,
+      overallDifficulty: od,
+      practiceRange: effectivePracticeRange(),
+    });
+    livePlayRef.current = play;
+    return play;
+  }
+
+  function restartPlay() {
+    const play = ensureLivePlay();
+    play?.reset();
+    setLiveHeldMask(0);
+    setLiveJudgments([]);
+    setLiveSummary(EMPTY_SUMMARY);
+    seekTo(playStartMsRef.current);
+    const audio = audioRef.current;
+    if (audio && audioUrlRef.current) {
+      void audio.play().catch(() => {
+        setAudioError("Playback blocked — click play again");
+      });
+    }
+  }
+
+  function enterPlayMode() {
+    playStartMsRef.current = 0;
+    livePlayRef.current = null;
+    setMode("play");
+    modeRef.current = "play";
+    restartPlay();
+  }
+
+  function enterTestFromHere() {
+    const replay = dataRef.current;
+    if (!replay || replay.error || replay.beatmap.columnCount <= 0) return;
+    playStartMsRef.current = Math.max(0, mapTimeMs());
+    livePlayRef.current = null;
+    setMode("play");
+    modeRef.current = "play";
+    restartPlay();
+  }
+
+  function enterRewatchMode() {
+    playStartMsRef.current = 0;
+    setMode("rewatch");
+    modeRef.current = "rewatch";
+    livePlayRef.current = null;
+    setLiveHeldMask(0);
+    setLiveJudgments([]);
+    setLiveSummary(EMPTY_SUMMARY);
   }
 
   function seekTo(ms: number) {
@@ -318,6 +451,53 @@ function ScoreReplayModal({
     setPlaying(false);
   }
 
+  // Recreate live judge when chart / OD changes.
+  useEffect(() => {
+    livePlayRef.current = null;
+    if (modeRef.current === "play" && data && !data.error) {
+      ensureLivePlay()?.reset();
+      setLiveHeldMask(0);
+      setLiveJudgments([]);
+      setLiveSummary(EMPTY_SUMMARY);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- rebuild when chart identity changes
+  }, [scoreId, data?.beatmap.id, data?.beatmap.overallDifficulty]);
+
+  // Tick live judge while in play mode.
+  useEffect(() => {
+    if (mode !== "play") return;
+    let raf = 0;
+    let running = true;
+    let lastJudgmentCount = -1;
+    let lastHeld = -1;
+    let lastCombo = -1;
+    function loop() {
+      if (!running) return;
+      const play = livePlayRef.current ?? ensureLivePlay();
+      if (play) {
+        play.tick(mapTimeMs());
+        const summary = play.summary;
+        if (
+          play.judgments.length !== lastJudgmentCount ||
+          play.heldMask !== lastHeld ||
+          summary.combo !== lastCombo
+        ) {
+          lastJudgmentCount = play.judgments.length;
+          lastHeld = play.heldMask;
+          lastCombo = summary.combo;
+          syncLiveHud();
+        }
+      }
+      raf = requestAnimationFrame(loop);
+    }
+    raf = requestAnimationFrame(loop);
+    return () => {
+      running = false;
+      cancelAnimationFrame(raf);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, scoreId]);
+
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
     dialogRef.current?.focus();
@@ -345,27 +525,84 @@ function ScoreReplayModal({
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.preventDefault();
-        if (prefsRef.current.fullscreen) {
-          setPrefs((p) => ({ ...p, fullscreen: false }));
+        if (modeRef.current === "play") {
+          enterRewatchMode();
           return;
         }
         onCloseRef.current();
         return;
       }
 
-      // Space always play/pause (even when seek/volume sliders are focused).
-      if (e.key === " " || e.key === "k" || e.key === "K") {
-        if (isTextEntry(e.target)) return;
-        e.preventDefault();
-        togglePlay();
-        return;
+      // Space always play/pause in rewatch (even when seek/volume sliders are focused).
+      if (modeRef.current !== "play") {
+        if (e.key === " " || e.key === "k" || e.key === "K") {
+          if (isTextEntry(e.target)) return;
+          e.preventDefault();
+          togglePlay();
+          return;
+        }
       }
 
       if (isTextEntry(e.target)) return;
 
+      if (modeRef.current === "play") {
+        if (e.repeat) return;
+        const col = codeToColumn(bindsRef.current, e.code);
+        if (col >= 0) {
+          e.preventDefault();
+          const play = livePlayRef.current ?? ensureLivePlay();
+          if (play) {
+            play.press(col, mapTimeMs());
+            syncLiveHud();
+          }
+          return;
+        }
+        if (e.key === " " || e.key === "k" || e.key === "K") {
+          e.preventDefault();
+          togglePlay();
+          return;
+        }
+        if (e.key === "r" || e.key === "R") {
+          e.preventDefault();
+          restartPlay();
+          return;
+        }
+        if (e.key === "f" || e.key === "F") {
+          e.preventDefault();
+          setPrefs((p) => ({ ...p, fullscreen: !p.fullscreen }));
+          return;
+        }
+        if (e.key === "[" || e.key === "]") {
+          e.preventDefault();
+          const dir = e.key === "[" ? -1 : 1;
+          setPrefs((p) => ({
+            ...p,
+            scroll: clamp(
+              p.scroll + dir,
+              PREVIEW_SCROLL_MIN,
+              PREVIEW_SCROLL_MAX,
+            ),
+          }));
+        }
+        return;
+      }
+
       if (e.key === "f" || e.key === "F") {
         e.preventDefault();
         setPrefs((p) => ({ ...p, fullscreen: !p.fullscreen }));
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const replay = dataRef.current;
+        if (replay && !replay.error && replay.beatmap.columnCount > 0) {
+          enterPlayMode();
+        }
+        return;
+      }
+      if (e.key === "t" || e.key === "T") {
+        e.preventDefault();
+        enterTestFromHere();
         return;
       }
       if (e.key === "s" || e.key === "S") {
@@ -386,12 +623,42 @@ function ScoreReplayModal({
       if (e.key === "Home" || e.key === "0") {
         e.preventDefault();
         stopPlayback();
+        return;
+      }
+      if (e.key === "[") {
+        e.preventDefault();
+        setPrefs((p) => ({
+          ...p,
+          scroll: Math.max(PREVIEW_SCROLL_MIN, p.scroll - 1),
+        }));
+        return;
+      }
+      if (e.key === "]") {
+        e.preventDefault();
+        setPrefs((p) => ({
+          ...p,
+          scroll: Math.min(PREVIEW_SCROLL_MAX, p.scroll + 1),
+        }));
+      }
+    }
+
+    function onKeyUp(e: KeyboardEvent) {
+      if (modeRef.current !== "play") return;
+      const col = codeToColumn(bindsRef.current, e.code);
+      if (col < 0) return;
+      e.preventDefault();
+      const play = livePlayRef.current ?? ensureLivePlay();
+      if (play) {
+        play.release(col, mapTimeMs());
+        syncLiveHud();
       }
     }
 
     document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("keyup", onKeyUp);
     return () => {
       document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("keyup", onKeyUp);
       document.body.style.overflow = previousOverflow;
       prev?.focus();
     };
@@ -405,6 +672,13 @@ function ScoreReplayModal({
     setCurrentMs(0);
     setDurationMs(0);
     setPlaying(false);
+    setMode("rewatch");
+    modeRef.current = "rewatch";
+    playStartMsRef.current = 0;
+    livePlayRef.current = null;
+    setLiveHeldMask(0);
+    setLiveJudgments([]);
+    setLiveSummary(EMPTY_SUMMARY);
     setHud({ combo: 0, accuracy: 1, last: null });
     setActiveMissTMs(null);
   }, [scoreId, audioUrl]);
@@ -500,9 +774,9 @@ function ScoreReplayModal({
     };
   }, [audioUrl]);
 
-  // Live HUD: mania acc starts at 100% and is reweighted over notes judged so far.
+  // Live HUD from stored replay judgments (rewatch mode only).
   useEffect(() => {
-    if (!data) return;
+    if (mode !== "rewatch" || !data || data.error) return;
     const judgments = data.judgments;
     let raf = 0;
     let running = true;
@@ -538,9 +812,10 @@ function ScoreReplayModal({
       cancelAnimationFrame(raf);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mapTimeMs closes over refs
-  }, [data]);
+  }, [mode, data]);
 
   function onSeek(e: FormEvent<HTMLInputElement>) {
+    if (mode === "play") return;
     seekTo(Number(e.currentTarget.value));
   }
 
@@ -569,6 +844,16 @@ function ScoreReplayModal({
   })();
   const scrollLabel = Math.round(prefs.scroll);
   const fullscreen = prefs.fullscreen;
+  const isPlay = mode === "play";
+  const canLivePlay = !!(
+    data &&
+    !data.error &&
+    data.beatmap.columnCount > 0
+  );
+  const binds = canLivePlay
+    ? resolveKeybinds(keybindsAll, data.beatmap.columnCount)
+    : [];
+  const showAnalysis = analysisOn && !isPlay;
 
   return (
     <div
@@ -616,6 +901,33 @@ function ScoreReplayModal({
             ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-1">
+            {canLivePlay ? (
+              <div className="mr-1 flex rounded-full bg-black/40 p-0.5 ring-1 ring-white/10">
+                <button
+                  type="button"
+                  className={`rounded-full px-3 py-1 text-sm transition ${
+                    !isPlay
+                      ? "bg-accent-glow text-ink"
+                      : "text-muted hover:text-ink"
+                  }`}
+                  onClick={enterRewatchMode}
+                >
+                  Rewatch
+                </button>
+                <button
+                  type="button"
+                  className={`rounded-full px-3 py-1 text-sm transition ${
+                    isPlay
+                      ? "bg-accent-glow text-ink"
+                      : "text-muted hover:text-ink"
+                  }`}
+                  onClick={enterPlayMode}
+                  title="Play from start (Enter)"
+                >
+                  Play
+                </button>
+              </div>
+            ) : null}
             <button
               type="button"
               onClick={() =>
@@ -631,14 +943,15 @@ function ScoreReplayModal({
             <button
               type="button"
               onClick={() => {
-                if (prefs.fullscreen) {
-                  setPrefs((p) => ({ ...p, fullscreen: false }));
+                if (isPlay) {
+                  enterRewatchMode();
                   return;
                 }
                 onClose();
               }}
               className="rounded-full px-3 py-1 text-sm text-muted transition hover:bg-highlight hover:text-ink"
-              aria-label={fullscreen ? "Exit fullscreen" : "Close"}
+              aria-label={isPlay ? "Back to rewatch" : "Close"}
+              title={isPlay ? "Back to rewatch (Esc)" : "Close (Esc)"}
             >
               Esc
             </button>
@@ -658,9 +971,48 @@ function ScoreReplayModal({
             </p>
           ) : data ? (
             <>
+              {isPlay ? (
+                <div className="relative flex flex-wrap items-center justify-center gap-x-4 gap-y-1 border-b border-white/10 bg-black/40 px-4 py-2 text-sm tabular-nums backdrop-blur">
+                  <span className="font-bold text-ink">
+                    {liveSummary.combo}x
+                  </span>
+                  <span className="text-muted">
+                    {formatAccuracy(liveSummary.accuracy)}
+                  </span>
+                  <span className="text-faint">
+                    max {liveSummary.maxCombo}x
+                  </span>
+                  <span className="hidden text-xs text-subtle sm:inline">
+                    <span className="text-[#ffe566]">
+                      {liveSummary.counts.perfect}
+                    </span>
+                    {" / "}
+                    <span className="text-[#7dd3fc]">
+                      {liveSummary.counts.great}
+                    </span>
+                    {" / "}
+                    <span className="text-[#86efac]">
+                      {liveSummary.counts.good}
+                    </span>
+                    {" / "}
+                    <span className="text-[#fdba74]">
+                      {liveSummary.counts.ok}
+                    </span>
+                    {" / "}
+                    <span className="text-[#f9a8d4]">
+                      {liveSummary.counts.meh}
+                    </span>
+                    {" / "}
+                    <span className="text-[#f87171]">
+                      {liveSummary.counts.miss}
+                    </span>
+                  </span>
+                </div>
+              ) : null}
+
               <div
                 className={
-                  analysisOn
+                  showAnalysis
                     ? "relative flex min-h-0 flex-1 flex-col sm:flex-row"
                     : "relative flex min-h-0 flex-1 flex-col"
                 }
@@ -669,7 +1021,7 @@ function ScoreReplayModal({
                   className={
                     fullscreen
                       ? "relative mx-auto min-h-0 w-full flex-1 px-2 py-1 sm:px-4 sm:py-2"
-                      : analysisOn
+                      : showAnalysis
                         ? "relative mx-auto min-h-0 w-full min-w-0 flex-1 px-3 py-2 sm:px-4 sm:py-3"
                         : "relative mx-auto min-h-0 w-full max-w-2xl flex-1 px-3 py-2 sm:max-w-3xl sm:px-6 sm:py-4"
                   }
@@ -679,45 +1031,63 @@ function ScoreReplayModal({
                       : undefined
                   }
                 >
-                  <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex justify-between gap-3 sm:inset-x-6 sm:top-5">
-                    <div className="rounded-lg bg-black/55 px-3 py-2 backdrop-blur">
-                      <div className="text-[10px] font-semibold uppercase tracking-wide text-faint">
-                        Combo
-                      </div>
-                      <div className="font-display text-2xl font-bold tabular-nums text-ink">
-                        {hud.combo}
-                        <span className="text-base text-muted">x</span>
-                      </div>
-                    </div>
-                    <div className="rounded-lg bg-black/55 px-3 py-2 text-right backdrop-blur">
-                      <div className="text-[10px] font-semibold uppercase tracking-wide text-faint">
-                        Accuracy
-                      </div>
-                      <div className="font-display text-2xl font-bold tabular-nums text-ink">
-                        {formatAccuracy(hud.accuracy)}
-                      </div>
-                      {hud.last ? (
-                        <div
-                          className="mt-0.5 text-xs font-bold uppercase tracking-wide"
-                          style={{ color: JUDGMENT_COLORS[hud.last] }}
-                        >
-                          {hud.last}
+                  {!isPlay ? (
+                    <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex justify-between gap-3 sm:inset-x-6 sm:top-5">
+                      <div className="rounded-lg bg-black/55 px-3 py-2 backdrop-blur">
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-faint">
+                          Combo
                         </div>
-                      ) : null}
+                        <div className="font-display text-2xl font-bold tabular-nums text-ink">
+                          {hud.combo}
+                          <span className="text-base text-muted">x</span>
+                        </div>
+                      </div>
+                      <div className="rounded-lg bg-black/55 px-3 py-2 text-right backdrop-blur">
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-faint">
+                          Accuracy
+                        </div>
+                        <div className="font-display text-2xl font-bold tabular-nums text-ink">
+                          {formatAccuracy(hud.accuracy)}
+                        </div>
+                        {hud.last ? (
+                          <div
+                            className="mt-0.5 text-xs font-bold uppercase tracking-wide"
+                            style={{ color: JUDGMENT_COLORS[hud.last] }}
+                          >
+                            {hud.last}
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
-                  </div>
+                  ) : null}
 
                   {data.beatmap.columnCount > 0 ? (
-                    <div className="h-full w-full overflow-hidden rounded-xl">
-                      <ManiaNotefield
-                        columnCount={data.beatmap.columnCount}
-                        notes={data.beatmap.notes}
-                        frames={data.frames}
-                        judgments={data.judgments}
-                        highlightMissNotes={analysisOn}
-                        scrollSpeed={prefs.scroll}
-                        getCurrentTimeMs={mapTimeMs}
-                      />
+                    <div className="relative h-full w-full">
+                      <div className="h-full w-full overflow-hidden rounded-xl">
+                        <ManiaNotefield
+                          columnCount={data.beatmap.columnCount}
+                          notes={data.beatmap.notes}
+                          frames={isPlay ? undefined : data.frames}
+                          judgments={isPlay ? liveJudgments : data.judgments}
+                          highlightMissNotes={showAnalysis}
+                          scrollSpeed={prefs.scroll}
+                          liveHeldMask={isPlay ? liveHeldMask : null}
+                          getCurrentTimeMs={mapTimeMs}
+                        />
+                      </div>
+                      {isPlay ? (
+                        <TimingVisualizer
+                          judgments={liveJudgments}
+                          windows={maniaHitWindows(
+                            data.beatmap.overallDifficulty ?? 0,
+                          )}
+                          xPct={prefs.timingX}
+                          yPct={prefs.timingY}
+                          onMove={(timingX, timingY) =>
+                            setPrefs((p) => ({ ...p, timingX, timingY }))
+                          }
+                        />
+                      ) : null}
                     </div>
                   ) : (
                     <div className="flex h-full min-h-[16rem] items-center justify-center rounded-xl bg-black/40 px-6 text-center text-sm text-muted">
@@ -726,7 +1096,7 @@ function ScoreReplayModal({
                   )}
                 </div>
 
-                {analysisOn && analysis ? (
+                {showAnalysis && analysis ? (
                   <div className="h-56 shrink-0 sm:h-auto sm:w-72 sm:max-w-[40%] md:w-80">
                     <ReplayAnalysisPanel
                       data={data as ScoreReplay}
@@ -738,10 +1108,29 @@ function ScoreReplayModal({
                 ) : null}
               </div>
 
-              <div className="border-t border-white/10 bg-black/50 px-4 py-3 backdrop-blur sm:px-6 sm:py-4">
+              <div
+                className={
+                  isPlay
+                    ? "group/ctrl absolute inset-x-0 bottom-0 z-20"
+                    : "border-t border-white/10 bg-black/50 px-4 py-3 backdrop-blur sm:px-6 sm:py-4"
+                }
+              >
+                {isPlay ? (
+                  <div
+                    className="absolute inset-x-0 bottom-0 h-12"
+                    aria-hidden
+                  />
+                ) : null}
                 {audioUrl ? (
                   <audio ref={audioRef} src={audioUrl} preload="auto" />
                 ) : null}
+                <div
+                  className={
+                    isPlay
+                      ? "pointer-events-none relative translate-y-full border-t border-white/10 bg-black/50 px-4 py-3 opacity-0 backdrop-blur transition duration-200 group-hover/ctrl:pointer-events-auto group-hover/ctrl:translate-y-0 group-hover/ctrl:opacity-100 group-focus-within/ctrl:pointer-events-auto group-focus-within/ctrl:translate-y-0 group-focus-within/ctrl:opacity-100 sm:px-6 sm:py-4"
+                      : undefined
+                  }
+                >
 
                 {audioError || !audioUrl ? (
                   <p className="mb-3 text-sm text-amber-200/90">
@@ -750,14 +1139,16 @@ function ScoreReplayModal({
                   </p>
                 ) : null}
 
-                <ReplayStatsBar data={data as ScoreReplay} />
+                {!isPlay ? (
+                  <ReplayStatsBar data={data as ScoreReplay} />
+                ) : null}
 
                 <div className="relative mb-3 flex items-center gap-3">
                   <span className="w-16 shrink-0 tabular-nums text-xs text-muted sm:w-20">
                     {formatClock(currentMs)}
                   </span>
                   <div className="relative min-w-0 flex-1">
-                    {analysisOn && analysis ? (
+                    {showAnalysis && analysis ? (
                       <MissSeekMarkers
                         misses={analysis.misses}
                         maxDuration={maxDuration}
@@ -771,8 +1162,8 @@ function ScoreReplayModal({
                       step={10}
                       value={Math.min(currentMs, maxDuration)}
                       onInput={onSeek}
-                      disabled={!audioUrl}
-                      className="relative z-[1] min-w-0 w-full accent-[var(--accent)]"
+                      disabled={!audioUrl || isPlay}
+                      className="relative z-[1] min-w-0 w-full accent-[var(--accent)] disabled:opacity-40"
                       aria-label="Seek"
                     />
                   </div>
@@ -782,38 +1173,78 @@ function ScoreReplayModal({
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                  <button
-                    type="button"
-                    className="rx-btn"
-                    disabled={!audioUrl}
-                    onClick={() => seekBy(-SKIP_MS)}
-                  >
-                    −5s
-                  </button>
-                  <button
-                    type="button"
-                    className="rx-btn-primary min-w-[5.5rem]"
-                    onClick={togglePlay}
-                    disabled={!audioUrl}
-                  >
-                    {playing ? "Pause" : "Play"}
-                  </button>
-                  <button
-                    type="button"
-                    className="rx-btn"
-                    disabled={!audioUrl}
-                    onClick={() => seekBy(SKIP_MS)}
-                  >
-                    +5s
-                  </button>
-                  <button
-                    type="button"
-                    className="rx-btn"
-                    disabled={!audioUrl}
-                    onClick={stopPlayback}
-                  >
-                    Stop
-                  </button>
+                  {isPlay ? (
+                    <>
+                      <button
+                        type="button"
+                        className="rx-btn-primary min-w-[5.5rem]"
+                        onClick={togglePlay}
+                        disabled={!audioUrl}
+                        title="Play / pause"
+                      >
+                        {playing ? "Pause" : "Play"}
+                      </button>
+                      <button
+                        type="button"
+                        className="rx-btn"
+                        disabled={!audioUrl}
+                        onClick={restartPlay}
+                        title="Restart from session start (R)"
+                      >
+                        Restart
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        className="rx-btn"
+                        disabled={!audioUrl}
+                        onClick={() => seekBy(-SKIP_MS)}
+                        title="Skip back 5s (←)"
+                      >
+                        −5s
+                      </button>
+                      <button
+                        type="button"
+                        className="rx-btn-primary min-w-[5.5rem]"
+                        onClick={togglePlay}
+                        disabled={!audioUrl}
+                        title="Play / pause (Space)"
+                      >
+                        {playing ? "Pause" : "Play"}
+                      </button>
+                      <button
+                        type="button"
+                        className="rx-btn"
+                        disabled={!audioUrl}
+                        onClick={() => seekBy(SKIP_MS)}
+                        title="Skip forward 5s (→)"
+                      >
+                        +5s
+                      </button>
+                      <button
+                        type="button"
+                        className="rx-btn"
+                        disabled={!audioUrl}
+                        onClick={stopPlayback}
+                        title="Stop (S / Home)"
+                      >
+                        Stop
+                      </button>
+                      {canLivePlay ? (
+                        <button
+                          type="button"
+                          className="rx-btn-primary"
+                          disabled={!audioUrl}
+                          onClick={enterTestFromHere}
+                          title="Play from here (T)"
+                        >
+                          Test
+                        </button>
+                      ) : null}
+                    </>
+                  )}
 
                   <div className="mx-1 hidden h-6 w-px bg-white/10 sm:block" />
 
@@ -893,21 +1324,47 @@ function ScoreReplayModal({
                     </label>
                   ) : null}
 
-                  <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
-                    <input
-                      type="checkbox"
-                      checked={prefs.analysis}
-                      onChange={(e) =>
-                        setPrefs((p) => ({
-                          ...p,
-                          analysis: e.target.checked,
-                        }))
-                      }
-                      className="accent-[var(--accent)]"
-                      aria-label="Analysis mode"
-                    />
-                    <span className="shrink-0">Analysis</span>
-                  </label>
+                  {!isPlay ? (
+                    <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
+                      <input
+                        type="checkbox"
+                        checked={prefs.analysis}
+                        onChange={(e) =>
+                          setPrefs((p) => ({
+                            ...p,
+                            analysis: e.target.checked,
+                          }))
+                        }
+                        className="accent-[var(--accent)]"
+                        aria-label="Analysis mode"
+                      />
+                      <span className="shrink-0">Analysis</span>
+                    </label>
+                  ) : null}
+                </div>
+
+                <p className="mt-2 hidden text-[11px] text-faint sm:block">
+                  {isPlay ? (
+                    <>
+                      Keys{" "}
+                      {binds.map((c) => formatKeyCode(c)).join(" ")} · R restart
+                      · Esc rewatch
+                      {" · "}
+                      <a
+                        href="#/settings"
+                        className="text-subtle underline-offset-2 hover:underline"
+                      >
+                        Edit keybinds
+                      </a>
+                    </>
+                  ) : (
+                    <>
+                      Enter play · T test here · Space play · ← → skip 5s · S
+                      stop · F fullscreen · [ ] scroll
+                      {canLivePlay ? " · Esc close" : ""}
+                    </>
+                  )}
+                </p>
                 </div>
               </div>
             </>

@@ -28,7 +28,9 @@ export type FieldTerm =
       max?: number;
       op?: ComparisonOp;
       value?: number;
-    };
+    }
+  /** 7k dominant pattern label (jack, jumpstream, chordjack, bracket, chordstream, stream). */
+  | { type: "pattern"; value: string; prefix?: boolean };
 
 export type AstNode =
   | { type: "term"; term: FieldTerm }

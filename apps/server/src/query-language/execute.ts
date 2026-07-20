@@ -3,7 +3,12 @@ import { parseQuery } from "./parse";
 import { compileQuery } from "./compile";
 import type { AstNode } from "./ast";
 import { astUsesDanRating } from "./astUsesDan";
+import { astUsesPatternAnalysis } from "./astUsesPattern";
 import { backfillSunnyDanSync, ensureSunnyDanForIdsSync } from "../map-analysis/computeSunnyDan";
+import {
+  backfillPatternAnalysisSync,
+  PATTERN_QUERY_BACKFILL_LIMIT,
+} from "../map-analysis/computePatternAnalysis";
 
 /** Max maps to compute per dan/sunny query so first filter stays responsive. */
 const DAN_QUERY_BACKFILL_LIMIT = 120;
@@ -85,6 +90,8 @@ const BASE_FROM = `
   LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
   LEFT JOIN beatmap_dan_ratings dr
     ON dr.beatmap_id = b.id AND dr.algorithm = 'sunny'
+  LEFT JOIN beatmap_pattern_analysis pa
+    ON pa.beatmap_id = b.id AND pa.algorithm = '7k-heuristic-v1'
 `;
 
 const SELECT_COLS = `
@@ -210,21 +217,35 @@ function resolveFilter(query: string | undefined): {
   sql: string;
   params: unknown[];
   needsDanBackfill: boolean;
+  needsPatternBackfill: boolean;
 } {
   const q = query?.trim();
-  if (!q) return { sql: "1=1", params: [], needsDanBackfill: false };
+  if (!q) {
+    return {
+      sql: "1=1",
+      params: [],
+      needsDanBackfill: false,
+      needsPatternBackfill: false,
+    };
+  }
   const ast = parseQuery(q);
   const compiled = compileQuery(ast);
   return {
     sql: compiled.sql,
     params: compiled.params,
     needsDanBackfill: astUsesDanRating(ast),
+    needsPatternBackfill: astUsesPatternAnalysis(ast),
   };
 }
 
 function maybeBackfillDan(db: Db, needsDanBackfill: boolean): void {
   if (!needsDanBackfill) return;
   backfillSunnyDanSync(db, { limit: DAN_QUERY_BACKFILL_LIMIT });
+}
+
+function maybeBackfillPattern(db: Db, needsPatternBackfill: boolean): void {
+  if (!needsPatternBackfill) return;
+  backfillPatternAnalysisSync(db, { limit: PATTERN_QUERY_BACKFILL_LIMIT });
 }
 
 function mapRow(r: PracticeCardRow): PracticeCardRow {
@@ -277,6 +298,9 @@ export function executeAst(
 ): { items: PracticeCardRow[]; total: number } {
   if (astUsesDanRating(ast)) {
     backfillSunnyDanSync(db, { limit: DAN_QUERY_BACKFILL_LIMIT });
+  }
+  if (astUsesPatternAnalysis(ast)) {
+    backfillPatternAnalysisSync(db, { limit: PATTERN_QUERY_BACKFILL_LIMIT });
   }
   const compiled = compileQuery(ast);
   return executeFilter(db, compiled.sql, compiled.params, opts);
@@ -337,6 +361,7 @@ export function searchBeatmaps(
 } {
   const filter = resolveFilter(query);
   maybeBackfillDan(db, filter.needsDanBackfill);
+  maybeBackfillPattern(db, filter.needsPatternBackfill);
   const offset = (opts.page - 1) * opts.pageSize;
   const result = executeFilter(db, filter.sql, filter.params, {
     limit: opts.pageSize,
@@ -362,6 +387,7 @@ export function sampleBeatmaps(
 ): { items: PracticeCardRow[]; total: number } {
   const filter = resolveFilter(query);
   maybeBackfillDan(db, filter.needsDanBackfill);
+  maybeBackfillPattern(db, filter.needsPatternBackfill);
   let filterSql = filter.sql;
   const params = [...filter.params];
 
@@ -401,6 +427,7 @@ export function sampleBeatmaps(
 export function countMatches(db: Db, query: string): number {
   const filter = resolveFilter(query);
   maybeBackfillDan(db, filter.needsDanBackfill);
+  maybeBackfillPattern(db, filter.needsPatternBackfill);
   const where = baseWhere(filter.sql);
   const countSql = `SELECT COUNT(*) AS n ${BASE_FROM} ${where}`;
   const countRow = db.$client
@@ -616,6 +643,7 @@ export function practiceDistribution(
 } {
   const filter = resolveFilter(query);
   maybeBackfillDan(db, filter.needsDanBackfill);
+  maybeBackfillPattern(db, filter.needsPatternBackfill);
   const where = baseWhere(filter.sql);
   const params = filter.params;
 

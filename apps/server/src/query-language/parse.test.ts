@@ -11,6 +11,7 @@ describe("looksLikeQuery", () => {
     expect(looksLikeQuery("key=7")).toBe(true);
     expect(looksLikeQuery("ln<10")).toBe(true);
     expect(looksLikeQuery("sunny>7")).toBe(true);
+    expect(looksLikeQuery("pattern:jack")).toBe(true);
     expect(looksLikeQuery("hello world")).toBe(false);
   });
 });
@@ -93,6 +94,22 @@ describe("parseQuery", () => {
       type: "term",
       term: { type: "sunny", op: ">=", value: 8 },
     });
+    expect(parseQuery("pattern:jack")).toEqual({
+      type: "term",
+      term: { type: "pattern", value: "jack", prefix: false },
+    });
+    expect(parseQuery("dominant:jumpstream")).toEqual({
+      type: "term",
+      term: { type: "pattern", value: "jumpstream", prefix: false },
+    });
+    expect(parseQuery("style:chordjack")).toEqual({
+      type: "term",
+      term: { type: "pattern", value: "chordjack", prefix: false },
+    });
+    expect(parseQuery("pattern:^bracket")).toEqual({
+      type: "term",
+      term: { type: "pattern", value: "bracket", prefix: true },
+    });
   });
 
   test("boolean AND OR NOT and parens", () => {
@@ -168,6 +185,22 @@ describe("compileQuery", () => {
     expect(compiled.sql).toContain("dr.sunny_star");
     expect(compiled.sql).toContain("BETWEEN");
     expect(compiled.params).toEqual([5, 6]);
+  });
+
+  test("compiles pattern label against pattern analysis", () => {
+    const ast = parseQuery("pattern:jumpstream");
+    const compiled = compileQuery(ast);
+    expect(compiled.sql).toContain("pa.dominant_pattern");
+    expect(compiled.sql).toContain("pa.secondary_pattern");
+    expect(compiled.params).toEqual(["%jumpstream%", "%jumpstream%"]);
+    expect((compiled.sql.match(/\?/g) ?? []).length).toBe(compiled.params.length);
+  });
+
+  test("compiles combined key and pattern with matching bind count", () => {
+    const ast = parseQuery("key=7 pattern:chordstream");
+    const compiled = compileQuery(ast);
+    expect((compiled.sql.match(/\?/g) ?? []).length).toBe(compiled.params.length);
+    expect(compiled.params).toEqual(["mania", 7, "%chordstream%", "%chordstream%"]);
   });
 
 

@@ -32,6 +32,12 @@ const FIELDS: { field: string; meaning: string; example: string }[] = [
     meaning: "Sunny rework star rating (range or comparison)",
     example: "sunny:5..6",
   },
+  {
+    field: "pattern / dominant / style",
+    meaning:
+      "7k dominant gameplay pattern (jack, jumpstream, chordjack, bracket, chordstream, stream). Computed from chart analysis.",
+    example: "pattern:jumpstream key=7",
+  },
   { field: "mods / mod", meaning: "Mods used on a score", example: "mods:DT" },
   { field: "acc / accuracy", meaning: "Best accuracy % (range or comparison)", example: "acc:90..92" },
   { field: "misses / miss", meaning: "Best (fewest) miss count", example: "misses:0" },
@@ -53,6 +59,10 @@ const EXAMPLES = [
   "key=4 dan:Reform",
   'key=7 dan:"Regular 4"',
   "key=7 dan:Regular sunny:6..8",
+  "key=7 pattern:jack",
+  "pattern:jumpstream stars:4..6",
+  "pattern:bracket key=7",
+  "pattern:chordjack OR pattern:chordstream",
   "dan:Alpha OR dan:Beta",
   "mapper:Lasse OR mapper:Sotarks",
   "(mode:osu OR mode:mania) stars:6..7",

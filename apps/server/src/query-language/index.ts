@@ -11,6 +11,7 @@ export {
   toStructuredQuery,
 };
 export { astUsesDanRating } from "./astUsesDan";
+export { astUsesPatternAnalysis } from "./astUsesPattern";
 export {
   searchBeatmaps,
   sampleBeatmaps,

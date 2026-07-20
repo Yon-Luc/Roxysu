@@ -309,3 +309,35 @@ export const beatmapDanRatings = sqliteTable(
     pk: primaryKey({ columns: [t.beatmapId, t.algorithm] }),
   }),
 );
+
+/**
+ * Cached 7k dominant-pattern analysis (heuristic over parsed chart notes).
+ * Written only by server; keyed by beatmap + algorithm.
+ */
+export const beatmapPatternAnalysis = sqliteTable(
+  "beatmap_pattern_analysis",
+  {
+    beatmapId: text("beatmap_id")
+      .notNull()
+      .references(() => beatmaps.id),
+    /** Analyzer id, e.g. "7k-heuristic-v1". */
+    algorithm: text("algorithm").notNull(),
+    beatmapHash: text("beatmap_hash"),
+    columnCount: integer("column_count"),
+    dominantPattern: text("dominant_pattern"),
+    secondaryPattern: text("secondary_pattern"),
+    confidence: real("confidence"),
+    jackDensity: real("jack_density"),
+    chordDensity: real("chord_density"),
+    streamDensity: real("stream_density"),
+    bracketDensity: real("bracket_density"),
+    chordjackScore: real("chordjack_score"),
+    jumpstreamScore: real("jumpstream_score"),
+    chordstreamScore: real("chordstream_score"),
+    error: text("error"),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.beatmapId, t.algorithm] }),
+  }),
+);

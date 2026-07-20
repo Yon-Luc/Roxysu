@@ -50,6 +50,13 @@
       "when": 1784463600000,
       "tag": "0006_score_replay_file_hash",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1784467200000,
+      "tag": "0007_beatmap_pattern_analysis",
+      "breakpoints": true
     }
   ]
 }

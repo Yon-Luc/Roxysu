@@ -107,6 +107,27 @@ function parsePlayed(rest: string): number | null {
   return Number(m[1]);
 }
 
+/** Normalize community pattern synonyms to canonical labels. */
+function normalizePatternValue(raw: string): string {
+  const compact = raw.trim().toLowerCase().replace(/[\s_-]+/g, "");
+  const aliases: Record<string, string> = {
+    jack: "jack",
+    jacks: "jack",
+    jumpstream: "jumpstream",
+    js: "jumpstream",
+    chordjack: "chordjack",
+    cj: "chordjack",
+    bracket: "bracket",
+    brackets: "bracket",
+    chordstream: "chordstream",
+    cs: "chordstream",
+    stream: "stream",
+    streams: "stream",
+    mixed: "mixed",
+  };
+  return aliases[compact] ?? raw.trim().toLowerCase();
+}
+
 function parseFieldTerm(raw: string): FieldTerm {
   // Bare text (no colon) — free-text search
   const colon = raw.indexOf(":");
@@ -255,6 +276,12 @@ function parseFieldTerm(raw: string): FieldTerm {
       if (!r) throw new QueryParseError(`Invalid sunny value: ${value}`);
       return { type: "sunny", ...r };
     }
+    case "pattern":
+    case "dominant":
+    case "style": {
+      if (!value) throw new QueryParseError("Invalid pattern value: empty");
+      return { type: "pattern", value: normalizePatternValue(value), prefix };
+    }
     default:
       throw new QueryParseError(`Unknown field: ${field}`);
   }
@@ -362,6 +389,6 @@ export function looksLikeQuery(q: string): boolean {
   if (/[()]/.test(trimmed)) return true;
   if (/\b(AND|OR|NOT)\b/i.test(trimmed)) return true;
   if (/:\S/.test(trimmed)) return true;
-  if (/\b(acc|retry|mastery|pp|stars|misses|miss|score|keys|key|lns|ln|sunny|danstars|sunnystars)(>=|<=|>|<|=)/i.test(trimmed)) return true;
+  if (/\b(acc|retry|mastery|pp|stars|misses|miss|score|keys|key|lns|ln|sunny|danstars|sunnystars|pattern|dominant|style)(>=|<=|>|<|=)/i.test(trimmed)) return true;
   return false;
 }

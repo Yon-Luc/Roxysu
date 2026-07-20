@@ -123,6 +123,18 @@ function compileTerm(term: FieldTerm, params: unknown[]): string {
       }
       return "dr.sunny_star IS NOT NULL";
     }
+    case "pattern": {
+      const pattern = likePattern(term.value, term.prefix);
+      const dominantPat = push(pattern);
+      const secondaryPat = push(pattern);
+      return `(
+        pa.dominant_pattern IS NOT NULL
+        AND (
+          lower(pa.dominant_pattern) LIKE lower(${dominantPat}) ESCAPE '\\'
+          OR lower(COALESCE(pa.secondary_pattern, '')) LIKE lower(${secondaryPat}) ESCAPE '\\'
+        )
+      )`;
+    }
     case "text": {
       const pat = push(`%${term.value}%`);
       const p2 = push(`%${term.value}%`);

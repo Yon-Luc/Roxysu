@@ -1,0 +1,20 @@
+CREATE TABLE `beatmap_pattern_analysis` (
+	`beatmap_id` text NOT NULL,
+	`algorithm` text NOT NULL,
+	`beatmap_hash` text,
+	`column_count` integer,
+	`dominant_pattern` text,
+	`secondary_pattern` text,
+	`confidence` real,
+	`jack_density` real,
+	`chord_density` real,
+	`stream_density` real,
+	`bracket_density` real,
+	`chordjack_score` real,
+	`jumpstream_score` real,
+	`chordstream_score` real,
+	`error` text,
+	`updated_at` integer NOT NULL,
+	PRIMARY KEY(`beatmap_id`, `algorithm`),
+	FOREIGN KEY (`beatmap_id`) REFERENCES `beatmaps`(`id`) ON UPDATE no action ON DELETE no action
+);

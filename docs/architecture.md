@@ -88,7 +88,7 @@ SQLite supports multiple processes against the same file, but a few rules keep i
 
 ## Realm Sync Strategy
 
-`realm-reader` prefers **watermark incremental sync** (`Score.Date` / `Beatmap.LastLocalUpdate` vs SQLite maxima), writing `imports.kind = "incremental"`. Every N cycles (default 10) — or on first run / `REALM_FULL_SYNC=1` — it runs a **full reconcile**: upsert all objects and delete SQLite orphans not present in Realm. Soft-deleted Realm objects are upserted with `delete_pending = true` (not skipped). Realm `addListener` change notifications are intentionally not used while lazer may exclusive-lock the file; polling + watermarks match the latency model above.
+`realm-reader` prefers **watermark incremental sync** (`Score.Date` / `Beatmap.LastLocalUpdate` vs SQLite maxima), writing `imports.kind = "incremental"`. When Realm vs SQLite object counts diverge, incremental also **catches up missing IDs** (upserts Realm beatmaps/sets/scores absent from SQLite) so imports that miss the watermark (e.g. null `LastLocalUpdate`) still appear within one poll. Every N cycles (default 10) it runs a **reconcile**: the same missing-ID catch-up plus delete of SQLite orphans not present in Realm. Soft-deleted Realm objects are upserted with `delete_pending = true` (not skipped). A full remap of every object only runs on first import / `REALM_FULL_SYNC=1`. Realm `addListener` change notifications are intentionally not used while lazer may exclusive-lock the file; polling + watermarks match the latency model above.
 
 ### Collection write-back (manual, scoped exception)
 
@@ -311,7 +311,7 @@ This would be added as a **third isolated adapter**, not a replacement for Realm
 - Realm JS integration — read `client.realm`, map to raw tables
 
 ### Phase 2 *(done)*
-- Watermark incremental sync + periodic full reconcile (deletions)
+- Watermark incremental sync + count-based missing-ID catch-up + periodic reconcile (deletions)
 - HTTP API
 - SSE (via server poll loop)
 

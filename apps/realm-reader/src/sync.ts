@@ -374,7 +374,7 @@ function collectMappedRows(realm: Realm): {
   };
 }
 
-/** Collect primary keys only — used by periodic reconcile. */
+/** Collect primary keys only — used by periodic reconcile / missing catch-up. */
 function collectRealmIdSets(realm: Realm): {
   realmScoreIds: Set<string>;
   realmBeatmapIds: Set<string>;
@@ -399,6 +399,186 @@ function collectRealmIdSets(realm: Realm): {
   }
 
   return { realmScoreIds, realmBeatmapIds, realmSetIds };
+}
+
+function sqliteIdSet(
+  db: Db,
+  table: typeof beatmaps | typeof beatmapSets | typeof scores,
+): Set<string> {
+  return new Set(
+    db
+      .select({ id: table.id })
+      .from(table)
+      .all()
+      .map((r) => r.id),
+  );
+}
+
+function idsMissingFromSqlite(
+  realmIds: Set<string>,
+  sqliteIds: Set<string>,
+): string[] {
+  const missing: string[] = [];
+  for (const id of realmIds) {
+    if (!sqliteIds.has(id)) missing.push(id);
+  }
+  return missing;
+}
+
+/**
+ * Upsert Realm objects whose IDs are absent from SQLite.
+ * Heals maps/scores missed by watermark incremental (e.g. null LastLocalUpdate).
+ */
+function catchUpMissingFromRealm(
+  db: Db,
+  realm: Realm,
+  realmIds: {
+    realmScoreIds: Set<string>;
+    realmBeatmapIds: Set<string>;
+    realmSetIds: Set<string>;
+  },
+): {
+  beatmapSetsUpserted: number;
+  beatmapsUpserted: number;
+  scoresUpserted: number;
+  rulesetsUpserted: number;
+  changedBeatmapIds: string[];
+  changedScoreIds: string[];
+  rowsChanged: number;
+} {
+  const sqliteSetIds = sqliteIdSet(db, beatmapSets);
+  const sqliteBeatmapIds = sqliteIdSet(db, beatmaps);
+  const sqliteScoreIds = sqliteIdSet(db, scores);
+
+  const missingSetIds = idsMissingFromSqlite(realmIds.realmSetIds, sqliteSetIds);
+  const missingBeatmapIds = idsMissingFromSqlite(
+    realmIds.realmBeatmapIds,
+    sqliteBeatmapIds,
+  );
+  const missingScoreIds = idsMissingFromSqlite(
+    realmIds.realmScoreIds,
+    sqliteScoreIds,
+  );
+
+  if (
+    missingSetIds.length === 0 &&
+    missingBeatmapIds.length === 0 &&
+    missingScoreIds.length === 0
+  ) {
+    return {
+      beatmapSetsUpserted: 0,
+      beatmapsUpserted: 0,
+      scoresUpserted: 0,
+      rulesetsUpserted: 0,
+      changedBeatmapIds: [],
+      changedScoreIds: [],
+      rowsChanged: 0,
+    };
+  }
+
+  const setRows: BeatmapSetRow[] = [];
+  const setIdsQueued = new Set<string>();
+  const queueSet = (setId: string) => {
+    if (sqliteSetIds.has(setId) || setIdsQueued.has(setId)) return;
+    const obj = realm.objectForPrimaryKey("BeatmapSet", realmUuid(setId));
+    if (!obj) return;
+    const row = mapBeatmapSet(obj as never);
+    if (!row) return;
+    setRows.push(row);
+    setIdsQueued.add(setId);
+  };
+
+  for (const id of missingSetIds) queueSet(id);
+
+  const beatmapRows: BeatmapRow[] = [];
+  const rulesetShortNames = new Set<string>();
+  for (const id of missingBeatmapIds) {
+    const obj = realm.objectForPrimaryKey("Beatmap", realmUuid(id));
+    if (!obj) continue;
+    const row = mapBeatmap(obj as never);
+    if (!row) continue;
+    beatmapRows.push(row);
+    queueSet(row.setId);
+    if (row.rulesetShortName) rulesetShortNames.add(row.rulesetShortName);
+  }
+
+  const scoreRows: ScoreRow[] = [];
+  const knownBeatmapIds = new Set([
+    ...sqliteBeatmapIds,
+    ...beatmapRows.map((r) => r.id),
+  ]);
+  for (const id of missingScoreIds) {
+    const obj = realm.objectForPrimaryKey("Score", realmUuid(id));
+    if (!obj) continue;
+    const row = mapScore(obj as never);
+    if (!row) continue;
+    if (row.beatmapId && !knownBeatmapIds.has(row.beatmapId)) {
+      const bm = realm.objectForPrimaryKey("Beatmap", realmUuid(row.beatmapId));
+      const mapped = bm ? mapBeatmap(bm as never) : null;
+      if (mapped) {
+        beatmapRows.push(mapped);
+        knownBeatmapIds.add(mapped.id);
+        queueSet(mapped.setId);
+        if (mapped.rulesetShortName) {
+          rulesetShortNames.add(mapped.rulesetShortName);
+        }
+      } else {
+        row.beatmapId = null;
+      }
+    }
+    if (row.rulesetShortName) rulesetShortNames.add(row.rulesetShortName);
+    scoreRows.push(row);
+  }
+
+  const rulesetRows: RulesetRow[] = [];
+  for (const shortName of rulesetShortNames) {
+    const matches = realm
+      .objects("Ruleset")
+      .filtered("ShortName == $0", shortName);
+    for (const obj of matches) {
+      const row = mapRuleset(obj as never);
+      if (row) rulesetRows.push(row);
+    }
+  }
+
+  const rulesetsUpserted = upsertBatches(
+    db,
+    rulesets,
+    rulesetRows as Record<string, unknown>[],
+    ["shortName"],
+  );
+  const beatmapSetsUpserted = upsertBatches(
+    db,
+    beatmapSets,
+    setRows as Record<string, unknown>[],
+    ["id"],
+  );
+  const beatmapsUpserted = upsertBatches(
+    db,
+    beatmaps,
+    beatmapRows as Record<string, unknown>[],
+    ["id"],
+  );
+  const scoresUpserted = upsertBatches(
+    db,
+    scores,
+    scoreRows as Record<string, unknown>[],
+    ["id"],
+  );
+
+  return {
+    beatmapSetsUpserted: beatmapSetsUpserted.attempted,
+    beatmapsUpserted: beatmapsUpserted.attempted,
+    scoresUpserted: scoresUpserted.attempted,
+    rulesetsUpserted: rulesetsUpserted.attempted,
+    changedBeatmapIds: beatmapRows.map((r) => r.id),
+    changedScoreIds: scoreRows.map((r) => r.id),
+    rowsChanged:
+      rulesetsUpserted.changed +
+      beatmapSetsUpserted.changed +
+      beatmapsUpserted.changed +
+      scoresUpserted.changed,
+  };
 }
 
 /** Remove SQLite rows that no longer exist in Realm (full/reconcile only). */
@@ -639,7 +819,7 @@ export function runFullSync(db: Db, realmPath: string): SyncResult {
 }
 
 /**
- * Periodic orphan check: ID sets only (no full remapping/upsert of maps/scores).
+ * Periodic orphan check + missing-ID catch-up (no full remapping of all rows).
  * Soft-delete flags are picked up on incremental when counts diverge.
  */
 export function runReconcileSync(db: Db, realmPath: string): SyncResult {
@@ -669,14 +849,24 @@ export function runReconcileSync(db: Db, realmPath: string): SyncResult {
       deletedScoreIds: [] as string[],
       deletedBeatmapIds: [] as string[],
     };
+    let caughtUp = {
+      beatmapSetsUpserted: 0,
+      beatmapsUpserted: 0,
+      scoresUpserted: 0,
+      rulesetsUpserted: 0,
+      changedBeatmapIds: [] as string[],
+      changedScoreIds: [] as string[],
+      rowsChanged: 0,
+    };
 
-    // Counts match → no hard orphans; skip ID-set build.
+    // Counts differ → catch up missing Realm rows and/or delete SQLite orphans.
     if (
       sqliteScoreCount !== realmScoreCount ||
       sqliteBeatmapCount !== realmBeatmapCount ||
       sqliteSetCount !== realmSetCount
     ) {
       const ids = collectRealmIdSets(realm);
+      caughtUp = catchUpMissingFromRealm(db, realm, ids);
       deleted = reconcileDeletes(
         db,
         ids.realmScoreIds,
@@ -688,8 +878,14 @@ export function runReconcileSync(db: Db, realmPath: string): SyncResult {
     // Soft-delete count gate: if pending counts diverge, map those objects.
     let softScoreChanged = 0;
     let softSetChanged = 0;
-    const changedScoreIds: string[] = [...deleted.deletedScoreIds];
-    const changedBeatmapIds: string[] = [...deleted.deletedBeatmapIds];
+    const changedScoreIds: string[] = [
+      ...deleted.deletedScoreIds,
+      ...caughtUp.changedScoreIds,
+    ];
+    const changedBeatmapIds: string[] = [
+      ...deleted.deletedBeatmapIds,
+      ...caughtUp.changedBeatmapIds,
+    ];
 
     const realmSoftScores = realm
       .objects("Score")
@@ -776,14 +972,15 @@ export function runReconcileSync(db: Db, realmPath: string): SyncResult {
       deleted.scoresDeleted +
       deleted.beatmapsDeleted +
       deleted.beatmapSetsDeleted +
+      caughtUp.rowsChanged +
       softScoreChanged +
       softSetChanged +
       replayBackfillUpserted;
 
     finishImport(db, importRow.id, {
-      beatmapSetsUpserted: 0,
-      beatmapsUpserted: 0,
-      scoresUpserted: replayBackfillUpserted,
+      beatmapSetsUpserted: caughtUp.beatmapSetsUpserted,
+      beatmapsUpserted: caughtUp.beatmapsUpserted,
+      scoresUpserted: caughtUp.scoresUpserted + replayBackfillUpserted,
       rowsChanged,
       scoresDeleted: deleted.scoresDeleted,
       beatmapsDeleted: deleted.beatmapsDeleted,
@@ -795,10 +992,10 @@ export function runReconcileSync(db: Db, realmPath: string): SyncResult {
 
     return {
       kind: "reconcile",
-      beatmapSetsUpserted: 0,
-      beatmapsUpserted: 0,
-      scoresUpserted: replayBackfillUpserted,
-      rulesetsUpserted: 0,
+      beatmapSetsUpserted: caughtUp.beatmapSetsUpserted,
+      beatmapsUpserted: caughtUp.beatmapsUpserted,
+      scoresUpserted: caughtUp.scoresUpserted + replayBackfillUpserted,
+      rulesetsUpserted: caughtUp.rulesetsUpserted,
       rowsChanged,
       scoresDeleted: deleted.scoresDeleted,
       beatmapsDeleted: deleted.beatmapsDeleted,
@@ -988,19 +1185,45 @@ export function runIncrementalSync(db: Db, realmPath: string): SyncResult {
       ["id"],
     );
 
+    // Heal maps/scores the watermark missed (null LastLocalUpdate, clock ties, etc.).
+    let caughtUp = {
+      beatmapSetsUpserted: 0,
+      beatmapsUpserted: 0,
+      scoresUpserted: 0,
+      rulesetsUpserted: 0,
+      changedBeatmapIds: [] as string[],
+      changedScoreIds: [] as string[],
+      rowsChanged: 0,
+    };
+    const sqliteScoreCount =
+      db.select({ n: count() }).from(scores).get()?.n ?? 0;
+    const sqliteBeatmapCount =
+      db.select({ n: count() }).from(beatmaps).get()?.n ?? 0;
+    const sqliteSetCount =
+      db.select({ n: count() }).from(beatmapSets).get()?.n ?? 0;
+    if (
+      realm.objects("Score").length !== sqliteScoreCount ||
+      realm.objects("Beatmap").length !== sqliteBeatmapCount ||
+      realm.objects("BeatmapSet").length !== sqliteSetCount
+    ) {
+      caughtUp = catchUpMissingFromRealm(db, realm, collectRealmIdSets(realm));
+    }
+
     const rowsChanged =
       rulesetsUpserted.changed +
       beatmapSetsUpserted.changed +
       beatmapsUpserted.changed +
-      scoresUpserted.changed;
+      scoresUpserted.changed +
+      caughtUp.rowsChanged;
 
-    const changedScoreIds = [...scoreIds];
-    const changedBeatmapIds = [...beatmapIds];
+    const changedScoreIds = [...scoreIds, ...caughtUp.changedScoreIds];
+    const changedBeatmapIds = [...beatmapIds, ...caughtUp.changedBeatmapIds];
 
     finishImport(db, importRow.id, {
-      beatmapSetsUpserted: beatmapSetsUpserted.attempted,
-      beatmapsUpserted: beatmapsUpserted.attempted,
-      scoresUpserted: scoresUpserted.attempted,
+      beatmapSetsUpserted:
+        beatmapSetsUpserted.attempted + caughtUp.beatmapSetsUpserted,
+      beatmapsUpserted: beatmapsUpserted.attempted + caughtUp.beatmapsUpserted,
+      scoresUpserted: scoresUpserted.attempted + caughtUp.scoresUpserted,
       rowsChanged,
       scoresDeleted: 0,
       beatmapsDeleted: 0,
@@ -1012,10 +1235,12 @@ export function runIncrementalSync(db: Db, realmPath: string): SyncResult {
 
     return {
       kind: "incremental",
-      beatmapSetsUpserted: beatmapSetsUpserted.attempted,
-      beatmapsUpserted: beatmapsUpserted.attempted,
-      scoresUpserted: scoresUpserted.attempted,
-      rulesetsUpserted: rulesetsUpserted.attempted,
+      beatmapSetsUpserted:
+        beatmapSetsUpserted.attempted + caughtUp.beatmapSetsUpserted,
+      beatmapsUpserted: beatmapsUpserted.attempted + caughtUp.beatmapsUpserted,
+      scoresUpserted: scoresUpserted.attempted + caughtUp.scoresUpserted,
+      rulesetsUpserted:
+        rulesetsUpserted.attempted + caughtUp.rulesetsUpserted,
       rowsChanged,
       scoresDeleted: 0,
       beatmapsDeleted: 0,

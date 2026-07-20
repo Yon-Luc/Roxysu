@@ -6,6 +6,7 @@ import {
   searchBeatmaps,
   sampleBeatmaps,
   practiceDistribution,
+  practicePatternSummary,
   QueryParseError,
   toStructuredQuery,
   type PracticeSortBy,
@@ -211,6 +212,21 @@ export const practiceRoutes = new Elysia({ prefix: "/practice" })
       query: t.Object({
         q: t.Optional(t.String()),
         metric: t.Optional(t.String()),
+      }),
+    },
+  )
+  .get(
+    "/patterns",
+    ({ db, query }) => {
+      const samplesPerPattern = Math.max(
+        1,
+        Math.min(8, Math.floor(query.samples ?? 5)),
+      );
+      return practicePatternSummary(db, { samplesPerPattern });
+    },
+    {
+      query: t.Object({
+        samples: t.Optional(t.Numeric()),
       }),
     },
   )

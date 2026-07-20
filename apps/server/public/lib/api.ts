@@ -82,6 +82,15 @@ export async function fetchPracticeDistribution(params: {
   );
 }
 
+export async function fetchPracticePatterns(params?: { samples?: number }) {
+  return unwrap(
+    await api.api.practice.patterns.get({
+      query: { samples: params?.samples },
+    }),
+    "/api/practice/patterns",
+  );
+}
+
 export async function fetchPracticeSample(params: {
   q?: string;
   count?: number;
@@ -238,6 +247,10 @@ export type PracticeList = Exclude<
 export type PracticeItem = PracticeList["items"][number];
 export type PracticeDistribution = Exclude<
   Awaited<ReturnType<typeof fetchPracticeDistribution>>,
+  { error: string }
+>;
+export type PracticePatterns = Exclude<
+  Awaited<ReturnType<typeof fetchPracticePatterns>>,
   { error: string }
 >;
 export type PracticeSample = Exclude<

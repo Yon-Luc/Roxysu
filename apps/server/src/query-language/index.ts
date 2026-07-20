@@ -19,6 +19,8 @@ export {
   executeAst,
   practiceDistribution,
 } from "./execute";
+export { practicePatternSummary } from "./patternSummary";
+export type { PatternSummary, PatternSummaryItem } from "./patternSummary";
 export type {
   PracticeCardRow,
   PracticeSortBy,

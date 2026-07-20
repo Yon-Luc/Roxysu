@@ -12,6 +12,7 @@ import {
   YAxis,
 } from "recharts";
 import { QueryLanguageHelpButton } from "../../components/QueryLanguageHelpModal";
+import { PatternBrowserButton } from "../../components/PatternBrowserModal";
 import { BeatmapCover } from "../../components/BeatmapCover";
 import { BeatmapPreviewButton } from "../../components/BeatmapPreviewModal";
 import { CopyBeatmapSearchButton } from "../../components/CopyBeatmapSearchButton";
@@ -292,6 +293,8 @@ export function PracticeListPage() {
             <code className="text-subtle">mode:mania stars:5..6</code>
             {" · "}
             <QueryLanguageHelpButton />
+            {" · "}
+            <PatternBrowserButton onApplyQuery={(query) => applySearch(query)} />
           </p>
         </div>
         <form

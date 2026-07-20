@@ -11,7 +11,7 @@
   ],
   "scripts": {
     "dev": "concurrently \"bun run --cwd apps/server dev\" \"bun run --filter '@roxysu/realm-reader' dev\"",
-    "test": "bun run --cwd apps/server test && bun run --filter '@roxysu/pattern-7k' test"
+    "test": "bun run --cwd apps/server test && bun run --filter '@roxysu/pattern-7k' test && bun run --filter '@roxysu/timing-analysis' test && bun run --filter '@roxysu/audio-analysis' test"
   },
   "devDependencies": {
     "concurrently": "^9.0.0"

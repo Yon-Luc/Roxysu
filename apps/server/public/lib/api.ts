@@ -306,6 +306,7 @@ export type MapgenGenerateInput = {
   bpm?: number;
   seed?: number;
   endSec?: number;
+  dan?: string;
   format?: "zip" | "osu";
 };
 
@@ -317,6 +318,13 @@ export async function generateMapgenPack(
   bpm: string | null;
   notes: string | null;
   dominant: string | null;
+  offsetMs: string | null;
+  bpmConfidence: string | null;
+  bpmAlts: string | null;
+  danTarget: string | null;
+  estDiff: string | null;
+  sunnyStar: string | null;
+  lnPct: string | null;
 }> {
   const form = new FormData();
   form.append("audio", input.audio);
@@ -335,6 +343,7 @@ export async function generateMapgenPack(
     bpm: input.bpm,
     seed: input.seed,
     endSec: input.endSec,
+    dan: input.dan,
     format: input.format ?? "zip",
   };
   for (const [key, value] of Object.entries(fields)) {
@@ -368,6 +377,13 @@ export async function generateMapgenPack(
     bpm: res.headers.get("X-Mapgen-Bpm"),
     notes: res.headers.get("X-Mapgen-Notes"),
     dominant: res.headers.get("X-Mapgen-Dominant"),
+    offsetMs: res.headers.get("X-Mapgen-Offset-Ms"),
+    bpmConfidence: res.headers.get("X-Mapgen-Bpm-Confidence"),
+    bpmAlts: res.headers.get("X-Mapgen-Bpm-Alts"),
+    danTarget: res.headers.get("X-Mapgen-Dan-Target"),
+    estDiff: res.headers.get("X-Mapgen-Est-Diff"),
+    sunnyStar: res.headers.get("X-Mapgen-Sunny-Star"),
+    lnPct: res.headers.get("X-Mapgen-Ln"),
   };
 }
 

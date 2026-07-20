@@ -14,6 +14,7 @@ import {
   resolveFfmpegPath,
 } from "../shared/ffmpeg-path";
 import { buildZip } from "../map-analysis/zipStore";
+import { runSunnyEstimatorFromText } from "../map-analysis/sunnyEstimator";
 
 const AUDIO_EXTS = new Set([
   ".mp3",
@@ -37,9 +38,44 @@ function parseNum(value: unknown): number | undefined {
 }
 
 function parseStr(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const t = value.trim();
-  return t.length > 0 ? t : undefined;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+  return undefined;
+}
+
+function setMapgenHeaders(
+  set: { headers: Record<string, string | number> },
+  result: ReturnType<typeof generateMapFromAudio>,
+  analysis: ReturnType<typeof analyzeGeneratedPatterns>,
+  osuText: string,
+): void {
+  set.headers["X-Mapgen-Bpm"] = String(result.bpm);
+  set.headers["X-Mapgen-Notes"] = String(result.notes.length);
+  set.headers["X-Mapgen-Dominant"] = analysis.dominantPattern;
+  set.headers["X-Mapgen-Segments"] = String(result.segments.length);
+  set.headers["X-Mapgen-Offset-Ms"] = String(result.timingOffsetMs);
+  set.headers["X-Mapgen-Bpm-Confidence"] = String(
+    Math.round(result.bpmConfidence * 100),
+  );
+  if (result.bpmAlternates.length > 0) {
+    set.headers["X-Mapgen-Bpm-Alts"] = result.bpmAlternates.join(",");
+  }
+  if (result.dan) {
+    set.headers["X-Mapgen-Dan-Target"] = result.dan.label;
+  }
+  set.headers["X-Mapgen-Ln"] = String(
+    Math.round((result.targets.ln ?? 0) * 100),
+  );
+
+  try {
+    const sunny = runSunnyEstimatorFromText(osuText);
+    set.headers["X-Mapgen-Est-Diff"] = sunny.estDiff;
+    set.headers["X-Mapgen-Sunny-Star"] = sunny.star.toFixed(2);
+  } catch {
+    // Sunny can fail on very short charts; pack is still valid.
+  }
 }
 
 export const mapgenRoutes = new Elysia({ prefix: "/mapgen" })
@@ -113,7 +149,10 @@ export const mapgenRoutes = new Elysia({ prefix: "/mapgen" })
           "Generated Chart";
         const artist = parseStr(body.artist) ?? "Unknown";
         const creator = parseStr(body.creator) ?? "Roxysu Mapgen";
-        const version = parseStr(body.version) ?? "Generated";
+        const dan = parseStr(body.dan);
+        const version =
+          parseStr(body.version) ??
+          (dan ? undefined : "Generated");
 
         const result = generateMapFromAudio(
           audioAnalysis,
@@ -128,12 +167,15 @@ export const mapgenRoutes = new Elysia({ prefix: "/mapgen" })
           {
             bpm: parseNum(body.bpm),
             seed: parseNum(body.seed),
+            dan,
             endMs:
               parseNum(body.endSec) != null
                 ? parseNum(body.endSec)! * 1000
                 : undefined,
             snapDivisor: parseNum(body.snapDivisor),
             segmentBeats: parseNum(body.segmentBeats),
+            noteStride: parseNum(body.noteStride),
+            timingOffsetMs: parseNum(body.timingOffsetMs),
             audioFilename: audioName,
             metadata: {
               title,
@@ -146,17 +188,16 @@ export const mapgenRoutes = new Elysia({ prefix: "/mapgen" })
         );
 
         const osuText = buildManiaOsuText(result.chart);
-        const osuName = `${title.replace(/[^\w.\- ]+/g, "_")} [${version}].osu`;
+        const osuName = `${title.replace(/[^\w.\- ]+/g, "_")} [${result.chart.metadata.version}].osu`;
         const analysis = analyzeGeneratedPatterns(result.notes);
 
         const format = parseStr(body.format) ?? "zip";
+        setMapgenHeaders(set, result, analysis, osuText);
+
         if (format === "osu") {
           set.headers["Content-Type"] = "application/octet-stream";
           set.headers["Content-Disposition"] =
             `attachment; filename="${osuName.replace(/"/g, "")}"`;
-          set.headers["X-Mapgen-Bpm"] = String(result.bpm);
-          set.headers["X-Mapgen-Notes"] = String(result.notes.length);
-          set.headers["X-Mapgen-Dominant"] = analysis.dominantPattern;
           return new Response(osuText);
         }
 
@@ -179,10 +220,6 @@ export const mapgenRoutes = new Elysia({ prefix: "/mapgen" })
         set.headers["Content-Type"] = "application/zip";
         set.headers["Content-Disposition"] =
           `attachment; filename="${zipName.replace(/"/g, "")}"`;
-        set.headers["X-Mapgen-Bpm"] = String(result.bpm);
-        set.headers["X-Mapgen-Notes"] = String(result.notes.length);
-        set.headers["X-Mapgen-Dominant"] = analysis.dominantPattern;
-        set.headers["X-Mapgen-Segments"] = String(result.segments.length);
         return new Response(zip);
       } catch (err) {
         set.status = 500;
@@ -216,6 +253,9 @@ export const mapgenRoutes = new Elysia({ prefix: "/mapgen" })
         endSec: t.Optional(t.String()),
         snapDivisor: t.Optional(t.String()),
         segmentBeats: t.Optional(t.String()),
+        noteStride: t.Optional(t.String()),
+        timingOffsetMs: t.Optional(t.String()),
+        dan: t.Optional(t.String()),
         format: t.Optional(t.String()),
       }),
     },

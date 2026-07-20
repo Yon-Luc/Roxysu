@@ -25,6 +25,7 @@ type CliArgs = {
   chordstream?: number;
   bracket?: number;
   ln?: number;
+  dan?: string;
   ffmpegPath?: string;
   verify: boolean;
   help: boolean;
@@ -56,6 +57,7 @@ Metadata:
 
 Other:
   --bpm              Override detected BPM
+  --dan              Target Sunny dan preset (regular-4, ln-5, "Regular 4", …)
   --seed             RNG seed for reproducible patterns
   --end              Stop generating after N seconds
   --ffmpeg           Path to ffmpeg binary (or set FFMPEG_PATH)
@@ -64,7 +66,7 @@ Other:
 
 Examples:
   bun run mapgen -- --mp3 track.mp3 -o out.osu --delay 0.5 --ln 0.2
-  bun run mapgen -- --mp3 track.mp3 -o out.osu --jack 0.4 --chordjack 0.3 --seed 1
+  bun run mapgen -- --mp3 track.mp3 -o out.osu --dan regular-4 --seed 1
 
 Requires ffmpeg on PATH (nix develop includes it).
 `);
@@ -150,6 +152,10 @@ function parseArgs(argv: string[]): CliArgs {
         args.ln = Number(next);
         i += 1;
         break;
+      case "--dan":
+        args.dan = next;
+        i += 1;
+        break;
       case "--ffmpeg":
         args.ffmpegPath = next;
         i += 1;
@@ -207,7 +213,11 @@ async function main(): Promise<void> {
   });
 
   console.log(
-    `BPM: ${audio.bpm?.toFixed(1) ?? "?"} (confidence ${((audio.bpmConfidence ?? 0) * 100).toFixed(0)}%)`,
+    `BPM: ${audio.bpm?.toFixed(1) ?? "?"} (confidence ${((audio.bpmConfidence ?? 0) * 100).toFixed(0)}%)` +
+      (audio.bpmAlternates?.length
+        ? ` alts=[${audio.bpmAlternates.join(", ")}]`
+        : "") +
+      ` offset=${audio.timingOffsetMs}ms`,
   );
   console.log(`Targets: ${JSON.stringify(targets)}`);
 
@@ -224,12 +234,13 @@ async function main(): Promise<void> {
     {
       bpm: args.bpm,
       seed: args.seed,
+      dan: args.dan,
       endMs: args.endSec != null ? args.endSec * 1000 : undefined,
       metadata: {
         title: args.title ?? audioBasename.replace(/\.[^.]+$/, ""),
         artist: args.artist ?? "Unknown",
         creator: args.creator,
-        version: args.version,
+        version: args.version === "Generated" && args.dan ? undefined : args.version,
       },
       audioFilename: audioBasename,
     },
@@ -239,7 +250,12 @@ async function main(): Promise<void> {
   writeFileSync(outPath, osuText, "utf8");
 
   console.log(`Wrote ${result.notes.length} objects → ${outPath}`);
-  console.log(`Segments: ${result.segments.length} (${result.segments.map((s) => s.pattern).join(", ")})`);
+  console.log(
+    `Segments: ${result.segments.length} (${result.segments.map((s) => s.pattern).join(", ")})`,
+  );
+  if (result.dan) {
+    console.log(`Dan target: ${result.dan.label} (LN ${(result.targets.ln * 100).toFixed(0)}%)`);
+  }
 
   if (args.verify) {
     const analysis = analyzeGeneratedPatterns(result.notes);

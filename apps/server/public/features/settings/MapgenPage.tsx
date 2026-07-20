@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type DragEvent } from "react";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { DAN_PRESETS, resolveDanPreset } from "@roxysu/mapgen-core";
 import { PageTitle } from "../../components/PageTitle";
 import { fetchMapgenStatus, generateMapgenPack } from "../../lib/api";
 
@@ -55,6 +56,26 @@ const PATTERN_FIELDS: Array<{
     defaultValue: 0.15,
   },
 ];
+
+function defaultTargets(): Record<PatternKey, number> {
+  return Object.fromEntries(
+    PATTERN_FIELDS.map((f) => [f.key, f.defaultValue]),
+  ) as Record<PatternKey, number>;
+}
+
+function targetsFromDan(danId: string): Record<PatternKey, number> | null {
+  const preset = resolveDanPreset(danId);
+  if (!preset) return null;
+  const bias = preset.patternBias;
+  return {
+    delay: bias.delay ?? 0,
+    jack: bias.jack ?? 0,
+    chordjack: bias.chordjack ?? 0,
+    chordstream: bias.chordstream ?? 0,
+    bracket: bias.bracket ?? 0,
+    ln: preset.ln,
+  };
+}
 
 type DropZoneProps = {
   label: string;
@@ -176,17 +197,21 @@ export function MapgenPage() {
   const [bpm, setBpm] = useState("");
   const [seed, setSeed] = useState("");
   const [endSec, setEndSec] = useState("");
-  const [targets, setTargets] = useState<Record<PatternKey, number>>(() =>
-    Object.fromEntries(
-      PATTERN_FIELDS.map((f) => [f.key, f.defaultValue]),
-    ) as Record<PatternKey, number>,
-  );
+  const [dan, setDan] = useState("");
+  const [targets, setTargets] = useState<Record<PatternKey, number>>(defaultTargets);
 
   const [lastResult, setLastResult] = useState<{
     filename: string;
     bpm: string | null;
     notes: string | null;
     dominant: string | null;
+    offsetMs: string | null;
+    bpmConfidence: string | null;
+    bpmAlts: string | null;
+    danTarget: string | null;
+    estDiff: string | null;
+    sunnyStar: string | null;
+    lnPct: string | null;
   } | null>(null);
 
   useEffect(() => {
@@ -229,6 +254,7 @@ export function MapgenPage() {
         bpm: bpm ? Number(bpm) : undefined,
         seed: seed ? Number(seed) : undefined,
         endSec: endSec ? Number(endSec) : undefined,
+        dan: dan || undefined,
       });
     },
     onSuccess: (result) => {
@@ -237,6 +263,13 @@ export function MapgenPage() {
         bpm: result.bpm,
         notes: result.notes,
         dominant: result.dominant,
+        offsetMs: result.offsetMs,
+        bpmConfidence: result.bpmConfidence,
+        bpmAlts: result.bpmAlts,
+        danTarget: result.danTarget,
+        estDiff: result.estDiff,
+        sunnyStar: result.sunnyStar,
+        lnPct: result.lnPct,
       });
       const url = URL.createObjectURL(result.blob);
       const a = document.createElement("a");
@@ -246,6 +279,16 @@ export function MapgenPage() {
       URL.revokeObjectURL(url);
     },
   });
+
+  const applyDan = (nextDan: string) => {
+    setDan(nextDan);
+    if (!nextDan) return;
+    const next = targetsFromDan(nextDan);
+    if (!next) return;
+    setTargets(next);
+    const preset = resolveDanPreset(nextDan);
+    if (preset) setVersion(preset.label);
+  };
 
   const ffmpegOk = statusQuery.data?.ffmpegAvailable === true;
 
@@ -311,6 +354,36 @@ export function MapgenPage() {
             placeholder="auto-detect"
             mono
           />
+          <label className="block">
+            <span className="text-xs font-semibold uppercase tracking-wide text-faint">
+              Dan target
+            </span>
+            <select
+              value={dan}
+              onChange={(e) => applyDan(e.target.value)}
+              className="mt-1.5 w-full rounded-xl border border-line bg-elevated/50 px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none"
+            >
+              <option value="">None (manual mix)</option>
+              <optgroup label="7K Regular (RC)">
+                {DAN_PRESETS.filter((p) => p.axis === "rc").map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label} (~{p.targetStar.toFixed(1)}★)
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="7K LN">
+                {DAN_PRESETS.filter((p) => p.axis === "ln").map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label} (~{p.targetStar.toFixed(1)}★)
+                  </option>
+                ))}
+              </optgroup>
+            </select>
+            <p className="mt-1 text-xs text-faint">
+              Sets density, LN floor, and pattern bias. Exact Sunny dan still
+              varies with song length.
+            </p>
+          </label>
           <Field
             label="Seed"
             value={seed}
@@ -384,7 +457,24 @@ export function MapgenPage() {
           </p>
           <p className="mt-2">
             {lastResult.bpm ? `${lastResult.bpm} BPM` : "BPM n/a"}
+            {lastResult.bpmConfidence
+              ? ` (${lastResult.bpmConfidence}% conf)`
+              : ""}
+            {lastResult.bpmAlts ? ` · alts ${lastResult.bpmAlts}` : ""}
+            {lastResult.offsetMs != null
+              ? ` · offset ${lastResult.offsetMs}ms`
+              : ""}
             {lastResult.notes ? ` · ${lastResult.notes} notes` : ""}
+            {lastResult.lnPct != null ? ` · LN ${lastResult.lnPct}%` : ""}
+          </p>
+          <p className="mt-1">
+            {lastResult.danTarget
+              ? `Target ${lastResult.danTarget}`
+              : "No dan target"}
+            {lastResult.estDiff
+              ? ` · Sunny says ${lastResult.estDiff}`
+              : ""}
+            {lastResult.sunnyStar ? ` (${lastResult.sunnyStar}★)` : ""}
             {lastResult.dominant
               ? ` · dominant ${lastResult.dominant}`
               : ""}
@@ -392,7 +482,8 @@ export function MapgenPage() {
           <p className="mt-2 text-xs text-faint">
             Import the .osz in osu!lazer (File → Import). Roxysu picks it up
             from lazer&apos;s library on the next sync (~60s) — it does not
-            scan a Songs folder.
+            scan a Songs folder. If BPM looks half/double, paste an alt above
+            and regenerate.
           </p>
         </section>
       ) : null}

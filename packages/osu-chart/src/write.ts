@@ -40,8 +40,9 @@ function formatHitObject(
   const x = columnToX(note.column, columnCount);
   const isHold = note.endMs > note.startMs + 20;
   const type = isHold ? 128 : 1;
+  // Hold syntax: x,y,time,type,hitSound,endTime:hitSample
   if (isHold) {
-    return `${x},192,${Math.round(note.startMs)},${type},0,0:${Math.round(note.endMs)}:0:0:`;
+    return `${x},192,${Math.round(note.startMs)},${type},0,${Math.round(note.endMs)}:0:0:0:0:`;
   }
   return `${x},192,${Math.round(note.startMs)},${type},0,0:0:0:0:`;
 }

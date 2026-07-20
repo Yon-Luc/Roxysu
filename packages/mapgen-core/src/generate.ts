@@ -6,6 +6,7 @@ import {
 } from "@roxysu/osu-chart";
 import type { PatternLabelV2 } from "@roxysu/pattern-7k";
 import { analyze7kStructuralNotes } from "@roxysu/pattern-7k";
+import { resolveDanPreset } from "./danPresets";
 import { PATTERN_EMITTERS, applyLnRatio } from "./templates";
 import { createRng, normalizeTargets, pickWeighted } from "./rng";
 import type { MapgenOptions, MapgenResult, PatternTargets } from "./types";
@@ -25,30 +26,67 @@ function resolveBpm(audio: AudioAnalysisResult, override?: number): number {
   return 120;
 }
 
+function hasExplicitPatternWeights(raw: PatternTargets): boolean {
+  return (
+    (raw.delay != null && raw.delay > 0) ||
+    (raw.jack != null && raw.jack > 0) ||
+    (raw.chordjack != null && raw.chordjack > 0) ||
+    (raw.chordstream != null && raw.chordstream > 0) ||
+    (raw.bracket != null && raw.bracket > 0)
+  );
+}
+
 /** Generate a 7K mania chart from audio analysis + pattern targets. */
 export function generateMapFromAudio(
   audio: AudioAnalysisResult,
   rawTargets: PatternTargets = {},
   options: MapgenOptions = {},
 ): MapgenResult {
+  const dan = resolveDanPreset(options.dan);
+  const applyDanPatternBias = options.applyDanPatternBias !== false;
+  const applyDanLn = options.applyDanLn !== false;
+
   const columnCount = options.columnCount ?? 7;
-  const snapDivisor = options.snapDivisor ?? 4;
-  const segmentBeats = options.segmentBeats ?? 8;
+  const snapDivisor =
+    options.snapDivisor ?? dan?.snapDivisor ?? 4;
+  const noteStride = options.noteStride ?? dan?.noteStride ?? 1;
+  const segmentBeats =
+    options.segmentBeats ?? dan?.segmentBeats ?? 8;
   const seed = options.seed ?? Date.now();
   const rng = createRng(seed);
 
-  const merged = { ...DEFAULT_TARGETS, ...rawTargets };
-  const lnTarget = merged.ln ?? 0;
-  const patternTargets = normalizeTargets(
-    Object.fromEntries(
-      Object.entries(merged).filter(([k]) => k !== "ln"),
-    ),
-  );
+  const useDanPatterns =
+    Boolean(dan) &&
+    applyDanPatternBias &&
+    !hasExplicitPatternWeights(rawTargets);
+
+  const patternSource: PatternTargets = useDanPatterns
+    ? { ...dan!.patternBias }
+    : { ...DEFAULT_TARGETS, ...rawTargets };
+
+  const lnExplicit = rawTargets.ln != null;
+  const lnTarget = lnExplicit
+    ? (rawTargets.ln ?? 0)
+    : dan && applyDanLn
+      ? dan.ln
+      : (DEFAULT_TARGETS.ln ?? 0);
+
+  // RC dan must stay under Sunny's 20% LN threshold; LN dan must stay above.
+  let lnFinal = lnTarget;
+  if (dan?.axis === "rc" && lnFinal >= 0.2) lnFinal = 0.15;
+  if (dan?.axis === "ln" && lnFinal < 0.2) lnFinal = Math.max(lnFinal, 0.25);
+
+  const { ln: _lnIgnored, ...patternOnly } = patternSource;
+  const patternTargets = normalizeTargets(patternOnly);
 
   const bpm = resolveBpm(audio, options.bpm);
   const beatMs = 60_000 / bpm;
   const snapMs = beatMs / snapDivisor;
-  const endMs = options.endMs ?? audio.durationMs;
+  const timingOffsetMs =
+    options.timingOffsetMs ?? audio.timingOffsetMs ?? 0;
+  let endMs = options.endMs ?? audio.durationMs;
+  // If truncate point is before music start, fall back to full track.
+  if (endMs <= timingOffsetMs) endMs = audio.durationMs;
   const segmentMs = segmentBeats * beatMs;
 
   const weightItems = Object.entries(patternTargets).map(([key, weight]) => ({
@@ -58,10 +96,13 @@ export function generateMapFromAudio(
 
   const segments: MapgenResult["segments"] = [];
   const notes: ChartNote[] = [];
-  const ctx = { columnCount, snapMs, rng };
+  const ctx = { columnCount, snapMs, rng, noteStride };
 
-  for (let segStart = 0; segStart < endMs; segStart += segmentMs) {
-    const segEnd = Math.min(endMs, segStart + segmentMs);
+  const genStart = timingOffsetMs;
+  const genEnd = Math.max(genStart, endMs);
+
+  for (let segStart = genStart; segStart < genEnd; segStart += segmentMs) {
+    const segEnd = Math.min(genEnd, segStart + segmentMs);
     const pattern = pickWeighted(weightItems, rng);
     segments.push({ startMs: segStart, endMs: segEnd, pattern });
 
@@ -73,18 +114,22 @@ export function generateMapFromAudio(
     notes.push(...emitted);
   }
 
-  const withLn = applyLnRatio(notes, lnTarget, beatMs, rng);
+  const withLn = applyLnRatio(notes, lnFinal, beatMs, rng);
 
   const sorted = withLn.sort(
     (a, b) => a.startMs - b.startMs || a.column - b.column,
   );
+
+  const version =
+    options.metadata?.version ??
+    (dan ? dan.label : "Generated");
 
   const chart: ManiaOsuChart = {
     metadata: {
       title: options.metadata?.title ?? "Generated Chart",
       artist: options.metadata?.artist ?? "Unknown",
       creator: options.metadata?.creator ?? "Roxysu Mapgen",
-      version: options.metadata?.version ?? "Generated",
+      version,
       audioFilename: options.audioFilename ?? "audio.mp3",
       backgroundFilename: options.metadata?.backgroundFilename,
     },
@@ -93,7 +138,7 @@ export function generateMapFromAudio(
       overallDifficulty: 8,
       hpDrainRate: 7,
     },
-    timingPoints: [[0, beatMs]],
+    timingPoints: [[timingOffsetMs, beatMs]],
     notes: sorted,
   };
 
@@ -102,8 +147,12 @@ export function generateMapFromAudio(
     notes: sorted,
     audio,
     segments,
-    targets: { ...patternTargets, ln: lnTarget },
+    targets: { ...patternTargets, ln: lnFinal },
     bpm,
+    timingOffsetMs,
+    dan,
+    bpmAlternates: audio.bpmAlternates ?? [],
+    bpmConfidence: audio.bpmConfidence ?? 0,
   };
 }
 

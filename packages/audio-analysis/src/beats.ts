@@ -2,13 +2,26 @@ import type { BeatOnset } from "./types";
 
 const MIN_BPM = 60;
 const MAX_BPM = 220;
+/** Prefer tempi in this band when half/double are ambiguous (typical dance/pop BPM). */
+const PREFERRED_BPM_CENTER = 128;
+const PREFERRED_BPM_SIGMA = 42;
+
+export type BpmEstimate = {
+  bpm: number | null;
+  confidence: number;
+  /** Strong alternate candidates (usually half/double), excluding the chosen BPM. */
+  alternates: number[];
+};
+
+function musicalWeight(bpm: number): number {
+  const d = bpm - PREFERRED_BPM_CENTER;
+  return Math.exp(-(d * d) / (2 * PREFERRED_BPM_SIGMA * PREFERRED_BPM_SIGMA));
+}
 
 /** Estimate tempo from onset IOIs using a histogram peak in BPM space. */
-export function estimateBpm(
-  onsets: BeatOnset[],
-): { bpm: number | null; confidence: number } {
+export function estimateBpm(onsets: BeatOnset[]): BpmEstimate {
   if (onsets.length < 4) {
-    return { bpm: null, confidence: 0 };
+    return { bpm: null, confidence: 0, alternates: [] };
   }
 
   const iois: number[] = [];
@@ -19,7 +32,7 @@ export function estimateBpm(
     }
   }
 
-  if (iois.length < 3) return { bpm: null, confidence: 0 };
+  if (iois.length < 3) return { bpm: null, confidence: 0, alternates: [] };
 
   const bins = new Map<number, number>();
   for (const ioi of iois) {
@@ -30,19 +43,38 @@ export function estimateBpm(
     }
   }
 
-  let bestBpm = 0;
-  let bestCount = 0;
-  for (const [bpm, count] of bins) {
-    if (count > bestCount) {
-      bestBpm = bpm;
-      bestCount = count;
+  const ranked = [...bins.entries()]
+    .map(([bpm, count]) => ({
+      bpm,
+      count,
+      score: count * musicalWeight(bpm),
+    }))
+    .sort((a, b) => b.score - a.score || b.count - a.count);
+
+  const best = ranked[0];
+  if (!best || best.bpm <= 0) return { bpm: null, confidence: 0, alternates: [] };
+
+  // Prefer double-tempo when the winner is unusually slow and half has similar support.
+  let chosen = best;
+  if (chosen.bpm < 85) {
+    const doubled = ranked.find((r) => r.bpm === chosen.bpm * 2);
+    if (doubled && doubled.count >= chosen.count * 0.55) {
+      chosen = doubled;
+    }
+  } else if (chosen.bpm > 190) {
+    const halved = ranked.find((r) => r.bpm === Math.round(chosen.bpm / 2));
+    if (halved && halved.count >= chosen.count * 0.55) {
+      chosen = halved;
     }
   }
 
-  if (bestBpm <= 0) return { bpm: null, confidence: 0 };
+  const confidence = Math.min(1, chosen.count / iois.length);
+  const alternates = ranked
+    .filter((r) => r.bpm !== chosen.bpm)
+    .slice(0, 3)
+    .map((r) => r.bpm);
 
-  const confidence = Math.min(1, bestCount / iois.length);
-  return { bpm: bestBpm, confidence };
+  return { bpm: chosen.bpm, confidence, alternates };
 }
 
 /** Snap onsets to a regular beat grid and return downbeat-aligned beats. */
@@ -77,4 +109,31 @@ export function refineBeatsFromOnsets(
   }
 
   return beats;
+}
+
+/**
+ * Pick a timing origin so charts start on the music, not at file t=0.
+ * Uses the earliest beat in the first quarter of the track (or first onset).
+ */
+export function resolveTimingOffsetMs(
+  beats: BeatOnset[],
+  onsets: BeatOnset[],
+  durationMs: number,
+): number {
+  const cutoff = Math.max(durationMs * 0.35, 15_000);
+  const earlyBeats = beats.filter((b) => b.timeMs >= 0 && b.timeMs <= cutoff);
+  if (earlyBeats.length > 0) {
+    return Math.max(0, Math.round(earlyBeats[0]!.timeMs));
+  }
+  if (beats.length > 0) {
+    return Math.max(0, Math.round(beats[0]!.timeMs));
+  }
+  const earlyOnsets = onsets.filter((o) => o.timeMs >= 0 && o.timeMs <= cutoff);
+  if (earlyOnsets.length > 0) {
+    return Math.max(0, Math.round(earlyOnsets[0]!.timeMs));
+  }
+  if (onsets.length > 0) {
+    return Math.max(0, Math.round(onsets[0]!.timeMs));
+  }
+  return 0;
 }

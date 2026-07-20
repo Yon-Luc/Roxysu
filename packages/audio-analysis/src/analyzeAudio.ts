@@ -1,5 +1,9 @@
 import { decodeAudioFile } from "./ffmpeg";
-import { estimateBpm, refineBeatsFromOnsets } from "./beats";
+import {
+  estimateBpm,
+  refineBeatsFromOnsets,
+  resolveTimingOffsetMs,
+} from "./beats";
 import { buildBeatGrid, detectOnsets } from "./onsets";
 import { detectSections } from "./sections";
 import type {
@@ -20,7 +24,7 @@ export function analyzeDecodedAudio(
     onsetThreshold: options.onsetThreshold,
   });
 
-  const { bpm, confidence } = estimateBpm(onsets);
+  const { bpm, confidence, alternates } = estimateBpm(onsets);
   const beats =
     bpm != null
       ? refineBeatsFromOnsets(onsets, bpm, decoded.durationMs)
@@ -32,12 +36,20 @@ export function analyzeDecodedAudio(
     options.sectionWindowSec ?? 8,
   );
 
+  const timingOffsetMs = resolveTimingOffsetMs(
+    beats,
+    onsets,
+    decoded.durationMs,
+  );
+
   return {
     algorithm: "audio-v1",
     durationMs: decoded.durationMs,
     sampleRate: decoded.sampleRate,
     bpm,
     bpmConfidence: confidence,
+    bpmAlternates: alternates,
+    timingOffsetMs,
     beats,
     onsets,
     sections,

@@ -23,9 +23,22 @@ describe("estimateBpm", () => {
       timeMs: i * 500,
       strength: 1,
     }));
-    const { bpm, confidence } = estimateBpm(onsets);
+    const { bpm, confidence, alternates } = estimateBpm(onsets);
     expect(bpm).toBe(120);
     expect(confidence).toBeGreaterThan(0.3);
+    expect(alternates).not.toContain(120);
+  });
+
+  test("prefers double-tempo when half is unusually slow", () => {
+    // 882ms IOI ≈ 68 BPM raw; musical preference + slow-tempo boost → 136.
+    const onsets = Array.from({ length: 24 }, (_, i) => ({
+      timeMs: i * 882,
+      strength: 1,
+    }));
+    const { bpm } = estimateBpm(onsets);
+    expect(bpm).not.toBeNull();
+    expect(bpm!).toBeGreaterThanOrEqual(120);
+    expect(bpm!).toBeLessThanOrEqual(140);
   });
 });
 

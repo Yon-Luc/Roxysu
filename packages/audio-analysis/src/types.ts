@@ -15,6 +15,10 @@ export type AudioAnalysisResult = {
   sampleRate: number;
   bpm: number | null;
   bpmConfidence: number;
+  /** Other plausible tempi (half/double), excluding `bpm`. */
+  bpmAlternates: number[];
+  /** Suggested chart offset — first musical beat, not always 0. */
+  timingOffsetMs: number;
   beats: BeatOnset[];
   onsets: BeatOnset[];
   sections: AudioSection[];

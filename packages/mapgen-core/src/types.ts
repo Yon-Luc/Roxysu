@@ -65,4 +65,6 @@ export type MapgenResult = {
   dan: DanPreset | null;
   bpmAlternates: number[];
   bpmConfidence: number;
+  /** Uninherited timing points written into the chart. */
+  timingPoints: Array<[number, number]>;
 };

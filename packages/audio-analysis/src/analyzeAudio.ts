@@ -6,6 +6,11 @@ import {
 } from "./beats";
 import { buildBeatGrid, detectOnsets } from "./onsets";
 import { detectSections } from "./sections";
+import {
+  estimateTempoMap,
+  refineBeatsFromTempoMap,
+  tempoMapToTimingPoints,
+} from "./tempoMap";
 import type {
   AudioAnalysisOptions,
   AudioAnalysisResult,
@@ -25,10 +30,14 @@ export function analyzeDecodedAudio(
   });
 
   const { bpm, confidence, alternates } = estimateBpm(onsets);
+  const tempoMap = estimateTempoMap(onsets, decoded.durationMs, bpm);
+
   const beats =
-    bpm != null
-      ? refineBeatsFromOnsets(onsets, bpm, decoded.durationMs)
-      : buildBeatGrid(onsets, 120, decoded.durationMs);
+    tempoMap.length > 1
+      ? refineBeatsFromTempoMap(onsets, tempoMap, decoded.durationMs)
+      : bpm != null
+        ? refineBeatsFromOnsets(onsets, bpm, decoded.durationMs)
+        : buildBeatGrid(onsets, 120, decoded.durationMs);
 
   const sections = detectSections(
     decoded.samples,
@@ -42,6 +51,8 @@ export function analyzeDecodedAudio(
     decoded.durationMs,
   );
 
+  const timingPoints = tempoMapToTimingPoints(tempoMap, timingOffsetMs);
+
   return {
     algorithm: "audio-v1",
     durationMs: decoded.durationMs,
@@ -50,6 +61,8 @@ export function analyzeDecodedAudio(
     bpmConfidence: confidence,
     bpmAlternates: alternates,
     timingOffsetMs,
+    tempoMap,
+    timingPoints,
     beats,
     onsets,
     sections,
@@ -79,6 +92,39 @@ export function synthesizeImpulseTrack(
 
   for (let i = 0; i < count; i += 1) {
     const idx = Math.round(((i * intervalMs) / 1000) * sampleRate);
+    if (idx >= 0 && idx < samples.length) samples[idx] = 1;
+  }
+
+  return {
+    samples,
+    sampleRate,
+    durationMs: (samples.length / sampleRate) * 1000,
+  };
+}
+
+/**
+ * Two-tempo click track for tempo-map tests.
+ * First half uses `intervalAMs`, second half uses `intervalBMs`.
+ */
+export function synthesizeTwoTempoTrack(
+  intervalAMs: number,
+  countA: number,
+  intervalBMs: number,
+  countB: number,
+  sampleRate = 22_050,
+): DecodedAudio {
+  const switchMs = intervalAMs * (countA - 1);
+  const totalMs = switchMs + intervalBMs * (countB - 1) + 500;
+  const samples = new Float32Array(Math.ceil((totalMs / 1000) * sampleRate));
+
+  for (let i = 0; i < countA; i += 1) {
+    const t = i * intervalAMs;
+    const idx = Math.round((t / 1000) * sampleRate);
+    if (idx >= 0 && idx < samples.length) samples[idx] = 1;
+  }
+  for (let i = 0; i < countB; i += 1) {
+    const t = switchMs + i * intervalBMs;
+    const idx = Math.round((t / 1000) * sampleRate);
     if (idx >= 0 && idx < samples.length) samples[idx] = 1;
   }
 

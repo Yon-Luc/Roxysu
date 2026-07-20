@@ -9,16 +9,30 @@ export type AudioSection = {
   energy: number;
 };
 
+/** A stretch of constant tempo detected from audio. */
+export type TempoSegment = {
+  startMs: number;
+  endMs: number;
+  bpm: number;
+  beatLengthMs: number;
+  confidence: number;
+};
+
 export type AudioAnalysisResult = {
   algorithm: "audio-v1";
   durationMs: number;
   sampleRate: number;
+  /** Dominant / global BPM (mode of the tempo map). */
   bpm: number | null;
   bpmConfidence: number;
   /** Other plausible tempi (half/double), excluding `bpm`. */
   bpmAlternates: number[];
   /** Suggested chart offset — first musical beat, not always 0. */
   timingOffsetMs: number;
+  /** Piecewise tempo — empty/single when the track is constant-BPM. */
+  tempoMap: TempoSegment[];
+  /** Uninherited timing points derived from `tempoMap` + offset. */
+  timingPoints: Array<[number, number]>;
   beats: BeatOnset[];
   onsets: BeatOnset[];
   sections: AudioSection[];

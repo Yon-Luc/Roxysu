@@ -212,6 +212,8 @@ export function MapgenPage() {
     estDiff: string | null;
     sunnyStar: string | null;
     lnPct: string | null;
+    timingPoints: string | null;
+    bpmMap: string | null;
   } | null>(null);
 
   useEffect(() => {
@@ -270,6 +272,8 @@ export function MapgenPage() {
         estDiff: result.estDiff,
         sunnyStar: result.sunnyStar,
         lnPct: result.lnPct,
+        timingPoints: result.timingPoints,
+        bpmMap: result.bpmMap,
       });
       const url = URL.createObjectURL(result.blob);
       const a = document.createElement("a");
@@ -466,6 +470,12 @@ export function MapgenPage() {
               : ""}
             {lastResult.notes ? ` · ${lastResult.notes} notes` : ""}
             {lastResult.lnPct != null ? ` · LN ${lastResult.lnPct}%` : ""}
+          </p>
+          <p className="mt-1">
+            {lastResult.timingPoints
+              ? `${lastResult.timingPoints} timing point${lastResult.timingPoints === "1" ? "" : "s"}`
+              : "Timing n/a"}
+            {lastResult.bpmMap ? ` · ${lastResult.bpmMap}` : ""}
           </p>
           <p className="mt-1">
             {lastResult.danTarget

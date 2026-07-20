@@ -68,6 +68,13 @@ function setMapgenHeaders(
   set.headers["X-Mapgen-Ln"] = String(
     Math.round((result.targets.ln ?? 0) * 100),
   );
+  set.headers["X-Mapgen-Timing-Points"] = String(result.timingPoints.length);
+  if (result.timingPoints.length > 1) {
+    const bpmChanges = result.timingPoints
+      .map(([t, beatLen]) => `${Math.round(t)}:${(60_000 / beatLen).toFixed(1)}`)
+      .join(",");
+    set.headers["X-Mapgen-Bpm-Map"] = bpmChanges;
+  }
 
   try {
     const sunny = runSunnyEstimatorFromText(osuText);

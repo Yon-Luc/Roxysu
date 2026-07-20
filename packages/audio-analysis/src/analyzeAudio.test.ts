@@ -4,6 +4,7 @@ import {
   detectOnsets,
   estimateBpm,
   synthesizeImpulseTrack,
+  synthesizeTwoTempoTrack,
 } from "./index";
 
 describe("detectOnsets", () => {
@@ -52,5 +53,18 @@ describe("analyzeDecodedAudio", () => {
     expect(Math.abs(result.bpm! - 120)).toBeLessThanOrEqual(6);
     expect(result.beats.length).toBeGreaterThan(0);
     expect(result.sections.length).toBeGreaterThan(0);
+    expect(result.timingPoints.length).toBeGreaterThanOrEqual(1);
+    expect(result.tempoMap.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test("detects BPM change on two-tempo click track", () => {
+    // 120 BPM (500ms) then 160 BPM (375ms)
+    const decoded = synthesizeTwoTempoTrack(500, 32, 375, 32);
+    const result = analyzeDecodedAudio(decoded);
+    expect(result.tempoMap.length).toBeGreaterThanOrEqual(2);
+    const bpms = result.tempoMap.map((s) => s.bpm);
+    expect(bpms.some((b) => Math.abs(b - 120) <= 6)).toBe(true);
+    expect(bpms.some((b) => Math.abs(b - 160) <= 8)).toBe(true);
+    expect(result.timingPoints.length).toBeGreaterThanOrEqual(2);
   });
 });

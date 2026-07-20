@@ -1,6 +1,8 @@
 import {
   beatmapSets,
   beatmaps,
+  beatmapDanRatings,
+  beatmapPatternAnalysis,
   imports,
   mastery,
   notes,
@@ -216,7 +218,9 @@ function deleteByIds(
     | typeof scoreMetrics
     | typeof mastery
     | typeof notes
-    | typeof beatmapTags,
+    | typeof beatmapTags
+    | typeof beatmapDanRatings
+    | typeof beatmapPatternAnalysis,
   idColumn: { name: string },
   ids: string[],
 ) {
@@ -628,6 +632,18 @@ function reconcileDeletes(
     deleteByIds(db, mastery, mastery.beatmapId as never, orphanBeatmaps);
     deleteByIds(db, notes, notes.beatmapId as never, orphanBeatmaps);
     deleteByIds(db, beatmapTags, beatmapTags.beatmapId as never, orphanBeatmaps);
+    deleteByIds(
+      db,
+      beatmapDanRatings,
+      beatmapDanRatings.beatmapId as never,
+      orphanBeatmaps,
+    );
+    deleteByIds(
+      db,
+      beatmapPatternAnalysis,
+      beatmapPatternAnalysis.beatmapId as never,
+      orphanBeatmaps,
+    );
     deleteByIds(db, beatmaps, beatmaps.id as never, orphanBeatmaps);
   }
 

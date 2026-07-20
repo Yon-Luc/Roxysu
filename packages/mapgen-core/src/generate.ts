@@ -36,6 +36,56 @@ function hasExplicitPatternWeights(raw: PatternTargets): boolean {
   );
 }
 
+function beatLengthAt(
+  timingPoints: Array<[number, number]>,
+  timeMs: number,
+): number {
+  if (timingPoints.length === 0) return 500;
+  let active = timingPoints[0]![1];
+  for (const [t, beatLen] of timingPoints) {
+    if (t > timeMs) break;
+    active = beatLen;
+  }
+  return active;
+}
+
+/**
+ * Resolve chart timing points.
+ * - BPM override → single constant timing point (user wins).
+ * - Else prefer audio.timingPoints / tempoMap when present.
+ */
+function resolveTimingPoints(
+  audio: AudioAnalysisResult,
+  timingOffsetMs: number,
+  bpmOverride: number | undefined,
+  fallbackBpm: number,
+): Array<[number, number]> {
+  const fallbackBeat = 60_000 / fallbackBpm;
+
+  if (bpmOverride != null && bpmOverride > 0) {
+    return [[timingOffsetMs, 60_000 / bpmOverride]];
+  }
+
+  if (audio.timingPoints && audio.timingPoints.length > 0) {
+    const points = audio.timingPoints.map(
+      ([t, beatLen]) => [t, beatLen] as [number, number],
+    );
+    if (points[0]![0] !== timingOffsetMs) {
+      points[0] = [timingOffsetMs, points[0]![1]];
+    }
+    return points;
+  }
+
+  if (audio.tempoMap && audio.tempoMap.length > 0) {
+    return audio.tempoMap.map((seg, i) => {
+      const t = i === 0 ? timingOffsetMs : Math.max(timingOffsetMs, seg.startMs);
+      return [t, seg.beatLengthMs] as [number, number];
+    });
+  }
+
+  return [[timingOffsetMs, fallbackBeat]];
+}
+
 /** Generate a 7K mania chart from audio analysis + pattern targets. */
 export function generateMapFromAudio(
   audio: AudioAnalysisResult,
@@ -80,14 +130,17 @@ export function generateMapFromAudio(
   const patternTargets = normalizeTargets(patternOnly);
 
   const bpm = resolveBpm(audio, options.bpm);
-  const beatMs = 60_000 / bpm;
-  const snapMs = beatMs / snapDivisor;
   const timingOffsetMs =
     options.timingOffsetMs ?? audio.timingOffsetMs ?? 0;
   let endMs = options.endMs ?? audio.durationMs;
-  // If truncate point is before music start, fall back to full track.
   if (endMs <= timingOffsetMs) endMs = audio.durationMs;
-  const segmentMs = segmentBeats * beatMs;
+
+  const timingPoints = resolveTimingPoints(
+    audio,
+    timingOffsetMs,
+    options.bpm,
+    bpm,
+  );
 
   const weightItems = Object.entries(patternTargets).map(([key, weight]) => ({
     key: key as PatternLabelV2,
@@ -96,25 +149,43 @@ export function generateMapFromAudio(
 
   const segments: MapgenResult["segments"] = [];
   const notes: ChartNote[] = [];
-  const ctx = { columnCount, snapMs, rng, noteStride };
 
-  const genStart = timingOffsetMs;
-  const genEnd = Math.max(genStart, endMs);
+  // Walk time using local snap so BPM changes mid-chart are respected.
+  let segStart = timingOffsetMs;
+  const genEnd = Math.max(segStart, endMs);
 
-  for (let segStart = genStart; segStart < genEnd; segStart += segmentMs) {
+  while (segStart < genEnd - 1) {
+    const localBeatMs = beatLengthAt(timingPoints, segStart);
+    const snapMs = localBeatMs / snapDivisor;
+    const segmentMs = segmentBeats * localBeatMs;
     const segEnd = Math.min(genEnd, segStart + segmentMs);
-    const pattern = pickWeighted(weightItems, rng);
-    segments.push({ startMs: segStart, endMs: segEnd, pattern });
 
-    const steps = Math.max(
-      1,
-      Math.floor((segEnd - segStart) / snapMs),
-    );
-    const emitted = PATTERN_EMITTERS[pattern](segStart, steps, ctx);
-    notes.push(...emitted);
+    // Truncate segment early if a timing point starts inside it.
+    let hardEnd = segEnd;
+    for (const [t] of timingPoints) {
+      if (t > segStart + 1 && t < hardEnd) {
+        hardEnd = t;
+        break;
+      }
+    }
+
+    const pattern = pickWeighted(weightItems, rng);
+    segments.push({ startMs: segStart, endMs: hardEnd, pattern });
+
+    const steps = Math.max(1, Math.floor((hardEnd - segStart) / snapMs));
+    const ctx = { columnCount, snapMs, rng, noteStride };
+    notes.push(...PATTERN_EMITTERS[pattern](segStart, steps, ctx));
+
+    segStart = hardEnd;
   }
 
-  const withLn = applyLnRatio(notes, lnFinal, beatMs, rng);
+  // LN lengths use the beat length at each note's start.
+  const withLn = applyLnRatio(
+    notes,
+    lnFinal,
+    (note) => beatLengthAt(timingPoints, note.startMs),
+    rng,
+  );
 
   const sorted = withLn.sort(
     (a, b) => a.startMs - b.startMs || a.column - b.column,
@@ -138,7 +209,7 @@ export function generateMapFromAudio(
       overallDifficulty: 8,
       hpDrainRate: 7,
     },
-    timingPoints: [[timingOffsetMs, beatMs]],
+    timingPoints,
     notes: sorted,
   };
 
@@ -153,6 +224,7 @@ export function generateMapFromAudio(
     dan,
     bpmAlternates: audio.bpmAlternates ?? [],
     bpmConfidence: audio.bpmConfidence ?? 0,
+    timingPoints,
   };
 }
 

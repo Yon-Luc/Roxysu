@@ -249,7 +249,17 @@ async function main(): Promise<void> {
   const osuText = buildManiaOsuText(result.chart);
   writeFileSync(outPath, osuText, "utf8");
 
-  console.log(`Wrote ${result.notes.length} objects → ${outPath}`);
+  console.log(
+    `Wrote ${result.notes.length} objects → ${outPath}`,
+  );
+  console.log(
+    `Timing points: ${result.timingPoints.length}` +
+      (result.timingPoints.length > 1
+        ? ` (${result.timingPoints
+            .map(([t, b]) => `${Math.round(t)}ms@${(60_000 / b).toFixed(1)}`)
+            .join(", ")})`
+        : ""),
+  );
   console.log(
     `Segments: ${result.segments.length} (${result.segments.map((s) => s.pattern).join(", ")})`,
   );

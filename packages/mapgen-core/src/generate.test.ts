@@ -3,6 +3,7 @@ import { parseOsuChart, isHold } from "@roxysu/osu-chart";
 import {
   analyzeDecodedAudio,
   synthesizeImpulseTrack,
+  synthesizeTwoTempoTrack,
 } from "@roxysu/audio-analysis";
 import {
   analyzeGeneratedPatterns,
@@ -81,6 +82,26 @@ describe("generateMapFromAudio", () => {
     expect(result.timingOffsetMs).toBe(offset);
     expect(result.chart.timingPoints[0]![0]).toBe(offset);
     expect(result.notes[0]!.startMs).toBeGreaterThanOrEqual(offset);
+  });
+
+  test("writes multiple timing points when audio has tempo changes", () => {
+    const decoded = synthesizeTwoTempoTrack(500, 28, 375, 28);
+    const audio = analyzeDecodedAudio(decoded);
+    const result = generateMapFromAudio(
+      audio,
+      { delay: 1, ln: 0 },
+      {
+        seed: 2,
+        timingOffsetMs: 0,
+        endMs: audio.durationMs,
+        metadata: { title: "Tempo", artist: "T" },
+      },
+    );
+
+    expect(result.timingPoints.length).toBeGreaterThanOrEqual(2);
+    expect(result.chart.timingPoints.length).toBe(
+      result.timingPoints.length,
+    );
   });
 
   test("dan preset applies density and LN floor for LN axis", () => {

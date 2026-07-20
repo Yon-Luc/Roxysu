@@ -116,10 +116,15 @@ export const PATTERN_EMITTERS: Record<PatternLabelV2, PatternEmitter> = {
 export function applyLnRatio(
   notes: ChartNote[],
   lnRatio: number,
-  beatLengthMs: number,
+  beatLengthMs: number | ((note: ChartNote) => number),
   rng: () => number,
 ): ChartNote[] {
   if (lnRatio <= 0) return notes;
+
+  const beatLenOf =
+    typeof beatLengthMs === "function"
+      ? beatLengthMs
+      : (_note: ChartNote) => beatLengthMs;
 
   // Avoid stacking holds that would collide on the same column.
   const byColumn = new Map<number, ChartNote[]>();
@@ -136,8 +141,9 @@ export function applyLnRatio(
     if (note.endMs > note.startMs + 20) return note;
     if (rng() > lnRatio) return note;
 
+    const localBeat = beatLenOf(note);
     const holdBeats = rng() > 0.7 ? 2 : 1;
-    let endMs = note.startMs + beatLengthMs * holdBeats;
+    let endMs = note.startMs + localBeat * holdBeats;
 
     const colNotes = byColumn.get(note.column) ?? [];
     const idx = colNotes.findIndex(
@@ -145,7 +151,10 @@ export function applyLnRatio(
     );
     const next = idx >= 0 ? colNotes[idx + 1] : undefined;
     if (next && endMs >= next.startMs - 10) {
-      endMs = Math.max(note.startMs, next.startMs - Math.round(beatLengthMs / 4));
+      endMs = Math.max(
+        note.startMs,
+        next.startMs - Math.round(localBeat / 4),
+      );
     }
     if (endMs <= note.startMs + 20) return note;
 

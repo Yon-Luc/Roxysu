@@ -2,6 +2,7 @@ export {
   analyzeAudioFile,
   analyzeDecodedAudio,
   synthesizeImpulseTrack,
+  synthesizeTwoTempoTrack,
 } from "./analyzeAudio";
 export { decodeAudioFile, isFfmpegAvailable } from "./ffmpeg";
 export { detectOnsets, buildBeatGrid } from "./onsets";
@@ -11,6 +12,11 @@ export {
   resolveTimingOffsetMs,
 } from "./beats";
 export type { BpmEstimate } from "./beats";
+export {
+  estimateTempoMap,
+  refineBeatsFromTempoMap,
+  tempoMapToTimingPoints,
+} from "./tempoMap";
 export { detectSections } from "./sections";
 export type {
   AudioAnalysisOptions,
@@ -19,4 +25,5 @@ export type {
   BeatOnset,
   DecodeAudioOptions,
   DecodedAudio,
+  TempoSegment,
 } from "./types";

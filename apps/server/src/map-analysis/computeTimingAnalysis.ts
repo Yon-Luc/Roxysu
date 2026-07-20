@@ -2,13 +2,18 @@ import { readFileSync } from "node:fs";
 import { eq } from "drizzle-orm";
 import { beatmaps, type Db } from "@roxysu/db/client.bun";
 import { parseOsuChart } from "@roxysu/osu-chart";
-import { analyzeAudioFile, isFfmpegAvailable } from "@roxysu/audio-analysis";
+import { analyzeAudioFile } from "@roxysu/audio-analysis";
 import {
   analyzeChartTiming,
   compareChartToAudio,
   type TimingIssue,
   type TimingIssueKind,
 } from "@roxysu/timing-analysis";
+import {
+  ffmpegUnavailableMessage,
+  isFfmpegAvailableAt,
+  resolveFfmpegPath,
+} from "../shared/ffmpeg-path";
 import {
   getOsuDataPath,
   lazerFileExists,
@@ -169,14 +174,15 @@ export async function analyzeMusicDrift(
     };
   }
 
-  if (!(await isFfmpegAvailable())) {
+  const ffmpegPath = resolveFfmpegPath();
+  if (!(await isFfmpegAvailableAt(ffmpegPath))) {
     return {
       audioBpm: null,
       audioBpmConfidence: 0,
       chartBpm: 0,
       driftRatio: 0,
       issues: [],
-      error: "ffmpeg is not available on PATH",
+      error: ffmpegUnavailableMessage(ffmpegPath),
     };
   }
 
@@ -205,7 +211,7 @@ export async function analyzeMusicDrift(
 
   try {
     const chart = parseOsuChart(osuText);
-    const audio = await analyzeAudioFile(audioPath);
+    const audio = await analyzeAudioFile(audioPath, { ffmpegPath });
     const comparison = compareChartToAudio(chart, audio);
 
     return {

@@ -505,8 +505,10 @@ function TimingAnalysisPanel({
           Music alignment
         </h3>
         <p className="mt-1 text-sm text-muted">
-          Compare note times to beats detected from the chart audio (requires
-          ffmpeg).
+          Compare note times to beats detected from the chart audio. Requires
+          ffmpeg on PATH, or set{" "}
+          <span className="font-mono text-xs">FFMPEG_PATH</span> (NixOS:{" "}
+          <span className="font-mono text-xs">nix develop</span> includes it).
         </p>
 
         {musicDrift && !musicDrift.error ? (

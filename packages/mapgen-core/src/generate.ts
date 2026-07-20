@@ -7,8 +7,18 @@ import {
 import type { PatternLabelV2 } from "@roxysu/pattern-7k";
 import { analyze7kStructuralNotes } from "@roxysu/pattern-7k";
 import { resolveDanPreset } from "./danPresets";
-import { PATTERN_EMITTERS, applyLnRatio } from "./templates";
+import { buildMusicalHitTimes } from "./musicGrid";
+import {
+  PATTERN_EMITTERS,
+  applyLnRatio,
+  ensureColumnCoverage,
+} from "./templates";
 import { createRng, normalizeTargets, pickWeighted } from "./rng";
+import { sanitizeManiaNotes } from "./sanitizeNotes";
+import {
+  filterTargetsForTier,
+  resolveTierConstraints,
+} from "./tierConstraints";
 import type { MapgenOptions, MapgenResult, PatternTargets } from "./types";
 
 const DEFAULT_TARGETS: PatternTargets = {
@@ -49,11 +59,6 @@ function beatLengthAt(
   return active;
 }
 
-/**
- * Resolve chart timing points.
- * - BPM override → single constant timing point (user wins).
- * - Else prefer audio.timingPoints / tempoMap when present.
- */
 function resolveTimingPoints(
   audio: AudioAnalysisResult,
   timingOffsetMs: number,
@@ -95,10 +100,11 @@ export function generateMapFromAudio(
   const dan = resolveDanPreset(options.dan);
   const applyDanPatternBias = options.applyDanPatternBias !== false;
   const applyDanLn = options.applyDanLn !== false;
+  const tier = resolveTierConstraints(dan);
 
   const columnCount = options.columnCount ?? 7;
-  const snapDivisor =
-    options.snapDivisor ?? dan?.snapDivisor ?? 4;
+  let snapDivisor = options.snapDivisor ?? dan?.snapDivisor ?? 4;
+  snapDivisor = Math.min(snapDivisor, tier.maxSnapDivisor);
   const noteStride = options.noteStride ?? dan?.noteStride ?? 1;
   const segmentBeats =
     options.segmentBeats ?? dan?.segmentBeats ?? 8;
@@ -121,13 +127,15 @@ export function generateMapFromAudio(
       ? dan.ln
       : (DEFAULT_TARGETS.ln ?? 0);
 
-  // RC dan must stay under Sunny's 20% LN threshold; LN dan must stay above.
   let lnFinal = lnTarget;
   if (dan?.axis === "rc" && lnFinal >= 0.2) lnFinal = 0.15;
   if (dan?.axis === "ln" && lnFinal < 0.2) lnFinal = Math.max(lnFinal, 0.25);
 
   const { ln: _lnIgnored, ...patternOnly } = patternSource;
-  const patternTargets = normalizeTargets(patternOnly);
+  let patternTargets = normalizeTargets(patternOnly);
+  patternTargets = normalizeTargets(
+    filterTargetsForTier(patternTargets, tier),
+  );
 
   const bpm = resolveBpm(audio, options.bpm);
   const timingOffsetMs =
@@ -142,6 +150,28 @@ export function generateMapFromAudio(
     bpm,
   );
 
+  // Effective stride: low tier often skips hits even when dan says stride 1.
+  const effectiveStride = Math.max(
+    noteStride,
+    tier.tier === "low" ? 2 : 1,
+  );
+
+  const allHitTimes = buildMusicalHitTimes(
+    audio,
+    timingPoints,
+    timingOffsetMs,
+    endMs,
+    {
+      snapDivisor,
+      onsetKeepQuantile: tier.onsetKeepQuantile,
+    },
+  );
+
+  // Apply stride across the full musical grid.
+  const stridedHits = allHitTimes.filter(
+    (_, i) => i % effectiveStride === 0,
+  );
+
   const weightItems = Object.entries(patternTargets).map(([key, weight]) => ({
     key: key as PatternLabelV2,
     weight,
@@ -150,17 +180,15 @@ export function generateMapFromAudio(
   const segments: MapgenResult["segments"] = [];
   const notes: ChartNote[] = [];
 
-  // Walk time using local snap so BPM changes mid-chart are respected.
   let segStart = timingOffsetMs;
   const genEnd = Math.max(segStart, endMs);
+  let hitCursor = 0;
 
   while (segStart < genEnd - 1) {
     const localBeatMs = beatLengthAt(timingPoints, segStart);
-    const snapMs = localBeatMs / snapDivisor;
     const segmentMs = segmentBeats * localBeatMs;
     const segEnd = Math.min(genEnd, segStart + segmentMs);
 
-    // Truncate segment early if a timing point starts inside it.
     let hardEnd = segEnd;
     for (const [t] of timingPoints) {
       if (t > segStart + 1 && t < hardEnd) {
@@ -169,27 +197,63 @@ export function generateMapFromAudio(
       }
     }
 
+    // Musical hits belonging to this segment.
+    const segHits: number[] = [];
+    while (
+      hitCursor < stridedHits.length &&
+      stridedHits[hitCursor]! < hardEnd
+    ) {
+      const t = stridedHits[hitCursor]!;
+      if (t >= segStart) segHits.push(t);
+      hitCursor += 1;
+    }
+
     const pattern = pickWeighted(weightItems, rng);
     segments.push({ startMs: segStart, endMs: hardEnd, pattern });
 
-    const steps = Math.max(1, Math.floor((hardEnd - segStart) / snapMs));
-    const ctx = { columnCount, snapMs, rng, noteStride };
-    notes.push(...PATTERN_EMITTERS[pattern](segStart, steps, ctx));
+    if (segHits.length > 0) {
+      notes.push(
+        ...PATTERN_EMITTERS[pattern]({
+          columnCount,
+          rng,
+          hitTimes: segHits,
+          beatMs: localBeatMs,
+          tier,
+        }),
+      );
+    }
 
     segStart = hardEnd;
   }
 
-  // LN lengths use the beat length at each note's start.
-  const withLn = applyLnRatio(
+  const withCoverage = ensureColumnCoverage(
     notes,
+    columnCount,
+    stridedHits,
+    rng,
+    tier.maxChordSize,
+  );
+
+  const withLn = applyLnRatio(
+    withCoverage,
     lnFinal,
     (note) => beatLengthAt(timingPoints, note.startMs),
     rng,
+    tier.minLnBeats,
   );
 
-  const sorted = withLn.sort(
-    (a, b) => a.startMs - b.startMs || a.column - b.column,
-  );
+  const sorted = sanitizeManiaNotes(withLn, {
+    minLnMs: (note) => {
+      const beat = beatLengthAt(timingPoints, note.startMs);
+      return Math.max(40, Math.round(beat * tier.minLnBeats));
+    },
+    maxChordSize: tier.maxChordSize,
+    minReleaseGapMs: (note) => {
+      if (tier.minReleaseGapBeats <= 0) return 0;
+      const beat = beatLengthAt(timingPoints, note.startMs);
+      return Math.round(beat * tier.minReleaseGapBeats);
+    },
+  });
 
   const version =
     options.metadata?.version ??
@@ -206,8 +270,8 @@ export function generateMapFromAudio(
     },
     difficulty: {
       columnCount,
-      overallDifficulty: 8,
-      hpDrainRate: 7,
+      overallDifficulty: tier.tier === "low" ? 6 : tier.tier === "mid" ? 7 : 8,
+      hpDrainRate: tier.tier === "low" ? 6 : tier.tier === "mid" ? 7 : 7,
     },
     timingPoints,
     notes: sorted,

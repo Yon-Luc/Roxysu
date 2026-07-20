@@ -15,6 +15,11 @@ import {
   stopSunnyDanBackfill,
 } from "../map-analysis/sunnyDanJob";
 import {
+  getPatternAnalysisJobState,
+  startPatternAnalysisBackfill,
+  stopPatternAnalysisBackfill,
+} from "../map-analysis/patternAnalysisJob";
+import {
   SYNC_PAUSE_WHEN_UNFOCUSED_KEY,
   SYNC_UI_FOCUSED_KEY,
 } from "./system";
@@ -58,6 +63,7 @@ async function buildSettingsResponse(db: Db) {
     },
     paths,
     sunnyDan: getSunnyDanJobState(db),
+    patternAnalysis: getPatternAnalysisJobState(db),
   };
 }
 
@@ -67,6 +73,9 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
   .get("/sunny-dan", ({ db }) => getSunnyDanJobState(db))
   .post("/sunny-dan/start", ({ db }) => startSunnyDanBackfill(db))
   .post("/sunny-dan/stop", ({ db }) => stopSunnyDanBackfill(db))
+  .get("/pattern-analysis", ({ db }) => getPatternAnalysisJobState(db))
+  .post("/pattern-analysis/start", ({ db }) => startPatternAnalysisBackfill(db))
+  .post("/pattern-analysis/stop", ({ db }) => stopPatternAnalysisBackfill(db))
   .patch(
     "/",
     async ({ db, body, set }) => {

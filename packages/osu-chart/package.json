@@ -1,0 +1,13 @@
+{
+  "name": "@roxysu/osu-chart",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./parser": "./src/osuFileParser.js"
+  },
+  "devDependencies": {
+    "bun-types": "^1.3.14"
+  }
+}

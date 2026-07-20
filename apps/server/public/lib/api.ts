@@ -258,6 +258,27 @@ export async function stopSunnyDanJob() {
   );
 }
 
+export async function fetchPatternAnalysisJob() {
+  return unwrap(
+    await api.api.settings["pattern-analysis"].get(),
+    "/api/settings/pattern-analysis",
+  );
+}
+
+export async function startPatternAnalysisJob() {
+  return unwrap(
+    await api.api.settings["pattern-analysis"].start.post(),
+    "/api/settings/pattern-analysis/start",
+  );
+}
+
+export async function stopPatternAnalysisJob() {
+  return unwrap(
+    await api.api.settings["pattern-analysis"].stop.post(),
+    "/api/settings/pattern-analysis/stop",
+  );
+}
+
 export type SystemStatus = Awaited<ReturnType<typeof fetchSystemStatus>>;
 export type Dashboard = Awaited<ReturnType<typeof fetchDashboard>>;
 export type PracticeList = Exclude<

@@ -5,6 +5,7 @@ import type { AstNode } from "./ast";
 import { astUsesDanRating } from "./astUsesDan";
 import { astUsesPatternAnalysis } from "./astUsesPattern";
 import { backfillSunnyDanSync, ensureSunnyDanForIdsSync } from "../map-analysis/computeSunnyDan";
+import { PATTERN_ALGORITHM } from "@roxysu/pattern-7k";
 import {
   backfillPatternAnalysisSync,
   PATTERN_QUERY_BACKFILL_LIMIT,
@@ -91,7 +92,7 @@ const BASE_FROM = `
   LEFT JOIN beatmap_dan_ratings dr
     ON dr.beatmap_id = b.id AND dr.algorithm = 'sunny'
   LEFT JOIN beatmap_pattern_analysis pa
-    ON pa.beatmap_id = b.id AND pa.algorithm = '7k-heuristic-v1'
+    ON pa.beatmap_id = b.id AND pa.algorithm = '${PATTERN_ALGORITHM}'
 `;
 
 const SELECT_COLS = `

@@ -22,6 +22,12 @@ export {
   PATTERN_QUERY_BACKFILL_LIMIT,
 } from "./computePatternAnalysis";
 export { analyze7kFromOsuText, analyze7kNotes } from "./patternAnalysis/analyze7kPatterns";
+export {
+  analyze7kStructuralFromOsuText,
+  analyze7kStructuralNotes,
+  PATTERN_ALGORITHM_V1,
+  PATTERN_ALGORITHM_V2,
+} from "@roxysu/pattern-7k";
 export { PATTERN_LABELS } from "./patternAnalysis/types";
 export type { PatternLabel } from "./patternAnalysis/types";
 export {
@@ -31,3 +37,10 @@ export {
   stopSunnyDanBackfill,
   countSunnyDanMissing,
 } from "./sunnyDanJob";
+export {
+  getPatternAnalysisJobState,
+  getPatternAnalysisCoverage,
+  startPatternAnalysisBackfill,
+  stopPatternAnalysisBackfill,
+  countPatternAnalysisMissing,
+} from "./patternAnalysisJob";

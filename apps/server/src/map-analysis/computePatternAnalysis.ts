@@ -9,11 +9,11 @@ import {
   getOsuDataPath,
   resolveLazerFilePath,
 } from "../shared/lazer-files";
-import { analyze7kFromOsuText } from "./patternAnalysis/analyze7kPatterns";
 import {
+  analyze7kFromOsuText,
   PATTERN_ALGORITHM,
   type PatternLabel,
-} from "./patternAnalysis/types";
+} from "@roxysu/pattern-7k";
 
 export { PATTERN_ALGORITHM };
 
@@ -283,7 +283,7 @@ async function computeOnePattern(
   }
 
   try {
-    const result = analyze7kFromOsuText(osuText);
+    const result = analyze7kFromOsuText(osuText, PATTERN_ALGORITHM);
     return upsertRating(db, {
       beatmapId: beatmap.id,
       algorithm: PATTERN_ALGORITHM,
@@ -511,7 +511,7 @@ function computeOnePatternSync(
   }
 
   try {
-    const result = analyze7kFromOsuText(osuText);
+    const result = analyze7kFromOsuText(osuText, PATTERN_ALGORITHM);
     upsertRatingSync(db, {
       beatmapId,
       beatmapHash: hash,

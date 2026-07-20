@@ -6,6 +6,7 @@ import { dbPlugin } from "../db";
 import { toIso } from "../shared/serialize";
 import { listSessionsForBeatmap } from "../analytics/session";
 import { getOrComputeSunnyDan } from "../map-analysis/computeSunnyDan";
+import { getOrComputePatternAnalysis } from "../map-analysis/computePatternAnalysis";
 import { OsuFileParser } from "../map-analysis/parser/osuFileParser.js";
 import {
   getOsuDataPath,
@@ -67,6 +68,14 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
           ? await getOrComputeSunnyDan(db, params.id)
           : null;
 
+      const is7kMania =
+        beatmap.rulesetShortName === "mania" &&
+        beatmap.circleSize != null &&
+        Math.round(beatmap.circleSize) === 7;
+      const patternAnalysis = is7kMania
+        ? await getOrComputePatternAnalysis(db, params.id)
+        : null;
+
       return {
         beatmap: {
           id: beatmap.id,
@@ -123,6 +132,7 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
             }
           : null,
         sunnyDan,
+        patternAnalysis,
         notes: [] as Array<{ id: number; body: string }>,
         tags: [] as Array<{ id: number; name: string; color: string | null }>,
         sessions: sessionRows.map((s) => ({

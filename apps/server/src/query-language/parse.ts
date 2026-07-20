@@ -121,8 +121,10 @@ function normalizePatternValue(raw: string): string {
     brackets: "bracket",
     chordstream: "chordstream",
     cs: "chordstream",
-    stream: "stream",
-    streams: "stream",
+    delay: "delay",
+    delays: "delay",
+    stream: "delay",
+    streams: "delay",
     mixed: "mixed",
   };
   return aliases[compact] ?? raw.trim().toLowerCase();

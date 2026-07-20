@@ -5,9 +5,12 @@ import { KeybindModal } from "./KeybindModal";
 import { PageTitle } from "../../components/PageTitle";
 import {
   fetchSettings,
+  fetchPatternAnalysisJob,
   fetchSunnyDanJob,
   patchSettings,
+  startPatternAnalysisJob,
   startSunnyDanJob,
+  stopPatternAnalysisJob,
   stopSunnyDanJob,
 } from "../../lib/api";
 import {
@@ -36,6 +39,15 @@ export function SettingsPage() {
   const sunnyDanQuery = useQuery({
     queryKey: ["settings", "sunny-dan"],
     queryFn: fetchSunnyDanJob,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === "running" || status === "stopping" ? 1000 : false;
+    },
+  });
+
+  const patternAnalysisQuery = useQuery({
+    queryKey: ["settings", "pattern-analysis"],
+    queryFn: fetchPatternAnalysisJob,
     refetchInterval: (query) => {
       const status = query.state.data?.status;
       return status === "running" || status === "stopping" ? 1000 : false;
@@ -85,6 +97,21 @@ export function SettingsPage() {
     },
   });
 
+  const startPattern = useMutation({
+    mutationFn: startPatternAnalysisJob,
+    onSuccess: (state) => {
+      queryClient.setQueryData(["settings", "pattern-analysis"], state);
+      void queryClient.invalidateQueries({ queryKey: ["settings"] });
+    },
+  });
+
+  const stopPattern = useMutation({
+    mutationFn: stopPatternAnalysisJob,
+    onSuccess: (state) => {
+      queryClient.setQueryData(["settings", "pattern-analysis"], state);
+    },
+  });
+
   if (isLoading) {
     return <p className="text-muted">Loading settings…</p>;
   }
@@ -106,6 +133,21 @@ export function SettingsPage() {
       ? Math.min(
           100,
           Math.round((coverage.computed / coverage.maniaTotal) * 100),
+        )
+      : 0;
+
+  const patternAnalysis = patternAnalysisQuery.data ?? data.patternAnalysis;
+  const patternCoverage = patternAnalysis?.coverage;
+  const patternRunning =
+    patternAnalysis?.status === "running" ||
+    patternAnalysis?.status === "stopping";
+  const patternProgressPct =
+    patternCoverage && patternCoverage.total7k > 0
+      ? Math.min(
+          100,
+          Math.round(
+            (patternCoverage.computed / patternCoverage.total7k) * 100,
+          ),
         )
       : 0;
 
@@ -417,6 +459,97 @@ export function SettingsPage() {
         ) : null}
         {sunnyDan?.error ? (
           <p className="mt-3 text-sm text-rose-300">{sunnyDan.error}</p>
+        ) : null}
+      </section>
+
+      <section className="rx-panel p-5">
+        <h2 className="text-sm font-bold text-ink">7K pattern analysis</h2>
+        <p className="mt-1 text-sm text-muted">
+          Classify 7K mania maps with the structural pattern algorithm (delay,
+          chordjack, bracket, etc.) for pattern filters and the practice browser.
+        </p>
+        <p className="mt-2 font-mono text-xs text-faint">
+          Algorithm: {patternAnalysis?.algorithm ?? "7k-structural-v2"}
+        </p>
+
+        {patternCoverage ? (
+          <div className="mt-4 space-y-3">
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm tabular-nums text-subtle">
+              <span>
+                <span className="font-semibold text-ink">
+                  {patternCoverage.computed.toLocaleString()}
+                </span>
+                {" / "}
+                {patternCoverage.total7k.toLocaleString()} 7K maps
+              </span>
+              <span>{patternCoverage.missing.toLocaleString()} remaining</span>
+              {patternCoverage.failed > 0 ? (
+                <span className="text-rose-300/90">
+                  {patternCoverage.failed.toLocaleString()} failed
+                </span>
+              ) : null}
+            </div>
+
+            <div className="h-2 overflow-hidden rounded bg-elevated">
+              <div
+                className="h-full bg-accent transition-[width] duration-500"
+                style={{ width: `${patternProgressPct}%` }}
+              />
+            </div>
+
+            <p className="text-xs text-faint">
+              {statusLabel(patternAnalysis?.status)}
+              {patternRunning
+                ? ` · +${patternAnalysis.computedThisRun.toLocaleString()} classified this run`
+                : null}
+              {patternAnalysis?.status === "completed" &&
+              patternAnalysis.computedThisRun > 0
+                ? ` · +${patternAnalysis.computedThisRun.toLocaleString()} classified`
+                : null}
+              {patternCoverage.failed > 0 && !patternRunning
+                ? ` · ${patternCoverage.failed.toLocaleString()} unparsable skipped`
+                : null}
+            </p>
+          </div>
+        ) : (
+          <p className="mt-3 text-sm text-muted">Loading coverage…</p>
+        )}
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="rx-btn-primary"
+            disabled={
+              patternRunning ||
+              startPattern.isPending ||
+              (patternCoverage?.missing ?? 0) === 0
+            }
+            onClick={() => startPattern.mutate()}
+          >
+            {patternRunning ? "Calculating…" : "Calculate missing patterns"}
+          </button>
+          <button
+            type="button"
+            className="rx-btn"
+            disabled={!patternRunning || stopPattern.isPending}
+            onClick={() => stopPattern.mutate()}
+          >
+            {patternAnalysis?.status === "stopping" ? "Stopping…" : "Stop"}
+          </button>
+        </div>
+
+        {startPattern.error ? (
+          <p className="mt-3 text-sm text-rose-300">
+            {startPattern.error.message}
+          </p>
+        ) : null}
+        {stopPattern.error ? (
+          <p className="mt-3 text-sm text-rose-300">
+            {stopPattern.error.message}
+          </p>
+        ) : null}
+        {patternAnalysis?.error ? (
+          <p className="mt-3 text-sm text-rose-300">{patternAnalysis.error}</p>
         ) : null}
       </section>
     </div>

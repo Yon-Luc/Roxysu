@@ -57,6 +57,20 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
           error: string | null;
         } | null }).sunnyDan
       : null;
+  const patternAnalysis =
+    data && "patternAnalysis" in data
+      ? (data as { patternAnalysis?: {
+          algorithm: string;
+          dominantPattern: string | null;
+          secondaryPattern: string | null;
+          confidence: number | null;
+          jackDensity: number | null;
+          chordDensity: number | null;
+          streamDensity: number | null;
+          bracketDensity: number | null;
+          error: string | null;
+        } | null }).patternAnalysis
+      : null;
   const sessions = data.sessions ?? [];
   const clientUrl = osuClientBeatmapUrl(beatmap.onlineId);
   const webUrl = osuWebBeatmapUrl(beatmap.onlineId, beatmap.setOnlineId);
@@ -142,7 +156,7 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
         />
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rx-panel px-5 py-5">
           <h3 className="text-sm font-bold text-ink">Mastery</h3>
           {mastery ? (
@@ -181,6 +195,31 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
             ) : (
               <p className="mt-3 text-sm text-faint">
                 {sunnyDan?.error ?? "Not available"}
+              </p>
+            )}
+          </div>
+        )}
+        {patternAnalysis != null && (
+          <div className="rx-panel px-5 py-5">
+            <h3 className="text-sm font-bold text-ink">Pattern</h3>
+            {patternAnalysis.dominantPattern ? (
+              <div className="mt-3 space-y-1">
+                <div className="font-display text-2xl font-extrabold text-accent">
+                  {formatPatternLabel(patternAnalysis.dominantPattern)}
+                </div>
+                <p className="text-xs text-muted">
+                  {patternAnalysis.secondaryPattern
+                    ? `+ ${formatPatternLabel(patternAnalysis.secondaryPattern)}`
+                    : null}
+                  {patternAnalysis.confidence != null
+                    ? `${patternAnalysis.secondaryPattern ? " · " : ""}${Math.round(patternAnalysis.confidence * 100)}% confidence`
+                    : null}
+                </p>
+                <PatternDensityHints pattern={patternAnalysis} />
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-faint">
+                {patternAnalysis.error ?? "Not available"}
               </p>
             )}
           </div>
@@ -256,4 +295,48 @@ function MiniStat({ label, value }: { label: string; value: string }) {
       <div className="mt-1.5 text-lg font-bold tabular-nums text-ink">{value}</div>
     </div>
   );
+}
+
+const PATTERN_LABELS: Record<string, string> = {
+  jack: "Jack",
+  jumpstream: "Jumpstream",
+  chordjack: "Chordjack",
+  bracket: "Bracket",
+  chordstream: "Chordstream",
+  stream: "Stream",
+  delay: "Delay",
+  mixed: "Mixed",
+};
+
+function formatPatternLabel(pattern: string): string {
+  return PATTERN_LABELS[pattern] ?? pattern;
+}
+
+function PatternDensityHints({
+  pattern,
+}: {
+  pattern: {
+    dominantPattern: string | null;
+    jackDensity: number | null;
+    chordDensity: number | null;
+    streamDensity: number | null;
+    bracketDensity: number | null;
+  };
+}) {
+  const hints: string[] = [];
+  const dominant = pattern.dominantPattern;
+
+  const add = (label: string, value: number | null, key: string) => {
+    if (value == null || value < 0.08 || key === dominant) return;
+    hints.push(`${label} ${Math.round(value * 100)}%`);
+  };
+
+  add("jack", pattern.jackDensity, "jack");
+  add("chord", pattern.chordDensity, "chordjack");
+  add("delay", pattern.streamDensity, "delay");
+  add("bracket", pattern.bracketDensity, "bracket");
+
+  if (hints.length === 0) return null;
+
+  return <p className="text-xs text-faint">{hints.join(" · ")}</p>;
 }

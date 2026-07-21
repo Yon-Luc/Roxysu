@@ -10,7 +10,8 @@ import {
 import { createPortal } from "react-dom";
 import { fetchScoreReplay, type ScoreReplay } from "../lib/api";
 import { AudioClock, sampleAudioClock } from "../lib/audioClock";
-import { formatAccuracy, formatMods } from "../lib/format";
+import { formatAccuracy } from "../lib/format";
+import { ModBadges } from "./ModBadges";
 import {
   codeToColumn,
   formatKeyCode,
@@ -50,8 +51,7 @@ import {
 
 const PREFS_KEY = "rx-beatmap-preview";
 const SKIP_MS = 5000;
-const RATES = [0.5, 0.75, 1, 1.25, 1.5] as const;
-type ReplayRate = (typeof RATES)[number];
+const PRESET_RATES = [0.5, 0.75, 1, 1.25, 1.5] as const;
 /** Fullscreen playfield width as % of the modal (saved). */
 const FIELD_WIDTH_MIN = 40;
 const FIELD_WIDTH_MAX = 100;
@@ -70,7 +70,7 @@ const ACC_SCALE = 305;
 
 type PreviewPrefs = {
   volume: number;
-  rate: ReplayRate;
+  rate: number;
   scroll: number;
   fullscreen: boolean;
   /** Fullscreen playfield max-width (% of dialog). */
@@ -147,9 +147,10 @@ function loadPrefs(): PreviewPrefs {
         0,
         1,
       ),
-      rate: RATES.includes(parsed.rate as (typeof RATES)[number])
-        ? (parsed.rate as ReplayRate)
-        : DEFAULT_PREFS.rate,
+      rate:
+        typeof parsed.rate === "number" && parsed.rate > 0
+          ? clampRate(parsed.rate)
+          : DEFAULT_PREFS.rate,
       scroll: migratePreviewScroll(
         typeof parsed.scroll === "number" ? parsed.scroll : DEFAULT_PREFS.scroll,
       ),
@@ -196,17 +197,22 @@ function clamp(n: number, min: number, max: number) {
   return Math.min(max, Math.max(min, n));
 }
 
-function nearestRate(rate: number): ReplayRate {
-  let best: ReplayRate = RATES[0]!;
-  let bestDist = Math.abs(rate - best);
-  for (const r of RATES) {
-    const d = Math.abs(rate - r);
-    if (d < bestDist) {
-      best = r;
-      bestDist = d;
-    }
+function clampRate(rate: number): number {
+  return clamp(rate, 0.5, 2);
+}
+
+function playbackRateOptions(current: number): number[] {
+  const options = [...PRESET_RATES];
+  if (!options.some((r) => Math.abs(r - current) < 0.001) && current > 0) {
+    options.push(clampRate(current));
+    options.sort((a, b) => a - b);
   }
-  return best;
+  return options;
+}
+
+function formatRateLabel(rate: number): string {
+  const label = rate.toFixed(2).replace(/\.?0+$/, "");
+  return `${label}×`;
 }
 
 type ScoreReplayButtonProps = {
@@ -339,7 +345,7 @@ function ScoreReplayModal({
     rateApplied.current = true;
     const modRate = replayData.playback.rate;
     if (modRate !== 1) {
-      setPrefs((p) => ({ ...p, rate: nearestRate(modRate) }));
+      setPrefs((p) => ({ ...p, rate: clampRate(modRate) }));
     }
   }, [replayData]);
 
@@ -854,18 +860,15 @@ function ScoreReplayModal({
         .filter(Boolean)
         .join(" · ")
     : "Score rewatch";
-  const subtitle = replayData
+  const subtitleParts = replayData
     ? [
         replayData.beatmap.artist,
         replayData.beatmap.columnCount > 0
           ? `${replayData.beatmap.columnCount}K`
           : null,
-        formatMods(replayData.score.mods),
         replayData.score.userUsername,
-      ]
-        .filter(Boolean)
-        .join(" · ")
-    : null;
+      ].filter(Boolean)
+    : [];
   const maxDuration = (() => {
     const candidates = [
       durationMs,
@@ -927,8 +930,13 @@ function ScoreReplayModal({
             >
               {title}
             </h2>
-            {subtitle ? (
-              <p className="mt-0.5 truncate text-sm text-muted">{subtitle}</p>
+            {subtitleParts.length > 0 || replayData?.score.mods ? (
+              <p className="mt-0.5 flex min-w-0 items-center gap-1.5 truncate text-sm text-muted">
+                {subtitleParts.length > 0 ? (
+                  <span className="truncate">{subtitleParts.join(" · ")}</span>
+                ) : null}
+                {replayData ? <ModBadges mods={replayData.score.mods} /> : null}
+              </p>
             ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-1">
@@ -1304,14 +1312,14 @@ function ScoreReplayModal({
                       onChange={(e) =>
                         setPrefs((p) => ({
                           ...p,
-                          rate: nearestRate(Number(e.target.value)),
+                          rate: clampRate(Number(e.target.value)),
                         }))
                       }
                       aria-label="Playback rate"
                     >
-                      {RATES.map((r) => (
+                      {playbackRateOptions(prefs.rate).map((r) => (
                         <option key={r} value={r}>
-                          {r}×
+                          {formatRateLabel(r)}
                         </option>
                       ))}
                     </select>

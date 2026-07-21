@@ -1,3 +1,5 @@
+import { formatModAcronym, parseModEntries } from "@server/replay/mods";
+
 export function formatAccuracy(value: number | null | undefined): string {
   if (value == null) return "—";
   return `${(value * 100).toFixed(2)}%`;
@@ -41,24 +43,17 @@ export function formatRelativeTime(iso: string | null | undefined): string {
 
 export function formatMods(mods: string | null | undefined): string {
   if (!mods || mods === "[]" || mods === "{}") return "NM";
-  try {
-    const parsed = JSON.parse(mods) as unknown;
-    if (Array.isArray(parsed)) {
-      if (parsed.length === 0) return "NM";
-      return parsed
-        .map((m) => {
-          if (typeof m === "string") return m;
-          if (m && typeof m === "object" && "acronym" in m) {
-            return String((m as { acronym: string }).acronym);
-          }
-          return String(m);
-        })
-        .join(",");
+  const entries = parseModEntries(mods);
+  if (entries.length === 0) {
+    try {
+      const parsed = JSON.parse(mods) as unknown;
+      if (Array.isArray(parsed) && parsed.length === 0) return "NM";
+    } catch {
+      // fall through
     }
-  } catch {
-    // fall through
+    return mods;
   }
-  return mods;
+  return entries.map(formatModAcronym).join(",");
 }
 
 /** Text for pasting into osu! song select search. */

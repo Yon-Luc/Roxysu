@@ -1,10 +1,10 @@
 import { focusManager, useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { BeatmapCover } from "../../components/BeatmapCover";
+import { ModBadges } from "../../components/ModBadges";
 import { fetchDashboard, fetchSession } from "../../lib/api";
 import {
   formatAccuracy,
-  formatMods,
   formatPp,
   formatRelativeTime,
 } from "../../lib/format";
@@ -217,10 +217,11 @@ export function OverlayPage({
                       </span>
                     ) : null}
                   </div>
-                  <div className="truncate text-xs text-white/70 overlay-text">
-                    {score.difficultyName ?? score.artist ?? "—"}
-                    {" · "}
-                    {formatMods(score.mods)}
+                  <div className="flex min-w-0 items-center gap-1 truncate text-xs text-white/70 overlay-text">
+                    <span className="truncate">
+                      {score.difficultyName ?? score.artist ?? "—"}
+                    </span>
+                    <ModBadges mods={score.mods} variant="overlay" />
                   </div>
                 </div>
                 <div className="shrink-0 text-right">

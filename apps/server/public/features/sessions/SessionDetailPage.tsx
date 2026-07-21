@@ -2,12 +2,12 @@ import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { BeatmapCover } from "../../components/BeatmapCover";
+import { ModBadges } from "../../components/ModBadges";
 import { PageTitle } from "../../components/PageTitle";
 import { ScoreReplayButton } from "../../components/ScoreReplayModal";
 import { fetchSession } from "../../lib/api";
 import {
   formatAccuracy,
-  formatMods,
   formatPp,
   formatRelativeTime,
 } from "../../lib/format";
@@ -224,20 +224,22 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
                         </span>
                       ) : null}
                     </div>
-                    <div className="mt-0.5 truncate text-sm text-muted">
-                      {score.artist ?? "Unknown"}
-                      {score.difficultyName ? ` · ${score.difficultyName}` : ""}
-                      {" · "}
-                      {formatPrimaryRating({
-                        mode: ratingMode,
-                        starRating: score.starRating,
-                        sunnyEstDiff: score.sunnyEstDiff,
-                        sunnyStar: score.sunnyStar,
-                      })}{" "}
-                      · {formatMods(score.mods)}
-                      {score.retryIndex != null && score.retryIndex > 0
-                        ? ` · retry #${score.retryIndex}`
-                        : ""}
+                    <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5 text-sm text-muted">
+                      <span className="truncate">
+                        {score.artist ?? "Unknown"}
+                        {score.difficultyName ? ` · ${score.difficultyName}` : ""}
+                        {" · "}
+                        {formatPrimaryRating({
+                          mode: ratingMode,
+                          starRating: score.starRating,
+                          sunnyEstDiff: score.sunnyEstDiff,
+                          sunnyStar: score.sunnyStar,
+                        })}
+                        {score.retryIndex != null && score.retryIndex > 0
+                          ? ` · retry #${score.retryIndex}`
+                          : ""}
+                      </span>
+                      <ModBadges mods={score.mods} />
                     </div>
                   </div>
                   <div className="hidden shrink-0 text-right sm:block">

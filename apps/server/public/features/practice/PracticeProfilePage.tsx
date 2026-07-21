@@ -3,11 +3,11 @@ import { useQuery } from "@tanstack/react-query";
 import { BeatmapCover } from "../../components/BeatmapCover";
 import { BeatmapPreviewButton } from "../../components/BeatmapPreviewModal";
 import { CopyBeatmapSearchButton } from "../../components/CopyBeatmapSearchButton";
+import { ModBadges } from "../../components/ModBadges";
 import { ScoreReplayButton } from "../../components/ScoreReplayModal";
 import { fetchBeatmap } from "../../lib/api";
 import {
   formatAccuracy,
-  formatMods,
   formatPp,
   formatRelativeTime,
 } from "../../lib/format";
@@ -274,8 +274,9 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
           <ul className="space-y-0.5">
             {recentScores.map((score) => (
               <li key={score.id} className="rx-row justify-between gap-3">
-                <div className="min-w-0 text-sm text-subtle">
-                  {formatRelativeTime(score.playedAt)} · {formatMods(score.mods)}
+                <div className="flex min-w-0 items-center gap-1.5 text-sm text-subtle">
+                  <span>{formatRelativeTime(score.playedAt)}</span>
+                  <ModBadges mods={score.mods} />
                 </div>
                 <div className="flex shrink-0 items-center gap-3 text-sm font-semibold tabular-nums text-ink">
                   <ScoreReplayButton

@@ -13,11 +13,11 @@ import {
   YAxis,
 } from "recharts";
 import { BeatmapCover } from "../../components/BeatmapCover";
+import { ModBadges } from "../../components/ModBadges";
 import { PageTitle } from "../../components/PageTitle";
 import { fetchDashboard } from "../../lib/api";
 import {
   formatAccuracy,
-  formatMods,
   formatPp,
   formatRelativeTime,
 } from "../../lib/format";
@@ -223,17 +223,19 @@ export function DashboardPage() {
                     <div className="truncate font-semibold text-ink">
                       {score.title ?? "Untitled"}
                     </div>
-                    <div className="mt-0.5 truncate text-sm text-muted">
-                      {score.artist ?? "Unknown"}
-                      {score.difficultyName ? ` · ${score.difficultyName}` : ""}
-                      {" · "}
-                      {formatPrimaryRating({
-                        mode: ratingMode,
-                        starRating: score.starRating,
-                        sunnyEstDiff: score.sunnyEstDiff,
-                        sunnyStar: score.sunnyStar,
-                      })}{" "}
-                      · {formatMods(score.mods)}
+                    <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5 text-sm text-muted">
+                      <span className="truncate">
+                        {score.artist ?? "Unknown"}
+                        {score.difficultyName ? ` · ${score.difficultyName}` : ""}
+                        {" · "}
+                        {formatPrimaryRating({
+                          mode: ratingMode,
+                          starRating: score.starRating,
+                          sunnyEstDiff: score.sunnyEstDiff,
+                          sunnyStar: score.sunnyStar,
+                        })}
+                      </span>
+                      <ModBadges mods={score.mods} />
                     </div>
                   </div>
                   <div className="hidden shrink-0 text-right sm:block">

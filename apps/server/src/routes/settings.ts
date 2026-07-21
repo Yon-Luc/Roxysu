@@ -29,6 +29,17 @@ import {
   setCachedOsuDataOverride,
   validateOsuDataPath,
 } from "../shared/osu-paths";
+import {
+  DEFAULT_TOSU_HOST,
+  TOSU_ENABLED_KEY,
+  TOSU_EXECUTABLE_PATH_KEY,
+  TOSU_HOST_KEY,
+  deleteSetting,
+  normalizeTosuHost,
+  readTosuSettings,
+  restartTosuAdapter,
+  upsertSetting,
+} from "../tosu";
 
 async function readOsuDataOverride(db: Db): Promise<string | null> {
   const [row] = await db
@@ -48,6 +59,7 @@ async function buildSettingsResponse(db: Db) {
     .limit(1);
   const osuOverride = await readOsuDataOverride(db);
   const paths = buildResolvedOsuPaths(osuOverride);
+  const tosu = await readTosuSettings(db);
 
   return {
     mastery: {
@@ -62,6 +74,12 @@ async function buildSettingsResponse(db: Db) {
       pauseWhenUnfocused: pauseRow?.value === "1",
     },
     paths,
+    tosu: {
+      enabled: tosu.enabled,
+      host: tosu.host,
+      executablePath: tosu.executablePath,
+      defaultHost: DEFAULT_TOSU_HOST,
+    },
     sunnyDan: getSunnyDanJobState(db),
     patternAnalysis: getPatternAnalysisJobState(db),
   };
@@ -79,6 +97,8 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
   .patch(
     "/",
     async ({ db, body, set }) => {
+      let tosuChanged = false;
+
       if (body.masteryFormulaId) {
         try {
           await setActiveFormulaId(db, body.masteryFormulaId);
@@ -137,6 +157,37 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
         }
       }
 
+      if (body.tosuEnabled !== undefined) {
+        await upsertSetting(db, TOSU_ENABLED_KEY, body.tosuEnabled ? "1" : "0");
+        tosuChanged = true;
+      }
+
+      if (body.tosuHost !== undefined) {
+        const host = normalizeTosuHost(body.tosuHost);
+        await upsertSetting(db, TOSU_HOST_KEY, host);
+        tosuChanged = true;
+      }
+
+      if (body.tosuExecutablePath !== undefined) {
+        if (
+          body.tosuExecutablePath === null ||
+          body.tosuExecutablePath.trim() === ""
+        ) {
+          await deleteSetting(db, TOSU_EXECUTABLE_PATH_KEY);
+        } else {
+          await upsertSetting(
+            db,
+            TOSU_EXECUTABLE_PATH_KEY,
+            body.tosuExecutablePath.trim(),
+          );
+        }
+        tosuChanged = true;
+      }
+
+      if (tosuChanged) {
+        await restartTosuAdapter(db);
+      }
+
       return buildSettingsResponse(db);
     },
     {
@@ -145,6 +196,10 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
         pauseWhenUnfocused: t.Optional(t.Boolean()),
         /** Absolute lazer data dir, or null/"" to clear the override. */
         osuDataPath: t.Optional(t.Union([t.String(), t.Null()])),
+        tosuEnabled: t.Optional(t.Boolean()),
+        tosuHost: t.Optional(t.String()),
+        /** Absolute path to tosu binary, or null/"" to clear. */
+        tosuExecutablePath: t.Optional(t.Union([t.String(), t.Null()])),
       }),
     },
   );

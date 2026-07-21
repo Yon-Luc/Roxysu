@@ -10,6 +10,7 @@ import { searchRoutes } from "./search";
 import { sessionRoutes } from "./sessions";
 import { settingsRoutes } from "./settings";
 import { systemRoutes } from "./system";
+import { tosuRoutes } from "./tosu";
 export const apiRoutes = new Elysia({ prefix: "/api" })
   .use(systemRoutes)
   .use(dashboardRoutes)
@@ -21,4 +22,5 @@ export const apiRoutes = new Elysia({ prefix: "/api" })
   .use(sessionRoutes)
   .use(searchRoutes)
   .use(collectionRoutes)
-  .use(settingsRoutes);
+  .use(settingsRoutes)
+  .use(tosuRoutes);

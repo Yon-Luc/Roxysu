@@ -28,13 +28,19 @@ export function SettingsPage() {
   });
 
   const [osuPathDraft, setOsuPathDraft] = useState("");
+  const [tosuHostDraft, setTosuHostDraft] = useState("");
+  const [tosuExeDraft, setTosuExeDraft] = useState("");
   const [keybindOpen, setKeybindOpen] = useState(false);
 
   useEffect(() => {
     if (data?.paths) {
       setOsuPathDraft(data.paths.osuDataPath ?? "");
     }
-  }, [data?.paths]);
+    if (data?.tosu) {
+      setTosuHostDraft(data.tosu.host);
+      setTosuExeDraft(data.tosu.executablePath ?? "");
+    }
+  }, [data?.paths, data?.tosu]);
 
   const sunnyDanQuery = useQuery({
     queryKey: ["settings", "sunny-dan"],
@@ -77,8 +83,26 @@ export function SettingsPage() {
   const pathMut = useMutation({
     mutationFn: (osuDataPath: string | null) => patchSettings({ osuDataPath }),
     onSuccess: (next) => {
+      if ("error" in next) return;
       queryClient.setQueryData(["settings"], next);
       setOsuPathDraft(next.paths.osuDataPath ?? "");
+    },
+  });
+
+  const tosuMut = useMutation({
+    mutationFn: (body: {
+      tosuEnabled?: boolean;
+      tosuHost?: string;
+      tosuExecutablePath?: string | null;
+    }) => patchSettings(body),
+    onSuccess: (next) => {
+      if ("error" in next) return;
+      queryClient.setQueryData(["settings"], next);
+      if (next.tosu) {
+        setTosuHostDraft(next.tosu.host);
+        setTosuExeDraft(next.tosu.executablePath ?? "");
+      }
+      void queryClient.invalidateQueries({ queryKey: ["tosu", "live"] });
     },
   });
 
@@ -154,6 +178,10 @@ export function SettingsPage() {
   const paths = data.paths;
   const pathDirty =
     (osuPathDraft.trim() || null) !== (paths.osuDataPath ?? null);
+  const tosu = data.tosu;
+  const tosuHostDirty = tosuHostDraft.trim() !== tosu.host;
+  const tosuExeDirty =
+    (tosuExeDraft.trim() || null) !== (tosu.executablePath ?? null);
 
   return (
     <div className="space-y-8">
@@ -240,6 +268,104 @@ export function SettingsPage() {
 
         {pathMut.error ? (
           <p className="mt-3 text-sm text-rose-300">{pathMut.error.message}</p>
+        ) : null}
+      </section>
+
+      <section className="rx-panel p-5">
+        <h2 className="text-sm font-bold text-ink">Tosu / live map</h2>
+        <p className="mt-1 text-sm text-muted">
+          Connect to a local{" "}
+          <span className="font-mono">tosu</span> WebSocket for the currently
+          selected osu! map on the live session page. Analysis uses Roxysu Sunny
+          / 7K patterns (not Etterna MSD).
+        </p>
+
+        <label className="mt-4 flex cursor-pointer gap-3 rounded-xl bg-elevated/50 px-4 py-3">
+          <input
+            type="checkbox"
+            checked={tosu.enabled}
+            disabled={tosuMut.isPending}
+            onChange={(e) => tosuMut.mutate({ tosuEnabled: e.target.checked })}
+            className="mt-1 accent-[var(--color-accent)]"
+          />
+          <div>
+            <div className="font-bold text-ink">Enable tosu live adapter</div>
+            <div className="mt-0.5 text-sm text-muted">
+              When on, Roxysu connects to{" "}
+              <span className="font-mono">ws://…/websocket/v2</span> and can
+              auto-start tosu if the executable path is set.
+            </div>
+          </div>
+        </label>
+
+        <label className="mt-4 block">
+          <span className="text-xs font-semibold uppercase tracking-wide text-faint">
+            Host
+          </span>
+          <input
+            type="text"
+            value={tosuHostDraft}
+            onChange={(e) => setTosuHostDraft(e.target.value)}
+            placeholder={tosu.defaultHost}
+            disabled={tosuMut.isPending}
+            className="mt-1.5 w-full rounded-xl border border-line bg-elevated/50 px-3 py-2 font-mono text-sm text-ink placeholder:text-faint focus:border-accent focus:outline-none disabled:opacity-60"
+            spellCheck={false}
+            autoComplete="off"
+          />
+        </label>
+
+        <label className="mt-4 block">
+          <span className="text-xs font-semibold uppercase tracking-wide text-faint">
+            Executable path
+          </span>
+          <input
+            type="text"
+            value={tosuExeDraft}
+            onChange={(e) => setTosuExeDraft(e.target.value)}
+            placeholder="/path/to/tosu"
+            disabled={tosuMut.isPending}
+            className="mt-1.5 w-full rounded-xl border border-line bg-elevated/50 px-3 py-2 font-mono text-sm text-ink placeholder:text-faint focus:border-accent focus:outline-none disabled:opacity-60"
+            spellCheck={false}
+            autoComplete="off"
+          />
+        </label>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="rx-btn-primary"
+            disabled={
+              tosuMut.isPending || (!tosuHostDirty && !tosuExeDirty)
+            }
+            onClick={() =>
+              tosuMut.mutate({
+                ...(tosuHostDirty
+                  ? { tosuHost: tosuHostDraft.trim() || tosu.defaultHost }
+                  : {}),
+                ...(tosuExeDirty
+                  ? {
+                      tosuExecutablePath: tosuExeDraft.trim()
+                        ? tosuExeDraft.trim()
+                        : null,
+                    }
+                  : {}),
+              })
+            }
+          >
+            {tosuMut.isPending ? "Saving…" : "Save tosu settings"}
+          </button>
+          <button
+            type="button"
+            className="rx-btn"
+            disabled={tosuMut.isPending || tosu.executablePath == null}
+            onClick={() => tosuMut.mutate({ tosuExecutablePath: null })}
+          >
+            Clear executable
+          </button>
+        </div>
+
+        {tosuMut.error ? (
+          <p className="mt-3 text-sm text-rose-300">{tosuMut.error.message}</p>
         ) : null}
       </section>
 

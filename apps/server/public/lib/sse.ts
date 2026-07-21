@@ -8,6 +8,7 @@ const LIVE_EVENTS = new Set([
   "session.started",
   "session.finished",
   "collection.updated",
+  "tosu.updated",
 ]);
 
 /** Subscribe to server SSE and invalidate React Query caches on live events. */
@@ -24,8 +25,16 @@ export function connectLiveUpdates(queryClient: QueryClient): () => void {
     void queryClient.invalidateQueries({ queryKey: ["settings"] });
   };
 
+  const onTosu = () => {
+    void queryClient.invalidateQueries({ queryKey: ["tosu", "live"] });
+  };
+
   for (const name of LIVE_EVENTS) {
-    source.addEventListener(name, onLive);
+    if (name === "tosu.updated") {
+      source.addEventListener(name, onTosu);
+    } else {
+      source.addEventListener(name, onLive);
+    }
   }
 
   source.onerror = () => {
@@ -34,7 +43,11 @@ export function connectLiveUpdates(queryClient: QueryClient): () => void {
 
   return () => {
     for (const name of LIVE_EVENTS) {
-      source.removeEventListener(name, onLive);
+      if (name === "tosu.updated") {
+        source.removeEventListener(name, onTosu);
+      } else {
+        source.removeEventListener(name, onLive);
+      }
     }
     source.close();
   };

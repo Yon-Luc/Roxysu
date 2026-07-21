@@ -233,8 +233,19 @@ export async function patchSettings(body: {
   masteryFormulaId?: string;
   pauseWhenUnfocused?: boolean;
   osuDataPath?: string | null;
+  tosuEnabled?: boolean;
+  tosuHost?: string;
+  tosuExecutablePath?: string | null;
 }) {
   return unwrap(await api.api.settings.patch(body), "/api/settings");
+}
+
+export async function fetchTosuLive() {
+  return unwrap(await api.api.tosu.live.get(), "/api/tosu/live");
+}
+
+export async function startTosu() {
+  return unwrap(await api.api.tosu.start.post(), "/api/tosu/start");
 }
 
 export async function fetchSunnyDanJob() {
@@ -322,3 +333,4 @@ export type SessionDetail = Exclude<
 >;
 export type CollectionsPayload = Awaited<ReturnType<typeof fetchCollections>>;
 export type SettingsPayload = Awaited<ReturnType<typeof fetchSettings>>;
+export type TosuLive = Awaited<ReturnType<typeof fetchTosuLive>>;

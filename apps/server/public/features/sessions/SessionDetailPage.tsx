@@ -16,6 +16,7 @@ import {
   useRatingDisplayMode,
 } from "../../lib/ratingDisplay";
 import { SessionSuggest } from "./SessionSuggest";
+import { SessionTosuLivePanel } from "./SessionTosuLivePanel";
 
 export function SessionDetailPage({ sessionId }: { sessionId: string }) {
   const ratingMode = useRatingDisplayMode();
@@ -108,6 +109,8 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
           </p>
         </div>
 
+        <SessionTosuLivePanel />
+
         <SessionSuggest
           rulesetShortName={null}
           excludeBeatmapIds={[]}
@@ -175,6 +178,8 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
           value={formatSessionDuration(session.startedAt, session.endedAt)}
         />
       </section>
+
+      {isCurrentHub ? <SessionTosuLivePanel /> : null}
 
       {isCurrentHub ? (
         <SessionSuggest

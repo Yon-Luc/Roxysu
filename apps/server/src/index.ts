@@ -3,10 +3,12 @@ import { app } from "./app";
 import { db } from "./db";
 import { startPollLoop } from "./sse";
 import { startAnalyticsPipeline } from "./analytics/pipeline";
+import { startTosuAdapter, stopTosuAdapter } from "./tosu";
 
 app.listen(4321);
 const stopPoll = startPollLoop(db);
 const stopAnalytics = startAnalyticsPipeline(db);
+void startTosuAdapter(db);
 
 console.log(
   `🦊 Roxysu running at http://${app.server?.hostname}:${app.server?.port}`,
@@ -19,6 +21,7 @@ async function shutdown(signal: string) {
   shuttingDown = true;
   console.log(`\nshutting down (${signal})…`);
 
+  stopTosuAdapter();
   stopAnalytics();
   stopPoll();
   try {

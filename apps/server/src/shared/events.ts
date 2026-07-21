@@ -6,7 +6,8 @@ export type AppEvent =
   | { type: "session.finished"; sessionId: number }
   | { type: "mastery.updated" }
   | { type: "collection.updated"; collectionId?: number }
-  | { type: "dashboard.updated" };
+  | { type: "dashboard.updated" }
+  | { type: "tosu.updated" };
 
 type Listener = (event: AppEvent) => void;
 

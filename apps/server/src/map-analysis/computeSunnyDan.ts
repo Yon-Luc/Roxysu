@@ -11,6 +11,7 @@ import {
 } from "../shared/lazer-files";
 import { runSunnyEstimatorFromText } from "./sunnyEstimator";
 import { estDiff } from "./estDiff";
+import { toIso as toIsoNullable } from "../shared/serialize";
 
 export const SUNNY_ALGORITHM = "sunny";
 
@@ -27,7 +28,7 @@ export type SunnyDanRating = {
 };
 
 function toIso(d: Date | null | undefined): string {
-  return (d ?? new Date()).toISOString();
+  return toIsoNullable(d) ?? new Date().toISOString();
 }
 
 function rowToResult(

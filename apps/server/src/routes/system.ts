@@ -1,14 +1,14 @@
 import { Elysia, t } from "elysia";
 import { count, desc, eq } from "drizzle-orm";
 import { beatmaps, imports, scores, settings } from "@roxysu/db/client.bun";
+import {
+  SYNC_PAUSE_WHEN_UNFOCUSED_KEY,
+  SYNC_UI_FOCUSED_KEY,
+} from "@roxysu/db/settings-keys";
 import { dbPlugin } from "../db";
 import { toIso } from "../shared/serialize";
 
-/** Written by the web UI; read by realm-reader to avoid opening client.realm while unfocused. */
-export const SYNC_UI_FOCUSED_KEY = "sync.ui_focused";
-
-/** Opt-in: when "1", realm-reader honors sync.ui_focused. Missing/"0" = never pause. */
-export const SYNC_PAUSE_WHEN_UNFOCUSED_KEY = "sync.pause_when_unfocused";
+export { SYNC_PAUSE_WHEN_UNFOCUSED_KEY, SYNC_UI_FOCUSED_KEY };
 
 export const systemRoutes = new Elysia({ prefix: "/system" })
   .use(dbPlugin)

@@ -7,7 +7,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "bun:test";
-import { backupRealmFile } from "../../../realm-reader/src/realmBackup";
+import { backupRealmFile } from "@roxysu/realm-backup";
 
 describe("realmBackup", () => {
   test("rotates backups to keep last 5", () => {

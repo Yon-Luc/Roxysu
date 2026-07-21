@@ -1,10 +1,8 @@
 /** Local pattern context + timing stats from chart notes + judgments. */
 
-export type ChartNote = {
-  column: number;
-  startMs: number;
-  endMs: number;
-};
+import type { ChartNote } from "@roxysu/osu-chart";
+
+export type { ChartNote };
 
 export type JudgmentLike = {
   noteIndex: number;

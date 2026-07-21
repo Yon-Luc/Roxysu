@@ -14,6 +14,7 @@ import {
   PATTERN_ALGORITHM,
   type PatternLabel,
 } from "@roxysu/pattern-7k";
+import { toIso as toIsoNullable } from "../shared/serialize";
 
 export { PATTERN_ALGORITHM };
 
@@ -37,7 +38,7 @@ export type PatternAnalysisRating = {
 };
 
 function toIso(d: Date | null | undefined): string {
-  return (d ?? new Date()).toISOString();
+  return toIsoNullable(d) ?? new Date().toISOString();
 }
 
 function rowToResult(

@@ -21,15 +21,15 @@ export {
   PATTERN_ALGORITHM,
   PATTERN_QUERY_BACKFILL_LIMIT,
 } from "./computePatternAnalysis";
-export { analyze7kFromOsuText, analyze7kNotes } from "./patternAnalysis/analyze7kPatterns";
+export { analyze7kFromOsuText, analyze7kNotes } from "@roxysu/pattern-7k";
 export {
   analyze7kStructuralFromOsuText,
   analyze7kStructuralNotes,
   PATTERN_ALGORITHM_V1,
   PATTERN_ALGORITHM_V2,
+  PATTERN_LABELS,
 } from "@roxysu/pattern-7k";
-export { PATTERN_LABELS } from "./patternAnalysis/types";
-export type { PatternLabel } from "./patternAnalysis/types";
+export type { PatternLabel } from "@roxysu/pattern-7k";
 export {
   getSunnyDanJobState,
   getSunnyDanCoverage,

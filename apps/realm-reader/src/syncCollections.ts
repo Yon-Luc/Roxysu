@@ -1,41 +1,23 @@
 import { collections, eq, type Db } from "@roxysu/db/client.node";
+import {
+  type CollectionSyncPayload,
+  type CollectionSyncResult,
+  isManagedCollectionName,
+  lazerCollectionName,
+} from "@roxysu/collection-sync";
+import { backupRealmFile } from "@roxysu/realm-backup";
 import Realm from "realm";
 import { loadOsuSchema } from "./schema";
-import { backupRealmFile } from "./realmBackup";
 import { RealmLockedError, SchemaVersionMismatchError } from "./sync";
 
-/** Roxysu-owned lazer collection name prefix (includes trailing space). */
-export const LAZER_COLLECTION_PREFIX = "!Roxysu ";
-
-export type CollectionSyncInput = {
-  id: number;
-  name: string;
-  lazerCollectionId: string | null;
-  md5Hashes: string[];
-};
-
-export type CollectionSyncPayload = {
-  collections: CollectionSyncInput[];
-  skippedNoMd5: number;
-};
-
-export type CollectionSyncSuccess = {
-  ok: true;
-  created: number;
-  updated: number;
-  deleted: number;
-  skippedNoMd5: number;
-  backupPath: string;
-  syncedAt: string;
-};
-
-export type CollectionSyncFailure = {
-  ok: false;
-  error: string;
-  code: "locked" | "schema_mismatch" | "other";
-};
-
-export type CollectionSyncResult = CollectionSyncSuccess | CollectionSyncFailure;
+export type {
+  CollectionSyncInput,
+  CollectionSyncPayload,
+  CollectionSyncSuccess,
+  CollectionSyncFailure,
+  CollectionSyncResult,
+} from "@roxysu/collection-sync";
+export { LAZER_COLLECTION_PREFIX } from "@roxysu/collection-sync";
 
 type BeatmapCollectionObj = Realm.Object & {
   ID: Realm.BSON.UUID;
@@ -60,14 +42,6 @@ function isLockError(err: unknown): boolean {
 
 function realmUuid(id: string): Realm.BSON.UUID {
   return new Realm.BSON.UUID(id);
-}
-
-function lazerCollectionName(name: string): string {
-  return `${LAZER_COLLECTION_PREFIX}${name}`;
-}
-
-function isManagedCollectionName(name: string | null | undefined): boolean {
-  return (name ?? "").startsWith(LAZER_COLLECTION_PREFIX);
 }
 
 function openRealmForWrite(realmPath: string): Realm {

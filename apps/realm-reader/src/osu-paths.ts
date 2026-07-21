@@ -1,48 +1,21 @@
-import path from "node:path";
-import os from "node:os";
 import { eq, settings, type Db } from "@roxysu/db/client.node";
+import {
+  OSU_DATA_PATH_SETTING_KEY,
+  resolveOsuDataPath,
+  resolveRealmPath,
+} from "@roxysu/osu-paths";
 
-/** Mirrors apps/server/src/shared/osu-paths.ts */
-export const OSU_DATA_PATH_SETTING_KEY = "paths.osu_data";
+export {
+  OSU_DATA_PATH_SETTING_KEY,
+  platformDefaultOsuDataPath,
+  resolveRealmPath,
+} from "@roxysu/osu-paths";
 
-/**
- * Default osu!lazer data directory for the current OS.
- * Windows: `%APPDATA%\osu`
- * macOS: `~/Library/Application Support/osu`
- * Linux: `~/.local/share/osu`
- */
-export function platformDefaultOsuDataPath(
-  platform: NodeJS.Platform = process.platform,
-  env: NodeJS.ProcessEnv = process.env,
-  homedir: () => string = () => os.homedir(),
+/** Resolve data path string (settings/env/default) without source metadata. */
+export function resolveOsuDataPathString(
+  settingsOverride: string | null | undefined,
 ): string {
-  if (platform === "win32") {
-    const appData =
-      env.APPDATA?.trim() || path.join(homedir(), "AppData", "Roaming");
-    return path.join(appData, "osu");
-  }
-  if (platform === "darwin") {
-    return path.join(homedir(), "Library", "Application Support", "osu");
-  }
-  return path.join(homedir(), ".local", "share", "osu");
-}
-
-/**
- * Resolve the lazer data directory.
- * Precedence: OSU_DATA_PATH / REALM_PATH env → settings override → platform default.
- */
-export function resolveOsuDataPath(settingsOverride: string | null | undefined): string {
-  if (process.env.OSU_DATA_PATH) return process.env.OSU_DATA_PATH;
-  if (process.env.REALM_PATH) return path.dirname(process.env.REALM_PATH);
-  const trimmed = settingsOverride?.trim();
-  if (trimmed) return trimmed;
-  return platformDefaultOsuDataPath();
-}
-
-/** Prefer REALM_PATH env, else `{osuDataPath}/client.realm`. */
-export function resolveRealmPath(osuDataPath: string): string {
-  if (process.env.REALM_PATH) return process.env.REALM_PATH;
-  return path.join(osuDataPath, "client.realm");
+  return resolveOsuDataPath(settingsOverride).resolved;
 }
 
 /** Read settings override from SQLite and resolve the realm path for this sync cycle. */
@@ -56,6 +29,6 @@ export function resolveRealmPathFromDb(db: Db): string {
     .limit(1)
     .get();
 
-  const dataPath = resolveOsuDataPath(row?.value);
+  const dataPath = resolveOsuDataPath(row?.value).resolved;
   return resolveRealmPath(dataPath);
 }

@@ -1,5 +1,19 @@
 import { treaty } from "@elysia/eden";
+import type { LazerCollectionSyncSuccess } from "@roxysu/collection-sync";
 import type { App } from "@server/app";
+import type {
+  RecommendFocus,
+  RecommendSkillsetFilter,
+} from "@server/analytics/recommend/types";
+import type {
+  PracticeMetric,
+  PracticeSortBy,
+  PracticeSortDir,
+} from "@server/query-language";
+
+export type { PracticeSortBy, PracticeSortDir, PracticeMetric };
+export type RecommendSkillset = RecommendSkillsetFilter;
+export type { RecommendFocus };
 
 /** End-to-end typed client for the Elysia server (same origin). */
 export const api = treaty<App>(
@@ -32,19 +46,6 @@ export async function fetchSystemStatus() {
 export async function fetchDashboard() {
   return unwrap(await api.api.dashboard.get(), "/api/dashboard");
 }
-
-export type PracticeSortBy =
-  | "lastPlayed"
-  | "accuracy"
-  | "misses"
-  | "score"
-  | "pp"
-  | "mastery"
-  | "stars";
-
-export type PracticeSortDir = "asc" | "desc";
-
-export type PracticeMetric = "accuracy" | "misses" | "score";
 
 export async function fetchPracticeList(params: {
   page?: number;
@@ -117,15 +118,6 @@ export async function fetchPracticeSample(params: {
   );
 }
 
-export type RecommendFocus =
-  | "push"
-  | "accuracy"
-  | "consistency"
-  | "deficit"
-  | "skillset";
-
-export type RecommendSkillset = "both" | "rc" | "ln" | "fln";
-
 export async function fetchPracticeRecommend(params: {
   focus?: RecommendFocus;
   skillset?: RecommendSkillset;
@@ -197,14 +189,7 @@ export async function deleteCollection(id: number) {
   );
 }
 
-export type LazerCollectionSyncResult = {
-  created: number;
-  updated: number;
-  deleted: number;
-  skippedNoMd5: number;
-  backupPath: string;
-  syncedAt: string;
-};
+export type LazerCollectionSyncResult = LazerCollectionSyncSuccess;
 
 export async function syncCollectionsToLazer(): Promise<LazerCollectionSyncResult> {
   const result = await api.api.collections["sync-lazer"].post();

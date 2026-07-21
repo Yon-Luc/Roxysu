@@ -22,7 +22,6 @@ import {
   type Db,
 } from "@roxysu/db/client.node";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import Realm from "realm";
 import {
   mapBeatmap,
@@ -36,6 +35,8 @@ import {
 } from "./map";
 import { loadOsuSchema } from "./schema";
 import { platformDefaultOsuDataPath } from "./osu-paths";
+
+export { defaultDbPath } from "@roxysu/db/path";
 
 const BATCH_SIZE = 500;
 
@@ -1278,10 +1279,4 @@ export function defaultRealmPath(): string {
     return path.join(process.env.OSU_DATA_PATH, "client.realm");
   }
   return path.join(platformDefaultOsuDataPath(), "client.realm");
-}
-
-export function defaultDbPath(): string {
-  if (process.env.DB_PATH) return process.env.DB_PATH;
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  return path.resolve(here, "../../server/data.sqlite");
 }

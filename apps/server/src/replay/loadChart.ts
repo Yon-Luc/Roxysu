@@ -1,18 +1,14 @@
 import { readFileSync } from "node:fs";
 import { and, eq } from "drizzle-orm";
 import { beatmaps, beatmapSets, scores } from "@roxysu/db/client.bun";
-import { OsuFileParser } from "../map-analysis/parser/osuFileParser.js";
+import { OsuFileParser, type ChartNote } from "@roxysu/osu-chart";
 import {
   getOsuDataPath,
   resolveLazerFilePath,
 } from "../shared/lazer-files";
 import type { Db } from "../db";
 
-export type ChartNote = {
-  column: number;
-  startMs: number;
-  endMs: number;
-};
+export type { ChartNote };
 
 export type LoadedChart = {
   beatmapId: string;

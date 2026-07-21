@@ -3,38 +3,26 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { collections, settings, type Db } from "@roxysu/db/client.bun";
+import { SYNC_REALM_READER_PAUSED_KEY } from "@roxysu/db/settings-keys";
+import { defaultDbPath } from "@roxysu/db/path";
+import type {
+  LazerCollectionSyncError,
+  LazerCollectionSyncSuccess,
+} from "@roxysu/collection-sync";
 import {
   listCollectionMd5Hashes,
   parseQuery,
   QueryParseError,
 } from "../query-language";
 
-export const SYNC_REALM_READER_PAUSED_KEY = "sync.realm_reader_paused";
+export { SYNC_REALM_READER_PAUSED_KEY };
+export type { LazerCollectionSyncSuccess, LazerCollectionSyncError };
 
 const PAUSE_SETTLE_MS = 2_000;
-
-export type LazerCollectionSyncSuccess = {
-  created: number;
-  updated: number;
-  deleted: number;
-  skippedNoMd5: number;
-  backupPath: string;
-  syncedAt: string;
-};
-
-export type LazerCollectionSyncError = {
-  error: string;
-  code: "locked" | "schema_mismatch" | "other";
-};
 
 function realmReaderDir(): string {
   const here = path.dirname(fileURLToPath(import.meta.url));
   return path.resolve(here, "../../../realm-reader");
-}
-
-function defaultDbPathFromServer(): string {
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  return path.resolve(here, "../../data.sqlite");
 }
 
 async function setSetting(db: Db, key: string, value: string): Promise<void> {
@@ -153,7 +141,7 @@ export async function syncCollectionsToLazer(
       cwd: realmReaderDir(),
       env: {
         ...process.env,
-        DB_PATH: process.env.DB_PATH ?? defaultDbPathFromServer(),
+        DB_PATH: process.env.DB_PATH ?? defaultDbPath(),
       },
       stdout: "pipe",
       stderr: "pipe",

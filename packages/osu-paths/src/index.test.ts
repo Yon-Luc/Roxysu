@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import path from "node:path";
-import { platformDefaultOsuDataPath } from "./osu-paths";
+import { platformDefaultOsuDataPath } from "./index";
 
 describe("platformDefaultOsuDataPath", () => {
   test("uses APPDATA on Windows", () => {

@@ -115,12 +115,20 @@ roxysu/
 │   ├── server/          # Bun + Elysia — API, SSE, static frontend
 │   └── realm-reader/     # Node — Realm listener, writes to SQLite
 ├── packages/
-│   └── db/                # Drizzle schema + runtime-specific clients
+│   ├── db/                # Drizzle schema + settings keys + default DB path
+│   ├── osu-paths/         # Shared lazer data/realm path resolution
+│   ├── collection-sync/   # Collection write-back wire types + prefix
+│   ├── realm-backup/      # client.realm backup/prune helpers
+│   ├── osu-chart/         # .osu parse/write
+│   ├── pattern-7k/        # 7K pattern analysis
+│   ├── timing-analysis/   # Timing grid analysis
+│   ├── mania-judge/       # Hit windows, mods, replay judgment
+│   └── sunny-dan/         # Sunny stars → dan estimate
 ├── docs/
 └── scripts/
 ```
 
-Only `db` is a real shared package for now — it's the one thing genuinely imported by two independently-run processes. The other conceptual modules from the original design (`analytics`, `query-language`, `search`, `shared`, `types`) start as **folders inside `apps/server/src/`**, not separate workspace packages:
+`@roxysu/db` (plus path/settings helpers) is the cross-process contract between server and realm-reader. Chart/analysis packages are pure libraries (mostly server-consumed today) extracted for testability and to avoid drift. Product modules from the original design (`analytics`, `query-language`, `search`) stay as **folders inside `apps/server/src/`** until a second consumer appears:
 
 ```text
 apps/server/src/
@@ -130,7 +138,7 @@ apps/server/src/
 └── shared/
 ```
 
-TypeScript path aliases give the same import ergonomics as a workspace package without the overhead. Promote any of these to a real `packages/*` entry later if it needs to be reused outside `apps/server` (e.g. a future CLI) or needs a hard import boundary enforced.
+TypeScript path aliases (`@server/*`) give the UI the same import ergonomics as a workspace package without the overhead. Promote any remaining server folder to a real `packages/*` entry later if it needs to be reused outside `apps/server` (e.g. a future CLI) or needs a hard import boundary enforced.
 
 ## Dev Environment (NixOS)
 

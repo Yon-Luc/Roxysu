@@ -8,7 +8,7 @@ import { listSessionsForBeatmap } from "../analytics/session";
 import { getOrComputeSunnyDan } from "../map-analysis/computeSunnyDan";
 import { getOrComputePatternAnalysis } from "../map-analysis/computePatternAnalysis";
 import { getChartTimingAnalysis } from "../map-analysis/computeTimingAnalysis";
-import { OsuFileParser } from "../map-analysis/parser/osuFileParser.js";
+import { OsuFileParser } from "@roxysu/osu-chart";
 import {
   getOsuDataPath,
   resolveLazerFilePath,

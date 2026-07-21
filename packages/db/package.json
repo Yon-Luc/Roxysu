@@ -6,7 +6,9 @@
   "exports": {
     "./schema": "./src/schema.ts",
     "./client.node": "./src/client.node.ts",
-    "./client.bun": "./src/client.bun.ts"
+    "./client.bun": "./src/client.bun.ts",
+    "./settings-keys": "./src/settings-keys.ts",
+    "./path": "./src/path.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",

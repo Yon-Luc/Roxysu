@@ -1,0 +1,13 @@
+{
+  "name": "@roxysu/osu-paths",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "bun-types": "^1.3.14"
+  }
+}

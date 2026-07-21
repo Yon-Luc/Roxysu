@@ -1,8 +1,13 @@
 import { closeDb, ensureDb, eq, settings, type Db } from "@roxysu/db/client.node";
+import { defaultDbPath } from "@roxysu/db/path";
+import {
+  SYNC_PAUSE_WHEN_UNFOCUSED_KEY,
+  SYNC_REALM_READER_PAUSED_KEY,
+  SYNC_UI_FOCUSED_KEY,
+} from "@roxysu/db/settings-keys";
 import {
   RealmLockedError,
   SchemaVersionMismatchError,
-  defaultDbPath,
   hasSuccessfulImport,
   runFullSync,
   runIncrementalSync,
@@ -10,17 +15,13 @@ import {
 } from "./sync";
 import { resolveRealmPathFromDb } from "./osu-paths";
 
+export { SYNC_REALM_READER_PAUSED_KEY };
+
 const RETRY_MS = Number(process.env.REALM_RETRY_MS ?? 10_000);
 const RESYNC_MS = Number(process.env.REALM_RESYNC_MS ?? 60_000);
 const PAUSE_POLL_MS = Number(process.env.REALM_PAUSE_POLL_MS ?? 2_000);
 const FULL_EVERY_N = Number(process.env.REALM_FULL_EVERY_N ?? 10);
 const FORCE_FULL = process.env.REALM_FULL_SYNC === "1";
-
-/** Mirrors apps/server/src/routes/system.ts — web UI writes these via settings / sync-focus. */
-const SYNC_UI_FOCUSED_KEY = "sync.ui_focused";
-const SYNC_PAUSE_WHEN_UNFOCUSED_KEY = "sync.pause_when_unfocused";
-/** Set to "1" while Roxysu writes collections to client.realm. */
-export const SYNC_REALM_READER_PAUSED_KEY = "sync.realm_reader_paused";
 
 let shuttingDown = false;
 let wakeSleep: (() => void) | null = null;

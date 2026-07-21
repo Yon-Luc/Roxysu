@@ -350,17 +350,6 @@ export function SettingsPage() {
       </section>
 
       <section className="rx-panel p-5">
-        <h2 className="text-sm font-bold text-ink">Mapgen</h2>
-        <p className="mt-1 text-sm text-muted">
-          Generate a 7K mania beatmap from an MP3 with pattern targets, optional
-          background image, and downloadable .osz pack.
-        </p>
-        <Link to="/mapgen" className="rx-btn-primary mt-4 inline-flex">
-          Open mapgen
-        </Link>
-      </section>
-
-      <section className="rx-panel p-5">
         <h2 className="text-sm font-bold text-ink">Preview skin</h2>
         <p className="mt-1 text-sm text-muted">
           Customize note shape, colors, size, hit position, and lane cover for

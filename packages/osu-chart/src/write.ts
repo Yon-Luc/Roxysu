@@ -76,7 +76,7 @@ export function buildManiaOsuText(chart: ManiaOsuChart): string {
     `Creator:${md.creator}`,
     `Version:${md.version}`,
     "Source:",
-    "Tags:roxysu mapgen",
+    "Tags:roxysu",
     "BeatmapID:0",
     "BeatmapSetID:-1",
     "",

@@ -136,12 +136,12 @@ TypeScript path aliases give the same import ergonomics as a workspace package w
 
 Both native-dependency packages (`better-sqlite3`, `realm`) ship prebuilt binaries assuming a standard FHS layout, which NixOS doesn't have. A project-local `flake.nix` devShell handles this without touching system config:
 
-- `bun`, `nodejs_24`, `ffmpeg` — runtime tools for the server, realm-reader, and audio analysis.
+- `bun`, `nodejs_24` — runtime tools for the server and realm-reader.
 - `NIX_LD` / `NIX_LD_LIBRARY_PATH` — points a compatibility loader at the dynamic linker and shared libs (`zlib`, `openssl`, `icu`, `stdenv.cc.cc`) these native binaries expect at runtime.
 - `python3`, `gcc`, `gnumake` — fallback build toolchain for whenever a package's prebuilt binary doesn't match the installed Node/Bun ABI and `node-gyp` has to compile from source.
 - `bun install` runs `trustedDependencies` install scripts for `better-sqlite3` and `realm` (blocked by default in Bun for security) — required for either native module to actually build/link.
 
-`nix develop` (optionally via `direnv`) gets a contributor a working environment with zero manual global installs. The dev shell exports `FFMPEG_PATH` explicitly; when the server runs outside the shell (e.g. from an IDE terminal), `@roxysu/audio-analysis` auto-resolves ffmpeg via the repo flake (`packages.ffmpeg`).
+`nix develop` (optionally via `direnv`) gets a contributor a working environment with zero manual global installs.
 
 ## Data Flow
 

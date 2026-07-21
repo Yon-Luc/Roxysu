@@ -7,7 +7,6 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@roxysu/audio-analysis": "workspace:*",
     "@roxysu/osu-chart": "workspace:*"
   },
   "devDependencies": {

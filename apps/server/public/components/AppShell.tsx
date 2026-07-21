@@ -11,7 +11,6 @@ const nav = [
   { to: "/practice", label: "Practice", icon: PracticeIcon },
   { to: "/sessions", label: "Sessions", icon: SessionsIcon },
   { to: "/collections", label: "Collections", icon: CollectionsIcon },
-  { to: "/mapgen", label: "Mapgen", icon: MapgenIcon },
   { to: "/skin", label: "Skin", icon: SkinIcon },
   { to: "/settings", label: "Settings", icon: SettingsIcon },
 ] as const;
@@ -309,14 +308,6 @@ function SkinIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
       <path d="M5 4.75A.75.75 0 0 1 5.75 4h3.5a.75.75 0 0 1 .75.75v14.5a.75.75 0 0 1-.75.75h-3.5a.75.75 0 0 1-.75-.75V4.75Zm9 0a.75.75 0 0 1 .75-.75h3.5a.75.75 0 0 1 .75.75v14.5a.75.75 0 0 1-.75.75h-3.5a.75.75 0 0 1-.75-.75V4.75ZM6.5 7.5h2v2h-2v-2Zm9 3h2v3h-2v-3ZM6.5 12h2v4h-2v-4Z" />
-    </svg>
-  );
-}
-
-function MapgenIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d="M12 3.5a.75.75 0 0 1 .75.75V11h6.75a.75.75 0 0 1 0 1.5H12.75v6.75a.75.75 0 0 1-1.5 0V12.5H4.5a.75.75 0 0 1 0-1.5h6.75V4.25A.75.75 0 0 1 12 3.5Z" />
     </svg>
   );
 }

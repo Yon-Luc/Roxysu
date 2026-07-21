@@ -1,10 +1,10 @@
 import { Link } from "@tanstack/react-router";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { BeatmapCover } from "../../components/BeatmapCover";
 import { BeatmapPreviewButton } from "../../components/BeatmapPreviewModal";
 import { CopyBeatmapSearchButton } from "../../components/CopyBeatmapSearchButton";
 import { ScoreReplayButton } from "../../components/ScoreReplayModal";
-import { fetchBeatmap, fetchMusicDrift } from "../../lib/api";
+import { fetchBeatmap } from "../../lib/api";
 import {
   formatAccuracy,
   formatMods,
@@ -25,11 +25,6 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
     queryFn: () => fetchBeatmap(beatmapId),
     enabled: Boolean(beatmapId),
   });
-
-  const musicDriftMut = useMutation({
-    mutationFn: () => fetchMusicDrift(beatmapId),
-  });
-
   if (isLoading) {
     return <p className="text-muted">Loading practice profile…</p>;
   }
@@ -265,18 +260,7 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
       {beatmap.rulesetShortName === "mania" && timingAnalysis != null ? (
         <section className="rx-panel p-5">
           <h2 className="text-sm font-bold text-ink">Timing analysis</h2>
-          <TimingAnalysisPanel
-            timing={timingAnalysis}
-            hasAudio={Boolean(beatmap.audioFileHash)}
-            musicDrift={musicDriftMut.data?.musicDrift ?? null}
-            musicDriftLoading={musicDriftMut.isPending}
-            musicDriftError={
-              musicDriftMut.error instanceof Error
-                ? musicDriftMut.error.message
-                : null
-            }
-            onAnalyzeMusic={() => musicDriftMut.mutate()}
-          />
+          <TimingAnalysisPanel timing={timingAnalysis} />
         </section>
       ) : null}
 
@@ -390,15 +374,6 @@ type ChartTimingView = {
   error: string | null;
 };
 
-type MusicDriftView = {
-  audioBpm: number | null;
-  audioBpmConfidence: number;
-  chartBpm: number;
-  driftRatio: number;
-  issues: TimingIssueView[];
-  error: string | null;
-};
-
 const ISSUE_KIND_LABELS: Record<string, string> = {
   off_snap: "Off snap",
   inconsistent_snap: "Ambiguous snap",
@@ -424,21 +399,7 @@ function severityClass(severity: string): string {
   }
 }
 
-function TimingAnalysisPanel({
-  timing,
-  hasAudio,
-  musicDrift,
-  musicDriftLoading,
-  musicDriftError,
-  onAnalyzeMusic,
-}: {
-  timing: ChartTimingView;
-  hasAudio: boolean;
-  musicDrift: MusicDriftView | null;
-  musicDriftLoading: boolean;
-  musicDriftError: string | null;
-  onAnalyzeMusic: () => void;
-}) {
+function TimingAnalysisPanel({ timing }: { timing: ChartTimingView }) {
   if (timing.error) {
     return <p className="mt-3 text-sm text-faint">{timing.error}</p>;
   }
@@ -499,82 +460,6 @@ function TimingAnalysisPanel({
       ) : (
         <p className="text-sm text-muted">No timing issues detected on snap grid.</p>
       )}
-
-      <div className="border-t border-line pt-4">
-        <h3 className="text-xs font-bold uppercase tracking-wide text-faint">
-          Music alignment
-        </h3>
-        <p className="mt-1 text-sm text-muted">
-          Compare note times to beats detected from the chart audio. Requires
-          ffmpeg on PATH, or set{" "}
-          <span className="font-mono text-xs">FFMPEG_PATH</span> (NixOS:{" "}
-          <span className="font-mono text-xs">nix develop</span> includes it).
-        </p>
-
-        {musicDrift && !musicDrift.error ? (
-          <div className="mt-3 space-y-2 text-sm">
-            <div className="flex flex-wrap gap-x-4 gap-y-1 tabular-nums text-subtle">
-              <span>
-                Audio BPM{" "}
-                <span className="font-semibold text-ink">
-                  {musicDrift.audioBpm?.toFixed(1) ?? "—"}
-                </span>
-              </span>
-              <span>
-                Drift{" "}
-                <span className="font-semibold text-ink">
-                  {Math.round(musicDrift.driftRatio * 100)}%
-                </span>
-              </span>
-              {musicDrift.audioBpmConfidence > 0 ? (
-                <span>
-                  Confidence{" "}
-                  <span className="font-semibold text-ink">
-                    {Math.round(musicDrift.audioBpmConfidence * 100)}%
-                  </span>
-                </span>
-              ) : null}
-            </div>
-            {musicDrift.issues.length > 0 ? (
-              <ul className="max-h-36 space-y-1 overflow-y-auto">
-                {musicDrift.issues.slice(0, 15).map((issue, idx) => (
-                  <li
-                    key={`drift-${issue.startMs}-${idx}`}
-                    className={`text-sm ${severityClass(issue.severity)}`}
-                  >
-                    <span className="font-mono text-xs text-faint">
-                      {formatTimeMs(issue.startMs)}
-                    </span>{" "}
-                    {issue.message}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-muted">
-                Notes align with detected audio beats.
-              </p>
-            )}
-          </div>
-        ) : musicDrift?.error ? (
-          <p className="mt-3 text-sm text-rose-300">{musicDrift.error}</p>
-        ) : null}
-
-        {musicDriftError ? (
-          <p className="mt-3 text-sm text-rose-300">{musicDriftError}</p>
-        ) : null}
-
-        <button
-          type="button"
-          className="rx-btn-primary mt-3"
-          disabled={!hasAudio || musicDriftLoading}
-          onClick={onAnalyzeMusic}
-        >
-          {musicDriftLoading ? "Analyzing audio…" : "Check music alignment"}
-        </button>
-        {!hasAudio ? (
-          <p className="mt-2 text-xs text-faint">Audio file hash not available.</p>
-        ) : null}
-      </div>
     </div>
   );
 }

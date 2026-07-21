@@ -2,23 +2,12 @@ import { readFileSync } from "node:fs";
 import { eq } from "drizzle-orm";
 import { beatmaps, type Db } from "@roxysu/db/client.bun";
 import { parseOsuChart } from "@roxysu/osu-chart";
-import { analyzeAudioFile } from "@roxysu/audio-analysis";
 import {
   analyzeChartTiming,
-  compareChartToAudio,
   type TimingIssue,
   type TimingIssueKind,
 } from "@roxysu/timing-analysis";
-import {
-  ffmpegUnavailableMessage,
-  isFfmpegAvailableAt,
-  resolveFfmpegPath,
-} from "../shared/ffmpeg-path";
-import {
-  getOsuDataPath,
-  lazerFileExists,
-  resolveLazerFilePath,
-} from "../shared/lazer-files";
+import { getOsuDataPath, resolveLazerFilePath } from "../shared/lazer-files";
 
 const MAX_ISSUES = 40;
 
@@ -34,15 +23,6 @@ export type ChartTimingRating = {
   };
   issues: TimingIssue[];
   issueCounts: Partial<Record<TimingIssueKind, number>>;
-  error: string | null;
-};
-
-export type MusicDriftRating = {
-  audioBpm: number | null;
-  audioBpmConfidence: number;
-  chartBpm: number;
-  driftRatio: number;
-  issues: TimingIssue[];
   error: string | null;
 };
 
@@ -140,95 +120,6 @@ export async function getChartTimingAnalysis(
       },
       issues: [],
       issueCounts: {},
-      error: err instanceof Error ? err.message : String(err),
-    };
-  }
-}
-
-/** Decode chart audio via ffmpeg and compare note times to detected beats. */
-export async function analyzeMusicDrift(
-  db: Db,
-  beatmapId: string,
-): Promise<MusicDriftRating | null> {
-  const loaded = await loadBeatmapOsu(db, beatmapId);
-  if (!loaded.ok) {
-    return {
-      audioBpm: null,
-      audioBpmConfidence: 0,
-      chartBpm: 0,
-      driftRatio: 0,
-      issues: [],
-      error: loaded.error,
-    };
-  }
-
-  const { beatmap, osuText } = loaded;
-  if (!beatmap.audioFileHash) {
-    return {
-      audioBpm: null,
-      audioBpmConfidence: 0,
-      chartBpm: 0,
-      driftRatio: 0,
-      issues: [],
-      error: "Beatmap audio hash missing",
-    };
-  }
-
-  const ffmpegPath = await resolveFfmpegPath();
-  if (!(await isFfmpegAvailableAt(ffmpegPath))) {
-    return {
-      audioBpm: null,
-      audioBpmConfidence: 0,
-      chartBpm: 0,
-      driftRatio: 0,
-      issues: [],
-      error: ffmpegUnavailableMessage(ffmpegPath),
-    };
-  }
-
-  if (!lazerFileExists(beatmap.audioFileHash, getOsuDataPath())) {
-    return {
-      audioBpm: null,
-      audioBpmConfidence: 0,
-      chartBpm: 0,
-      driftRatio: 0,
-      issues: [],
-      error: "Audio file not found in lazer files store",
-    };
-  }
-
-  const audioPath = resolveLazerFilePath(beatmap.audioFileHash, getOsuDataPath());
-  if (!audioPath) {
-    return {
-      audioBpm: null,
-      audioBpmConfidence: 0,
-      chartBpm: 0,
-      driftRatio: 0,
-      issues: [],
-      error: "Could not resolve audio file path",
-    };
-  }
-
-  try {
-    const chart = parseOsuChart(osuText);
-    const audio = await analyzeAudioFile(audioPath, { ffmpegPath });
-    const comparison = compareChartToAudio(chart, audio);
-
-    return {
-      audioBpm: comparison.audioBpm,
-      audioBpmConfidence: comparison.audioBpmConfidence,
-      chartBpm: comparison.chartBpm,
-      driftRatio: comparison.driftRatio,
-      issues: prioritizeIssues(comparison.issues),
-      error: null,
-    };
-  } catch (err) {
-    return {
-      audioBpm: null,
-      audioBpmConfidence: 0,
-      chartBpm: 0,
-      driftRatio: 0,
-      issues: [],
       error: err instanceof Error ? err.message : String(err),
     };
   }

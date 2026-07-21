@@ -31,9 +31,9 @@ export function parseOsuChart(osuText: string): ParsedOsuChart {
     status: parser.status,
     lnRatio: parser.lnRatio,
     notes: notesFromParser(parser),
-    timingPoints: parser.timingPoints as ParsedOsuChart["timingPoints"],
-    breaks: parser.breaks as ParsedOsuChart["breaks"],
-    metaData: parser.metaData as Record<string, string>,
+    timingPoints: parser.timingPoints,
+    breaks: parser.breaks,
+    metaData: parser.metaData,
   };
 }
 

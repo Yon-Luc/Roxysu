@@ -97,7 +97,9 @@ const skinRoute = createRoute({
 const overlayRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/overlay",
-  validateSearch: (search: Record<string, unknown>) => ({
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { limit?: number; bg?: "solid" | "clear" } => ({
     limit:
       search.limit == null || search.limit === ""
         ? undefined

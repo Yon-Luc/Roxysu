@@ -1,4 +1,4 @@
-import { calculate as calculateSunny } from "./sunny/sunnyAlgorithm.js";
+import { calculate } from "./sunny/sunnyAlgorithm.js";
 import { estDiff } from "./estDiff";
 
 export type SunnyEstimatorResult = {
@@ -7,16 +7,6 @@ export type SunnyEstimatorResult = {
   columnCount: number;
   estDiff: string;
 };
-
-type CalculateFn = (
-  osuText: string,
-  speedRate?: number,
-  odFlag?: string | number | null,
-  cvtFlag?: string | null,
-  options?: { withGraph?: boolean },
-) => unknown;
-
-const calculate = calculateSunny as CalculateFn;
 
 function normalizeReworkResult(
   result: unknown,

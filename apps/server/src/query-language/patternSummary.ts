@@ -114,7 +114,9 @@ function parseAxis(value: string | undefined): PatternAxis {
   return "all";
 }
 
-function axisSqlClause(axis: PatternAxis, params: unknown[]): string | null {
+type SqlParam = string | number | boolean | null;
+
+function axisSqlClause(axis: PatternAxis, params: SqlParam[]): string | null {
   if (axis === "all") return null;
   params.push(LN_DAN_RATIO_THRESHOLD);
   if (axis === "ln") {
@@ -149,7 +151,7 @@ function buildPatternsForCounts(
   countRows: Array<{ pattern: string; count: number }>,
   samplesPerPattern: number,
   axisFilter: string,
-  axisParams: unknown[],
+  axisParams: SqlParam[],
 ): PatternSummaryItem[] {
   const countByPattern = new Map(
     countRows.map((r) => [r.pattern, Number(r.count)]),
@@ -228,7 +230,7 @@ export function practicePatternSummary(
     Math.min(8, Math.floor(opts.samplesPerPattern ?? 5)),
   );
 
-  const axisParams: unknown[] = [];
+  const axisParams: SqlParam[] = [];
   const axisClause = axisSqlClause(axis, axisParams);
   const axisFilter = axisClause ? `AND ${axisClause}` : "";
 
@@ -297,12 +299,12 @@ export function practicePatternSummary(
     )
     .all(SUNNY_ALGORITHM, PATTERN_ALGORITHM, ...axisParams) as Array<{
     pattern: string;
-    count: number;
+    n: number;
   }>;
 
   const normalizedCounts = countRows.map((r) => ({
     pattern: r.pattern,
-    count: Number(r.count ?? r.n ?? 0),
+    count: Number(r.n ?? 0),
   }));
 
   const patterns = buildPatternsForCounts(

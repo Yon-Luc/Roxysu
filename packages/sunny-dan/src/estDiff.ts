@@ -1,16 +1,4 @@
-import { DAN_INDEX as DAN_INDEX_RAW } from "./intervals/index.js";
-
-type DanInterval = [number, number, string];
-
-type DanIndex = Record<
-  number,
-  {
-    RC: { default: DanInterval[] };
-    LN: { default: DanInterval[] };
-  }
->;
-
-const DAN_INDEX = DAN_INDEX_RAW as DanIndex;
+import { DAN_INDEX, type DanInterval } from "./intervals/index.js";
 
 /** LN ratio at/above this uses LN dan; below uses RC/Regular dan. */
 export const LN_DAN_RATIO_THRESHOLD = 0.2;

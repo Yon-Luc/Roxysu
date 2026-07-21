@@ -108,11 +108,9 @@ export function scaleManiaHitWindows<T extends Record<string, number>>(
 ): T {
   if (rate === 1) return windows;
   const scale = (n: number) => Math.floor(n * rate) + 0.5;
-  const next = { ...windows };
-  for (const key of Object.keys(next)) {
-    next[key] = scale(next[key]!);
-  }
-  return next;
+  return Object.fromEntries(
+    Object.entries(windows).map(([key, value]) => [key, scale(value)]),
+  ) as T;
 }
 
 /** Format a mod acronym; custom rate mods become `X1.15` instead of the mod name. */

@@ -72,6 +72,7 @@ async function readOsuTextFromDb(
   if (!row?.hash) return null;
   try {
     const path = resolveLazerFilePath(row.hash, getOsuDataPath());
+    if (path == null) return null;
     return readFileSync(path, "utf8");
   } catch {
     return null;

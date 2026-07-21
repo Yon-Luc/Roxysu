@@ -199,14 +199,15 @@ function scorePatterns(metrics: ReturnType<typeof computeMetrics>): ScoredPatter
     (1 - metrics.jumpstreamScore) *
     (1 - metrics.chordstreamScore * 0.5);
 
-  return [
+  const scored: ScoredPattern[] = [
     { label: "jack", score: jackScore },
     { label: "chordjack", score: chordjackScore },
     { label: "jumpstream", score: jumpstreamScore },
     { label: "chordstream", score: chordstreamScore },
     { label: "bracket", score: bracketScore },
     { label: "stream", score: streamScore },
-  ].sort((a, b) => b.score - a.score);
+  ];
+  return scored.sort((a, b) => b.score - a.score);
 }
 
 function pickDominant(scored: ScoredPattern[]): {

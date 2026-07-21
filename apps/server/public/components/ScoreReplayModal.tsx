@@ -202,7 +202,7 @@ function clampRate(rate: number): number {
 }
 
 function playbackRateOptions(current: number): number[] {
-  const options = [...PRESET_RATES];
+  const options: number[] = [...PRESET_RATES];
   if (!options.some((r) => Math.abs(r - current) < 0.001) && current > 0) {
     options.push(clampRate(current));
     options.sort((a, b) => a - b);

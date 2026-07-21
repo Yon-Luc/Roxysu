@@ -202,7 +202,8 @@ export function applyLnRatio(
     const endMs = note.startMs + Math.max(minLn, localBeat * holdBeats);
 
     out.push({ ...note, endMs });
-    freeAt.set(note.column, endMs);
+    // Inclusive LN end — next head must be strictly after release.
+    freeAt.set(note.column, endMs + 1);
   }
 
   return out;

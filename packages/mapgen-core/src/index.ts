@@ -11,6 +11,7 @@ export {
   sanitizeManiaNotes,
   findIllegalOverlaps,
   findEmptyColumns,
+  enforceColumnOccupancy,
 } from "./sanitizeNotes";
 export { buildMusicalHitTimes } from "./musicGrid";
 export {

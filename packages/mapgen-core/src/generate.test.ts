@@ -30,18 +30,33 @@ describe("sanitizeManiaNotes", () => {
       { column: 3, startMs: 0, endMs: 500 },
       { column: 3, startMs: 200, endMs: 200 },
       { column: 3, startMs: 500, endMs: 500 },
+      { column: 3, startMs: 501, endMs: 501 },
     ]);
     expect(notes).toHaveLength(2);
-    expect(notes[1]!.startMs).toBe(500);
+    expect(notes[0]!.endMs).toBe(500);
+    expect(notes[1]!.startMs).toBe(501);
     expect(findIllegalOverlaps(notes)).toHaveLength(0);
   });
 
-  test("allows a new head exactly on LN release", () => {
+  test("allows a new head after LN release, not on it", () => {
     const notes = sanitizeManiaNotes([
       { column: 2, startMs: 0, endMs: 400 },
       { column: 2, startMs: 400, endMs: 400 },
+      { column: 2, startMs: 401, endMs: 401 },
     ]);
     expect(notes).toHaveLength(2);
+    expect(notes[0]!.endMs).toBe(400);
+    expect(notes[1]!.startMs).toBe(401);
+    expect(findIllegalOverlaps(notes)).toHaveLength(0);
+  });
+
+  test("rejects head stacked on LN release timestamp", () => {
+    const notes = sanitizeManiaNotes([
+      { column: 1, startMs: 50000, endMs: 50933 },
+      { column: 1, startMs: 50933, endMs: 50933 },
+    ]);
+    expect(notes).toHaveLength(1);
+    expect(notes[0]!.endMs).toBe(50933);
     expect(findIllegalOverlaps(notes)).toHaveLength(0);
   });
 

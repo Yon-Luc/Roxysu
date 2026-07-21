@@ -13,7 +13,7 @@ https://osu.ppy.sh/wiki/en/Ranking_criteria/osu!mania
 
 - **Auto must FC** — no object placement that makes Auto fail.
 - **One object per column per timestamp**
-- **No body overlap** — no rice/LN head inside an active hold; head may start on release
+- **No body overlap** — no rice/LN head inside an active hold **or on the release ms** (inclusive end; analysers flag release+head as stacked)
 - **No empty columns** — every key in the keymode must be used (`ensureColumnCoverage`)
 - **Chord cap** — respect tier `maxChordSize` (≤6 for Insane-or-lower)
 - Always run `sanitizeManiaNotes` before write/export

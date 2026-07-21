@@ -19,7 +19,7 @@ export type TempoSegment = {
 };
 
 export type AudioAnalysisResult = {
-  algorithm: "audio-v1";
+  algorithm: "audio-v1" | "audio-v2";
   durationMs: number;
   sampleRate: number;
   /** Dominant / global BPM (mode of the tempo map). */
@@ -39,6 +39,8 @@ export type AudioAnalysisResult = {
 };
 
 export type AudioAnalysisOptions = {
+  /** Analysis recipe. Default: "audio-v1". */
+  algorithm?: "audio-v1" | "audio-v2";
   /** Path to ffmpeg binary. Default: "ffmpeg". */
   ffmpegPath?: string;
   /** Decode sample rate. Default: 22050. */
@@ -53,6 +55,8 @@ export type AudioAnalysisOptions = {
   onsetThreshold?: number;
   /** Section window length in seconds. Default: 8. */
   sectionWindowSec?: number;
+  /** audio-v2: merge adjacent onsets closer than this beat fraction. Default: 1/6. */
+  minPlacementGapBeats?: number;
 };
 
 export type DecodeAudioOptions = {

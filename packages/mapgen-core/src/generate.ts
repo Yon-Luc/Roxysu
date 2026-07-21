@@ -20,6 +20,7 @@ import {
   resolveTierConstraints,
 } from "./tierConstraints";
 import type { MapgenOptions, MapgenResult, PatternTargets } from "./types";
+import { generateMarkovNotes } from "./markov";
 
 const DEFAULT_TARGETS: PatternTargets = {
   delay: 0.45,
@@ -108,6 +109,9 @@ export function generateMapFromAudio(
   const noteStride = options.noteStride ?? dan?.noteStride ?? 1;
   const segmentBeats =
     options.segmentBeats ?? dan?.segmentBeats ?? 8;
+  const mapgenVersion = options.version ?? 1;
+  const stage2Backend =
+    options.stage2Backend ?? (mapgenVersion === 2 ? "markov" : "template");
   const seed = options.seed ?? Date.now();
   const rng = createRng(seed);
 
@@ -212,15 +216,27 @@ export function generateMapFromAudio(
     segments.push({ startMs: segStart, endMs: hardEnd, pattern });
 
     if (segHits.length > 0) {
-      notes.push(
-        ...PATTERN_EMITTERS[pattern]({
-          columnCount,
-          rng,
-          hitTimes: segHits,
-          beatMs: localBeatMs,
-          tier,
-        }),
-      );
+      const emitted =
+        stage2Backend === "markov"
+          ? generateMarkovNotes({
+              columnCount,
+              rng,
+              hitTimes: segHits,
+              tier,
+              bpm: 60_000 / localBeatMs,
+              starHint: dan?.targetStar ?? (tier.tier === "low" ? 3 : tier.tier === "mid" ? 5 : 8),
+              lnRatio: lnFinal,
+              model: options.markovModel,
+              fallbackTargets: { ...patternTargets, ln: lnFinal },
+            })
+          : PATTERN_EMITTERS[pattern]({
+              columnCount,
+              rng,
+              hitTimes: segHits,
+              beatMs: localBeatMs,
+              tier,
+            });
+      notes.push(...emitted);
     }
 
     segStart = hardEnd;
@@ -255,7 +271,7 @@ export function generateMapFromAudio(
     },
   });
 
-  const version =
+  const difficultyVersion =
     options.metadata?.version ??
     (dan ? dan.label : "Generated");
 
@@ -264,7 +280,7 @@ export function generateMapFromAudio(
       title: options.metadata?.title ?? "Generated Chart",
       artist: options.metadata?.artist ?? "Unknown",
       creator: options.metadata?.creator ?? "Roxysu Mapgen",
-      version,
+      version: difficultyVersion,
       audioFilename: options.audioFilename ?? "audio.mp3",
       backgroundFilename: options.metadata?.backgroundFilename,
     },
@@ -289,6 +305,8 @@ export function generateMapFromAudio(
     bpmAlternates: audio.bpmAlternates ?? [],
     bpmConfidence: audio.bpmConfidence ?? 0,
     timingPoints,
+    stage2Backend,
+    version: mapgenVersion,
   };
 }
 

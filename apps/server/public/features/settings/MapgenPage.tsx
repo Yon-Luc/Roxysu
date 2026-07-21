@@ -3,7 +3,11 @@ import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { DAN_PRESETS, resolveDanPreset } from "@roxysu/mapgen-core";
 import { PageTitle } from "../../components/PageTitle";
-import { fetchMapgenStatus, generateMapgenPack } from "../../lib/api";
+import {
+  fetchMapgenStatus,
+  fetchMapgenV2Status,
+  generateMapgenPack,
+} from "../../lib/api";
 
 type PatternKey =
   | "delay"
@@ -198,7 +202,12 @@ export function MapgenPage() {
   const [seed, setSeed] = useState("");
   const [endSec, setEndSec] = useState("");
   const [dan, setDan] = useState("");
+  const [versionCode, setVersionCode] = useState<1 | 2>(2);
   const [targets, setTargets] = useState<Record<PatternKey, number>>(defaultTargets);
+  const v2StatusQuery = useQuery({
+    queryKey: ["mapgen", "v2-status"],
+    queryFn: fetchMapgenV2Status,
+  });
 
   const [lastResult, setLastResult] = useState<{
     filename: string;
@@ -215,6 +224,12 @@ export function MapgenPage() {
     sunnyLnPct: string | null;
     timingPoints: string | null;
     bpmMap: string | null;
+    versionCode: string | null;
+    stage2: string | null;
+    evalBucket: string | null;
+    evalNps: string | null;
+    evalEntropy: string | null;
+    evalRc: string | null;
   } | null>(null);
 
   useEffect(() => {
@@ -258,6 +273,7 @@ export function MapgenPage() {
         seed: seed ? Number(seed) : undefined,
         endSec: endSec ? Number(endSec) : undefined,
         dan: dan || undefined,
+        versionCode,
       });
     },
     onSuccess: (result) => {
@@ -276,6 +292,12 @@ export function MapgenPage() {
         sunnyLnPct: result.sunnyLnPct,
         timingPoints: result.timingPoints,
         bpmMap: result.bpmMap,
+        versionCode: result.versionCode,
+        stage2: result.stage2,
+        evalBucket: result.evalBucket,
+        evalNps: result.evalNps,
+        evalEntropy: result.evalEntropy,
+        evalRc: result.evalRc,
       });
       const url = URL.createObjectURL(result.blob);
       const a = document.createElement("a");
@@ -360,6 +382,26 @@ export function MapgenPage() {
             placeholder="auto-detect"
             mono
           />
+          <label className="block">
+            <span className="text-xs font-semibold uppercase tracking-wide text-faint">
+              Generator
+            </span>
+            <select
+              value={String(versionCode)}
+              onChange={(e) => setVersionCode(e.target.value === "1" ? 1 : 2)}
+              className="mt-1.5 w-full rounded-xl border border-line bg-elevated/50 px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none"
+            >
+              <option value="2">v2 Markov + eval</option>
+              <option value="1">v1 template baseline</option>
+            </select>
+            <p className="mt-1 text-xs text-faint">
+              {versionCode === 2
+                ? v2StatusQuery.data?.ready
+                  ? `Uses ${v2StatusQuery.data.sampleCount} library charts across ${v2StatusQuery.data.bucketCount} eval buckets.`
+                  : "v2 corpus assets are not ready yet; generation may fall back to lightweight defaults."
+                : "Use this to compare against the old segment-template baseline."}
+            </p>
+          </label>
           <label className="block">
             <span className="text-xs font-semibold uppercase tracking-wide text-faint">
               Dan target
@@ -493,7 +535,17 @@ export function MapgenPage() {
             {lastResult.dominant
               ? ` · dominant ${lastResult.dominant}`
               : ""}
+            {lastResult.stage2 ? ` · ${lastResult.stage2}` : ""}
+            {lastResult.versionCode ? ` · v${lastResult.versionCode}` : ""}
           </p>
+          {lastResult.evalBucket ? (
+            <p className="mt-1 text-xs text-faint">
+              Eval {lastResult.evalBucket}
+              {lastResult.evalNps ? ` · density ${lastResult.evalNps}` : ""}
+              {lastResult.evalEntropy ? ` · entropy ${lastResult.evalEntropy}` : ""}
+              {lastResult.evalRc != null ? ` · RC issues ${lastResult.evalRc}` : ""}
+            </p>
+          ) : null}
           <p className="mt-2 text-xs text-faint">
             Import the .osz in osu!lazer (File → Import). Roxysu picks it up
             from lazer&apos;s library on the next sync (~60s) — it does not

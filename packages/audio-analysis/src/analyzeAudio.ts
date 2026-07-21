@@ -17,19 +17,77 @@ import type {
   DecodedAudio,
 } from "./types";
 
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)] ?? 0;
+}
+
+function mergeNearbyOnsets(
+  onsets: AudioAnalysisResult["onsets"],
+  bpm: number | null,
+  beatWindow = 1 / 6,
+): AudioAnalysisResult["onsets"] {
+  if (onsets.length <= 1 || !bpm || bpm <= 0) return onsets;
+  const minGapMs = (60_000 / bpm) * beatWindow;
+  const merged: AudioAnalysisResult["onsets"] = [onsets[0]!];
+  for (let i = 1; i < onsets.length; i += 1) {
+    const next = onsets[i]!;
+    const prev = merged[merged.length - 1]!;
+    if (next.timeMs - prev.timeMs < minGapMs) {
+      if (next.strength > prev.strength) merged[merged.length - 1] = next;
+      continue;
+    }
+    merged.push(next);
+  }
+  return merged;
+}
+
+function analyzeWindow(
+  decoded: DecodedAudio,
+  startRatio: number,
+  endRatio: number,
+  options: AudioAnalysisOptions,
+): { bpm: number | null; offset: number; confidence: number } {
+  const total = decoded.samples.length;
+  const start = Math.max(0, Math.floor(total * startRatio));
+  const end = Math.min(total, Math.floor(total * endRatio));
+  const sliced: DecodedAudio = {
+    samples: decoded.samples.slice(start, end),
+    sampleRate: decoded.sampleRate,
+    durationMs: ((end - start) / decoded.sampleRate) * 1000,
+  };
+  const result = analyzeDecodedAudio(sliced, { ...options, algorithm: "audio-v1" });
+  const startMs = (start / decoded.sampleRate) * 1000;
+  return {
+    bpm: result.bpm,
+    offset: result.timingOffsetMs + startMs,
+    confidence: result.bpmConfidence,
+  };
+}
+
 /** Analyze decoded PCM — no ffmpeg required. */
 export function analyzeDecodedAudio(
   decoded: DecodedAudio,
   options: AudioAnalysisOptions = {},
 ): AudioAnalysisResult {
-  const onsets = detectOnsets(decoded.samples, decoded.sampleRate, {
+  const algorithm = options.algorithm ?? "audio-v1";
+  const baseOnsets = detectOnsets(decoded.samples, decoded.sampleRate, {
     frameSize: options.frameSize,
     hopSize: options.hopSize,
     minOnsetIntervalSec: options.minOnsetIntervalSec,
     onsetThreshold: options.onsetThreshold,
   });
 
-  const { bpm, confidence, alternates } = estimateBpm(onsets);
+  const { bpm: rawBpm, confidence: rawConfidence, alternates } = estimateBpm(baseOnsets);
+  const onsets =
+    algorithm === "audio-v2"
+      ? mergeNearbyOnsets(baseOnsets, rawBpm, options.minPlacementGapBeats ?? 1 / 6)
+      : baseOnsets;
+  const { bpm, confidence } =
+    algorithm === "audio-v2"
+      ? estimateBpm(onsets)
+      : { bpm: rawBpm, confidence: rawConfidence };
   const tempoMap = estimateTempoMap(
     onsets,
     decoded.durationMs,
@@ -50,16 +108,38 @@ export function analyzeDecodedAudio(
     options.sectionWindowSec ?? 8,
   );
 
-  const timingOffsetMs = resolveTimingOffsetMs(
+  let timingOffsetMs = resolveTimingOffsetMs(
     beats,
     onsets,
     decoded.durationMs,
   );
 
+  if (algorithm === "audio-v2") {
+    const windows = [
+      analyzeWindow(decoded, 0, 0.35, options),
+      analyzeWindow(decoded, 0.25, 0.6, options),
+      analyzeWindow(decoded, 0.5, 0.85, options),
+    ].filter((window) => window.confidence > 0.1);
+    const bpms = windows
+      .map((window) => window.bpm)
+      .filter((value): value is number => value != null && value > 0);
+    const offsets = windows.map((window) => window.offset).filter(Number.isFinite);
+    if (bpms.length > 0) {
+      const mergedBpm = median(bpms);
+      if (Number.isFinite(mergedBpm) && mergedBpm > 0) {
+        const remapped = estimateTempoMap(onsets, decoded.durationMs, mergedBpm, confidence);
+        if (remapped.length > 0) {
+          tempoMap.splice(0, tempoMap.length, ...remapped);
+        }
+      }
+    }
+    if (offsets.length > 0) timingOffsetMs = Math.round(median(offsets));
+  }
+
   const timingPoints = tempoMapToTimingPoints(tempoMap, timingOffsetMs);
 
   return {
-    algorithm: "audio-v1",
+    algorithm,
     durationMs: decoded.durationMs,
     sampleRate: decoded.sampleRate,
     bpm,

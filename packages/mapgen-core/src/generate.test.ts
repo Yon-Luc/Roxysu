@@ -208,6 +208,31 @@ describe("generateMapFromAudio", () => {
     expect(findEmptyColumns(result.notes, 7)).toHaveLength(0);
   });
 
+  test("v2 Markov backend produces parseable legal charts", () => {
+    const decoded = synthesizeImpulseTrack(441, 180);
+    const audio = analyzeDecodedAudio(decoded, { algorithm: "audio-v2" });
+    const result = generateMapFromAudio(
+      audio,
+      { delay: 0.4, jack: 0.2, chordstream: 0.2, ln: 0.2 },
+      {
+        seed: 13,
+        bpm: 144,
+        timingOffsetMs: 0,
+        endMs: 45_000,
+        version: 2,
+        metadata: { title: "V2", artist: "T" },
+      },
+    );
+
+    expect(result.version).toBe(2);
+    expect(result.stage2Backend).toBe("markov");
+    expect(result.notes.length).toBeGreaterThan(20);
+    expect(findIllegalOverlaps(result.notes)).toHaveLength(0);
+    expect(findEmptyColumns(result.notes, 7)).toHaveLength(0);
+    const parsed = parseOsuChart(buildManiaOsuText(result.chart));
+    expect(parsed.columnCount).toBe(7);
+  });
+
   test("places notes near musical onsets rather than filling every snap", () => {
     const decoded = synthesizeImpulseTrack(500, 40);
     const audio = analyzeDecodedAudio(decoded);

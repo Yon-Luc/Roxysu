@@ -14,6 +14,7 @@ export {
   enforceColumnOccupancy,
 } from "./sanitizeNotes";
 export { buildMusicalHitTimes } from "./musicGrid";
+export { generateMarkovNotes } from "./markov";
 export {
   resolveTierConstraints,
   filterTargetsForTier,
@@ -22,5 +23,7 @@ export type { PatternTier, TierConstraints } from "./tierConstraints";
 export type {
   MapgenOptions,
   MapgenResult,
+  MarkovTransitionModel,
   PatternTargets,
+  Stage2Backend,
 } from "./types";

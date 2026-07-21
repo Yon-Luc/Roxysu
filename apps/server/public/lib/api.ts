@@ -290,6 +290,10 @@ export async function fetchMapgenStatus() {
   return unwrap(await api.api.mapgen.status.get(), "/api/mapgen/status");
 }
 
+export async function fetchMapgenV2Status() {
+  return unwrap(await api.api.mapgen.v2.status.get(), "/api/mapgen/v2/status");
+}
+
 export type MapgenGenerateInput = {
   audio: File;
   background?: File;
@@ -307,6 +311,7 @@ export type MapgenGenerateInput = {
   seed?: number;
   endSec?: number;
   dan?: string;
+  versionCode?: 1 | 2;
   format?: "zip" | "osu";
 };
 
@@ -328,6 +333,12 @@ export async function generateMapgenPack(
   sunnyLnPct: string | null;
   timingPoints: string | null;
   bpmMap: string | null;
+  versionCode: string | null;
+  stage2: string | null;
+  evalBucket: string | null;
+  evalNps: string | null;
+  evalEntropy: string | null;
+  evalRc: string | null;
 }> {
   const form = new FormData();
   form.append("audio", input.audio);
@@ -347,6 +358,7 @@ export async function generateMapgenPack(
     seed: input.seed,
     endSec: input.endSec,
     dan: input.dan,
+    versionCode: input.versionCode,
     format: input.format ?? "zip",
   };
   for (const [key, value] of Object.entries(fields)) {
@@ -390,6 +402,12 @@ export async function generateMapgenPack(
     sunnyLnPct: res.headers.get("X-Mapgen-Sunny-Ln"),
     timingPoints: res.headers.get("X-Mapgen-Timing-Points"),
     bpmMap: res.headers.get("X-Mapgen-Bpm-Map"),
+    versionCode: res.headers.get("X-Mapgen-Version"),
+    stage2: res.headers.get("X-Mapgen-Stage2"),
+    evalBucket: res.headers.get("X-Mapgen-Eval-Bucket"),
+    evalNps: res.headers.get("X-Mapgen-Eval-Nps"),
+    evalEntropy: res.headers.get("X-Mapgen-Eval-Entropy"),
+    evalRc: res.headers.get("X-Mapgen-Eval-Rc"),
   };
 }
 

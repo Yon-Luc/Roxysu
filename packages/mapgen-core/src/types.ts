@@ -8,6 +8,18 @@ export type PatternTargets = Partial<
   Record<PatternLabelV2 | "ln", number>
 >;
 
+export type Stage2Backend = "template" | "markov";
+
+export type MarkovTransitionModel = {
+  order: number;
+  transitions: Array<{
+    bpmBand: string;
+    starBand: string;
+    history: string;
+    next: Array<{ event: string; count: number }>;
+  }>;
+};
+
 export type MapgenOptions = {
   columnCount?: number;
   /** Snap divisor for note placement (4 = 1/4). */
@@ -47,6 +59,12 @@ export type MapgenOptions = {
   audioFilename?: string;
   /** Skip generating notes after this ms (default: full track). */
   endMs?: number;
+  /** mapgen pipeline version (1 = template, 2 = Markov/corpus-aware). */
+  version?: 1 | 2;
+  /** Force a specific Stage 2 backend. */
+  stage2Backend?: Stage2Backend;
+  /** Optional transition table produced by mapgen-eval corpus extraction. */
+  markovModel?: MarkovTransitionModel;
 };
 
 export type MapgenResult = {
@@ -67,4 +85,6 @@ export type MapgenResult = {
   bpmConfidence: number;
   /** Uninherited timing points written into the chart. */
   timingPoints: Array<[number, number]>;
+  stage2Backend: Stage2Backend;
+  version: 1 | 2;
 };

@@ -10,6 +10,7 @@ import {
   resolveDanPreset,
   type MapgenResult,
 } from "@roxysu/mapgen-core";
+import { scoreMapgenChart } from "../../../../packages/mapgen-eval/src/index";
 import {
   ffmpegUnavailableMessage,
   isFfmpegAvailableAt,
@@ -17,6 +18,8 @@ import {
 } from "../shared/ffmpeg-path";
 import { buildZip } from "../map-analysis/zipStore";
 import { runSunnyEstimatorFromText } from "../map-analysis/sunnyEstimator";
+import { db } from "../db";
+import { getMapgenV2Assets, runRegressionBaseline } from "../mapgen-v2";
 
 const AUDIO_EXTS = new Set([
   ".mp3",
@@ -52,6 +55,7 @@ function setMapgenHeaders(
   result: MapgenResult,
   analysis: ReturnType<typeof analyzeGeneratedPatterns>,
   osuText: string,
+  evalScore?: ReturnType<typeof scoreMapgenChart> | null,
 ): void {
   set.headers["X-Mapgen-Bpm"] = String(result.bpm);
   set.headers["X-Mapgen-Notes"] = String(result.notes.length);
@@ -71,6 +75,8 @@ function setMapgenHeaders(
     Math.round((result.targets.ln ?? 0) * 100),
   );
   set.headers["X-Mapgen-Timing-Points"] = String(result.timingPoints.length);
+  set.headers["X-Mapgen-Version"] = String(result.version);
+  set.headers["X-Mapgen-Stage2"] = result.stage2Backend;
   if (result.timingPoints.length > 1) {
     const bpmChanges = result.timingPoints
       .map(([t, beatLen]) => `${Math.round(t)}:${(60_000 / beatLen).toFixed(1)}`)
@@ -87,6 +93,18 @@ function setMapgenHeaders(
     );
   } catch {
     // Sunny can fail on very short charts; pack is still valid.
+  }
+  if (evalScore) {
+    set.headers["X-Mapgen-Eval-Bucket"] =
+      evalScore.bucket != null
+        ? `${evalScore.bucket.starBand}@${evalScore.bucket.bpmBand}`
+        : "n/a";
+    set.headers["X-Mapgen-Eval-Nps"] = evalScore.metrics.notesPerSecond.verdict;
+    set.headers["X-Mapgen-Eval-Entropy"] =
+      evalScore.metrics.transitionEntropy.verdict;
+    set.headers["X-Mapgen-Eval-Rc"] = String(
+      evalScore.rc.illegalOverlaps + evalScore.rc.emptyColumns,
+    );
   }
 }
 
@@ -158,6 +176,28 @@ export const mapgenRoutes = new Elysia({ prefix: "/mapgen" })
       message: available ? null : ffmpegUnavailableMessage(ffmpegPath),
     };
   })
+  .get("/v2/status", async () => {
+    const assets = await getMapgenV2Assets(db);
+    return {
+      ready: assets != null,
+      builtAt: assets?.builtAt ?? null,
+      sampleCount: assets?.sampleCount ?? 0,
+      regressionCount: assets?.regressionSet.length ?? 0,
+      bucketCount: assets?.referenceStats.buckets.length ?? 0,
+    };
+  })
+  .get("/v2/regression", async () => {
+    const assets = await getMapgenV2Assets(db);
+    return {
+      builtAt: assets?.builtAt ?? null,
+      items: assets?.regressionSet ?? [],
+    };
+  })
+  .get("/v2/regression/baseline", async () => {
+    return {
+      items: await runRegressionBaseline(db),
+    };
+  })
   .post(
     "/",
     async ({ body, set }) => {
@@ -220,10 +260,12 @@ export const mapgenRoutes = new Elysia({ prefix: "/mapgen" })
         const artist = parseStr(body.artist) ?? "Unknown";
         const creator = parseStr(body.creator) ?? "Roxysu Mapgen";
         const dan = parseStr(body.dan);
-        const version =
+        const difficultyVersion =
           parseStr(body.version) ??
           (dan ? undefined : "Generated");
 
+        const mapgenVersion = parseNum(body.versionCode) === 2 ? 2 : 1;
+        const assets = mapgenVersion === 2 ? await getMapgenV2Assets(db) : null;
         const result = generateForDanTarget(
           audioAnalysis,
           {
@@ -246,12 +288,15 @@ export const mapgenRoutes = new Elysia({ prefix: "/mapgen" })
             segmentBeats: parseNum(body.segmentBeats),
             noteStride: parseNum(body.noteStride),
             timingOffsetMs: parseNum(body.timingOffsetMs),
+            version: mapgenVersion,
+            stage2Backend: mapgenVersion === 2 ? "markov" : "template",
+            markovModel: assets?.markovModel,
             audioFilename: audioName,
             metadata: {
               title,
               artist,
               creator,
-              version,
+              version: difficultyVersion,
               backgroundFilename,
             },
           },
@@ -262,7 +307,25 @@ export const mapgenRoutes = new Elysia({ prefix: "/mapgen" })
         const analysis = analyzeGeneratedPatterns(result.notes);
 
         const format = parseStr(body.format) ?? "zip";
-        setMapgenHeaders(set, result, analysis, osuText);
+        const sunny = (() => {
+          try {
+            return runSunnyEstimatorFromText(osuText);
+          } catch {
+            return null;
+          }
+        })();
+        const evalScore =
+          assets?.referenceStats != null
+            ? scoreMapgenChart(
+                {
+                  chart: result.chart,
+                  sunnyStar: sunny?.star ?? null,
+                  explicitBpm: result.bpm,
+                },
+                assets.referenceStats,
+              )
+            : null;
+        setMapgenHeaders(set, result, analysis, osuText, evalScore);
 
         if (format === "osu") {
           set.headers["Content-Type"] = "application/octet-stream";
@@ -326,6 +389,7 @@ export const mapgenRoutes = new Elysia({ prefix: "/mapgen" })
         noteStride: t.Optional(t.String()),
         timingOffsetMs: t.Optional(t.String()),
         dan: t.Optional(t.String()),
+        versionCode: t.Optional(t.String()),
         format: t.Optional(t.String()),
       }),
     },

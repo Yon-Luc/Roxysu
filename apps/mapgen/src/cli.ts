@@ -26,6 +26,8 @@ type CliArgs = {
   bracket?: number;
   ln?: number;
   dan?: string;
+  versionCode: 1 | 2;
+  audioAlgorithm: "audio-v1" | "audio-v2";
   ffmpegPath?: string;
   verify: boolean;
   help: boolean;
@@ -60,6 +62,8 @@ Other:
   --dan              Target Sunny dan preset (regular-4, ln-5, "Regular 4", …)
   --seed             RNG seed for reproducible patterns
   --end              Stop generating after N seconds
+  --v1               Use the old template backend
+  --audio-algo       audio-v1 or audio-v2 (default: audio-v2)
   --ffmpeg           Path to ffmpeg binary (or set FFMPEG_PATH)
   --verify           Print pattern-7k analysis of output
   --help, -h         Show this help
@@ -78,6 +82,8 @@ function parseArgs(argv: string[]): CliArgs {
     output: "",
     creator: "Roxysu Mapgen",
     version: "Generated",
+    versionCode: 2,
+    audioAlgorithm: "audio-v2",
     verify: false,
     help: false,
   };
@@ -156,6 +162,13 @@ function parseArgs(argv: string[]): CliArgs {
         args.dan = next;
         i += 1;
         break;
+      case "--v1":
+        args.versionCode = 1;
+        break;
+      case "--audio-algo":
+        args.audioAlgorithm = next === "audio-v1" ? "audio-v1" : "audio-v2";
+        i += 1;
+        break;
       case "--ffmpeg":
         args.ffmpegPath = next;
         i += 1;
@@ -201,7 +214,10 @@ async function main(): Promise<void> {
   const audioBasename = basename(mp3Path);
 
   console.log(`Analyzing audio: ${mp3Path}`);
-  const audio = await analyzeAudioFile(mp3Path, { ffmpegPath });
+  const audio = await analyzeAudioFile(mp3Path, {
+    ffmpegPath,
+    algorithm: args.audioAlgorithm,
+  });
 
   const targets = normalizeTargets({
     delay: args.delay,
@@ -235,6 +251,7 @@ async function main(): Promise<void> {
       bpm: args.bpm,
       seed: args.seed,
       dan: args.dan,
+      version: args.versionCode,
       endMs: args.endSec != null ? args.endSec * 1000 : undefined,
       metadata: {
         title: args.title ?? audioBasename.replace(/\.[^.]+$/, ""),

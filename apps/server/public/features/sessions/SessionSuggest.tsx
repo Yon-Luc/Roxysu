@@ -15,7 +15,7 @@ const TABS: { id: SuggestTab; label: string; hint: string }[] = [
   {
     id: "7k",
     label: "7K recommendations",
-    hint: "Ranked picks from your Sunny skill estimate (Push, Consistency, Deficit, Skillset).",
+    hint: "Ranked picks from your Sunny skill estimate (Push, Accuracy, Consistency, Deficit, Skillset).",
   },
 ];
 

@@ -1,5 +1,5 @@
-import { LN_DAN_RATIO_THRESHOLD } from "../../map-analysis/estDiff";
 import type { SevenKSkillProfile, SkillAxis, MapMatchResult } from "./types";
+import { classifyMapAxis } from "./axis";
 import { skillForAxis } from "./sevenKSkill";
 
 const BASE_SUNNY_WEIGHT = 0.6;
@@ -13,10 +13,6 @@ export type CandidateMap = {
   playCount: number;
   lastPlayedAt: number | null;
 };
-
-function classifyAxis(lnRatio: number | null): "rc" | "ln" {
-  return (lnRatio ?? 0) >= LN_DAN_RATIO_THRESHOLD ? "ln" : "rc";
-}
 
 /**
  * Performance adjustment from best accuracy on the map (Companella-style).
@@ -56,12 +52,12 @@ export function calculateMapMatch(
   map: CandidateMap,
   skill: SevenKSkillProfile,
   targetSkillset: SkillAxis | null = null,
-  skillMode: "comfort" | "peak" | "consistency" = "comfort",
+  skillMode: "comfort" | "peak" | "consistency" | "accuracy" = "comfort",
 ): MapMatchResult {
   const axis: SkillAxis =
     targetSkillset && targetSkillset !== "overall"
       ? targetSkillset
-      : classifyAxis(map.lnRatio);
+      : classifyMapAxis(map.lnRatio);
 
   const baseSunny = map.sunnyStar;
   const adjustment = performanceAdjustment(map.bestAccuracy, map.playCount);
@@ -88,7 +84,7 @@ export function calculateMapMatch(
 
 export function mapMatchesAxis(
   lnRatio: number | null,
-  axis: "rc" | "ln",
+  axis: "rc" | "ln" | "fln",
 ): boolean {
-  return classifyAxis(lnRatio) === axis;
+  return classifyMapAxis(lnRatio) === axis;
 }

@@ -15,6 +15,9 @@ const DAN_INDEX = DAN_INDEX_RAW as DanIndex;
 /** LN ratio at/above this uses LN dan; below uses RC/Regular dan. */
 export const LN_DAN_RATIO_THRESHOLD = 0.2;
 
+/** LN ratio at/above this is treated as full-LN (FLN) for 7K recommendations. */
+export const FLN_RATIO_THRESHOLD = 0.8;
+
 function intervalLookup(
   sr: number,
   table: DanInterval[],

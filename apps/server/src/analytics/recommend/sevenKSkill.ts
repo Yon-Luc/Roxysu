@@ -1,10 +1,10 @@
 import type { Db } from "@roxysu/db/client.bun";
-import { LN_DAN_RATIO_THRESHOLD } from "../../map-analysis/estDiff";
 import {
   backfillSunnyDanSync,
   ensureSunnyDanForIdsSync,
 } from "../../map-analysis/computeSunnyDan";
-import type { SevenKSkillProfile, SkillAxis } from "./types";
+import { classifyMapAxis } from "./axis";
+import type { MapAxis, SevenKSkillProfile, SkillAxis } from "./types";
 
 /** Min plays before we trust the comfort estimate (else cold-start). */
 const MIN_PLAYS_FOR_SKILL = 5;
@@ -25,6 +25,11 @@ const CONSISTENCY_ACC_MIN = 0.96;
 const CONSISTENCY_ACC_MAX = 0.99;
 const CONSISTENCY_ACC_CENTER = 0.975;
 
+/** Accuracy band: 99%+ targets. */
+const ACCURACY_ACC_MIN = 0.99;
+const ACCURACY_ACC_MAX = 1.01;
+const ACCURACY_ACC_CENTER = 0.995;
+
 /** Recency decay per play index (Companella uses 0.95). */
 const RECENCY_DECAY = 0.95;
 
@@ -44,10 +49,6 @@ type ClearMapRow = {
   avgBandAcc: number;
   lastPlayedAt: number;
 };
-
-function classifyAxis(lnRatio: number | null): "rc" | "ln" {
-  return (lnRatio ?? 0) >= LN_DAN_RATIO_THRESHOLD ? "ln" : "rc";
-}
 
 /** Accuracy weight: 80% → 0, 100% → 1 (accuracy stored 0–1). */
 function accuracyWeight(accuracy: number): number {
@@ -70,19 +71,32 @@ function emptySkill(partial: Partial<SevenKSkillProfile> = {}): SevenKSkillProfi
     overall: 0,
     rc: 0,
     ln: 0,
+    fln: 0,
     peakOverall: 0,
     peakRc: 0,
     peakLn: 0,
+    peakFln: 0,
     clearRcMaps: 0,
     clearLnMaps: 0,
+    clearFlnMaps: 0,
+    accuracyOverall: 0,
+    accuracyRc: 0,
+    accuracyLn: 0,
+    accuracyFln: 0,
+    accuracyRcMaps: 0,
+    accuracyLnMaps: 0,
+    accuracyFlnMaps: 0,
     consistencyOverall: 0,
     consistencyRc: 0,
     consistencyLn: 0,
+    consistencyFln: 0,
     consistencyRcMaps: 0,
     consistencyLnMaps: 0,
+    consistencyFlnMaps: 0,
     samplePlays: 0,
     rcPlays: 0,
     lnPlays: 0,
+    flnPlays: 0,
     coldStart: true,
     ...partial,
   };
@@ -189,14 +203,14 @@ function loadAccBandMaps(
  */
 function clearLevelFromMaps(
   maps: ClearMapRow[],
-  axis: "rc" | "ln" | "all",
+  axis: MapAxis | "all",
   accCenter: number,
   halfWidth: number,
 ): { level: number; mapCount: number } {
   const filtered =
     axis === "all"
       ? maps
-      : maps.filter((m) => classifyAxis(m.lnRatio) === axis);
+      : maps.filter((m) => classifyMapAxis(m.lnRatio) === axis);
 
   if (filtered.length === 0) return { level: 0, mapCount: 0 };
 
@@ -217,6 +231,19 @@ function clearLevelFromMaps(
   return {
     level: weightedMean(points),
     mapCount: filtered.length,
+  };
+}
+
+function bandLevels(
+  maps: ClearMapRow[],
+  center: number,
+  halfWidth: number,
+) {
+  return {
+    all: clearLevelFromMaps(maps, "all", center, halfWidth),
+    rc: clearLevelFromMaps(maps, "rc", center, halfWidth),
+    ln: clearLevelFromMaps(maps, "ln", center, halfWidth),
+    fln: clearLevelFromMaps(maps, "fln", center, halfWidth),
   };
 }
 
@@ -264,6 +291,7 @@ function coldStartFromMastery(db: Db): SevenKSkillProfile {
 
   const rcPoints: Array<{ value: number; weight: number }> = [];
   const lnPoints: Array<{ value: number; weight: number }> = [];
+  const flnPoints: Array<{ value: number; weight: number }> = [];
   const allPoints: Array<{ value: number; weight: number }> = [];
 
   for (const row of rows) {
@@ -273,34 +301,47 @@ function coldStartFromMastery(db: Db): SevenKSkillProfile {
     const weight = Math.max(0.05, accuracyWeight(acc));
     const point = { value: sunny, weight };
     allPoints.push(point);
-    if (classifyAxis(row.lnRatio != null ? Number(row.lnRatio) : null) === "ln") {
-      lnPoints.push(point);
-    } else {
-      rcPoints.push(point);
-    }
+    const axis = classifyMapAxis(
+      row.lnRatio != null ? Number(row.lnRatio) : null,
+    );
+    if (axis === "fln") flnPoints.push(point);
+    else if (axis === "ln") lnPoints.push(point);
+    else rcPoints.push(point);
   }
 
   const rc = weightedMean(rcPoints);
   const ln = weightedMean(lnPoints);
+  const fln = weightedMean(flnPoints);
   const overall = allPoints.length > 0 ? weightedMean(allPoints) : 0;
+  const comfortRc = rc > 0 ? rc : overall;
+  const comfortLn = ln > 0 ? ln : overall;
+  const comfortFln = fln > 0 ? fln : overall;
   return emptySkill({
     overall,
-    rc: rc > 0 ? rc : overall,
-    ln: ln > 0 ? ln : overall,
+    rc: comfortRc,
+    ln: comfortLn,
+    fln: comfortFln,
     peakOverall: overall,
-    peakRc: rc > 0 ? rc : overall,
-    peakLn: ln > 0 ? ln : overall,
+    peakRc: comfortRc,
+    peakLn: comfortLn,
+    peakFln: comfortFln,
+    accuracyOverall: overall,
+    accuracyRc: comfortRc,
+    accuracyLn: comfortLn,
+    accuracyFln: comfortFln,
     samplePlays: allPoints.length,
     rcPlays: rcPoints.length,
     lnPlays: lnPoints.length,
+    flnPlays: flnPoints.length,
     coldStart: true,
   });
 }
 
 /**
  * Estimate 7K skill:
- * - comfort (overall/rc/ln): recent plays, recency × acc weight (Deficit / Skillset)
+ * - comfort (overall/rc/ln/fln): recent plays, recency × acc weight
  * - peak*: average Sunny of maps with 90–95% scores (Push base)
+ * - accuracy*: average Sunny of maps with 99%+ scores (Accuracy base)
  * - consistency*: average Sunny of maps with 96–99% scores (Consistency base)
  */
 export function estimateSevenKSkill(db: Db): SevenKSkillProfile {
@@ -318,33 +359,17 @@ export function estimateSevenKSkill(db: Db): SevenKSkillProfile {
   }
 
   const pushMaps = loadAccBandMaps(db, PUSH_ACC_MIN, PUSH_ACC_MAX);
-  const clearRc = clearLevelFromMaps(pushMaps, "rc", PUSH_ACC_CENTER, 0.025);
-  const clearLn = clearLevelFromMaps(pushMaps, "ln", PUSH_ACC_CENTER, 0.025);
-  const clearAll = clearLevelFromMaps(pushMaps, "all", PUSH_ACC_CENTER, 0.025);
+  const clear = bandLevels(pushMaps, PUSH_ACC_CENTER, 0.025);
 
   const farmMaps = loadAccBandMaps(
     db,
     CONSISTENCY_ACC_MIN,
     CONSISTENCY_ACC_MAX,
   );
-  const farmRc = clearLevelFromMaps(
-    farmMaps,
-    "rc",
-    CONSISTENCY_ACC_CENTER,
-    0.015,
-  );
-  const farmLn = clearLevelFromMaps(
-    farmMaps,
-    "ln",
-    CONSISTENCY_ACC_CENTER,
-    0.015,
-  );
-  const farmAll = clearLevelFromMaps(
-    farmMaps,
-    "all",
-    CONSISTENCY_ACC_CENTER,
-    0.015,
-  );
+  const farm = bandLevels(farmMaps, CONSISTENCY_ACC_CENTER, 0.015);
+
+  const accMaps = loadAccBandMaps(db, ACCURACY_ACC_MIN, ACCURACY_ACC_MAX);
+  const acc = bandLevels(accMaps, ACCURACY_ACC_CENTER, 0.01);
 
   const withSunny = plays
     .filter(
@@ -360,35 +385,62 @@ export function estimateSevenKSkill(db: Db): SevenKSkillProfile {
   ) =>
     band.mapCount >= MIN_CLEAR_MAPS && band.level > 0 ? band.level : fallback;
 
+  const withBandCounts = (
+    base: SevenKSkillProfile,
+    comfort: { rc: number; ln: number; fln: number; overall: number },
+  ): SevenKSkillProfile => ({
+    ...base,
+    peakOverall: bandOrFallback(clear.all, comfort.overall),
+    peakRc: bandOrFallback(clear.rc, comfort.rc),
+    peakLn: bandOrFallback(clear.ln, comfort.ln),
+    peakFln: bandOrFallback(clear.fln, comfort.fln),
+    clearRcMaps: clear.rc.mapCount,
+    clearLnMaps: clear.ln.mapCount,
+    clearFlnMaps: clear.fln.mapCount,
+    accuracyOverall: bandOrFallback(acc.all, comfort.overall),
+    accuracyRc: bandOrFallback(acc.rc, comfort.rc),
+    accuracyLn: bandOrFallback(acc.ln, comfort.ln),
+    accuracyFln: bandOrFallback(acc.fln, comfort.fln),
+    accuracyRcMaps: acc.rc.mapCount,
+    accuracyLnMaps: acc.ln.mapCount,
+    accuracyFlnMaps: acc.fln.mapCount,
+    consistencyOverall: bandOrFallback(farm.all, comfort.overall),
+    consistencyRc: bandOrFallback(farm.rc, comfort.rc),
+    consistencyLn: bandOrFallback(farm.ln, comfort.ln),
+    consistencyFln: bandOrFallback(farm.fln, comfort.fln),
+    consistencyRcMaps: farm.rc.mapCount,
+    consistencyLnMaps: farm.ln.mapCount,
+    consistencyFlnMaps: farm.fln.mapCount,
+  });
+
   if (withSunny.length < MIN_PLAYS_FOR_SKILL) {
     const fallback = coldStartFromMastery(db);
     if (fallback.overall > 0) {
-      return {
-        ...fallback,
-        peakOverall: bandOrFallback(clearAll, fallback.overall),
-        peakRc: bandOrFallback(clearRc, fallback.rc),
-        peakLn: bandOrFallback(clearLn, fallback.ln),
-        clearRcMaps: clearRc.mapCount,
-        clearLnMaps: clearLn.mapCount,
-        consistencyOverall: bandOrFallback(farmAll, fallback.overall),
-        consistencyRc: bandOrFallback(farmRc, fallback.rc),
-        consistencyLn: bandOrFallback(farmLn, fallback.ln),
-        consistencyRcMaps: farmRc.mapCount,
-        consistencyLnMaps: farmLn.mapCount,
-      };
+      return withBandCounts(fallback, {
+        overall: fallback.overall,
+        rc: fallback.rc,
+        ln: fallback.ln,
+        fln: fallback.fln,
+      });
     }
     return emptySkill({
       samplePlays: withSunny.length,
-      clearRcMaps: clearRc.mapCount,
-      clearLnMaps: clearLn.mapCount,
-      consistencyRcMaps: farmRc.mapCount,
-      consistencyLnMaps: farmLn.mapCount,
+      clearRcMaps: clear.rc.mapCount,
+      clearLnMaps: clear.ln.mapCount,
+      clearFlnMaps: clear.fln.mapCount,
+      accuracyRcMaps: acc.rc.mapCount,
+      accuracyLnMaps: acc.ln.mapCount,
+      accuracyFlnMaps: acc.fln.mapCount,
+      consistencyRcMaps: farm.rc.mapCount,
+      consistencyLnMaps: farm.ln.mapCount,
+      consistencyFlnMaps: farm.fln.mapCount,
     });
   }
 
   const total = withSunny.length;
   const rcPoints: Array<{ value: number; weight: number }> = [];
   const lnPoints: Array<{ value: number; weight: number }> = [];
+  const flnPoints: Array<{ value: number; weight: number }> = [];
   const allPoints: Array<{ value: number; weight: number }> = [];
 
   for (let i = 0; i < withSunny.length; i++) {
@@ -397,48 +449,73 @@ export function estimateSevenKSkill(db: Db): SevenKSkillProfile {
     const combined = recencyWeight * accuracyWeight(play.accuracy);
     const point = { value: play.sunnyStar, weight: combined };
     allPoints.push(point);
-    if (classifyAxis(play.lnRatio) === "ln") lnPoints.push(point);
+    const axis = classifyMapAxis(play.lnRatio);
+    if (axis === "fln") flnPoints.push(point);
+    else if (axis === "ln") lnPoints.push(point);
     else rcPoints.push(point);
   }
 
   const rc = weightedMean(rcPoints);
   const ln = weightedMean(lnPoints);
+  const fln = weightedMean(flnPoints);
   const overall = weightedMean(allPoints);
   const comfortRc = rc > 0 ? rc : overall;
   const comfortLn = ln > 0 ? ln : overall;
+  const comfortFln = fln > 0 ? fln : overall;
 
-  return {
-    overall,
-    rc: comfortRc,
-    ln: comfortLn,
-    peakOverall: bandOrFallback(clearAll, overall),
-    peakRc: bandOrFallback(clearRc, comfortRc),
-    peakLn: bandOrFallback(clearLn, comfortLn),
-    clearRcMaps: clearRc.mapCount,
-    clearLnMaps: clearLn.mapCount,
-    consistencyOverall: bandOrFallback(farmAll, overall),
-    consistencyRc: bandOrFallback(farmRc, comfortRc),
-    consistencyLn: bandOrFallback(farmLn, comfortLn),
-    consistencyRcMaps: farmRc.mapCount,
-    consistencyLnMaps: farmLn.mapCount,
-    samplePlays: withSunny.length,
-    rcPlays: rcPoints.length,
-    lnPlays: lnPoints.length,
-    coldStart: false,
-  };
+  return withBandCounts(
+    emptySkill({
+      overall,
+      rc: comfortRc,
+      ln: comfortLn,
+      fln: comfortFln,
+      samplePlays: withSunny.length,
+      rcPlays: rcPoints.length,
+      lnPlays: lnPoints.length,
+      flnPlays: flnPoints.length,
+      coldStart: false,
+    }),
+    {
+      overall,
+      rc: comfortRc,
+      ln: comfortLn,
+      fln: comfortFln,
+    },
+  );
 }
+
+export type SkillMode = "comfort" | "peak" | "consistency" | "accuracy";
 
 export function skillForAxis(
   skill: SevenKSkillProfile,
   axis: SkillAxis | null | undefined,
-  mode: "comfort" | "peak" | "consistency" = "comfort",
+  mode: SkillMode = "comfort",
 ): number {
   if (mode === "peak") {
     if (!axis || axis === "overall") return skill.peakOverall;
     if (axis === "rc") {
       return skill.peakRc > 0 ? skill.peakRc : skill.peakOverall;
     }
+    if (axis === "fln") {
+      return skill.peakFln > 0 ? skill.peakFln : skill.peakOverall;
+    }
     return skill.peakLn > 0 ? skill.peakLn : skill.peakOverall;
+  }
+  if (mode === "accuracy") {
+    if (!axis || axis === "overall") return skill.accuracyOverall;
+    if (axis === "rc") {
+      return skill.accuracyRc > 0
+        ? skill.accuracyRc
+        : skill.accuracyOverall;
+    }
+    if (axis === "fln") {
+      return skill.accuracyFln > 0
+        ? skill.accuracyFln
+        : skill.accuracyOverall;
+    }
+    return skill.accuracyLn > 0
+      ? skill.accuracyLn
+      : skill.accuracyOverall;
   }
   if (mode === "consistency") {
     if (!axis || axis === "overall") return skill.consistencyOverall;
@@ -447,24 +524,59 @@ export function skillForAxis(
         ? skill.consistencyRc
         : skill.consistencyOverall;
     }
+    if (axis === "fln") {
+      return skill.consistencyFln > 0
+        ? skill.consistencyFln
+        : skill.consistencyOverall;
+    }
     return skill.consistencyLn > 0
       ? skill.consistencyLn
       : skill.consistencyOverall;
   }
   if (!axis || axis === "overall") return skill.overall;
   if (axis === "rc") return skill.rc > 0 ? skill.rc : skill.overall;
+  if (axis === "fln") return skill.fln > 0 ? skill.fln : skill.overall;
   return skill.ln > 0 ? skill.ln : skill.overall;
 }
 
-/** Weaker of RC/LN comfort skills (ties prefer fewer sample plays). */
-export function weakestAxis(skill: SevenKSkillProfile): "rc" | "ln" {
-  const rc = skill.rc > 0 ? skill.rc : skill.overall;
-  const ln = skill.ln > 0 ? skill.ln : skill.overall;
-  if (rc <= 0 && ln <= 0) return "rc";
-  if (rc <= 0) return "ln";
-  if (ln <= 0) return "rc";
-  if (Math.abs(rc - ln) < 0.05) {
-    return skill.rcPlays <= skill.lnPlays ? "rc" : "ln";
-  }
-  return rc < ln ? "rc" : "ln";
+/** Weaker of RC/LN/FLN comfort skills (ties prefer fewer sample plays). */
+export function weakestAxis(skill: SevenKSkillProfile): MapAxis {
+  const candidates: Array<{ axis: MapAxis; value: number; plays: number }> = (
+    [
+      {
+        axis: "rc" as const,
+        value: skill.rc > 0 ? skill.rc : skill.overall,
+        plays: skill.rcPlays,
+      },
+      {
+        axis: "ln" as const,
+        value: skill.ln > 0 ? skill.ln : skill.overall,
+        plays: skill.lnPlays,
+      },
+      {
+        axis: "fln" as const,
+        value: skill.fln > 0 ? skill.fln : skill.overall,
+        plays: skill.flnPlays,
+      },
+    ] satisfies Array<{ axis: MapAxis; value: number; plays: number }>
+  ).filter((c) => c.value > 0);
+
+  if (candidates.length === 0) return "rc";
+
+  candidates.sort((a, b) => {
+    if (Math.abs(a.value - b.value) < 0.05) return a.plays - b.plays;
+    return a.value - b.value;
+  });
+  return candidates[0]!.axis;
+}
+
+/** Strongest comfort axis (for skillset default). */
+export function strongestAxis(skill: SevenKSkillProfile): MapAxis {
+  const candidates: Array<{ axis: MapAxis; value: number }> = [
+    { axis: "rc", value: skill.rc > 0 ? skill.rc : 0 },
+    { axis: "ln", value: skill.ln > 0 ? skill.ln : 0 },
+    { axis: "fln", value: skill.fln > 0 ? skill.fln : 0 },
+  ];
+  candidates.sort((a, b) => b.value - a.value);
+  return candidates[0]!.value > 0 ? candidates[0]!.axis : "rc";
 }

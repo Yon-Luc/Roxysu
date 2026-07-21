@@ -5,9 +5,14 @@ import {
   toStructuredQuery,
 } from "../../query-language";
 import { backfillSunnyDanSync } from "../../map-analysis/computeSunnyDan";
-import { estimateSevenKSkill, weakestAxis } from "./sevenKSkill";
+import {
+  estimateSevenKSkill,
+  strongestAxis,
+  weakestAxis,
+} from "./sevenKSkill";
 import { countMissingSunnyDan, countSevenKWithSunny } from "./candidates";
 import {
+  recommendAccuracy,
   recommendConsistency,
   recommendDeficit,
   recommendPush,
@@ -15,6 +20,7 @@ import {
 } from "./strategies";
 import { summaryFor } from "./summary";
 import type {
+  MapAxis,
   RecommendBatch,
   RecommendFocus,
   RecommendItem,
@@ -39,26 +45,35 @@ export type RecommendOptions = {
 
 function parseFocus(value: string | undefined): RecommendFocus {
   const v = (value ?? "push").toLowerCase();
-  if (v === "consistency" || v === "deficit" || v === "skillset" || v === "push") {
+  if (
+    v === "consistency" ||
+    v === "accuracy" ||
+    v === "deficit" ||
+    v === "skillset" ||
+    v === "push"
+  ) {
     return v;
   }
   return "push";
 }
 
-/** Parsed axis filter: rc/ln limit the pool; both/null = no axis limit. */
-type AxisFilter = "rc" | "ln" | "both" | null;
+/** Parsed axis filter: rc/ln/fln limit the pool; both/null = no axis limit. */
+type AxisFilter = MapAxis | "both" | null;
 
 function parseSkillset(value: string | null | undefined): AxisFilter {
   const v = (value ?? "").toLowerCase();
   if (v === "rc" || v === "rice") return "rc";
   if (v === "ln") return "ln";
+  if (v === "fln" || v === "full-ln" || v === "fullln") return "fln";
   if (v === "both") return "both";
   return null;
 }
 
-/** Map API skillset to a SQL axis filter (`null` = Rice + LN). */
-function toAxisFilter(skillset: AxisFilter): "rc" | "ln" | null {
-  if (skillset === "rc" || skillset === "ln") return skillset;
+/** Map API skillset to a SQL axis filter (`null` = Rice + LN + FLN). */
+function toAxisFilter(skillset: AxisFilter): MapAxis | null {
+  if (skillset === "rc" || skillset === "ln" || skillset === "fln") {
+    return skillset;
+  }
   return null;
 }
 
@@ -96,7 +111,7 @@ export function recommendSevenK(
 
   // Companella defaults skillset focus to the player's strongest axis when unset.
   if (focus === "skillset" && skillset === null) {
-    skillset = skill.rc >= skill.ln ? "rc" : "ln";
+    skillset = strongestAxis(skill);
   }
 
   const axisFilter = toAxisFilter(skillset);
@@ -121,6 +136,16 @@ export function recommendSevenK(
   switch (focus) {
     case "consistency":
       recommendations = recommendConsistency(
+        db,
+        skill,
+        count,
+        overlay,
+        excludeIds,
+        axisFilter,
+      );
+      break;
+    case "accuracy":
+      recommendations = recommendAccuracy(
         db,
         skill,
         count,

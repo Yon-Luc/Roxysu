@@ -15,12 +15,12 @@ export function pickCandidatesInRange(
   opts: {
     targetRatio: number;
     tolerance: number;
-    axis: "rc" | "ln" | null;
+    axis: "rc" | "ln" | "fln" | null;
     overlaySql: string | null;
     overlayParams: unknown[];
     excludeIds: string[];
     pool: number;
-    skillMode?: "comfort" | "peak" | "consistency";
+    skillMode?: "comfort" | "peak" | "consistency" | "accuracy";
   },
 ): { rows: CandidateRow[]; matches: ReturnType<typeof calculateMapMatch>[] } {
   const skillMode = opts.skillMode ?? "comfort";
@@ -112,6 +112,8 @@ export function pickCandidatesInRange(
   };
 }
 
-export function axesForFilter(axisFilter: "rc" | "ln" | null): Array<"rc" | "ln"> {
-  return axisFilter ? [axisFilter] : ["rc", "ln"];
+export function axesForFilter(
+  axisFilter: "rc" | "ln" | "fln" | null,
+): Array<"rc" | "ln" | "fln"> {
+  return axisFilter ? [axisFilter] : ["rc", "ln", "fln"];
 }

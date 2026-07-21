@@ -25,29 +25,35 @@ const FOCUS_OPTIONS: { id: RecommendFocus; label: string; hint: string }[] = [
   {
     id: "push",
     label: "Push",
-    hint: "Slightly above your 90–95% clear level on rice/LN (neighboring dans).",
+    hint: "Slightly above your 90–95% clear level on rice/LN/FLN (neighboring dans).",
+  },
+  {
+    id: "accuracy",
+    label: "Accuracy",
+    hint: "Maps in your 99%+ difficulty range — aim for 99%+ on rice/LN/FLN.",
   },
   {
     id: "consistency",
     label: "Consistency",
-    hint: "Maps around your 96–99% rice/LN level (farm / polish dans).",
+    hint: "Maps around your 96–99% rice/LN/FLN level (farm / polish dans).",
   },
   {
     id: "deficit",
     label: "Deficit",
-    hint: "Targets your weaker Rice or LN axis.",
+    hint: "Targets your weaker Rice, LN, or FLN axis.",
   },
   {
     id: "skillset",
     label: "Skillset",
-    hint: "Focus Rice, LN, or both at your level.",
+    hint: "Focus Rice, LN, FLN, or all at your level.",
   },
 ];
 
 const AXIS_OPTIONS: { id: RecommendSkillset; label: string }[] = [
-  { id: "both", label: "Both" },
+  { id: "both", label: "All" },
   { id: "rc", label: "Rice" },
   { id: "ln", label: "LN" },
+  { id: "fln", label: "FLN" },
 ];
 
 function loadPrefs(): RecPrefs {
@@ -58,6 +64,7 @@ function loadPrefs(): RecPrefs {
     return {
       focus:
         parsed.focus === "consistency" ||
+        parsed.focus === "accuracy" ||
         parsed.focus === "deficit" ||
         parsed.focus === "skillset" ||
         parsed.focus === "push"
@@ -65,6 +72,7 @@ function loadPrefs(): RecPrefs {
           : DEFAULT_PREFS.focus,
       skillset:
         parsed.skillset === "ln" ||
+        parsed.skillset === "fln" ||
         parsed.skillset === "rc" ||
         parsed.skillset === "both"
           ? parsed.skillset
@@ -176,12 +184,15 @@ export function SessionSevenKRecommend({
                 </button>
               ))}
             </div>
+            <p className="mt-1.5 text-xs text-faint">
+              LN is 20–80% long notes; FLN is ≥80% (full LN).
+            </p>
           </div>
         ) : null}
 
         {skill ? (
           <div className="space-y-2">
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               <SkillStat
                 label="Rice @ 90–95%"
                 value={formatSkill(skill.peakRc)}
@@ -193,19 +204,29 @@ export function SessionSevenKRecommend({
                 note={`${skill.clearLnMaps ?? 0} maps · Push`}
               />
               <SkillStat
-                label="Rice @ 96–99%"
-                value={formatSkill(skill.consistencyRc)}
-                note={`${skill.consistencyRcMaps ?? 0} maps · Consistency`}
+                label="FLN @ 90–95%"
+                value={formatSkill(skill.peakFln)}
+                note={`${skill.clearFlnMaps ?? 0} maps · Push`}
               />
               <SkillStat
-                label="LN @ 96–99%"
-                value={formatSkill(skill.consistencyLn)}
-                note={`${skill.consistencyLnMaps ?? 0} maps · Consistency`}
+                label="Rice @ 99%+"
+                value={formatSkill(skill.accuracyRc)}
+                note={`${skill.accuracyRcMaps ?? 0} maps · Accuracy`}
+              />
+              <SkillStat
+                label="LN @ 99%+"
+                value={formatSkill(skill.accuracyLn)}
+                note={`${skill.accuracyLnMaps ?? 0} maps · Accuracy`}
+              />
+              <SkillStat
+                label="FLN @ 99%+"
+                value={formatSkill(skill.accuracyFln)}
+                note={`${skill.accuracyFlnMaps ?? 0} maps · Accuracy`}
               />
             </div>
             <p className="text-xs text-faint">
-              Push aims ~8% above your 90–95% clears. Consistency picks around
-              your 96–99% dan level.
+              Push aims ~8% above your 90–95% clears. Accuracy picks in your
+              99%+ difficulty range.
             </p>
           </div>
         ) : null}

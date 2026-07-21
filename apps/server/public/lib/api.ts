@@ -119,11 +119,12 @@ export async function fetchPracticeSample(params: {
 
 export type RecommendFocus =
   | "push"
+  | "accuracy"
   | "consistency"
   | "deficit"
   | "skillset";
 
-export type RecommendSkillset = "both" | "rc" | "ln";
+export type RecommendSkillset = "both" | "rc" | "ln" | "fln";
 
 export async function fetchPracticeRecommend(params: {
   focus?: RecommendFocus;

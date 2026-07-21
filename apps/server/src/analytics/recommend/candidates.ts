@@ -1,6 +1,9 @@
 import type { Db } from "@roxysu/db/client.bun";
 import { SUNNY_ALGORITHM } from "../../map-analysis/computeSunnyDan";
-import { LN_DAN_RATIO_THRESHOLD } from "../../map-analysis/estDiff";
+import {
+  FLN_RATIO_THRESHOLD,
+  LN_DAN_RATIO_THRESHOLD,
+} from "../../map-analysis/estDiff";
 
 export type CandidateRow = {
   id: string;
@@ -53,7 +56,7 @@ export function countMissingSunnyDan(db: Db): number {
 export function buildBaseSevenKFilter(
   minSunny: number,
   maxSunny: number,
-  axis: "rc" | "ln" | null,
+  axis: "rc" | "ln" | "fln" | null,
   overlaySql: string | null,
   overlayParams: unknown[],
 ): { sql: string; params: unknown[] } {
@@ -70,8 +73,11 @@ export function buildBaseSevenKFilter(
     `dr.sunny_star BETWEEN ${push(minSunny)} AND ${push(maxSunny)}`,
   ];
 
-  if (axis === "ln") {
+  if (axis === "fln") {
+    parts.push(`COALESCE(dr.ln_ratio, 0) >= ${push(FLN_RATIO_THRESHOLD)}`);
+  } else if (axis === "ln") {
     parts.push(`COALESCE(dr.ln_ratio, 0) >= ${push(LN_DAN_RATIO_THRESHOLD)}`);
+    parts.push(`COALESCE(dr.ln_ratio, 0) < ${push(FLN_RATIO_THRESHOLD)}`);
   } else if (axis === "rc") {
     parts.push(`COALESCE(dr.ln_ratio, 0) < ${push(LN_DAN_RATIO_THRESHOLD)}`);
   }

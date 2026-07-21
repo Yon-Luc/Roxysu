@@ -174,7 +174,7 @@ export async function analyzeMusicDrift(
     };
   }
 
-  const ffmpegPath = resolveFfmpegPath();
+  const ffmpegPath = await resolveFfmpegPath();
   if (!(await isFfmpegAvailableAt(ffmpegPath))) {
     return {
       audioBpm: null,

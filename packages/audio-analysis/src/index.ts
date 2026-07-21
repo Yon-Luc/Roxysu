@@ -5,6 +5,14 @@ export {
   synthesizeTwoTempoTrack,
 } from "./analyzeAudio";
 export { decodeAudioFile, isFfmpegAvailable } from "./ffmpeg";
+export {
+  ffmpegUnavailableMessage,
+  findFlakeRoot,
+  findProjectFlakeRoot,
+  resetFfmpegPathCache,
+  resolveFfmpegPath,
+  resolveNixBinary,
+} from "./resolveFfmpegPath";
 export { detectOnsets, buildBeatGrid } from "./onsets";
 export {
   estimateBpm,

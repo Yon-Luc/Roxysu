@@ -161,7 +161,7 @@ export async function runRegressionBaseline(
 ): Promise<RegressionBaselineRow[]> {
   const assets = await getMapgenV2Assets(db);
   if (!assets) return [];
-  const ffmpegPath = resolveFfmpegPath();
+  const ffmpegPath = await resolveFfmpegPath();
   const limit = Math.max(1, Math.min(options.limit ?? 8, assets.regressionSet.length));
   const rows: RegressionBaselineRow[] = [];
   for (const candidate of assets.regressionSet.slice(0, limit)) {

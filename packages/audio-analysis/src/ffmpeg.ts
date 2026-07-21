@@ -1,3 +1,4 @@
+import { resolveFfmpegPath } from "./resolveFfmpegPath";
 import type { DecodeAudioOptions, DecodedAudio } from "./types";
 
 const DEFAULT_SAMPLE_RATE = 22_050;
@@ -7,7 +8,7 @@ export async function decodeAudioFile(
   filePath: string,
   options: DecodeAudioOptions = {},
 ): Promise<DecodedAudio> {
-  const ffmpegPath = options.ffmpegPath ?? "ffmpeg";
+  const ffmpegPath = options.ffmpegPath ?? (await resolveFfmpegPath());
   const sampleRate = options.sampleRate ?? DEFAULT_SAMPLE_RATE;
 
   const proc = Bun.spawn(
@@ -52,17 +53,4 @@ export async function decodeAudioFile(
   return { samples, sampleRate, durationMs };
 }
 
-/** Returns true when ffmpeg is available on PATH (or at the given path). */
-export async function isFfmpegAvailable(
-  ffmpegPath = "ffmpeg",
-): Promise<boolean> {
-  try {
-    const proc = Bun.spawn([ffmpegPath, "-version"], {
-      stdout: "ignore",
-      stderr: "ignore",
-    });
-    return (await proc.exited) === 0;
-  } catch {
-    return false;
-  }
-}
+export { isFfmpegAvailable } from "./resolveFfmpegPath";

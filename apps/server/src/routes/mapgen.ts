@@ -168,7 +168,7 @@ function generateForDanTarget(
 
 export const mapgenRoutes = new Elysia({ prefix: "/mapgen" })
   .get("/status", async () => {
-    const ffmpegPath = resolveFfmpegPath();
+    const ffmpegPath = await resolveFfmpegPath();
     const available = await isFfmpegAvailableAt(ffmpegPath);
     return {
       ffmpegAvailable: available,
@@ -201,7 +201,7 @@ export const mapgenRoutes = new Elysia({ prefix: "/mapgen" })
   .post(
     "/",
     async ({ body, set }) => {
-      const ffmpegPath = resolveFfmpegPath();
+      const ffmpegPath = await resolveFfmpegPath();
       if (!(await isFfmpegAvailableAt(ffmpegPath))) {
         set.status = 503;
         return {

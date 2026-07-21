@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
-import { analyzeAudioFile, isFfmpegAvailable } from "@roxysu/audio-analysis";
+import { analyzeAudioFile, isFfmpegAvailable, resolveFfmpegPath } from "@roxysu/audio-analysis";
 import {
   analyzeGeneratedPatterns,
   buildManiaOsuText,
@@ -201,7 +201,7 @@ async function main(): Promise<void> {
   }
 
   const ffmpegPath =
-    args.ffmpegPath ?? process.env.FFMPEG_PATH?.trim() ?? "ffmpeg";
+    args.ffmpegPath ?? process.env.FFMPEG_PATH?.trim() ?? (await resolveFfmpegPath());
   if (!(await isFfmpegAvailable(ffmpegPath))) {
     console.error(
       "Error: ffmpeg not found. Use nix develop, install ffmpeg, or set --ffmpeg / FFMPEG_PATH",

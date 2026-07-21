@@ -96,7 +96,7 @@ Deeper design notes live in [`docs/architecture.md`](./docs/architecture.md).
 - [Bun](https://bun.sh/)
 - [Node.js](https://nodejs.org/) LTS (for realm-reader)
 - osu!lazer installed with local play history
-- On NixOS: `nix develop` (or direnv via `.envrc`) for Bun, Node, and native-module libraries
+- On NixOS: `nix develop` (or direnv via `.envrc`) for Bun, Node, ffmpeg, and native-module libraries
 - On Windows: if `bun install` fails building `realm` / `better-sqlite3`, install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (Desktop development with C++) and retry
 
 ### Install & run
@@ -136,6 +136,7 @@ Copy [`.env.example`](./.env.example) if you want overrides. All variables are o
 | `OSU_DATA_PATH` | Platform default (see below) — used for covers / `.osu` files |
 | `REALM_FULL_SYNC=1` | Force a full reconcile on reader start |
 | `REALM_RESYNC_MS` | Poll interval (default `60000`) |
+| `FFMPEG_PATH` | ffmpeg binary for audio analysis / mapgen (auto-detected from PATH or repo flake on NixOS) |
 
 **Default osu!lazer data folder** (when env/Settings unset):
 

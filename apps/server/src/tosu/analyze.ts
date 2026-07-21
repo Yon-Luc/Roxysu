@@ -1,12 +1,13 @@
 import { and, eq } from "drizzle-orm";
+import { readFileSync } from "node:fs";
 import { beatmaps, type Db } from "@roxysu/db/client.bun";
 import { analyze7kFromOsuText } from "@roxysu/pattern-7k";
-import {
-  getOrComputePatternAnalysis,
-  getOrComputeSunnyDan,
-} from "../map-analysis";
+import { getOrComputePatternAnalysis } from "../map-analysis";
 import { runSunnyEstimatorFromText } from "../map-analysis/sunnyEstimator";
-import { parseScoreMods } from "../replay/mods";
+import {
+  getOsuDataPath,
+  resolveLazerFilePath,
+} from "../shared/lazer-files";
 import type {
   TosuLiveAnalysis,
   TosuLiveBeatmap,
@@ -53,22 +54,22 @@ async function fetchCurrentOsuText(host: string): Promise<string | null> {
   }
 }
 
-function speedRateFromMods(mods: string | null): number {
-  return parseScoreMods(mods).rate;
-}
-
-function sunnyFromDb(
-  rating: Awaited<ReturnType<typeof getOrComputeSunnyDan>>,
-): TosuLiveSunny | null {
-  if (!rating) return null;
-  return {
-    sunnyStar: rating.sunnyStar,
-    estDiff: rating.estDiff,
-    lnRatio: rating.lnRatio,
-    columnCount: rating.columnCount,
-    error: rating.error,
-    source: "db",
-  };
+async function readOsuTextFromDb(
+  db: Db,
+  beatmapId: string,
+): Promise<string | null> {
+  const [row] = await db
+    .select({ hash: beatmaps.hash })
+    .from(beatmaps)
+    .where(eq(beatmaps.id, beatmapId))
+    .limit(1);
+  if (!row?.hash) return null;
+  try {
+    const path = resolveLazerFilePath(row.hash, getOsuDataPath());
+    return readFileSync(path, "utf8");
+  } catch {
+    return null;
+  }
 }
 
 function patternFromDb(
@@ -85,14 +86,9 @@ function patternFromDb(
   };
 }
 
-function sunnyFromText(
-  osuText: string,
-  mods: string | null,
-): TosuLiveSunny {
+function sunnyFromText(osuText: string, speedRate: number): TosuLiveSunny {
   try {
-    const result = runSunnyEstimatorFromText(osuText, {
-      speedRate: speedRateFromMods(mods),
-    });
+    const result = runSunnyEstimatorFromText(osuText, { speedRate });
     return {
       sunnyStar: result.star,
       estDiff: result.estDiff,
@@ -141,15 +137,29 @@ export type AnalyzeLiveMapResult = {
   analysis: Omit<TosuLiveAnalysis, "analyzing">;
 };
 
-/** Resolve the live tosu map to Roxysu analysis (ephemeral; no score writes). */
+export type AnalyzeLiveMapOptions = {
+  /** Cached `.osu` text for the current checksum (avoids re-fetch on rate tweaks). */
+  osuTextCache?: string | null;
+  /** When true, skip pattern recompute (rate-only change). */
+  sunnyOnly?: boolean;
+  /** Previous pattern to keep when sunnyOnly. */
+  previousPattern?: TosuLivePattern | null;
+};
+
+/** Resolve the live tosu map to Roxysu analysis (ephemeral; rate-aware Sunny). */
 export async function analyzeLiveMap(
   db: Db,
   host: string,
   beatmap: TosuLiveBeatmap,
-): Promise<AnalyzeLiveMapResult> {
-  const empty: AnalyzeLiveMapResult = {
-    matchedBeatmapId: null,
-    analysis: { sunny: null, pattern: null },
+  options: AnalyzeLiveMapOptions = {},
+): Promise<AnalyzeLiveMapResult & { osuText: string | null }> {
+  const empty = {
+    matchedBeatmapId: null as string | null,
+    analysis: { sunny: null, pattern: null } as Omit<
+      TosuLiveAnalysis,
+      "analyzing"
+    >,
+    osuText: null as string | null,
   };
 
   const mode = (beatmap.mode ?? "").toLowerCase();
@@ -168,8 +178,9 @@ export async function analyzeLiveMap(
           error: "Not a mania beatmap",
           source: "osu-text",
         },
-        pattern: null,
+        pattern: options.previousPattern ?? null,
       },
+      osuText: options.osuTextCache ?? null,
     };
   }
 
@@ -179,32 +190,46 @@ export async function analyzeLiveMap(
     beatmap.onlineId,
   );
 
-  if (matchedBeatmapId) {
-    const [sunny, pattern] = await Promise.all([
-      getOrComputeSunnyDan(db, matchedBeatmapId).catch(() => null),
-      getOrComputePatternAnalysis(db, matchedBeatmapId).catch(() => null),
-    ]);
-    return {
-      matchedBeatmapId,
-      analysis: {
-        sunny: sunnyFromDb(sunny),
-        pattern: patternFromDb(pattern),
-      },
-    };
-  }
-
-  const osuText = await fetchCurrentOsuText(host);
+  let osuText = options.osuTextCache ?? null;
   if (!osuText) {
-    return empty;
+    osuText = await fetchCurrentOsuText(host);
+  }
+  if (!osuText && matchedBeatmapId) {
+    osuText = await readOsuTextFromDb(db, matchedBeatmapId);
+  }
+  if (!osuText) {
+    return { ...empty, matchedBeatmapId };
   }
 
-  const sunny = sunnyFromText(osuText, beatmap.mods);
-  const keys = sunny.columnCount ?? beatmap.keys;
-  const pattern =
-    keys === 7 ? patternFromText(osuText) : null;
+  const speedRate =
+    typeof beatmap.rate === "number" &&
+    Number.isFinite(beatmap.rate) &&
+    beatmap.rate > 0
+      ? beatmap.rate
+      : 1;
+
+  const sunny = sunnyFromText(osuText, speedRate);
+
+  let pattern: TosuLivePattern | null;
+  if (options.sunnyOnly) {
+    pattern = options.previousPattern ?? null;
+  } else if (matchedBeatmapId) {
+    const fromDb = await getOrComputePatternAnalysis(db, matchedBeatmapId).catch(
+      () => null,
+    );
+    pattern = patternFromDb(fromDb);
+    if (!pattern) {
+      const keys = sunny.columnCount ?? beatmap.keys;
+      pattern = keys === 7 ? patternFromText(osuText) : null;
+    }
+  } else {
+    const keys = sunny.columnCount ?? beatmap.keys;
+    pattern = keys === 7 ? patternFromText(osuText) : null;
+  }
 
   return {
-    matchedBeatmapId: null,
+    matchedBeatmapId,
     analysis: { sunny, pattern },
+    osuText,
   };
 }

@@ -14,6 +14,7 @@ import type {
 
 const PLAY_PUBLISH_MS = 500;
 const SPAWN_COOLDOWN_MS = 60_000;
+const RATE_ANALYSIS_DEBOUNCE_MS = 150;
 
 let dbRef: Db | null = null;
 let settings: TosuSettings | null = null;
@@ -27,10 +28,17 @@ let analyzing = false;
 let sunny: TosuLiveSnapshot["analysis"]["sunny"] = null;
 let pattern: TosuLiveSnapshot["analysis"]["pattern"] = null;
 let lastChecksum: string | null = null;
+/** Rate we last finished analyzing at. */
+let lastAnalyzedRate: number | null = null;
+/** Rate we already scheduled a recompute for (avoids debounce reset spam). */
+let pendingRate: number | null = null;
+let osuTextCache: string | null = null;
+let osuTextChecksum: string | null = null;
 let analysisToken = 0;
 let lastPlayPublishAt = 0;
 let lastSpawnAttemptAt = 0;
 let probeTimer: ReturnType<typeof setInterval> | null = null;
+let rateDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -38,6 +46,10 @@ function nowIso(): string {
 
 function uniqueWarnings(list: string[]): string[] {
   return [...new Set(list.filter(Boolean))];
+}
+
+function roundRate(rate: number): number {
+  return Math.round(rate * 1000) / 1000;
 }
 
 function emit(force = false): void {
@@ -100,18 +112,33 @@ async function refreshProbeAndMaybeSpawn(opts: {
   warnings = uniqueWarnings(nextWarnings);
 }
 
-async function runAnalysisForBeatmap(next: TosuLiveBeatmap): Promise<void> {
+async function runAnalysisForBeatmap(
+  next: TosuLiveBeatmap,
+  opts: { sunnyOnly: boolean },
+): Promise<void> {
   if (!dbRef || !settings) return;
   const token = ++analysisToken;
   analyzing = true;
   emit(true);
 
   try {
-    const result = await analyzeLiveMap(dbRef, settings.host, next);
+    const cache =
+      osuTextChecksum === next.checksum ? osuTextCache : null;
+    const result = await analyzeLiveMap(dbRef, settings.host, next, {
+      osuTextCache: cache,
+      sunnyOnly: opts.sunnyOnly,
+      previousPattern: opts.sunnyOnly ? pattern : null,
+    });
     if (token !== analysisToken) return;
     matchedBeatmapId = result.matchedBeatmapId;
     sunny = result.analysis.sunny;
     pattern = result.analysis.pattern;
+    if (result.osuText && next.checksum) {
+      osuTextCache = result.osuText;
+      osuTextChecksum = next.checksum;
+    }
+    lastAnalyzedRate = roundRate(next.rate);
+    pendingRate = null;
   } catch (err) {
     if (token !== analysisToken) return;
     sunny = {
@@ -122,8 +149,11 @@ async function runAnalysisForBeatmap(next: TosuLiveBeatmap): Promise<void> {
       error: err instanceof Error ? err.message : String(err),
       source: "osu-text",
     };
-    pattern = null;
-    matchedBeatmapId = null;
+    if (!opts.sunnyOnly) {
+      pattern = null;
+      matchedBeatmapId = null;
+    }
+    pendingRate = null;
   } finally {
     if (token === analysisToken) {
       analyzing = false;
@@ -132,22 +162,68 @@ async function runAnalysisForBeatmap(next: TosuLiveBeatmap): Promise<void> {
   }
 }
 
+/**
+ * Recompute Sunny when rate changes. Only (re)arms the debounce when the
+ * target rate differs from what we already scheduled — continuous tosu WS
+ * frames were previously resetting the timer forever so analysis never ran.
+ */
+function scheduleRateAnalysis(next: TosuLiveBeatmap): void {
+  const target = roundRate(next.rate);
+  if (lastAnalyzedRate != null && target === lastAnalyzedRate) return;
+  if (pendingRate != null && target === pendingRate) return;
+
+  pendingRate = target;
+  if (rateDebounceTimer) clearTimeout(rateDebounceTimer);
+  rateDebounceTimer = setTimeout(() => {
+    rateDebounceTimer = null;
+    const current = beatmap;
+    if (!current) {
+      pendingRate = null;
+      return;
+    }
+    const rate = roundRate(current.rate);
+    if (lastAnalyzedRate != null && rate === lastAnalyzedRate) {
+      pendingRate = null;
+      return;
+    }
+    void runAnalysisForBeatmap(current, { sunnyOnly: true });
+  }, RATE_ANALYSIS_DEBOUNCE_MS);
+}
+
 function onFrame(frame: {
   beatmap: TosuLiveBeatmap;
   play: TosuLivePlay;
 }): void {
   const checksumChanged = frame.beatmap.checksum !== lastChecksum;
+  const nextRate = roundRate(frame.beatmap.rate);
+  const rateChanged =
+    lastAnalyzedRate != null && nextRate !== lastAnalyzedRate;
+
   beatmap = frame.beatmap;
   play = frame.play;
 
   if (checksumChanged) {
+    if (rateDebounceTimer) {
+      clearTimeout(rateDebounceTimer);
+      rateDebounceTimer = null;
+    }
     lastChecksum = frame.beatmap.checksum;
+    lastAnalyzedRate = null;
+    pendingRate = null;
+    osuTextCache = null;
+    osuTextChecksum = null;
     sunny = null;
     pattern = null;
     matchedBeatmapId = null;
     if (frame.beatmap.checksum || frame.beatmap.title) {
-      void runAnalysisForBeatmap(frame.beatmap);
+      void runAnalysisForBeatmap(frame.beatmap, { sunnyOnly: false });
     }
+    emit(true);
+    return;
+  }
+
+  if (rateChanged && (frame.beatmap.checksum || frame.beatmap.title)) {
+    scheduleRateAnalysis(frame.beatmap);
     emit(true);
     return;
   }
@@ -215,6 +291,10 @@ export async function startTosuAdapter(db: Db): Promise<void> {
 
   stopWs();
   stopProbeLoop();
+  if (rateDebounceTimer) {
+    clearTimeout(rateDebounceTimer);
+    rateDebounceTimer = null;
+  }
 
   if (!settings.enabled) {
     status = "disabled";
@@ -226,6 +306,10 @@ export async function startTosuAdapter(db: Db): Promise<void> {
     pattern = null;
     analyzing = false;
     lastChecksum = null;
+    lastAnalyzedRate = null;
+    pendingRate = null;
+    osuTextCache = null;
+    osuTextChecksum = null;
     emit(true);
     return;
   }
@@ -244,6 +328,10 @@ export async function restartTosuAdapter(db: Db): Promise<void> {
 export function stopTosuAdapter(): void {
   stopWs();
   stopProbeLoop();
+  if (rateDebounceTimer) {
+    clearTimeout(rateDebounceTimer);
+    rateDebounceTimer = null;
+  }
   status = "disabled";
   analysisToken += 1;
   analyzing = false;

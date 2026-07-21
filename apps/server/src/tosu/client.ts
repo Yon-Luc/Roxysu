@@ -1,4 +1,5 @@
 import type { TosuLiveBeatmap, TosuLivePlay } from "./types";
+import { parseScoreMods } from "../replay/mods";
 
 type NumberName = { number?: number; name?: string };
 type ModEntry = { acronym?: string; settings?: Record<string, unknown> };
@@ -51,6 +52,7 @@ function modsToJson(mods: unknown): string | null {
   const m = mods as {
     name?: string;
     array?: ModEntry[] | string[];
+    rate?: number;
   };
   const arr = m.array;
   if (!Array.isArray(arr) || arr.length === 0) {
@@ -73,6 +75,43 @@ function modsToJson(mods: unknown): string | null {
     };
   });
   return JSON.stringify(entries);
+}
+
+/** Effective playback rate: prefer DT/HT speed_change, then tosu mods.rate. */
+function rateFromMods(mods: unknown, modsJson: string | null): number {
+  const fromSettings = parseScoreMods(modsJson).rate;
+  if (mods && typeof mods === "object") {
+    const raw = (mods as { rate?: unknown }).rate;
+    const top =
+      typeof raw === "number" && Number.isFinite(raw) && raw > 0
+        ? raw
+        : typeof raw === "string"
+          ? Number(raw)
+          : NaN;
+    // If array settings include a custom speed_change, trust that over a stale
+    // top-level rate (tosu may keep rate at the default DT 1.5 while scrubbing).
+    const hasCustomSpeed = (() => {
+      if (!modsJson) return false;
+      try {
+        const arr = JSON.parse(modsJson) as unknown;
+        if (!Array.isArray(arr)) return false;
+        return arr.some((entry) => {
+          if (!entry || typeof entry !== "object") return false;
+          const settings = (entry as { settings?: Record<string, unknown> })
+            .settings;
+          if (!settings) return false;
+          return (
+            settings.speed_change != null || settings.speedChange != null
+          );
+        });
+      } catch {
+        return false;
+      }
+    })();
+    if (hasCustomSpeed) return fromSettings;
+    if (Number.isFinite(top) && top > 0) return top;
+  }
+  return fromSettings;
 }
 
 function missCount(hits: unknown): number | null {
@@ -105,6 +144,8 @@ export function parseTosuV2Message(raw: string): ParsedTosuFrame | null {
     (typeof stateName === "string" && stateName.toLowerCase() === "play");
 
   const keys = asFinite(bm?.stats?.cs);
+  const modsJson = modsToJson(data.play?.mods);
+  const rate = rateFromMods(data.play?.mods, modsJson);
 
   const beatmap: TosuLiveBeatmap = {
     checksum: bm?.checksum?.trim() ? bm.checksum.trim() : null,
@@ -118,7 +159,8 @@ export function parseTosuV2Message(raw: string): ParsedTosuFrame | null {
     modeNumber: asFinite(bm?.mode?.number),
     keys,
     starRating: starFromStats(bm?.stats),
-    mods: modsToJson(data.play?.mods),
+    mods: modsJson,
+    rate,
     state: stateName,
     stateNumber,
   };

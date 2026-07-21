@@ -19,6 +19,8 @@ export type TosuLiveBeatmap = {
   starRating: number | null;
   /** Lazer-style mods JSON string for ModBadges. */
   mods: string | null;
+  /** Playback rate from tosu mods (1.0 = NM; DT custom e.g. 1.05). */
+  rate: number;
   state: string | null;
   stateNumber: number | null;
 };

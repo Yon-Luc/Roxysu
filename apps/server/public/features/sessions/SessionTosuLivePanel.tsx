@@ -191,6 +191,9 @@ export function SessionTosuLivePanel() {
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-wide text-faint">
                     Sunny
+                    {beatmap?.rate != null && Math.abs(beatmap.rate - 1) > 0.001
+                      ? ` · ×${beatmap.rate.toFixed(2).replace(/\.?0+$/, "")}`
+                      : ""}
                   </div>
                   <p className="mt-1 text-sm text-ink">
                     {sunny?.estDiff ?? "—"}

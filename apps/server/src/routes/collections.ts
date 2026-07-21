@@ -7,10 +7,16 @@ import { publish } from "../shared/events";
 import { syncCollectionsToLazer } from "../shared/syncCollections";
 import {
   countMatches,
+  listDistinctSetIds,
   parseQuery,
   QueryParseError,
   searchBeatmaps,
 } from "../query-language";
+import {
+  buildCollectionExportZip,
+  isOszBuildError,
+  oszContentDisposition,
+} from "../map-analysis/exportOsz";
 
 export const collectionRoutes = new Elysia({ prefix: "/collections" })
   .use(dbPlugin)
@@ -159,6 +165,46 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
           }
           publish({ type: "collection.updated", collectionId: id });
           return { ok: true };
+        },
+        {
+          params: t.Object({ id: t.String() }),
+        },
+      )
+      .get(
+        "/export",
+        async ({ db, params, set }) => {
+          const id = Number(params.id);
+          const [col] = await db
+            .select()
+            .from(collections)
+            .where(eq(collections.id, id))
+            .limit(1);
+          if (!col) {
+            set.status = 404;
+            return { error: "Collection not found" };
+          }
+
+          try {
+            const { setIds } = listDistinctSetIds(db, col.query);
+            const pack = await buildCollectionExportZip(db, setIds, col.name);
+            if (isOszBuildError(pack)) {
+              set.status = pack.status;
+              return { error: pack.error };
+            }
+            return new Response(Buffer.from(pack.bytes), {
+              headers: {
+                "content-type": "application/zip",
+                "content-disposition": oszContentDisposition(pack.filename),
+                "cache-control": "no-store",
+              },
+            });
+          } catch (err) {
+            if (err instanceof QueryParseError) {
+              set.status = 400;
+              return { error: err.message };
+            }
+            throw err;
+          }
         },
         {
           params: t.Object({ id: t.String() }),

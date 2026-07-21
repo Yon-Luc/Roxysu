@@ -468,6 +468,28 @@ export function listCollectionMd5Hashes(
   return { hashes, skippedNoMd5: total - hashes.length };
 }
 
+/** Distinct beatmap set ids matching a QL filter (for collection .osz export). */
+export function listDistinctSetIds(
+  db: Db,
+  query: string,
+): { setIds: string[] } {
+  const filter = resolveFilter(query);
+  maybeBackfillDan(db, filter.needsDanBackfill);
+  maybeBackfillPattern(db, filter.needsPatternBackfill);
+  const where = baseWhere(filter.sql);
+
+  const sql = `
+    SELECT DISTINCT b.set_id AS set_id
+    ${BASE_FROM}
+    ${where}
+  `;
+  const rows = db.$client
+    .query(sql)
+    .all(...asBindings(filter.params)) as { set_id: string }[];
+
+  return { setIds: rows.map((r) => r.set_id).filter(Boolean) };
+}
+
 function distributionMisses(
   db: Db,
   where: string,

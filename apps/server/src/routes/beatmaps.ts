@@ -13,6 +13,25 @@ import {
   getOsuDataPath,
   resolveLazerFilePath,
 } from "../shared/lazer-files";
+import {
+  buildDifficultyOsz,
+  buildSetOszForBeatmap,
+  isOszBuildError,
+  oszContentDisposition,
+} from "../map-analysis/exportOsz";
+
+function oszResponse(pack: {
+  bytes: Uint8Array;
+  filename: string;
+}): Response {
+  return new Response(Buffer.from(pack.bytes), {
+    headers: {
+      "content-type": "application/x-osu-beatmap-archive",
+      "content-disposition": oszContentDisposition(pack.filename),
+      "cache-control": "no-store",
+    },
+  });
+}
 
 export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
   .use(dbPlugin)
@@ -254,6 +273,38 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
         columnCount: parser.columnCount,
         notes,
       };
+    },
+    {
+      params: t.Object({
+        id: t.String(),
+      }),
+    },
+  )
+  .get(
+    "/:id/export",
+    async ({ db, params, set }) => {
+      const pack = await buildDifficultyOsz(db, params.id);
+      if (isOszBuildError(pack)) {
+        set.status = pack.status;
+        return { error: pack.error };
+      }
+      return oszResponse(pack);
+    },
+    {
+      params: t.Object({
+        id: t.String(),
+      }),
+    },
+  )
+  .get(
+    "/:id/export-set",
+    async ({ db, params, set }) => {
+      const pack = await buildSetOszForBeatmap(db, params.id);
+      if (isOszBuildError(pack)) {
+        set.status = pack.status;
+        return { error: pack.error };
+      }
+      return oszResponse(pack);
     },
     {
       params: t.Object({

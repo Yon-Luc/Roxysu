@@ -54,9 +54,20 @@ export function CollectionResultsPage({
         </Link>
         <PageTitle className="mt-3">{collection.name}</PageTitle>
         <p className="mt-2 font-mono text-sm text-muted">{collection.query}</p>
-        <p className="mt-1 text-xs text-faint">
-          {total.toLocaleString()} matches
-        </p>
+        <div className="mt-2 flex flex-wrap items-center gap-3">
+          <p className="text-xs text-faint">
+            {total.toLocaleString()} matches
+          </p>
+          {total > 0 && (
+            <a
+              href={`/api/collections/${collection.id}/export`}
+              className="rx-btn"
+              download
+            >
+              Export collection
+            </a>
+          )}
+        </div>
       </div>
 
       {items.length === 0 ? (

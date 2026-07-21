@@ -134,6 +134,20 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
                 title={beatmap.title}
                 difficultyName={beatmap.difficultyName}
               />
+              <a
+                href={`/api/beatmaps/${beatmap.id}/export`}
+                className="rx-btn"
+                download
+              >
+                Export map
+              </a>
+              <a
+                href={`/api/beatmaps/${beatmap.id}/export-set`}
+                className="rx-btn"
+                download
+              >
+                Export set
+              </a>
               {webUrl && (
                 <a
                   href={webUrl}

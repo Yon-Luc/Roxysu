@@ -24,6 +24,7 @@ let warnings: string[] = [];
 let beatmap: TosuLiveBeatmap | null = null;
 let play: TosuLivePlay | null = null;
 let matchedBeatmapId: string | null = null;
+let backgroundFileHash: string | null = null;
 let analyzing = false;
 let sunny: TosuLiveSnapshot["analysis"]["sunny"] = null;
 let pattern: TosuLiveSnapshot["analysis"]["pattern"] = null;
@@ -78,6 +79,7 @@ export function getTosuLiveSnapshot(): TosuLiveSnapshot {
       analyzing,
     },
     matchedBeatmapId,
+    backgroundFileHash,
     updatedAt: nowIso(),
   };
 }
@@ -131,6 +133,7 @@ async function runAnalysisForBeatmap(
     });
     if (token !== analysisToken) return;
     matchedBeatmapId = result.matchedBeatmapId;
+    backgroundFileHash = result.backgroundFileHash;
     sunny = result.analysis.sunny;
     pattern = result.analysis.pattern;
     if (result.osuText && next.checksum) {
@@ -152,6 +155,7 @@ async function runAnalysisForBeatmap(
     if (!opts.sunnyOnly) {
       pattern = null;
       matchedBeatmapId = null;
+      backgroundFileHash = null;
     }
     pendingRate = null;
   } finally {
@@ -215,6 +219,7 @@ function onFrame(frame: {
     sunny = null;
     pattern = null;
     matchedBeatmapId = null;
+    backgroundFileHash = null;
     if (frame.beatmap.checksum || frame.beatmap.title) {
       void runAnalysisForBeatmap(frame.beatmap, { sunnyOnly: false });
     }
@@ -302,6 +307,7 @@ export async function startTosuAdapter(db: Db): Promise<void> {
     beatmap = null;
     play = null;
     matchedBeatmapId = null;
+    backgroundFileHash = null;
     sunny = null;
     pattern = null;
     analyzing = false;

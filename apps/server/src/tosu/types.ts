@@ -69,5 +69,7 @@ export type TosuLiveSnapshot = {
   play: TosuLivePlay | null;
   analysis: TosuLiveAnalysis;
   matchedBeatmapId: string | null;
+  /** Lazer background hash when the live map is in Roxysu's library. */
+  backgroundFileHash: string | null;
   updatedAt: string;
 };

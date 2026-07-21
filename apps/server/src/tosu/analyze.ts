@@ -15,27 +15,33 @@ import type {
   TosuLiveSunny,
 } from "./types";
 
-async function lookupBeatmapId(
+async function lookupBeatmap(
   db: Db,
   checksum: string | null,
   onlineId: number | null,
-): Promise<string | null> {
+): Promise<{ id: string; backgroundFileHash: string | null } | null> {
   if (checksum) {
     const [byMd5] = await db
-      .select({ id: beatmaps.id })
+      .select({
+        id: beatmaps.id,
+        backgroundFileHash: beatmaps.backgroundFileHash,
+      })
       .from(beatmaps)
       .where(eq(beatmaps.md5Hash, checksum))
       .limit(1);
-    if (byMd5) return byMd5.id;
+    if (byMd5) return byMd5;
   }
 
   if (onlineId != null && onlineId > 0) {
     const [byOnline] = await db
-      .select({ id: beatmaps.id })
+      .select({
+        id: beatmaps.id,
+        backgroundFileHash: beatmaps.backgroundFileHash,
+      })
       .from(beatmaps)
       .where(and(eq(beatmaps.onlineId, onlineId)))
       .limit(1);
-    if (byOnline) return byOnline.id;
+    if (byOnline) return byOnline;
   }
 
   return null;
@@ -134,6 +140,7 @@ function patternFromText(osuText: string): TosuLivePattern {
 
 export type AnalyzeLiveMapResult = {
   matchedBeatmapId: string | null;
+  backgroundFileHash: string | null;
   analysis: Omit<TosuLiveAnalysis, "analyzing">;
 };
 
@@ -155,6 +162,7 @@ export async function analyzeLiveMap(
 ): Promise<AnalyzeLiveMapResult & { osuText: string | null }> {
   const empty = {
     matchedBeatmapId: null as string | null,
+    backgroundFileHash: null as string | null,
     analysis: { sunny: null, pattern: null } as Omit<
       TosuLiveAnalysis,
       "analyzing"
@@ -169,6 +177,7 @@ export async function analyzeLiveMap(
   if (!isMania && beatmap.modeNumber != null && beatmap.modeNumber !== 3) {
     return {
       matchedBeatmapId: null,
+      backgroundFileHash: null,
       analysis: {
         sunny: {
           sunnyStar: null,
@@ -184,11 +193,9 @@ export async function analyzeLiveMap(
     };
   }
 
-  const matchedBeatmapId = await lookupBeatmapId(
-    db,
-    beatmap.checksum,
-    beatmap.onlineId,
-  );
+  const matched = await lookupBeatmap(db, beatmap.checksum, beatmap.onlineId);
+  const matchedBeatmapId = matched?.id ?? null;
+  const backgroundFileHash = matched?.backgroundFileHash ?? null;
 
   let osuText = options.osuTextCache ?? null;
   if (!osuText) {
@@ -198,7 +205,7 @@ export async function analyzeLiveMap(
     osuText = await readOsuTextFromDb(db, matchedBeatmapId);
   }
   if (!osuText) {
-    return { ...empty, matchedBeatmapId };
+    return { ...empty, matchedBeatmapId, backgroundFileHash };
   }
 
   const speedRate =
@@ -229,6 +236,7 @@ export async function analyzeLiveMap(
 
   return {
     matchedBeatmapId,
+    backgroundFileHash,
     analysis: { sunny, pattern },
     osuText,
   };

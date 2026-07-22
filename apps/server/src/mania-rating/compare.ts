@@ -8,6 +8,10 @@ import {
   RATING_QUERY_BACKFILL_LIMIT,
 } from "./compute";
 import { getVersion } from "./registry";
+import {
+  BEATMAP_SET_JOIN,
+  beatmapFilterWhere,
+} from "../query-language/sqlFragments";
 
 export type RatingSide = {
   starRating: number | null;
@@ -201,7 +205,7 @@ function fetchCompareRows(
   limit: number,
   offset: number,
 ): RatingJoinRow[] {
-  const where = `WHERE b.hidden = 0 AND (${filterSql})`;
+  const where = beatmapFilterWhere(filterSql);
   const sql = `
     SELECT
       b.id AS beatmap_id,
@@ -221,6 +225,7 @@ function fetchCompareRows(
       exp.attributes_json AS exp_attributes_json,
       exp.error AS exp_error
     FROM beatmaps b
+    ${BEATMAP_SET_JOIN}
     LEFT JOIN beatmap_mania_ratings base
       ON base.beatmap_id = b.id AND base.version_id = ?
     LEFT JOIN beatmap_mania_ratings exp
@@ -240,9 +245,11 @@ function countCompareRows(
   filterSql: string,
   params: SqlBinding[],
 ): number {
-  const where = `WHERE b.hidden = 0 AND (${filterSql})`;
+  const where = beatmapFilterWhere(filterSql);
   const row = db.$client
-    .query(`SELECT COUNT(*) AS n FROM beatmaps b ${where}`)
+    .query(
+      `SELECT COUNT(*) AS n FROM beatmaps b ${BEATMAP_SET_JOIN} ${where}`,
+    )
     .get(...params) as { n: number } | null;
   return Number(row?.n ?? 0);
 }

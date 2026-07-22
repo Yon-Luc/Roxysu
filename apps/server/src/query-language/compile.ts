@@ -1,5 +1,6 @@
 import type { AstNode, FieldTerm } from "./ast";
 import { LN_DAN_RATIO_THRESHOLD } from "../map-analysis/estDiff";
+import { statusNameToInt, type BeatmapStatusName } from "./status";
 
 export type CompiledQuery = {
   /** SQL boolean expression referencing aliases: b, m, ps, rs */
@@ -141,6 +142,16 @@ function compileTerm(term: FieldTerm, params: unknown[]): string {
         return `(dr.ln_ratio IS NOT NULL AND dr.ln_ratio >= ${push(LN_DAN_RATIO_THRESHOLD)})`;
       }
       return `(dr.ln_ratio IS NOT NULL AND dr.ln_ratio < ${push(LN_DAN_RATIO_THRESHOLD)})`;
+    }
+    case "status": {
+      const ints = term.values.map((name) =>
+        statusNameToInt(name as BeatmapStatusName),
+      );
+      if (ints.length === 1) {
+        return `bs.status = ${push(ints[0]!)}`;
+      }
+      const placeholders = ints.map((n) => push(n)).join(", ");
+      return `bs.status IN (${placeholders})`;
     }
     case "text": {
       const pat = push(`%${term.value}%`);

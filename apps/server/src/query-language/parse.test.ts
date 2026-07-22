@@ -118,6 +118,30 @@ describe("parseQuery", () => {
       type: "term",
       term: { type: "axis", value: "ln" },
     });
+    expect(parseQuery("status:ranked")).toEqual({
+      type: "term",
+      term: { type: "status", values: ["ranked"] },
+    });
+    expect(parseQuery("status:ranked,loved")).toEqual({
+      type: "term",
+      term: { type: "status", values: ["ranked", "loved"] },
+    });
+    expect(parseQuery("ranked")).toEqual({
+      type: "term",
+      term: { type: "status", values: ["ranked"] },
+    });
+    expect(parseQuery("status=r")).toEqual({
+      type: "term",
+      term: { type: "status", values: ["ranked"] },
+    });
+    expect(parseQuery("status=pending")).toEqual({
+      type: "term",
+      term: { type: "status", values: ["pending"] },
+    });
+    expect(parseQuery("status=ranking")).toEqual({
+      type: "term",
+      term: { type: "status", values: ["ranked"] },
+    });
   });
 
   test("boolean AND OR NOT and parens", () => {
@@ -137,6 +161,17 @@ describe("parseQuery", () => {
       type: "and",
       left: { type: "term", term: { type: "mode", value: "mania" } },
       right: { type: "term", term: { type: "stars", min: 5, max: 6 } },
+    });
+
+    const withStatus = parseQuery("mode:mania key=7 ranked");
+    expect(withStatus).toEqual({
+      type: "and",
+      left: {
+        type: "and",
+        left: { type: "term", term: { type: "mode", value: "mania" } },
+        right: { type: "term", term: { type: "key", op: "=", value: 7 } },
+      },
+      right: { type: "term", term: { type: "status", values: ["ranked"] } },
     });
   });
 
@@ -224,6 +259,20 @@ describe("compileQuery", () => {
     const compiled = compileQuery(ast);
     expect(compiled.sql).toContain("dr.ln_ratio >=");
     expect(compiled.params).toEqual([0.2]);
+  });
+
+  test("compiles status filter against beatmap set status", () => {
+    const ast = parseQuery("mode:mania key=7 ranked");
+    const compiled = compileQuery(ast);
+    expect(compiled.sql).toContain("bs.status");
+    expect(compiled.params).toEqual(["mania", "mania", 7, 1]);
+  });
+
+  test("compiles multiple statuses as IN list", () => {
+    const ast = parseQuery("status:ranked,loved");
+    const compiled = compileQuery(ast);
+    expect(compiled.sql).toContain("bs.status IN");
+    expect(compiled.params).toEqual([1, 4]);
   });
 
 

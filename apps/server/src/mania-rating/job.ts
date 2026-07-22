@@ -3,6 +3,10 @@ import { parseQuery } from "../query-language/parse";
 import { compileQuery } from "../query-language/compile";
 import { backfillManiaRatingsSync } from "./compute";
 import { publish } from "../shared/events";
+import {
+  BEATMAP_SET_JOIN,
+  beatmapFilterWhere,
+} from "../query-language/sqlFragments";
 
 type SqlBinding = string | number | bigint | boolean | null;
 
@@ -70,12 +74,13 @@ function countMissingForQuery(
   filterSql: string,
   params: SqlBinding[],
 ): number {
-  const where = `WHERE b.hidden = 0 AND (${filterSql})`;
+  const where = beatmapFilterWhere(filterSql);
   const row = db.$client
     .query(
       `
       SELECT COUNT(*) AS n
       FROM beatmaps b
+      ${BEATMAP_SET_JOIN}
       LEFT JOIN beatmap_mania_ratings mr
         ON mr.beatmap_id = b.id AND mr.version_id = ?
       ${where}
@@ -218,12 +223,13 @@ function fetchBatchBeatmapIds(
   params: SqlBinding[],
   limit: number,
 ): string[] {
-  const where = `WHERE b.hidden = 0 AND (${filterSql})`;
+  const where = beatmapFilterWhere(filterSql);
   const rows = db.$client
     .query(
       `
       SELECT b.id
       FROM beatmaps b
+      ${BEATMAP_SET_JOIN}
       LEFT JOIN beatmap_mania_ratings mr
         ON mr.beatmap_id = b.id AND mr.version_id = ?
       ${where}

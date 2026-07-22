@@ -1,4 +1,5 @@
 import { QueryParseError, type AstNode, type ComparisonOp, type FieldTerm } from "./ast";
+import { normalizeStatusToken, parseStatusList } from "./status";
 
 type Token =
   | { kind: "lparen" }
@@ -143,6 +144,16 @@ function parseFieldTerm(raw: string): FieldTerm {
   // Bare text (no colon) — free-text search
   const colon = raw.indexOf(":");
   if (colon === -1) {
+    const gluedStatus = raw.match(/^status=(.+)$/i);
+    if (gluedStatus) {
+      try {
+        return { type: "status", values: parseStatusList(gluedStatus[1]!) };
+      } catch (err) {
+        throw new QueryParseError(
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    }
     // Could be acc>98 style without field prefix... support field+op glued
     const glued = raw.match(/^(acc|retry|mastery|pp|stars|misses|miss|score|keys|key|lns|ln|sunny|danstars|sunnystars)(>=|<=|>|<|=)(-?\d+(?:\.\d+)?)$/i);
     if (glued) {
@@ -161,6 +172,10 @@ function parseFieldTerm(raw: string): FieldTerm {
       if (field === "sunny" || field === "danstars" || field === "sunnystars") {
         return { type: "sunny", op, value };
       }
+    }
+    const bareStatus = normalizeStatusToken(raw);
+    if (bareStatus) {
+      return { type: "status", values: [bareStatus] };
     }
     return { type: "text", value: raw };
   }
@@ -299,6 +314,16 @@ function parseFieldTerm(raw: string): FieldTerm {
       if (!value) throw new QueryParseError("Invalid axis value: empty");
       return { type: "axis", value: normalizeAxisValue(value) };
     }
+    case "status": {
+      if (!value) throw new QueryParseError("Invalid status value: empty");
+      try {
+        return { type: "status", values: parseStatusList(value) };
+      } catch (err) {
+        throw new QueryParseError(
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    }
     default:
       throw new QueryParseError(`Unknown field: ${field}`);
   }
@@ -408,5 +433,9 @@ export function looksLikeQuery(q: string): boolean {
   if (/:\S/.test(trimmed)) return true;
   if (/\b(acc|retry|mastery|pp|stars|misses|miss|score|keys|key|lns|ln|sunny|danstars|sunnystars|pattern|dominant|style|axis|rice|lnmap)(>=|<=|>|<|=)/i.test(trimmed)) return true;
   if (/:(rc|rice|ln|lnmap)\b/i.test(trimmed)) return true;
+  if (/\b(ranked|loved|pending|qualified|approved|graveyard|wip)\b/i.test(trimmed)) {
+    return true;
+  }
+  if (/status=/i.test(trimmed)) return true;
   return false;
 }

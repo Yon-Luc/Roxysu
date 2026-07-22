@@ -2,6 +2,12 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 const FIELDS: { field: string; meaning: string; example: string }[] = [
   { field: "mode", meaning: "Ruleset short name", example: "mode:mania" },
+  {
+    field: "status / ranked / loved",
+    meaning:
+      "Beatmap set status: ranked, loved, pending, qualified, approved, graveyard, wip, none. Use status:ranked, status=r, or bare ranked.",
+    example: "mode:mania key=7 status=r",
+  },
   { field: "mapper", meaning: "Mapper username", example: "mapper:Lasse" },
   { field: "title", meaning: "Beatmap title (use ^ for prefix)", example: "title:^SL_5" },
   { field: "artist", meaning: "Artist name (use ^ for prefix)", example: "artist:Camellia" },
@@ -59,6 +65,8 @@ const FIELDS: { field: string; meaning: string; example: string }[] = [
 ];
 
 const EXAMPLES = [
+  "mode:mania key=7 ranked",
+  "mode:mania status:ranked,loved stars:6..8",
   "mode:mania stars:5..6",
   "key=7 stars:5..6",
   "key=7 ln<10",

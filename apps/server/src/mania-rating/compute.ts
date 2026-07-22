@@ -484,6 +484,27 @@ function upsertRatingSync(
     );
 }
 
+function fetchRowsByIds(
+  db: Db,
+  beatmapIds: string[],
+  limit: number,
+): MissingRow[] {
+  if (beatmapIds.length === 0) return [];
+  const placeholders = beatmapIds.map(() => "?").join(", ");
+  return db.$client
+    .query(
+      `
+      SELECT b.id, b.hash, b.ruleset_short_name, b.star_rating
+      FROM beatmaps b
+      WHERE b.id IN (${placeholders})
+        AND b.hidden = 0
+        AND lower(COALESCE(b.ruleset_short_name, '')) = 'mania'
+      LIMIT ?
+    `,
+    )
+    .all(...beatmapIds, limit) as MissingRow[];
+}
+
 function fetchMissingRows(
   db: Db,
   versionId: string,
@@ -579,6 +600,8 @@ export async function backfillManiaRatings(
     limit?: number;
     beatmapIds?: string[];
     includeFailed?: boolean;
+    /** Recompute even when a complete cache row already exists. */
+    force?: boolean;
     concurrency?: number;
   } = {},
 ): Promise<BackfillManiaRatingResult> {
@@ -601,7 +624,10 @@ export async function backfillManiaRatings(
   }
 
   const exe = executablePath.value.trim();
-  const rows = fetchMissingRows(db, versionId, limit, options.beatmapIds);
+  const rows =
+    options.force && options.beatmapIds && options.beatmapIds.length > 0
+      ? fetchRowsByIds(db, options.beatmapIds, limit)
+      : fetchMissingRows(db, versionId, limit, options.beatmapIds);
 
   const outcomes = await mapPool(rows, concurrency, async (row) => {
     const nowMs = Date.now();

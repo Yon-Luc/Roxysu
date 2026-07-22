@@ -167,7 +167,7 @@ Use a **new** `versionId` whenever the algo changes so old cached rows stay avai
 
    (stored as `maniaRating.executable.enissay-accuracy-v2`)
 
-6. **Rating Lab** — pick experiment = new version, then **Rerun experiment** for your query. Old `enissay-accuracy-change` rows remain usable for comparison.
+6. **Rating Lab** — pick experiment = new version, then **Compute missing experiment** for your query. Old `enissay-accuracy-change` rows remain usable for comparison.
 
 ### Shortcut: overwrite the same version
 
@@ -175,7 +175,7 @@ Only if you do not need to keep old results under the previous id:
 
 1. Checkout the new commit and rebuild into the **same** output path (e.g. `~/roxysu-calc/enissay-accuracy-change`).
 2. No registry change if the id stays `enissay-accuracy-change`.
-3. Delete stale cache for that version (or force a full rerun), then **Rerun experiment**.
+3. Delete stale cache for that version (or use **Force rerun experiment**), then **Compute missing experiment** if anything is still blank.
 
 Cache key is `(beatmap_id, version_id)` — same id + a valid cache row is skipped unless the row is missing, failed, or the beatmap hash changed.
 

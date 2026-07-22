@@ -321,6 +321,7 @@ export async function fetchRatingLabJob() {
 export async function startRatingLabJob(body: {
   versionId: string;
   query?: string;
+  force?: boolean;
 }) {
   return unwrap(
     await api.api["rating-lab"].job.start.post(body),

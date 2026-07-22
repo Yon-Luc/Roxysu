@@ -35,6 +35,7 @@ export type ManiaRatingJobState = {
   status: ManiaRatingJobStatus;
   versionId: string | null;
   query: string | null;
+  force: boolean;
   coverage: ManiaRatingCoverage;
   computedThisRun: number;
   attemptedThisRun: number;
@@ -52,6 +53,8 @@ let job: {
   status: ManiaRatingJobStatus;
   versionId: string | null;
   query: string | null;
+  force: boolean;
+  offset: number;
   computedThisRun: number;
   attemptedThisRun: number;
   startedAt: Date | null;
@@ -63,6 +66,8 @@ let job: {
   status: "idle",
   versionId: null,
   query: null,
+  force: false,
+  offset: 0,
   computedThisRun: 0,
   attemptedThisRun: 0,
   startedAt: null,
@@ -103,6 +108,26 @@ function countMissingForQuery(
     `,
     )
     .get(versionId, ...params) as { n: number } | null;
+  return Number(row?.n ?? 0);
+}
+
+function countMapsForQuery(
+  db: Db,
+  filterSql: string,
+  params: SqlBinding[],
+): number {
+  const where = beatmapFilterWhere(filterSql);
+  const row = db.$client
+    .query(
+      `
+      SELECT COUNT(*) AS n
+      FROM beatmaps b
+      ${BEATMAP_SET_JOIN}
+      ${where}
+        AND lower(COALESCE(b.ruleset_short_name, '')) = 'mania'
+    `,
+    )
+    .get(...params) as { n: number } | null;
   return Number(row?.n ?? 0);
 }
 
@@ -190,6 +215,7 @@ export function getManiaRatingJobState(db: Db): ManiaRatingJobState {
     status: job.status,
     versionId,
     query: job.query,
+    force: job.force,
     coverage: versionId
       ? getManiaRatingCoverage(db, versionId)
       : { maniaTotal: 0, computed: 0, missing: 0, failed: 0 },
@@ -233,8 +259,27 @@ function fetchBatchBeatmapIds(
   filterSql: string,
   params: SqlBinding[],
   limit: number,
+  options: { force?: boolean; offset?: number } = {},
 ): string[] {
   const where = beatmapFilterWhere(filterSql);
+  if (options.force) {
+    const rows = db.$client
+      .query(
+        `
+        SELECT b.id
+        FROM beatmaps b
+        ${BEATMAP_SET_JOIN}
+        ${where}
+          AND lower(COALESCE(b.ruleset_short_name, '')) = 'mania'
+        ORDER BY b.id
+        LIMIT ?
+        OFFSET ?
+      `,
+      )
+      .all(...params, limit, options.offset ?? 0) as { id: string }[];
+    return rows.map((r) => r.id);
+  }
+
   const rows = db.$client
     .query(
       `
@@ -290,6 +335,7 @@ async function runBatch(): Promise<void> {
       compiled.sql,
       asBindings(compiled.params),
       BATCH_SIZE,
+      { force: job.force, offset: job.offset },
     );
 
     if (ids.length === 0) {
@@ -300,11 +346,32 @@ async function runBatch(): Promise<void> {
     const result = await backfillManiaRatings(db, versionId, {
       limit: BATCH_SIZE,
       beatmapIds: ids,
+      force: job.force,
       concurrency: CALCULATOR_CONCURRENCY,
     });
 
     job.attemptedThisRun += result.attempted;
     job.computedThisRun += result.succeeded;
+
+    // No calculator work possible (e.g. executable not configured) — stop instead
+    // of spinning forever on the same rows.
+    if (result.attempted === 0) {
+      finish(
+        "error",
+        `No calculator work done for ${versionId}. Check the executable path in Settings.`,
+      );
+      return;
+    }
+
+    if (job.force) {
+      job.offset += ids.length;
+      if (ids.length < BATCH_SIZE) {
+        finish("completed");
+        return;
+      }
+      scheduleNext();
+      return;
+    }
 
     const remaining = countMissingForQuery(
       db,
@@ -326,7 +393,7 @@ async function runBatch(): Promise<void> {
 
 export function startManiaRatingBackfill(
   db: Db,
-  options: { versionId: string; query?: string },
+  options: { versionId: string; query?: string; force?: boolean },
 ): ManiaRatingJobState {
   if (job.status === "running" || job.status === "stopping") {
     return getManiaRatingJobState(db);
@@ -334,10 +401,13 @@ export function startManiaRatingBackfill(
 
   const versionId = options.versionId;
   const query = options.query?.trim() || "mode:mania";
+  const force = options.force === true;
 
   job.status = "running";
   job.versionId = versionId;
   job.query = query;
+  job.force = force;
+  job.offset = 0;
   job.computedThisRun = 0;
   job.attemptedThisRun = 0;
   job.startedAt = new Date();
@@ -347,14 +417,16 @@ export function startManiaRatingBackfill(
 
   const ast = parseQuery(query);
   const compiled = compileQuery(ast);
-  const missing = countMissingForQuery(
-    db,
-    versionId,
-    compiled.sql,
-    asBindings(compiled.params),
-  );
+  const pending = force
+    ? countMapsForQuery(db, compiled.sql, asBindings(compiled.params))
+    : countMissingForQuery(
+        db,
+        versionId,
+        compiled.sql,
+        asBindings(compiled.params),
+      );
 
-  if (missing === 0) {
+  if (pending === 0) {
     finish("completed");
     return getManiaRatingJobState(db);
   }

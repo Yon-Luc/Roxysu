@@ -220,12 +220,14 @@ export const ratingLabRoutes = new Elysia({ prefix: "/rating-lab" })
       return startManiaRatingBackfill(db, {
         versionId: body.versionId,
         query: body.query,
+        force: body.force ?? false,
       });
     },
     {
       body: t.Object({
         versionId: t.String(),
         query: t.Optional(t.String()),
+        force: t.Optional(t.Boolean()),
       }),
     },
   )

@@ -193,7 +193,12 @@ export function RatingLabPage() {
 
   const jobMut = useMutation({
     mutationFn: async (
-      action: "stop" | { start: "baseline" | "experiment" },
+      action:
+        | "stop"
+        | {
+            start: "baseline" | "experiment";
+            force?: boolean;
+          },
     ) => {
       if (action === "stop") return stopRatingLabJob();
       const versionId =
@@ -201,6 +206,7 @@ export function RatingLabPage() {
       return startRatingLabJob({
         versionId,
         query: activeQuery,
+        force: action.force === true,
       });
     },
     onSuccess: () => {
@@ -466,21 +472,43 @@ export function RatingLabPage() {
             </a>
             <button
               type="button"
-              className="rx-btn"
+              className="rx-btn-primary"
               disabled={jobBusy}
-              title="Recompute missing baseline ratings (including Base PP) for this query"
+              title="Compute ratings that are still missing for the baseline (including Base PP)"
               onClick={() => jobMut.mutate({ start: "baseline" })}
             >
-              Rerun baseline
+              Compute missing baseline
+            </button>
+            <button
+              type="button"
+              className="rx-btn-primary"
+              disabled={jobBusy}
+              title="Compute ratings that are still missing for the experiment"
+              onClick={() => jobMut.mutate({ start: "experiment" })}
+            >
+              Compute missing experiment
             </button>
             <button
               type="button"
               className="rx-btn"
               disabled={jobBusy}
-              title="Recompute missing experiment ratings for this query"
-              onClick={() => jobMut.mutate({ start: "experiment" })}
+              title="Force recompute every matching baseline map, even if already cached"
+              onClick={() =>
+                jobMut.mutate({ start: "baseline", force: true })
+              }
             >
-              Rerun experiment
+              Force rerun baseline
+            </button>
+            <button
+              type="button"
+              className="rx-btn"
+              disabled={jobBusy}
+              title="Force recompute every matching experiment map, even if already cached"
+              onClick={() =>
+                jobMut.mutate({ start: "experiment", force: true })
+              }
+            >
+              Force rerun experiment
             </button>
             <button
               type="button"
@@ -512,10 +540,12 @@ export function RatingLabPage() {
         {jobQuery.data && jobQuery.data.status !== "idle" ? (
           <p className="mt-3 text-xs text-muted">
             Job: {jobQuery.data.status}
+            {jobQuery.data.force ? " · force" : " · missing only"}
             {jobQuery.data.versionId ? ` · ${jobQuery.data.versionId}` : ""}
-            {jobQuery.data.computedThisRun > 0
-              ? ` · ${jobQuery.data.computedThisRun} computed this run`
+            {jobQuery.data.attemptedThisRun > 0
+              ? ` · ${jobQuery.data.computedThisRun}/${jobQuery.data.attemptedThisRun} ok this run`
               : ""}
+            {jobQuery.data.error ? ` · ${jobQuery.data.error}` : ""}
           </p>
         ) : null}
 

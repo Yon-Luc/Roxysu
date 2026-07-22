@@ -1,9 +1,13 @@
+export type ManiaRatingSource = "import" | "computed";
+
 export type ManiaRatingVersion = {
   id: string;
   label: string;
   description: string;
   /** Optional upstream git ref for documentation. */
   gitRef?: string;
+  /** Use beatmaps.star_rating from Realm instead of a calculator binary. */
+  source: ManiaRatingSource;
 };
 
 const versions = new Map<string, ManiaRatingVersion>();
@@ -20,6 +24,10 @@ export function listVersions(): ManiaRatingVersion[] {
   return [...versions.values()];
 }
 
+export function usesImportedRating(versionId: string): boolean {
+  return getVersion(versionId)?.source === "import";
+}
+
 export function executableSettingKey(versionId: string): string {
   return `maniaRating.executable.${versionId}`;
 }
@@ -29,10 +37,11 @@ export const ENISSAY_ACCURACY_VERSION = "enissay-accuracy-change";
 
 registerVersion({
   id: LAZER_MASTER_VERSION,
-  label: "Lazer master",
+  label: "Import (lazer)",
   description:
-    "Current osu!lazer mania SR and PP from master branch calculators.",
+    "Star rating imported from your local osu!lazer Realm sync. Optional binary for SS PP max only.",
   gitRef: "ppy/osu master",
+  source: "import",
 });
 
 registerVersion({
@@ -41,4 +50,5 @@ registerVersion({
   description:
     "Experimental 5-skill accuracy-curve SR and polynomial PP rework.",
   gitRef: "Natelytle/osu mania/enissay-mania-sr-rework-accuracy-change",
+  source: "computed",
 });

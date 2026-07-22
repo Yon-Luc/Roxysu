@@ -594,10 +594,12 @@ export function SettingsPage() {
             const draft = maniaExeDrafts[version.id] ?? "";
             const saved = version.executablePath ?? "";
             const dirty = (draft.trim() || null) !== (saved || null);
+            const optional = version.usesImport === true;
             return (
               <label key={version.id} className="block">
                 <span className="text-xs font-semibold uppercase tracking-wide text-faint">
                   {version.label}
+                  {optional ? " (optional)" : ""}
                 </span>
                 <input
                   type="text"
@@ -608,7 +610,11 @@ export function SettingsPage() {
                       [version.id]: e.target.value,
                     }))
                   }
-                  placeholder={`/path/to/mania-rating-calc (${version.id})`}
+                  placeholder={
+                    optional
+                      ? "Optional — SS PP max only"
+                      : `/path/to/mania-rating-calc (${version.id})`
+                  }
                   disabled={maniaRatingMut.isPending}
                   className="mt-1.5 w-full rounded-xl border border-line bg-elevated/50 px-3 py-2 font-mono text-sm text-ink placeholder:text-faint focus:border-accent focus:outline-none disabled:opacity-60"
                   spellCheck={false}

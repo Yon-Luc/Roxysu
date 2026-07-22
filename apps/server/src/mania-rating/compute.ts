@@ -9,7 +9,7 @@ import {
   getOsuDataPath,
   resolveLazerFilePath,
 } from "../shared/lazer-files";
-import { getVersion } from "./registry";
+import { getVersion, usesImportedRating } from "./registry";
 import { readExecutablePath } from "./settings";
 import { toIso as toIsoNullable } from "../shared/serialize";
 
@@ -147,7 +147,15 @@ async function runCalculator(
 function isValidCached(
   cached: typeof beatmapManiaRatings.$inferSelect,
   beatmapHash: string | null,
+  versionId: string,
 ): boolean {
+  if (usesImportedRating(versionId)) {
+    return (
+      cached.error == null &&
+      cached.beatmapHash === beatmapHash &&
+      (cached.starRating != null || cached.ppSs != null)
+    );
+  }
   return (
     cached.error == null &&
     cached.starRating != null &&
@@ -174,12 +182,15 @@ export async function getOrComputeManiaRating(
       id: beatmaps.id,
       hash: beatmaps.hash,
       rulesetShortName: beatmaps.rulesetShortName,
+      starRating: beatmaps.starRating,
     })
     .from(beatmaps)
     .where(eq(beatmaps.id, beatmapId))
     .limit(1);
 
   if (!beatmap) return null;
+
+  const importBaseline = usesImportedRating(versionId);
 
   if (!options.force) {
     const [cached] = await db
@@ -193,7 +204,16 @@ export async function getOrComputeManiaRating(
       )
       .limit(1);
 
-    if (cached && isValidCached(cached, beatmap.hash)) {
+    if (importBaseline) {
+      const importedStar = beatmap.starRating;
+      if (
+        cached &&
+        isValidCached(cached, beatmap.hash, versionId) &&
+        cached.starRating === importedStar
+      ) {
+        return rowToResult(cached, true);
+      }
+    } else if (cached && isValidCached(cached, beatmap.hash, versionId)) {
       return rowToResult(cached, true);
     }
   }
@@ -215,7 +235,21 @@ export async function getOrComputeManiaRating(
   }
 
   const executablePath = await readExecutablePath(db, versionId);
+
   if (!executablePath) {
+    if (importBaseline) {
+      return upsertRating(db, {
+        beatmapId,
+        versionId,
+        beatmapHash: beatmap.hash,
+        starRating: beatmap.starRating,
+        starRatingSs: null,
+        ppSs: null,
+        attributesJson: null,
+        error: null,
+        updatedAt: now,
+      });
+    }
     return upsertRating(db, {
       beatmapId,
       versionId,
@@ -230,6 +264,19 @@ export async function getOrComputeManiaRating(
   }
 
   if (!beatmap.hash) {
+    if (importBaseline) {
+      return upsertRating(db, {
+        beatmapId,
+        versionId,
+        beatmapHash: null,
+        starRating: beatmap.starRating,
+        starRatingSs: null,
+        ppSs: null,
+        attributesJson: null,
+        error: null,
+        updatedAt: now,
+      });
+    }
     return upsertRating(db, {
       beatmapId,
       versionId,
@@ -245,6 +292,19 @@ export async function getOrComputeManiaRating(
 
   const filePath = resolveLazerFilePath(beatmap.hash, getOsuDataPath());
   if (!filePath) {
+    if (importBaseline) {
+      return upsertRating(db, {
+        beatmapId,
+        versionId,
+        beatmapHash: beatmap.hash,
+        starRating: beatmap.starRating,
+        starRatingSs: null,
+        ppSs: null,
+        attributesJson: null,
+        error: null,
+        updatedAt: now,
+      });
+    }
     return upsertRating(db, {
       beatmapId,
       versionId,
@@ -261,6 +321,19 @@ export async function getOrComputeManiaRating(
   try {
     readFileSync(filePath, "utf8");
   } catch {
+    if (importBaseline) {
+      return upsertRating(db, {
+        beatmapId,
+        versionId,
+        beatmapHash: beatmap.hash,
+        starRating: beatmap.starRating,
+        starRatingSs: null,
+        ppSs: null,
+        attributesJson: null,
+        error: null,
+        updatedAt: now,
+      });
+    }
     return upsertRating(db, {
       beatmapId,
       versionId,
@@ -284,7 +357,9 @@ export async function getOrComputeManiaRating(
       beatmapId,
       versionId,
       beatmapHash: beatmap.hash,
-      starRating: output.starRating ?? null,
+      starRating: importBaseline
+        ? beatmap.starRating
+        : (output.starRating ?? null),
       starRatingSs: output.starRatingSs ?? null,
       ppSs: output.ppSs ?? null,
       attributesJson: output.attributes
@@ -295,6 +370,19 @@ export async function getOrComputeManiaRating(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    if (importBaseline) {
+      return upsertRating(db, {
+        beatmapId,
+        versionId,
+        beatmapHash: beatmap.hash,
+        starRating: beatmap.starRating,
+        starRatingSs: null,
+        ppSs: null,
+        attributesJson: null,
+        error: null,
+        updatedAt: now,
+      });
+    }
     return upsertRating(db, {
       beatmapId,
       versionId,
@@ -461,6 +549,10 @@ export function backfillManiaRatingsSync(
     includeFailed?: boolean;
   } = {},
 ): BackfillManiaRatingResult {
+  if (usesImportedRating(versionId)) {
+    return { attempted: 0, succeeded: 0, remaining: 0 };
+  }
+
   const limit = options.limit ?? 20;
   const executablePath = db.$client
     .query(`SELECT value FROM settings WHERE key = ? LIMIT 1`)

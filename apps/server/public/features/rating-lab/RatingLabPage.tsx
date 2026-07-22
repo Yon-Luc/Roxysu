@@ -146,6 +146,9 @@ export function RatingLabPage() {
   const experimentLabel =
     versions.find((v) => v.id === experimentId)?.label ?? experimentId;
 
+  const baselineUsesImport =
+    versions.find((v) => v.id === baselineId)?.usesImport ?? false;
+
   const exportUrl = useMemo(() => {
     const params = new URLSearchParams({
       q: activeQuery,
@@ -249,7 +252,11 @@ export function RatingLabPage() {
               {versions.map((v) => (
                 <option key={v.id} value={v.id}>
                   {v.label}
-                  {!v.executableConfigured ? " (no binary)" : ""}
+                  {v.usesImport
+                    ? " (import)"
+                    : !v.executableConfigured
+                      ? " (no binary)"
+                      : ""}
                 </option>
               ))}
             </select>
@@ -269,7 +276,7 @@ export function RatingLabPage() {
               {versions.map((v) => (
                 <option key={v.id} value={v.id}>
                   {v.label}
-                  {!v.executableConfigured ? " (no binary)" : ""}
+                  {!v.usesImport && !v.executableConfigured ? " (no binary)" : ""}
                 </option>
               ))}
             </select>
@@ -422,7 +429,9 @@ export function RatingLabPage() {
                 <thead>
                   <tr className="border-b border-line text-xs uppercase tracking-wide text-faint">
                     <th className="px-2 py-2">Map</th>
-                    <th className="px-2 py-2">Import ★</th>
+                    {!baselineUsesImport ? (
+                      <th className="px-2 py-2">Import ★</th>
+                    ) : null}
                     <th className="px-2 py-2">{baselineLabel} ★</th>
                     <th className="px-2 py-2">{experimentLabel} ★</th>
                     <th className="px-2 py-2">Δ★</th>
@@ -468,9 +477,11 @@ export function RatingLabPage() {
                           </div>
                         </Link>
                       </td>
-                      <td className="px-2 py-2 font-mono text-muted">
-                        {formatStars(item.importedStarRating)}
-                      </td>
+                      {!baselineUsesImport ? (
+                        <td className="px-2 py-2 font-mono text-muted">
+                          {formatStars(item.importedStarRating)}
+                        </td>
+                      ) : null}
                       <td className="px-2 py-2 font-mono">
                         {item.baseline.starRating != null
                           ? formatStars(item.baseline.starRating)

@@ -89,12 +89,15 @@ async function buildSettingsResponse(db: Db) {
     },
     sunnyDan: getSunnyDanJobState(db),
     patternAnalysis: getPatternAnalysisJobState(db),
-    maniaRating: {
+      maniaRating: {
       versions: listVersions().map((v) => ({
         id: v.id,
         label: v.label,
         description: v.description,
         gitRef: v.gitRef ?? null,
+        source: v.source,
+        usesImport: v.source === "import",
+        executableOptional: v.source === "import",
         executablePath: maniaRatingExecutables[v.id] ?? null,
       })),
       job: getManiaRatingJobState(db),

@@ -7,7 +7,7 @@ import {
   ensureManiaRatingsForIdsSync,
   RATING_QUERY_BACKFILL_LIMIT,
 } from "./compute";
-import { getVersion } from "./registry";
+import { getVersion, usesImportedRating } from "./registry";
 import {
   BEATMAP_SET_JOIN,
   beatmapFilterWhere,
@@ -160,9 +160,18 @@ function buildHistogram(deltas: number[]): HistogramBin[] {
   return bins;
 }
 
-function mapCompareRow(row: RatingJoinRow): CompareRow {
+function mapCompareRow(
+  row: RatingJoinRow,
+  baselineVersionId: string,
+): CompareRow {
   const baseline = toSide(row, "base");
   const experiment = toSide(row, "exp");
+  const importedStar = Number(row.imported_star_rating);
+
+  if (usesImportedRating(baselineVersionId)) {
+    baseline.starRating = importedStar;
+    baseline.error = null;
+  }
 
   return {
     beatmapId: row.beatmap_id,
@@ -170,7 +179,7 @@ function mapCompareRow(row: RatingJoinRow): CompareRow {
     artist: row.artist,
     difficultyName: row.difficulty_name,
     keyCount: row.circle_size != null ? Number(row.circle_size) : null,
-    importedStarRating: Number(row.imported_star_rating),
+    importedStarRating: importedStar,
     baseline,
     experiment,
     delta: {
@@ -178,7 +187,9 @@ function mapCompareRow(row: RatingJoinRow): CompareRow {
       ppSs: delta(baseline.ppSs, experiment.ppSs),
     },
     cached: {
-      baseline: baseline.starRating != null && baseline.error == null,
+      baseline:
+        usesImportedRating(baselineVersionId) ||
+        (baseline.starRating != null && baseline.error == null),
       experiment: experiment.starRating != null && experiment.error == null,
     },
   };
@@ -206,6 +217,9 @@ function fetchCompareRows(
   offset: number,
 ): RatingJoinRow[] {
   const where = beatmapFilterWhere(filterSql);
+  const baseStarSql = usesImportedRating(baselineVersionId)
+    ? "b.star_rating AS base_star_rating"
+    : "base.star_rating AS base_star_rating";
   const sql = `
     SELECT
       b.id AS beatmap_id,
@@ -214,7 +228,7 @@ function fetchCompareRows(
       b.difficulty_name,
       b.circle_size,
       b.star_rating AS imported_star_rating,
-      base.star_rating AS base_star_rating,
+      ${baseStarSql},
       base.star_rating_ss AS base_star_rating_ss,
       base.pp_ss AS base_pp_ss,
       base.attributes_json AS base_attributes_json,
@@ -261,10 +275,12 @@ function maybeEnsureRatings(
   experimentVersionId: string,
 ): { baseline: number; experiment: number } {
   const slice = beatmapIds.slice(0, RATING_QUERY_BACKFILL_LIMIT);
-  const baseResult = backfillManiaRatingsSync(db, baselineVersionId, {
-    limit: RATING_QUERY_BACKFILL_LIMIT,
-    beatmapIds: slice,
-  });
+  const baseResult = usesImportedRating(baselineVersionId)
+    ? { succeeded: 0 }
+    : backfillManiaRatingsSync(db, baselineVersionId, {
+        limit: RATING_QUERY_BACKFILL_LIMIT,
+        beatmapIds: slice,
+      });
   const expResult = backfillManiaRatingsSync(db, experimentVersionId, {
     limit: RATING_QUERY_BACKFILL_LIMIT,
     beatmapIds: slice,
@@ -318,7 +334,9 @@ export function compareManiaRatings(
       baselineVersionId,
       experimentVersionId,
     );
-    ensureManiaRatingsForIdsSync(db, baselineVersionId, ids);
+    if (!usesImportedRating(baselineVersionId)) {
+      ensureManiaRatingsForIdsSync(db, baselineVersionId, ids);
+    }
     ensureManiaRatingsForIdsSync(db, experimentVersionId, ids);
   }
 
@@ -339,7 +357,7 @@ export function compareManiaRatings(
     baselineVersionId,
     experimentVersionId,
     query,
-    items: rows.map(mapCompareRow),
+    items: rows.map((row) => mapCompareRow(row, baselineVersionId)),
     computedThisRequest,
   };
 }
@@ -362,7 +380,9 @@ export function summarizeManiaRatings(
       pageSize: RATING_QUERY_BACKFILL_LIMIT,
     });
     const ids = preview.items.map((i) => i.id);
-    ensureManiaRatingsForIdsSync(db, options.baselineVersionId, ids);
+    if (!usesImportedRating(options.baselineVersionId)) {
+      ensureManiaRatingsForIdsSync(db, options.baselineVersionId, ids);
+    }
     ensureManiaRatingsForIdsSync(db, options.experimentVersionId, ids);
   }
 
@@ -375,7 +395,7 @@ export function summarizeManiaRatings(
     5000,
     0,
   );
-  const items = allRows.map(mapCompareRow);
+  const items = allRows.map((row) => mapCompareRow(row, options.baselineVersionId));
 
   const comparable = items.filter(
     (i) =>

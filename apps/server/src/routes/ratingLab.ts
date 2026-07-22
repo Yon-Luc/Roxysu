@@ -27,8 +27,12 @@ export const ratingLabRoutes = new Elysia({ prefix: "/rating-lab" })
         label: v.label,
         description: v.description,
         gitRef: v.gitRef ?? null,
-        executableConfigured: executables[v.id] != null,
-        executablePath: executables[v.id],
+        source: v.source,
+        usesImport: v.source === "import",
+        executableOptional: v.source === "import",
+        executableConfigured:
+          v.source === "import" || executables[v.id] != null,
+        executablePath: executables[v.id] ?? null,
       })),
       defaults: {
         baseline: LAZER_MASTER_VERSION,

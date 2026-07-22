@@ -5,8 +5,9 @@ export {
   executableSettingKey,
   LAZER_MASTER_VERSION,
   ENISSAY_ACCURACY_VERSION,
+  usesImportedRating,
 } from "./registry";
-export type { ManiaRatingVersion } from "./registry";
+export type { ManiaRatingVersion, ManiaRatingSource } from "./registry";
 export {
   readExecutablePath,
   setExecutablePath,

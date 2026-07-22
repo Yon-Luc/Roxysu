@@ -385,6 +385,7 @@ export async function fetchRatingLabCompare(params: {
   sort?: string;
   order?: string;
   name?: string;
+  ppAccuracy?: number | string;
 }) {
   return unwrap(
     await api.api["rating-lab"].compare.get({ query: params }),
@@ -396,6 +397,7 @@ export async function fetchRatingLabSummary(params: {
   q: string;
   baseline?: string;
   experiment?: string;
+  ppAccuracy?: number | string;
 }) {
   return unwrap(
     await api.api["rating-lab"].compare.summary.get({ query: params }),

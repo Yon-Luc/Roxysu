@@ -12,6 +12,11 @@ import {
 import { getVersion, usesImportedRating } from "./registry";
 import { readExecutablePath } from "./settings";
 import { toIso as toIsoNullable } from "../shared/serialize";
+import {
+  hasCompletePpByAccuracy,
+  parsePpByAccuracy,
+  type PpByAccuracy,
+} from "./ppAccuracy";
 
 export type ManiaRatingAttributes = Record<string, unknown>;
 
@@ -21,6 +26,7 @@ export type ManiaRatingResult = {
   starRating: number | null;
   starRatingSs: number | null;
   ppSs: number | null;
+  ppByAccuracy: PpByAccuracy | null;
   attributes: ManiaRatingAttributes | null;
   error: string | null;
   updatedAt: string;
@@ -32,6 +38,7 @@ type CliOutput = {
   starRating?: number;
   starRatingSs?: number | null;
   ppSs?: number;
+  ppByAccuracy?: PpByAccuracy | null;
   attributes?: ManiaRatingAttributes | null;
   error?: string;
 };
@@ -59,6 +66,7 @@ function rowToResult(
     starRating: row.starRating,
     starRatingSs: row.starRatingSs,
     ppSs: row.ppSs,
+    ppByAccuracy: parsePpByAccuracy(row.ppByAccuracyJson),
     attributes,
     error: row.error,
     updatedAt: toIso(row.updatedAt),
@@ -80,6 +88,7 @@ async function upsertRating(
         starRating: values.starRating,
         starRatingSs: values.starRatingSs,
         ppSs: values.ppSs,
+        ppByAccuracyJson: values.ppByAccuracyJson,
         attributesJson: values.attributesJson,
         error: values.error,
         updatedAt: values.updatedAt,
@@ -94,6 +103,7 @@ async function upsertRating(
       starRating: values.starRating ?? null,
       starRatingSs: values.starRatingSs ?? null,
       ppSs: values.ppSs ?? null,
+      ppByAccuracyJson: values.ppByAccuracyJson ?? null,
       attributesJson: values.attributesJson ?? null,
       error: values.error ?? null,
       updatedAt: values.updatedAt,
@@ -151,6 +161,13 @@ function hasExecutableConfigured(db: Db, versionId: string): boolean {
   return Boolean(row?.value?.trim());
 }
 
+function serializePpByAccuracy(
+  map: PpByAccuracy | null | undefined,
+): string | null {
+  if (!map || !hasCompletePpByAccuracy(map)) return null;
+  return JSON.stringify(map);
+}
+
 function isValidCached(
   cached: typeof beatmapManiaRatings.$inferSelect,
   beatmapHash: string | null,
@@ -160,14 +177,23 @@ function isValidCached(
   if (cached.error != null) return false;
   if (cached.beatmapHash !== beatmapHash) return false;
 
+  const ppByAccuracy = parsePpByAccuracy(cached.ppByAccuracyJson);
+
   if (usesImportedRating(versionId)) {
     if (cached.starRating == null) return false;
-    // When a binary is configured, SR-only rows are stale — need SS PP.
-    if (options.requirePp && cached.ppSs == null) return false;
+    // When a binary is configured, SR-only rows are stale — need SS PP + accuracy tiers.
+    if (options.requirePp) {
+      if (cached.ppSs == null) return false;
+      if (!hasCompletePpByAccuracy(ppByAccuracy)) return false;
+    }
     return true;
   }
 
-  return cached.starRating != null && cached.ppSs != null;
+  return (
+    cached.starRating != null &&
+    cached.ppSs != null &&
+    hasCompletePpByAccuracy(ppByAccuracy)
+  );
 }
 
 /**
@@ -230,6 +256,7 @@ export async function getOrComputeManiaRating(
       starRating: null,
       starRatingSs: null,
       ppSs: null,
+      ppByAccuracyJson: null,
       attributesJson: null,
       error: "Not a mania beatmap",
       updatedAt: now,
@@ -247,6 +274,7 @@ export async function getOrComputeManiaRating(
         starRating: beatmap.starRating,
         starRatingSs: null,
         ppSs: null,
+        ppByAccuracyJson: null,
         attributesJson: null,
         error: null,
         updatedAt: now,
@@ -259,6 +287,7 @@ export async function getOrComputeManiaRating(
       starRating: null,
       starRatingSs: null,
       ppSs: null,
+      ppByAccuracyJson: null,
       attributesJson: null,
       error: `Executable not configured for version ${versionId}`,
       updatedAt: now,
@@ -274,6 +303,7 @@ export async function getOrComputeManiaRating(
         starRating: beatmap.starRating,
         starRatingSs: null,
         ppSs: null,
+        ppByAccuracyJson: null,
         attributesJson: null,
         error: null,
         updatedAt: now,
@@ -286,6 +316,7 @@ export async function getOrComputeManiaRating(
       starRating: null,
       starRatingSs: null,
       ppSs: null,
+      ppByAccuracyJson: null,
       attributesJson: null,
       error: "Beatmap hash missing",
       updatedAt: now,
@@ -302,6 +333,7 @@ export async function getOrComputeManiaRating(
         starRating: beatmap.starRating,
         starRatingSs: null,
         ppSs: null,
+        ppByAccuracyJson: null,
         attributesJson: null,
         error: null,
         updatedAt: now,
@@ -314,6 +346,7 @@ export async function getOrComputeManiaRating(
       starRating: null,
       starRatingSs: null,
       ppSs: null,
+      ppByAccuracyJson: null,
       attributesJson: null,
       error: "Could not resolve lazer file path",
       updatedAt: now,
@@ -331,6 +364,7 @@ export async function getOrComputeManiaRating(
         starRating: beatmap.starRating,
         starRatingSs: null,
         ppSs: null,
+        ppByAccuracyJson: null,
         attributesJson: null,
         error: null,
         updatedAt: now,
@@ -343,6 +377,7 @@ export async function getOrComputeManiaRating(
       starRating: null,
       starRatingSs: null,
       ppSs: null,
+      ppByAccuracyJson: null,
       attributesJson: null,
       error: "Beatmap file not found in lazer files store",
       updatedAt: now,
@@ -364,6 +399,7 @@ export async function getOrComputeManiaRating(
         : (output.starRating ?? null),
       starRatingSs: output.starRatingSs ?? null,
       ppSs: output.ppSs ?? null,
+      ppByAccuracyJson: serializePpByAccuracy(output.ppByAccuracy),
       attributesJson: output.attributes
         ? JSON.stringify(output.attributes)
         : null,
@@ -380,6 +416,7 @@ export async function getOrComputeManiaRating(
         starRating: beatmap.starRating,
         starRatingSs: null,
         ppSs: null,
+        ppByAccuracyJson: null,
         attributesJson: null,
         error: message,
         updatedAt: now,
@@ -392,6 +429,7 @@ export async function getOrComputeManiaRating(
       starRating: null,
       starRatingSs: null,
       ppSs: null,
+      ppByAccuracyJson: null,
       attributesJson: null,
       error: message,
       updatedAt: now,
@@ -449,6 +487,7 @@ function upsertRatingSync(
     starRating: number | null;
     starRatingSs: number | null;
     ppSs: number | null;
+    ppByAccuracyJson: string | null;
     attributesJson: string | null;
     error: string | null;
     updatedAtMs: number;
@@ -459,13 +498,14 @@ function upsertRatingSync(
       `
       INSERT INTO beatmap_mania_ratings (
         beatmap_id, version_id, beatmap_hash, star_rating, star_rating_ss,
-        pp_ss, attributes_json, error, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        pp_ss, pp_by_accuracy_json, attributes_json, error, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(beatmap_id, version_id) DO UPDATE SET
         beatmap_hash = excluded.beatmap_hash,
         star_rating = excluded.star_rating,
         star_rating_ss = excluded.star_rating_ss,
         pp_ss = excluded.pp_ss,
+        pp_by_accuracy_json = excluded.pp_by_accuracy_json,
         attributes_json = excluded.attributes_json,
         error = excluded.error,
         updated_at = excluded.updated_at
@@ -478,6 +518,7 @@ function upsertRatingSync(
       values.starRating,
       values.starRatingSs,
       values.ppSs,
+      values.ppByAccuracyJson,
       values.attributesJson,
       values.error,
       values.updatedAtMs,
@@ -505,6 +546,11 @@ function fetchRowsByIds(
     .all(...beatmapIds, limit) as MissingRow[];
 }
 
+const MISSING_PP_ACCURACY_SQL = `(
+  mr.pp_by_accuracy_json IS NULL
+  OR json_extract(mr.pp_by_accuracy_json, '$.93') IS NULL
+)`;
+
 function fetchMissingRows(
   db: Db,
   versionId: string,
@@ -528,6 +574,7 @@ function fetchMissingRows(
             OR mr.error IS NOT NULL
             OR mr.star_rating IS NULL
             OR mr.pp_ss IS NULL
+            OR ${MISSING_PP_ACCURACY_SQL}
             OR (
               b.hash IS NOT NULL
               AND mr.beatmap_hash IS NOT NULL
@@ -558,7 +605,11 @@ function fetchMissingRows(
           )
           OR (
             mr.error IS NULL
-            AND (mr.star_rating IS NULL OR mr.pp_ss IS NULL)
+            AND (
+              mr.star_rating IS NULL
+              OR mr.pp_ss IS NULL
+              OR ${MISSING_PP_ACCURACY_SQL}
+            )
           )
           OR mr.error IS NOT NULL
         )
@@ -585,6 +636,10 @@ function countRemainingMissing(db: Db, versionId: string): number {
             AND mr.beatmap_hash IS NOT NULL
             AND mr.beatmap_hash != b.hash
           )
+          OR mr.error IS NOT NULL
+          OR mr.star_rating IS NULL
+          OR mr.pp_ss IS NULL
+          OR ${MISSING_PP_ACCURACY_SQL}
         )
     `,
     )
@@ -640,6 +695,7 @@ export async function backfillManiaRatings(
         starRating: null,
         starRatingSs: null,
         ppSs: null,
+        ppByAccuracyJson: null,
         attributesJson: null,
         error: "Not a mania beatmap",
         updatedAtMs: nowMs,
@@ -655,6 +711,7 @@ export async function backfillManiaRatings(
         starRating: importBaseline ? row.star_rating : null,
         starRatingSs: null,
         ppSs: null,
+        ppByAccuracyJson: null,
         attributesJson: null,
         error: importBaseline ? null : "Beatmap hash missing",
         updatedAtMs: nowMs,
@@ -671,6 +728,7 @@ export async function backfillManiaRatings(
         starRating: importBaseline ? row.star_rating : null,
         starRatingSs: null,
         ppSs: null,
+        ppByAccuracyJson: null,
         attributesJson: null,
         error: importBaseline ? null : "Could not resolve lazer file path",
         updatedAtMs: nowMs,
@@ -688,6 +746,7 @@ export async function backfillManiaRatings(
         starRating: importBaseline ? row.star_rating : null,
         starRatingSs: null,
         ppSs: null,
+        ppByAccuracyJson: null,
         attributesJson: null,
         error: importBaseline
           ? null
@@ -710,6 +769,7 @@ export async function backfillManiaRatings(
           : (output.starRating ?? null),
         starRatingSs: output.starRatingSs ?? null,
         ppSs: output.ppSs ?? null,
+        ppByAccuracyJson: serializePpByAccuracy(output.ppByAccuracy),
         attributesJson: output.attributes
           ? JSON.stringify(output.attributes)
           : null,
@@ -726,6 +786,7 @@ export async function backfillManiaRatings(
         starRating: importBaseline ? row.star_rating : null,
         starRatingSs: null,
         ppSs: null,
+        ppByAccuracyJson: null,
         attributesJson: null,
         // Keep SR for import, but record PP failure so we can retry.
         error: message,

@@ -332,6 +332,8 @@ export const beatmapManiaRatings = sqliteTable(
     starRating: real("star_rating"),
     starRatingSs: real("star_rating_ss"),
     ppSs: real("pp_ss"),
+    /** JSON map of custom-accuracy % → PP, e.g. {"100":412.5,"99.5":400,…}. */
+    ppByAccuracyJson: text("pp_by_accuracy_json"),
     attributesJson: text("attributes_json"),
     error: text("error"),
     updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),

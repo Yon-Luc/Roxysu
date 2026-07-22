@@ -31,7 +31,10 @@ export {
   exportManiaRatingsHtml,
   parseCompareSort,
   parseCompareOrder,
+  parsePpAccuracyParam,
   COMPARE_SORTS,
+  PP_ACCURACY_TIERS,
+  formatPpAccuracyLabel,
 } from "./compare";
 export type {
   CompareRow,
@@ -39,7 +42,13 @@ export type {
   CompareSummary,
   CompareSort,
   CompareOrder,
+  PpAccuracyTier,
 } from "./compare";
+export {
+  DEFAULT_PP_ACCURACY,
+  ppAtAccuracy,
+} from "./ppAccuracy";
+export type { PpByAccuracy } from "./ppAccuracy";
 export {
   buildRatingLabAnalyseHtml,
   slimCompareRow,

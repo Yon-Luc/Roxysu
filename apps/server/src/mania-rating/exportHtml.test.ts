@@ -23,6 +23,14 @@ function sampleRow(overrides: Partial<CompareRow> = {}): CompareRow {
       starRating: 6.5,
       starRatingSs: null,
       ppSs: 200,
+      ppByAccuracy: {
+        "100": 200,
+        "99.5": 190,
+        "97": 160,
+        "95": 140,
+        "93": 120,
+      },
+      pp: 200,
       attributes: { speed_difficulty: 1 },
       error: null,
     },
@@ -30,10 +38,18 @@ function sampleRow(overrides: Partial<CompareRow> = {}): CompareRow {
       starRating: 7.1,
       starRatingSs: 7.2,
       ppSs: 240,
+      ppByAccuracy: {
+        "100": 240,
+        "99.5": 220,
+        "97": 180,
+        "95": 160,
+        "93": 140,
+      },
+      pp: 240,
       attributes: { variety: 1.05 },
       error: null,
     },
-    delta: { starRating: 0.6, ppSs: 40 },
+    delta: { starRating: 0.6, ppSs: 40, pp: 40 },
     cached: { baseline: true, experiment: true },
     ...overrides,
   };
@@ -76,8 +92,30 @@ describe("slimCompareRow", () => {
       difficultyName: "Another",
       keyCount: 7,
       importedStarRating: 6.5,
-      baseline: { starRating: 6.5, ppSs: 200, error: null },
-      experiment: { starRating: 7.1, ppSs: 240, error: null },
+      baseline: {
+        starRating: 6.5,
+        ppSs: 200,
+        ppByAccuracy: {
+          "100": 200,
+          "99.5": 190,
+          "97": 160,
+          "95": 140,
+          "93": 120,
+        },
+        error: null,
+      },
+      experiment: {
+        starRating: 7.1,
+        ppSs: 240,
+        ppByAccuracy: {
+          "100": 240,
+          "99.5": 220,
+          "97": 180,
+          "95": 160,
+          "93": 140,
+        },
+        error: null,
+      },
       delta: { starRating: 0.6, ppSs: 40 },
       cached: { baseline: true, experiment: true },
     });
@@ -115,7 +153,10 @@ describe("buildRatingLabAnalyseHtml", () => {
     expect(html).toContain("<!DOCTYPE html>");
     expect(html).toContain('id="rating-lab-data"');
     expect(html).toContain('id="keymode-filter"');
+    expect(html).toContain('id="pp-accuracy"');
     expect(html).toContain('id="name-filter"');
+    expect(html).toContain("ppAccuracyTiers");
+    expect(html).toContain("ppByAccuracy");
     expect(html).toContain('id="histogram"');
     expect(html).toContain("assets.ppy.sh/beatmaps/");
     expect(html).toContain("#mania/");

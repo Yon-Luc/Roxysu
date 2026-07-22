@@ -1,10 +1,10 @@
 # Mania Rating Lab
 
-Compare experimental mania star rating and SS PP formulas against lazer baseline inside Roxysu.
+Compare experimental mania star rating and theoretical PP (custom-accuracy tiers) against lazer baseline inside Roxysu.
 
 ## Overview
 
-Roxysu imports official lazer `star_rating` from Realm. Rating Lab recomputes SR and theoretical max PP (100% accuracy, NM) from local `.osu` files using versioned calculator binaries built from osu!lazer branches.
+Roxysu imports official lazer `star_rating` from Realm. Rating Lab recomputes SR and theoretical PP (SS / 99.5% / 97% / 95% / 93% custom accuracy, NM) from local `.osu` files using versioned calculator binaries built from osu!lazer branches.
 
 ## Build calculator binaries
 
@@ -98,9 +98,30 @@ Stdout JSON:
   "starRating": 7.42,
   "starRatingSs": 8.11,
   "ppSs": 412.5,
+  "ppByAccuracy": {
+    "100": 412.5,
+    "99.5": 390.1,
+    "97": 310.2,
+    "95": 250.0,
+    "93": 200.4
+  },
   "attributes": { "speed_difficulty": 3.2, "variety": 1.05 }
 }
 ```
+
+### PP at custom accuracy
+
+The CLI computes theoretical PP at fixed **mania custom-accuracy** tiers: **100% (SS), 99.5%, 97%, 95%, 93%**.
+
+For each tier it synthesizes judgement counts (Perfect → Great → Good → Ok → Meh → Miss) so custom accuracy ≈ `tier / 100`, then runs the performance calculator. The same recipe is used for every formula version so ΔPP stays comparable.
+
+This is **not** classic combo-dependent total-score simulation — only custom accuracy (judgement weights 320/300/200/100/50).
+
+Cached as `pp_by_accuracy_json` on `beatmap_mania_ratings`. After upgrading the calculator, **force rerun** (or wait for backfill of incomplete rows) so old SS-only cache rows gain accuracy tiers.
+
+Rating Lab and the static HTML export both expose a **PP at accuracy** picker that switches Base/Exp/ΔPP columns, summary mean/median ΔPP, and largest PP movers.
+
+Compare API: `GET /api/rating-lab/compare?…&ppAccuracy=99.5` (default `100`).
 
 ## Using Rating Lab
 
@@ -108,16 +129,17 @@ Open **Rating Lab** (`#/rating-lab`):
 
 1. Enter a query, e.g. `mode:mania key=7 ranked`
 2. Pick **baseline** (usually `lazer-master`) and **experiment** (e.g. `enissay-accuracy-change`)
-3. View SR / PP deltas in the table and histogram
-4. Run **backfill** to compute missing ratings in bulk
-5. **Export CSV** for spreadsheet analysis, or **Export HTML** for a shareable self-contained analysis page
+3. Optionally pick **PP at accuracy** (SS / 99.5% / 97% / 95% / 93%)
+4. View SR / PP deltas in the table and histogram
+5. Run **backfill** to compute missing ratings in bulk
+6. **Export CSV** for spreadsheet analysis, or **Export HTML** for a shareable self-contained analysis page
 
 ### Export HTML
 
 **Export HTML** downloads `rating-lab-analyse.html` — one file with CSS, vanilla JS, and the full compare snapshot inlined (no attributes payloads). Open it in any browser:
 
 - Summary cards, SR-delta histogram, and top movers (recomputed as you filter)
-- Name search and **keymode** filter (All / 4K / 7K / …)
+- Name search, **keymode** filter, and **PP at accuracy** picker
 - Sortable, paginated table (same columns as Rating Lab)
 - Beatmap **osu!** links and cover images from the osu! CDN via `setOnlineId` / `onlineId` (covers need network; table/stats work offline)
 

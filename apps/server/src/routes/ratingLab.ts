@@ -12,6 +12,7 @@ import {
   listVersions,
   parseCompareOrder,
   parseCompareSort,
+  parsePpAccuracyParam,
   readAllExecutablePaths,
   setExecutablePath,
   startManiaRatingBackfill,
@@ -59,6 +60,7 @@ export const ratingLabRoutes = new Elysia({ prefix: "/rating-lab" })
       const sort = parseCompareSort(query.sort);
       const order = parseCompareOrder(query.order);
       const name = query.name?.trim() || undefined;
+      const ppAccuracy = parsePpAccuracyParam(query.ppAccuracy);
 
       try {
         return await compareManiaRatings(db, {
@@ -71,6 +73,7 @@ export const ratingLabRoutes = new Elysia({ prefix: "/rating-lab" })
           sort,
           order,
           name,
+          ppAccuracy,
         });
       } catch (err) {
         if (err instanceof QueryParseError) {
@@ -94,6 +97,7 @@ export const ratingLabRoutes = new Elysia({ prefix: "/rating-lab" })
         sort: t.Optional(t.String()),
         order: t.Optional(t.String()),
         name: t.Optional(t.String()),
+        ppAccuracy: t.Optional(t.Union([t.Number(), t.String()])),
       }),
     },
   )
@@ -108,6 +112,7 @@ export const ratingLabRoutes = new Elysia({ prefix: "/rating-lab" })
 
       const baseline = query.baseline ?? LAZER_MASTER_VERSION;
       const experiment = query.experiment ?? ENISSAY_ACCURACY_VERSION;
+      const ppAccuracy = parsePpAccuracyParam(query.ppAccuracy);
 
       try {
         return await summarizeManiaRatings(db, {
@@ -115,6 +120,7 @@ export const ratingLabRoutes = new Elysia({ prefix: "/rating-lab" })
           baselineVersionId: baseline,
           experimentVersionId: experiment,
           ensureCompute: query.ensureCompute !== false,
+          ppAccuracy,
         });
       } catch (err) {
         if (err instanceof QueryParseError) {
@@ -133,6 +139,7 @@ export const ratingLabRoutes = new Elysia({ prefix: "/rating-lab" })
         baseline: t.Optional(t.String()),
         experiment: t.Optional(t.String()),
         ensureCompute: t.Optional(t.Boolean()),
+        ppAccuracy: t.Optional(t.Union([t.Number(), t.String()])),
       }),
     },
   )

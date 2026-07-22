@@ -63,28 +63,51 @@ try
     var maniaAttrs = (ManiaDifficultyAttributes)diffAttrs;
 
     var beatmap = working.GetPlayableBeatmap(ruleset.RulesetInfo, mods);
-    var perfectStats = BuildPerfectStatistics(beatmap);
-
-    var scoreInfo = new ScoreInfo
-    {
-        Ruleset = ruleset.RulesetInfo,
-        Mods = mods,
-        Statistics = perfectStats,
-        Accuracy = 1.0,
-        MaxCombo = beatmap.GetMaxCombo(),
-    };
-
+    var totalHits = CountTotalHits(beatmap);
+    var maxCombo = beatmap.GetMaxCombo();
     var perfCalc = ruleset.CreatePerformanceCalculator();
-    var perfAttrs = perfCalc.Calculate(scoreInfo, diffAttrs);
-    var maniaPerf = perfAttrs as ManiaPerformanceAttributes;
+
+    // Custom-accuracy tiers (%). Keys match Roxysu cache / UI (e.g. "99.5").
+    double[] accuracyPercents = [100, 99.5, 97, 95, 93];
+
+    var ppByAccuracy = new Dictionary<string, double>();
+    ManiaPerformanceAttributes? ssPerf = null;
+    double ppSs = 0;
+
+    foreach (var percent in accuracyPercents)
+    {
+        var targetAcc = percent / 100.0;
+        var stats = BuildStatisticsForCustomAccuracy(totalHits, targetAcc);
+        var customAcc = CalculateCustomAccuracy(stats);
+
+        var scoreInfo = new ScoreInfo
+        {
+            Ruleset = ruleset.RulesetInfo,
+            Mods = mods,
+            Statistics = stats,
+            Accuracy = customAcc,
+            MaxCombo = maxCombo,
+        };
+
+        var perfAttrs = perfCalc.Calculate(scoreInfo, diffAttrs);
+        var key = FormatAccuracyKey(percent);
+        ppByAccuracy[key] = perfAttrs.Total;
+
+        if (percent >= 100.0 - 1e-9)
+        {
+            ppSs = perfAttrs.Total;
+            ssPerf = perfAttrs as ManiaPerformanceAttributes;
+        }
+    }
 
     var output = new CalcOutput
     {
         Version = versionId ?? "unknown",
         StarRating = maniaAttrs.StarRating,
         StarRatingSs = GetStarRatingSs(maniaAttrs),
-        PpSs = perfAttrs.Total,
-        Attributes = BuildAttributes(maniaAttrs, maniaPerf),
+        PpSs = ppSs,
+        PpByAccuracy = ppByAccuracy,
+        Attributes = BuildAttributes(maniaAttrs, ssPerf),
     };
 
     var json = JsonSerializer.Serialize(output, new JsonSerializerOptions
@@ -98,6 +121,14 @@ catch (Exception ex)
 {
     WriteError(ex.ToString());
     Environment.Exit(1);
+}
+
+static string FormatAccuracyKey(double percent)
+{
+    // Stable string keys: 100, 99.5, 97, 95, 93
+    if (Math.Abs(percent % 1) < 1e-9)
+        return ((int)Math.Round(percent)).ToString();
+    return percent.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
 }
 
 static void WriteError(string message)
@@ -125,20 +156,107 @@ static Mod[] ParseMods(Ruleset ruleset, string modsArg)
     return mods.ToArray();
 }
 
-static Dictionary<HitResult, int> BuildPerfectStatistics(IBeatmap beatmap)
+static int CountTotalHits(IBeatmap beatmap)
 {
-    var stats = new Dictionary<HitResult, int>();
-    int perfect = 0;
+    int hits = 0;
 
     foreach (var obj in beatmap.HitObjects)
     {
-        perfect++;
+        hits++;
         if (obj is HoldNote)
-            perfect++;
+            hits++;
     }
 
-    stats[HitResult.Perfect] = perfect;
+    return hits;
+}
+
+/// <summary>
+/// Synthesize judgement counts so mania custom accuracy ≈ <paramref name="targetAcc"/>.
+/// Walks Perfect → Great → Good → Ok → Meh → Miss, converting just enough hits at each step.
+/// </summary>
+static Dictionary<HitResult, int> BuildStatisticsForCustomAccuracy(int totalHits, double targetAcc)
+{
+    (HitResult Result, double Weight)[] ladder =
+    [
+        (HitResult.Perfect, 320),
+        (HitResult.Great, 300),
+        (HitResult.Good, 200),
+        (HitResult.Ok, 100),
+        (HitResult.Meh, 50),
+        (HitResult.Miss, 0),
+    ];
+
+    targetAcc = Math.Clamp(targetAcc, 0, 1);
+
+    if (totalHits <= 0)
+        return new Dictionary<HitResult, int> { [HitResult.Perfect] = 0 };
+
+    if (targetAcc >= 1.0 - 1e-12)
+        return new Dictionary<HitResult, int> { [HitResult.Perfect] = totalHits };
+
+    // Start all Perfect, then demote counts down the ladder until custom acc matches target.
+    var counts = new int[ladder.Length];
+    counts[0] = totalHits;
+
+    double maxWeight = ladder[0].Weight;
+    double targetSum = targetAcc * totalHits * maxWeight;
+    double currentSum = totalHits * maxWeight;
+
+    for (var tier = 0; tier < ladder.Length - 1 && currentSum > targetSum + 1e-9; tier++)
+    {
+        var weightHere = ladder[tier].Weight;
+        var weightNext = ladder[tier + 1].Weight;
+        var dropPerHit = weightHere - weightNext;
+        if (dropPerHit <= 0 || counts[tier] <= 0)
+            continue;
+
+        var needDrop = currentSum - targetSum;
+        var convert = (int)Math.Min(counts[tier], Math.Ceiling(needDrop / dropPerHit - 1e-12));
+        if (convert <= 0)
+            continue;
+
+        // Prefer the count that lands closest to target (floor vs ceil when both valid).
+        var convertFloor = Math.Max(0, convert - 1);
+        var sumFloor = currentSum - convertFloor * dropPerHit;
+        var sumCeil = currentSum - convert * dropPerHit;
+        if (convertFloor < convert &&
+            Math.Abs(sumFloor - targetSum) <= Math.Abs(sumCeil - targetSum))
+        {
+            convert = convertFloor;
+        }
+
+        counts[tier] -= convert;
+        counts[tier + 1] += convert;
+        currentSum -= convert * dropPerHit;
+    }
+
+    var stats = new Dictionary<HitResult, int>();
+    for (var i = 0; i < ladder.Length; i++)
+    {
+        if (counts[i] > 0)
+            stats[ladder[i].Result] = counts[i];
+    }
+
+    if (stats.Count == 0)
+        stats[HitResult.Miss] = totalHits;
+
     return stats;
+}
+
+static double CalculateCustomAccuracy(Dictionary<HitResult, int> stats)
+{
+    var perfect = stats.GetValueOrDefault(HitResult.Perfect);
+    var great = stats.GetValueOrDefault(HitResult.Great);
+    var good = stats.GetValueOrDefault(HitResult.Good);
+    var ok = stats.GetValueOrDefault(HitResult.Ok);
+    var meh = stats.GetValueOrDefault(HitResult.Meh);
+    var miss = stats.GetValueOrDefault(HitResult.Miss);
+    var totalHits = perfect + great + good + ok + meh + miss;
+    if (totalHits == 0)
+        return 0;
+
+    return (perfect * 320.0 + great * 300.0 + good * 200.0 + ok * 100.0 + meh * 50.0)
+           / (totalHits * 320.0);
 }
 
 static double? GetStarRatingSs(ManiaDifficultyAttributes attrs)
@@ -217,5 +335,6 @@ sealed class CalcOutput
     public double StarRating { get; set; }
     public double? StarRatingSs { get; set; }
     public double PpSs { get; set; }
+    public Dictionary<string, double>? PpByAccuracy { get; set; }
     public Dictionary<string, object?>? Attributes { get; set; }
 }

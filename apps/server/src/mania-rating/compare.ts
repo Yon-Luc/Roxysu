@@ -16,11 +16,27 @@ import {
   buildRatingLabAnalyseHtml,
   slimCompareRow,
 } from "./exportHtml";
+import {
+  DEFAULT_PP_ACCURACY,
+  PP_ACCURACY_TIERS,
+  formatPpAccuracyLabel,
+  parsePpAccuracyParam,
+  parsePpByAccuracy,
+  ppAccuracyKey,
+  ppAtAccuracy,
+  sqlPpAtAccuracy,
+  type PpAccuracyTier,
+  type PpByAccuracy,
+} from "./ppAccuracy";
 
 export type RatingSide = {
   starRating: number | null;
   starRatingSs: number | null;
   ppSs: number | null;
+  /** Full custom-accuracy → PP map when cached. */
+  ppByAccuracy: PpByAccuracy | null;
+  /** PP at the selected custom-accuracy tier. */
+  pp: number | null;
   attributes: Record<string, unknown> | null;
   error: string | null;
 };
@@ -41,6 +57,7 @@ export type CompareRow = {
   delta: {
     starRating: number | null;
     ppSs: number | null;
+    pp: number | null;
   };
   cached: {
     baseline: boolean;
@@ -55,6 +72,7 @@ export type CompareResult = {
   baselineVersionId: string;
   experimentVersionId: string;
   query: string;
+  ppAccuracy: PpAccuracyTier;
   items: CompareRow[];
   computedThisRequest: {
     baseline: number;
@@ -72,6 +90,7 @@ export type CompareSummary = {
   query: string;
   baselineVersionId: string;
   experimentVersionId: string;
+  ppAccuracy: PpAccuracyTier;
   totalMatches: number;
   comparedCount: number;
   missingBaseline: number;
@@ -110,18 +129,28 @@ function parseAttributes(json: string | null): Record<string, unknown> | null {
   }
 }
 
-function toSide(row: RatingJoinRow, prefix: "base" | "exp"): RatingSide {
+function toSide(
+  row: RatingJoinRow,
+  prefix: "base" | "exp",
+  ppAccuracy: PpAccuracyTier,
+): RatingSide {
   const starKey = prefix === "base" ? "base_star_rating" : "exp_star_rating";
   const ssKey = prefix === "base" ? "base_star_rating_ss" : "exp_star_rating_ss";
   const ppKey = prefix === "base" ? "base_pp_ss" : "exp_pp_ss";
+  const ppMapKey =
+    prefix === "base" ? "base_pp_by_accuracy_json" : "exp_pp_by_accuracy_json";
   const attrKey = prefix === "base" ? "base_attributes_json" : "exp_attributes_json";
   const errKey = prefix === "base" ? "base_error" : "exp_error";
 
   const r = row as Record<string, unknown>;
+  const ppSs = r[ppKey] != null ? Number(r[ppKey]) : null;
+  const ppByAccuracy = parsePpByAccuracy(r[ppMapKey] as string | null);
   return {
     starRating: r[starKey] != null ? Number(r[starKey]) : null,
     starRatingSs: r[ssKey] != null ? Number(r[ssKey]) : null,
-    ppSs: r[ppKey] != null ? Number(r[ppKey]) : null,
+    ppSs,
+    ppByAccuracy,
+    pp: ppAtAccuracy(ppByAccuracy, ppAccuracy, ppSs),
     attributes: parseAttributes(r[attrKey] as string | null),
     error: (r[errKey] as string | null) ?? null,
   };
@@ -173,9 +202,10 @@ function buildHistogram(deltas: number[]): HistogramBin[] {
 function mapCompareRow(
   row: RatingJoinRow,
   baselineVersionId: string,
+  ppAccuracy: PpAccuracyTier,
 ): CompareRow {
-  const baseline = toSide(row, "base");
-  const experiment = toSide(row, "exp");
+  const baseline = toSide(row, "base", ppAccuracy);
+  const experiment = toSide(row, "exp", ppAccuracy);
   const importedStar = Number(row.imported_star_rating);
 
   if (usesImportedRating(baselineVersionId)) {
@@ -203,6 +233,7 @@ function mapCompareRow(
     delta: {
       starRating: delta(baseline.starRating, experiment.starRating),
       ppSs: delta(baseline.ppSs, experiment.ppSs),
+      pp: delta(baseline.pp, experiment.pp),
     },
     cached: {
       // Import baseline always has Realm SR in the UI; treat as complete only when
@@ -247,6 +278,9 @@ export function parseCompareOrder(raw: string | undefined): CompareOrder {
   return raw === "desc" ? "desc" : "asc";
 }
 
+export { parsePpAccuracyParam, formatPpAccuracyLabel, PP_ACCURACY_TIERS };
+export type { PpAccuracyTier };
+
 function asBindings(params: unknown[]): SqlBinding[] {
   return params as SqlBinding[];
 }
@@ -271,11 +305,15 @@ function orderByClause(
   sort: CompareSort,
   order: CompareOrder,
   baselineVersionId: string,
+  ppAccuracy: PpAccuracyTier,
 ): string {
   const dir = order === "desc" ? "DESC" : "ASC";
   const baseStar = baseStarExpr(baselineVersionId);
   const tiebreak =
     "b.title COLLATE NOCASE ASC, b.difficulty_name COLLATE NOCASE ASC";
+  const accKey = ppAccuracyKey(ppAccuracy);
+  const basePp = sqlPpAtAccuracy("base", accKey);
+  const expPp = sqlPpAtAccuracy("exp", accKey);
 
   if (sort === "map") {
     return order === "desc"
@@ -288,9 +326,9 @@ function orderByClause(
     baseStar,
     expStar: "exp.star_rating",
     deltaStar: `(exp.star_rating - ${baseStar})`,
-    basePp: "base.pp_ss",
-    expPp: "exp.pp_ss",
-    deltaPp: "(exp.pp_ss - base.pp_ss)",
+    basePp,
+    expPp,
+    deltaPp: `(${expPp} - ${basePp})`,
   };
 
   const column = expr[sort];
@@ -326,6 +364,7 @@ function fetchCompareRows(
     sort?: CompareSort;
     order?: CompareOrder;
     name?: string;
+    ppAccuracy?: PpAccuracyTier;
   } = {},
 ): RatingJoinRow[] {
   const queryParams = [...params];
@@ -336,6 +375,7 @@ function fetchCompareRows(
   );
   const sort = options.sort ?? "map";
   const order = options.order ?? "asc";
+  const ppAccuracy = options.ppAccuracy ?? DEFAULT_PP_ACCURACY;
   const baseStarSql = usesImportedRating(baselineVersionId)
     ? "b.star_rating AS base_star_rating"
     : "base.star_rating AS base_star_rating";
@@ -352,11 +392,13 @@ function fetchCompareRows(
       ${baseStarSql},
       base.star_rating_ss AS base_star_rating_ss,
       base.pp_ss AS base_pp_ss,
+      base.pp_by_accuracy_json AS base_pp_by_accuracy_json,
       base.attributes_json AS base_attributes_json,
       base.error AS base_error,
       exp.star_rating AS exp_star_rating,
       exp.star_rating_ss AS exp_star_rating_ss,
       exp.pp_ss AS exp_pp_ss,
+      exp.pp_by_accuracy_json AS exp_pp_by_accuracy_json,
       exp.attributes_json AS exp_attributes_json,
       exp.error AS exp_error
     FROM beatmaps b
@@ -366,7 +408,7 @@ function fetchCompareRows(
     LEFT JOIN beatmap_mania_ratings exp
       ON exp.beatmap_id = b.id AND exp.version_id = ?
     ${where}
-    ORDER BY ${orderByClause(sort, order, baselineVersionId)}
+    ORDER BY ${orderByClause(sort, order, baselineVersionId, ppAccuracy)}
     LIMIT ? OFFSET ?
   `;
 
@@ -436,10 +478,12 @@ export async function compareManiaRatings(
     sort?: CompareSort;
     order?: CompareOrder;
     name?: string;
+    ppAccuracy?: PpAccuracyTier | number | string;
   },
 ): Promise<CompareResult> {
   const baselineVersionId = options.baselineVersionId;
   const experimentVersionId = options.experimentVersionId;
+  const ppAccuracy = parsePpAccuracyParam(options.ppAccuracy);
 
   if (!getVersion(baselineVersionId)) {
     throw new Error(`Unknown baseline version: ${baselineVersionId}`);
@@ -485,7 +529,7 @@ export async function compareManiaRatings(
     experimentVersionId,
     pageSize,
     offset,
-    { sort, order, name },
+    { sort, order, name, ppAccuracy },
   );
 
   return {
@@ -495,7 +539,10 @@ export async function compareManiaRatings(
     baselineVersionId,
     experimentVersionId,
     query,
-    items: rows.map((row) => mapCompareRow(row, baselineVersionId)),
+    ppAccuracy,
+    items: rows.map((row) =>
+      mapCompareRow(row, baselineVersionId, ppAccuracy),
+    ),
     computedThisRequest,
   };
 }
@@ -509,10 +556,12 @@ function loadAllCompareRowsForExport(
     sort?: CompareSort;
     order?: CompareOrder;
     name?: string;
+    ppAccuracy?: PpAccuracyTier;
   },
 ): CompareRow[] {
   const baselineVersionId = options.baselineVersionId;
   const experimentVersionId = options.experimentVersionId;
+  const ppAccuracy = options.ppAccuracy ?? DEFAULT_PP_ACCURACY;
 
   if (!getVersion(baselineVersionId)) {
     throw new Error(`Unknown baseline version: ${baselineVersionId}`);
@@ -538,10 +587,12 @@ function loadAllCompareRowsForExport(
     experimentVersionId,
     total,
     0,
-    { sort, order, name },
+    { sort, order, name, ppAccuracy },
   );
 
-  return rows.map((row) => mapCompareRow(row, baselineVersionId));
+  return rows.map((row) =>
+    mapCompareRow(row, baselineVersionId, ppAccuracy),
+  );
 }
 
 export async function exportManiaRatingsCsv(
@@ -555,7 +606,12 @@ export async function exportManiaRatingsCsv(
     name?: string;
   },
 ): Promise<string> {
-  return compareRowsToCsv(loadAllCompareRowsForExport(db, options));
+  return compareRowsToCsv(
+    loadAllCompareRowsForExport(db, {
+      ...options,
+      ppAccuracy: DEFAULT_PP_ACCURACY,
+    }),
+  );
 }
 
 export async function exportManiaRatingsHtml(
@@ -605,9 +661,11 @@ export async function summarizeManiaRatings(
     baselineVersionId: string;
     experimentVersionId: string;
     ensureCompute?: boolean;
+    ppAccuracy?: PpAccuracyTier | number | string;
   },
 ): Promise<CompareSummary> {
   const query = options.query.trim();
+  const ppAccuracy = parsePpAccuracyParam(options.ppAccuracy);
   const { sql, params } = resolveFilterSql(query);
 
   if (options.ensureCompute !== false) {
@@ -628,8 +686,11 @@ export async function summarizeManiaRatings(
     options.experimentVersionId,
     15_000,
     0,
+    { ppAccuracy },
   );
-  const items = allRows.map((row) => mapCompareRow(row, options.baselineVersionId));
+  const items = allRows.map((row) =>
+    mapCompareRow(row, options.baselineVersionId, ppAccuracy),
+  );
 
   const comparable = items.filter(
     (i) =>
@@ -642,7 +703,7 @@ export async function summarizeManiaRatings(
     .map((i) => i.delta.starRating)
     .filter((v): v is number => v != null);
   const ppDeltas = comparable
-    .map((i) => i.delta.ppSs)
+    .map((i) => i.delta.pp)
     .filter((v): v is number => v != null);
 
   const topStarMovers = [...comparable]
@@ -653,13 +714,14 @@ export async function summarizeManiaRatings(
     .slice(0, 10);
 
   const topPpMovers = [...comparable]
-    .sort((a, b) => Math.abs(b.delta.ppSs ?? 0) - Math.abs(a.delta.ppSs ?? 0))
+    .sort((a, b) => Math.abs(b.delta.pp ?? 0) - Math.abs(a.delta.pp ?? 0))
     .slice(0, 10);
 
   return {
     query,
     baselineVersionId: options.baselineVersionId,
     experimentVersionId: options.experimentVersionId,
+    ppAccuracy,
     totalMatches: items.length,
     comparedCount: comparable.length,
     missingBaseline: items.filter((i) => !i.cached.baseline).length,
@@ -675,6 +737,15 @@ export async function summarizeManiaRatings(
 }
 
 export function compareRowsToCsv(rows: CompareRow[]): string {
+  const tierHeaders = PP_ACCURACY_TIERS.flatMap((tier) => {
+    const key = ppAccuracyKey(tier);
+    return [
+      `baseline_pp_${key}`,
+      `experiment_pp_${key}`,
+      `delta_pp_${key}`,
+    ];
+  });
+
   const header = [
     "beatmapset_id",
     "beatmap_id",
@@ -690,6 +761,7 @@ export function compareRowsToCsv(rows: CompareRow[]): string {
     "baseline_pp_ss",
     "experiment_pp_ss",
     "delta_pp_ss",
+    ...tierHeaders,
     "baseline_error",
     "experiment_error",
   ].join(",");
@@ -710,8 +782,18 @@ export function compareRowsToCsv(rows: CompareRow[]): string {
     return `https://osu.ppy.sh/b/${r.onlineId}`;
   };
 
-  const lines = rows.map((r) =>
-    [
+  const lines = rows.map((r) => {
+    const tierCells = PP_ACCURACY_TIERS.flatMap((tier) => {
+      const base = ppAtAccuracy(r.baseline.ppByAccuracy, tier, r.baseline.ppSs);
+      const exp = ppAtAccuracy(
+        r.experiment.ppByAccuracy,
+        tier,
+        r.experiment.ppSs,
+      );
+      return [base, exp, delta(base, exp)];
+    });
+
+    return [
       r.setOnlineId,
       r.onlineId,
       webLink(r),
@@ -726,12 +808,13 @@ export function compareRowsToCsv(rows: CompareRow[]): string {
       r.baseline.ppSs,
       r.experiment.ppSs,
       r.delta.ppSs,
+      ...tierCells,
       r.baseline.error,
       r.experiment.error,
     ]
       .map(escape)
-      .join(","),
-  );
+      .join(",");
+  });
 
   return [header, ...lines].join("\n");
 }

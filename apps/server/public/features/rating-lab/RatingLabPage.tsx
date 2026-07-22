@@ -25,6 +25,10 @@ import {
 import { formatPp, formatStars } from "../../lib/format";
 
 const RATING_LAB_QUERY_KEY = "roxysu:rating-lab-query";
+const RATING_LAB_PP_ACC_KEY = "roxysu:rating-lab-pp-accuracy";
+
+const PP_ACCURACY_TIERS = [100, 99.5, 97, 95, 93] as const;
+type PpAccuracyTier = (typeof PP_ACCURACY_TIERS)[number];
 
 const EXAMPLE_QUERIES = [
   "mode:mania key=7 ranked",
@@ -57,6 +61,43 @@ function storeQuery(q: string): void {
   } catch {
     // ignore
   }
+}
+
+function readStoredPpAccuracy(): PpAccuracyTier {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl = params.get("ppAccuracy");
+    if (fromUrl != null) {
+      const n = Number(fromUrl);
+      const match = PP_ACCURACY_TIERS.find((t) => Math.abs(t - n) < 1e-9);
+      if (match != null) return match;
+    }
+    const stored = localStorage.getItem(RATING_LAB_PP_ACC_KEY);
+    if (stored != null) {
+      const n = Number(stored);
+      const match = PP_ACCURACY_TIERS.find((t) => Math.abs(t - n) < 1e-9);
+      if (match != null) return match;
+    }
+  } catch {
+    // ignore
+  }
+  return 100;
+}
+
+function storePpAccuracy(tier: PpAccuracyTier): void {
+  try {
+    localStorage.setItem(RATING_LAB_PP_ACC_KEY, String(tier));
+    const url = new URL(window.location.href);
+    url.searchParams.set("ppAccuracy", String(tier));
+    window.history.replaceState(null, "", url.toString());
+  } catch {
+    // ignore
+  }
+}
+
+function formatPpAccuracyLabel(tier: number): string {
+  if (Math.abs(tier - 100) < 1e-9) return "SS (100%)";
+  return `${tier}%`;
 }
 
 function formatDelta(value: number | null, digits = 2): string {
@@ -114,6 +155,7 @@ export function RatingLabPage() {
   const [order, setOrder] = useState<CompareOrder>("asc");
   const [nameDraft, setNameDraft] = useState("");
   const [nameFilter, setNameFilter] = useState("");
+  const [ppAccuracy, setPpAccuracy] = useState<PpAccuracyTier>(readStoredPpAccuracy);
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
@@ -124,7 +166,11 @@ export function RatingLabPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [nameFilter]);
+  }, [nameFilter, ppAccuracy]);
+
+  useEffect(() => {
+    storePpAccuracy(ppAccuracy);
+  }, [ppAccuracy]);
 
   const versionsQuery = useQuery({
     queryKey: ["rating-lab", "versions"],
@@ -150,6 +196,7 @@ export function RatingLabPage() {
       sort,
       order,
       nameFilter,
+      ppAccuracy,
     ],
     queryFn: () =>
       fetchRatingLabCompare({
@@ -161,6 +208,7 @@ export function RatingLabPage() {
         sort,
         order,
         name: nameFilter || undefined,
+        ppAccuracy,
       }),
     enabled: activeQuery.trim().length > 0,
   });
@@ -172,12 +220,14 @@ export function RatingLabPage() {
       activeQuery,
       baselineId,
       experimentId,
+      ppAccuracy,
     ],
     queryFn: () =>
       fetchRatingLabSummary({
         q: activeQuery,
         baseline: baselineId,
         experiment: experimentId,
+        ppAccuracy,
       }),
     enabled: activeQuery.trim().length > 0,
   });
@@ -287,8 +337,8 @@ export function RatingLabPage() {
       <div>
         <PageTitle>Rating Lab</PageTitle>
         <p className="mt-2 max-w-3xl text-sm text-muted">
-          Compare experimental mania star rating and SS PP against a baseline.
-          Uses local{" "}
+          Compare experimental mania star rating and PP (at a chosen custom
+          accuracy) against a baseline. Uses local{" "}
           <code className="text-xs">.osu</code> files and versioned calculator
           binaries configured in Settings.
         </p>
@@ -338,7 +388,7 @@ export function RatingLabPage() {
           ))}
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-3">
           <label>
             <span className="text-xs font-semibold uppercase tracking-wide text-faint">
               Baseline
@@ -383,6 +433,24 @@ export function RatingLabPage() {
               ))}
             </select>
           </label>
+          <label>
+            <span className="text-xs font-semibold uppercase tracking-wide text-faint">
+              PP at accuracy
+            </span>
+            <select
+              value={String(ppAccuracy)}
+              onChange={(e) => {
+                setPpAccuracy(Number(e.target.value) as PpAccuracyTier);
+              }}
+              className="mt-1.5 w-full rounded-xl border border-line bg-elevated/50 px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none"
+            >
+              {PP_ACCURACY_TIERS.map((tier) => (
+                <option key={tier} value={String(tier)}>
+                  {formatPpAccuracyLabel(tier)}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
       </section>
 
@@ -414,7 +482,7 @@ export function RatingLabPage() {
           </div>
           <div className="rx-panel p-4">
             <div className="text-xs uppercase tracking-wide text-faint">
-              Mean Δ PP (SS)
+              Mean Δ PP ({formatPpAccuracyLabel(ppAccuracy)})
             </div>
             <div
               className={`mt-1 text-2xl font-bold ${deltaClass(summary.meanDeltaPpSs)}`}
@@ -620,14 +688,14 @@ export function RatingLabPage() {
                       onSort={handleSort}
                     />
                     <SortHeader
-                      label="Base PP"
+                      label={`Base PP (${formatPpAccuracyLabel(ppAccuracy)})`}
                       column="basePp"
                       sort={sort}
                       order={order}
                       onSort={handleSort}
                     />
                     <SortHeader
-                      label="Exp PP"
+                      label={`Exp PP (${formatPpAccuracyLabel(ppAccuracy)})`}
                       column="expPp"
                       sort={sort}
                       order={order}
@@ -643,7 +711,17 @@ export function RatingLabPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {compareData.items.map((item: RatingLabCompareItem) => (
+                  {compareData.items.map((item: RatingLabCompareItem) => {
+                    const basePp =
+                      item.baseline.pp ?? item.baseline.ppSs ?? null;
+                    const expPp =
+                      item.experiment.pp ?? item.experiment.ppSs ?? null;
+                    const deltaPp =
+                      item.delta.pp ??
+                      (basePp != null && expPp != null
+                        ? expPp - basePp
+                        : item.delta.ppSs);
+                    return (
                     <tr
                       key={item.beatmapId}
                       className="border-b border-line/60 hover:bg-elevated/40"
@@ -700,22 +778,19 @@ export function RatingLabPage() {
                         {formatDelta(item.delta.starRating, 3)}
                       </td>
                       <td className="px-2 py-2 font-mono text-muted">
-                        {item.baseline.ppSs != null
-                          ? formatPp(item.baseline.ppSs)
-                          : "—"}
+                        {basePp != null ? formatPp(basePp) : "—"}
                       </td>
                       <td className="px-2 py-2 font-mono">
-                        {item.experiment.ppSs != null
-                          ? formatPp(item.experiment.ppSs)
-                          : "—"}
+                        {expPp != null ? formatPp(expPp) : "—"}
                       </td>
                       <td
-                        className={`px-2 py-2 font-mono ${deltaClass(item.delta.ppSs)}`}
+                        className={`px-2 py-2 font-mono ${deltaClass(deltaPp)}`}
                       >
-                        {formatDelta(item.delta.ppSs, 1)}
+                        {formatDelta(deltaPp, 1)}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

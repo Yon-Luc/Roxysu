@@ -1,4 +1,11 @@
 import type { CompareRow } from "./compare";
+import {
+  DEFAULT_PP_ACCURACY,
+  PP_ACCURACY_TIERS,
+  formatPpAccuracyLabel,
+  ppAccuracyKey,
+  type PpByAccuracy,
+} from "./ppAccuracy";
 
 /** Slim row embedded in the static HTML (no attributes). */
 export type AnalyseExportRow = {
@@ -12,11 +19,13 @@ export type AnalyseExportRow = {
   baseline: {
     starRating: number | null;
     ppSs: number | null;
+    ppByAccuracy: PpByAccuracy | null;
     error: string | null;
   };
   experiment: {
     starRating: number | null;
     ppSs: number | null;
+    ppByAccuracy: PpByAccuracy | null;
     error: string | null;
   };
   delta: {
@@ -42,6 +51,8 @@ export type AnalyseExportMeta = {
 export type AnalyseExportPayload = {
   meta: AnalyseExportMeta;
   rows: AnalyseExportRow[];
+  ppAccuracyTiers: readonly number[];
+  defaultPpAccuracy: number;
 };
 
 export function slimCompareRow(row: CompareRow): AnalyseExportRow {
@@ -56,11 +67,13 @@ export function slimCompareRow(row: CompareRow): AnalyseExportRow {
     baseline: {
       starRating: row.baseline.starRating,
       ppSs: row.baseline.ppSs,
+      ppByAccuracy: row.baseline.ppByAccuracy,
       error: row.baseline.error,
     },
     experiment: {
       starRating: row.experiment.starRating,
       ppSs: row.experiment.ppSs,
+      ppByAccuracy: row.experiment.ppByAccuracy,
       error: row.experiment.error,
     },
     delta: {
@@ -99,8 +112,20 @@ export function buildRatingLabAnalyseHtml(
   meta: AnalyseExportMeta,
   rows: AnalyseExportRow[],
 ): string {
-  const payload: AnalyseExportPayload = { meta, rows };
+  const payload: AnalyseExportPayload = {
+    meta,
+    rows,
+    ppAccuracyTiers: [...PP_ACCURACY_TIERS],
+    defaultPpAccuracy: DEFAULT_PP_ACCURACY,
+  };
   const dataJson = embedJson(payload);
+  const accuracyOptions = PP_ACCURACY_TIERS.map((tier) => {
+    const key = ppAccuracyKey(tier);
+    const label = escapeHtml(formatPpAccuracyLabel(tier));
+    const selected =
+      Math.abs(tier - DEFAULT_PP_ACCURACY) < 1e-9 ? " selected" : "";
+    return `<option value="${key}"${selected}>${label}</option>`;
+  }).join("");
   const title = escapeHtml(
     `Rating Lab · ${meta.baselineLabel} vs ${meta.experimentLabel}`,
   );
@@ -374,6 +399,10 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
           <option value="">All</option>
         </select>
       </label>
+      <label>
+        PP at accuracy
+        <select id="pp-accuracy">${accuracyOptions}</select>
+      </label>
     </div>
     <div class="table-wrap">
       <table>
@@ -414,10 +443,12 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   var payload = JSON.parse(dataEl.textContent);
   var meta = payload.meta;
   var allRows = payload.rows;
+  var defaultAcc = payload.defaultPpAccuracy != null ? payload.defaultPpAccuracy : 100;
 
   var state = {
     name: "",
     keymode: "",
+    ppAccuracy: defaultAcc,
     sort: "map",
     order: "asc",
     page: 1,
@@ -456,6 +487,32 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   function deltaClass(v) {
     if (v == null || v === 0) return "";
     return v > 0 ? "delta-pos" : "delta-neg";
+  }
+
+  function accKey(tier) {
+    if (Number.isInteger(tier)) return String(tier);
+    return String(tier);
+  }
+
+  function ppLabel(tier) {
+    if (Math.abs(tier - 100) < 1e-9) return "SS (100%)";
+    return accKey(tier) + "%";
+  }
+
+  function ppAt(side, tier) {
+    var key = accKey(tier);
+    if (side.ppByAccuracy && side.ppByAccuracy[key] != null) {
+      return side.ppByAccuracy[key];
+    }
+    if (Math.abs(tier - 100) < 1e-9 && side.ppSs != null) return side.ppSs;
+    return null;
+  }
+
+  function ppDelta(row) {
+    var a = ppAt(row.baseline, state.ppAccuracy);
+    var b = ppAt(row.experiment, state.ppAccuracy);
+    if (a == null || b == null) return null;
+    return b - a;
   }
 
   function mean(values) {
@@ -542,11 +599,11 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       case "deltaStar":
         return row.delta.starRating;
       case "basePp":
-        return row.baseline.ppSs;
+        return ppAt(row.baseline, state.ppAccuracy);
       case "expPp":
-        return row.experiment.ppSs;
+        return ppAt(row.experiment, state.ppAccuracy);
       case "deltaPp":
-        return row.delta.ppSs;
+        return ppDelta(row);
       default:
         return null;
     }
@@ -595,7 +652,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       .map(function (r) { return r.delta.starRating; })
       .filter(function (v) { return v != null; });
     var ppDeltas = comp
-      .map(function (r) { return r.delta.ppSs; })
+      .map(function (r) { return ppDelta(r); })
       .filter(function (v) { return v != null; });
     var topStar = comp
       .slice()
@@ -606,7 +663,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     var topPp = comp
       .slice()
       .sort(function (a, b) {
-        return Math.abs(b.delta.ppSs || 0) - Math.abs(a.delta.ppSs || 0);
+        return Math.abs(ppDelta(b) || 0) - Math.abs(ppDelta(a) || 0);
       })
       .slice(0, 10);
     return {
@@ -712,11 +769,11 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
         var delta =
           kind === "star"
             ? fmtDelta(r.delta.starRating, 3)
-            : fmtDelta(r.delta.ppSs, 1);
+            : fmtDelta(ppDelta(r), 1);
         var cls =
           kind === "star"
             ? deltaClass(r.delta.starRating)
-            : deltaClass(r.delta.ppSs);
+            : deltaClass(ppDelta(r));
         var link = webLink(r);
         var titleHtml = link
           ? '<a href="' +
@@ -758,8 +815,8 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       { id: "baseStar", label: meta.baselineLabel + " ★", cls: "num" },
       { id: "expStar", label: meta.experimentLabel + " ★", cls: "num" },
       { id: "deltaStar", label: "Δ★", cls: "num" },
-      { id: "basePp", label: "Base PP", cls: "num" },
-      { id: "expPp", label: "Exp PP", cls: "num" },
+      { id: "basePp", label: "Base PP (" + ppLabel(state.ppAccuracy) + ")", cls: "num" },
+      { id: "expPp", label: "Exp PP (" + ppLabel(state.ppAccuracy) + ")", cls: "num" },
       { id: "deltaPp", label: "ΔPP", cls: "num" },
       { id: "link", label: "Link", cls: "" },
     ]);
@@ -863,15 +920,15 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
             escapeHtml(fmtDelta(r.delta.starRating, 3)) +
             "</td>" +
             '<td class="num">' +
-            escapeHtml(fmtNum(r.baseline.ppSs, 1)) +
+            escapeHtml(fmtNum(ppAt(r.baseline, state.ppAccuracy), 1)) +
             "</td>" +
             '<td class="num">' +
-            escapeHtml(fmtNum(r.experiment.ppSs, 1)) +
+            escapeHtml(fmtNum(ppAt(r.experiment, state.ppAccuracy), 1)) +
             "</td>" +
             '<td class="num ' +
-            deltaClass(r.delta.ppSs) +
+            deltaClass(ppDelta(r)) +
             '">' +
-            escapeHtml(fmtDelta(r.delta.ppSs, 1)) +
+            escapeHtml(fmtDelta(ppDelta(r), 1)) +
             "</td>" +
             "<td>" +
             linkHtml +
@@ -912,6 +969,11 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   });
   document.getElementById("keymode-filter").addEventListener("change", function (ev) {
     state.keymode = ev.target.value;
+    state.page = 1;
+    render();
+  });
+  document.getElementById("pp-accuracy").addEventListener("change", function (ev) {
+    state.ppAccuracy = Number(ev.target.value);
     state.page = 1;
     render();
   });

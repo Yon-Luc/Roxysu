@@ -99,6 +99,8 @@ function countMissingForQuery(
           OR mr.error IS NOT NULL
           OR mr.star_rating IS NULL
           OR mr.pp_ss IS NULL
+          OR mr.pp_by_accuracy_json IS NULL
+          OR json_extract(mr.pp_by_accuracy_json, '$.93') IS NULL
           OR (
             b.hash IS NOT NULL
             AND mr.beatmap_hash IS NOT NULL
@@ -144,6 +146,8 @@ export function getManiaRatingCoverage(
           CASE
             WHEN mr.star_rating IS NOT NULL
               AND mr.pp_ss IS NOT NULL
+              AND mr.pp_by_accuracy_json IS NOT NULL
+              AND json_extract(mr.pp_by_accuracy_json, '$.93') IS NOT NULL
               AND mr.error IS NULL
               AND (
                 b.hash IS NULL
@@ -191,6 +195,8 @@ export function getManiaRatingCoverage(
           OR mr.error IS NOT NULL
           OR mr.star_rating IS NULL
           OR mr.pp_ss IS NULL
+          OR mr.pp_by_accuracy_json IS NULL
+          OR json_extract(mr.pp_by_accuracy_json, '$.93') IS NULL
           OR (
             b.hash IS NOT NULL
             AND mr.beatmap_hash IS NOT NULL
@@ -295,6 +301,8 @@ function fetchBatchBeatmapIds(
           OR mr.error IS NOT NULL
           OR mr.star_rating IS NULL
           OR mr.pp_ss IS NULL
+          OR mr.pp_by_accuracy_json IS NULL
+          OR json_extract(mr.pp_by_accuracy_json, '$.93') IS NULL
           OR (
             b.hash IS NOT NULL
             AND mr.beatmap_hash IS NOT NULL

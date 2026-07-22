@@ -20,6 +20,12 @@ import {
   stopPatternAnalysisBackfill,
 } from "../map-analysis/patternAnalysisJob";
 import {
+  getManiaRatingJobState,
+  listVersions,
+  readAllExecutablePaths,
+  setExecutablePath,
+} from "../mania-rating";
+import {
   SYNC_PAUSE_WHEN_UNFOCUSED_KEY,
   SYNC_UI_FOCUSED_KEY,
 } from "./system";
@@ -60,6 +66,7 @@ async function buildSettingsResponse(db: Db) {
   const osuOverride = await readOsuDataOverride(db);
   const paths = buildResolvedOsuPaths(osuOverride);
   const tosu = await readTosuSettings(db);
+  const maniaRatingExecutables = await readAllExecutablePaths(db);
 
   return {
     mastery: {
@@ -82,6 +89,16 @@ async function buildSettingsResponse(db: Db) {
     },
     sunnyDan: getSunnyDanJobState(db),
     patternAnalysis: getPatternAnalysisJobState(db),
+    maniaRating: {
+      versions: listVersions().map((v) => ({
+        id: v.id,
+        label: v.label,
+        description: v.description,
+        gitRef: v.gitRef ?? null,
+        executablePath: maniaRatingExecutables[v.id] ?? null,
+      })),
+      job: getManiaRatingJobState(db),
+    },
   };
 }
 
@@ -188,6 +205,23 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
         await restartTosuAdapter(db);
       }
 
+      if (body.maniaRatingExecutables) {
+        for (const [versionId, execPath] of Object.entries(
+          body.maniaRatingExecutables,
+        )) {
+          const version = listVersions().find((v) => v.id === versionId);
+          if (!version) {
+            set.status = 400;
+            return { error: `Unknown mania rating version: ${versionId}` };
+          }
+          await setExecutablePath(
+            db,
+            versionId,
+            typeof execPath === "string" ? execPath : null,
+          );
+        }
+      }
+
       return buildSettingsResponse(db);
     },
     {
@@ -200,6 +234,10 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
         tosuHost: t.Optional(t.String()),
         /** Absolute path to tosu binary, or null/"" to clear. */
         tosuExecutablePath: t.Optional(t.Union([t.String(), t.Null()])),
+        /** Mania rating lab calculator paths keyed by version id. */
+        maniaRatingExecutables: t.Optional(
+          t.Record(t.String(), t.Union([t.String(), t.Null()])),
+        ),
       }),
     },
   );

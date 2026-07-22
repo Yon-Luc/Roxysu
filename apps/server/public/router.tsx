@@ -16,6 +16,7 @@ import { CollectionResultsPage } from "./features/collections/CollectionResultsP
 import { SettingsPage } from "./features/settings/SettingsPage";
 import { SkinPage } from "./features/settings/SkinPage";
 import { OverlayPage } from "./features/overlay/OverlayPage";
+import { RatingLabPage } from "./features/rating-lab/RatingLabPage";
 
 const rootRoute = createRootRoute({
   component: () => <Outlet />,
@@ -82,6 +83,12 @@ const collectionResultsRoute = createRoute({
   },
 });
 
+const ratingLabRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/rating-lab",
+  component: RatingLabPage,
+});
+
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/settings",
@@ -123,6 +130,7 @@ const routeTree = rootRoute.addChildren([
     sessionDetailRoute,
     collectionsRoute,
     collectionResultsRoute,
+    ratingLabRoute,
     skinRoute,
     settingsRoute,
   ]),

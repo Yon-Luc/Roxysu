@@ -64,6 +64,13 @@
       "when": 1784470800000,
       "tag": "0008_collection_lazer_sync",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1784474400000,
+      "tag": "0009_beatmap_mania_ratings",
+      "breakpoints": true
     }
   ]
 }

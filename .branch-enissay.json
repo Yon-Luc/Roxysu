@@ -1,0 +1,103 @@
+{
+  "name": "mania/enissay-mania-sr-rework-accuracy-change",
+  "commit": {
+    "sha": "ba8d3076cfdff2ba3462a378d154d92015b67dcd",
+    "node_id": "C_kwDOGcByddoAKGJhOGQzMDc2Y2ZkZmYyYmEzNDYyYTM3OGQxNTRkOTIwMTViNjdkY2Q",
+    "commit": {
+      "author": {
+        "name": "nathen",
+        "email": "nathenbr@gmail.com",
+        "date": "2026-07-20T23:01:19Z"
+      },
+      "committer": {
+        "name": "nathen",
+        "email": "nathenbr@gmail.com",
+        "date": "2026-07-20T23:01:19Z"
+      },
+      "message": "Me when I have to speed up binning by a lot because I'm bored",
+      "tree": {
+        "sha": "c4aa659af3e3e65c993c4d9d6751cbf83503e69c",
+        "url": "https://api.github.com/repos/Natelytle/osu/git/trees/c4aa659af3e3e65c993c4d9d6751cbf83503e69c"
+      },
+      "url": "https://api.github.com/repos/Natelytle/osu/git/commits/ba8d3076cfdff2ba3462a378d154d92015b67dcd",
+      "comment_count": 0,
+      "verification": {
+        "verified": false,
+        "reason": "unsigned",
+        "signature": null,
+        "payload": null,
+        "verified_at": null
+      }
+    },
+    "url": "https://api.github.com/repos/Natelytle/osu/commits/ba8d3076cfdff2ba3462a378d154d92015b67dcd",
+    "html_url": "https://github.com/Natelytle/osu/commit/ba8d3076cfdff2ba3462a378d154d92015b67dcd",
+    "comments_url": "https://api.github.com/repos/Natelytle/osu/commits/ba8d3076cfdff2ba3462a378d154d92015b67dcd/comments",
+    "author": {
+      "login": "Natelytle",
+      "id": 92956514,
+      "node_id": "U_kgDOBYpnYg",
+      "avatar_url": "https://avatars.githubusercontent.com/u/92956514?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/Natelytle",
+      "html_url": "https://github.com/Natelytle",
+      "followers_url": "https://api.github.com/users/Natelytle/followers",
+      "following_url": "https://api.github.com/users/Natelytle/following{/other_user}",
+      "gists_url": "https://api.github.com/users/Natelytle/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/Natelytle/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/Natelytle/subscriptions",
+      "organizations_url": "https://api.github.com/users/Natelytle/orgs",
+      "repos_url": "https://api.github.com/users/Natelytle/repos",
+      "events_url": "https://api.github.com/users/Natelytle/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/Natelytle/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "committer": {
+      "login": "Natelytle",
+      "id": 92956514,
+      "node_id": "U_kgDOBYpnYg",
+      "avatar_url": "https://avatars.githubusercontent.com/u/92956514?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/Natelytle",
+      "html_url": "https://github.com/Natelytle",
+      "followers_url": "https://api.github.com/users/Natelytle/followers",
+      "following_url": "https://api.github.com/users/Natelytle/following{/other_user}",
+      "gists_url": "https://api.github.com/users/Natelytle/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/Natelytle/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/Natelytle/subscriptions",
+      "organizations_url": "https://api.github.com/users/Natelytle/orgs",
+      "repos_url": "https://api.github.com/users/Natelytle/repos",
+      "events_url": "https://api.github.com/users/Natelytle/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/Natelytle/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "parents": [
+      {
+        "sha": "d12871004bea8afece980e4555a417dc14b78d69",
+        "url": "https://api.github.com/repos/Natelytle/osu/commits/d12871004bea8afece980e4555a417dc14b78d69",
+        "html_url": "https://github.com/Natelytle/osu/commit/d12871004bea8afece980e4555a417dc14b78d69"
+      }
+    ]
+  },
+  "_links": {
+    "self": "https://api.github.com/repos/Natelytle/osu/branches/mania/enissay-mania-sr-rework-accuracy-change",
+    "html": "https://github.com/Natelytle/osu/tree/mania/enissay-mania-sr-rework-accuracy-change"
+  },
+  "protected": false,
+  "protection": {
+    "enabled": false,
+    "required_status_checks": {
+      "enforcement_level": "off",
+      "contexts": [
+
+      ],
+      "checks": [
+
+      ]
+    }
+  },
+  "protection_url": "https://api.github.com/repos/Natelytle/osu/branches/mania/enissay-mania-sr-rework-accuracy-change/protection"
+}

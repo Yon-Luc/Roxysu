@@ -222,6 +222,7 @@ export async function patchSettings(body: {
   tosuEnabled?: boolean;
   tosuHost?: string;
   tosuExecutablePath?: string | null;
+  maniaRatingExecutables?: Record<string, string | null>;
 }) {
   return unwrap(await api.api.settings.patch(body), "/api/settings");
 }
@@ -276,6 +277,61 @@ export async function stopPatternAnalysisJob() {
   );
 }
 
+export async function fetchRatingLabVersions() {
+  return unwrap(
+    await api.api["rating-lab"].versions.get(),
+    "/api/rating-lab/versions",
+  );
+}
+
+export async function fetchRatingLabCompare(params: {
+  q: string;
+  baseline?: string;
+  experiment?: string;
+  page?: number;
+  pageSize?: number;
+}) {
+  return unwrap(
+    await api.api["rating-lab"].compare.get({ query: params }),
+    "/api/rating-lab/compare",
+  );
+}
+
+export async function fetchRatingLabSummary(params: {
+  q: string;
+  baseline?: string;
+  experiment?: string;
+}) {
+  return unwrap(
+    await api.api["rating-lab"].compare.summary.get({ query: params }),
+    "/api/rating-lab/compare/summary",
+  );
+}
+
+export async function fetchRatingLabJob() {
+  return unwrap(
+    await api.api["rating-lab"].job.get(),
+    "/api/rating-lab/job",
+  );
+}
+
+export async function startRatingLabJob(body: {
+  versionId: string;
+  query?: string;
+}) {
+  return unwrap(
+    await api.api["rating-lab"].job.start.post(body),
+    "/api/rating-lab/job/start",
+  );
+}
+
+export async function stopRatingLabJob() {
+  return unwrap(
+    await api.api["rating-lab"].job.stop.post(),
+    "/api/rating-lab/job/stop",
+  );
+}
+
 export type SystemStatus = Awaited<ReturnType<typeof fetchSystemStatus>>;
 export type Dashboard = Awaited<ReturnType<typeof fetchDashboard>>;
 export type PracticeList = Exclude<
@@ -318,5 +374,14 @@ export type SessionDetail = Exclude<
   { error: string }
 >;
 export type CollectionsPayload = Awaited<ReturnType<typeof fetchCollections>>;
+export type RatingLabCompare = Exclude<
+  Awaited<ReturnType<typeof fetchRatingLabCompare>>,
+  { error: string }
+>;
+export type RatingLabCompareItem = RatingLabCompare["items"][number];
+export type RatingLabSummary = Exclude<
+  Awaited<ReturnType<typeof fetchRatingLabSummary>>,
+  { error: string }
+>;
 export type SettingsPayload = Awaited<ReturnType<typeof fetchSettings>>;
 export type TosuLive = Awaited<ReturnType<typeof fetchTosuLive>>;

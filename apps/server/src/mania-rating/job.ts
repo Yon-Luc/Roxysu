@@ -1,0 +1,350 @@
+import type { Db } from "@roxysu/db/client.bun";
+import { parseQuery } from "../query-language/parse";
+import { compileQuery } from "../query-language/compile";
+import { backfillManiaRatingsSync } from "./compute";
+import { publish } from "../shared/events";
+
+type SqlBinding = string | number | bigint | boolean | null;
+
+function asBindings(params: unknown[]): SqlBinding[] {
+  return params as SqlBinding[];
+}
+
+export type ManiaRatingJobStatus =
+  | "idle"
+  | "running"
+  | "stopping"
+  | "completed"
+  | "error";
+
+export type ManiaRatingCoverage = {
+  maniaTotal: number;
+  computed: number;
+  missing: number;
+  failed: number;
+};
+
+export type ManiaRatingJobState = {
+  status: ManiaRatingJobStatus;
+  versionId: string | null;
+  query: string | null;
+  coverage: ManiaRatingCoverage;
+  computedThisRun: number;
+  attemptedThisRun: number;
+  startedAt: string | null;
+  finishedAt: string | null;
+  error: string | null;
+  batchSize: number;
+};
+
+const BATCH_SIZE = 20;
+const YIELD_MS = 10;
+
+let job: {
+  status: ManiaRatingJobStatus;
+  versionId: string | null;
+  query: string | null;
+  computedThisRun: number;
+  attemptedThisRun: number;
+  startedAt: Date | null;
+  finishedAt: Date | null;
+  error: string | null;
+  timer: ReturnType<typeof setTimeout> | null;
+  db: Db | null;
+} = {
+  status: "idle",
+  versionId: null,
+  query: null,
+  computedThisRun: 0,
+  attemptedThisRun: 0,
+  startedAt: null,
+  finishedAt: null,
+  error: null,
+  timer: null,
+  db: null,
+};
+
+function countMissingForQuery(
+  db: Db,
+  versionId: string,
+  filterSql: string,
+  params: SqlBinding[],
+): number {
+  const where = `WHERE b.hidden = 0 AND (${filterSql})`;
+  const row = db.$client
+    .query(
+      `
+      SELECT COUNT(*) AS n
+      FROM beatmaps b
+      LEFT JOIN beatmap_mania_ratings mr
+        ON mr.beatmap_id = b.id AND mr.version_id = ?
+      ${where}
+        AND lower(COALESCE(b.ruleset_short_name, '')) = 'mania'
+        AND (
+          mr.beatmap_id IS NULL
+          OR (
+            b.hash IS NOT NULL
+            AND mr.beatmap_hash IS NOT NULL
+            AND mr.beatmap_hash != b.hash
+          )
+        )
+    `,
+    )
+    .get(versionId, ...params) as { n: number } | null;
+  return Number(row?.n ?? 0);
+}
+
+export function getManiaRatingCoverage(
+  db: Db,
+  versionId: string,
+): ManiaRatingCoverage {
+  const totals = db.$client
+    .query(
+      `
+      SELECT
+        COUNT(*) AS maniaTotal,
+        SUM(
+          CASE
+            WHEN mr.star_rating IS NOT NULL
+              AND mr.pp_ss IS NOT NULL
+              AND mr.error IS NULL
+              AND (
+                b.hash IS NULL
+                OR mr.beatmap_hash IS NULL
+                OR mr.beatmap_hash = b.hash
+              )
+            THEN 1 ELSE 0
+          END
+        ) AS computed,
+        SUM(
+          CASE
+            WHEN mr.beatmap_id IS NOT NULL
+              AND mr.error IS NOT NULL
+            THEN 1 ELSE 0
+          END
+        ) AS failed
+      FROM beatmaps b
+      LEFT JOIN beatmap_mania_ratings mr
+        ON mr.beatmap_id = b.id AND mr.version_id = ?
+      WHERE b.hidden = 0
+        AND lower(COALESCE(b.ruleset_short_name, '')) = 'mania'
+    `,
+    )
+    .get(versionId) as {
+    maniaTotal: number;
+    computed: number;
+    failed: number;
+  } | null;
+
+  const maniaTotal = Number(totals?.maniaTotal ?? 0);
+  const computed = Number(totals?.computed ?? 0);
+  const failed = Number(totals?.failed ?? 0);
+
+  const missingRow = db.$client
+    .query(
+      `
+      SELECT COUNT(*) AS n
+      FROM beatmaps b
+      LEFT JOIN beatmap_mania_ratings mr
+        ON mr.beatmap_id = b.id AND mr.version_id = ?
+      WHERE b.hidden = 0
+        AND lower(COALESCE(b.ruleset_short_name, '')) = 'mania'
+        AND (
+          mr.beatmap_id IS NULL
+          OR (
+            b.hash IS NOT NULL
+            AND mr.beatmap_hash IS NOT NULL
+            AND mr.beatmap_hash != b.hash
+          )
+        )
+    `,
+    )
+    .get(versionId) as { n: number } | null;
+
+  return {
+    maniaTotal,
+    computed,
+    missing: Number(missingRow?.n ?? 0),
+    failed,
+  };
+}
+
+export function getManiaRatingJobState(db: Db): ManiaRatingJobState {
+  const versionId = job.versionId;
+  return {
+    status: job.status,
+    versionId,
+    query: job.query,
+    coverage: versionId
+      ? getManiaRatingCoverage(db, versionId)
+      : { maniaTotal: 0, computed: 0, missing: 0, failed: 0 },
+    computedThisRun: job.computedThisRun,
+    attemptedThisRun: job.attemptedThisRun,
+    startedAt: job.startedAt?.toISOString() ?? null,
+    finishedAt: job.finishedAt?.toISOString() ?? null,
+    error: job.error,
+    batchSize: BATCH_SIZE,
+  };
+}
+
+function clearTimer(): void {
+  if (job.timer != null) {
+    clearTimeout(job.timer);
+    job.timer = null;
+  }
+}
+
+function finish(status: "completed" | "idle" | "error", error?: string): void {
+  clearTimer();
+  job.status = status === "idle" ? "idle" : status;
+  job.finishedAt = new Date();
+  job.error = error ?? null;
+  job.db = null;
+  publish({ type: "dashboard.updated" });
+}
+
+function scheduleNext(): void {
+  clearTimer();
+  job.timer = setTimeout(() => {
+    job.timer = null;
+    runBatch();
+  }, YIELD_MS);
+}
+
+function fetchBatchBeatmapIds(
+  db: Db,
+  versionId: string,
+  filterSql: string,
+  params: SqlBinding[],
+  limit: number,
+): string[] {
+  const where = `WHERE b.hidden = 0 AND (${filterSql})`;
+  const rows = db.$client
+    .query(
+      `
+      SELECT b.id
+      FROM beatmaps b
+      LEFT JOIN beatmap_mania_ratings mr
+        ON mr.beatmap_id = b.id AND mr.version_id = ?
+      ${where}
+        AND lower(COALESCE(b.ruleset_short_name, '')) = 'mania'
+        AND (
+          mr.beatmap_id IS NULL
+          OR (
+            b.hash IS NOT NULL
+            AND mr.beatmap_hash IS NOT NULL
+            AND mr.beatmap_hash != b.hash
+          )
+        )
+      LIMIT ?
+    `,
+    )
+    .all(versionId, ...params, limit) as { id: string }[];
+
+  return rows.map((r) => r.id);
+}
+
+function runBatch(): void {
+  const db = job.db;
+  const versionId = job.versionId;
+  const query = job.query;
+
+  if (!db || !versionId || !query) {
+    finish("error", "Backfill job lost database handle or scope");
+    return;
+  }
+
+  if (job.status === "stopping") {
+    finish("idle");
+    return;
+  }
+
+  if (job.status !== "running") return;
+
+  try {
+    const ast = parseQuery(query);
+    const compiled = compileQuery(ast);
+    const ids = fetchBatchBeatmapIds(
+      db,
+      versionId,
+      compiled.sql,
+      asBindings(compiled.params),
+      BATCH_SIZE,
+    );
+
+    if (ids.length === 0) {
+      finish("completed");
+      return;
+    }
+
+    const result = backfillManiaRatingsSync(db, versionId, {
+      limit: BATCH_SIZE,
+      beatmapIds: ids,
+    });
+
+    job.attemptedThisRun += result.attempted;
+    job.computedThisRun += result.succeeded;
+
+    const remaining = countMissingForQuery(
+      db,
+      versionId,
+      compiled.sql,
+      asBindings(compiled.params),
+    );
+
+    if (remaining === 0) {
+      finish("completed");
+      return;
+    }
+
+    scheduleNext();
+  } catch (err) {
+    finish("error", err instanceof Error ? err.message : String(err));
+  }
+}
+
+export function startManiaRatingBackfill(
+  db: Db,
+  options: { versionId: string; query?: string },
+): ManiaRatingJobState {
+  if (job.status === "running" || job.status === "stopping") {
+    return getManiaRatingJobState(db);
+  }
+
+  const versionId = options.versionId;
+  const query = options.query?.trim() || "mode:mania";
+
+  job.status = "running";
+  job.versionId = versionId;
+  job.query = query;
+  job.computedThisRun = 0;
+  job.attemptedThisRun = 0;
+  job.startedAt = new Date();
+  job.finishedAt = null;
+  job.error = null;
+  job.db = db;
+
+  const ast = parseQuery(query);
+  const compiled = compileQuery(ast);
+  const missing = countMissingForQuery(
+    db,
+    versionId,
+    compiled.sql,
+    asBindings(compiled.params),
+  );
+
+  if (missing === 0) {
+    finish("completed");
+    return getManiaRatingJobState(db);
+  }
+
+  scheduleNext();
+  return getManiaRatingJobState(db);
+}
+
+export function stopManiaRatingBackfill(db: Db): ManiaRatingJobState {
+  if (job.status === "running") {
+    job.status = "stopping";
+  }
+  return getManiaRatingJobState(db);
+}

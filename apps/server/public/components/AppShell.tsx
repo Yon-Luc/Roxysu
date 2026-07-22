@@ -11,6 +11,7 @@ const nav = [
   { to: "/practice", label: "Practice", icon: PracticeIcon },
   { to: "/sessions", label: "Sessions", icon: SessionsIcon },
   { to: "/collections", label: "Collections", icon: CollectionsIcon },
+  { to: "/rating-lab", label: "Rating Lab", icon: RatingLabIcon },
   { to: "/skin", label: "Skin", icon: SkinIcon },
   { to: "/settings", label: "Settings", icon: SettingsIcon },
 ] as const;
@@ -300,6 +301,14 @@ function CollectionsIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
       <path d="M3.75 5.5A1.75 1.75 0 0 1 5.5 3.75h5A1.75 1.75 0 0 1 12.25 5.5v5A1.75 1.75 0 0 1 10.5 12.25h-5A1.75 1.75 0 0 1 3.75 10.5v-5Zm8 0A1.75 1.75 0 0 1 13.5 3.75h5A1.75 1.75 0 0 1 20.25 5.5v5A1.75 1.75 0 0 1 18.5 12.25h-5A1.75 1.75 0 0 1 11.75 10.5v-5ZM3.75 13.5A1.75 1.75 0 0 1 5.5 11.75h5a1.75 1.75 0 0 1 1.75 1.75v5A1.75 1.75 0 0 1 10.5 20.25h-5A1.75 1.75 0 0 1 3.75 18.5v-5Zm8 0a1.75 1.75 0 0 1 1.75-1.75h5a1.75 1.75 0 0 1 1.75 1.75v5a1.75 1.75 0 0 1-1.75 1.75h-5a1.75 1.75 0 0 1-1.75-1.75v-5Z" />
+    </svg>
+  );
+}
+
+function RatingLabIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M12 2.25a.75.75 0 0 1 .67.41l1.9 3.84 4.25.62a.75.75 0 0 1 .42 1.28l-3.08 3 0.73 4.24a.75.75 0 0 1-1.09.79L12 15.9l-3.8 2a.75.75 0 0 1-1.08-.79l0.73-4.24-3.08-3a.75.75 0 0 1 .42-1.28l4.25-.62 1.9-3.84A.75.75 0 0 1 12 2.25ZM5.5 18.75A1.75 1.75 0 0 0 3.75 20.5v0.75a.75.75 0 0 0 1.5 0V20.5a.25.25 0 0 1 .25-.25H7.5a.75.75 0 0 0 0-1.5H5.5Zm13 0a.75.75 0 0 0 0 1.5h2a.25.25 0 0 1 .25.25v0.75a.75.75 0 0 0 1.5 0V20.5a1.75 1.75 0 0 0-1.75-1.75H18.5Z" />
     </svg>
   );
 }

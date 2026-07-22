@@ -6,11 +6,14 @@ import { PageTitle } from "../../components/PageTitle";
 import {
   fetchSettings,
   fetchPatternAnalysisJob,
+  fetchRatingLabJob,
   fetchSunnyDanJob,
   patchSettings,
   startPatternAnalysisJob,
+  startRatingLabJob,
   startSunnyDanJob,
   stopPatternAnalysisJob,
+  stopRatingLabJob,
   stopSunnyDanJob,
 } from "../../lib/api";
 import {
@@ -31,6 +34,9 @@ export function SettingsPage() {
   const [tosuHostDraft, setTosuHostDraft] = useState("");
   const [tosuExeDraft, setTosuExeDraft] = useState("");
   const [keybindOpen, setKeybindOpen] = useState(false);
+  const [maniaExeDrafts, setManiaExeDrafts] = useState<Record<string, string>>(
+    {},
+  );
 
   useEffect(() => {
     if (data?.paths) {
@@ -40,7 +46,14 @@ export function SettingsPage() {
       setTosuHostDraft(data.tosu.host);
       setTosuExeDraft(data.tosu.executablePath ?? "");
     }
-  }, [data?.paths, data?.tosu]);
+    if (data?.maniaRating?.versions) {
+      const next: Record<string, string> = {};
+      for (const v of data.maniaRating.versions) {
+        next[v.id] = v.executablePath ?? "";
+      }
+      setManiaExeDrafts(next);
+    }
+  }, [data?.paths, data?.tosu, data?.maniaRating?.versions]);
 
   const sunnyDanQuery = useQuery({
     queryKey: ["settings", "sunny-dan"],
@@ -54,6 +67,15 @@ export function SettingsPage() {
   const patternAnalysisQuery = useQuery({
     queryKey: ["settings", "pattern-analysis"],
     queryFn: fetchPatternAnalysisJob,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === "running" || status === "stopping" ? 1000 : false;
+    },
+  });
+
+  const ratingLabJobQuery = useQuery({
+    queryKey: ["rating-lab", "job"],
+    queryFn: fetchRatingLabJob,
     refetchInterval: (query) => {
       const status = query.state.data?.status;
       return status === "running" || status === "stopping" ? 1000 : false;
@@ -136,6 +158,37 @@ export function SettingsPage() {
     },
   });
 
+  const maniaRatingMut = useMutation({
+    mutationFn: (executables: Record<string, string | null>) =>
+      patchSettings({ maniaRatingExecutables: executables }),
+    onSuccess: (next) => {
+      if ("error" in next) return;
+      queryClient.setQueryData(["settings"], next);
+      if (next.maniaRating?.versions) {
+        const drafts: Record<string, string> = {};
+        for (const v of next.maniaRating.versions) {
+          drafts[v.id] = v.executablePath ?? "";
+        }
+        setManiaExeDrafts(drafts);
+      }
+    },
+  });
+
+  const startRatingLab = useMutation({
+    mutationFn: (versionId: string) =>
+      startRatingLabJob({ versionId, query: "mode:mania" }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["rating-lab", "job"] });
+    },
+  });
+
+  const stopRatingLab = useMutation({
+    mutationFn: stopRatingLabJob,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["rating-lab", "job"] });
+    },
+  });
+
   if (isLoading) {
     return <p className="text-muted">Loading settings…</p>;
   }
@@ -182,6 +235,25 @@ export function SettingsPage() {
   const tosuHostDirty = tosuHostDraft.trim() !== tosu.host;
   const tosuExeDirty =
     (tosuExeDraft.trim() || null) !== (tosu.executablePath ?? null);
+
+  const maniaRating = data.maniaRating;
+  const maniaVersions = maniaRating?.versions ?? [];
+  const maniaJob = ratingLabJobQuery.data ?? maniaRating?.job;
+  const maniaCoverage = maniaJob?.coverage;
+  const maniaRunning =
+    maniaJob?.status === "running" || maniaJob?.status === "stopping";
+  const maniaProgressPct =
+    maniaCoverage && maniaCoverage.maniaTotal > 0
+      ? Math.min(
+          100,
+          Math.round((maniaCoverage.computed / maniaCoverage.maniaTotal) * 100),
+        )
+      : 0;
+  const defaultExperimentVersion =
+    maniaVersions.find((v) => v.id === "enissay-accuracy-change")?.id ??
+    maniaVersions[1]?.id ??
+    maniaVersions[0]?.id ??
+    "";
 
   return (
     <div className="space-y-8">
@@ -503,6 +575,132 @@ export function SettingsPage() {
           open={keybindOpen}
           onClose={() => setKeybindOpen(false)}
         />
+      </section>
+
+      <section className="rx-panel p-5">
+        <h2 className="text-sm font-bold text-ink">Mania Rating Lab</h2>
+        <p className="mt-1 text-sm text-muted">
+          Calculator binaries built from osu!lazer branches (see{" "}
+          <code className="text-xs">docs/mania-rating-lab.md</code>). Used by
+          the{" "}
+          <Link to="/rating-lab" className="text-accent hover:underline">
+            Rating Lab
+          </Link>{" "}
+          page to compare SR and SS PP.
+        </p>
+
+        <div className="mt-4 space-y-4">
+          {maniaVersions.map((version) => {
+            const draft = maniaExeDrafts[version.id] ?? "";
+            const saved = version.executablePath ?? "";
+            const dirty = (draft.trim() || null) !== (saved || null);
+            return (
+              <label key={version.id} className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-faint">
+                  {version.label}
+                </span>
+                <input
+                  type="text"
+                  value={draft}
+                  onChange={(e) =>
+                    setManiaExeDrafts((prev) => ({
+                      ...prev,
+                      [version.id]: e.target.value,
+                    }))
+                  }
+                  placeholder={`/path/to/mania-rating-calc (${version.id})`}
+                  disabled={maniaRatingMut.isPending}
+                  className="mt-1.5 w-full rounded-xl border border-line bg-elevated/50 px-3 py-2 font-mono text-sm text-ink placeholder:text-faint focus:border-accent focus:outline-none disabled:opacity-60"
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+                <p className="mt-1 text-xs text-faint">{version.description}</p>
+                {dirty ? (
+                  <button
+                    type="button"
+                    className="rx-btn mt-2"
+                    disabled={maniaRatingMut.isPending}
+                    onClick={() =>
+                      maniaRatingMut.mutate({
+                        [version.id]: draft.trim() ? draft.trim() : null,
+                      })
+                    }
+                  >
+                    Save {version.label}
+                  </button>
+                ) : null}
+              </label>
+            );
+          })}
+        </div>
+
+        {maniaCoverage ? (
+          <div className="mt-5 space-y-3">
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm tabular-nums text-subtle">
+              <span>
+                <span className="font-semibold text-ink">
+                  {maniaCoverage.computed.toLocaleString()}
+                </span>
+                {" / "}
+                {maniaCoverage.maniaTotal.toLocaleString()} mania maps
+                {maniaJob?.versionId ? ` (${maniaJob.versionId})` : ""}
+              </span>
+              <span>{maniaCoverage.missing.toLocaleString()} remaining</span>
+              {maniaCoverage.failed > 0 ? (
+                <span className="text-rose-300/90">
+                  {maniaCoverage.failed.toLocaleString()} failed
+                </span>
+              ) : null}
+            </div>
+
+            <div className="h-2 overflow-hidden rounded bg-elevated">
+              <div
+                className="h-full bg-accent transition-[width] duration-500"
+                style={{ width: `${maniaProgressPct}%` }}
+              />
+            </div>
+
+            <p className="text-xs text-faint">
+              {statusLabel(maniaJob?.status)}
+              {maniaRunning
+                ? ` · +${maniaJob?.computedThisRun.toLocaleString() ?? 0} computed this run`
+                : null}
+            </p>
+          </div>
+        ) : null}
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="rx-btn-primary"
+            disabled={
+              maniaRunning ||
+              startRatingLab.isPending ||
+              !defaultExperimentVersion ||
+              (maniaCoverage?.missing ?? 0) === 0
+            }
+            onClick={() => startRatingLab.mutate(defaultExperimentVersion)}
+          >
+            {maniaRunning ? "Computing…" : "Backfill experiment ratings"}
+          </button>
+          <button
+            type="button"
+            className="rx-btn"
+            disabled={!maniaRunning || stopRatingLab.isPending}
+            onClick={() => stopRatingLab.mutate()}
+          >
+            {maniaJob?.status === "stopping" ? "Stopping…" : "Stop"}
+          </button>
+        </div>
+
+        {maniaRatingMut.error ? (
+          <p className="mt-3 text-sm text-rose-300">
+            {maniaRatingMut.error.message}
+          </p>
+        ) : null}
+        {maniaJob?.error ? (
+          <p className="mt-3 text-sm text-rose-300">{maniaJob.error}</p>
+        ) : null}
       </section>
 
       <section className="rx-panel p-5">

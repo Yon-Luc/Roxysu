@@ -316,6 +316,32 @@ export const beatmapDanRatings = sqliteTable(
  * Cached 7k dominant-pattern analysis (heuristic over parsed chart notes).
  * Written only by server; keyed by beatmap + algorithm.
  */
+/**
+ * Cached mania SR / SS PP from versioned calculator binaries (Rating Lab).
+ * Written only by server; keyed by beatmap + version_id.
+ */
+export const beatmapManiaRatings = sqliteTable(
+  "beatmap_mania_ratings",
+  {
+    beatmapId: text("beatmap_id")
+      .notNull()
+      .references(() => beatmaps.id),
+    /** Formula version id, e.g. "lazer-master", "enissay-accuracy-change". */
+    versionId: text("version_id").notNull(),
+    beatmapHash: text("beatmap_hash"),
+    starRating: real("star_rating"),
+    starRatingSs: real("star_rating_ss"),
+    ppSs: real("pp_ss"),
+    attributesJson: text("attributes_json"),
+    error: text("error"),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.beatmapId, t.versionId] }),
+    versionIdx: index("beatmap_mania_ratings_version_idx").on(t.versionId),
+  }),
+);
+
 export const beatmapPatternAnalysis = sqliteTable(
   "beatmap_pattern_analysis",
   {

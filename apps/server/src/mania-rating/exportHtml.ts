@@ -92,7 +92,7 @@ export function osuWebManiaUrl(
 
 export function osuCoverListUrl(setOnlineId: number | null): string | null {
   if (setOnlineId == null || setOnlineId <= 0) return null;
-  return `https://assets.ppy.sh/beatmapsets/${setOnlineId}/covers/list.jpg`;
+  return `https://assets.ppy.sh/beatmaps/${setOnlineId}/covers/list@2x.jpg`;
 }
 
 export function buildRatingLabAnalyseHtml(
@@ -353,16 +353,6 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   </section>
 
   <section class="panel">
-    <h2>Largest SR movers</h2>
-    <div class="movers" id="star-movers"></div>
-  </section>
-
-  <section class="panel">
-    <h2>Largest PP movers</h2>
-    <div class="movers" id="pp-movers"></div>
-  </section>
-
-  <section class="panel">
     <h2>Results</h2>
     <div class="controls">
       <label>
@@ -388,6 +378,16 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       <span id="page-info"></span>
       <button type="button" id="next-page">Next</button>
     </div>
+  </section>
+
+  <section class="panel">
+    <h2>Largest SR movers</h2>
+    <div class="movers" id="star-movers"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Largest PP movers</h2>
+    <div class="movers" id="pp-movers"></div>
   </section>
 </div>
 <script type="application/json" id="rating-lab-data">${dataJson}</script>
@@ -483,7 +483,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
   function coverUrl(row) {
     if (row.setOnlineId == null) return null;
-    return "https://assets.ppy.sh/beatmapsets/" + row.setOnlineId + "/covers/list.jpg";
+    return "https://assets.ppy.sh/beatmaps/" + row.setOnlineId + "/covers/list@2x.jpg";
   }
 
   function mapLabel(row) {

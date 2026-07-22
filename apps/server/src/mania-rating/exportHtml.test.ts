@@ -45,7 +45,7 @@ describe("osuWebManiaUrl / osuCoverListUrl", () => {
       "https://osu.ppy.sh/beatmapsets/456#mania/123",
     );
     expect(osuCoverListUrl(456)).toBe(
-      "https://assets.ppy.sh/beatmapsets/456/covers/list.jpg",
+      "https://assets.ppy.sh/beatmaps/456/covers/list@2x.jpg",
     );
   });
 
@@ -117,9 +117,15 @@ describe("buildRatingLabAnalyseHtml", () => {
     expect(html).toContain('id="keymode-filter"');
     expect(html).toContain('id="name-filter"');
     expect(html).toContain('id="histogram"');
-    expect(html).toContain("assets.ppy.sh/beatmapsets/");
+    expect(html).toContain("assets.ppy.sh/beatmaps/");
     expect(html).toContain("#mania/");
-    expect(html).toContain("covers/list.jpg");
+    expect(html).toContain("covers/list@2x.jpg");
+    const histIdx = html.indexOf('id="histogram"');
+    const resultsIdx = html.indexOf("<h2>Results</h2>");
+    const moversIdx = html.indexOf("<h2>Largest SR movers</h2>");
+    expect(histIdx).toBeGreaterThan(-1);
+    expect(resultsIdx).toBeGreaterThan(histIdx);
+    expect(moversIdx).toBeGreaterThan(resultsIdx);
     expect(html).not.toContain("</script>Breakout");
     expect(html).toContain("\\u003c/script>Breakout");
     expect(html).toContain(meta.query);

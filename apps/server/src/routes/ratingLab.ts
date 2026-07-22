@@ -2,8 +2,8 @@ import { Elysia, t } from "elysia";
 import { dbPlugin } from "../db";
 import {
   compareManiaRatings,
-  compareRowsToCsv,
   ENISSAY_ACCURACY_VERSION,
+  exportManiaRatingsCsv,
   getManiaRatingJobState,
   getOrComputeManiaRating,
   getVersion,
@@ -146,20 +146,23 @@ export const ratingLabRoutes = new Elysia({ prefix: "/rating-lab" })
 
       const baseline = query.baseline ?? LAZER_MASTER_VERSION;
       const experiment = query.experiment ?? ENISSAY_ACCURACY_VERSION;
+      const sort = parseCompareSort(query.sort);
+      const order = parseCompareOrder(query.order);
+      const name = query.name?.trim() || undefined;
 
       try {
-        const result = await compareManiaRatings(db, {
+        const csv = await exportManiaRatingsCsv(db, {
           query: q,
           baselineVersionId: baseline,
           experimentVersionId: experiment,
-          page: 1,
-          pageSize: 10_000,
-          ensureCompute: true,
+          sort,
+          order,
+          name,
         });
         set.headers["content-type"] = "text/csv; charset=utf-8";
         set.headers["content-disposition"] =
           'attachment; filename="rating-lab-export.csv"';
-        return compareRowsToCsv(result.items);
+        return csv;
       } catch (err) {
         set.status = 400;
         return err instanceof Error ? err.message : String(err);
@@ -170,6 +173,9 @@ export const ratingLabRoutes = new Elysia({ prefix: "/rating-lab" })
         q: t.Optional(t.String()),
         baseline: t.Optional(t.String()),
         experiment: t.Optional(t.String()),
+        sort: t.Optional(t.String()),
+        order: t.Optional(t.String()),
+        name: t.Optional(t.String()),
       }),
     },
   )

@@ -27,6 +27,7 @@ export {
   compareManiaRatings,
   summarizeManiaRatings,
   compareRowsToCsv,
+  exportManiaRatingsCsv,
   parseCompareSort,
   parseCompareOrder,
   COMPARE_SORTS,

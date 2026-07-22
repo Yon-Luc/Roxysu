@@ -228,9 +228,12 @@ export function RatingLabPage() {
       q: activeQuery,
       baseline: baselineId,
       experiment: experimentId,
+      sort,
+      order,
     });
+    if (nameFilter) params.set("name", nameFilter);
     return `/api/rating-lab/export?${params.toString()}`;
-  }, [activeQuery, baselineId, experimentId]);
+  }, [activeQuery, baselineId, experimentId, sort, order, nameFilter]);
 
   const summary =
     summaryQuery.data && !("error" in summaryQuery.data)

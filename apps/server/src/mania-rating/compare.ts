@@ -23,6 +23,10 @@ export type RatingSide = {
 
 export type CompareRow = {
   beatmapId: string;
+  /** osu! online difficulty id (>0), for shareable links / CSV. */
+  onlineId: number | null;
+  /** osu! online beatmap set id (>0). */
+  setOnlineId: number | null;
   title: string | null;
   artist: string | null;
   difficultyName: string | null;
@@ -79,6 +83,8 @@ export type CompareSummary = {
 
 type RatingJoinRow = {
   beatmap_id: string;
+  online_id: number | null;
+  set_online_id: number | null;
   title: string | null;
   artist: string | null;
   difficulty_name: string | null;
@@ -175,6 +181,14 @@ function mapCompareRow(
 
   return {
     beatmapId: row.beatmap_id,
+    onlineId:
+      row.online_id != null && Number(row.online_id) > 0
+        ? Number(row.online_id)
+        : null,
+    setOnlineId:
+      row.set_online_id != null && Number(row.set_online_id) > 0
+        ? Number(row.set_online_id)
+        : null,
     title: row.title,
     artist: row.artist,
     difficultyName: row.difficulty_name,
@@ -324,6 +338,8 @@ function fetchCompareRows(
   const sql = `
     SELECT
       b.id AS beatmap_id,
+      CASE WHEN b.online_id > 0 THEN b.online_id ELSE NULL END AS online_id,
+      CASE WHEN bs.online_id > 0 THEN bs.online_id ELSE NULL END AS set_online_id,
       b.title,
       b.artist,
       b.difficulty_name,
@@ -480,6 +496,54 @@ export async function compareManiaRatings(
   };
 }
 
+export async function exportManiaRatingsCsv(
+  db: Db,
+  options: {
+    query: string;
+    baselineVersionId: string;
+    experimentVersionId: string;
+    sort?: CompareSort;
+    order?: CompareOrder;
+    name?: string;
+  },
+): Promise<string> {
+  const baselineVersionId = options.baselineVersionId;
+  const experimentVersionId = options.experimentVersionId;
+
+  if (!getVersion(baselineVersionId)) {
+    throw new Error(`Unknown baseline version: ${baselineVersionId}`);
+  }
+  if (!getVersion(experimentVersionId)) {
+    throw new Error(`Unknown experiment version: ${experimentVersionId}`);
+  }
+
+  const query = options.query.trim();
+  const sort = options.sort ?? "map";
+  const order = options.order ?? "asc";
+  const name = options.name?.trim() || undefined;
+
+  const { sql, params } = resolveFilterSql(query);
+  const total = countCompareRows(db, sql, params, name);
+  if (total === 0) {
+    return compareRowsToCsv([]);
+  }
+
+  const rows = fetchCompareRows(
+    db,
+    sql,
+    params,
+    baselineVersionId,
+    experimentVersionId,
+    total,
+    0,
+    { sort, order, name },
+  );
+
+  return compareRowsToCsv(
+    rows.map((row) => mapCompareRow(row, baselineVersionId)),
+  );
+}
+
 export async function summarizeManiaRatings(
   db: Db,
   options: {
@@ -558,7 +622,9 @@ export async function summarizeManiaRatings(
 
 export function compareRowsToCsv(rows: CompareRow[]): string {
   const header = [
+    "beatmapset_id",
     "beatmap_id",
+    "link",
     "title",
     "artist",
     "difficulty",
@@ -582,9 +648,19 @@ export function compareRowsToCsv(rows: CompareRow[]): string {
     return s;
   };
 
+  const webLink = (r: CompareRow): string => {
+    if (r.onlineId == null) return "";
+    if (r.setOnlineId != null) {
+      return `https://osu.ppy.sh/beatmapsets/${r.setOnlineId}#mania/${r.onlineId}`;
+    }
+    return `https://osu.ppy.sh/b/${r.onlineId}`;
+  };
+
   const lines = rows.map((r) =>
     [
-      r.beatmapId,
+      r.setOnlineId,
+      r.onlineId,
+      webLink(r),
       r.title,
       r.artist,
       r.difficultyName,

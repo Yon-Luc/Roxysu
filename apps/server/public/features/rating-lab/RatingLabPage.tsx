@@ -127,10 +127,14 @@ export function RatingLabPage() {
   });
 
   const jobMut = useMutation({
-    mutationFn: async (action: "start" | "stop") => {
+    mutationFn: async (
+      action: "stop" | { start: "baseline" | "experiment" },
+    ) => {
       if (action === "stop") return stopRatingLabJob();
+      const versionId =
+        action.start === "baseline" ? baselineId : experimentId;
       return startRatingLabJob({
-        versionId: experimentId,
+        versionId,
         query: activeQuery,
       });
     },
@@ -140,6 +144,11 @@ export function RatingLabPage() {
       void queryClient.invalidateQueries({ queryKey: ["rating-lab", "summary"] });
     },
   });
+
+  const jobBusy =
+    jobMut.isPending ||
+    jobQuery.data?.status === "running" ||
+    jobQuery.data?.status === "stopping";
 
   const baselineLabel =
     versions.find((v) => v.id === baselineId)?.label ?? baselineId;
@@ -380,14 +389,20 @@ export function RatingLabPage() {
             <button
               type="button"
               className="rx-btn"
-              disabled={
-                jobMut.isPending ||
-                jobQuery.data?.status === "running" ||
-                jobQuery.data?.status === "stopping"
-              }
-              onClick={() => jobMut.mutate("start")}
+              disabled={jobBusy}
+              title="Recompute missing baseline ratings (including Base PP) for this query"
+              onClick={() => jobMut.mutate({ start: "baseline" })}
             >
-              Backfill experiment
+              Rerun baseline
+            </button>
+            <button
+              type="button"
+              className="rx-btn"
+              disabled={jobBusy}
+              title="Recompute missing experiment ratings for this query"
+              onClick={() => jobMut.mutate({ start: "experiment" })}
+            >
+              Rerun experiment
             </button>
             <button
               type="button"
@@ -399,7 +414,7 @@ export function RatingLabPage() {
               }
               onClick={() => jobMut.mutate("stop")}
             >
-              Stop backfill
+              Stop
             </button>
           </div>
         </div>

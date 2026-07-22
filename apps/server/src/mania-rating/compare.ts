@@ -187,10 +187,17 @@ function mapCompareRow(
       ppSs: delta(baseline.ppSs, experiment.ppSs),
     },
     cached: {
-      baseline:
-        usesImportedRating(baselineVersionId) ||
-        (baseline.starRating != null && baseline.error == null),
-      experiment: experiment.starRating != null && experiment.error == null,
+      // Import baseline always has Realm SR in the UI; treat as complete only when
+      // SS PP is present (Base PP column). Failed calcs count as missing so Rerun works.
+      baseline: usesImportedRating(baselineVersionId)
+        ? baseline.ppSs != null && baseline.error == null
+        : baseline.starRating != null &&
+          baseline.ppSs != null &&
+          baseline.error == null,
+      experiment:
+        experiment.starRating != null &&
+        experiment.ppSs != null &&
+        experiment.error == null,
     },
   };
 }

@@ -12,6 +12,7 @@ import { settingsRoutes } from "./settings";
 import { systemRoutes } from "./system";
 import { tosuRoutes } from "./tosu";
 import { ratingLabRoutes } from "./ratingLab";
+import { mirrorRoutes } from "./mirrors";
 export const apiRoutes = new Elysia({ prefix: "/api" })
   .use(systemRoutes)
   .use(dashboardRoutes)
@@ -25,4 +26,5 @@ export const apiRoutes = new Elysia({ prefix: "/api" })
   .use(collectionRoutes)
   .use(settingsRoutes)
   .use(tosuRoutes)
-  .use(ratingLabRoutes);
+  .use(ratingLabRoutes)
+  .use(mirrorRoutes);

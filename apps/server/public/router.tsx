@@ -17,6 +17,7 @@ import { SettingsPage } from "./features/settings/SettingsPage";
 import { SkinPage } from "./features/settings/SkinPage";
 import { OverlayPage } from "./features/overlay/OverlayPage";
 import { RatingLabPage } from "./features/rating-lab/RatingLabPage";
+import { DownloadMapsPage } from "./features/download/DownloadMapsPage";
 
 const rootRoute = createRootRoute({
   component: () => <Outlet />,
@@ -89,6 +90,12 @@ const ratingLabRoute = createRoute({
   component: RatingLabPage,
 });
 
+const downloadMapsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/download-maps",
+  component: DownloadMapsPage,
+});
+
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/settings",
@@ -131,6 +138,7 @@ const routeTree = rootRoute.addChildren([
     collectionsRoute,
     collectionResultsRoute,
     ratingLabRoute,
+    downloadMapsRoute,
     skinRoute,
     settingsRoute,
   ]),

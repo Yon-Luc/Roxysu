@@ -18,6 +18,19 @@ export function osuWebBeatmapUrl(
   return `https://osu.ppy.sh/b/${onlineId}`;
 }
 
+/**
+ * Download a beatmapset `.osz` via Roxysu's mirror redirect.
+ * Open or drag the file into osu!lazer to import — not auto-imported.
+ */
+export function mirrorBeatmapSetDownloadUrl(
+  setOnlineId: number | null | undefined,
+  opts?: { noVideo?: boolean },
+): string | null {
+  if (setOnlineId == null || setOnlineId <= 0) return null;
+  const qs = opts?.noVideo ? "?noVideo=1" : "";
+  return `/api/mirrors/beatmapsets/${setOnlineId}/download${qs}`;
+}
+
 export type OsuCoverSize = "list" | "card" | "cover" | "slimcover";
 
 /** Beatmapset cover from osu! CDN (null for local/unsubmitted sets). */

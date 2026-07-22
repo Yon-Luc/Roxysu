@@ -215,6 +215,98 @@ export async function fetchSettings() {
   return unwrap(await api.api.settings.get(), "/api/settings");
 }
 
+export async function fetchMirrorSearch(params: {
+  q?: string;
+  mode?: "any" | "osu" | "taiko" | "fruits" | "mania";
+  status?:
+    | "any"
+    | "ranked"
+    | "qualified"
+    | "loved"
+    | "pending"
+    | "graveyard";
+  sort?:
+    | "ranked_desc"
+    | "ranked_asc"
+    | "plays_desc"
+    | "favourites_desc"
+    | "difficulty_desc"
+    | "title_asc";
+  page?: number;
+  excludeOwned?: boolean;
+}) {
+  return unwrap(
+    await api.api.mirrors.search.get({
+      query: {
+        q: params.q,
+        mode: params.mode,
+        status: params.status,
+        sort: params.sort,
+        page: params.page,
+        excludeOwned: params.excludeOwned,
+      },
+    }),
+    "/api/mirrors/search",
+  );
+}
+
+export async function fetchMirrorDownloadDir() {
+  return unwrap(
+    await api.api.mirrors["download-dir"].get(),
+    "/api/mirrors/download-dir",
+  );
+}
+
+export async function fetchMirrorBatchJob() {
+  return unwrap(await api.api.mirrors.batch.get(), "/api/mirrors/batch");
+}
+
+export async function startMirrorBatchJob(body: {
+  q?: string;
+  mode?: "any" | "osu" | "taiko" | "fruits" | "mania";
+  status?:
+    | "any"
+    | "ranked"
+    | "qualified"
+    | "loved"
+    | "pending"
+    | "graveyard";
+  sort?:
+    | "ranked_desc"
+    | "ranked_asc"
+    | "plays_desc"
+    | "favourites_desc"
+    | "difficulty_desc"
+    | "title_asc";
+  startPage?: number;
+  pageCount?: number;
+  noVideo?: boolean;
+  excludeOwned?: boolean;
+}) {
+  return unwrap(
+    await api.api.mirrors.batch.start.post(body),
+    "/api/mirrors/batch/start",
+  );
+}
+
+export async function stopMirrorBatchJob() {
+  return unwrap(
+    await api.api.mirrors.batch.stop.post(),
+    "/api/mirrors/batch/stop",
+  );
+}
+
+export type MirrorSearchPayload = Exclude<
+  Awaited<ReturnType<typeof fetchMirrorSearch>>,
+  { error: string }
+>;
+export type OnlineBeatmapSet = MirrorSearchPayload["items"][number];
+export type MirrorBatchJob = Exclude<
+  Awaited<ReturnType<typeof fetchMirrorBatchJob>>,
+  { error: string }
+>;
+
+
 export async function patchSettings(body: {
   masteryFormulaId?: string;
   pauseWhenUnfocused?: boolean;

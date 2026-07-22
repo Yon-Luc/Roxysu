@@ -18,10 +18,7 @@ import {
   resolveKeybinds,
   useKeybinds,
 } from "../lib/keybinds";
-import {
-  LiveManiaPlay,
-  type PracticeRange,
-} from "../lib/liveManiaPlay";
+import { LiveManiaPlay, type PracticeRange } from "../lib/liveManiaPlay";
 import { maniaHitWindows, type JudgmentSummary } from "../lib/maniaWindows";
 import {
   localBeatmapAudioUrl,
@@ -126,13 +123,13 @@ function isLoadedScoreReplay(
 ): data is LoadedScoreReplay {
   return Boolean(
     data &&
-      !("error" in data) &&
-      data.beatmap &&
-      data.playback &&
-      data.score &&
-      data.frames &&
-      data.judgments &&
-      data.simulated,
+    !("error" in data) &&
+    data.beatmap &&
+    data.playback &&
+    data.score &&
+    data.frames &&
+    data.judgments &&
+    data.simulated,
   );
 }
 
@@ -143,7 +140,9 @@ function loadPrefs(): PreviewPrefs {
     const parsed = JSON.parse(raw) as Partial<PreviewPrefs>;
     return {
       volume: clamp(
-        typeof parsed.volume === "number" ? parsed.volume : DEFAULT_PREFS.volume,
+        typeof parsed.volume === "number"
+          ? parsed.volume
+          : DEFAULT_PREFS.volume,
         0,
         1,
       ),
@@ -152,7 +151,9 @@ function loadPrefs(): PreviewPrefs {
           ? clampRate(parsed.rate)
           : DEFAULT_PREFS.rate,
       scroll: migratePreviewScroll(
-        typeof parsed.scroll === "number" ? parsed.scroll : DEFAULT_PREFS.scroll,
+        typeof parsed.scroll === "number"
+          ? parsed.scroll
+          : DEFAULT_PREFS.scroll,
       ),
       fullscreen:
         typeof parsed.fullscreen === "boolean"
@@ -275,9 +276,9 @@ function ScoreReplayModal({
   const rateApplied = useRef(false);
   const modeRef = useRef<ModalMode>("rewatch");
   const livePlayRef = useRef<LiveManiaPlay | null>(null);
-  const dataRef = useRef<Awaited<ReturnType<typeof fetchScoreReplay>> | undefined>(
-    undefined,
-  );
+  const dataRef = useRef<
+    Awaited<ReturnType<typeof fetchScoreReplay>> | undefined
+  >(undefined);
   /** Map time where the current Play / Test session started (R restarts here). */
   const playStartMsRef = useRef(0);
   const keybindsAll = useKeybinds();
@@ -298,7 +299,8 @@ function ScoreReplayModal({
   const [activeMissTMs, setActiveMissTMs] = useState<number | null>(null);
   const [liveHeldMask, setLiveHeldMask] = useState(0);
   const [liveJudgments, setLiveJudgments] = useState<NotefieldJudgment[]>([]);
-  const [liveSummary, setLiveSummary] = useState<JudgmentSummary>(EMPTY_SUMMARY);
+  const [liveSummary, setLiveSummary] =
+    useState<JudgmentSummary>(EMPTY_SUMMARY);
 
   const { data, error, isLoading } = useQuery({
     queryKey: ["score-replay", scoreId],
@@ -856,7 +858,10 @@ function ScoreReplayModal({
   }
 
   const title = replayData
-    ? [replayData.beatmap.title ?? "Untitled", replayData.beatmap.difficultyName]
+    ? [
+        replayData.beatmap.title ?? "Untitled",
+        replayData.beatmap.difficultyName,
+      ]
         .filter(Boolean)
         .join(" · ")
     : "Score rewatch";
@@ -870,20 +875,16 @@ function ScoreReplayModal({
       ].filter(Boolean)
     : [];
   const maxDuration = (() => {
-    const candidates = [
-      durationMs,
-      replayData?.beatmap.lengthMs ?? 0,
-    ].filter((n) => Number.isFinite(n) && n > 0 && n < 24 * 60 * 60 * 1000);
+    const candidates = [durationMs, replayData?.beatmap.lengthMs ?? 0].filter(
+      (n) => Number.isFinite(n) && n > 0 && n < 24 * 60 * 60 * 1000,
+    );
     const base = candidates.length > 0 ? Math.max(...candidates) : 1;
     return Math.max(base, currentMs, 1);
   })();
   const scrollLabel = Math.round(prefs.scroll);
   const fullscreen = prefs.fullscreen;
   const isPlay = mode === "play";
-  const canLivePlay = !!(
-    replayData &&
-    replayData.beatmap.columnCount > 0
-  );
+  const canLivePlay = !!(replayData && replayData.beatmap.columnCount > 0);
   const binds = canLivePlay
     ? resolveKeybinds(keybindsAll, replayData.beatmap.columnCount)
     : [];
@@ -1004,9 +1005,7 @@ function ScoreReplayModal({
             </p>
           ) : error ? (
             <p className="px-5 py-10 text-center text-sm text-rose-300">
-              {error instanceof Error
-                ? error.message
-                : "Failed to load replay"}
+              {error instanceof Error ? error.message : "Failed to load replay"}
             </p>
           ) : data ? (
             <>
@@ -1107,7 +1106,9 @@ function ScoreReplayModal({
                           columnCount={replayData.beatmap.columnCount}
                           notes={replayData.beatmap.notes}
                           frames={isPlay ? undefined : replayData.frames}
-                          judgments={isPlay ? liveJudgments : replayData.judgments}
+                          judgments={
+                            isPlay ? liveJudgments : replayData.judgments
+                          }
                           highlightMissNotes={showAnalysis}
                           scrollSpeed={prefs.scroll}
                           liveHeldMask={isPlay ? liveHeldMask : null}
@@ -1170,240 +1171,240 @@ function ScoreReplayModal({
                       : undefined
                   }
                 >
-
-                {audioError || !audioUrl ? (
-                  <p className="mb-3 text-sm text-amber-200/90">
-                    {audioError ??
-                      "Audio not available locally — re-sync after updating Roxysu."}
-                  </p>
-                ) : null}
-
-                {!isPlay ? (
-                  replayData ? <ReplayStatsBar data={replayData} /> : null
-                ) : null}
-
-                <div className="relative mb-3 flex items-center gap-3">
-                  <span className="w-16 shrink-0 tabular-nums text-xs text-muted sm:w-20">
-                    {formatClock(currentMs)}
-                  </span>
-                  <div className="relative min-w-0 flex-1">
-                    {showAnalysis && analysis ? (
-                      <MissSeekMarkers
-                        misses={analysis.misses}
-                        maxDuration={maxDuration}
-                        onJump={jumpToMiss}
-                      />
-                    ) : null}
-                    <input
-                      type="range"
-                      min={0}
-                      max={Math.max(1, Math.floor(maxDuration))}
-                      step={10}
-                      value={Math.min(currentMs, maxDuration)}
-                      onInput={onSeek}
-                      disabled={!audioUrl || isPlay}
-                      className="relative z-[1] min-w-0 w-full accent-[var(--accent)] disabled:opacity-40"
-                      aria-label="Seek"
-                    />
-                  </div>
-                  <span className="w-16 shrink-0 text-right tabular-nums text-xs text-muted sm:w-20">
-                    {formatClock(maxDuration)}
-                  </span>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                  {isPlay ? (
-                    <>
-                      <button
-                        type="button"
-                        className="rx-btn-primary min-w-[5.5rem]"
-                        onClick={togglePlay}
-                        disabled={!audioUrl}
-                        title="Play / pause"
-                      >
-                        {playing ? "Pause" : "Play"}
-                      </button>
-                      <button
-                        type="button"
-                        className="rx-btn"
-                        disabled={!audioUrl}
-                        onClick={restartPlay}
-                        title="Restart from session start (R)"
-                      >
-                        Restart
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        className="rx-btn"
-                        disabled={!audioUrl}
-                        onClick={() => seekBy(-SKIP_MS)}
-                        title="Skip back 5s (←)"
-                      >
-                        −5s
-                      </button>
-                      <button
-                        type="button"
-                        className="rx-btn-primary min-w-[5.5rem]"
-                        onClick={togglePlay}
-                        disabled={!audioUrl}
-                        title="Play / pause (Space)"
-                      >
-                        {playing ? "Pause" : "Play"}
-                      </button>
-                      <button
-                        type="button"
-                        className="rx-btn"
-                        disabled={!audioUrl}
-                        onClick={() => seekBy(SKIP_MS)}
-                        title="Skip forward 5s (→)"
-                      >
-                        +5s
-                      </button>
-                      <button
-                        type="button"
-                        className="rx-btn"
-                        disabled={!audioUrl}
-                        onClick={stopPlayback}
-                        title="Stop (S / Home)"
-                      >
-                        Stop
-                      </button>
-                      {canLivePlay ? (
-                        <button
-                          type="button"
-                          className="rx-btn-primary"
-                          disabled={!audioUrl}
-                          onClick={enterTestFromHere}
-                          title="Play from here (T)"
-                        >
-                          Test
-                        </button>
-                      ) : null}
-                    </>
-                  )}
-
-                  <div className="mx-1 hidden h-6 w-px bg-white/10 sm:block" />
-
-                  <label className="flex min-w-[8rem] flex-1 items-center gap-2 text-xs text-muted sm:flex-none">
-                    <span className="shrink-0">Vol</span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={1}
-                      step={0.01}
-                      value={prefs.volume}
-                      onInput={(e) => {
-                        const volume = Number(e.currentTarget.value);
-                        setPrefs((p) => ({ ...p, volume }));
-                      }}
-                      className="min-w-[4rem] flex-1 accent-[var(--accent)]"
-                      aria-label="Volume"
-                    />
-                  </label>
-
-                  <label className="flex items-center gap-2 text-xs text-muted">
-                    <span className="shrink-0">Rate</span>
-                    <select
-                      className="rx-select py-1.5 text-xs"
-                      value={String(prefs.rate)}
-                      onChange={(e) =>
-                        setPrefs((p) => ({
-                          ...p,
-                          rate: clampRate(Number(e.target.value)),
-                        }))
-                      }
-                      aria-label="Playback rate"
-                    >
-                      {playbackRateOptions(prefs.rate).map((r) => (
-                        <option key={r} value={r}>
-                          {formatRateLabel(r)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-muted sm:max-w-xs">
-                    <span className="shrink-0">Scroll {scrollLabel}</span>
-                    <input
-                      type="range"
-                      min={PREVIEW_SCROLL_MIN}
-                      max={PREVIEW_SCROLL_MAX}
-                      step={1}
-                      value={prefs.scroll}
-                      onInput={(e) => {
-                        const scroll = Number(e.currentTarget.value);
-                        setPrefs((p) => ({ ...p, scroll }));
-                      }}
-                      className="min-w-[4rem] flex-1 accent-[var(--accent)]"
-                      aria-label="Scroll speed"
-                    />
-                  </label>
-
-                  {fullscreen ? (
-                    <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-muted sm:max-w-xs">
-                      <span className="shrink-0">
-                        Size {Math.round(prefs.fieldWidth)}%
-                      </span>
-                      <input
-                        type="range"
-                        min={FIELD_WIDTH_MIN}
-                        max={FIELD_WIDTH_MAX}
-                        step={1}
-                        value={prefs.fieldWidth}
-                        onInput={(e) => {
-                          const fieldWidth = Number(e.currentTarget.value);
-                          setPrefs((p) => ({ ...p, fieldWidth }));
-                        }}
-                        className="min-w-[4rem] flex-1 accent-[var(--accent)]"
-                        aria-label="Playfield size"
-                      />
-                    </label>
+                  {audioError || !audioUrl ? (
+                    <p className="mb-3 text-sm text-amber-200/90">
+                      {audioError ??
+                        "Audio not available locally — re-sync after updating Roxysu."}
+                    </p>
                   ) : null}
 
                   {!isPlay ? (
-                    <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
+                    replayData ? (
+                      <ReplayStatsBar data={replayData} />
+                    ) : null
+                  ) : null}
+
+                  <div className="relative mb-3 flex items-center gap-3">
+                    <span className="w-16 shrink-0 tabular-nums text-xs text-muted sm:w-20">
+                      {formatClock(currentMs)}
+                    </span>
+                    <div className="relative min-w-0 flex-1">
+                      {showAnalysis && analysis ? (
+                        <MissSeekMarkers
+                          misses={analysis.misses}
+                          maxDuration={maxDuration}
+                          onJump={jumpToMiss}
+                        />
+                      ) : null}
                       <input
-                        type="checkbox"
-                        checked={prefs.analysis}
+                        type="range"
+                        min={0}
+                        max={Math.max(1, Math.floor(maxDuration))}
+                        step={10}
+                        value={Math.min(currentMs, maxDuration)}
+                        onInput={onSeek}
+                        disabled={!audioUrl || isPlay}
+                        className="relative z-[1] min-w-0 w-full accent-[var(--accent)] disabled:opacity-40"
+                        aria-label="Seek"
+                      />
+                    </div>
+                    <span className="w-16 shrink-0 text-right tabular-nums text-xs text-muted sm:w-20">
+                      {formatClock(maxDuration)}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                    {isPlay ? (
+                      <>
+                        <button
+                          type="button"
+                          className="rx-btn-primary min-w-[5.5rem]"
+                          onClick={togglePlay}
+                          disabled={!audioUrl}
+                          title="Play / pause"
+                        >
+                          {playing ? "Pause" : "Play"}
+                        </button>
+                        <button
+                          type="button"
+                          className="rx-btn"
+                          disabled={!audioUrl}
+                          onClick={restartPlay}
+                          title="Restart from session start (R)"
+                        >
+                          Restart
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          className="rx-btn"
+                          disabled={!audioUrl}
+                          onClick={() => seekBy(-SKIP_MS)}
+                          title="Skip back 5s (←)"
+                        >
+                          −5s
+                        </button>
+                        <button
+                          type="button"
+                          className="rx-btn-primary min-w-[5.5rem]"
+                          onClick={togglePlay}
+                          disabled={!audioUrl}
+                          title="Play / pause (Space)"
+                        >
+                          {playing ? "Pause" : "Play"}
+                        </button>
+                        <button
+                          type="button"
+                          className="rx-btn"
+                          disabled={!audioUrl}
+                          onClick={() => seekBy(SKIP_MS)}
+                          title="Skip forward 5s (→)"
+                        >
+                          +5s
+                        </button>
+                        <button
+                          type="button"
+                          className="rx-btn"
+                          disabled={!audioUrl}
+                          onClick={stopPlayback}
+                          title="Stop (S / Home)"
+                        >
+                          Stop
+                        </button>
+                        {canLivePlay ? (
+                          <button
+                            type="button"
+                            className="rx-btn-primary"
+                            disabled={!audioUrl}
+                            onClick={enterTestFromHere}
+                            title="Play from here (T)"
+                          >
+                            Test
+                          </button>
+                        ) : null}
+                      </>
+                    )}
+
+                    <div className="mx-1 hidden h-6 w-px bg-white/10 sm:block" />
+
+                    <label className="flex min-w-[8rem] flex-1 items-center gap-2 text-xs text-muted sm:flex-none">
+                      <span className="shrink-0">Vol</span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        value={prefs.volume}
+                        onInput={(e) => {
+                          const volume = Number(e.currentTarget.value);
+                          setPrefs((p) => ({ ...p, volume }));
+                        }}
+                        className="min-w-[4rem] flex-1 accent-[var(--accent)]"
+                        aria-label="Volume"
+                      />
+                    </label>
+
+                    <label className="flex items-center gap-2 text-xs text-muted">
+                      <span className="shrink-0">Rate</span>
+                      <select
+                        className="rx-select py-1.5 text-xs"
+                        value={String(prefs.rate)}
                         onChange={(e) =>
                           setPrefs((p) => ({
                             ...p,
-                            analysis: e.target.checked,
+                            rate: clampRate(Number(e.target.value)),
                           }))
                         }
-                        className="accent-[var(--accent)]"
-                        aria-label="Analysis mode"
-                      />
-                      <span className="shrink-0">Analysis</span>
-                    </label>
-                  ) : null}
-                </div>
-
-                <p className="mt-2 hidden text-[11px] text-faint sm:block">
-                  {isPlay ? (
-                    <>
-                      Keys{" "}
-                      {binds.map((c) => formatKeyCode(c)).join(" ")} · R restart
-                      · Esc rewatch
-                      {" · "}
-                      <a
-                        href="#/settings"
-                        className="text-subtle underline-offset-2 hover:underline"
+                        aria-label="Playback rate"
                       >
-                        Edit keybinds
-                      </a>
-                    </>
-                  ) : (
-                    <>
-                      Enter play · T test here · Space play · ← → skip 5s · S
-                      stop · F fullscreen · [ ] scroll
-                      {canLivePlay ? " · Esc close" : ""}
-                    </>
-                  )}
-                </p>
+                        {playbackRateOptions(prefs.rate).map((r) => (
+                          <option key={r} value={r}>
+                            {formatRateLabel(r)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-muted sm:max-w-xs">
+                      <span className="shrink-0">Scroll {scrollLabel}</span>
+                      <input
+                        type="range"
+                        min={PREVIEW_SCROLL_MIN}
+                        max={PREVIEW_SCROLL_MAX}
+                        step={1}
+                        value={prefs.scroll}
+                        onInput={(e) => {
+                          const scroll = Number(e.currentTarget.value);
+                          setPrefs((p) => ({ ...p, scroll }));
+                        }}
+                        className="min-w-[4rem] flex-1 accent-[var(--accent)]"
+                        aria-label="Scroll speed"
+                      />
+                    </label>
+
+                    {fullscreen ? (
+                      <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-muted sm:max-w-xs">
+                        <span className="shrink-0">
+                          Size {Math.round(prefs.fieldWidth)}%
+                        </span>
+                        <input
+                          type="range"
+                          min={FIELD_WIDTH_MIN}
+                          max={FIELD_WIDTH_MAX}
+                          step={1}
+                          value={prefs.fieldWidth}
+                          onInput={(e) => {
+                            const fieldWidth = Number(e.currentTarget.value);
+                            setPrefs((p) => ({ ...p, fieldWidth }));
+                          }}
+                          className="min-w-[4rem] flex-1 accent-[var(--accent)]"
+                          aria-label="Playfield size"
+                        />
+                      </label>
+                    ) : null}
+
+                    {!isPlay ? (
+                      <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
+                        <input
+                          type="checkbox"
+                          checked={prefs.analysis}
+                          onChange={(e) =>
+                            setPrefs((p) => ({
+                              ...p,
+                              analysis: e.target.checked,
+                            }))
+                          }
+                          className="accent-[var(--accent)]"
+                          aria-label="Analysis mode"
+                        />
+                        <span className="shrink-0">Analysis</span>
+                      </label>
+                    ) : null}
+                  </div>
+
+                  <p className="mt-2 hidden text-[11px] text-faint sm:block">
+                    {isPlay ? (
+                      <>
+                        Keys {binds.map((c) => formatKeyCode(c)).join(" ")} · R
+                        restart · Esc rewatch
+                        {" · "}
+                        <a
+                          href="#/settings"
+                          className="text-subtle underline-offset-2 hover:underline"
+                        >
+                          Edit keybinds
+                        </a>
+                      </>
+                    ) : (
+                      <>
+                        Enter play · T test here · Space play · ← → skip 5s · S
+                        stop · F fullscreen · [ ] scroll
+                        {canLivePlay ? " · Esc close" : ""}
+                      </>
+                    )}
+                  </p>
                 </div>
               </div>
             </>

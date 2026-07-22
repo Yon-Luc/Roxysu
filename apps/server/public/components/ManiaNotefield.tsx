@@ -85,6 +85,9 @@ const JUDGMENT_COLORS: Record<ReplayJudgmentResult, string> = {
   miss: "#f87171",
 };
 
+/** Desaturated note color used in analysis mode. */
+const ANALYSIS_NOTE_GREY = "#9ca3af";
+
 type NoteGeom = {
   x: number;
   noteW: number;
@@ -254,6 +257,22 @@ function drawTap(
     return;
   }
   drawFlat(ctx, x, y, w, h, color, alpha);
+}
+
+/** Horizontal line at the map-time press position (judgment color). */
+function drawPressMarkerLine(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  w: number,
+  pressY: number,
+  result: ReplayJudgmentResult,
+) {
+  const h = 4;
+  ctx.save();
+  ctx.fillStyle = JUDGMENT_COLORS[result];
+  ctx.globalAlpha = 1;
+  ctx.fillRect(x, pressY - h / 2, w, h);
+  ctx.restore();
 }
 
 /** Analysis miss marker — rectangle frame around the note (keeps skin color). */
@@ -581,7 +600,6 @@ export function ManiaNotefield({
       for (let i = startIdx; i < noteList.length; i += 1) {
         const note = noteList[i]!;
         if (note.startMs > windowEnd) break;
-        if (note.endMs < windowStart) continue;
 
         const col = Math.min(cols - 1, Math.max(0, note.column));
         const skin = colSkin(col);
@@ -589,38 +607,80 @@ export function ManiaNotefield({
         const isHold = note.endMs > note.startMs + 20;
 
         const judgment = headMap.get(i);
+        const hasJudgment = judgment != null;
         const isMiss = judgment?.result === "miss";
-        const judged = judgment != null && t >= judgment.tMs;
-        // Analysis: keep skin color on misses; mark with a rect instead.
-        // Holds keep skin colors while held — only taps flash judgment color.
+        const judged = hasJudgment && t >= judgment.tMs;
+        const judgmentColor =
+          judgment != null ? JUDGMENT_COLORS[judgment.result] : skin.noteColor;
         const useJudgmentColor =
-          judged && !isHold && !(markMisses && isMiss);
+          judged && !isHold && !markMisses && !isMiss;
+        const showPressMarker =
+          markMisses &&
+          hasJudgment &&
+          !isMiss &&
+          judgment!.errorMs != null;
         const noteColor = useJudgmentColor
-          ? JUDGMENT_COLORS[judgment!.result]
+          ? judgmentColor
           : skin.noteColor;
         const lnColor = skin.lnColor;
+        const displayNoteColor = markMisses ? ANALYSIS_NOTE_GREY : noteColor;
+        const displayLnColor = markMisses ? ANALYSIS_NOTE_GREY : lnColor;
         const alpha =
           judged && isMiss && !markMisses ? 0.35 : 0.95;
 
         const startY = receptorY - (note.startMs - t) * scroll;
+        const headOnScreen =
+          startY + tapH / 2 >= coverH && startY - tapH / 2 <= receptorY;
+        const pressY =
+          hasJudgment && !isMiss
+            ? receptorY - (judgment!.tMs - t) * scroll
+            : 0;
+        const pressMarkerOnScreen =
+          showPressMarker &&
+          pressY >= coverH &&
+          pressY <= receptorY;
+
+        if (note.endMs < windowStart) {
+          if (!(markMisses && hasJudgment && headOnScreen)) continue;
+        }
+
         if (isHold) {
           const endY = receptorY - (note.endMs - t) * scroll;
           const top = Math.min(startY, endY);
           const bottom = Math.max(startY, endY);
           const height = Math.max(tapH, bottom - top);
-          drawHoldBody(ctx!, shape, x, top, noteW, height, lnColor);
-          if (note.startMs >= t) {
-            drawTap(ctx!, shape, x, startY, noteW, tapH, noteColor, alpha);
+          drawHoldBody(ctx!, shape, x, top, noteW, height, displayLnColor);
+          if (headOnScreen || note.startMs >= t) {
+            drawTap(ctx!, shape, x, startY, noteW, tapH, displayNoteColor, alpha);
           }
-          if (markMisses && isMiss) {
+          if (showPressMarker && (headOnScreen || pressMarkerOnScreen)) {
+            drawPressMarkerLine(
+              ctx!,
+              x,
+              noteW,
+              pressY,
+              judgment!.result,
+            );
+          }
+          if (markMisses && isMiss && hasJudgment) {
             drawMissHoldRect(ctx!, x, top, noteW, height);
           }
-        } else if (note.startMs >= t) {
-          drawTap(ctx!, shape, x, startY, noteW, tapH, noteColor, alpha);
-          if (markMisses && isMiss) {
+        } else if (markMisses && hasJudgment && headOnScreen) {
+          drawTap(ctx!, shape, x, startY, noteW, tapH, displayNoteColor, alpha);
+          if (isMiss) {
             drawMissRect(ctx!, x, startY, noteW, tapH);
+          } else if (showPressMarker && (headOnScreen || pressMarkerOnScreen)) {
+            drawPressMarkerLine(
+              ctx!,
+              x,
+              noteW,
+              pressY,
+              judgment!.result,
+            );
           }
-        } else if (judged && t - judgment.tMs < 120) {
+        } else if (note.startMs >= t) {
+          drawTap(ctx!, shape, x, startY, noteW, tapH, displayNoteColor, alpha);
+        } else if (!markMisses && judged && t - judgment.tMs < 120) {
           // Brief flash at receptor after hit.
           const flashY = receptorY;
           const flashAlpha = 1 - (t - judgment.tMs) / 120;

@@ -15,9 +15,12 @@ export {
 } from "./settings";
 export {
   getOrComputeManiaRating,
+  backfillManiaRatings,
   backfillManiaRatingsSync,
+  ensureManiaRatingsForIds,
   ensureManiaRatingsForIdsSync,
   RATING_QUERY_BACKFILL_LIMIT,
+  CALCULATOR_CONCURRENCY,
 } from "./compute";
 export type { ManiaRatingResult, ManiaRatingAttributes } from "./compute";
 export {

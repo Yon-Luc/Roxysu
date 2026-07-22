@@ -3,8 +3,8 @@ import { parseQuery } from "../query-language/parse";
 import { compileQuery } from "../query-language/compile";
 import { searchBeatmaps } from "../query-language/execute";
 import {
-  backfillManiaRatingsSync,
-  ensureManiaRatingsForIdsSync,
+  backfillManiaRatings,
+  ensureManiaRatingsForIds,
   RATING_QUERY_BACKFILL_LIMIT,
 } from "./compute";
 import { getVersion, usesImportedRating } from "./registry";
@@ -268,30 +268,30 @@ function countCompareRows(
   return Number(row?.n ?? 0);
 }
 
-function maybeEnsureRatings(
+async function maybeEnsureRatings(
   db: Db,
   beatmapIds: string[],
   baselineVersionId: string,
   experimentVersionId: string,
-): { baseline: number; experiment: number } {
+): Promise<{ baseline: number; experiment: number }> {
   const slice = beatmapIds.slice(0, RATING_QUERY_BACKFILL_LIMIT);
-  const baseResult = usesImportedRating(baselineVersionId)
-    ? { succeeded: 0 }
-    : backfillManiaRatingsSync(db, baselineVersionId, {
-        limit: RATING_QUERY_BACKFILL_LIMIT,
-        beatmapIds: slice,
-      });
-  const expResult = backfillManiaRatingsSync(db, experimentVersionId, {
-    limit: RATING_QUERY_BACKFILL_LIMIT,
-    beatmapIds: slice,
-  });
+  const [baseResult, expResult] = await Promise.all([
+    backfillManiaRatings(db, baselineVersionId, {
+      limit: RATING_QUERY_BACKFILL_LIMIT,
+      beatmapIds: slice,
+    }),
+    backfillManiaRatings(db, experimentVersionId, {
+      limit: RATING_QUERY_BACKFILL_LIMIT,
+      beatmapIds: slice,
+    }),
+  ]);
   return {
     baseline: baseResult.succeeded,
     experiment: expResult.succeeded,
   };
 }
 
-export function compareManiaRatings(
+export async function compareManiaRatings(
   db: Db,
   options: {
     query: string;
@@ -301,7 +301,7 @@ export function compareManiaRatings(
     pageSize?: number;
     ensureCompute?: boolean;
   },
-): CompareResult {
+): Promise<CompareResult> {
   const baselineVersionId = options.baselineVersionId;
   const experimentVersionId = options.experimentVersionId;
 
@@ -328,16 +328,14 @@ export function compareManiaRatings(
       pageSize: RATING_QUERY_BACKFILL_LIMIT,
     });
     const ids = preview.items.map((i) => i.id);
-    computedThisRequest = maybeEnsureRatings(
+    computedThisRequest = await maybeEnsureRatings(
       db,
       ids,
       baselineVersionId,
       experimentVersionId,
     );
-    if (!usesImportedRating(baselineVersionId)) {
-      ensureManiaRatingsForIdsSync(db, baselineVersionId, ids);
-    }
-    ensureManiaRatingsForIdsSync(db, experimentVersionId, ids);
+    await ensureManiaRatingsForIds(db, baselineVersionId, ids);
+    await ensureManiaRatingsForIds(db, experimentVersionId, ids);
   }
 
   const rows = fetchCompareRows(
@@ -362,7 +360,7 @@ export function compareManiaRatings(
   };
 }
 
-export function summarizeManiaRatings(
+export async function summarizeManiaRatings(
   db: Db,
   options: {
     query: string;
@@ -370,7 +368,7 @@ export function summarizeManiaRatings(
     experimentVersionId: string;
     ensureCompute?: boolean;
   },
-): CompareSummary {
+): Promise<CompareSummary> {
   const query = options.query.trim();
   const { sql, params } = resolveFilterSql(query);
 
@@ -380,10 +378,8 @@ export function summarizeManiaRatings(
       pageSize: RATING_QUERY_BACKFILL_LIMIT,
     });
     const ids = preview.items.map((i) => i.id);
-    if (!usesImportedRating(options.baselineVersionId)) {
-      ensureManiaRatingsForIdsSync(db, options.baselineVersionId, ids);
-    }
-    ensureManiaRatingsForIdsSync(db, options.experimentVersionId, ids);
+    await ensureManiaRatingsForIds(db, options.baselineVersionId, ids);
+    await ensureManiaRatingsForIds(db, options.experimentVersionId, ids);
   }
 
   const allRows = fetchCompareRows(

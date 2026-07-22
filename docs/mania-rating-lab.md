@@ -54,9 +54,31 @@ From Roxysu's `tools/mania-rating-calc/`:
 OSU_GAME_PATH=/path/to/osu dotnet publish -c Release -o dist/my-build
 ```
 
-## Configure Roxysu
+This links against `osu.Game` and `osu.Game.Rulesets.Mania` from the checkout.
 
-1. Open **Settings → Mania Rating Lab**
+**NixOS:** Roxysu spawns the calculator as a subprocess outside your dev shell, so publish **self-contained** (bundles the .NET runtime):
+
+```bash
+cd tools/mania-rating-calc
+
+OSU_GAME_PATH=~/dev/osu-enissay dotnet publish -c Release \
+  --self-contained -r linux-x64 \
+  -o ~/roxysu-calc/enissay-accuracy-change
+```
+
+Settings path stays the same: `~/roxysu-calc/enissay-accuracy-change/mania-rating-calc`.
+
+### Parallel backfill
+
+By default the backfill job runs **4 calculator processes at once**. Override with:
+
+```bash
+MANIA_RATING_CONCURRENCY=8 bun run ...
+```
+
+Self-contained .NET + osu.Game is memory-heavy — keep concurrency modest if the machine starts swapping.
+
+## Configure Roxysu
 2. Set executable paths:
    - **Lazer master** → `dist/lazer-master/mania-rating-calc`
    - **Enissay accuracy change** → `dist/enissay-accuracy-change/mania-rating-calc`

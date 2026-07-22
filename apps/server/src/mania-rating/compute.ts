@@ -144,24 +144,30 @@ async function runCalculator(
   return parseCliOutput(stdout);
 }
 
+function hasExecutableConfigured(db: Db, versionId: string): boolean {
+  const row = db.$client
+    .query(`SELECT value FROM settings WHERE key = ? LIMIT 1`)
+    .get(`maniaRating.executable.${versionId}`) as { value: string } | null;
+  return Boolean(row?.value?.trim());
+}
+
 function isValidCached(
   cached: typeof beatmapManiaRatings.$inferSelect,
   beatmapHash: string | null,
   versionId: string,
+  options: { requirePp?: boolean } = {},
 ): boolean {
+  if (cached.error != null) return false;
+  if (cached.beatmapHash !== beatmapHash) return false;
+
   if (usesImportedRating(versionId)) {
-    return (
-      cached.error == null &&
-      cached.beatmapHash === beatmapHash &&
-      (cached.starRating != null || cached.ppSs != null)
-    );
+    if (cached.starRating == null) return false;
+    // When a binary is configured, SR-only rows are stale — need SS PP.
+    if (options.requirePp && cached.ppSs == null) return false;
+    return true;
   }
-  return (
-    cached.error == null &&
-    cached.starRating != null &&
-    cached.ppSs != null &&
-    cached.beatmapHash === beatmapHash
-  );
+
+  return cached.starRating != null && cached.ppSs != null;
 }
 
 /**
@@ -191,6 +197,7 @@ export async function getOrComputeManiaRating(
   if (!beatmap) return null;
 
   const importBaseline = usesImportedRating(versionId);
+  const requirePp = hasExecutableConfigured(db, versionId);
 
   if (!options.force) {
     const [cached] = await db
@@ -204,16 +211,11 @@ export async function getOrComputeManiaRating(
       )
       .limit(1);
 
-    if (importBaseline) {
-      const importedStar = beatmap.starRating;
-      if (
-        cached &&
-        isValidCached(cached, beatmap.hash, versionId) &&
-        cached.starRating === importedStar
-      ) {
-        return rowToResult(cached, true);
-      }
-    } else if (cached && isValidCached(cached, beatmap.hash, versionId)) {
+    if (
+      cached &&
+      isValidCached(cached, beatmap.hash, versionId, { requirePp }) &&
+      (!importBaseline || cached.starRating === beatmap.starRating)
+    ) {
       return rowToResult(cached, true);
     }
   }
@@ -379,7 +381,7 @@ export async function getOrComputeManiaRating(
         starRatingSs: null,
         ppSs: null,
         attributesJson: null,
-        error: null,
+        error: message,
         updatedAt: now,
       });
     }
@@ -403,10 +405,39 @@ export type BackfillManiaRatingResult = {
   remaining: number;
 };
 
+/** How many calculator processes to run at once. Override with MANIA_RATING_CONCURRENCY. */
+export const CALCULATOR_CONCURRENCY = Math.max(
+  1,
+  Number(process.env.MANIA_RATING_CONCURRENCY) || 4,
+);
+
+async function mapPool<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  if (items.length === 0) return [];
+  const results = new Array<R>(items.length);
+  let next = 0;
+
+  async function worker(): Promise<void> {
+    while (true) {
+      const i = next++;
+      if (i >= items.length) return;
+      results[i] = await fn(items[i]!);
+    }
+  }
+
+  const workers = Math.min(concurrency, items.length);
+  await Promise.all(Array.from({ length: workers }, () => worker()));
+  return results;
+}
+
 type MissingRow = {
   id: string;
   hash: string | null;
   ruleset_short_name: string | null;
+  star_rating: number | null;
 };
 
 function upsertRatingSync(
@@ -464,7 +495,7 @@ function fetchMissingRows(
     return db.$client
       .query(
         `
-        SELECT b.id, b.hash, b.ruleset_short_name
+        SELECT b.id, b.hash, b.ruleset_short_name, b.star_rating
         FROM beatmaps b
         LEFT JOIN beatmap_mania_ratings mr
           ON mr.beatmap_id = b.id AND mr.version_id = ?
@@ -491,7 +522,7 @@ function fetchMissingRows(
   return db.$client
     .query(
       `
-      SELECT b.id, b.hash, b.ruleset_short_name
+      SELECT b.id, b.hash, b.ruleset_short_name, b.star_rating
       FROM beatmaps b
       LEFT JOIN beatmap_mania_ratings mr
         ON mr.beatmap_id = b.id AND mr.version_id = ?
@@ -508,6 +539,7 @@ function fetchMissingRows(
             mr.error IS NULL
             AND (mr.star_rating IS NULL OR mr.pp_ss IS NULL)
           )
+          OR mr.error IS NOT NULL
         )
       LIMIT ?
     `,
@@ -539,34 +571,39 @@ function countRemainingMissing(db: Db, versionId: string): number {
   return Number(row?.n ?? 0);
 }
 
-/** Synchronous backfill for job worker and query-time ensure. */
-export function backfillManiaRatingsSync(
+/** Backfill missing mania ratings. Runs up to CALCULATOR_CONCURRENCY processes at once. */
+export async function backfillManiaRatings(
   db: Db,
   versionId: string,
   options: {
     limit?: number;
     beatmapIds?: string[];
     includeFailed?: boolean;
+    concurrency?: number;
   } = {},
-): BackfillManiaRatingResult {
-  if (usesImportedRating(versionId)) {
-    return { attempted: 0, succeeded: 0, remaining: 0 };
-  }
-
+): Promise<BackfillManiaRatingResult> {
+  const importBaseline = usesImportedRating(versionId);
   const limit = options.limit ?? 20;
+  const concurrency = options.concurrency ?? CALCULATOR_CONCURRENCY;
   const executablePath = db.$client
     .query(`SELECT value FROM settings WHERE key = ? LIMIT 1`)
     .get(`maniaRating.executable.${versionId}`) as { value: string } | null;
 
+  // Import without a binary: nothing to compute (SR comes from Realm).
   if (!executablePath?.value?.trim()) {
-    return { attempted: 0, succeeded: 0, remaining: countRemainingMissing(db, versionId) };
+    return {
+      attempted: 0,
+      succeeded: 0,
+      remaining: importBaseline
+        ? 0
+        : countRemainingMissing(db, versionId),
+    };
   }
 
   const exe = executablePath.value.trim();
   const rows = fetchMissingRows(db, versionId, limit, options.beatmapIds);
-  let succeeded = 0;
 
-  for (const row of rows) {
+  const outcomes = await mapPool(rows, concurrency, async (row) => {
     const nowMs = Date.now();
 
     if ((row.ruleset_short_name ?? "").toLowerCase() !== "mania") {
@@ -581,7 +618,7 @@ export function backfillManiaRatingsSync(
         error: "Not a mania beatmap",
         updatedAtMs: nowMs,
       });
-      continue;
+      return false;
     }
 
     if (!row.hash) {
@@ -589,14 +626,14 @@ export function backfillManiaRatingsSync(
         beatmapId: row.id,
         versionId,
         beatmapHash: null,
-        starRating: null,
+        starRating: importBaseline ? row.star_rating : null,
         starRatingSs: null,
         ppSs: null,
         attributesJson: null,
-        error: "Beatmap hash missing",
+        error: importBaseline ? null : "Beatmap hash missing",
         updatedAtMs: nowMs,
       });
-      continue;
+      return false;
     }
 
     const filePath = resolveLazerFilePath(row.hash, getOsuDataPath());
@@ -605,14 +642,14 @@ export function backfillManiaRatingsSync(
         beatmapId: row.id,
         versionId,
         beatmapHash: row.hash,
-        starRating: null,
+        starRating: importBaseline ? row.star_rating : null,
         starRatingSs: null,
         ppSs: null,
         attributesJson: null,
-        error: "Could not resolve lazer file path",
+        error: importBaseline ? null : "Could not resolve lazer file path",
         updatedAtMs: nowMs,
       });
-      continue;
+      return false;
     }
 
     try {
@@ -622,43 +659,29 @@ export function backfillManiaRatingsSync(
         beatmapId: row.id,
         versionId,
         beatmapHash: row.hash,
-        starRating: null,
+        starRating: importBaseline ? row.star_rating : null,
         starRatingSs: null,
         ppSs: null,
         attributesJson: null,
-        error: "Beatmap file not found in lazer files store",
+        error: importBaseline
+          ? null
+          : "Beatmap file not found in lazer files store",
         updatedAtMs: nowMs,
       });
-      continue;
+      return false;
     }
 
     try {
-      const proc = Bun.spawnSync({
-        cmd: [exe, "--mods", "NM", "--version-id", versionId, filePath],
-        stdout: "pipe",
-        stderr: "pipe",
-      });
-
-      if (proc.exitCode !== 0) {
-        const stderr = proc.stderr.toString().trim();
-        let message = stderr || `Calculator exited with code ${proc.exitCode}`;
-        try {
-          const errJson = JSON.parse(stderr) as { error?: string };
-          if (errJson.error) message = errJson.error;
-        } catch {
-          // keep message
-        }
-        throw new Error(message);
-      }
-
-      const output = parseCliOutput(proc.stdout.toString());
+      const output = await runCalculator(exe, filePath, versionId);
       if (output.error) throw new Error(output.error);
 
       upsertRatingSync(db, {
         beatmapId: row.id,
         versionId,
         beatmapHash: row.hash,
-        starRating: output.starRating ?? null,
+        starRating: importBaseline
+          ? row.star_rating
+          : (output.starRating ?? null),
         starRatingSs: output.starRatingSs ?? null,
         ppSs: output.ppSs ?? null,
         attributesJson: output.attributes
@@ -667,22 +690,26 @@ export function backfillManiaRatingsSync(
         error: null,
         updatedAtMs: nowMs,
       });
-      succeeded++;
+      return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       upsertRatingSync(db, {
         beatmapId: row.id,
         versionId,
         beatmapHash: row.hash,
-        starRating: null,
+        starRating: importBaseline ? row.star_rating : null,
         starRatingSs: null,
         ppSs: null,
         attributesJson: null,
+        // Keep SR for import, but record PP failure so we can retry.
         error: message,
         updatedAtMs: nowMs,
       });
+      return false;
     }
-  }
+  });
+
+  const succeeded = outcomes.filter(Boolean).length;
 
   return {
     attempted: rows.length,
@@ -691,14 +718,19 @@ export function backfillManiaRatingsSync(
   };
 }
 
-export function ensureManiaRatingsForIdsSync(
+/** Alias kept for older imports — prefer backfillManiaRatings. */
+export const backfillManiaRatingsSync = backfillManiaRatings;
+
+export async function ensureManiaRatingsForIds(
   db: Db,
   versionId: string,
   beatmapIds: string[],
   limit = 40,
-): void {
+): Promise<void> {
   if (beatmapIds.length === 0) return;
-  backfillManiaRatingsSync(db, versionId, { limit, beatmapIds });
+  await backfillManiaRatings(db, versionId, { limit, beatmapIds });
 }
+
+export const ensureManiaRatingsForIdsSync = ensureManiaRatingsForIds;
 
 export const RATING_QUERY_BACKFILL_LIMIT = 40;

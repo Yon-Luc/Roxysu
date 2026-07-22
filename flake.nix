@@ -20,7 +20,9 @@
     ];
   in {
     devShells.${system}.default = pkgs.mkShell {
-      buildInputs = [pkgs.bun pkgs.nodejs_24] ++ nativeDeps;
+      buildInputs =
+        [pkgs.bun pkgs.nodejs_24 pkgs.dotnet-sdk_8]
+        ++ nativeDeps;
 
       # Fallback build toolchain for node-gyp, in case a package's
       # prebuilt binary doesn't match the installed Node/Bun ABI.
@@ -35,7 +37,7 @@
       NIX_LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath nativeDeps;
 
       shellHook = ''
-        echo "Roxysu dev shell — bun $(bun --version), node $(node --version)"
+        echo "Roxysu dev shell — bun $(bun --version), node $(node --version), dotnet $(dotnet --version)"
       '';
     };
   };

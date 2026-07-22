@@ -265,6 +265,7 @@ describe("compileQuery", () => {
     const ast = parseQuery("mode:mania key=7 ranked");
     const compiled = compileQuery(ast);
     expect(compiled.sql).toContain("bs.status");
+    expect(compiled.sql).toContain("b.online_id > 0");
     expect(compiled.params).toEqual(["mania", "mania", 7, 1]);
   });
 
@@ -272,9 +273,33 @@ describe("compileQuery", () => {
     const ast = parseQuery("status:ranked,loved");
     const compiled = compileQuery(ast);
     expect(compiled.sql).toContain("bs.status IN");
+    expect(compiled.sql).toContain("b.online_id > 0");
     expect(compiled.params).toEqual([1, 4]);
   });
 
+  test("compiles graveyard status with online_id constraint", () => {
+    const ast = parseQuery("status=g");
+    const compiled = compileQuery(ast);
+    expect(compiled.sql).toContain("bs.status =");
+    expect(compiled.sql).toContain("b.online_id > 0");
+    expect(compiled.params).toEqual([-2]);
+  });
+
+  test("compiles local status without online_id constraint", () => {
+    const ast = parseQuery("status:none");
+    const compiled = compileQuery(ast);
+    expect(compiled.sql).toContain("bs.status =");
+    expect(compiled.sql).not.toContain("b.online_id > 0");
+    expect(compiled.params).toEqual([-3]);
+  });
+
+  test("compiles mixed online and local statuses with OR", () => {
+    const ast = parseQuery("status:graveyard,none");
+    const compiled = compileQuery(ast);
+    expect(compiled.sql).toContain("b.online_id > 0");
+    expect(compiled.sql).toContain(" OR ");
+    expect(compiled.params).toEqual([-2, -3]);
+  });
 
   test("compiles NOT played:lastNd with correct parentheses", () => {
     const ast = parseQuery("acc:90..93 NOT played:last14d");

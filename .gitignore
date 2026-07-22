@@ -5,6 +5,13 @@ node_modules/
 dist/
 *.tsbuildinfo
 
+# .NET / mania-rating-calc publish artifacts
+**/bin/
+**/obj/
+*.user
+*.suo
+roxysu-calc/
+
 # local env overrides (see .env.example)
 .env
 .env.local
@@ -19,3 +26,13 @@ backups/
 
 # nix
 .direnv/
+result
+result-*
+
+# OS / editor
+.DS_Store
+*.swp
+*~
+
+# local branch pin / scratch (not source)
+.branch-*.json

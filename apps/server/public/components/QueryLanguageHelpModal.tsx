@@ -5,7 +5,7 @@ const FIELDS: { field: string; meaning: string; example: string }[] = [
   {
     field: "status / ranked / loved",
     meaning:
-      "Beatmap set status: ranked, loved, pending, qualified, approved, graveyard, wip, none. Use status:ranked, status=r, or bare ranked.",
+      "Beatmap set status: ranked, loved, pending, qualified, approved, graveyard, wip, none. Use status:ranked, status=r, or bare ranked. Online statuses (ranked/loved/pending/qualified/approved/graveyard) also require an osu beatmap ID (website link).",
     example: "mode:mania key=7 status=r",
   },
   { field: "mapper", meaning: "Mapper username", example: "mapper:Lasse" },

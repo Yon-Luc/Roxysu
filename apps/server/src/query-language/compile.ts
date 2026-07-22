@@ -1,6 +1,10 @@
 import type { AstNode, FieldTerm } from "./ast";
 import { LN_DAN_RATIO_THRESHOLD } from "../map-analysis/estDiff";
-import { statusNameToInt, type BeatmapStatusName } from "./status";
+import {
+  isOnlineBeatmapStatus,
+  statusNameToInt,
+  type BeatmapStatusName,
+} from "./status";
 
 export type CompiledQuery = {
   /** SQL boolean expression referencing aliases: b, m, ps, rs */
@@ -144,14 +148,29 @@ function compileTerm(term: FieldTerm, params: unknown[]): string {
       return `(dr.ln_ratio IS NOT NULL AND dr.ln_ratio < ${push(LN_DAN_RATIO_THRESHOLD)})`;
     }
     case "status": {
-      const ints = term.values.map((name) =>
-        statusNameToInt(name as BeatmapStatusName),
-      );
-      if (ints.length === 1) {
-        return `bs.status = ${push(ints[0]!)}`;
+      const names = term.values as BeatmapStatusName[];
+      const online = names.filter(isOnlineBeatmapStatus);
+      const local = names.filter((n) => !isOnlineBeatmapStatus(n));
+
+      const statusEq = (name: BeatmapStatusName) =>
+        `bs.status = ${push(statusNameToInt(name))}`;
+      const statusIn = (list: BeatmapStatusName[]) => {
+        if (list.length === 1) return statusEq(list[0]!);
+        const placeholders = list
+          .map((n) => push(statusNameToInt(n)))
+          .join(", ");
+        return `bs.status IN (${placeholders})`;
+      };
+      const withOnlineId = (statusSql: string) =>
+        `(${statusSql} AND b.online_id > 0)`;
+
+      if (online.length > 0 && local.length === 0) {
+        return withOnlineId(statusIn(online));
       }
-      const placeholders = ints.map((n) => push(n)).join(", ");
-      return `bs.status IN (${placeholders})`;
+      if (local.length > 0 && online.length === 0) {
+        return statusIn(local);
+      }
+      return `(${withOnlineId(statusIn(online))} OR (${statusIn(local)}))`;
     }
     case "text": {
       const pat = push(`%${term.value}%`);

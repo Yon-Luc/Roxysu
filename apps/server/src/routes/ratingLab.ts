@@ -55,7 +55,7 @@ export const ratingLabRoutes = new Elysia({ prefix: "/rating-lab" })
       const pageSize = Math.min(100, Math.max(1, query.pageSize ?? 48));
 
       try {
-        return compareManiaRatings(db, {
+        return await compareManiaRatings(db, {
           query: q,
           baselineVersionId: baseline,
           experimentVersionId: experiment,
@@ -98,7 +98,7 @@ export const ratingLabRoutes = new Elysia({ prefix: "/rating-lab" })
       const experiment = query.experiment ?? ENISSAY_ACCURACY_VERSION;
 
       try {
-        return summarizeManiaRatings(db, {
+        return await summarizeManiaRatings(db, {
           query: q,
           baselineVersionId: baseline,
           experimentVersionId: experiment,
@@ -137,7 +137,7 @@ export const ratingLabRoutes = new Elysia({ prefix: "/rating-lab" })
       const experiment = query.experiment ?? ENISSAY_ACCURACY_VERSION;
 
       try {
-        const result = compareManiaRatings(db, {
+        const result = await compareManiaRatings(db, {
           query: q,
           baselineVersionId: baseline,
           experimentVersionId: experiment,

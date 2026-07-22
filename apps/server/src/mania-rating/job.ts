@@ -1,7 +1,10 @@
 import type { Db } from "@roxysu/db/client.bun";
 import { parseQuery } from "../query-language/parse";
 import { compileQuery } from "../query-language/compile";
-import { backfillManiaRatingsSync } from "./compute";
+import {
+  backfillManiaRatings,
+  CALCULATOR_CONCURRENCY,
+} from "./compute";
 import { publish } from "../shared/events";
 import {
   BEATMAP_SET_JOIN,
@@ -39,9 +42,10 @@ export type ManiaRatingJobState = {
   finishedAt: string | null;
   error: string | null;
   batchSize: number;
+  concurrency: number;
 };
 
-const BATCH_SIZE = 20;
+const BATCH_SIZE = 32;
 const YIELD_MS = 10;
 
 let job: {
@@ -87,6 +91,9 @@ function countMissingForQuery(
         AND lower(COALESCE(b.ruleset_short_name, '')) = 'mania'
         AND (
           mr.beatmap_id IS NULL
+          OR mr.error IS NOT NULL
+          OR mr.star_rating IS NULL
+          OR mr.pp_ss IS NULL
           OR (
             b.hash IS NOT NULL
             AND mr.beatmap_hash IS NOT NULL
@@ -156,6 +163,9 @@ export function getManiaRatingCoverage(
         AND lower(COALESCE(b.ruleset_short_name, '')) = 'mania'
         AND (
           mr.beatmap_id IS NULL
+          OR mr.error IS NOT NULL
+          OR mr.star_rating IS NULL
+          OR mr.pp_ss IS NULL
           OR (
             b.hash IS NOT NULL
             AND mr.beatmap_hash IS NOT NULL
@@ -189,6 +199,7 @@ export function getManiaRatingJobState(db: Db): ManiaRatingJobState {
     finishedAt: job.finishedAt?.toISOString() ?? null,
     error: job.error,
     batchSize: BATCH_SIZE,
+    concurrency: CALCULATOR_CONCURRENCY,
   };
 }
 
@@ -212,7 +223,7 @@ function scheduleNext(): void {
   clearTimer();
   job.timer = setTimeout(() => {
     job.timer = null;
-    runBatch();
+    void runBatch();
   }, YIELD_MS);
 }
 
@@ -236,6 +247,9 @@ function fetchBatchBeatmapIds(
         AND lower(COALESCE(b.ruleset_short_name, '')) = 'mania'
         AND (
           mr.beatmap_id IS NULL
+          OR mr.error IS NOT NULL
+          OR mr.star_rating IS NULL
+          OR mr.pp_ss IS NULL
           OR (
             b.hash IS NOT NULL
             AND mr.beatmap_hash IS NOT NULL
@@ -250,7 +264,7 @@ function fetchBatchBeatmapIds(
   return rows.map((r) => r.id);
 }
 
-function runBatch(): void {
+async function runBatch(): Promise<void> {
   const db = job.db;
   const versionId = job.versionId;
   const query = job.query;
@@ -283,9 +297,10 @@ function runBatch(): void {
       return;
     }
 
-    const result = backfillManiaRatingsSync(db, versionId, {
+    const result = await backfillManiaRatings(db, versionId, {
       limit: BATCH_SIZE,
       beatmapIds: ids,
+      concurrency: CALCULATOR_CONCURRENCY,
     });
 
     job.attemptedThisRun += result.attempted;

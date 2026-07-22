@@ -4,7 +4,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using osu.Game.Beatmaps;
-using osu.Game.Beatmaps.Formats;
 using osu.Game.Rulesets;
 using osu.Game.Rulesets.Mania;
 using osu.Game.Rulesets.Mania.Difficulty;
@@ -12,7 +11,6 @@ using osu.Game.Rulesets.Mania.Objects;
 using osu.Game.Rulesets.Mods;
 using osu.Game.Rulesets.Scoring;
 using osu.Game.Scoring;
-using osu.Game.Utils;
 
 if (args.Length == 0 || args.Contains("-h") || args.Contains("--help"))
 {
@@ -58,9 +56,7 @@ try
     var ruleset = new ManiaRuleset();
     var mods = ParseMods(ruleset, modsArg);
 
-    using var stream = File.OpenRead(beatmapPath);
-    var decoder = new Decoder();
-    var working = new FlatWorkingBeatmap(stream);
+    var working = new FlatWorkingBeatmap(beatmapPath);
 
     var diffCalc = ruleset.CreateDifficultyCalculator(working);
     var diffAttrs = diffCalc.Calculate(mods);
@@ -87,7 +83,7 @@ try
         Version = versionId ?? "unknown",
         StarRating = maniaAttrs.StarRating,
         StarRatingSs = GetStarRatingSs(maniaAttrs),
-        PpSs = perfAttrs.Total.Value,
+        PpSs = perfAttrs.Total,
         Attributes = BuildAttributes(maniaAttrs, maniaPerf),
     };
 
@@ -115,16 +111,15 @@ static Mod[] ParseMods(Ruleset ruleset, string modsArg)
     if (string.IsNullOrWhiteSpace(modsArg) || modsArg.Equals("NM", StringComparison.OrdinalIgnoreCase))
         return Array.Empty<Mod>();
 
-    var available = ruleset.AllMods.ToDictionary(m => m.Acronym.ToUpperInvariant());
     var mods = new List<Mod>();
 
     foreach (var token in modsArg.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
     {
-        var key = token.ToUpperInvariant();
-        if (!available.TryGetValue(key, out var modType))
+        var mod = ruleset.CreateModFromAcronym(token);
+        if (mod == null)
             throw new ArgumentException($"Unknown mod: {token}");
 
-        mods.Add((Mod)Activator.CreateInstance(modType)!);
+        mods.Add(mod);
     }
 
     return mods.ToArray();
@@ -148,10 +143,14 @@ static Dictionary<HitResult, int> BuildPerfectStatistics(IBeatmap beatmap)
 
 static double? GetStarRatingSs(ManiaDifficultyAttributes attrs)
 {
-    // Enissay branch exposes StarRatingSS; master uses display SR only.
     var prop = attrs.GetType().GetProperty("StarRatingSS");
-    if (prop?.GetValue(attrs) is double ss && ss > 0)
-        return ss;
+    if (prop?.GetValue(attrs) is double ssProp && ssProp > 0)
+        return ssProp;
+
+    var field = attrs.GetType().GetField("StarRatingSS");
+    if (field?.GetValue(attrs) is double ssField && ssField > 0)
+        return ssField;
+
     return null;
 }
 
@@ -185,8 +184,10 @@ static Dictionary<string, object?> BuildAttributes(
 
     if (perf != null)
     {
-        add("difficulty_value", perf.DifficultyValue);
-        add("accuracy_value", perf.AccuracyValue);
+        add("difficulty", TryGetDouble(perf, "Difficulty"));
+        add("ss_value", TryGetDouble(perf, "ValueSS"));
+        add("accuracy_value", TryGetDouble(perf, "AccuracyValue"));
+        add("difficulty_value", TryGetDouble(perf, "DifficultyValue"));
     }
 
     return result;
@@ -195,13 +196,18 @@ static Dictionary<string, object?> BuildAttributes(
 static double? TryGetDouble(object obj, string propName)
 {
     var prop = obj.GetType().GetProperty(propName);
-    return prop?.GetValue(obj) as double?;
+    if (prop?.GetValue(obj) is double d) return d;
+    var field = obj.GetType().GetField(propName);
+    if (field?.GetValue(obj) is double f) return f;
+    return null;
 }
 
 static int? TryGetInt(object obj, string propName)
 {
     var prop = obj.GetType().GetProperty(propName);
     if (prop?.GetValue(obj) is int i) return i;
+    var field = obj.GetType().GetField(propName);
+    if (field?.GetValue(obj) is int f) return f;
     return null;
 }
 

@@ -39,7 +39,7 @@ registerVersion({
   id: LAZER_MASTER_VERSION,
   label: "Import (lazer)",
   description:
-    "Star rating imported from your local osu!lazer Realm sync. Optional binary for SS PP max only.",
+    "Uses Realm-imported star rating. Configure the lazer-master binary to also compute SS PP max.",
   gitRef: "ppy/osu master",
   source: "import",
 });

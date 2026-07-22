@@ -68,3 +68,17 @@ export function parseStatusList(raw: string): BeatmapStatusName[] {
 export function statusNameToInt(name: BeatmapStatusName): number {
   return BEATMAP_STATUS[name];
 }
+
+/** Statuses that imply a submitted map with an osu website link. */
+const ONLINE_STATUSES = new Set<BeatmapStatusName>([
+  "graveyard",
+  "pending",
+  "ranked",
+  "approved",
+  "qualified",
+  "loved",
+]);
+
+export function isOnlineBeatmapStatus(name: BeatmapStatusName): boolean {
+  return ONLINE_STATUSES.has(name);
+}

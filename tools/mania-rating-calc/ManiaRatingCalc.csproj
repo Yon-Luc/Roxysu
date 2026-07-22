@@ -8,11 +8,14 @@
     <RootNamespace>ManiaRatingCalc</RootNamespace>
   </PropertyGroup>
 
-  <!--
-    Build against a local osu!lazer checkout. Set OSU_GAME_PATH to the repo root:
-      OSU_GAME_PATH=/path/to/osu dotnet publish -c Release -o dist/my-version
-  -->
+  <!-- Reference snapshots for diff review — not part of the build -->
+  <ItemGroup>
+    <Compile Remove="docs/**" />
+    <None Include="docs/**" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(OSU_GAME_PATH)' != ''">
     <ProjectReference Include="$(OSU_GAME_PATH)/osu.Game/osu.Game.csproj" />
+    <ProjectReference Include="$(OSU_GAME_PATH)/osu.Game.Rulesets.Mania/osu.Game.Rulesets.Mania.csproj" />
   </ItemGroup>
 </Project>

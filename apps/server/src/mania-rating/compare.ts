@@ -626,7 +626,7 @@ export async function summarizeManiaRatings(
     params,
     options.baselineVersionId,
     options.experimentVersionId,
-    5000,
+    10_000,
     0,
   );
   const items = allRows.map((row) => mapCompareRow(row, options.baselineVersionId));

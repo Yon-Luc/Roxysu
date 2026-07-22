@@ -332,6 +332,15 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 }
 .pager button:disabled { opacity: 0.4; cursor: not-allowed; }
 .empty { color: var(--faint); padding: 1.5rem 0; text-align: center; }
+.credits {
+  margin-top: 1.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.credits a { color: var(--accent); }
 </style>
 </head>
 <body>
@@ -389,6 +398,13 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     <h2>Largest PP movers</h2>
     <div class="movers" id="pp-movers"></div>
   </section>
+
+  <footer class="credits">
+    Roxysu made by
+    <a href="https://osu.ppy.sh/users/36810767" target="_blank" rel="noopener">Noy</a>
+    · rework at
+    <a href="https://github.com/EnissayDev/osu/tree/enissay-mania-sr-rework" target="_blank" rel="noopener">https://github.com/EnissayDev/osu/tree/enissay-mania-sr-rework</a>
+  </footer>
 </div>
 <script type="application/json" id="rating-lab-data">${dataJson}</script>
 <script>

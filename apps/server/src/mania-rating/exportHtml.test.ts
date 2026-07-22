@@ -131,6 +131,11 @@ describe("buildRatingLabAnalyseHtml", () => {
     expect(html).toContain(meta.query);
     expect(html).toContain(meta.baselineLabel);
     expect(html).toContain(meta.experimentLabel);
+    expect(html).toContain("https://osu.ppy.sh/users/36810767");
+    expect(html).toContain(
+      "https://github.com/EnissayDev/osu/tree/enissay-mania-sr-rework",
+    );
+    expect(html).toContain(">Noy</a>");
   });
 
   test("hides Import ★ column wiring when usesImport is true", () => {

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -32,6 +32,17 @@ const EXAMPLE_QUERIES = [
   "mode:mania ln<15 stars:7..9",
 ];
 
+type CompareSort =
+  | "map"
+  | "importStar"
+  | "baseStar"
+  | "expStar"
+  | "deltaStar"
+  | "basePp"
+  | "expPp"
+  | "deltaPp";
+type CompareOrder = "asc" | "desc";
+
 function readStoredQuery(): string {
   try {
     return localStorage.getItem(RATING_LAB_QUERY_KEY) ?? EXAMPLE_QUERIES[0]!;
@@ -59,6 +70,39 @@ function deltaClass(value: number | null): string {
   return value > 0 ? "text-amber-300" : "text-sky-300";
 }
 
+function SortHeader({
+  label,
+  column,
+  sort,
+  order,
+  onSort,
+  className = "px-2 py-2",
+}: {
+  label: string;
+  column: CompareSort;
+  sort: CompareSort;
+  order: CompareOrder;
+  onSort: (column: CompareSort) => void;
+  className?: string;
+}) {
+  const active = sort === column;
+  const indicator = active ? (order === "asc" ? " ↑" : " ↓") : "";
+  return (
+    <th className={className}>
+      <button
+        type="button"
+        className={`inline-flex items-center gap-0.5 uppercase tracking-wide transition-colors ${
+          active ? "text-ink" : "text-faint hover:text-muted"
+        }`}
+        onClick={() => onSort(column)}
+      >
+        {label}
+        <span className="font-mono text-[0.65rem]">{indicator || "\u00a0"}</span>
+      </button>
+    </th>
+  );
+}
+
 export function RatingLabPage() {
   const queryClient = useQueryClient();
   const [queryDraft, setQueryDraft] = useState(readStoredQuery);
@@ -66,6 +110,21 @@ export function RatingLabPage() {
   const [baseline, setBaseline] = useState("");
   const [experiment, setExperiment] = useState("");
   const [page, setPage] = useState(1);
+  const [sort, setSort] = useState<CompareSort>("map");
+  const [order, setOrder] = useState<CompareOrder>("asc");
+  const [nameDraft, setNameDraft] = useState("");
+  const [nameFilter, setNameFilter] = useState("");
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setNameFilter(nameDraft.trim());
+    }, 200);
+    return () => window.clearTimeout(handle);
+  }, [nameDraft]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [nameFilter]);
 
   const versionsQuery = useQuery({
     queryKey: ["rating-lab", "versions"],
@@ -88,6 +147,9 @@ export function RatingLabPage() {
       baselineId,
       experimentId,
       page,
+      sort,
+      order,
+      nameFilter,
     ],
     queryFn: () =>
       fetchRatingLabCompare({
@@ -96,6 +158,9 @@ export function RatingLabPage() {
         experiment: experimentId,
         page,
         pageSize: 48,
+        sort,
+        order,
+        name: nameFilter || undefined,
       }),
     enabled: activeQuery.trim().length > 0,
   });
@@ -187,6 +252,16 @@ export function RatingLabPage() {
     storeQuery(q);
     setActiveQuery(q);
     setPage(1);
+  }
+
+  function handleSort(column: CompareSort) {
+    setPage(1);
+    if (sort === column) {
+      setOrder((o) => (o === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSort(column);
+    setOrder(column === "map" ? "asc" : "desc");
   }
 
   return (
@@ -419,6 +494,18 @@ export function RatingLabPage() {
           </div>
         </div>
 
+        <label className="mt-4 block max-w-md">
+          <span className="text-xs font-semibold uppercase tracking-wide text-faint">
+            Filter by name
+          </span>
+          <input
+            className="rx-input mt-1 w-full"
+            value={nameDraft}
+            placeholder="Title, artist, or difficulty…"
+            onChange={(e) => setNameDraft(e.target.value)}
+          />
+        </label>
+
         {jobQuery.data && jobQuery.data.status !== "idle" ? (
           <p className="mt-3 text-xs text-muted">
             Job: {jobQuery.data.status}
@@ -436,23 +523,73 @@ export function RatingLabPage() {
             {compareQuery.error.message}
           </p>
         ) : !compareData || compareData.items.length === 0 ? (
-          <p className="mt-4 text-sm text-muted">No matches.</p>
+          <p className="mt-4 text-sm text-muted">
+            {nameFilter ? "No matches for this name filter." : "No matches."}
+          </p>
         ) : (
           <>
             <div className="mt-4 overflow-x-auto">
               <table className="w-full min-w-[56rem] text-left text-sm">
                 <thead>
-                  <tr className="border-b border-line text-xs uppercase tracking-wide text-faint">
-                    <th className="px-2 py-2">Map</th>
+                  <tr className="border-b border-line text-xs">
+                    <SortHeader
+                      label="Map"
+                      column="map"
+                      sort={sort}
+                      order={order}
+                      onSort={handleSort}
+                    />
                     {!baselineUsesImport ? (
-                      <th className="px-2 py-2">Import ★</th>
+                      <SortHeader
+                        label="Import ★"
+                        column="importStar"
+                        sort={sort}
+                        order={order}
+                        onSort={handleSort}
+                      />
                     ) : null}
-                    <th className="px-2 py-2">{baselineLabel} ★</th>
-                    <th className="px-2 py-2">{experimentLabel} ★</th>
-                    <th className="px-2 py-2">Δ★</th>
-                    <th className="px-2 py-2">Base PP</th>
-                    <th className="px-2 py-2">Exp PP</th>
-                    <th className="px-2 py-2">ΔPP</th>
+                    <SortHeader
+                      label={`${baselineLabel} ★`}
+                      column="baseStar"
+                      sort={sort}
+                      order={order}
+                      onSort={handleSort}
+                    />
+                    <SortHeader
+                      label={`${experimentLabel} ★`}
+                      column="expStar"
+                      sort={sort}
+                      order={order}
+                      onSort={handleSort}
+                    />
+                    <SortHeader
+                      label="Δ★"
+                      column="deltaStar"
+                      sort={sort}
+                      order={order}
+                      onSort={handleSort}
+                    />
+                    <SortHeader
+                      label="Base PP"
+                      column="basePp"
+                      sort={sort}
+                      order={order}
+                      onSort={handleSort}
+                    />
+                    <SortHeader
+                      label="Exp PP"
+                      column="expPp"
+                      sort={sort}
+                      order={order}
+                      onSort={handleSort}
+                    />
+                    <SortHeader
+                      label="ΔPP"
+                      column="deltaPp"
+                      sort={sort}
+                      order={order}
+                      onSort={handleSort}
+                    />
                   </tr>
                 </thead>
                 <tbody>

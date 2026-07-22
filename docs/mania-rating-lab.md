@@ -114,18 +114,77 @@ Open **Rating Lab** (`#/rating-lab`):
 
 ## Adding a new formula version
 
-1. Build a new binary from your branch/commit
-2. Register in `apps/server/src/mania-rating/registry.ts`:
+### Recommended: new version id (keep old cache)
+
+Use a **new** `versionId` whenever the algo changes so old cached rows stay available for side-by-side comparison.
+
+1. **Get the new code** in your osu checkout:
+
+   ```bash
+   cd ~/dev/osu-enissay   # or wherever your Natelytle/osu clone lives
+   git fetch
+   git checkout <new-branch-or-commit>
+   ```
+
+2. **Build a new self-contained binary** (NixOS) with a new version id and output dir:
+
+   ```bash
+   cd ~/dev/side/Roxysu
+   nix develop   # so dotnet is available
+
+   cd tools/mania-rating-calc
+   OSU_GAME_PATH=~/dev/osu-enissay dotnet publish -c Release \
+     --self-contained -r linux-x64 \
+     -p:VersionId=enissay-accuracy-v2 \
+     -o ~/roxysu-calc/enissay-accuracy-v2
+   ```
+
+3. **Smoke-test** the binary:
+
+   ```bash
+   ~/roxysu-calc/enissay-accuracy-v2/mania-rating-calc \
+     --mods NM --version-id enissay-accuracy-v2 \
+     /path/to/some/mania.osu
+   ```
+
+4. **Register it** in `apps/server/src/mania-rating/registry.ts`:
+
    ```typescript
    registerVersion({
-     id: "my-iteration-2026-08",
-     label: "My iteration Aug 2026",
-     description: "...",
-     gitRef: "my-branch@abc1234",
+     id: "enissay-accuracy-v2",
+     label: "Enissay accuracy v2",
+     description: "…",
+     gitRef: "Natelytle/osu <branch>@<sha>",
+     source: "computed",
    });
    ```
-3. Set its executable path in Settings (key: `maniaRating.executable.my-iteration-2026-08`)
-4. Old versions and cached rows remain available for comparison
+
+   Optionally point `ENISSAY_ACCURACY_VERSION` / the Rating Lab default experiment at the new id.
+
+5. **Settings → Mania Rating Lab** — set the executable for `enissay-accuracy-v2` to:
+
+   `~/roxysu-calc/enissay-accuracy-v2/mania-rating-calc`
+
+   (stored as `maniaRating.executable.enissay-accuracy-v2`)
+
+6. **Rating Lab** — pick experiment = new version, then **Rerun experiment** for your query. Old `enissay-accuracy-change` rows remain usable for comparison.
+
+### Shortcut: overwrite the same version
+
+Only if you do not need to keep old results under the previous id:
+
+1. Checkout the new commit and rebuild into the **same** output path (e.g. `~/roxysu-calc/enissay-accuracy-change`).
+2. No registry change if the id stays `enissay-accuracy-change`.
+3. Delete stale cache for that version (or force a full rerun), then **Rerun experiment**.
+
+Cache key is `(beatmap_id, version_id)` — same id + a valid cache row is skipped unless the row is missing, failed, or the beatmap hash changed.
+
+### Optional
+
+- Refresh C# snapshots under `tools/mania-rating-calc/docs/` if you want in-repo diffs.
+- Update `.branch-enissay.json` / the version `gitRef` to the new pin.
+
+**Rule of thumb:** new algo iteration → **new `versionId` + new binary path**. Do not reuse the old id if you still want side-by-side comparison.
 
 ## Reference snapshots
 

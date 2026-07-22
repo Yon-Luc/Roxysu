@@ -27,8 +27,17 @@ export {
   compareManiaRatings,
   summarizeManiaRatings,
   compareRowsToCsv,
+  parseCompareSort,
+  parseCompareOrder,
+  COMPARE_SORTS,
 } from "./compare";
-export type { CompareRow, CompareResult, CompareSummary } from "./compare";
+export type {
+  CompareRow,
+  CompareResult,
+  CompareSummary,
+  CompareSort,
+  CompareOrder,
+} from "./compare";
 export {
   getManiaRatingJobState,
   getManiaRatingCoverage,

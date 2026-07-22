@@ -204,6 +204,31 @@ function mapCompareRow(
 
 type SqlBinding = string | number | bigint | boolean | null;
 
+export const COMPARE_SORTS = [
+  "map",
+  "importStar",
+  "baseStar",
+  "expStar",
+  "deltaStar",
+  "basePp",
+  "expPp",
+  "deltaPp",
+] as const;
+
+export type CompareSort = (typeof COMPARE_SORTS)[number];
+export type CompareOrder = "asc" | "desc";
+
+export function parseCompareSort(raw: string | undefined): CompareSort {
+  if (raw && (COMPARE_SORTS as readonly string[]).includes(raw)) {
+    return raw as CompareSort;
+  }
+  return "map";
+}
+
+export function parseCompareOrder(raw: string | undefined): CompareOrder {
+  return raw === "desc" ? "desc" : "asc";
+}
+
 function asBindings(params: unknown[]): SqlBinding[] {
   return params as SqlBinding[];
 }
@@ -214,6 +239,63 @@ function resolveFilterSql(query: string): { sql: string; params: SqlBinding[] } 
   return { sql: compiled.sql, params: asBindings(compiled.params) };
 }
 
+function escapeLike(value: string): string {
+  return value.replace(/[%_\\]/g, (ch) => `\\${ch}`);
+}
+
+function baseStarExpr(baselineVersionId: string): string {
+  return usesImportedRating(baselineVersionId)
+    ? "b.star_rating"
+    : "base.star_rating";
+}
+
+function orderByClause(
+  sort: CompareSort,
+  order: CompareOrder,
+  baselineVersionId: string,
+): string {
+  const dir = order === "desc" ? "DESC" : "ASC";
+  const baseStar = baseStarExpr(baselineVersionId);
+  const tiebreak =
+    "b.title COLLATE NOCASE ASC, b.difficulty_name COLLATE NOCASE ASC";
+
+  if (sort === "map") {
+    return order === "desc"
+      ? `b.title COLLATE NOCASE DESC, b.difficulty_name COLLATE NOCASE DESC`
+      : `b.title COLLATE NOCASE ASC, b.difficulty_name COLLATE NOCASE ASC`;
+  }
+
+  const expr: Record<Exclude<CompareSort, "map">, string> = {
+    importStar: "b.star_rating",
+    baseStar,
+    expStar: "exp.star_rating",
+    deltaStar: `(exp.star_rating - ${baseStar})`,
+    basePp: "base.pp_ss",
+    expPp: "exp.pp_ss",
+    deltaPp: "(exp.pp_ss - base.pp_ss)",
+  };
+
+  const column = expr[sort];
+  // Nulls last regardless of direction.
+  return `(${column}) IS NULL ASC, ${column} ${dir}, ${tiebreak}`;
+}
+
+function appendNameFilter(
+  where: string,
+  params: SqlBinding[],
+  name: string | undefined,
+): string {
+  const trimmed = name?.trim();
+  if (!trimmed) return where;
+  const pat = `%${escapeLike(trimmed)}%`;
+  params.push(pat, pat, pat);
+  return `${where} AND (
+    b.title LIKE ? ESCAPE '\\'
+    OR b.artist LIKE ? ESCAPE '\\'
+    OR b.difficulty_name LIKE ? ESCAPE '\\'
+  )`;
+}
+
 function fetchCompareRows(
   db: Db,
   filterSql: string,
@@ -222,8 +304,20 @@ function fetchCompareRows(
   experimentVersionId: string,
   limit: number,
   offset: number,
+  options: {
+    sort?: CompareSort;
+    order?: CompareOrder;
+    name?: string;
+  } = {},
 ): RatingJoinRow[] {
-  const where = beatmapFilterWhere(filterSql);
+  const queryParams = [...params];
+  const where = appendNameFilter(
+    beatmapFilterWhere(filterSql),
+    queryParams,
+    options.name,
+  );
+  const sort = options.sort ?? "map";
+  const order = options.order ?? "asc";
   const baseStarSql = usesImportedRating(baselineVersionId)
     ? "b.star_rating AS base_star_rating"
     : "base.star_rating AS base_star_rating";
@@ -252,26 +346,38 @@ function fetchCompareRows(
     LEFT JOIN beatmap_mania_ratings exp
       ON exp.beatmap_id = b.id AND exp.version_id = ?
     ${where}
-    ORDER BY b.title COLLATE NOCASE, b.difficulty_name COLLATE NOCASE
+    ORDER BY ${orderByClause(sort, order, baselineVersionId)}
     LIMIT ? OFFSET ?
   `;
 
   return db.$client
     .query(sql)
-    .all(baselineVersionId, experimentVersionId, ...params, limit, offset) as RatingJoinRow[];
+    .all(
+      baselineVersionId,
+      experimentVersionId,
+      ...queryParams,
+      limit,
+      offset,
+    ) as RatingJoinRow[];
 }
 
 function countCompareRows(
   db: Db,
   filterSql: string,
   params: SqlBinding[],
+  name?: string,
 ): number {
-  const where = beatmapFilterWhere(filterSql);
+  const queryParams = [...params];
+  const where = appendNameFilter(
+    beatmapFilterWhere(filterSql),
+    queryParams,
+    name,
+  );
   const row = db.$client
     .query(
       `SELECT COUNT(*) AS n FROM beatmaps b ${BEATMAP_SET_JOIN} ${where}`,
     )
-    .get(...params) as { n: number } | null;
+    .get(...queryParams) as { n: number } | null;
   return Number(row?.n ?? 0);
 }
 
@@ -307,6 +413,9 @@ export async function compareManiaRatings(
     page?: number;
     pageSize?: number;
     ensureCompute?: boolean;
+    sort?: CompareSort;
+    order?: CompareOrder;
+    name?: string;
   },
 ): Promise<CompareResult> {
   const baselineVersionId = options.baselineVersionId;
@@ -323,9 +432,12 @@ export async function compareManiaRatings(
   const pageSize = Math.min(100, Math.max(1, options.pageSize ?? 48));
   const offset = (page - 1) * pageSize;
   const query = options.query.trim();
+  const sort = options.sort ?? "map";
+  const order = options.order ?? "asc";
+  const name = options.name?.trim() || undefined;
 
   const { sql, params } = resolveFilterSql(query);
-  const total = countCompareRows(db, sql, params);
+  const total = countCompareRows(db, sql, params, name);
 
   let computedThisRequest = { baseline: 0, experiment: 0 };
 
@@ -353,6 +465,7 @@ export async function compareManiaRatings(
     experimentVersionId,
     pageSize,
     offset,
+    { sort, order, name },
   );
 
   return {

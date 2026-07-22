@@ -9,6 +9,8 @@ import {
   getVersion,
   LAZER_MASTER_VERSION,
   listVersions,
+  parseCompareOrder,
+  parseCompareSort,
   readAllExecutablePaths,
   setExecutablePath,
   startManiaRatingBackfill,
@@ -53,6 +55,9 @@ export const ratingLabRoutes = new Elysia({ prefix: "/rating-lab" })
       const experiment = query.experiment ?? ENISSAY_ACCURACY_VERSION;
       const page = Math.max(1, query.page ?? 1);
       const pageSize = Math.min(100, Math.max(1, query.pageSize ?? 48));
+      const sort = parseCompareSort(query.sort);
+      const order = parseCompareOrder(query.order);
+      const name = query.name?.trim() || undefined;
 
       try {
         return await compareManiaRatings(db, {
@@ -62,6 +67,9 @@ export const ratingLabRoutes = new Elysia({ prefix: "/rating-lab" })
           page,
           pageSize,
           ensureCompute: query.ensureCompute !== false,
+          sort,
+          order,
+          name,
         });
       } catch (err) {
         if (err instanceof QueryParseError) {
@@ -82,6 +90,9 @@ export const ratingLabRoutes = new Elysia({ prefix: "/rating-lab" })
         page: t.Optional(t.Number()),
         pageSize: t.Optional(t.Number()),
         ensureCompute: t.Optional(t.Boolean()),
+        sort: t.Optional(t.String()),
+        order: t.Optional(t.String()),
+        name: t.Optional(t.String()),
       }),
     },
   )

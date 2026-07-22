@@ -290,6 +290,9 @@ export async function fetchRatingLabCompare(params: {
   experiment?: string;
   page?: number;
   pageSize?: number;
+  sort?: string;
+  order?: string;
+  name?: string;
 }) {
   return unwrap(
     await api.api["rating-lab"].compare.get({ query: params }),

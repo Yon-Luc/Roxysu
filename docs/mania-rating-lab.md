@@ -110,7 +110,18 @@ Open **Rating Lab** (`#/rating-lab`):
 2. Pick **baseline** (usually `lazer-master`) and **experiment** (e.g. `enissay-accuracy-change`)
 3. View SR / PP deltas in the table and histogram
 4. Run **backfill** to compute missing ratings in bulk
-5. **Export CSV** for spreadsheet analysis
+5. **Export CSV** for spreadsheet analysis, or **Export HTML** for a shareable self-contained analysis page
+
+### Export HTML
+
+**Export HTML** downloads `rating-lab-analyse.html` — one file with CSS, vanilla JS, and the full compare snapshot inlined (no attributes payloads). Open it in any browser:
+
+- Summary cards, SR-delta histogram, and top movers (recomputed as you filter)
+- Name search and **keymode** filter (All / 4K / 7K / …)
+- Sortable, paginated table (same columns as Rating Lab)
+- Beatmap **osu!** links and cover images from the osu! CDN via `setOnlineId` / `onlineId` (covers need network; table/stats work offline)
+
+Same query params as CSV for versions: `GET /api/rating-lab/export-html?q=…&baseline=…&experiment=…`
 
 ## Adding a new formula version
 

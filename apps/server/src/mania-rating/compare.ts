@@ -12,6 +12,10 @@ import {
   BEATMAP_SET_JOIN,
   beatmapFilterWhere,
 } from "../query-language/sqlFragments";
+import {
+  buildRatingLabAnalyseHtml,
+  slimCompareRow,
+} from "./exportHtml";
 
 export type RatingSide = {
   starRating: number | null;
@@ -496,7 +500,7 @@ export async function compareManiaRatings(
   };
 }
 
-export async function exportManiaRatingsCsv(
+function loadAllCompareRowsForExport(
   db: Db,
   options: {
     query: string;
@@ -506,7 +510,7 @@ export async function exportManiaRatingsCsv(
     order?: CompareOrder;
     name?: string;
   },
-): Promise<string> {
+): CompareRow[] {
   const baselineVersionId = options.baselineVersionId;
   const experimentVersionId = options.experimentVersionId;
 
@@ -524,9 +528,7 @@ export async function exportManiaRatingsCsv(
 
   const { sql, params } = resolveFilterSql(query);
   const total = countCompareRows(db, sql, params, name);
-  if (total === 0) {
-    return compareRowsToCsv([]);
-  }
+  if (total === 0) return [];
 
   const rows = fetchCompareRows(
     db,
@@ -539,8 +541,60 @@ export async function exportManiaRatingsCsv(
     { sort, order, name },
   );
 
-  return compareRowsToCsv(
-    rows.map((row) => mapCompareRow(row, baselineVersionId)),
+  return rows.map((row) => mapCompareRow(row, baselineVersionId));
+}
+
+export async function exportManiaRatingsCsv(
+  db: Db,
+  options: {
+    query: string;
+    baselineVersionId: string;
+    experimentVersionId: string;
+    sort?: CompareSort;
+    order?: CompareOrder;
+    name?: string;
+  },
+): Promise<string> {
+  return compareRowsToCsv(loadAllCompareRowsForExport(db, options));
+}
+
+export async function exportManiaRatingsHtml(
+  db: Db,
+  options: {
+    query: string;
+    baselineVersionId: string;
+    experimentVersionId: string;
+  },
+): Promise<string> {
+  const baselineVersionId = options.baselineVersionId;
+  const experimentVersionId = options.experimentVersionId;
+  const baseline = getVersion(baselineVersionId);
+  const experiment = getVersion(experimentVersionId);
+
+  if (!baseline) {
+    throw new Error(`Unknown baseline version: ${baselineVersionId}`);
+  }
+  if (!experiment) {
+    throw new Error(`Unknown experiment version: ${experimentVersionId}`);
+  }
+
+  const rows = loadAllCompareRowsForExport(db, {
+    query: options.query,
+    baselineVersionId,
+    experimentVersionId,
+  });
+
+  return buildRatingLabAnalyseHtml(
+    {
+      query: options.query.trim(),
+      baselineVersionId,
+      experimentVersionId,
+      baselineLabel: baseline.label,
+      experimentLabel: experiment.label,
+      usesImport: usesImportedRating(baselineVersionId),
+      generatedAt: new Date().toISOString(),
+    },
+    rows.map(slimCompareRow),
   );
 }
 

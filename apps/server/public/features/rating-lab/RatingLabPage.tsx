@@ -241,6 +241,15 @@ export function RatingLabPage() {
     return `/api/rating-lab/export?${params.toString()}`;
   }, [activeQuery, baselineId, experimentId, sort, order, nameFilter]);
 
+  const exportHtmlUrl = useMemo(() => {
+    const params = new URLSearchParams({
+      q: activeQuery,
+      baseline: baselineId,
+      experiment: experimentId,
+    });
+    return `/api/rating-lab/export-html?${params.toString()}`;
+  }, [activeQuery, baselineId, experimentId]);
+
   const summary =
     summaryQuery.data && !("error" in summaryQuery.data)
       ? summaryQuery.data
@@ -469,6 +478,14 @@ export function RatingLabPage() {
           <div className="flex flex-wrap gap-2">
             <a href={exportUrl} className="rx-btn" download>
               Export CSV
+            </a>
+            <a
+              href={exportHtmlUrl}
+              className="rx-btn"
+              download="rating-lab-analyse.html"
+              title="Self-contained HTML analysis page with filters, graph, and osu! links"
+            >
+              Export HTML
             </a>
             <button
               type="button"

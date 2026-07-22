@@ -28,6 +28,7 @@ export {
   summarizeManiaRatings,
   compareRowsToCsv,
   exportManiaRatingsCsv,
+  exportManiaRatingsHtml,
   parseCompareSort,
   parseCompareOrder,
   COMPARE_SORTS,
@@ -39,6 +40,18 @@ export type {
   CompareSort,
   CompareOrder,
 } from "./compare";
+export {
+  buildRatingLabAnalyseHtml,
+  slimCompareRow,
+  embedJson,
+  osuWebManiaUrl,
+  osuCoverListUrl,
+} from "./exportHtml";
+export type {
+  AnalyseExportRow,
+  AnalyseExportMeta,
+  AnalyseExportPayload,
+} from "./exportHtml";
 export {
   getManiaRatingJobState,
   getManiaRatingCoverage,

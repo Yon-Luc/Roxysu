@@ -4,6 +4,7 @@ import {
   compareManiaRatings,
   ENISSAY_ACCURACY_VERSION,
   exportManiaRatingsCsv,
+  exportManiaRatingsHtml,
   getManiaRatingJobState,
   getOrComputeManiaRating,
   getVersion,
@@ -176,6 +177,41 @@ export const ratingLabRoutes = new Elysia({ prefix: "/rating-lab" })
         sort: t.Optional(t.String()),
         order: t.Optional(t.String()),
         name: t.Optional(t.String()),
+      }),
+    },
+  )
+  .get(
+    "/export-html",
+    async ({ db, query, set }) => {
+      const q = query.q?.trim();
+      if (!q) {
+        set.status = 400;
+        return "Query parameter q is required";
+      }
+
+      const baseline = query.baseline ?? LAZER_MASTER_VERSION;
+      const experiment = query.experiment ?? ENISSAY_ACCURACY_VERSION;
+
+      try {
+        const html = await exportManiaRatingsHtml(db, {
+          query: q,
+          baselineVersionId: baseline,
+          experimentVersionId: experiment,
+        });
+        set.headers["content-type"] = "text/html; charset=utf-8";
+        set.headers["content-disposition"] =
+          'attachment; filename="rating-lab-analyse.html"';
+        return html;
+      } catch (err) {
+        set.status = 400;
+        return err instanceof Error ? err.message : String(err);
+      }
+    },
+    {
+      query: t.Object({
+        q: t.Optional(t.String()),
+        baseline: t.Optional(t.String()),
+        experiment: t.Optional(t.String()),
       }),
     },
   )

@@ -19,6 +19,12 @@ import {
   type StatsRange,
 } from "../../lib/api";
 import { formatAccuracy, formatPp, formatRelativeTime } from "../../lib/format";
+import {
+  formatSkillRating,
+  useRatingDisplayMode,
+  type RatingDisplayMode,
+  type SkillRatingAxis,
+} from "../../lib/ratingDisplay";
 
 const chartTick = { fill: "#a7a7a7", fontSize: 11 };
 const tooltipStyle = {
@@ -35,11 +41,6 @@ const RC_COLOR = "#7c8fe0";
 const LN_COLOR = "#e879a8";
 const FLN_COLOR = "#c9a227";
 
-function formatSkill(n: number): string {
-  if (!Number.isFinite(n) || n <= 0) return "—";
-  return `${n.toFixed(1)}★`;
-}
-
 function formatDuration(ms: number | null | undefined): string {
   if (ms == null || !Number.isFinite(ms) || ms <= 0) return "—";
   const mins = Math.round(ms / 60_000);
@@ -47,6 +48,19 @@ function formatDuration(ms: number | null | undefined): string {
   const h = Math.floor(mins / 60);
   const m = mins % 60;
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
+function skillTooltipFormatter(
+  mode: RatingDisplayMode,
+  value: unknown,
+  name: unknown,
+): [string, string] {
+  const label = String(name ?? "");
+  const n = typeof value === "number" ? value : Number(value);
+  return [
+    formatSkillRating({ mode, sunnyStar: n, axis: "overall" }),
+    label,
+  ];
 }
 
 export function StatsPage({
@@ -60,6 +74,7 @@ export function StatsPage({
   onGranularityChange: (g: StatsGranularity) => void;
   onRangeChange: (r: StatsRange) => void;
 }) {
+  const ratingMode = useRatingDisplayMode();
   const { data, isLoading, error } = useQuery({
     queryKey: ["stats", granularity, range],
     queryFn: () => fetchStats({ granularity, range }),
@@ -103,6 +118,7 @@ export function StatsPage({
           <PageTitle>Stats</PageTitle>
           <p className="rx-subtitle">
             Skill evolution, progression, and how you play — times in UTC.
+            Skill uses your Settings rating display (Sunny ★ or dan).
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -145,6 +161,7 @@ export function StatsPage({
         </h2>
         <div className="grid gap-3 sm:grid-cols-3">
           <SkillCard
+            mode={ratingMode}
             title="Push"
             hint="90–95% clears"
             overall={skill.peakOverall}
@@ -156,6 +173,7 @@ export function StatsPage({
             flnMaps={skill.clearFlnMaps}
           />
           <SkillCard
+            mode={ratingMode}
             title="Accuracy"
             hint="99%+ clears"
             overall={skill.accuracyOverall}
@@ -167,6 +185,7 @@ export function StatsPage({
             flnMaps={skill.accuracyFlnMaps}
           />
           <SkillCard
+            mode={ratingMode}
             title="Consistency"
             hint="96–99% clears"
             overall={skill.consistencyOverall}
@@ -206,7 +225,12 @@ export function StatsPage({
                   axisLine={false}
                   tickLine={false}
                 />
-                <Tooltip contentStyle={tooltipStyle} />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  formatter={(value, name) =>
+                    skillTooltipFormatter(ratingMode, value, name)
+                  }
+                />
                 <Legend />
                 <Line
                   type="monotone"
@@ -373,28 +397,33 @@ export function StatsPage({
             {ranks.every((r) => r.count === 0) ? (
               <EmptyChart />
             ) : (
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={ranks}>
-                  <CartesianGrid
-                    stroke="rgba(255,255,255,0.06)"
-                    vertical={false}
-                  />
-                  <XAxis
-                    dataKey="label"
-                    tick={chartTick}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    tick={chartTick}
-                    width={36}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <Tooltip contentStyle={tooltipStyle} />
-                  <Bar dataKey="count" fill={CONS_COLOR} radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              <>
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={ranks}>
+                    <CartesianGrid
+                      stroke="rgba(255,255,255,0.06)"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="label"
+                      tick={chartTick}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      tick={chartTick}
+                      width={36}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip contentStyle={tooltipStyle} />
+                    <Bar dataKey="count" fill={CONS_COLOR} radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+                <p className="mt-2 text-[11px] text-faint">
+                  S includes SH · X is SS (X/XH) or a 1,000,000 score
+                </p>
+              </>
             )}
           </ChartCard>
 
@@ -545,6 +574,7 @@ export function StatsPage({
 }
 
 function SkillCard({
+  mode,
   title,
   hint,
   overall,
@@ -555,6 +585,7 @@ function SkillCard({
   lnMaps,
   flnMaps,
 }: {
+  mode: RatingDisplayMode;
   title: string;
   hint: string;
   overall: number;
@@ -568,24 +599,38 @@ function SkillCard({
   return (
     <div className="rx-panel px-4 py-4">
       <div className="rx-label">{title}</div>
-      <div className="mt-2 text-3xl font-bold tabular-nums text-ink">
-        {formatSkill(overall)}
+      <div
+        className={`mt-2 font-bold tabular-nums text-ink ${
+          mode === "dan" ? "text-xl leading-snug" : "text-3xl"
+        }`}
+      >
+        {formatSkillRating({ mode, sunnyStar: overall, axis: "overall" })}
       </div>
       <p className="mt-1 text-xs text-muted">{hint}</p>
       <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
-        <AxisCell label="Rice" value={rc} maps={rcMaps} />
-        <AxisCell label="LN" value={ln} maps={lnMaps} />
-        <AxisCell label="FLN" value={fln} maps={flnMaps} />
+        <AxisCell mode={mode} axis="rc" label="Rice" value={rc} maps={rcMaps} />
+        <AxisCell mode={mode} axis="ln" label="LN" value={ln} maps={lnMaps} />
+        <AxisCell
+          mode={mode}
+          axis="fln"
+          label="FLN"
+          value={fln}
+          maps={flnMaps}
+        />
       </div>
     </div>
   );
 }
 
 function AxisCell({
+  mode,
+  axis,
   label,
   value,
   maps,
 }: {
+  mode: RatingDisplayMode;
+  axis: SkillRatingAxis;
   label: string;
   value: number;
   maps: number;
@@ -593,8 +638,12 @@ function AxisCell({
   return (
     <div>
       <div className="text-faint">{label}</div>
-      <div className="mt-0.5 font-semibold tabular-nums text-ink">
-        {formatSkill(value)}
+      <div
+        className={`mt-0.5 font-semibold tabular-nums text-ink ${
+          mode === "dan" ? "text-[11px] leading-tight" : ""
+        }`}
+      >
+        {formatSkillRating({ mode, sunnyStar: value, axis })}
       </div>
       <div className="text-[10px] text-faint">{maps} maps</div>
     </div>

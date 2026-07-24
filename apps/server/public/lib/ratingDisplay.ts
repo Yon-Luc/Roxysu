@@ -1,9 +1,24 @@
 import { useSyncExternalStore } from "react";
+import { estDiff } from "@roxysu/sunny-dan";
 import { formatStars } from "./format";
 
 export type RatingDisplayMode = "osu" | "dan" | "sunny";
 
+/** Skill axes for mapping Sunny ★ → the matching dan table. */
+export type SkillRatingAxis = "overall" | "rc" | "ln" | "fln";
+
 const STORAGE_KEY = "roxysu:rating-display";
+
+/** 7K only — skill estimates are Sunny 7K. */
+const SKILL_KEY_COUNT = 7;
+
+/** Representative LN ratios so estDiff picks RC vs LN dan tables. */
+const AXIS_LN_RATIO: Record<SkillRatingAxis, number> = {
+  overall: 0,
+  rc: 0,
+  ln: 0.5,
+  fln: 0.9,
+};
 
 const OPTIONS: Array<{
   id: RatingDisplayMode;
@@ -82,4 +97,25 @@ export function formatPrimaryRating(opts: {
     default:
       return formatStars(opts.starRating);
   }
+}
+
+/**
+ * Format a 7K skill Sunny ★ value using the Settings rating display mode.
+ * Dan mode maps through the RC or LN dan table based on {@link axis}.
+ */
+export function formatSkillRating(opts: {
+  mode: RatingDisplayMode;
+  sunnyStar: number | null | undefined;
+  axis?: SkillRatingAxis;
+}): string {
+  const n = opts.sunnyStar;
+  if (n == null || !Number.isFinite(n) || n <= 0) return "—";
+
+  if (opts.mode === "dan") {
+    const axis = opts.axis ?? "overall";
+    return estDiff(n, AXIS_LN_RATIO[axis], SKILL_KEY_COUNT);
+  }
+
+  // Skill is always Sunny ★; one decimal matches prior skill UI.
+  return `${n.toFixed(1)}★`;
 }

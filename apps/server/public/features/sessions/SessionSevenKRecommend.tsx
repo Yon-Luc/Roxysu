@@ -7,6 +7,10 @@ import {
   type RecommendFocus,
   type RecommendSkillset,
 } from "../../lib/api";
+import {
+  formatSkillRating,
+  useRatingDisplayMode,
+} from "../../lib/ratingDisplay";
 import { SessionSuggestMapRow } from "./SessionSuggestMapRow";
 
 const PREFS_KEY = "rx-session-7k-recommend";
@@ -87,16 +91,12 @@ function savePrefs(prefs: RecPrefs) {
   localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
 }
 
-function formatSkill(n: number): string {
-  if (!Number.isFinite(n) || n <= 0) return "—";
-  return `${n.toFixed(1)}★`;
-}
-
 export function SessionSevenKRecommend({
   excludeBeatmapIds,
 }: {
   excludeBeatmapIds: string[];
 }) {
+  const ratingMode = useRatingDisplayMode();
   const [prefs, setPrefs] = useState<RecPrefs>(() => loadPrefs());
   const [shuffleKey, setShuffleKey] = useState(0);
 
@@ -195,32 +195,56 @@ export function SessionSevenKRecommend({
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               <SkillStat
                 label="Rice @ 90–95%"
-                value={formatSkill(skill.peakRc)}
+                value={formatSkillRating({
+                  mode: ratingMode,
+                  sunnyStar: skill.peakRc,
+                  axis: "rc",
+                })}
                 note={`${skill.clearRcMaps ?? 0} maps · Push`}
               />
               <SkillStat
                 label="LN @ 90–95%"
-                value={formatSkill(skill.peakLn)}
+                value={formatSkillRating({
+                  mode: ratingMode,
+                  sunnyStar: skill.peakLn,
+                  axis: "ln",
+                })}
                 note={`${skill.clearLnMaps ?? 0} maps · Push`}
               />
               <SkillStat
                 label="FLN @ 90–95%"
-                value={formatSkill(skill.peakFln)}
+                value={formatSkillRating({
+                  mode: ratingMode,
+                  sunnyStar: skill.peakFln,
+                  axis: "fln",
+                })}
                 note={`${skill.clearFlnMaps ?? 0} maps · Push`}
               />
               <SkillStat
                 label="Rice @ 99%+"
-                value={formatSkill(skill.accuracyRc)}
+                value={formatSkillRating({
+                  mode: ratingMode,
+                  sunnyStar: skill.accuracyRc,
+                  axis: "rc",
+                })}
                 note={`${skill.accuracyRcMaps ?? 0} maps · Accuracy`}
               />
               <SkillStat
                 label="LN @ 99%+"
-                value={formatSkill(skill.accuracyLn)}
+                value={formatSkillRating({
+                  mode: ratingMode,
+                  sunnyStar: skill.accuracyLn,
+                  axis: "ln",
+                })}
                 note={`${skill.accuracyLnMaps ?? 0} maps · Accuracy`}
               />
               <SkillStat
                 label="FLN @ 99%+"
-                value={formatSkill(skill.accuracyFln)}
+                value={formatSkillRating({
+                  mode: ratingMode,
+                  sunnyStar: skill.accuracyFln,
+                  axis: "fln",
+                })}
                 note={`${skill.accuracyFlnMaps ?? 0} maps · Accuracy`}
               />
             </div>

@@ -18,20 +18,19 @@ import {
   estimateSevenKSkillHistory,
 } from "./recommend/sevenKSkill";
 
-/** osu!lazer ScoreRank → letter. */
-const RANK_LABELS: Record<number, string> = {
-  [-1]: "F",
-  0: "D",
-  1: "C",
-  2: "B",
-  3: "A",
-  4: "S",
-  5: "SH",
-  6: "X",
-  7: "XH",
-};
+/** Display buckets for the rank chart (silver grades folded into gold). */
+const RANK_BUCKETS = [
+  { key: "F", ranks: [-1] },
+  { key: "D", ranks: [0] },
+  { key: "C", ranks: [1] },
+  { key: "B", ranks: [2] },
+  { key: "A", ranks: [3] },
+  { key: "S", ranks: [4, 5] }, // S + SH
+  { key: "X", ranks: [6, 7] }, // X + XH; also 1M score below
+] as const;
 
-const RANK_ORDER = [-1, 0, 1, 2, 3, 4, 5, 6, 7];
+/** Mania max / perfect score (ScoreV1-style ceiling). */
+const PERFECT_TOTAL_SCORE = 1_000_000;
 
 export type StatsGranularity = "day" | "week";
 export type StatsRange = 30 | 90 | 180;
@@ -56,22 +55,44 @@ function toMs(value: Date | number | null | undefined): number | null {
   return value instanceof Date ? value.getTime() : Number(value);
 }
 
+/**
+ * Rank distribution with SH→S, XH→X, plus any 1,000,000 total score as X.
+ * Each score is counted once (perfect score wins over letter rank).
+ */
 async function getRankDistribution(db: Db) {
-  const rows = await db
-    .select({
-      rank: scores.rank,
-      count: count(),
-    })
-    .from(scores)
-    .where(eq(scores.deletePending, false))
-    .groupBy(scores.rank);
+  const rows = db.$client
+    .query(
+      `
+      SELECT
+        CASE
+          WHEN s.total_score = ? OR s.rank IN (6, 7) THEN 'X'
+          WHEN s.rank IN (4, 5) THEN 'S'
+          WHEN s.rank = 3 THEN 'A'
+          WHEN s.rank = 2 THEN 'B'
+          WHEN s.rank = 1 THEN 'C'
+          WHEN s.rank = 0 THEN 'D'
+          WHEN s.rank = -1 THEN 'F'
+          ELSE NULL
+        END AS label,
+        COUNT(*) AS count
+      FROM scores s
+      WHERE s.delete_pending = 0
+      GROUP BY label
+    `,
+    )
+    .all(PERFECT_TOTAL_SCORE) as Array<{ label: string | null; count: number }>;
 
-  const byRank = new Map(rows.map((r) => [r.rank, Number(r.count)]));
-  return RANK_ORDER.map((rank) => ({
-    rank,
-    label: RANK_LABELS[rank] ?? String(rank),
-    count: byRank.get(rank) ?? 0,
-  })).filter((r) => r.count > 0 || RANK_ORDER.includes(r.rank));
+  const byLabel = new Map(
+    rows
+      .filter((r) => r.label != null)
+      .map((r) => [r.label!, Number(r.count)]),
+  );
+
+  return RANK_BUCKETS.map((b, i) => ({
+    rank: i,
+    label: b.key,
+    count: byLabel.get(b.key) ?? 0,
+  }));
 }
 
 async function getSkillsetMix(db: Db) {
@@ -311,4 +332,4 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
   };
 }
 
-export { parseGranularity, parseRange, RANK_LABELS };
+export { parseGranularity, parseRange, PERFECT_TOTAL_SCORE };

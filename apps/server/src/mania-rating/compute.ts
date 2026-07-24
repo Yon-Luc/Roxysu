@@ -168,6 +168,17 @@ function serializePpByAccuracy(
   return JSON.stringify(map);
 }
 
+/** Require a complete accuracy-tier map from the calculator (rebuilt binary). */
+function requirePpByAccuracyJson(
+  map: PpByAccuracy | null | undefined,
+): string {
+  const json = serializePpByAccuracy(map);
+  if (json) return json;
+  throw new Error(
+    "Calculator output missing ppByAccuracy tiers (100/99.5/97/95/93). Rebuild mania-rating-calc and update the executable path in Settings.",
+  );
+}
+
 function isValidCached(
   cached: typeof beatmapManiaRatings.$inferSelect,
   beatmapHash: string | null,
@@ -399,7 +410,7 @@ export async function getOrComputeManiaRating(
         : (output.starRating ?? null),
       starRatingSs: output.starRatingSs ?? null,
       ppSs: output.ppSs ?? null,
-      ppByAccuracyJson: serializePpByAccuracy(output.ppByAccuracy),
+      ppByAccuracyJson: requirePpByAccuracyJson(output.ppByAccuracy),
       attributesJson: output.attributes
         ? JSON.stringify(output.attributes)
         : null,
@@ -769,7 +780,7 @@ export async function backfillManiaRatings(
           : (output.starRating ?? null),
         starRatingSs: output.starRatingSs ?? null,
         ppSs: output.ppSs ?? null,
-        ppByAccuracyJson: serializePpByAccuracy(output.ppByAccuracy),
+        ppByAccuracyJson: requirePpByAccuracyJson(output.ppByAccuracy),
         attributesJson: output.attributes
           ? JSON.stringify(output.attributes)
           : null,

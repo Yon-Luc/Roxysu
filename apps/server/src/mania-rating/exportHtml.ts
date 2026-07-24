@@ -333,9 +333,113 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   white-space: nowrap;
 }
 .btn:hover { background: var(--highlight); text-decoration: none; }
-.btn[aria-disabled="true"] {
+.btn[aria-disabled="true"],
+.btn:disabled {
   opacity: 0.4;
   pointer-events: none;
+}
+.btn-row { display: inline-flex; align-items: center; gap: 0.35rem; }
+.btn-icon {
+  width: 1.7rem;
+  padding-left: 0;
+  padding-right: 0;
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+.modal[hidden] { display: none; }
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+}
+.modal-dialog {
+  position: relative;
+  z-index: 1;
+  width: min(440px, 100%);
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+  padding: 1rem 1.1rem 1.15rem;
+}
+.modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.35rem;
+}
+.modal-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 0;
+}
+.modal-sub {
+  margin: 0.15rem 0 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.modal-close {
+  flex-shrink: 0;
+  width: 1.85rem;
+  height: 1.85rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--elevated);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+.modal-close:hover { background: var(--highlight); }
+.pp-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.1rem;
+  margin: 0.65rem 0 0.5rem;
+  font-size: 0.72rem;
+  color: var(--subtle);
+}
+.pp-chart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.pp-chart-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 3px;
+  border-radius: 2px;
+}
+.pp-chart-swatch.base { background: var(--accent); }
+.pp-chart-swatch.exp { background: #e8a54b; }
+.pp-chart-wrap {
+  width: 100%;
+  overflow: hidden;
+}
+.pp-chart-wrap svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.pp-chart-empty {
+  color: var(--faint);
+  font-size: 0.85rem;
+  padding: 1.25rem 0;
+  text-align: center;
 }
 .pager {
   display: flex;
@@ -435,6 +539,22 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     <a href="https://github.com/EnissayDev/osu/tree/enissay-mania-sr-rework" target="_blank" rel="noopener">https://github.com/EnissayDev/osu/tree/enissay-mania-sr-rework</a>
   </footer>
 </div>
+
+<div class="modal" id="pp-chart-modal" hidden>
+  <div class="modal-backdrop" id="pp-chart-backdrop"></div>
+  <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="pp-chart-title">
+    <div class="modal-head">
+      <div>
+        <h3 class="modal-title" id="pp-chart-title">PP by accuracy</h3>
+        <p class="modal-sub" id="pp-chart-sub"></p>
+      </div>
+      <button type="button" class="modal-close" id="pp-chart-close" aria-label="Close">×</button>
+    </div>
+    <div class="pp-chart-legend" id="pp-chart-legend"></div>
+    <div class="pp-chart-wrap" id="pp-chart-svg"></div>
+  </div>
+</div>
+
 <script type="application/json" id="rating-lab-data">${dataJson}</script>
 <script>
 (function () {
@@ -443,6 +563,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   var payload = JSON.parse(dataEl.textContent);
   var meta = payload.meta;
   var allRows = payload.rows;
+  var tiers = payload.ppAccuracyTiers || [100, 99.5, 97, 95, 93];
   var defaultAcc = payload.defaultPpAccuracy != null ? payload.defaultPpAccuracy : 100;
 
   var state = {
@@ -513,6 +634,169 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     var b = ppAt(row.experiment, state.ppAccuracy);
     if (a == null || b == null) return null;
     return b - a;
+  }
+
+  function hasPpChartData(row) {
+    for (var i = 0; i < tiers.length; i++) {
+      if (ppAt(row.baseline, tiers[i]) != null) return true;
+      if (ppAt(row.experiment, tiers[i]) != null) return true;
+    }
+    return false;
+  }
+
+  function closePpChartModal() {
+    var modal = document.getElementById("pp-chart-modal");
+    modal.hidden = true;
+  }
+
+  function buildPpChartSvg(row) {
+    var W = 400;
+    var H = 220;
+    var padL = 44;
+    var padR = 12;
+    var padT = 16;
+    var padB = 36;
+    var plotW = W - padL - padR;
+    var plotH = H - padT - padB;
+    var n = tiers.length;
+    var baseVals = [];
+    var expVals = [];
+    var all = [];
+    for (var i = 0; i < n; i++) {
+      var bv = ppAt(row.baseline, tiers[i]);
+      var ev = ppAt(row.experiment, tiers[i]);
+      baseVals.push(bv);
+      expVals.push(ev);
+      if (bv != null) all.push(bv);
+      if (ev != null) all.push(ev);
+    }
+    if (!all.length) {
+      return '<div class="pp-chart-empty">No PP-by-accuracy data for this map.</div>';
+    }
+    var minV = Math.min.apply(null, all);
+    var maxV = Math.max.apply(null, all);
+    if (maxV === minV) {
+      minV = Math.max(0, minV - 10);
+      maxV = maxV + 10;
+    } else {
+      var pad = (maxV - minV) * 0.08;
+      minV = Math.max(0, minV - pad);
+      maxV = maxV + pad;
+    }
+    function xAt(i) {
+      return padL + (n === 1 ? plotW / 2 : (i / (n - 1)) * plotW);
+    }
+    function yAt(v) {
+      return padT + plotH - ((v - minV) / (maxV - minV)) * plotH;
+    }
+    function seriesPath(vals, color, cls) {
+      var parts = [];
+      var dots = [];
+      var started = false;
+      for (var i = 0; i < vals.length; i++) {
+        if (vals[i] == null) {
+          started = false;
+          continue;
+        }
+        var x = xAt(i);
+        var y = yAt(vals[i]);
+        parts.push((started ? "L" : "M") + x.toFixed(1) + " " + y.toFixed(1));
+        started = true;
+        dots.push(
+          '<circle class="' +
+            cls +
+            '" cx="' +
+            x.toFixed(1) +
+            '" cy="' +
+            y.toFixed(1) +
+            '" r="3.5" fill="' +
+            color +
+            '"><title>' +
+            escapeHtml(ppLabel(tiers[i]) + ": " + vals[i].toFixed(1) + "pp") +
+            "</title></circle>"
+        );
+      }
+      if (!parts.length) return "";
+      return (
+        '<path d="' +
+        parts.join(" ") +
+        '" fill="none" stroke="' +
+        color +
+        '" stroke-width="2"/>' +
+        dots.join("")
+      );
+    }
+    var yTicks = 4;
+    var grid = [];
+    for (var t = 0; t <= yTicks; t++) {
+      var frac = t / yTicks;
+      var val = maxV - frac * (maxV - minV);
+      var y = padT + frac * plotH;
+      grid.push(
+        '<line x1="' +
+          padL +
+          '" y1="' +
+          y.toFixed(1) +
+          '" x2="' +
+          (W - padR) +
+          '" y2="' +
+          y.toFixed(1) +
+          '" stroke="var(--line)" stroke-width="1"/>'
+      );
+      grid.push(
+        '<text x="' +
+          (padL - 6) +
+          '" y="' +
+          (y + 3).toFixed(1) +
+          '" text-anchor="end" fill="var(--faint)" font-size="10">' +
+          escapeHtml(val.toFixed(0)) +
+          "</text>"
+      );
+    }
+    var xLabels = [];
+    for (var xi = 0; xi < n; xi++) {
+      xLabels.push(
+        '<text x="' +
+          xAt(xi).toFixed(1) +
+          '" y="' +
+          (H - 10) +
+          '" text-anchor="middle" fill="var(--faint)" font-size="10">' +
+          escapeHtml(accKey(tiers[xi]) + "%") +
+          "</text>"
+      );
+    }
+    return (
+      '<svg viewBox="0 0 ' +
+      W +
+      " " +
+      H +
+      '" role="img" aria-label="PP by accuracy chart">' +
+      grid.join("") +
+      seriesPath(baseVals, "var(--accent)", "base") +
+      seriesPath(expVals, "#e8a54b", "exp") +
+      xLabels.join("") +
+      "</svg>"
+    );
+  }
+
+  function openPpChartModal(row) {
+    var label = mapLabel(row);
+    document.getElementById("pp-chart-title").textContent = label.title;
+    document.getElementById("pp-chart-sub").textContent =
+      label.sub +
+      " · " +
+      meta.baselineLabel +
+      " vs " +
+      meta.experimentLabel;
+    document.getElementById("pp-chart-legend").innerHTML =
+      '<span><i class="pp-chart-swatch base"></i>' +
+      escapeHtml(meta.baselineLabel) +
+      "</span>" +
+      '<span><i class="pp-chart-swatch exp"></i>' +
+      escapeHtml(meta.experimentLabel) +
+      "</span>";
+    document.getElementById("pp-chart-svg").innerHTML = buildPpChartSvg(row);
+    document.getElementById("pp-chart-modal").hidden = false;
   }
 
   function mean(values) {
@@ -871,7 +1155,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     } else {
       empty.hidden = true;
       tbody.innerHTML = pageRows
-        .map(function (r) {
+        .map(function (r, i) {
           var label = mapLabel(r);
           var cover = coverUrl(r);
           var link = webLink(r);
@@ -896,6 +1180,13 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
               escapeHtml(link) +
               '" target="_blank" rel="noopener">osu!</a>'
             : '<span class="btn" aria-disabled="true">osu!</span>';
+          var chartDisabled = !hasPpChartData(r);
+          var chartHtml =
+            '<button type="button" class="btn btn-icon" data-pp-chart="' +
+            i +
+            '" aria-label="PP by accuracy chart"' +
+            (chartDisabled ? " disabled" : "") +
+            ">+</button>";
           return (
             "<tr>" +
             '<td><div class="map-cell">' +
@@ -930,13 +1221,22 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
             '">' +
             escapeHtml(fmtDelta(ppDelta(r), 1)) +
             "</td>" +
-            "<td>" +
+            '<td><div class="btn-row">' +
             linkHtml +
-            "</td>" +
+            chartHtml +
+            "</div></td>" +
             "</tr>"
           );
         })
         .join("");
+      var chartBtns = tbody.querySelectorAll("[data-pp-chart]");
+      for (var bi = 0; bi < chartBtns.length; bi++) {
+        chartBtns[bi].addEventListener("click", function (ev) {
+          var idx = Number(ev.currentTarget.getAttribute("data-pp-chart"));
+          if (!Number.isFinite(idx) || !pageRows[idx]) return;
+          openPpChartModal(pageRows[idx]);
+        });
+      }
     }
 
     document.getElementById("page-info").textContent =
@@ -986,6 +1286,11 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   document.getElementById("next-page").addEventListener("click", function () {
     state.page++;
     render();
+  });
+  document.getElementById("pp-chart-close").addEventListener("click", closePpChartModal);
+  document.getElementById("pp-chart-backdrop").addEventListener("click", closePpChartModal);
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") closePpChartModal();
   });
 
   renderHeader();

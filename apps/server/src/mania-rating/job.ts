@@ -351,6 +351,15 @@ async function runBatch(): Promise<void> {
       return;
     }
 
+    const remainingBefore = job.force
+      ? null
+      : countMissingForQuery(
+          db,
+          versionId,
+          compiled.sql,
+          asBindings(compiled.params),
+        );
+
     const result = await backfillManiaRatings(db, versionId, {
       limit: BATCH_SIZE,
       beatmapIds: ids,
@@ -390,6 +399,26 @@ async function runBatch(): Promise<void> {
 
     if (remaining === 0) {
       finish("completed");
+      return;
+    }
+
+    // Prevent infinite retry when maps stay "missing" after a batch
+    // (e.g. old calculator binary without ppByAccuracy).
+    if (result.succeeded === 0) {
+      finish(
+        "error",
+        `Backfill made no progress on ${result.attempted} map(s) for ${versionId}. ` +
+          `Check calculator errors (often: rebuild mania-rating-calc for ppByAccuracy).`,
+      );
+      return;
+    }
+
+    if (remainingBefore != null && remaining >= remainingBefore) {
+      finish(
+        "error",
+        `Backfill stuck with ${remaining} missing map(s) for ${versionId} after computing ${result.attempted}. ` +
+          `Stop and check Settings / rebuild mania-rating-calc if accuracy-tier PP is missing.`,
+      );
       return;
     }
 

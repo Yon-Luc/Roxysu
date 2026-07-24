@@ -158,6 +158,10 @@ describe("buildRatingLabAnalyseHtml", () => {
     expect(html).toContain("ppAccuracyTiers");
     expect(html).toContain("ppByAccuracy");
     expect(html).toContain('id="histogram"');
+    expect(html).toContain('id="pp-chart-modal"');
+    expect(html).toContain("data-pp-chart");
+    expect(html).toContain("openPpChartModal");
+    expect(html).toContain("buildPpChartSvg");
     expect(html).toContain("assets.ppy.sh/beatmaps/");
     expect(html).toContain("#mania/");
     expect(html).toContain("covers/list@2x.jpg");

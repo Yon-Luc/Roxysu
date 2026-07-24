@@ -9,6 +9,7 @@ import { scoreRoutes } from "./scores";
 import { searchRoutes } from "./search";
 import { sessionRoutes } from "./sessions";
 import { settingsRoutes } from "./settings";
+import { statsRoutes } from "./stats";
 import { systemRoutes } from "./system";
 import { tosuRoutes } from "./tosu";
 import { ratingLabRoutes } from "./ratingLab";
@@ -16,6 +17,7 @@ import { mirrorRoutes } from "./mirrors";
 export const apiRoutes = new Elysia({ prefix: "/api" })
   .use(systemRoutes)
   .use(dashboardRoutes)
+  .use(statsRoutes)
   .use(practiceRoutes)
   .use(beatmapRoutes)
   .use(coverRoutes)

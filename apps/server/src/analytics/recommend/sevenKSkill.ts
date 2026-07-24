@@ -33,7 +33,7 @@ const ACCURACY_ACC_CENTER = 0.995;
 /** Recency decay per play index (Companella uses 0.95). */
 const RECENCY_DECAY = 0.95;
 
-type SkillPlayRow = {
+export type SkillPlayRow = {
   beatmapId: string;
   accuracy: number;
   playedAt: number;
@@ -48,6 +48,25 @@ type ClearMapRow = {
   bandPlays: number;
   avgBandAcc: number;
   lastPlayedAt: number;
+};
+
+export type SkillHistoryPoint = {
+  /** ISO day (YYYY-MM-DD) or week start Monday. */
+  at: string;
+  push: number;
+  accuracy: number;
+  consistency: number;
+  overall: number;
+  rc: number;
+  ln: number;
+  fln: number;
+  coldStart: boolean;
+};
+
+export type SkillHistoryOptions = {
+  granularity: "day" | "week";
+  /** Lookback window in days (e.g. 30 / 90 / 180). */
+  rangeDays: number;
 };
 
 /** Accuracy weight: 80% → 0, 100% → 1 (accuracy stored 0–1). */
@@ -102,98 +121,54 @@ function emptySkill(partial: Partial<SevenKSkillProfile> = {}): SevenKSkillProfi
   };
 }
 
-function loadRecentSevenKPlays(db: Db): SkillPlayRow[] {
-  const rows = db.$client
-    .query(
-      `
-      SELECT
-        s.beatmap_id AS beatmapId,
-        s.accuracy AS accuracy,
-        s.played_at AS playedAt,
-        dr.sunny_star AS sunnyStar,
-        dr.ln_ratio AS lnRatio
-      FROM scores s
-      JOIN beatmaps b ON b.id = s.beatmap_id
-      LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
-      LEFT JOIN beatmap_dan_ratings dr
-        ON dr.beatmap_id = b.id AND dr.algorithm = 'sunny'
-      WHERE s.delete_pending = 0
-        AND b.hidden = 0
-        AND COALESCE(bs.delete_pending, 0) = 0
-        AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
-        AND b.circle_size = 7
-        AND s.beatmap_id IS NOT NULL
-      ORDER BY s.played_at DESC
-      LIMIT ?
-    `,
-    )
-    .all(MAX_SKILL_PLAYS) as Array<{
-    beatmapId: string;
-    accuracy: number;
-    playedAt: number;
-    sunnyStar: number | null;
-    lnRatio: number | null;
-  }>;
-
-  return rows.map((r) => ({
-    beatmapId: r.beatmapId,
-    accuracy: Number(r.accuracy ?? 0),
-    playedAt: Number(r.playedAt ?? 0),
-    sunnyStar: r.sunnyStar != null ? Number(r.sunnyStar) : null,
-    lnRatio: r.lnRatio != null ? Number(r.lnRatio) : null,
-  }));
-}
-
 /**
  * Maps with at least one score in [accMin, accMax) — dan-style level for that band.
  */
-function loadAccBandMaps(
-  db: Db,
+function aggregateAccBandMaps(
+  plays: SkillPlayRow[],
   accMin: number,
   accMax: number,
 ): ClearMapRow[] {
-  const rows = db.$client
-    .query(
-      `
-      SELECT
-        b.id AS beatmapId,
-        dr.sunny_star AS sunnyStar,
-        dr.ln_ratio AS lnRatio,
-        COUNT(*) AS bandPlays,
-        AVG(s.accuracy) AS avgBandAcc,
-        MAX(s.played_at) AS lastPlayedAt
-      FROM scores s
-      JOIN beatmaps b ON b.id = s.beatmap_id
-      LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
-      JOIN beatmap_dan_ratings dr
-        ON dr.beatmap_id = b.id AND dr.algorithm = 'sunny'
-      WHERE s.delete_pending = 0
-        AND b.hidden = 0
-        AND COALESCE(bs.delete_pending, 0) = 0
-        AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
-        AND b.circle_size = 7
-        AND dr.sunny_star IS NOT NULL
-        AND s.accuracy >= ?
-        AND s.accuracy < ?
-      GROUP BY b.id
-    `,
-    )
-    .all(accMin, accMax) as Array<{
-    beatmapId: string;
-    sunnyStar: number;
-    lnRatio: number | null;
-    bandPlays: number;
-    avgBandAcc: number;
-    lastPlayedAt: number;
-  }>;
+  const byMap = new Map<
+    string,
+    {
+      sunnyStar: number;
+      lnRatio: number | null;
+      bandPlays: number;
+      accSum: number;
+      lastPlayedAt: number;
+    }
+  >();
 
-  return rows.map((r) => ({
-    beatmapId: r.beatmapId,
-    sunnyStar: Number(r.sunnyStar),
-    lnRatio: r.lnRatio != null ? Number(r.lnRatio) : null,
-    bandPlays: Number(r.bandPlays ?? 0),
-    avgBandAcc: Number(r.avgBandAcc ?? 0),
-    lastPlayedAt: Number(r.lastPlayedAt ?? 0),
+  for (const play of plays) {
+    if (play.sunnyStar == null || !(play.sunnyStar > 0)) continue;
+    if (play.accuracy < accMin || play.accuracy >= accMax) continue;
+    const existing = byMap.get(play.beatmapId);
+    if (!existing) {
+      byMap.set(play.beatmapId, {
+        sunnyStar: play.sunnyStar,
+        lnRatio: play.lnRatio,
+        bandPlays: 1,
+        accSum: play.accuracy,
+        lastPlayedAt: play.playedAt,
+      });
+      continue;
+    }
+    existing.bandPlays += 1;
+    existing.accSum += play.accuracy;
+    if (play.playedAt > existing.lastPlayedAt) {
+      existing.lastPlayedAt = play.playedAt;
+    }
+    if (play.lnRatio != null) existing.lnRatio = play.lnRatio;
+  }
+
+  return [...byMap.entries()].map(([beatmapId, row]) => ({
+    beatmapId,
+    sunnyStar: row.sunnyStar,
+    lnRatio: row.lnRatio,
+    bandPlays: row.bandPlays,
+    avgBandAcc: row.accSum / row.bandPlays,
+    lastPlayedAt: row.lastPlayedAt,
   }));
 }
 
@@ -245,6 +220,72 @@ function bandLevels(
     ln: clearLevelFromMaps(maps, "ln", center, halfWidth),
     fln: clearLevelFromMaps(maps, "fln", center, halfWidth),
   };
+}
+
+/** Cold start from best-acc per map in the play list (no DB). */
+function coldStartFromPlays(plays: SkillPlayRow[]): SevenKSkillProfile {
+  const byMap = new Map<
+    string,
+    { bestAccuracy: number; sunnyStar: number; lnRatio: number | null }
+  >();
+
+  for (const play of plays) {
+    if (play.sunnyStar == null || !(play.sunnyStar > 0)) continue;
+    const existing = byMap.get(play.beatmapId);
+    if (!existing || play.accuracy > existing.bestAccuracy) {
+      byMap.set(play.beatmapId, {
+        bestAccuracy: play.accuracy,
+        sunnyStar: play.sunnyStar,
+        lnRatio: play.lnRatio,
+      });
+    }
+  }
+
+  const rows = [...byMap.values()]
+    .sort((a, b) => b.bestAccuracy - a.bestAccuracy)
+    .slice(0, 80);
+
+  const rcPoints: Array<{ value: number; weight: number }> = [];
+  const lnPoints: Array<{ value: number; weight: number }> = [];
+  const flnPoints: Array<{ value: number; weight: number }> = [];
+  const allPoints: Array<{ value: number; weight: number }> = [];
+
+  for (const row of rows) {
+    const weight = Math.max(0.05, accuracyWeight(row.bestAccuracy));
+    const point = { value: row.sunnyStar, weight };
+    allPoints.push(point);
+    const axis = classifyMapAxis(row.lnRatio);
+    if (axis === "fln") flnPoints.push(point);
+    else if (axis === "ln") lnPoints.push(point);
+    else rcPoints.push(point);
+  }
+
+  const rc = weightedMean(rcPoints);
+  const ln = weightedMean(lnPoints);
+  const fln = weightedMean(flnPoints);
+  const overall = allPoints.length > 0 ? weightedMean(allPoints) : 0;
+  const comfortRc = rc > 0 ? rc : overall;
+  const comfortLn = ln > 0 ? ln : overall;
+  const comfortFln = fln > 0 ? fln : overall;
+  return emptySkill({
+    overall,
+    rc: comfortRc,
+    ln: comfortLn,
+    fln: comfortFln,
+    peakOverall: overall,
+    peakRc: comfortRc,
+    peakLn: comfortLn,
+    peakFln: comfortFln,
+    accuracyOverall: overall,
+    accuracyRc: comfortRc,
+    accuracyLn: comfortLn,
+    accuracyFln: comfortFln,
+    samplePlays: allPoints.length,
+    rcPlays: rcPoints.length,
+    lnPlays: lnPoints.length,
+    flnPlays: flnPoints.length,
+    coldStart: true,
+  });
 }
 
 /** Cold start: best-acc weighted Sunny on played 7K maps with ratings. */
@@ -337,58 +378,20 @@ function coldStartFromMastery(db: Db): SevenKSkillProfile {
   });
 }
 
-/**
- * Estimate 7K skill:
- * - comfort (overall/rc/ln/fln): recent plays, recency × acc weight
- * - peak*: average Sunny of maps with 90–95% scores (Push base)
- * - accuracy*: average Sunny of maps with 99%+ scores (Accuracy base)
- * - consistency*: average Sunny of maps with 96–99% scores (Consistency base)
- */
-export function estimateSevenKSkill(db: Db): SevenKSkillProfile {
-  backfillSunnyDanSync(db, { limit: 120 });
-
-  let plays = loadRecentSevenKPlays(db);
-  const missingIds = [
-    ...new Set(
-      plays.filter((p) => p.sunnyStar == null).map((p) => p.beatmapId),
-    ),
-  ];
-  if (missingIds.length > 0) {
-    ensureSunnyDanForIdsSync(db, missingIds);
-    plays = loadRecentSevenKPlays(db);
-  }
-
-  const pushMaps = loadAccBandMaps(db, PUSH_ACC_MIN, PUSH_ACC_MAX);
-  const clear = bandLevels(pushMaps, PUSH_ACC_CENTER, 0.025);
-
-  const farmMaps = loadAccBandMaps(
-    db,
-    CONSISTENCY_ACC_MIN,
-    CONSISTENCY_ACC_MAX,
-  );
-  const farm = bandLevels(farmMaps, CONSISTENCY_ACC_CENTER, 0.015);
-
-  const accMaps = loadAccBandMaps(db, ACCURACY_ACC_MIN, ACCURACY_ACC_MAX);
-  const acc = bandLevels(accMaps, ACCURACY_ACC_CENTER, 0.01);
-
-  const withSunny = plays
-    .filter(
-      (p): p is SkillPlayRow & { sunnyStar: number } =>
-        p.sunnyStar != null && p.sunnyStar > 0,
-    )
-    .slice()
-    .reverse();
-
+function applyBandLevels(
+  base: SevenKSkillProfile,
+  comfort: { rc: number; ln: number; fln: number; overall: number },
+  clear: ReturnType<typeof bandLevels>,
+  farm: ReturnType<typeof bandLevels>,
+  acc: ReturnType<typeof bandLevels>,
+): SevenKSkillProfile {
   const bandOrFallback = (
     band: { level: number; mapCount: number },
     fallback: number,
   ) =>
     band.mapCount >= MIN_CLEAR_MAPS && band.level > 0 ? band.level : fallback;
 
-  const withBandCounts = (
-    base: SevenKSkillProfile,
-    comfort: { rc: number; ln: number; fln: number; overall: number },
-  ): SevenKSkillProfile => ({
+  return {
     ...base,
     peakOverall: bandOrFallback(clear.all, comfort.overall),
     peakRc: bandOrFallback(clear.rc, comfort.rc),
@@ -411,17 +414,90 @@ export function estimateSevenKSkill(db: Db): SevenKSkillProfile {
     consistencyRcMaps: farm.rc.mapCount,
     consistencyLnMaps: farm.ln.mapCount,
     consistencyFlnMaps: farm.fln.mapCount,
-  });
+  };
+}
+
+/**
+ * Pure skill estimate from an in-memory play list.
+ * Comfort uses the most recent {@link MAX_SKILL_PLAYS} plays with Sunny;
+ * push / accuracy / consistency bands use the full list.
+ */
+export function estimateSevenKSkillFromPlays(
+  plays: SkillPlayRow[],
+  opts?: {
+    asOfMs?: number;
+    /** When true (default for history), cold-start from plays only. */
+    coldStartFromPlaysOnly?: boolean;
+    /** Optional DB cold-start when play-list cold-start is empty. */
+    coldStartFallback?: () => SevenKSkillProfile;
+  },
+): SevenKSkillProfile {
+  const asOfMs = opts?.asOfMs;
+  const filtered =
+    asOfMs != null ? plays.filter((p) => p.playedAt <= asOfMs) : plays;
+
+  const pushMaps = aggregateAccBandMaps(filtered, PUSH_ACC_MIN, PUSH_ACC_MAX);
+  const clear = bandLevels(pushMaps, PUSH_ACC_CENTER, 0.025);
+
+  const farmMaps = aggregateAccBandMaps(
+    filtered,
+    CONSISTENCY_ACC_MIN,
+    CONSISTENCY_ACC_MAX,
+  );
+  const farm = bandLevels(farmMaps, CONSISTENCY_ACC_CENTER, 0.015);
+
+  const accMaps = aggregateAccBandMaps(
+    filtered,
+    ACCURACY_ACC_MIN,
+    ACCURACY_ACC_MAX,
+  );
+  const acc = bandLevels(accMaps, ACCURACY_ACC_CENTER, 0.01);
+
+  const recent = filtered
+    .slice()
+    .sort((a, b) => b.playedAt - a.playedAt)
+    .slice(0, MAX_SKILL_PLAYS);
+
+  const withSunny = recent
+    .filter(
+      (p): p is SkillPlayRow & { sunnyStar: number } =>
+        p.sunnyStar != null && p.sunnyStar > 0,
+    )
+    .slice()
+    .reverse();
 
   if (withSunny.length < MIN_PLAYS_FOR_SKILL) {
-    const fallback = coldStartFromMastery(db);
-    if (fallback.overall > 0) {
-      return withBandCounts(fallback, {
-        overall: fallback.overall,
-        rc: fallback.rc,
-        ln: fallback.ln,
-        fln: fallback.fln,
-      });
+    const fromPlays = coldStartFromPlays(filtered);
+    if (fromPlays.overall > 0) {
+      return applyBandLevels(
+        fromPlays,
+        {
+          overall: fromPlays.overall,
+          rc: fromPlays.rc,
+          ln: fromPlays.ln,
+          fln: fromPlays.fln,
+        },
+        clear,
+        farm,
+        acc,
+      );
+    }
+    if (!opts?.coldStartFromPlaysOnly && opts?.coldStartFallback) {
+      const fallback = opts.coldStartFallback();
+      if (fallback.overall > 0) {
+        return applyBandLevels(
+          fallback,
+          {
+            overall: fallback.overall,
+            rc: fallback.rc,
+            ln: fallback.ln,
+            fln: fallback.fln,
+          },
+          clear,
+          farm,
+          acc,
+        );
+      }
     }
     return emptySkill({
       samplePlays: withSunny.length,
@@ -463,7 +539,7 @@ export function estimateSevenKSkill(db: Db): SevenKSkillProfile {
   const comfortLn = ln > 0 ? ln : overall;
   const comfortFln = fln > 0 ? fln : overall;
 
-  return withBandCounts(
+  return applyBandLevels(
     emptySkill({
       overall,
       rc: comfortRc,
@@ -481,8 +557,184 @@ export function estimateSevenKSkill(db: Db): SevenKSkillProfile {
       ln: comfortLn,
       fln: comfortFln,
     },
+    clear,
+    farm,
+    acc,
   );
 }
+
+function loadAllSevenKPlays(db: Db): SkillPlayRow[] {
+  const rows = db.$client
+    .query(
+      `
+      SELECT
+        s.beatmap_id AS beatmapId,
+        s.accuracy AS accuracy,
+        s.played_at AS playedAt,
+        dr.sunny_star AS sunnyStar,
+        dr.ln_ratio AS lnRatio
+      FROM scores s
+      JOIN beatmaps b ON b.id = s.beatmap_id
+      LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
+      LEFT JOIN beatmap_dan_ratings dr
+        ON dr.beatmap_id = b.id AND dr.algorithm = 'sunny'
+      WHERE s.delete_pending = 0
+        AND b.hidden = 0
+        AND COALESCE(bs.delete_pending, 0) = 0
+        AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
+        AND b.circle_size = 7
+        AND s.beatmap_id IS NOT NULL
+      ORDER BY s.played_at DESC
+    `,
+    )
+    .all() as Array<{
+    beatmapId: string;
+    accuracy: number;
+    playedAt: number;
+    sunnyStar: number | null;
+    lnRatio: number | null;
+  }>;
+
+  return rows.map((r) => ({
+    beatmapId: r.beatmapId,
+    accuracy: Number(r.accuracy ?? 0),
+    playedAt: Number(r.playedAt ?? 0),
+    sunnyStar: r.sunnyStar != null ? Number(r.sunnyStar) : null,
+    lnRatio: r.lnRatio != null ? Number(r.lnRatio) : null,
+  }));
+}
+
+function ensureSunnyForPlays(db: Db, plays: SkillPlayRow[]): SkillPlayRow[] {
+  const missingIds = [
+    ...new Set(
+      plays.filter((p) => p.sunnyStar == null).map((p) => p.beatmapId),
+    ),
+  ];
+  if (missingIds.length === 0) return plays;
+  ensureSunnyDanForIdsSync(db, missingIds);
+  return loadAllSevenKPlays(db);
+}
+
+/**
+ * Estimate 7K skill:
+ * - comfort (overall/rc/ln/fln): recent plays, recency × acc weight
+ * - peak*: average Sunny of maps with 90–95% scores (Push base)
+ * - accuracy*: average Sunny of maps with 99%+ scores (Accuracy base)
+ * - consistency*: average Sunny of maps with 96–99% scores (Consistency base)
+ */
+export function estimateSevenKSkill(db: Db): SevenKSkillProfile {
+  backfillSunnyDanSync(db, { limit: 120 });
+  let plays = loadAllSevenKPlays(db);
+  plays = ensureSunnyForPlays(db, plays);
+  return estimateSevenKSkillFromPlays(plays, {
+    coldStartFallback: () => coldStartFromMastery(db),
+  });
+}
+
+function utcDayKey(ms: number): string {
+  const d = new Date(ms);
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** Monday of the UTC week containing `ms`, as YYYY-MM-DD. */
+function utcWeekStartKey(ms: number): string {
+  const d = new Date(ms);
+  const day = d.getUTCDay(); // 0 Sun … 6 Sat
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  d.setUTCDate(d.getUTCDate() + diffToMonday);
+  return utcDayKey(d.getTime());
+}
+
+function endOfUtcDayMs(dayKey: string): number {
+  const [y, m, d] = dayKey.split("-").map(Number);
+  return Date.UTC(y!, m! - 1, d!, 23, 59, 59, 999);
+}
+
+function endOfUtcWeekMs(weekStartKey: string): number {
+  const [y, m, d] = weekStartKey.split("-").map(Number);
+  // Week start Monday 00:00 → Sunday 23:59:59.999
+  return Date.UTC(y!, m! - 1, d! + 6, 23, 59, 59, 999);
+}
+
+function buildSampleKeys(
+  granularity: "day" | "week",
+  rangeDays: number,
+  nowMs: number,
+): string[] {
+  const keys: string[] = [];
+  if (granularity === "day") {
+    for (let i = rangeDays - 1; i >= 0; i--) {
+      const ms = nowMs - i * 86_400_000;
+      keys.push(utcDayKey(ms));
+    }
+    return [...new Set(keys)];
+  }
+
+  const weeks = Math.max(1, Math.ceil(rangeDays / 7));
+  for (let i = weeks - 1; i >= 0; i--) {
+    const ms = nowMs - i * 7 * 86_400_000;
+    keys.push(utcWeekStartKey(ms));
+  }
+  return [...new Set(keys)];
+}
+
+/**
+ * Skill evolution series: one estimate per day or week end, from a single play load.
+ */
+export function estimateSevenKSkillHistory(
+  db: Db,
+  opts: SkillHistoryOptions,
+  nowMs: number = Date.now(),
+): SkillHistoryPoint[] {
+  backfillSunnyDanSync(db, { limit: 80 });
+  let plays = loadAllSevenKPlays(db);
+  plays = ensureSunnyForPlays(db, plays);
+
+  const keys = buildSampleKeys(opts.granularity, opts.rangeDays, nowMs);
+  const points: SkillHistoryPoint[] = [];
+
+  for (const key of keys) {
+    const asOfMs =
+      opts.granularity === "day" ? endOfUtcDayMs(key) : endOfUtcWeekMs(key);
+    const skill = estimateSevenKSkillFromPlays(plays, {
+      asOfMs,
+      coldStartFromPlaysOnly: true,
+    });
+    points.push({
+      at: key,
+      push: skill.peakOverall,
+      accuracy: skill.accuracyOverall,
+      consistency: skill.consistencyOverall,
+      overall: skill.overall,
+      rc: skill.rc,
+      ln: skill.ln,
+      fln: skill.fln,
+      coldStart: skill.coldStart,
+    });
+  }
+
+  return points;
+}
+
+/** Exposed for unit tests. */
+export const __testing = {
+  aggregateAccBandMaps,
+  buildSampleKeys,
+  endOfUtcDayMs,
+  endOfUtcWeekMs,
+  utcDayKey,
+  utcWeekStartKey,
+  PUSH_ACC_MIN,
+  PUSH_ACC_MAX,
+  CONSISTENCY_ACC_MIN,
+  CONSISTENCY_ACC_MAX,
+  ACCURACY_ACC_MIN,
+  ACCURACY_ACC_MAX,
+  MIN_CLEAR_MAPS,
+};
 
 export type SkillMode = "comfort" | "peak" | "consistency" | "accuracy";
 

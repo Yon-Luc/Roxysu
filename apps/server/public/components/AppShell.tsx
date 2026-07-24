@@ -8,6 +8,7 @@ const SIDEBAR_OPEN_KEY = "roxysu.sidebarOpen";
 
 const nav = [
   { to: "/", label: "Home", exact: true, icon: HomeIcon },
+  { to: "/stats", label: "Stats", icon: StatsIcon },
   { to: "/practice", label: "Practice", icon: PracticeIcon },
   { to: "/sessions", label: "Sessions", icon: SessionsIcon },
   { to: "/collections", label: "Collections", icon: CollectionsIcon },
@@ -278,6 +279,14 @@ function HomeIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
       <path d="M12.97 2.59a1.5 1.5 0 0 0-1.94 0l-7.5 6.56A1.5 1.5 0 0 0 3 10.3V20a1.5 1.5 0 0 0 1.5 1.5H9a.75.75 0 0 0 .75-.75V15.5a1.75 1.75 0 1 1 3.5 0v5.25c0 .41.34.75.75.75h4.5A1.5 1.5 0 0 0 21 20v-9.7a1.5 1.5 0 0 0-.53-1.15l-7.5-6.56Z" />
+    </svg>
+  );
+}
+
+function StatsIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M4.75 14a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0v-4.5a.75.75 0 0 1 .75-.75Zm4.5-5a.75.75 0 0 1 .75.75v9.5a.75.75 0 0 1-1.5 0v-9.5A.75.75 0 0 1 9.25 9Zm4.5-4a.75.75 0 0 1 .75.75v13.5a.75.75 0 0 1-1.5 0V5.75a.75.75 0 0 1 .75-.75Zm4.5 7a.75.75 0 0 1 .75.75v6.5a.75.75 0 0 1-1.5 0v-6.5a.75.75 0 0 1 .75-.75Z" />
     </svg>
   );
 }

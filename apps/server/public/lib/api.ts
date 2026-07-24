@@ -47,6 +47,26 @@ export async function fetchDashboard() {
   return unwrap(await api.api.dashboard.get(), "/api/dashboard");
 }
 
+export type StatsGranularity = "day" | "week";
+export type StatsRange = 30 | 90 | 180;
+
+export async function fetchStats(params?: {
+  granularity?: StatsGranularity;
+  range?: StatsRange;
+}) {
+  return unwrap(
+    await api.api.stats.get({
+      query: {
+        granularity: params?.granularity,
+        range: params?.range,
+      },
+    }),
+    "/api/stats",
+  );
+}
+
+export type PlayerStats = Awaited<ReturnType<typeof fetchStats>>;
+
 export async function fetchPracticeList(params: {
   page?: number;
   pageSize?: number;

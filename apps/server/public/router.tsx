@@ -18,6 +18,8 @@ import { SkinPage } from "./features/settings/SkinPage";
 import { OverlayPage } from "./features/overlay/OverlayPage";
 import { RatingLabPage } from "./features/rating-lab/RatingLabPage";
 import { DownloadMapsPage } from "./features/download/DownloadMapsPage";
+import { StatsPage } from "./features/stats/StatsPage";
+import type { StatsGranularity, StatsRange } from "./lib/api";
 
 const rootRoute = createRootRoute({
   component: () => <Outlet />,
@@ -37,6 +39,37 @@ const indexRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/",
   component: DashboardPage,
+});
+
+const statsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/stats",
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { granularity: StatsGranularity; range: StatsRange } => {
+    const granularity: StatsGranularity =
+      search.granularity === "week" ? "week" : "day";
+    const rawRange = Number(search.range);
+    const range: StatsRange =
+      rawRange === 90 || rawRange === 180 ? rawRange : 30;
+    return { granularity, range };
+  },
+  component: function StatsRoute() {
+    const navigate = statsRoute.useNavigate();
+    const { granularity, range } = statsRoute.useSearch();
+    return (
+      <StatsPage
+        granularity={granularity}
+        range={range}
+        onGranularityChange={(next) =>
+          navigate({ search: (prev) => ({ ...prev, granularity: next }) })
+        }
+        onRangeChange={(next) =>
+          navigate({ search: (prev) => ({ ...prev, range: next }) })
+        }
+      />
+    );
+  },
 });
 
 const practiceRoute = createRoute({
@@ -131,6 +164,7 @@ const overlayRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   appRoute.addChildren([
     indexRoute,
+    statsRoute,
     practiceRoute,
     practiceProfileRoute,
     sessionsRoute,

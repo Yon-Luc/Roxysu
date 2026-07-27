@@ -106,6 +106,7 @@ export type RecommendBatch = {
   focus: RecommendFocus;
   targetSkillset: SkillAxis | null;
   skill: SevenKSkillProfile;
+  skillTopPlays: number;
   summary: string;
   totalMapsConsidered: number;
   needsSunnyBackfill: boolean;

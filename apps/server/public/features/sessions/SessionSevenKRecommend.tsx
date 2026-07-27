@@ -11,6 +11,7 @@ import {
   formatSkillRating,
   useRatingDisplayMode,
 } from "../../lib/ratingDisplay";
+import { readSkillTopPlays, SKILL_TOP_PLAYS_STORAGE_KEY } from "../../lib/skillTopPlays";
 import { SessionSuggestMapRow } from "./SessionSuggestMapRow";
 
 const PREFS_KEY = "rx-session-7k-recommend";
@@ -29,7 +30,7 @@ const FOCUS_OPTIONS: { id: RecommendFocus; label: string; hint: string }[] = [
   {
     id: "push",
     label: "Push",
-    hint: "Slightly above your 90–95% clear level on rice/LN/FLN (neighboring dans).",
+    hint: "Slightly above your 90%+ clear level on rice/LN/FLN (neighboring dans).",
   },
   {
     id: "accuracy",
@@ -39,7 +40,7 @@ const FOCUS_OPTIONS: { id: RecommendFocus; label: string; hint: string }[] = [
   {
     id: "consistency",
     label: "Consistency",
-    hint: "Maps around your 96–99% rice/LN/FLN level (farm / polish dans).",
+    hint: "Maps around your 96%+ rice/LN/FLN level (farm / polish dans).",
   },
   {
     id: "deficit",
@@ -99,6 +100,7 @@ export function SessionSevenKRecommend({
   const ratingMode = useRatingDisplayMode();
   const [prefs, setPrefs] = useState<RecPrefs>(() => loadPrefs());
   const [shuffleKey, setShuffleKey] = useState(0);
+  const [skillTopPlays, setSkillTopPlays] = useState(() => readSkillTopPlays());
   const excludeRef = useRef(excludeBeatmapIds);
   excludeRef.current = excludeBeatmapIds;
 
@@ -106,14 +108,34 @@ export function SessionSevenKRecommend({
     savePrefs(prefs);
   }, [prefs]);
 
+  useEffect(() => {
+    const syncTopPlays = () => setSkillTopPlays(readSkillTopPlays());
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === SKILL_TOP_PLAYS_STORAGE_KEY) syncTopPlays();
+    };
+    window.addEventListener("focus", syncTopPlays);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("focus", syncTopPlays);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, []);
+
   const { data, isLoading, error, isFetching, refetch } = useQuery({
-    queryKey: ["practice-recommend-7k", prefs.focus, prefs.skillset, shuffleKey],
+    queryKey: [
+      "practice-recommend-7k",
+      prefs.focus,
+      prefs.skillset,
+      skillTopPlays,
+      shuffleKey,
+    ],
     queryFn: () =>
       fetchPracticeRecommend({
         focus: prefs.focus,
         skillset: prefs.focus === "deficit" ? undefined : prefs.skillset,
         count: 8,
         exclude: excludeRef.current,
+        topPlays: skillTopPlays,
       }),
   });
 
@@ -121,6 +143,7 @@ export function SessionSevenKRecommend({
     data && !("error" in data) ? (data as PracticeRecommend) : null;
   const items = batch?.recommendations ?? [];
   const skill = batch?.skill;
+  const requiredMaps = batch?.skillTopPlays ?? skillTopPlays;
   const focusHint =
     FOCUS_OPTIONS.find((f) => f.id === prefs.focus)?.hint ?? "";
 
@@ -188,33 +211,50 @@ export function SessionSevenKRecommend({
 
         {skill ? (
           <div className="space-y-2">
+            <p className="text-xs text-faint">
+              Skill from your top {requiredMaps} rated maps per band (best play
+              per map; all {requiredMaps} required). Change on{" "}
+              <Link
+                to="/stats"
+                search={{
+                  granularity: "day",
+                  range: 30,
+                  skillTopPlays,
+                  skillAxis: "all",
+                }}
+                className="underline hover:text-accent"
+              >
+                Stats
+              </Link>
+              .
+            </p>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               <SkillStat
-                label="Rice @ 90–95%"
+                label="Rice @ 90%+"
                 value={formatSkillRating({
                   mode: ratingMode,
                   sunnyStar: skill.peakRc,
                   axis: "rc",
                 })}
-                note={`${skill.clearRcMaps ?? 0} maps · Push`}
+                note={bandMapsNote(skill.peakRc, skill.clearRcMaps ?? 0, requiredMaps, "Push")}
               />
               <SkillStat
-                label="LN @ 90–95%"
+                label="LN @ 90%+"
                 value={formatSkillRating({
                   mode: ratingMode,
                   sunnyStar: skill.peakLn,
                   axis: "ln",
                 })}
-                note={`${skill.clearLnMaps ?? 0} maps · Push`}
+                note={bandMapsNote(skill.peakLn, skill.clearLnMaps ?? 0, requiredMaps, "Push")}
               />
               <SkillStat
-                label="FLN @ 90–95%"
+                label="FLN @ 90%+"
                 value={formatSkillRating({
                   mode: ratingMode,
                   sunnyStar: skill.peakFln,
                   axis: "fln",
                 })}
-                note={`${skill.clearFlnMaps ?? 0} maps · Push`}
+                note={bandMapsNote(skill.peakFln, skill.clearFlnMaps ?? 0, requiredMaps, "Push")}
               />
               <SkillStat
                 label="Rice @ 99%+"
@@ -223,7 +263,12 @@ export function SessionSevenKRecommend({
                   sunnyStar: skill.accuracyRc,
                   axis: "rc",
                 })}
-                note={`${skill.accuracyRcMaps ?? 0} maps · Accuracy`}
+                note={bandMapsNote(
+                  skill.accuracyRc,
+                  skill.accuracyRcMaps ?? 0,
+                  requiredMaps,
+                  "Accuracy",
+                )}
               />
               <SkillStat
                 label="LN @ 99%+"
@@ -232,7 +277,12 @@ export function SessionSevenKRecommend({
                   sunnyStar: skill.accuracyLn,
                   axis: "ln",
                 })}
-                note={`${skill.accuracyLnMaps ?? 0} maps · Accuracy`}
+                note={bandMapsNote(
+                  skill.accuracyLn,
+                  skill.accuracyLnMaps ?? 0,
+                  requiredMaps,
+                  "Accuracy",
+                )}
               />
               <SkillStat
                 label="FLN @ 99%+"
@@ -241,12 +291,17 @@ export function SessionSevenKRecommend({
                   sunnyStar: skill.accuracyFln,
                   axis: "fln",
                 })}
-                note={`${skill.accuracyFlnMaps ?? 0} maps · Accuracy`}
+                note={bandMapsNote(
+                  skill.accuracyFln,
+                  skill.accuracyFlnMaps ?? 0,
+                  requiredMaps,
+                  "Accuracy",
+                )}
               />
             </div>
             <p className="text-xs text-faint">
-              Push aims ~8% above your 90–95% clears. Accuracy picks in your
-              99%+ difficulty range.
+              Push aims ~8% above your 90%+ clears. Accuracy picks in your 99%+
+              difficulty range.
             </p>
           </div>
         ) : null}
@@ -306,6 +361,17 @@ export function SessionSevenKRecommend({
       )}
     </section>
   );
+}
+
+function bandMapsNote(
+  value: number,
+  maps: number,
+  requiredMaps: number,
+  band: string,
+): string {
+  if (maps === 0) return `No maps in band · ${band}`;
+  if (value > 0) return `${maps} maps in band · ${band}`;
+  return `${maps}/${requiredMaps} maps in band · ${band}`;
 }
 
 function SkillStat({

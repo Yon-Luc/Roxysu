@@ -20,6 +20,10 @@ import { RatingLabPage } from "./features/rating-lab/RatingLabPage";
 import { DownloadMapsPage } from "./features/download/DownloadMapsPage";
 import { StatsPage } from "./features/stats/StatsPage";
 import type { StatsGranularity, StatsRange, StatsSkillAxis } from "./lib/api";
+import {
+  readSkillTopPlays,
+  writeSkillTopPlays,
+} from "./lib/skillTopPlays";
 
 const rootRoute = createRootRoute({
   component: () => <Outlet />,
@@ -61,7 +65,7 @@ const statsRoute = createRoute({
     const skillTopPlays =
       Number.isFinite(rawTop) && rawTop >= 1 && rawTop <= 500
         ? Math.round(rawTop)
-        : 30;
+        : readSkillTopPlays();
     const rawAxis = search.skillAxis;
     const skillAxis: StatsSkillAxis =
       rawAxis === "rc" || rawAxis === "ln" || rawAxis === "fln"
@@ -85,9 +89,10 @@ const statsRoute = createRoute({
         onRangeChange={(next) =>
           navigate({ search: (prev) => ({ ...prev, range: next }) })
         }
-        onSkillTopPlaysChange={(next) =>
-          navigate({ search: (prev) => ({ ...prev, skillTopPlays: next }) })
-        }
+        onSkillTopPlaysChange={(next) => {
+          writeSkillTopPlays(next);
+          navigate({ search: (prev) => ({ ...prev, skillTopPlays: next }) });
+        }}
         onSkillAxisChange={(next) =>
           navigate({ search: (prev) => ({ ...prev, skillAxis: next }) })
         }

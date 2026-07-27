@@ -7,6 +7,7 @@ import {
 import { backfillSunnyDanSync } from "../../map-analysis/computeSunnyDan";
 import {
   estimateSevenKSkill,
+  parseSkillTopPlays,
   strongestAxis,
   weakestAxis,
 } from "./sevenKSkill";
@@ -41,6 +42,8 @@ export type RecommendOptions = {
   count?: number;
   excludeIds?: string[];
   q?: string;
+  /** Top maps per band for skill estimate (default 30). */
+  topPlays?: number;
 };
 
 function parseFocus(value: string | undefined): RecommendFocus {
@@ -87,6 +90,7 @@ export function recommendSevenK(
   const focus = parseFocus(opts.focus);
   const count = clampCount(opts.count);
   const excludeIds = (opts.excludeIds ?? []).filter(Boolean);
+  const topPlays = parseSkillTopPlays(opts.topPlays);
   let skillset = parseSkillset(opts.skillset);
 
   // Ensure a pool of Sunny ratings exists before searching.
@@ -94,7 +98,7 @@ export function recommendSevenK(
   const missingSunny = countMissingSunnyDan(db);
   const needsSunnyBackfill = missingSunny > 0;
 
-  const skill = estimateSevenKSkill(db);
+  const skill = estimateSevenKSkill(db, { topPlays });
 
   let overlaySql: string | null = null;
   let overlayParams: unknown[] = [];
@@ -123,7 +127,8 @@ export function recommendSevenK(
       focus,
       targetSkillset: resolvedSkillset,
       skill,
-      summary: summaryFor(focus, resolvedSkillset, skill, 0),
+      skillTopPlays: topPlays,
+      summary: summaryFor(focus, resolvedSkillset, skill, 0, topPlays),
       totalMapsConsidered,
       needsSunnyBackfill,
       recommendations: [],
@@ -194,7 +199,8 @@ export function recommendSevenK(
     focus,
     targetSkillset: batchSkillset,
     skill,
-    summary: summaryFor(focus, batchSkillset, skill, recommendations.length),
+    skillTopPlays: topPlays,
+    summary: summaryFor(focus, batchSkillset, skill, recommendations.length, topPlays),
     totalMapsConsidered,
     needsSunnyBackfill,
     recommendations,

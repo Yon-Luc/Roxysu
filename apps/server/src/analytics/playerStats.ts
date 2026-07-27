@@ -16,6 +16,7 @@ import { classifyMapAxis } from "./recommend/axis";
 import {
   estimateSevenKSkill,
   estimateSevenKSkillHistory,
+  parseSkillTopPlays,
 } from "./recommend/sevenKSkill";
 
 /** Display buckets for the rank chart (silver grades folded into gold). */
@@ -40,12 +41,6 @@ export type PlayerStatsQuery = {
   range?: StatsRange;
   skillTopPlays?: number;
 };
-
-function parseSkillTopPlays(raw: unknown): number {
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return 30;
-  return Math.min(500, Math.max(1, Math.round(n)));
-}
 
 function parseRange(raw: unknown): StatsRange {
   const n = Number(raw);

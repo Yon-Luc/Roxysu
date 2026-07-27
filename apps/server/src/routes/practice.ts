@@ -14,6 +14,7 @@ import {
   type PracticeMetric,
 } from "../query-language";
 import { recommendSevenK } from "../analytics/recommend";
+import { parseSkillTopPlays } from "../analytics/recommend/sevenKSkill";
 
 const SORT_BY = [
   "lastPlayed",
@@ -250,12 +251,14 @@ export const practiceRoutes = new Elysia({ prefix: "/practice" })
           count: query.count ?? 10,
           excludeIds: exclude,
           q: query.q?.trim() || undefined,
+          topPlays: parseSkillTopPlays(query.topPlays),
         });
 
         return {
           focus: batch.focus,
           targetSkillset: batch.targetSkillset,
           skill: batch.skill,
+          skillTopPlays: batch.skillTopPlays,
           summary: batch.summary,
           totalMapsConsidered: batch.totalMapsConsidered,
           needsSunnyBackfill: batch.needsSunnyBackfill,
@@ -306,6 +309,7 @@ export const practiceRoutes = new Elysia({ prefix: "/practice" })
         count: t.Optional(t.Numeric()),
         exclude: t.Optional(t.String()),
         q: t.Optional(t.String()),
+        topPlays: t.Optional(t.Union([t.Number(), t.String()])),
       }),
     },
   );

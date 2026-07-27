@@ -155,6 +155,12 @@ function normalizeTopPlays(raw: number | undefined): number {
   return Math.min(500, Math.max(1, Math.round(n)));
 }
 
+/** Parse top-map count from API query strings (stats, recommend, etc.). */
+export function parseSkillTopPlays(raw: unknown): number {
+  if (raw === undefined) return DEFAULT_SKILL_TOP_PLAYS;
+  return normalizeTopPlays(Number(raw));
+}
+
 type PlayLike = Pick<
   SkillPlayRow,
   "beatmapId" | "accuracy" | "playedAt" | "sunnyStar"
@@ -853,45 +859,21 @@ export function skillForAxis(
 ): number {
   if (mode === "peak") {
     if (!axis || axis === "overall") return skill.peakOverall;
-    if (axis === "rc") {
-      return skill.peakRc > 0 ? skill.peakRc : skill.peakOverall;
-    }
-    if (axis === "fln") {
-      return skill.peakFln > 0 ? skill.peakFln : skill.peakOverall;
-    }
-    return skill.peakLn > 0 ? skill.peakLn : skill.peakOverall;
+    if (axis === "rc") return skill.peakRc;
+    if (axis === "fln") return skill.peakFln;
+    return skill.peakLn;
   }
   if (mode === "accuracy") {
     if (!axis || axis === "overall") return skill.accuracyOverall;
-    if (axis === "rc") {
-      return skill.accuracyRc > 0
-        ? skill.accuracyRc
-        : skill.accuracyOverall;
-    }
-    if (axis === "fln") {
-      return skill.accuracyFln > 0
-        ? skill.accuracyFln
-        : skill.accuracyOverall;
-    }
-    return skill.accuracyLn > 0
-      ? skill.accuracyLn
-      : skill.accuracyOverall;
+    if (axis === "rc") return skill.accuracyRc;
+    if (axis === "fln") return skill.accuracyFln;
+    return skill.accuracyLn;
   }
   if (mode === "consistency") {
     if (!axis || axis === "overall") return skill.consistencyOverall;
-    if (axis === "rc") {
-      return skill.consistencyRc > 0
-        ? skill.consistencyRc
-        : skill.consistencyOverall;
-    }
-    if (axis === "fln") {
-      return skill.consistencyFln > 0
-        ? skill.consistencyFln
-        : skill.consistencyOverall;
-    }
-    return skill.consistencyLn > 0
-      ? skill.consistencyLn
-      : skill.consistencyOverall;
+    if (axis === "rc") return skill.consistencyRc;
+    if (axis === "fln") return skill.consistencyFln;
+    return skill.consistencyLn;
   }
   if (!axis || axis === "overall") return skill.overall;
   if (axis === "rc") return skill.rc > 0 ? skill.rc : skill.overall;

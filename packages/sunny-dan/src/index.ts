@@ -1,5 +1,7 @@
 export {
   estDiff,
+  danIntervalForStar,
+  nextDanInterval,
   LN_DAN_RATIO_THRESHOLD,
   FLN_RATIO_THRESHOLD,
 } from "./estDiff";

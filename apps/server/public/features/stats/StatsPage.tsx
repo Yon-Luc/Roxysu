@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import {
@@ -15,13 +16,20 @@ import {
 } from "recharts";
 import { PageTitle } from "../../components/PageTitle";
 import {
+  fetchSkillBandPlays,
   fetchStats,
+  type SkillBandKind,
   type StatsGranularity,
   type StatsRange,
   type StatsSkillAxis,
   type PlayerStats,
 } from "../../lib/api";
-import { formatAccuracy, formatPp, formatRelativeTime } from "../../lib/format";
+import {
+  formatAccuracy,
+  formatPp,
+  formatRelativeTime,
+  formatStars,
+} from "../../lib/format";
 import {
   formatSkillRating,
   useRatingDisplayMode,
@@ -198,6 +206,7 @@ export function StatsPage({
   const [topPlaysTab, setTopPlaysTab] = useState<TopPlaysTab>(() =>
     isPreset ? (skillTopPlays as TopPlaysTab) : "custom",
   );
+  const [expandedBand, setExpandedBand] = useState<SkillBandKind | null>(null);
 
   useEffect(() => {
     setCustomTopPlays(String(skillTopPlays));
@@ -205,6 +214,10 @@ export function StatsPage({
       setTopPlaysTab(skillTopPlays as TopPlaysTab);
     }
   }, [skillTopPlays]);
+
+  useEffect(() => {
+    setExpandedBand(null);
+  }, [skillAxis, skillTopPlays]);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["stats", granularity, range, skillTopPlays],
@@ -261,7 +274,8 @@ export function StatsPage({
             <p className="rx-subtitle">
               Skill evolution, progression, and how you play — times in UTC.
               Skill uses your Settings rating display (Sunny ★ or dan) from your
-              top {skillTopPlays} rated plays per band (all {skillTopPlays} required)
+              top {skillTopPlays} rated maps per band (best play per map, all{" "}
+            {skillTopPlays} required)
               {axisFilterActive ? ` · ${skillAxisLabel(skillAxis)} only` : ""}.
             </p>
           </div>
@@ -359,11 +373,16 @@ export function StatsPage({
           <SkillCard
             mode={ratingMode}
             axis={skillAxis}
+            band="push"
             title="Push"
-            hint="90–95% clears"
+            hint="90%+ clears"
             value={skillBandValue(skill, "peak", skillAxis)}
             maps={skillBandMaps(skill, "peak", skillAxis)}
             requiredPlays={skillTopPlays}
+            expanded={expandedBand === "push"}
+            onToggle={() =>
+              setExpandedBand((prev) => (prev === "push" ? null : "push"))
+            }
             breakdown={
               axisFilterActive
                 ? null
@@ -380,11 +399,18 @@ export function StatsPage({
           <SkillCard
             mode={ratingMode}
             axis={skillAxis}
+            band="accuracy"
             title="Accuracy"
             hint="99%+ clears"
             value={skillBandValue(skill, "accuracy", skillAxis)}
             maps={skillBandMaps(skill, "accuracy", skillAxis)}
             requiredPlays={skillTopPlays}
+            expanded={expandedBand === "accuracy"}
+            onToggle={() =>
+              setExpandedBand((prev) =>
+                prev === "accuracy" ? null : "accuracy",
+              )
+            }
             breakdown={
               axisFilterActive
                 ? null
@@ -401,11 +427,18 @@ export function StatsPage({
           <SkillCard
             mode={ratingMode}
             axis={skillAxis}
+            band="consistency"
             title="Consistency"
-            hint="96–99% clears"
+            hint="96%+ clears"
             value={skillBandValue(skill, "consistency", skillAxis)}
             maps={skillBandMaps(skill, "consistency", skillAxis)}
             requiredPlays={skillTopPlays}
+            expanded={expandedBand === "consistency"}
+            onToggle={() =>
+              setExpandedBand((prev) =>
+                prev === "consistency" ? null : "consistency",
+              )
+            }
             breakdown={
               axisFilterActive
                 ? null
@@ -420,6 +453,14 @@ export function StatsPage({
             }
           />
         </div>
+        {expandedBand ? (
+          <SkillBandPlaysPanel
+            band={expandedBand}
+            axis={skillAxis}
+            topPlays={skillTopPlays}
+            ratingMode={ratingMode}
+          />
+        ) : null}
         {skill.coldStart ? (
           <p className="mt-3 text-xs text-muted">
             Cold-start estimate — play more 7K maps for a firmer reading.
@@ -805,20 +846,26 @@ export function StatsPage({
 function SkillCard({
   mode,
   axis,
+  band,
   title,
   hint,
   value,
   maps,
   requiredPlays,
+  expanded,
+  onToggle,
   breakdown,
 }: {
   mode: RatingDisplayMode;
   axis: StatsSkillAxis;
+  band: SkillBandKind;
   title: string;
   hint: string;
   value: number;
   maps: number;
   requiredPlays: number;
+  expanded: boolean;
+  onToggle: () => void;
   breakdown: {
     rc: number;
     ln: number;
@@ -833,12 +880,27 @@ function SkillCard({
     maps === 0
       ? "No plays in band yet"
       : hasEstimate
-        ? `${maps} top plays in band`
-        : `${maps}/${requiredPlays} plays in band`;
+        ? `${maps} maps in band`
+        : `${maps}/${requiredPlays} maps in band`;
 
   return (
-    <div className="rx-panel px-4 py-4">
-      <div className="rx-label">{title}</div>
+    <button
+      type="button"
+      onClick={onToggle}
+      className={`rx-panel w-full px-4 py-4 text-left transition ${
+        expanded
+          ? "ring-1 ring-accent/40"
+          : "hover:bg-elevated/30"
+      }`}
+      aria-expanded={expanded}
+      aria-controls={`skill-band-${band}`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="rx-label">{title}</div>
+        <span className="text-[10px] font-bold uppercase tracking-wide text-faint">
+          {expanded ? "Hide" : "Plays"}
+        </span>
+      </div>
       <div
         className={`mt-2 font-bold tabular-nums text-ink ${
           mode === "dan" ? "text-xl leading-snug" : "text-3xl"
@@ -888,7 +950,157 @@ function SkillCard({
             : ""}
         </p>
       )}
+    </button>
+  );
+}
+
+const BAND_TITLES: Record<SkillBandKind, string> = {
+  push: "Push",
+  accuracy: "Accuracy",
+  consistency: "Consistency",
+};
+
+function SkillBandPlaysPanel({
+  band,
+  axis,
+  topPlays,
+  ratingMode,
+}: {
+  band: SkillBandKind;
+  axis: StatsSkillAxis;
+  topPlays: number;
+  ratingMode: RatingDisplayMode;
+}) {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["stats", "skill-plays", band, axis, topPlays],
+    queryFn: () =>
+      fetchSkillBandPlays({
+        band,
+        axis: axis === "all" ? undefined : axis,
+        topPlays,
+      }),
+  });
+
+  if (isLoading) {
+    return (
+      <div id={`skill-band-${band}`} className="rx-panel p-4">
+        <p className="text-sm text-muted">Loading plays…</p>
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div id={`skill-band-${band}`} className="rx-panel p-4">
+        <p className="text-sm text-rose-300">
+          {error?.message ?? "Failed to load plays"}
+        </p>
+      </div>
+    );
+  }
+
+  const axisLabel = skillAxisLabel(axis);
+  const bandTitle = BAND_TITLES[band];
+
+  return (
+    <div id={`skill-band-${band}`} className="rx-panel space-y-6 p-4 sm:p-5">
+      <div>
+        <h3 className="font-display text-lg font-bold text-ink">
+          {bandTitle} plays
+          {axis !== "all" ? ` · ${axisLabel}` : ""}
+        </h3>
+        <p className="mt-1 text-xs text-muted">
+          Top {topPlays} hardest maps in this accuracy band (best play per map),
+          plus progress in the next dan tier.
+        </p>
+      </div>
+
+      <SkillPlayList
+        title={`In band (${data.inBandTotal}/${topPlays} maps)`}
+        plays={data.inBand}
+        ratingMode={ratingMode}
+        empty="No plays in this band yet."
+      />
+
+      {data.nextDanLabel ? (
+        <SkillPlayList
+          title={`Next dan · ${data.nextDanLabel} (${data.inNextDanTotal}/${topPlays} maps)`}
+          plays={data.inNextDan}
+          ratingMode={ratingMode}
+          empty={`No ${data.nextDanLabel} clears in this band yet.`}
+        />
+      ) : (
+        <p className="text-sm text-muted">
+          No higher dan tier above your current estimate.
+        </p>
+      )}
     </div>
+  );
+}
+
+function SkillPlayList({
+  title,
+  plays,
+  ratingMode,
+  empty,
+}: {
+  title: string;
+  plays: Array<{
+    beatmapId: string;
+    title: string;
+    artist: string;
+    difficultyName: string;
+    accuracy: number;
+    sunnyStar: number;
+    danLabel: string;
+    playedAt: string | number | null;
+  }>;
+  ratingMode: RatingDisplayMode;
+  empty: string;
+}) {
+  return (
+    <section>
+      <h4 className="mb-2 text-sm font-bold text-ink">{title}</h4>
+      {plays.length === 0 ? (
+        <p className="text-sm text-muted">{empty}</p>
+      ) : (
+        <ul className="space-y-0.5">
+          {plays.map((play) => (
+            <li key={`${play.beatmapId}-${play.playedAt}`}>
+              <Link
+                to="/practice/$beatmapId"
+                params={{ beatmapId: play.beatmapId }}
+                className="rx-row gap-3 !py-2 hover:bg-elevated/30"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-semibold text-ink">
+                    {play.title}
+                  </div>
+                  <div className="mt-0.5 truncate text-sm text-muted">
+                    {play.artist}
+                    {play.difficultyName ? ` · ${play.difficultyName}` : ""}
+                  </div>
+                </div>
+                <div className="shrink-0 text-right text-sm">
+                  <div className="font-semibold tabular-nums text-ink">
+                    {formatAccuracy(play.accuracy)}
+                  </div>
+                  <div className="text-xs tabular-nums text-muted">
+                    {ratingMode === "dan"
+                      ? play.danLabel
+                      : formatStars(play.sunnyStar)}
+                    {" · "}
+                    {play.playedAt != null
+                      ? formatRelativeTime(String(play.playedAt))
+                      : "—"}
+                  </div>
+                </div>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -922,10 +1134,10 @@ function AxisCell({
       </div>
       <div className="text-[10px] text-faint">
         {maps >= requiredPlays
-          ? `${maps} plays`
+          ? `${maps} maps`
           : maps > 0
             ? `${maps}/${requiredPlays}`
-            : "0 plays"}
+            : "0 maps"}
       </div>
     </div>
   );

@@ -68,6 +68,25 @@ export async function fetchStats(params?: {
   );
 }
 
+export type SkillBandKind = "push" | "accuracy" | "consistency";
+
+export async function fetchSkillBandPlays(params: {
+  band: SkillBandKind;
+  axis?: StatsSkillAxis;
+  topPlays?: number;
+}) {
+  return unwrap(
+    await api.api.stats["skill-plays"].get({
+      query: {
+        band: params.band,
+        axis: params.axis,
+        topPlays: params.topPlays,
+      },
+    }),
+    "/api/stats/skill-plays",
+  );
+}
+
 export type PlayerStats = Awaited<ReturnType<typeof fetchStats>>;
 
 export async function fetchPracticeList(params: {

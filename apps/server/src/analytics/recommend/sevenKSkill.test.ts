@@ -14,6 +14,8 @@ const {
   utcWeekStartKey,
   PUSH_ACC_MIN,
   PUSH_ACC_MAX,
+  topPlaysInBand,
+  bestPlayPerMap,
 } = __testing;
 
 function play(
@@ -45,6 +47,65 @@ describe("aggregateAccBandMaps", () => {
     expect(maps[0]!.bandPlays).toBe(2);
     expect(maps[0]!.avgBandAcc).toBeCloseTo(0.93, 5);
     expect(maps[0]!.lastPlayedAt).toBe(2000);
+  });
+});
+
+describe("topPlaysInBand", () => {
+  test("uses only the best play per map", () => {
+    const top = topPlaysInBand(
+      [
+        play({
+          beatmapId: "a",
+          playedAt: 1000,
+          accuracy: 0.91,
+          sunnyStar: 8,
+        }),
+        play({
+          beatmapId: "a",
+          playedAt: 2000,
+          accuracy: 0.94,
+          sunnyStar: 8,
+        }),
+        play({
+          beatmapId: "b",
+          playedAt: 3000,
+          accuracy: 0.92,
+          sunnyStar: 9,
+        }),
+      ],
+      PUSH_ACC_MIN,
+      10,
+    );
+
+    expect(top).toHaveLength(2);
+    expect(top.find((p) => p.beatmapId === "a")!.accuracy).toBeCloseTo(0.94, 5);
+    expect(top[0]!.beatmapId).toBe("b");
+  });
+
+  test("keeps maps when best clear is above the core band", () => {
+    const top = topPlaysInBand(
+      [
+        play({
+          beatmapId: "a",
+          playedAt: 1000,
+          accuracy: 0.97,
+          sunnyStar: 8.5,
+          lnRatio: 0.5,
+        }),
+        play({
+          beatmapId: "b",
+          playedAt: 2000,
+          accuracy: 0.92,
+          sunnyStar: 8,
+          lnRatio: 0.5,
+        }),
+      ],
+      PUSH_ACC_MIN,
+      10,
+    );
+
+    expect(top).toHaveLength(2);
+    expect(top.map((p) => p.beatmapId).sort()).toEqual(["a", "b"]);
   });
 });
 
@@ -121,7 +182,7 @@ describe("estimateSevenKSkillFromPlays as-of", () => {
         play({
           beatmapId: `comfort-${i}`,
           playedAt: 2000 + i,
-          accuracy: 0.97,
+          accuracy: 0.85,
           sunnyStar: 7,
           lnRatio: 0.5,
         }),

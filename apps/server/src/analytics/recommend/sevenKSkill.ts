@@ -82,6 +82,21 @@ export type SevenKSkillOptions = {
   topPlays?: number;
 };
 
+export type SkillBandKind = "push" | "accuracy" | "consistency";
+
+export function skillBandAccRange(
+  band: SkillBandKind,
+): { min: number; max: number } {
+  switch (band) {
+    case "push":
+      return { min: PUSH_ACC_MIN, max: PUSH_ACC_MAX };
+    case "consistency":
+      return { min: CONSISTENCY_ACC_MIN, max: CONSISTENCY_ACC_MAX };
+    case "accuracy":
+      return { min: ACCURACY_ACC_MIN, max: ACCURACY_ACC_MAX };
+  }
+}
+
 /** Accuracy weight: 80% → 0, 100% → 1 (accuracy stored 0–1). */
 function accuracyWeight(accuracy: number): number {
   return Math.max(0, (accuracy * 100 - 80) / 20);
@@ -140,39 +155,68 @@ function normalizeTopPlays(raw: number | undefined): number {
   return Math.min(500, Math.max(1, Math.round(n)));
 }
 
-/** Highest Sunny plays in an accuracy band (ties prefer newer). */
-function topPlaysInBand(
+type PlayLike = Pick<
+  SkillPlayRow,
+  "beatmapId" | "accuracy" | "playedAt" | "sunnyStar"
+>;
+
+/** Keep a single best score per beatmap (highest ★, then acc, then newest). */
+export function bestPlayPerMap<T extends PlayLike>(plays: T[]): T[] {
+  const byMap = new Map<string, T>();
+  for (const play of plays) {
+    const existing = byMap.get(play.beatmapId);
+    if (!existing) {
+      byMap.set(play.beatmapId, play);
+      continue;
+    }
+    const playStar = play.sunnyStar ?? 0;
+    const existingStar = existing.sunnyStar ?? 0;
+    const better =
+      playStar > existingStar ||
+      (playStar === existingStar &&
+        (play.accuracy > existing.accuracy ||
+          (play.accuracy === existing.accuracy &&
+            play.playedAt > existing.playedAt)));
+    if (better) byMap.set(play.beatmapId, play);
+  }
+  return [...byMap.values()];
+}
+
+/** Highest Sunny maps at or above the band floor (one best play per map). */
+export function topPlaysInBand(
   plays: SkillPlayRow[],
-  accMin: number,
-  accMax: number,
+  accFloor: number,
   topN: number,
   axis?: MapAxis,
 ): SkillPlayRow[] {
-  return plays
-    .filter(
+  return bestPlayPerMap(
+    plays.filter(
       (p) =>
         p.sunnyStar != null &&
         p.sunnyStar > 0 &&
-        p.accuracy >= accMin &&
-        p.accuracy < accMax &&
+        p.accuracy >= accFloor &&
         (axis == null || classifyMapAxis(p.lnRatio) === axis),
-    )
+    ),
+  )
     .sort(
       (a, b) =>
         b.sunnyStar! - a.sunnyStar! ||
+        b.accuracy - a.accuracy ||
         b.playedAt - a.playedAt ||
         a.beatmapId.localeCompare(b.beatmapId),
     )
     .slice(0, topN);
 }
 
-/** Top Sunny-rated plays across all accuracy bands. */
+/** Top Sunny-rated plays across all accuracy bands (one play per map). */
 function topRatedPlays(plays: SkillPlayRow[], topN: number): SkillPlayRow[] {
-  return plays
-    .filter((p) => p.sunnyStar != null && p.sunnyStar > 0)
+  return bestPlayPerMap(
+    plays.filter((p) => p.sunnyStar != null && p.sunnyStar > 0),
+  )
     .sort(
       (a, b) =>
         b.sunnyStar! - a.sunnyStar! ||
+        b.accuracy - a.accuracy ||
         b.playedAt - a.playedAt ||
         a.beatmapId.localeCompare(b.beatmapId),
     )
@@ -269,33 +313,32 @@ function clearLevelFromPlays(
 
 function bandLevelsFromPlays(
   plays: SkillPlayRow[],
-  accMin: number,
-  accMax: number,
+  accFloor: number,
   topN: number,
   center: number,
   halfWidth: number,
 ) {
   return {
     all: clearLevelFromPlays(
-      topPlaysInBand(plays, accMin, accMax, topN),
+      topPlaysInBand(plays, accFloor, topN),
       "all",
       center,
       halfWidth,
     ),
     rc: clearLevelFromPlays(
-      topPlaysInBand(plays, accMin, accMax, topN, "rc"),
+      topPlaysInBand(plays, accFloor, topN, "rc"),
       "rc",
       center,
       halfWidth,
     ),
     ln: clearLevelFromPlays(
-      topPlaysInBand(plays, accMin, accMax, topN, "ln"),
+      topPlaysInBand(plays, accFloor, topN, "ln"),
       "ln",
       center,
       halfWidth,
     ),
     fln: clearLevelFromPlays(
-      topPlaysInBand(plays, accMin, accMax, topN, "fln"),
+      topPlaysInBand(plays, accFloor, topN, "fln"),
       "fln",
       center,
       halfWidth,
@@ -519,7 +562,6 @@ export function estimateSevenKSkillFromPlays(
   const clear = bandLevelsFromPlays(
     filtered,
     PUSH_ACC_MIN,
-    PUSH_ACC_MAX,
     topN,
     PUSH_ACC_CENTER,
     0.025,
@@ -528,7 +570,6 @@ export function estimateSevenKSkillFromPlays(
   const farm = bandLevelsFromPlays(
     filtered,
     CONSISTENCY_ACC_MIN,
-    CONSISTENCY_ACC_MAX,
     topN,
     CONSISTENCY_ACC_CENTER,
     0.015,
@@ -537,7 +578,6 @@ export function estimateSevenKSkillFromPlays(
   const acc = bandLevelsFromPlays(
     filtered,
     ACCURACY_ACC_MIN,
-    ACCURACY_ACC_MAX,
     topN,
     ACCURACY_ACC_CENTER,
     0.01,
@@ -795,6 +835,7 @@ export const __testing = {
   utcWeekStartKey,
   topPlaysInBand,
   topRatedPlays,
+  bestPlayPerMap,
   PUSH_ACC_MIN,
   PUSH_ACC_MAX,
   CONSISTENCY_ACC_MIN,

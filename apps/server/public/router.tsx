@@ -19,7 +19,7 @@ import { OverlayPage } from "./features/overlay/OverlayPage";
 import { RatingLabPage } from "./features/rating-lab/RatingLabPage";
 import { DownloadMapsPage } from "./features/download/DownloadMapsPage";
 import { StatsPage } from "./features/stats/StatsPage";
-import type { StatsGranularity, StatsRange } from "./lib/api";
+import type { StatsGranularity, StatsRange, StatsSkillAxis } from "./lib/api";
 
 const rootRoute = createRootRoute({
   component: () => <Outlet />,
@@ -46,26 +46,50 @@ const statsRoute = createRoute({
   path: "/stats",
   validateSearch: (
     search: Record<string, unknown>,
-  ): { granularity: StatsGranularity; range: StatsRange } => {
+  ): {
+    granularity: StatsGranularity;
+    range: StatsRange;
+    skillTopPlays: number;
+    skillAxis: StatsSkillAxis;
+  } => {
     const granularity: StatsGranularity =
       search.granularity === "week" ? "week" : "day";
     const rawRange = Number(search.range);
     const range: StatsRange =
       rawRange === 90 || rawRange === 180 ? rawRange : 30;
-    return { granularity, range };
+    const rawTop = Number(search.skillTopPlays);
+    const skillTopPlays =
+      Number.isFinite(rawTop) && rawTop >= 1 && rawTop <= 500
+        ? Math.round(rawTop)
+        : 30;
+    const rawAxis = search.skillAxis;
+    const skillAxis: StatsSkillAxis =
+      rawAxis === "rc" || rawAxis === "ln" || rawAxis === "fln"
+        ? rawAxis
+        : "all";
+    return { granularity, range, skillTopPlays, skillAxis };
   },
   component: function StatsRoute() {
     const navigate = statsRoute.useNavigate();
-    const { granularity, range } = statsRoute.useSearch();
+    const { granularity, range, skillTopPlays, skillAxis } =
+      statsRoute.useSearch();
     return (
       <StatsPage
         granularity={granularity}
         range={range}
+        skillTopPlays={skillTopPlays}
+        skillAxis={skillAxis}
         onGranularityChange={(next) =>
           navigate({ search: (prev) => ({ ...prev, granularity: next }) })
         }
         onRangeChange={(next) =>
           navigate({ search: (prev) => ({ ...prev, range: next }) })
+        }
+        onSkillTopPlaysChange={(next) =>
+          navigate({ search: (prev) => ({ ...prev, skillTopPlays: next }) })
+        }
+        onSkillAxisChange={(next) =>
+          navigate({ search: (prev) => ({ ...prev, skillAxis: next }) })
         }
       />
     );

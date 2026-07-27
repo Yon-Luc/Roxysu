@@ -17,6 +17,38 @@ function likePattern(value: string, prefix?: boolean): string {
   return prefix ? `${escaped}%` : `%${escaped}%`;
 }
 
+/** Dan tier labels end with a space + digit (e.g. "Regular 1", "LN 10"). */
+function isDanTierLabel(value: string): boolean {
+  return / \d+$/.test(value);
+}
+
+/**
+ * Match Sunny dan labels without crossing tiers — "Regular 1" must not match "Regular 10".
+ */
+function compileDanMatch(
+  value: string,
+  prefix: boolean | undefined,
+  push: (value: unknown) => string,
+): string {
+  if (prefix && !isDanTierLabel(value)) {
+    const pat = push(likePattern(value, true));
+    return `(dr.est_diff IS NOT NULL AND lower(dr.est_diff) LIKE lower(${pat}) ESCAPE '\\')`;
+  }
+
+  if (isDanTierLabel(value)) {
+    const escaped = value.replace(/%/g, "\\%").replace(/_/g, "\\_");
+    const tierSpace = push(`%${escaped} %`);
+    const tierExact = push(value);
+    return `(dr.est_diff IS NOT NULL AND (
+      lower(dr.est_diff) LIKE lower(${tierSpace}) ESCAPE '\\'
+      OR lower(dr.est_diff) = lower(${tierExact})
+    ))`;
+  }
+
+  const pat = push(likePattern(value, prefix));
+  return `(dr.est_diff IS NOT NULL AND lower(dr.est_diff) LIKE lower(${pat}) ESCAPE '\\')`;
+}
+
 /** Positional `?` binders. Alias contract: b=beatmaps, m=mastery, ps=play_stats, rs=retry_stats */
 function compileTerm(term: FieldTerm, params: unknown[]): string {
   const push = (value: unknown) => {
@@ -115,11 +147,8 @@ function compileTerm(term: FieldTerm, params: unknown[]): string {
       const since = Date.now() - term.days * 24 * 60 * 60 * 1000;
       return `(ps.last_played_at IS NOT NULL AND ps.last_played_at >= ${push(since)})`;
     }
-    case "dan": {
-      // Sunny dan label (est_diff); case-insensitive substring / prefix.
-      const pat = push(likePattern(term.value, term.prefix));
-      return `(dr.est_diff IS NOT NULL AND lower(dr.est_diff) LIKE lower(${pat}) ESCAPE '\\')`;
-    }
+    case "dan":
+      return compileDanMatch(term.value, term.prefix, push);
     case "sunny": {
       if (term.min != null && term.max != null) {
         return `dr.sunny_star BETWEEN ${push(term.min)} AND ${push(term.max)}`;

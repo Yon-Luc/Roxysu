@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   fetchPracticeRecommend,
   type PracticeRecommend,
@@ -99,25 +99,21 @@ export function SessionSevenKRecommend({
   const ratingMode = useRatingDisplayMode();
   const [prefs, setPrefs] = useState<RecPrefs>(() => loadPrefs());
   const [shuffleKey, setShuffleKey] = useState(0);
+  const excludeRef = useRef(excludeBeatmapIds);
+  excludeRef.current = excludeBeatmapIds;
 
   useEffect(() => {
     savePrefs(prefs);
   }, [prefs]);
 
   const { data, isLoading, error, isFetching, refetch } = useQuery({
-    queryKey: [
-      "practice-recommend-7k",
-      prefs.focus,
-      prefs.skillset,
-      excludeBeatmapIds.join(","),
-      shuffleKey,
-    ],
+    queryKey: ["practice-recommend-7k", prefs.focus, prefs.skillset, shuffleKey],
     queryFn: () =>
       fetchPracticeRecommend({
         focus: prefs.focus,
         skillset: prefs.focus === "deficit" ? undefined : prefs.skillset,
         count: 8,
-        exclude: excludeBeatmapIds,
+        exclude: excludeRef.current,
       }),
   });
 

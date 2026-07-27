@@ -49,16 +49,19 @@ export async function fetchDashboard() {
 
 export type StatsGranularity = "day" | "week";
 export type StatsRange = 30 | 90 | 180;
+export type StatsSkillAxis = "all" | "rc" | "ln" | "fln";
 
 export async function fetchStats(params?: {
   granularity?: StatsGranularity;
   range?: StatsRange;
+  skillTopPlays?: number;
 }) {
   return unwrap(
     await api.api.stats.get({
       query: {
         granularity: params?.granularity,
         range: params?.range,
+        skillTopPlays: params?.skillTopPlays,
       },
     }),
     "/api/stats",
@@ -205,6 +208,16 @@ export async function createCollection(body: { name: string; query: string }) {
 export async function deleteCollection(id: number) {
   return unwrap(
     await api.api.collections({ id: String(id) }).delete(),
+    `/api/collections/${id}`,
+  );
+}
+
+export async function updateCollection(
+  id: number,
+  body: { name?: string; query?: string },
+) {
+  return unwrap(
+    await api.api.collections({ id: String(id) }).patch(body),
     `/api/collections/${id}`,
   );
 }

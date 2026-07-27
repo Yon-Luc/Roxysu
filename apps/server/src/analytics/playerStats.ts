@@ -38,7 +38,14 @@ export type StatsRange = 30 | 90 | 180;
 export type PlayerStatsQuery = {
   granularity?: StatsGranularity;
   range?: StatsRange;
+  skillTopPlays?: number;
 };
+
+function parseSkillTopPlays(raw: unknown): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 30;
+  return Math.min(500, Math.max(1, Math.round(n)));
+}
 
 function parseRange(raw: unknown): StatsRange {
   const n = Number(raw);
@@ -274,6 +281,7 @@ async function getSummary(db: Db) {
 export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
   const granularity = parseGranularity(query.granularity);
   const range = parseRange(query.range);
+  const skillTopPlays = parseSkillTopPlays(query.skillTopPlays);
 
   const trendDays = range;
   const weekCount = Math.max(12, Math.ceil(range / 7));
@@ -292,9 +300,13 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
     topMappers,
   ] = await Promise.all([
     getSummary(db),
-    Promise.resolve(estimateSevenKSkill(db)),
+    Promise.resolve(estimateSevenKSkill(db, { topPlays: skillTopPlays })),
     Promise.resolve(
-      estimateSevenKSkillHistory(db, { granularity, rangeDays: range }),
+      estimateSevenKSkillHistory(db, {
+        granularity,
+        rangeDays: range,
+        topPlays: skillTopPlays,
+      }),
     ),
     getPpTrend(db, trendDays),
     getAccuracyTrend(db, trendDays),
@@ -309,6 +321,7 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
   return {
     granularity,
     range,
+    skillTopPlays,
     summary: {
       ...summary,
       sessionCount: sessionStats.sessionCount,
@@ -332,4 +345,4 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
   };
 }
 
-export { parseGranularity, parseRange, PERFECT_TOTAL_SCORE };
+export { parseGranularity, parseRange, parseSkillTopPlays, PERFECT_TOTAL_SCORE };

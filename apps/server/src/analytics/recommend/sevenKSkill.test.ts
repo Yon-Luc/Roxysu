@@ -14,7 +14,6 @@ const {
   utcWeekStartKey,
   PUSH_ACC_MIN,
   PUSH_ACC_MAX,
-  MIN_CLEAR_MAPS,
 } = __testing;
 
 function play(
@@ -54,10 +53,10 @@ describe("estimateSevenKSkillFromPlays as-of", () => {
     const day1 = Date.UTC(2024, 0, 1, 12);
     const day2 = Date.UTC(2024, 0, 10, 12);
     const day3 = Date.UTC(2024, 0, 20, 12);
+    const topPlays = 3;
 
-    // Need ≥ MIN_CLEAR_MAPS distinct maps in push band before day3 for peak to stick
     const early: SkillPlayRow[] = [];
-    for (let i = 0; i < MIN_CLEAR_MAPS; i++) {
+    for (let i = 0; i < topPlays; i++) {
       early.push(
         play({
           beatmapId: `early-${i}`,
@@ -67,7 +66,6 @@ describe("estimateSevenKSkillFromPlays as-of", () => {
         }),
       );
     }
-    // Comfort needs ≥5 plays with sunny
     for (let i = 0; i < 5; i++) {
       early.push(
         play({
@@ -88,20 +86,52 @@ describe("estimateSevenKSkillFromPlays as-of", () => {
 
     const asOfMid = estimateSevenKSkillFromPlays([...early, latePush], {
       asOfMs: endOfUtcDayMs(utcDayKey(day2)),
+      topPlays,
       coldStartFromPlaysOnly: true,
     });
     const asOfLate = estimateSevenKSkillFromPlays([...early, latePush], {
       asOfMs: endOfUtcDayMs(utcDayKey(day3)),
+      topPlays,
       coldStartFromPlaysOnly: true,
     });
 
     expect(asOfMid.peakOverall).toBeGreaterThan(0);
     expect(asOfMid.clearRcMaps + asOfMid.clearLnMaps + asOfMid.clearFlnMaps).toBe(
-      MIN_CLEAR_MAPS,
+      topPlays,
     );
-    // Late high-star map should raise push after it is included
     expect(asOfLate.peakOverall).toBeGreaterThanOrEqual(asOfMid.peakOverall);
     expect(asOfLate.clearRcMaps).toBeGreaterThanOrEqual(asOfMid.clearRcMaps);
+  });
+
+  test("requires full topN plays in band before reporting axis push skill", () => {
+    const lnPlays: SkillPlayRow[] = [];
+    for (let i = 0; i < 15; i++) {
+      lnPlays.push(
+        play({
+          beatmapId: `ln-${i}`,
+          playedAt: 1000 + i,
+          accuracy: 0.92,
+          sunnyStar: 8.5,
+          lnRatio: 0.5,
+        }),
+      );
+    }
+    for (let i = 0; i < 5; i++) {
+      lnPlays.push(
+        play({
+          beatmapId: `comfort-${i}`,
+          playedAt: 2000 + i,
+          accuracy: 0.97,
+          sunnyStar: 7,
+          lnRatio: 0.5,
+        }),
+      );
+    }
+
+    const skill = estimateSevenKSkillFromPlays(lnPlays, { topPlays: 20 });
+    expect(skill.clearLnMaps).toBe(15);
+    expect(skill.peakLn).toBe(0);
+    expect(skill.peakOverall).toBe(0);
   });
 
   test("empty before any plays", () => {

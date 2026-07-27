@@ -4,6 +4,7 @@ import {
   getPlayerStats,
   parseGranularity,
   parseRange,
+  parseSkillTopPlays,
 } from "../analytics/playerStats";
 import { toIso } from "../shared/serialize";
 
@@ -14,7 +15,12 @@ export const statsRoutes = new Elysia({ prefix: "/stats" })
     async ({ db, query }) => {
       const granularity = parseGranularity(query.granularity);
       const range = parseRange(query.range);
-      const data = await getPlayerStats(db, { granularity, range });
+      const skillTopPlays = parseSkillTopPlays(query.skillTopPlays);
+      const data = await getPlayerStats(db, {
+        granularity,
+        range,
+        skillTopPlays,
+      });
 
       return {
         ...data,
@@ -41,6 +47,7 @@ export const statsRoutes = new Elysia({ prefix: "/stats" })
           t.Union([t.Literal("day"), t.Literal("week")]),
         ),
         range: t.Optional(t.Union([t.Number(), t.String()])),
+        skillTopPlays: t.Optional(t.Union([t.Number(), t.String()])),
       }),
     },
   );

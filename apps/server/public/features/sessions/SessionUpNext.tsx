@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { QueryLanguageHelpButton } from "../../components/QueryLanguageHelpModal";
 import {
   fetchPracticeSample,
@@ -173,6 +173,8 @@ export function SessionUpNext({
   const [prefs, setPrefs] = useState<UpNextPrefs>(() => loadPrefs());
   const [shuffleKey, setShuffleKey] = useState(0);
   const [queryDirty, setQueryDirty] = useState(false);
+  const excludeRef = useRef(excludeBeatmapIds);
+  excludeRef.current = excludeBeatmapIds;
 
   useEffect(() => {
     savePrefs(prefs);
@@ -217,17 +219,12 @@ export function SessionUpNext({
   const sampleQuery = prefs.query.trim();
 
   const { data, isLoading, error, isFetching, refetch } = useQuery({
-    queryKey: [
-      "practice-sample",
-      sampleQuery,
-      excludeBeatmapIds.join(","),
-      shuffleKey,
-    ],
+    queryKey: ["practice-sample", sampleQuery, shuffleKey],
     queryFn: () =>
       fetchPracticeSample({
         q: sampleQuery || undefined,
         count: 3,
-        exclude: excludeBeatmapIds,
+        exclude: excludeRef.current,
       }),
     enabled: sampleQuery.length > 0,
   });

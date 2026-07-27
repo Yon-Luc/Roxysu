@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import {
   Bar,
@@ -17,6 +18,8 @@ import {
   fetchStats,
   type StatsGranularity,
   type StatsRange,
+  type StatsSkillAxis,
+  type PlayerStats,
 } from "../../lib/api";
 import { formatAccuracy, formatPp, formatRelativeTime } from "../../lib/format";
 import {
@@ -50,15 +53,118 @@ function formatDuration(ms: number | null | undefined): string {
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
+const SKILL_AXIS_OPTIONS: Array<{ id: StatsSkillAxis; label: string }> = [
+  { id: "all", label: "All" },
+  { id: "rc", label: "Rice" },
+  { id: "ln", label: "LN" },
+  { id: "fln", label: "FLN" },
+];
+
+function skillAxisLabel(axis: StatsSkillAxis): string {
+  return SKILL_AXIS_OPTIONS.find((o) => o.id === axis)?.label ?? "All";
+}
+
+function skillRatingAxis(
+  axis: StatsSkillAxis,
+): SkillRatingAxis {
+  if (axis === "rc" || axis === "ln" || axis === "fln") return axis;
+  return "overall";
+}
+
+function skillBandValue(
+  skill: PlayerStats["skill"],
+  band: "peak" | "accuracy" | "consistency",
+  axis: StatsSkillAxis,
+): number {
+  const values = {
+    peak: {
+      all: skill.peakOverall,
+      rc: skill.peakRc,
+      ln: skill.peakLn,
+      fln: skill.peakFln,
+    },
+    accuracy: {
+      all: skill.accuracyOverall,
+      rc: skill.accuracyRc,
+      ln: skill.accuracyLn,
+      fln: skill.accuracyFln,
+    },
+    consistency: {
+      all: skill.consistencyOverall,
+      rc: skill.consistencyRc,
+      ln: skill.consistencyLn,
+      fln: skill.consistencyFln,
+    },
+  } as const;
+  if (axis === "all") return values[band].all;
+  return values[band][axis];
+}
+
+function skillBandMaps(
+  skill: PlayerStats["skill"],
+  band: "peak" | "accuracy" | "consistency",
+  axis: StatsSkillAxis,
+): number {
+  const values = {
+    peak: {
+      all: skill.clearRcMaps + skill.clearLnMaps + skill.clearFlnMaps,
+      rc: skill.clearRcMaps,
+      ln: skill.clearLnMaps,
+      fln: skill.clearFlnMaps,
+    },
+    accuracy: {
+      all: skill.accuracyRcMaps + skill.accuracyLnMaps + skill.accuracyFlnMaps,
+      rc: skill.accuracyRcMaps,
+      ln: skill.accuracyLnMaps,
+      fln: skill.accuracyFlnMaps,
+    },
+    consistency: {
+      all:
+        skill.consistencyRcMaps +
+        skill.consistencyLnMaps +
+        skill.consistencyFlnMaps,
+      rc: skill.consistencyRcMaps,
+      ln: skill.consistencyLnMaps,
+      fln: skill.consistencyFlnMaps,
+    },
+  } as const;
+  return values[band][axis];
+}
+
+function historyBandValue(
+  point: NonNullable<PlayerStats["skillHistory"]>[number],
+  band: "push" | "accuracy" | "consistency",
+  axis: StatsSkillAxis,
+): number {
+  if (axis === "all") return point[band];
+  const key = `${band}${axis.charAt(0).toUpperCase()}${axis.slice(1)}` as
+    | "pushRc"
+    | "pushLn"
+    | "pushFln"
+    | "accuracyRc"
+    | "accuracyLn"
+    | "accuracyFln"
+    | "consistencyRc"
+    | "consistencyLn"
+    | "consistencyFln";
+  const axisValue = point[key];
+  return axisValue > 0 ? axisValue : point[band];
+}
+
 function skillTooltipFormatter(
   mode: RatingDisplayMode,
   value: unknown,
   name: unknown,
+  axis: StatsSkillAxis,
 ): [string, string] {
   const label = String(name ?? "");
   const n = typeof value === "number" ? value : Number(value);
   return [
-    formatSkillRating({ mode, sunnyStar: n, axis: "overall" }),
+    formatSkillRating({
+      mode,
+      sunnyStar: n,
+      axis: skillRatingAxis(axis),
+    }),
     label,
   ];
 }
@@ -66,18 +172,44 @@ function skillTooltipFormatter(
 export function StatsPage({
   granularity,
   range,
+  skillTopPlays,
+  skillAxis,
   onGranularityChange,
   onRangeChange,
+  onSkillTopPlaysChange,
+  onSkillAxisChange,
 }: {
   granularity: StatsGranularity;
   range: StatsRange;
+  skillTopPlays: number;
+  skillAxis: StatsSkillAxis;
   onGranularityChange: (g: StatsGranularity) => void;
   onRangeChange: (r: StatsRange) => void;
+  onSkillTopPlaysChange: (n: number) => void;
+  onSkillAxisChange: (a: StatsSkillAxis) => void;
 }) {
   const ratingMode = useRatingDisplayMode();
+  const [customTopPlays, setCustomTopPlays] = useState(
+    String(skillTopPlays),
+  );
+  const presetTopPlays = [10, 20, 30, 50] as const;
+  type TopPlaysTab = (typeof presetTopPlays)[number] | "custom";
+  const isPreset = (presetTopPlays as readonly number[]).includes(skillTopPlays);
+  const [topPlaysTab, setTopPlaysTab] = useState<TopPlaysTab>(() =>
+    isPreset ? (skillTopPlays as TopPlaysTab) : "custom",
+  );
+
+  useEffect(() => {
+    setCustomTopPlays(String(skillTopPlays));
+    if ((presetTopPlays as readonly number[]).includes(skillTopPlays)) {
+      setTopPlaysTab(skillTopPlays as TopPlaysTab);
+    }
+  }, [skillTopPlays]);
+
   const { data, isLoading, error } = useQuery({
-    queryKey: ["stats", granularity, range],
-    queryFn: () => fetchStats({ granularity, range }),
+    queryKey: ["stats", granularity, range, skillTopPlays],
+    queryFn: () =>
+      fetchStats({ granularity, range, skillTopPlays }),
   });
 
   if (isLoading) {
@@ -111,17 +243,75 @@ export function StatsPage({
     { axis: "FLN", plays: mix?.fln ?? 0, pct: mix?.flnPct ?? 0 },
   ];
 
+  const chartHistory = history.map((point) => ({
+    at: point.at,
+    push: historyBandValue(point, "push", skillAxis),
+    accuracy: historyBandValue(point, "accuracy", skillAxis),
+    consistency: historyBandValue(point, "consistency", skillAxis),
+  }));
+
+  const axisFilterActive = skillAxis !== "all";
+
   return (
     <div className="space-y-10">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <PageTitle>Stats</PageTitle>
-          <p className="rx-subtitle">
-            Skill evolution, progression, and how you play — times in UTC.
-            Skill uses your Settings rating display (Sunny ★ or dan).
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <PageTitle>Stats</PageTitle>
+            <p className="rx-subtitle">
+              Skill evolution, progression, and how you play — times in UTC.
+              Skill uses your Settings rating display (Sunny ★ or dan) from your
+              top {skillTopPlays} rated plays per band (all {skillTopPlays} required)
+              {axisFilterActive ? ` · ${skillAxisLabel(skillAxis)} only` : ""}.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+          <ToggleGroup
+            value={String(topPlaysTab)}
+            options={[
+              { id: "10", label: "Top 10" },
+              { id: "20", label: "Top 20" },
+              { id: "30", label: "Top 30" },
+              { id: "50", label: "Top 50" },
+              { id: "custom", label: "Custom" },
+            ]}
+            onChange={(v) => {
+              if (v === "custom") {
+                setTopPlaysTab("custom");
+                return;
+              }
+              const n = Number(v);
+              if (!Number.isFinite(n)) return;
+              setTopPlaysTab(n as TopPlaysTab);
+              onSkillTopPlaysChange(n);
+              setCustomTopPlays(v);
+            }}
+          />
+          {topPlaysTab === "custom" ? (
+            <form
+              className="flex items-center gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const n = Number(customTopPlays);
+                if (Number.isFinite(n) && n >= 1 && n <= 500) {
+                  onSkillTopPlaysChange(Math.round(n));
+                }
+              }}
+            >
+              <input
+                type="number"
+                min={1}
+                max={500}
+                value={customTopPlays}
+                onChange={(e) => setCustomTopPlays(e.target.value)}
+                className="rx-input w-20 tabular-nums"
+                aria-label="Top plays count"
+              />
+              <button type="submit" className="rx-btn text-xs">
+                Apply
+              </button>
+            </form>
+          ) : null}
           <ToggleGroup
             value={granularity}
             options={[
@@ -139,7 +329,13 @@ export function StatsPage({
             ]}
             onChange={(v) => onRangeChange(Number(v) as StatsRange)}
           />
+          </div>
         </div>
+        <ToggleGroup
+          value={skillAxis}
+          options={SKILL_AXIS_OPTIONS}
+          onChange={onSkillAxisChange}
+        />
       </div>
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -162,39 +358,66 @@ export function StatsPage({
         <div className="grid gap-3 sm:grid-cols-3">
           <SkillCard
             mode={ratingMode}
+            axis={skillAxis}
             title="Push"
             hint="90–95% clears"
-            overall={skill.peakOverall}
-            rc={skill.peakRc}
-            ln={skill.peakLn}
-            fln={skill.peakFln}
-            rcMaps={skill.clearRcMaps}
-            lnMaps={skill.clearLnMaps}
-            flnMaps={skill.clearFlnMaps}
+            value={skillBandValue(skill, "peak", skillAxis)}
+            maps={skillBandMaps(skill, "peak", skillAxis)}
+            requiredPlays={skillTopPlays}
+            breakdown={
+              axisFilterActive
+                ? null
+                : {
+                    rc: skill.peakRc,
+                    ln: skill.peakLn,
+                    fln: skill.peakFln,
+                    rcMaps: skill.clearRcMaps,
+                    lnMaps: skill.clearLnMaps,
+                    flnMaps: skill.clearFlnMaps,
+                  }
+            }
           />
           <SkillCard
             mode={ratingMode}
+            axis={skillAxis}
             title="Accuracy"
             hint="99%+ clears"
-            overall={skill.accuracyOverall}
-            rc={skill.accuracyRc}
-            ln={skill.accuracyLn}
-            fln={skill.accuracyFln}
-            rcMaps={skill.accuracyRcMaps}
-            lnMaps={skill.accuracyLnMaps}
-            flnMaps={skill.accuracyFlnMaps}
+            value={skillBandValue(skill, "accuracy", skillAxis)}
+            maps={skillBandMaps(skill, "accuracy", skillAxis)}
+            requiredPlays={skillTopPlays}
+            breakdown={
+              axisFilterActive
+                ? null
+                : {
+                    rc: skill.accuracyRc,
+                    ln: skill.accuracyLn,
+                    fln: skill.accuracyFln,
+                    rcMaps: skill.accuracyRcMaps,
+                    lnMaps: skill.accuracyLnMaps,
+                    flnMaps: skill.accuracyFlnMaps,
+                  }
+            }
           />
           <SkillCard
             mode={ratingMode}
+            axis={skillAxis}
             title="Consistency"
             hint="96–99% clears"
-            overall={skill.consistencyOverall}
-            rc={skill.consistencyRc}
-            ln={skill.consistencyLn}
-            fln={skill.consistencyFln}
-            rcMaps={skill.consistencyRcMaps}
-            lnMaps={skill.consistencyLnMaps}
-            flnMaps={skill.consistencyFlnMaps}
+            value={skillBandValue(skill, "consistency", skillAxis)}
+            maps={skillBandMaps(skill, "consistency", skillAxis)}
+            requiredPlays={skillTopPlays}
+            breakdown={
+              axisFilterActive
+                ? null
+                : {
+                    rc: skill.consistencyRc,
+                    ln: skill.consistencyLn,
+                    fln: skill.consistencyFln,
+                    rcMaps: skill.consistencyRcMaps,
+                    lnMaps: skill.consistencyLnMaps,
+                    flnMaps: skill.consistencyFlnMaps,
+                  }
+            }
           />
         </div>
         {skill.coldStart ? (
@@ -205,12 +428,18 @@ export function StatsPage({
       </section>
 
       <section>
-        <ChartCard title="Skill evolution">
-          {history.length === 0 ? (
+        <ChartCard
+          title={
+            axisFilterActive
+              ? `Skill evolution · ${skillAxisLabel(skillAxis)}`
+              : "Skill evolution"
+          }
+        >
+          {chartHistory.length === 0 ? (
             <EmptyChart />
           ) : (
             <ResponsiveContainer width="100%" height={260}>
-              <LineChart data={history}>
+              <LineChart data={chartHistory}>
                 <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
                 <XAxis
                   dataKey="at"
@@ -228,7 +457,7 @@ export function StatsPage({
                 <Tooltip
                   contentStyle={tooltipStyle}
                   formatter={(value, name) =>
-                    skillTooltipFormatter(ratingMode, value, name)
+                    skillTooltipFormatter(ratingMode, value, name, skillAxis)
                   }
                 />
                 <Legend />
@@ -575,27 +804,38 @@ export function StatsPage({
 
 function SkillCard({
   mode,
+  axis,
   title,
   hint,
-  overall,
-  rc,
-  ln,
-  fln,
-  rcMaps,
-  lnMaps,
-  flnMaps,
+  value,
+  maps,
+  requiredPlays,
+  breakdown,
 }: {
   mode: RatingDisplayMode;
+  axis: StatsSkillAxis;
   title: string;
   hint: string;
-  overall: number;
-  rc: number;
-  ln: number;
-  fln: number;
-  rcMaps: number;
-  lnMaps: number;
-  flnMaps: number;
+  value: number;
+  maps: number;
+  requiredPlays: number;
+  breakdown: {
+    rc: number;
+    ln: number;
+    fln: number;
+    rcMaps: number;
+    lnMaps: number;
+    flnMaps: number;
+  } | null;
 }) {
+  const hasEstimate = value > 0;
+  const playsLabel =
+    maps === 0
+      ? "No plays in band yet"
+      : hasEstimate
+        ? `${maps} top plays in band`
+        : `${maps}/${requiredPlays} plays in band`;
+
   return (
     <div className="rx-panel px-4 py-4">
       <div className="rx-label">{title}</div>
@@ -604,20 +844,50 @@ function SkillCard({
           mode === "dan" ? "text-xl leading-snug" : "text-3xl"
         }`}
       >
-        {formatSkillRating({ mode, sunnyStar: overall, axis: "overall" })}
+        {hasEstimate
+          ? formatSkillRating({
+              mode,
+              sunnyStar: value,
+              axis: skillRatingAxis(axis),
+            })
+          : "—"}
       </div>
       <p className="mt-1 text-xs text-muted">{hint}</p>
-      <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
-        <AxisCell mode={mode} axis="rc" label="Rice" value={rc} maps={rcMaps} />
-        <AxisCell mode={mode} axis="ln" label="LN" value={ln} maps={lnMaps} />
-        <AxisCell
-          mode={mode}
-          axis="fln"
-          label="FLN"
-          value={fln}
-          maps={flnMaps}
-        />
-      </div>
+      {breakdown ? (
+        <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
+          <AxisCell
+            mode={mode}
+            axis="rc"
+            label="Rice"
+            value={breakdown.rc}
+            maps={breakdown.rcMaps}
+            requiredPlays={requiredPlays}
+          />
+          <AxisCell
+            mode={mode}
+            axis="ln"
+            label="LN"
+            value={breakdown.ln}
+            maps={breakdown.lnMaps}
+            requiredPlays={requiredPlays}
+          />
+          <AxisCell
+            mode={mode}
+            axis="fln"
+            label="FLN"
+            value={breakdown.fln}
+            maps={breakdown.flnMaps}
+            requiredPlays={requiredPlays}
+          />
+        </div>
+      ) : (
+        <p className="mt-4 text-xs text-faint">
+          {playsLabel}
+          {!hasEstimate && maps > 0
+            ? ` · need ${requiredPlays} for an estimate`
+            : ""}
+        </p>
+      )}
     </div>
   );
 }
@@ -628,13 +898,16 @@ function AxisCell({
   label,
   value,
   maps,
+  requiredPlays,
 }: {
   mode: RatingDisplayMode;
   axis: SkillRatingAxis;
   label: string;
   value: number;
   maps: number;
+  requiredPlays: number;
 }) {
+  const hasEstimate = value > 0 && maps >= requiredPlays;
   return (
     <div>
       <div className="text-faint">{label}</div>
@@ -643,9 +916,17 @@ function AxisCell({
           mode === "dan" ? "text-[11px] leading-tight" : ""
         }`}
       >
-        {formatSkillRating({ mode, sunnyStar: value, axis })}
+        {hasEstimate
+          ? formatSkillRating({ mode, sunnyStar: value, axis })
+          : "—"}
       </div>
-      <div className="text-[10px] text-faint">{maps} maps</div>
+      <div className="text-[10px] text-faint">
+        {maps >= requiredPlays
+          ? `${maps} plays`
+          : maps > 0
+            ? `${maps}/${requiredPlays}`
+            : "0 plays"}
+      </div>
     </div>
   );
 }

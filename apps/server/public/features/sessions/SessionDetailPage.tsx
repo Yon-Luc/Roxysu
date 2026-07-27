@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { BeatmapCover } from "../../components/BeatmapCover";
 import { ModBadges } from "../../components/ModBadges";
@@ -26,6 +26,7 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
     queryKey: ["sessions", sessionId],
     queryFn: () => fetchSession(sessionId),
     enabled: Boolean(sessionId),
+    placeholderData: keepPreviousData,
   });
 
   const knownIds = useRef<Set<string>>(new Set());

@@ -1,6 +1,10 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { BeatmapCover } from "../../components/BeatmapCover";
+import {
+  CardGridSkeleton,
+  SkeletonBlock,
+} from "../../components/LoadingSkeleton";
 import { PageTitle } from "../../components/PageTitle";
 import { fetchCollectionResults } from "../../lib/api";
 import {
@@ -30,7 +34,24 @@ export function CollectionResultsPage({
     data && "collection" in data && data.collection ? data : null;
 
   if (isLoading) {
-    return <p className="text-muted">Loading collection…</p>;
+    return (
+      <div className="space-y-8">
+        <div>
+          <Link to="/collections" className="rx-back">
+            ← Collections
+          </Link>
+          <div className="mt-3">
+            <SkeletonBlock className="h-10 w-56 max-w-full rounded-xl" />
+            <SkeletonBlock className="mt-3 h-4 w-full max-w-[28rem]" />
+            <div className="mt-3 flex flex-wrap gap-3">
+              <SkeletonBlock className="h-3 w-24" />
+              <SkeletonBlock className="h-10 w-36 rounded-xl" />
+            </div>
+          </div>
+        </div>
+        <CardGridSkeleton count={6} />
+      </div>
+    );
   }
 
   if (error || !payload) {

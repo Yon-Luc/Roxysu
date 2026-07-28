@@ -3,6 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import { BeatmapCover } from "../../components/BeatmapCover";
 import { BeatmapPreviewButton } from "../../components/BeatmapPreviewModal";
 import { CopyBeatmapSearchButton } from "../../components/CopyBeatmapSearchButton";
+import {
+  HeroSkeleton,
+  ListSkeleton,
+  PanelSkeleton,
+  SkeletonBlock,
+  StatGridSkeleton,
+} from "../../components/LoadingSkeleton";
 import { ModBadges } from "../../components/ModBadges";
 import { ScoreReplayButton } from "../../components/ScoreReplayModal";
 import { fetchBeatmap } from "../../lib/api";
@@ -29,7 +36,28 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
     enabled: Boolean(beatmapId),
   });
   if (isLoading) {
-    return <p className="text-muted">Loading practice profile…</p>;
+    return (
+      <div className="space-y-8">
+        <div>
+          <Link to="/practice" className="rx-back">
+            ← Practice
+          </Link>
+          <HeroSkeleton />
+        </div>
+        <StatGridSkeleton />
+        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <PanelSkeleton lines={3} />
+          <PanelSkeleton lines={3} />
+          <PanelSkeleton lines={3} />
+          <PanelSkeleton lines={3} />
+        </section>
+        <PanelSkeleton lines={1} className="min-h-[20rem]" />
+        <section>
+          <SkeletonBlock className="mb-3 h-8 w-40 rounded-lg" />
+          <ListSkeleton count={6} showThumbnail={false} />
+        </section>
+      </div>
+    );
   }
 
   if (error || !data || !("beatmap" in data) || !data.beatmap) {

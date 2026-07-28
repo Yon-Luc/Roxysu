@@ -2,6 +2,13 @@ import { Link } from "@tanstack/react-router";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { BeatmapCover } from "../../components/BeatmapCover";
+import {
+  ListSkeleton,
+  PageHeaderSkeleton,
+  PanelSkeleton,
+  SkeletonBlock,
+  StatGridSkeleton,
+} from "../../components/LoadingSkeleton";
 import { ModBadges } from "../../components/ModBadges";
 import { PageTitle } from "../../components/PageTitle";
 import { ScoreReplayButton } from "../../components/ScoreReplayModal";
@@ -62,7 +69,27 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
   }, [sessionId]);
 
   if (isLoading) {
-    return <p className="text-muted">Loading session…</p>;
+    return (
+      <div className="space-y-8">
+        <div>
+          <Link to="/sessions" className="rx-back">
+            ← Sessions
+          </Link>
+          <div className="mt-3">
+            <PageHeaderSkeleton
+              subtitleWidth="w-72"
+              actions={<SkeletonBlock className="h-7 w-20 rounded-full" />}
+            />
+          </div>
+        </div>
+        <StatGridSkeleton count={3} />
+        <PanelSkeleton lines={3} />
+        <section>
+          <SkeletonBlock className="mb-3 h-8 w-24 rounded-lg" />
+          <ListSkeleton count={6} />
+        </section>
+      </div>
+    );
   }
 
   if (error || !data || !("session" in data)) {

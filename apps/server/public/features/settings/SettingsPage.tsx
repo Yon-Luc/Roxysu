@@ -1,6 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import {
+  PageHeaderSkeleton,
+  PanelSkeleton,
+  SkeletonBlock,
+} from "../../components/LoadingSkeleton";
 import { KeybindModal } from "./KeybindModal";
 import { PageTitle } from "../../components/PageTitle";
 import {
@@ -190,7 +195,40 @@ export function SettingsPage() {
   });
 
   if (isLoading) {
-    return <p className="text-muted">Loading settings…</p>;
+    return (
+      <div className="space-y-8">
+        <PageHeaderSkeleton subtitleWidth="w-[32rem]" />
+        <section className="rx-panel p-5">
+          <SkeletonBlock className="h-4 w-40" />
+          <SkeletonBlock className="mt-2 h-4 w-full max-w-[36rem]" />
+          <SkeletonBlock className="mt-1 h-4 w-full max-w-[30rem]" />
+          <SkeletonBlock className="mt-5 h-3 w-24" />
+          <SkeletonBlock className="mt-2 h-11 w-full rounded-xl" />
+          <div className="mt-4 flex gap-2">
+            <SkeletonBlock className="h-10 w-28 rounded-xl" />
+            <SkeletonBlock className="h-10 w-32 rounded-xl" />
+          </div>
+        </section>
+        <section className="rx-panel p-5">
+          <SkeletonBlock className="h-4 w-28" />
+          <SkeletonBlock className="mt-2 h-4 w-full max-w-[34rem]" />
+          <div className="mt-4 space-y-4">
+            <PanelSkeleton lines={2} className="p-4" />
+            <div>
+              <SkeletonBlock className="h-3 w-16" />
+              <SkeletonBlock className="mt-2 h-11 w-full rounded-xl" />
+            </div>
+            <div>
+              <SkeletonBlock className="h-3 w-28" />
+              <SkeletonBlock className="mt-2 h-11 w-full rounded-xl" />
+            </div>
+          </div>
+        </section>
+        <PanelSkeleton lines={4} />
+        <PanelSkeleton lines={4} />
+        <PanelSkeleton lines={4} />
+      </div>
+    );
   }
 
   if (error || !data) {

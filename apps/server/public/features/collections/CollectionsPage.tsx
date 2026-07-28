@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  ListSkeleton,
+  SkeletonBlock,
+} from "../../components/LoadingSkeleton";
 import { PageTitle } from "../../components/PageTitle";
 import { QueryLanguageHelpButton } from "../../components/QueryLanguageHelpModal";
 import {
@@ -180,7 +184,14 @@ export function CollectionsPage() {
       </form>
 
       {isLoading ? (
-        <p className="text-muted">Loading…</p>
+        <div className="space-y-4">
+          <div className="grid gap-3 rounded-xl bg-surface p-4 sm:grid-cols-[1fr_2fr_auto] sm:p-5">
+            <SkeletonBlock className="h-10 w-full rounded-md" />
+            <SkeletonBlock className="h-10 w-full rounded-md" />
+            <SkeletonBlock className="h-10 w-24 rounded-md" />
+          </div>
+          <ListSkeleton count={5} showThumbnail={false} />
+        </div>
       ) : error ? (
         <p className="text-rose-300">{error.message}</p>
       ) : !data || data.items.length === 0 ? (

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BeatmapCover } from "../../components/BeatmapCover";
+import { ListSkeleton, SkeletonBlock } from "../../components/LoadingSkeleton";
 import { PageTitle } from "../../components/PageTitle";
 import {
   fetchMirrorBatchJob,
@@ -468,7 +469,13 @@ export function DownloadMapsPage() {
       </section>
 
       {query.isLoading ? (
-        <p className="text-muted">Searching mirrors…</p>
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <SkeletonBlock className="h-4 w-48" />
+            <SkeletonBlock className="h-4 w-20" />
+          </div>
+          <ListSkeleton count={5} />
+        </div>
       ) : query.isError ? (
         <p className="text-rose-400">
           {query.error instanceof Error

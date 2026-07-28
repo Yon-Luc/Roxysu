@@ -16,6 +16,12 @@ import { PatternBrowserButton } from "../../components/PatternBrowserModal";
 import { BeatmapCover } from "../../components/BeatmapCover";
 import { BeatmapPreviewButton } from "../../components/BeatmapPreviewModal";
 import { CopyBeatmapSearchButton } from "../../components/CopyBeatmapSearchButton";
+import {
+  CardGridSkeleton,
+  PageHeaderSkeleton,
+  PanelSkeleton,
+  SkeletonBlock,
+} from "../../components/LoadingSkeleton";
 import { PageTitle } from "../../components/PageTitle";
 import {
   fetchPracticeDistribution,
@@ -363,9 +369,9 @@ export function PracticeListPage() {
         </div>
 
         {distLoading ? (
-          <p className="py-10 text-center text-sm text-muted">
-            Loading distribution…
-          </p>
+          <div className="py-2">
+            <SkeletonBlock className="h-[220px] w-full" />
+          </div>
         ) : distError || !bins ? (
           <p className="py-10 text-center text-sm text-rose-300">
             {distError?.message ?? "Failed to load distribution"}
@@ -485,7 +491,30 @@ export function PracticeListPage() {
       </div>
 
       {isLoading ? (
-        <p className="text-muted">Loading practice list…</p>
+        <>
+          <section className="rx-panel px-4 py-5 sm:px-5">
+            <PageHeaderSkeleton
+              subtitleWidth="w-72"
+              actions={
+                <>
+                  <SkeletonBlock className="h-10 w-40 rounded-md" />
+                  <SkeletonBlock className="h-10 w-28 rounded-md" />
+                </>
+              }
+            />
+            <div className="mt-5">
+              <PanelSkeleton lines={1} className="min-h-[16rem] p-0" />
+            </div>
+          </section>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex gap-2">
+              <SkeletonBlock className="h-9 w-32 rounded-md" />
+              <SkeletonBlock className="h-9 w-32 rounded-md" />
+            </div>
+            <SkeletonBlock className="h-4 w-28" />
+          </div>
+          <CardGridSkeleton count={6} />
+        </>
       ) : error ? (
         <p className="text-rose-300">Failed to load: {error.message}</p>
       ) : !list || list.items.length === 0 ? (

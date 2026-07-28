@@ -16,6 +16,14 @@ import {
 } from "recharts";
 import { PageTitle } from "../../components/PageTitle";
 import {
+  ChartGridSkeleton,
+  ListSkeleton,
+  PageHeaderSkeleton,
+  PanelSkeleton,
+  SkeletonBlock,
+  StatGridSkeleton,
+} from "../../components/LoadingSkeleton";
+import {
   fetchSkillBandPlays,
   fetchStats,
   type SkillBandKind,
@@ -226,7 +234,50 @@ export function StatsPage({
   });
 
   if (isLoading) {
-    return <p className="text-muted">Loading stats…</p>;
+    return (
+      <div className="space-y-10">
+        <div className="space-y-4">
+          <PageHeaderSkeleton
+            actions={
+              <>
+                <SkeletonBlock className="h-9 w-56 rounded-md" />
+                <SkeletonBlock className="h-9 w-28 rounded-md" />
+                <SkeletonBlock className="h-9 w-36 rounded-md" />
+              </>
+            }
+          />
+          <SkeletonBlock className="h-9 w-64 rounded-md" />
+        </div>
+        <StatGridSkeleton />
+        <section>
+          <div className="mb-4 h-8 w-40 animate-pulse rounded-lg bg-white/6" />
+          <div className="grid gap-3 sm:grid-cols-3">
+            <PanelSkeleton lines={3} />
+            <PanelSkeleton lines={3} />
+            <PanelSkeleton lines={3} />
+          </div>
+        </section>
+        <PanelSkeleton lines={1} className="min-h-[22rem]" />
+        <section>
+          <div className="mb-4 h-8 w-36 animate-pulse rounded-lg bg-white/6" />
+          <ChartGridSkeleton />
+        </section>
+        <section>
+          <div className="mb-4 h-8 w-40 animate-pulse rounded-lg bg-white/6" />
+          <StatGridSkeleton count={3} />
+          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            <PanelSkeleton lines={1} className="min-h-64" />
+            <PanelSkeleton lines={1} className="min-h-64" />
+            <PanelSkeleton lines={1} className="min-h-64" />
+            <PanelSkeleton lines={1} className="min-h-64" />
+          </div>
+        </section>
+        <section>
+          <div className="mb-4 h-8 w-32 animate-pulse rounded-lg bg-white/6" />
+          <ListSkeleton count={5} showThumbnail={false} />
+        </section>
+      </div>
+    );
   }
 
   if (error || !data) {
@@ -984,7 +1035,11 @@ function SkillBandPlaysPanel({
   if (isLoading) {
     return (
       <div id={`skill-band-${band}`} className="rx-panel p-4">
-        <p className="text-sm text-muted">Loading plays…</p>
+        <SkeletonBlock className="h-5 w-36" />
+        <SkeletonBlock className="mt-2 h-3 w-64 max-w-full" />
+        <div className="mt-5">
+          <ListSkeleton count={4} showThumbnail={false} />
+        </div>
       </div>
     );
   }

@@ -1,5 +1,10 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import {
+  ListSkeleton,
+  PageHeaderSkeleton,
+  PanelSkeleton,
+} from "../../components/LoadingSkeleton";
 import { PageTitle } from "../../components/PageTitle";
 import { fetchSessions } from "../../lib/api";
 import { formatRelativeTime } from "../../lib/format";
@@ -11,7 +16,13 @@ export function SessionsPage() {
   });
 
   if (isLoading) {
-    return <p className="text-muted">Loading sessions…</p>;
+    return (
+      <div className="space-y-8">
+        <PageHeaderSkeleton />
+        <PanelSkeleton lines={3} />
+        <ListSkeleton count={6} showThumbnail={false} />
+      </div>
+    );
   }
 
   if (error || !data) {

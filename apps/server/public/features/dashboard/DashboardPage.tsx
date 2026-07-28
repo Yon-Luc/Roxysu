@@ -13,6 +13,12 @@ import {
   YAxis,
 } from "recharts";
 import { BeatmapCover } from "../../components/BeatmapCover";
+import {
+  ChartGridSkeleton,
+  ListSkeleton,
+  PageHeaderSkeleton,
+  StatGridSkeleton,
+} from "../../components/LoadingSkeleton";
 import { ModBadges } from "../../components/ModBadges";
 import { PageTitle } from "../../components/PageTitle";
 import { fetchDashboard } from "../../lib/api";
@@ -42,7 +48,20 @@ export function DashboardPage() {
   });
 
   if (isLoading) {
-    return <p className="text-muted">Loading dashboard…</p>;
+    return (
+      <div className="space-y-10">
+        <PageHeaderSkeleton />
+        <StatGridSkeleton />
+        <ChartGridSkeleton />
+        <section>
+          <div className="mb-4 flex items-end justify-between gap-3">
+            <div className="h-8 w-40 animate-pulse rounded-lg bg-white/6" />
+            <div className="h-4 w-20 animate-pulse rounded-lg bg-white/6" />
+          </div>
+          <ListSkeleton count={5} />
+        </section>
+      </div>
+    );
   }
 
   if (error || !data) {

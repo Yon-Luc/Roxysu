@@ -44,21 +44,7 @@ import {
   type RatingDisplayMode,
   type SkillRatingAxis,
 } from "../../lib/ratingDisplay";
-
-const chartTick = { fill: "#a7a7a7", fontSize: 11 };
-const tooltipStyle = {
-  background: "#242424",
-  border: "none",
-  borderRadius: 8,
-  boxShadow: "0 8px 24px rgba(0,0,0,0.45)",
-};
-
-const PUSH_COLOR = "#e879a8";
-const ACC_COLOR = "#7c8fe0";
-const CONS_COLOR = "#5ec4a8";
-const RC_COLOR = "#7c8fe0";
-const LN_COLOR = "#e879a8";
-const FLN_COLOR = "#c9a227";
+import { useChartStyles } from "../../lib/chartStyles";
 
 function formatDuration(ms: number | null | undefined): string {
   if (ms == null || !Number.isFinite(ms) || ms <= 0) return "—";
@@ -205,6 +191,7 @@ export function StatsPage({
   onSkillAxisChange: (a: StatsSkillAxis) => void;
 }) {
   const ratingMode = useRatingDisplayMode();
+  const charts = useChartStyles();
   const [customTopPlays, setCustomTopPlays] = useState(
     String(skillTopPlays),
   );
@@ -532,22 +519,22 @@ export function StatsPage({
           ) : (
             <ResponsiveContainer width="100%" height={260}>
               <LineChart data={chartHistory}>
-                <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
+                <CartesianGrid stroke={charts.grid} vertical={false} />
                 <XAxis
                   dataKey="at"
-                  tick={chartTick}
+                  tick={charts.tick}
                   tickFormatter={(v) => String(v).slice(5)}
                   axisLine={false}
                   tickLine={false}
                 />
                 <YAxis
-                  tick={chartTick}
+                  tick={charts.tick}
                   width={40}
                   axisLine={false}
                   tickLine={false}
                 />
                 <Tooltip
-                  contentStyle={tooltipStyle}
+                  contentStyle={charts.tooltip}
                   formatter={(value, name) =>
                     skillTooltipFormatter(ratingMode, value, name, skillAxis)
                   }
@@ -557,7 +544,7 @@ export function StatsPage({
                   type="monotone"
                   dataKey="push"
                   name="Push"
-                  stroke={PUSH_COLOR}
+                  stroke={charts.chartAlt}
                   dot={false}
                   strokeWidth={2.5}
                 />
@@ -565,7 +552,7 @@ export function StatsPage({
                   type="monotone"
                   dataKey="accuracy"
                   name="Accuracy"
-                  stroke={ACC_COLOR}
+                  stroke={charts.chart}
                   dot={false}
                   strokeWidth={2.5}
                 />
@@ -573,7 +560,7 @@ export function StatsPage({
                   type="monotone"
                   dataKey="consistency"
                   name="Consistency"
-                  stroke={CONS_COLOR}
+                  stroke={charts.chartCons}
                   dot={false}
                   strokeWidth={2.5}
                 />
@@ -595,26 +582,26 @@ export function StatsPage({
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={weekly}>
                   <CartesianGrid
-                    stroke="rgba(255,255,255,0.06)"
+                    stroke={charts.grid}
                     vertical={false}
                   />
                   <XAxis
                     dataKey="weekStart"
-                    tick={chartTick}
+                    tick={charts.tick}
                     tickFormatter={(v) => String(v).slice(5)}
                     axisLine={false}
                     tickLine={false}
                   />
                   <YAxis
-                    tick={chartTick}
+                    tick={charts.tick}
                     width={36}
                     axisLine={false}
                     tickLine={false}
                   />
-                  <Tooltip contentStyle={tooltipStyle} />
+                  <Tooltip contentStyle={charts.tooltip} />
                   <Bar
                     dataKey="playCount"
-                    fill={ACC_COLOR}
+                    fill={charts.chart}
                     radius={[4, 4, 0, 0]}
                   />
                 </BarChart>
@@ -635,19 +622,19 @@ export function StatsPage({
                   }))}
                 >
                   <CartesianGrid
-                    stroke="rgba(255,255,255,0.06)"
+                    stroke={charts.grid}
                     vertical={false}
                   />
                   <XAxis
                     dataKey="day"
-                    tick={chartTick}
+                    tick={charts.tick}
                     tickFormatter={(v) => String(v).slice(5)}
                     axisLine={false}
                     tickLine={false}
                   />
                   <YAxis
                     yAxisId="pp"
-                    tick={chartTick}
+                    tick={charts.tick}
                     width={40}
                     axisLine={false}
                     tickLine={false}
@@ -655,19 +642,19 @@ export function StatsPage({
                   <YAxis
                     yAxisId="acc"
                     orientation="right"
-                    tick={chartTick}
+                    tick={charts.tick}
                     width={36}
                     domain={[0, 100]}
                     axisLine={false}
                     tickLine={false}
                   />
-                  <Tooltip contentStyle={tooltipStyle} />
+                  <Tooltip contentStyle={charts.tooltip} />
                   <Line
                     yAxisId="pp"
                     type="monotone"
                     dataKey="totalPp"
                     name="PP"
-                    stroke={PUSH_COLOR}
+                    stroke={charts.chartAlt}
                     dot={false}
                     strokeWidth={2.5}
                   />
@@ -676,7 +663,7 @@ export function StatsPage({
                     type="monotone"
                     dataKey="avgAccuracy"
                     name="Acc %"
-                    stroke={ACC_COLOR}
+                    stroke={charts.chart}
                     dot={false}
                     strokeWidth={2.5}
                   />
@@ -722,23 +709,23 @@ export function StatsPage({
                 <ResponsiveContainer width="100%" height={200}>
                   <BarChart data={ranks}>
                     <CartesianGrid
-                      stroke="rgba(255,255,255,0.06)"
+                      stroke={charts.grid}
                       vertical={false}
                     />
                     <XAxis
                       dataKey="label"
-                      tick={chartTick}
+                      tick={charts.tick}
                       axisLine={false}
                       tickLine={false}
                     />
                     <YAxis
-                      tick={chartTick}
+                      tick={charts.tick}
                       width={36}
                       axisLine={false}
                       tickLine={false}
                     />
-                    <Tooltip contentStyle={tooltipStyle} />
-                    <Bar dataKey="count" fill={CONS_COLOR} radius={[4, 4, 0, 0]} />
+                    <Tooltip contentStyle={charts.tooltip} />
+                    <Bar dataKey="count" fill={charts.chartCons} radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
                 <p className="mt-2 text-[11px] text-faint">
@@ -755,23 +742,23 @@ export function StatsPage({
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={skillsetBars}>
                   <CartesianGrid
-                    stroke="rgba(255,255,255,0.06)"
+                    stroke={charts.grid}
                     vertical={false}
                   />
                   <XAxis
                     dataKey="axis"
-                    tick={chartTick}
+                    tick={charts.tick}
                     axisLine={false}
                     tickLine={false}
                   />
                   <YAxis
-                    tick={chartTick}
+                    tick={charts.tick}
                     width={36}
                     axisLine={false}
                     tickLine={false}
                   />
                   <Tooltip
-                    contentStyle={tooltipStyle}
+                    contentStyle={charts.tooltip}
                     formatter={(value, name) => {
                       if (name === "plays") {
                         return [Number(value).toLocaleString(), "Plays"];
@@ -779,7 +766,7 @@ export function StatsPage({
                       return [value, name];
                     }}
                   />
-                  <Bar dataKey="plays" fill={RC_COLOR} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="plays" fill={charts.chart} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -792,23 +779,23 @@ export function StatsPage({
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={byDow}>
                   <CartesianGrid
-                    stroke="rgba(255,255,255,0.06)"
+                    stroke={charts.grid}
                     vertical={false}
                   />
                   <XAxis
                     dataKey="label"
-                    tick={chartTick}
+                    tick={charts.tick}
                     axisLine={false}
                     tickLine={false}
                   />
                   <YAxis
-                    tick={chartTick}
+                    tick={charts.tick}
                     width={36}
                     axisLine={false}
                     tickLine={false}
                   />
-                  <Tooltip contentStyle={tooltipStyle} />
-                  <Bar dataKey="count" fill={LN_COLOR} radius={[4, 4, 0, 0]} />
+                  <Tooltip contentStyle={charts.tooltip} />
+                  <Bar dataKey="count" fill={charts.chartAlt} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -821,23 +808,23 @@ export function StatsPage({
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={byHour}>
                   <CartesianGrid
-                    stroke="rgba(255,255,255,0.06)"
+                    stroke={charts.grid}
                     vertical={false}
                   />
                   <XAxis
                     dataKey="hour"
-                    tick={chartTick}
+                    tick={charts.tick}
                     axisLine={false}
                     tickLine={false}
                   />
                   <YAxis
-                    tick={chartTick}
+                    tick={charts.tick}
                     width={36}
                     axisLine={false}
                     tickLine={false}
                   />
-                  <Tooltip contentStyle={tooltipStyle} />
-                  <Bar dataKey="count" fill={FLN_COLOR} radius={[4, 4, 0, 0]} />
+                  <Tooltip contentStyle={charts.tooltip} />
+                  <Bar dataKey="count" fill={charts.chartFln} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}

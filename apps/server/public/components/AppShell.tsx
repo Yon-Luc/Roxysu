@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { fetchSystemStatus } from "../lib/api";
 import { CommandPalette, useCommandPaletteShortcut } from "./CommandPalette";
+import { toggleTheme, useResolvedTheme } from "../lib/theme";
 import roxyIcon from "../roxy.png";
 
 const SIDEBAR_OPEN_KEY = "roxysu.sidebarOpen";
@@ -56,6 +57,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     queryFn: fetchSystemStatus,
     refetchInterval: 30_000,
   });
+
+  const resolvedTheme = useResolvedTheme();
 
   const importStatus = status?.lastImport?.status;
   const syncTone =
@@ -121,11 +124,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           <button
             type="button"
             onClick={() => setCommandPaletteOpen(true)}
-            className="group mb-2 flex items-center gap-3 rounded-md border border-white/5 bg-surface/50 px-3 py-2 text-sm text-muted transition hover:border-white/10 hover:text-ink"
+            className="group mb-2 flex items-center gap-3 rounded-md border border-line bg-surface/50 px-3 py-2 text-sm text-muted transition hover:border-border hover:text-ink"
           >
             <SearchIcon className="size-4 shrink-0 opacity-70" />
             <span className="flex-1 text-left">Quick search</span>
-            <kbd className="hidden rounded border border-white/10 bg-canvas px-1.5 py-0.5 text-[10px] font-medium text-faint lg:inline">
+            <kbd className="hidden rounded border border-border bg-canvas px-1.5 py-0.5 text-[10px] font-medium text-faint lg:inline">
               ⌃K
             </kbd>
           </button>
@@ -148,7 +151,24 @@ export function AppShell({ children }: { children: ReactNode }) {
           })}
         </nav>
 
-        <div className="mt-auto space-y-2 border-t border-white/5 px-2 pt-3">
+        <div className="mt-auto space-y-2 border-t border-line px-2 pt-3">
+          <button
+            type="button"
+            onClick={() => toggleTheme()}
+            className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm font-medium text-muted transition hover:bg-highlight hover:text-ink"
+            title={
+              resolvedTheme === "light"
+                ? "Switch to dark theme"
+                : "Switch to light theme"
+            }
+          >
+            {resolvedTheme === "light" ? (
+              <MoonIcon className="size-4 shrink-0" />
+            ) : (
+              <SunIcon className="size-4 shrink-0" />
+            )}
+            {resolvedTheme === "light" ? "Dark mode" : "Light mode"}
+          </button>
           <div
             className={`rx-chip ${
               syncTone === "sky"
@@ -187,7 +207,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <button
         type="button"
         onClick={toggleSidebar}
-        className={`fixed left-3 top-3 z-40 hidden size-9 items-center justify-center rounded-md border border-white/10 bg-sidebar/90 text-muted shadow-lg backdrop-blur transition hover:border-white/20 hover:text-ink md:flex ${
+        className={`fixed left-3 top-3 z-40 hidden size-9 items-center justify-center rounded-md border border-border bg-sidebar/90 text-muted shadow-lg backdrop-blur transition hover:border-line hover:text-ink md:flex ${
           sidebarOpen
             ? "pointer-events-none -translate-x-2 opacity-0"
             : "translate-x-0 opacity-100"
@@ -200,7 +220,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </button>
 
       {/* Mobile top brand bar */}
-      <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-white/5 bg-canvas/90 px-4 py-3 backdrop-blur-md md:hidden">
+      <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-line bg-canvas/90 px-4 py-3 backdrop-blur-md md:hidden">
         <Link to="/" className="flex items-center gap-2">
           <img
             src={roxyIcon}
@@ -256,7 +276,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </main>
 
       {/* Mobile bottom nav */}
-      <nav className="fixed inset-x-0 bottom-0 z-30 flex border-t border-white/5 bg-sidebar/95 px-1 pb-[env(safe-area-inset-bottom)] backdrop-blur-lg md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-30 flex border-t border-line bg-sidebar/95 px-1 pb-[env(safe-area-inset-bottom)] backdrop-blur-lg md:hidden">
         {nav.map((item) => {
           const Icon = item.icon;
           return (
@@ -375,6 +395,22 @@ function SettingsIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
       <path d="M11.07 2.6a1.5 1.5 0 0 1 1.86 0l1.2.96c.28.22.64.3.98.23l1.48-.3a1.5 1.5 0 0 1 1.62.86l.7 1.5c.12.26.35.45.63.53l1.5.4a1.5 1.5 0 0 1 .95 1.95l-.55 1.55a1 1 0 0 0 0 .74l.55 1.55a1.5 1.5 0 0 1-.95 1.95l-1.5.4a1 1 0 0 0-.63.53l-.7 1.5a1.5 1.5 0 0 1-1.62.86l-1.48-.3a1 1 0 0 0-.98.23l-1.2.96a1.5 1.5 0 0 1-1.86 0l-1.2-.96a1 1 0 0 0-.98-.23l-1.48.3a1.5 1.5 0 0 1-1.62-.86l-.7-1.5a1 1 0 0 0-.63-.53l-1.5-.4a1.5 1.5 0 0 1-.95-1.95l.55-1.55a1 1 0 0 0 0-.74l-.55-1.55a1.5 1.5 0 0 1 .95-1.95l1.5-.4a1 1 0 0 0 .63-.53l.7-1.5a1.5 1.5 0 0 1 1.62-.86l1.48.3c.34.07.7-.01.98-.23l1.2-.96ZM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z" />
+    </svg>
+  );
+}
+
+function SunIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M12 2.25a.75.75 0 0 1 .75.75v2.25a.75.75 0 0 1-1.5 0V3a.75.75 0 0 1 .75-.75ZM7.5 12a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM18.894 6.166a.75.75 0 0 0-1.06-1.06l-1.591 1.59a.75.75 0 1 0 1.06 1.061l1.591-1.59ZM21.75 12a.75.75 0 0 1-.75.75h-2.25a.75.75 0 0 1 0-1.5H21a.75.75 0 0 1 .75.75ZM17.834 18.894a.75.75 0 0 0 1.06-1.06l-1.59-1.591a.75.75 0 1 0-1.061 1.06l1.59 1.591ZM12 18a.75.75 0 0 1 .75.75V21a.75.75 0 0 1-1.5 0v-2.25A.75.75 0 0 1 12 18ZM7.758 17.303a.75.75 0 0 0-1.061-1.06l-1.591 1.59a.75.75 0 0 0 1.06 1.061l1.591-1.59ZM6 12a.75.75 0 0 1-.75.75H3a.75.75 0 0 1 0-1.5h2.25A.75.75 0 0 1 6 12ZM4.409 7.757a.75.75 0 0 0 1.06-1.06l-1.59-1.591a.75.75 0 1 0-1.061 1.06l1.59 1.591Z" />
+    </svg>
+  );
+}
+
+function MoonIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M9.528 1.718a.75.75 0 0 1 .162.819A8.97 8.97 0 0 0 9 6a9 9 0 0 0 9 9 8.97 8.97 0 0 0 3.463-.69.75.75 0 0 1 .981.98 10.503 10.503 0 0 1-9.694 6.46c-5.799 0-10.5-4.701-10.5-10.5 0-4.368 2.667-8.112 6.44-9.726a.75.75 0 0 1 .814.162Z" />
     </svg>
   );
 }

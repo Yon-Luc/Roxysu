@@ -8,6 +8,20 @@
 		<link rel="manifest" href="./manifest.webmanifest">
 		<meta name="viewport" content="width=device-width, initial-scale=1.0">
 		<meta name="theme-color" content="#121212">
+		<script>
+			try {
+				var mode = localStorage.getItem("roxysu:theme");
+				var light = false;
+				if (mode === "light") light = true;
+				else if (mode === "system") {
+					light = window.matchMedia("(prefers-color-scheme: light)").matches;
+				}
+				if (light) {
+					document.documentElement.classList.add("light");
+					document.querySelector('meta[name="theme-color"]').content = "#f5f5f5";
+				}
+			} catch (e) {}
+		</script>
 		<meta name="mobile-web-app-capable" content="yes">
 		<meta name="apple-mobile-web-app-capable" content="yes">
 		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">

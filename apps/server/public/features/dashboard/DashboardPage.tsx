@@ -31,17 +31,11 @@ import {
   formatPrimaryRating,
   useRatingDisplayMode,
 } from "../../lib/ratingDisplay";
-
-const chartTick = { fill: "#a7a7a7", fontSize: 11 };
-const tooltipStyle = {
-  background: "#242424",
-  border: "none",
-  borderRadius: 8,
-  boxShadow: "0 8px 24px rgba(0,0,0,0.45)",
-};
+import { useChartStyles } from "../../lib/chartStyles";
 
 export function DashboardPage() {
   const ratingMode = useRatingDisplayMode();
+  const charts = useChartStyles();
   const { data, isLoading, error } = useQuery({
     queryKey: ["dashboard"],
     queryFn: fetchDashboard,
@@ -130,22 +124,22 @@ export function DashboardPage() {
           ) : (
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={weekly}>
-                <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
+                <CartesianGrid stroke={charts.grid} vertical={false} />
                 <XAxis
                   dataKey="weekStart"
-                  tick={chartTick}
+                  tick={charts.tick}
                   tickFormatter={(v) => String(v).slice(5)}
                   axisLine={false}
                   tickLine={false}
                 />
                 <YAxis
-                  tick={chartTick}
+                  tick={charts.tick}
                   width={36}
                   axisLine={false}
                   tickLine={false}
                 />
-                <Tooltip contentStyle={tooltipStyle} />
-                <Bar dataKey="playCount" fill="#7c8fe0" radius={[4, 4, 0, 0]} />
+                <Tooltip contentStyle={charts.tooltip} />
+                <Bar dataKey="playCount" fill={charts.chart} radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -163,17 +157,17 @@ export function DashboardPage() {
                   avgAccuracy: (accTrend[i]?.avgAccuracy ?? 0) * 100,
                 }))}
               >
-                <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
+                <CartesianGrid stroke={charts.grid} vertical={false} />
                 <XAxis
                   dataKey="day"
-                  tick={chartTick}
+                  tick={charts.tick}
                   tickFormatter={(v) => String(v).slice(5)}
                   axisLine={false}
                   tickLine={false}
                 />
                 <YAxis
                   yAxisId="pp"
-                  tick={chartTick}
+                  tick={charts.tick}
                   width={40}
                   axisLine={false}
                   tickLine={false}
@@ -181,18 +175,18 @@ export function DashboardPage() {
                 <YAxis
                   yAxisId="acc"
                   orientation="right"
-                  tick={chartTick}
+                  tick={charts.tick}
                   width={36}
                   domain={[0, 100]}
                   axisLine={false}
                   tickLine={false}
                 />
-                <Tooltip contentStyle={tooltipStyle} />
+                <Tooltip contentStyle={charts.tooltip} />
                 <Line
                   yAxisId="pp"
                   type="monotone"
                   dataKey="totalPp"
-                  stroke="#e879a8"
+                  stroke={charts.chartAlt}
                   dot={false}
                   strokeWidth={2.5}
                 />
@@ -200,7 +194,7 @@ export function DashboardPage() {
                   yAxisId="acc"
                   type="monotone"
                   dataKey="avgAccuracy"
-                  stroke="#7c8fe0"
+                  stroke={charts.chart}
                   dot={false}
                   strokeWidth={2.5}
                 />

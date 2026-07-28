@@ -9,7 +9,7 @@ export function SkeletonBlock({
   return (
     <div
       aria-hidden
-      className={`animate-pulse rounded-lg bg-white/6 ${className}`}
+      className={`animate-pulse rounded-lg bg-highlight/80 ${className}`}
     />
   );
 }

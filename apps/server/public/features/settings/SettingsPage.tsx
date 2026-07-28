@@ -26,10 +26,16 @@ import {
   setRatingDisplayMode,
   useRatingDisplayMode,
 } from "../../lib/ratingDisplay";
+import {
+  setTheme,
+  themeOptions,
+  useTheme,
+} from "../../lib/theme";
 
 export function SettingsPage() {
   const queryClient = useQueryClient();
   const ratingMode = useRatingDisplayMode();
+  const themeMode = useTheme();
   const { data, isLoading, error } = useQuery({
     queryKey: ["settings"],
     queryFn: fetchSettings,
@@ -546,6 +552,42 @@ export function SettingsPage() {
         {syncMut.error ? (
           <p className="mt-3 text-sm text-rose-300">{syncMut.error.message}</p>
         ) : null}
+      </section>
+
+      <section className="rx-panel p-5">
+        <h2 className="text-sm font-bold text-ink">Appearance</h2>
+        <p className="mt-1 text-sm text-muted">
+          Choose a light or dark interface. System follows your OS preference.
+        </p>
+        <div className="mt-4 space-y-2">
+          {themeOptions().map((opt) => {
+            const active = opt.id === themeMode;
+            return (
+              <label
+                key={opt.id}
+                className={`flex cursor-pointer gap-3 rounded-xl px-4 py-3 transition ${
+                  active
+                    ? "bg-accent-glow ring-1 ring-accent/50"
+                    : "bg-elevated/50 hover:bg-elevated"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="theme"
+                  checked={active}
+                  onChange={() => setTheme(opt.id)}
+                  className="mt-1 accent-[var(--color-accent)]"
+                />
+                <div>
+                  <div className="font-bold text-ink">{opt.label}</div>
+                  <div className="mt-0.5 text-sm text-muted">
+                    {opt.description}
+                  </div>
+                </div>
+              </label>
+            );
+          })}
+        </div>
       </section>
 
       <section className="rx-panel p-5">

@@ -339,7 +339,7 @@ export function CommandPalette({
         className="w-full max-w-xl overflow-hidden rounded-2xl bg-elevated shadow-2xl shadow-black/60"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="border-b border-white/5 px-4 py-3">
+        <div className="border-b border-line px-4 py-3">
           <label htmlFor={titleId} className="sr-only">
             Quick search
           </label>
@@ -356,7 +356,7 @@ export function CommandPalette({
               autoComplete="off"
               spellCheck={false}
             />
-            <kbd className="hidden rounded-md border border-white/10 bg-surface px-2 py-0.5 text-[11px] font-medium text-faint sm:inline">
+            <kbd className="hidden rounded-md border border-border bg-surface px-2 py-0.5 text-[11px] font-medium text-faint sm:inline">
               esc
             </kbd>
           </div>
@@ -429,11 +429,11 @@ export function CommandPalette({
           ) : null}
         </div>
 
-        <div className="flex items-center justify-between gap-3 border-t border-white/5 px-4 py-2 text-[11px] text-faint">
+        <div className="flex items-center justify-between gap-3 border-t border-line px-4 py-2 text-[11px] text-faint">
           <span>Type to filter · query language supported for maps</span>
           <span className="hidden sm:inline">
-            <kbd className="rounded border border-white/10 bg-surface px-1.5 py-0.5">↑↓</kbd> navigate{" "}
-            <kbd className="rounded border border-white/10 bg-surface px-1.5 py-0.5">↵</kbd> open
+            <kbd className="rounded border border-border bg-surface px-1.5 py-0.5">↑↓</kbd> navigate{" "}
+            <kbd className="rounded border border-border bg-surface px-1.5 py-0.5">↵</kbd> open
           </span>
         </div>
       </div>

@@ -1,7 +1,8 @@
-import { useState, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { fetchSystemStatus } from "../lib/api";
+import { CommandPalette, useCommandPaletteShortcut } from "./CommandPalette";
 import roxyIcon from "../roxy.png";
 
 const SIDEBAR_OPEN_KEY = "roxysu.sidebarOpen";
@@ -30,6 +31,13 @@ function readSidebarOpen(): boolean {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(readSidebarOpen);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const toggleCommandPalette = useCallback(
+    () => setCommandPaletteOpen((open) => !open),
+    [],
+  );
+
+  useCommandPaletteShortcut(toggleCommandPalette);
 
   function toggleSidebar() {
     setSidebarOpen((open) => {
@@ -73,6 +81,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-canvas text-ink">
+      <CommandPalette
+        open={commandPaletteOpen}
+        onOpenChange={setCommandPaletteOpen}
+      />
       {/* Desktop sidebar */}
       <aside
         className={`fixed inset-y-0 left-0 z-30 hidden w-60 flex-col bg-sidebar p-3 transition-transform duration-200 ease-out md:flex ${
@@ -106,6 +118,17 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
 
         <nav className="flex flex-1 flex-col gap-1">
+          <button
+            type="button"
+            onClick={() => setCommandPaletteOpen(true)}
+            className="group mb-2 flex items-center gap-3 rounded-md border border-white/5 bg-surface/50 px-3 py-2 text-sm text-muted transition hover:border-white/10 hover:text-ink"
+          >
+            <SearchIcon className="size-4 shrink-0 opacity-70" />
+            <span className="flex-1 text-left">Quick search</span>
+            <kbd className="hidden rounded border border-white/10 bg-canvas px-1.5 py-0.5 text-[10px] font-medium text-faint lg:inline">
+              ⌃K
+            </kbd>
+          </button>
           {nav.map((item) => {
             const Icon = item.icon;
             return (
@@ -252,6 +275,15 @@ export function AppShell({ children }: { children: ReactNode }) {
         })}
       </nav>
     </div>
+  );
+}
+
+function SearchIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="11" cy="11" r="7" />
+      <path d="M20 20l-3-3" />
+    </svg>
   );
 }
 

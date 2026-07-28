@@ -19,9 +19,8 @@ import {
   parseSkillTopPlays,
 } from "./recommend/sevenKSkill";
 
-/** Display buckets for the rank chart (silver grades folded into gold). */
+/** Display buckets for the rank chart (silver grades folded into gold). F/fails omitted. */
 const RANK_BUCKETS = [
-  { key: "F", ranks: [-1] },
   { key: "D", ranks: [0] },
   { key: "C", ranks: [1] },
   { key: "B", ranks: [2] },
@@ -59,7 +58,7 @@ function toMs(value: Date | number | null | undefined): number | null {
 
 /**
  * Rank distribution with SH→S, XH→X, plus any 1,000,000 total score as X.
- * Each score is counted once (perfect score wins over letter rank).
+ * Fails (rank F / -1) are excluded. Each score is counted once (perfect wins).
  */
 async function getRankDistribution(db: Db) {
   const rows = db.$client
@@ -73,12 +72,12 @@ async function getRankDistribution(db: Db) {
           WHEN s.rank = 2 THEN 'B'
           WHEN s.rank = 1 THEN 'C'
           WHEN s.rank = 0 THEN 'D'
-          WHEN s.rank = -1 THEN 'F'
           ELSE NULL
         END AS label,
         COUNT(*) AS count
       FROM scores s
       WHERE s.delete_pending = 0
+        AND s.rank != -1
       GROUP BY label
     `,
     )

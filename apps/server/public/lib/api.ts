@@ -110,6 +110,23 @@ export async function fetchPracticeList(params: {
   );
 }
 
+export async function fetchSearch(params: {
+  q?: string;
+  page?: number;
+  pageSize?: number;
+}) {
+  return unwrap(
+    await api.api.search.get({
+      query: {
+        q: params.q,
+        page: params.page,
+        pageSize: params.pageSize,
+      },
+    }),
+    "/api/search",
+  );
+}
+
 export async function fetchPracticeDistribution(params: {
   q?: string;
   metric?: PracticeMetric;

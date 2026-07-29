@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Roxysu Desktop</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #12141a;
+        --fg: #e8eaef;
+        --muted: #9aa3b5;
+        --accent: #7eb8ff;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        font-family: "Segoe UI", system-ui, sans-serif;
+        background:
+          radial-gradient(ellipse 80% 50% at 50% -20%, #1e3a5f 0%, transparent 55%),
+          var(--bg);
+        color: var(--fg);
+      }
+      main {
+        max-width: 28rem;
+        padding: 2rem;
+        text-align: center;
+      }
+      h1 {
+        margin: 0 0 0.5rem;
+        font-size: 1.75rem;
+        font-weight: 650;
+        letter-spacing: -0.02em;
+      }
+      p {
+        margin: 0 0 1.25rem;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+      dl {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0.35rem 1rem;
+        margin: 0;
+        text-align: left;
+        font-size: 0.875rem;
+      }
+      dt {
+        color: var(--muted);
+      }
+      dd {
+        margin: 0;
+        font-variant-numeric: tabular-nums;
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Roxysu Desktop</h1>
+      <p>Electron smoke test — if you see this window, the NixOS shell Electron path works.</p>
+      <dl id="meta">
+        <dt>status</dt>
+        <dd>loading…</dd>
+      </dl>
+    </main>
+    <script src="./renderer.js"></script>
+  </body>
+</html>

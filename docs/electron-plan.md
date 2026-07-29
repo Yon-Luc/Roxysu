@@ -55,7 +55,7 @@ roxysu/
 ├── apps/
 │   ├── server/          # Bun + Elysia — API, SSE, React UI (unchanged primary)
 │   ├── realm-reader/    # Node — Realm sync (logic reused by desktop)
-│   └── desktop/         # NEW — Electron shell + Node product entry
+│   └── desktop/         # Electron shell (smoke app first; Node product entry later)
 ├── packages/
 │   └── …                # already shared
 └── docs/
@@ -64,9 +64,20 @@ roxysu/
 
 `apps/desktop` is covered by existing workspaces (`"apps/*"`). No separate repository.
 
-Suggested `apps/desktop` contents (initial):
+### NixOS dev shell
 
-- Electron `main` / `preload`
+`flake.nix` provides `pkgs.electron_42` (fallback: `pkgs.electron`) and sets:
+
+- `ELECTRON_SKIP_BINARY_DOWNLOAD=1`
+- `ELECTRON_PATH` → nixpkgs **wrapped** `${electron}/bin/electron`
+
+Important: use the wrapper, not `libexec/electron/electron` / `ELECTRON_OVERRIDE_DIST_PATH` — the raw dist binary can SIGILL on NixOS.
+
+Smoke test: `nix develop` → `bun run desktop` (Hello window in `apps/desktop`).
+
+Suggested `apps/desktop` growth:
+
+- Electron `main` / `preload` (done for smoke)
 - Node Elysia bootstrap (`index.node.ts` or import shared `createApp({ runtime: "node" })`)
 - `electron-builder` config (`win` only)
 - Scripts: `dev`, `pack`, `dist`

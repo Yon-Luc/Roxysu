@@ -11,9 +11,13 @@ import {
 } from "../shared/lazer-files";
 import {
   analyze7kFromOsuText,
+  analyze7kStructuralNotes,
   PATTERN_ALGORITHM,
+  PATTERN_ALGORITHM_V2,
   type PatternLabel,
+  type PatternLabelV2,
 } from "@roxysu/pattern-7k";
+import { parse7kChart, type ChartNote } from "@roxysu/osu-chart";
 import { toIso as toIsoNullable } from "../shared/serialize";
 
 export { PATTERN_ALGORITHM };
@@ -36,6 +40,216 @@ export type PatternAnalysisRating = {
   updatedAt: string;
   cached: boolean;
 };
+
+type SevenKPatternBreakdown = Record<
+  "jack" | "chordjack" | "delay" | "chordstream" | "bracket",
+  number
+>;
+
+export type SevenKDensitySample = {
+  startMs: number;
+  endMs: number;
+  midpointMs: number;
+  noteCount: number;
+  notesPerSecond: number;
+  peakChordSize: number;
+  dominantPattern: PatternLabelV2 | null;
+  secondaryPattern: PatternLabelV2 | null;
+  composition: SevenKPatternBreakdown;
+};
+
+export type SevenKPatternHotspot = {
+  startMs: number;
+  endMs: number;
+  noteCount: number;
+  notesPerSecond: number;
+  dominantPattern: PatternLabelV2 | null;
+  secondaryPattern: PatternLabelV2 | null;
+  dominantCoverage: number;
+};
+
+export type SevenKPatternDetail = {
+  algorithm: typeof PATTERN_ALGORITHM_V2;
+  columnCount: number | null;
+  noteCount: number;
+  holdCount: number;
+  durationMs: number;
+  averageNps: number;
+  peakNps: number;
+  peakChordSize: number;
+  dominantPattern: PatternLabel | null;
+  secondaryPattern: PatternLabel | null;
+  confidence: number | null;
+  composition: SevenKPatternBreakdown;
+  samples: SevenKDensitySample[];
+  hotspots: SevenKPatternHotspot[];
+  error: string | null;
+};
+
+const EMPTY_BREAKDOWN: SevenKPatternBreakdown = {
+  jack: 0,
+  chordjack: 0,
+  delay: 0,
+  chordstream: 0,
+  bracket: 0,
+};
+
+const DENSITY_SAMPLE_MS = 1000;
+const CHORD_EPS_MS = 8;
+
+function normalizeBreakdown(
+  partial?: Partial<Record<PatternLabelV2, number>>,
+): SevenKPatternBreakdown {
+  return {
+    jack: partial?.jack ?? 0,
+    chordjack: partial?.chordjack ?? 0,
+    delay: partial?.delay ?? 0,
+    chordstream: partial?.chordstream ?? 0,
+    bracket: partial?.bracket ?? 0,
+  };
+}
+
+function emptySevenKPatternDetail(error: string): SevenKPatternDetail {
+  return {
+    algorithm: PATTERN_ALGORITHM_V2,
+    columnCount: null,
+    noteCount: 0,
+    holdCount: 0,
+    durationMs: 0,
+    averageNps: 0,
+    peakNps: 0,
+    peakChordSize: 0,
+    dominantPattern: null,
+    secondaryPattern: null,
+    confidence: null,
+    composition: { ...EMPTY_BREAKDOWN },
+    samples: [],
+    hotspots: [],
+    error,
+  };
+}
+
+function buildDensitySamples(notes: ChartNote[], sections: Array<{
+  startMs: number;
+  endMs: number;
+  patterns: Array<{ label: PatternLabelV2; coverage: number }>;
+}>): SevenKDensitySample[] {
+  if (notes.length === 0) return [];
+
+  const startMs =
+    Math.floor(notes[0]!.startMs / DENSITY_SAMPLE_MS) * DENSITY_SAMPLE_MS;
+  const endMs =
+    Math.ceil(notes[notes.length - 1]!.startMs / DENSITY_SAMPLE_MS) *
+    DENSITY_SAMPLE_MS;
+  const samples: SevenKDensitySample[] = [];
+
+  for (let t = startMs; t <= endMs; t += DENSITY_SAMPLE_MS) {
+    const windowEnd = t + DENSITY_SAMPLE_MS;
+    const windowNotes = notes.filter(
+      (note) => note.startMs >= t && note.startMs < windowEnd,
+    );
+    let peakChordSize = 0;
+    for (let i = 0; i < windowNotes.length; i += 1) {
+      const anchor = windowNotes[i]!;
+      let chordSize = 1;
+      for (let j = i + 1; j < windowNotes.length; j += 1) {
+        if (windowNotes[j]!.startMs - anchor.startMs > CHORD_EPS_MS) break;
+        chordSize += 1;
+      }
+      peakChordSize = Math.max(peakChordSize, chordSize);
+    }
+
+    const midpointMs = t + DENSITY_SAMPLE_MS / 2;
+    const section = sections.find(
+      (candidate) =>
+        midpointMs >= candidate.startMs && midpointMs < candidate.endMs,
+    );
+    const composition = normalizeBreakdown(
+      Object.fromEntries(
+        (section?.patterns ?? []).map((pattern) => [pattern.label, pattern.coverage]),
+      ) as Partial<Record<PatternLabelV2, number>>,
+    );
+
+    samples.push({
+      startMs: t,
+      endMs: windowEnd,
+      midpointMs,
+      noteCount: windowNotes.length,
+      notesPerSecond: windowNotes.length / (DENSITY_SAMPLE_MS / 1000),
+      peakChordSize,
+      dominantPattern: section?.patterns[0]?.label ?? null,
+      secondaryPattern: section?.patterns[1]?.label ?? null,
+      composition,
+    });
+  }
+
+  return samples;
+}
+
+function buildHotspots(samples: SevenKDensitySample[]): SevenKPatternHotspot[] {
+  return [...samples]
+    .filter((sample) => sample.noteCount > 0)
+    .map((sample) => ({
+      startMs: sample.startMs,
+      endMs: sample.endMs,
+      noteCount: sample.noteCount,
+      notesPerSecond: sample.notesPerSecond,
+      dominantPattern: sample.dominantPattern,
+      secondaryPattern: sample.secondaryPattern,
+      dominantCoverage:
+        sample.dominantPattern != null
+          ? sample.dominantPattern === "mixed"
+            ? 0
+            : sample.composition[sample.dominantPattern] ?? 0
+          : 0,
+    }))
+    .sort((a, b) => {
+      if (b.notesPerSecond !== a.notesPerSecond) {
+        return b.notesPerSecond - a.notesPerSecond;
+      }
+      return b.dominantCoverage - a.dominantCoverage;
+    })
+    .slice(0, 5);
+}
+
+function analyzeSevenKPatternDetail(osuText: string): SevenKPatternDetail {
+  const chart = parse7kChart(osuText);
+  const result = analyze7kStructuralNotes(chart.notes);
+  const holdCount = chart.notes.filter((note) => note.endMs > note.startMs).length;
+  const samples = buildDensitySamples(chart.notes, result.sections);
+  const durationMs =
+    chart.notes.length > 1
+      ? chart.notes[chart.notes.length - 1]!.startMs - chart.notes[0]!.startMs
+      : 0;
+  const averageNps =
+    durationMs > 0 ? chart.notes.length / Math.max(1, durationMs / 1000) : 0;
+  const peakNps = samples.reduce(
+    (maxNps, sample) => Math.max(maxNps, sample.notesPerSecond),
+    0,
+  );
+  const peakChordSize = samples.reduce(
+    (maxSize, sample) => Math.max(maxSize, sample.peakChordSize),
+    0,
+  );
+
+  return {
+    algorithm: PATTERN_ALGORITHM_V2,
+    columnCount: result.columnCount,
+    noteCount: chart.notes.length,
+    holdCount,
+    durationMs,
+    averageNps,
+    peakNps,
+    peakChordSize,
+    dominantPattern: result.dominantPattern,
+    secondaryPattern: result.secondaryPattern,
+    confidence: result.confidence,
+    composition: normalizeBreakdown(result.composition),
+    samples,
+    hotspots: buildHotspots(samples),
+    error: null,
+  };
+}
 
 function toIso(d: Date | null | undefined): string {
   return toIsoNullable(d) ?? new Date().toISOString();
@@ -159,6 +373,50 @@ export async function getOrComputePatternAnalysis(
   }
 
   return computeOnePattern(db, beatmap);
+}
+
+export async function getSevenKPatternDetail(
+  db: Db,
+  beatmapId: string,
+): Promise<SevenKPatternDetail | null> {
+  const [beatmap] = await db
+    .select({
+      id: beatmaps.id,
+      hash: beatmaps.hash,
+      rulesetShortName: beatmaps.rulesetShortName,
+      circleSize: beatmaps.circleSize,
+    })
+    .from(beatmaps)
+    .where(eq(beatmaps.id, beatmapId))
+    .limit(1);
+
+  if (!beatmap) return null;
+  if (beatmap.rulesetShortName !== "mania") return null;
+  if (beatmap.circleSize != null && Math.round(beatmap.circleSize) !== 7) {
+    return emptySevenKPatternDetail("7K density profile is only available for 7K mania charts.");
+  }
+  if (!beatmap.hash) {
+    return emptySevenKPatternDetail("Beatmap hash missing.");
+  }
+
+  const filePath = resolveLazerFilePath(beatmap.hash, getOsuDataPath());
+  if (!filePath) {
+    return emptySevenKPatternDetail("Could not resolve lazer file path.");
+  }
+
+  let osuText: string;
+  try {
+    osuText = readFileSync(filePath, "utf8");
+  } catch {
+    return emptySevenKPatternDetail("Beatmap file not found in lazer files store.");
+  }
+
+  try {
+    return analyzeSevenKPatternDetail(osuText);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return emptySevenKPatternDetail(message);
+  }
 }
 
 type BeatmapRow = {

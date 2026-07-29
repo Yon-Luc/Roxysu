@@ -1,5 +1,14 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { BeatmapCover } from "../../components/BeatmapCover";
 import { BeatmapPreviewButton } from "../../components/BeatmapPreviewModal";
 import { CopyBeatmapSearchButton } from "../../components/CopyBeatmapSearchButton";
@@ -26,10 +35,12 @@ import {
   formatPrimaryRating,
   useRatingDisplayMode,
 } from "../../lib/ratingDisplay";
+import { useChartStyles } from "../../lib/chartStyles";
 import roxyIcon from "../../roxy.png";
 
 export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
   const ratingMode = useRatingDisplayMode();
+  const charts = useChartStyles();
   const { data, isLoading, error } = useQuery({
     queryKey: ["beatmap", beatmapId],
     queryFn: () => fetchBeatmap(beatmapId),
@@ -98,12 +109,19 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
           chordDensity: number | null;
           streamDensity: number | null;
           bracketDensity: number | null;
+          chordjackScore: number | null;
+          jumpstreamScore: number | null;
+          chordstreamScore: number | null;
           error: string | null;
         } | null }).patternAnalysis
       : null;
   const timingAnalysis =
     data && "timingAnalysis" in data
       ? (data as { timingAnalysis?: ChartTimingView | null }).timingAnalysis
+      : null;
+  const sevenKAnalysis =
+    data && "sevenKAnalysis" in data
+      ? (data as { sevenKAnalysis?: SevenKAnalysisView | null }).sevenKAnalysis
       : null;
   const sessions = data.sessions ?? [];
   const clientUrl = osuClientBeatmapUrl(beatmap.onlineId);
@@ -302,6 +320,20 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
         </div>
       </section>
 
+      {beatmap.rulesetShortName === "mania" && sevenKAnalysis != null ? (
+        <section className="rx-panel p-5 sm:p-6">
+          <SevenKDensityPanel
+            beatmapLengthMs={beatmap.length ?? null}
+            keyCount={
+              beatmap.circleSize != null ? Math.round(beatmap.circleSize) : null
+            }
+            bpm={beatmap.bpm ?? null}
+            analysis={sevenKAnalysis}
+            charts={charts}
+          />
+        </section>
+      ) : null}
+
       {beatmap.rulesetShortName === "mania" && timingAnalysis != null ? (
         <section className="rx-panel p-5">
           <h2 className="text-sm font-bold text-ink">Timing analysis</h2>
@@ -420,6 +452,46 @@ type ChartTimingView = {
   error: string | null;
 };
 
+type SevenKDensitySampleView = {
+  startMs: number;
+  endMs: number;
+  midpointMs: number;
+  noteCount: number;
+  notesPerSecond: number;
+  peakChordSize: number;
+  dominantPattern: string | null;
+  secondaryPattern: string | null;
+  composition: Record<string, number>;
+};
+
+type SevenKHotspotView = {
+  startMs: number;
+  endMs: number;
+  noteCount: number;
+  notesPerSecond: number;
+  dominantPattern: string | null;
+  secondaryPattern: string | null;
+  dominantCoverage: number;
+};
+
+type SevenKAnalysisView = {
+  algorithm: string;
+  columnCount: number | null;
+  noteCount: number;
+  holdCount: number;
+  durationMs: number;
+  averageNps: number;
+  peakNps: number;
+  peakChordSize: number;
+  dominantPattern: string | null;
+  secondaryPattern: string | null;
+  confidence: number | null;
+  composition: Record<string, number>;
+  samples: SevenKDensitySampleView[];
+  hotspots: SevenKHotspotView[];
+  error: string | null;
+};
+
 const ISSUE_KIND_LABELS: Record<string, string> = {
   off_snap: "Off snap",
   inconsistent_snap: "Ambiguous snap",
@@ -510,9 +582,284 @@ function TimingAnalysisPanel({ timing }: { timing: ChartTimingView }) {
   );
 }
 
+function SevenKDensityPanel({
+  beatmapLengthMs,
+  keyCount,
+  bpm,
+  analysis,
+  charts,
+}: {
+  beatmapLengthMs: number | null;
+  keyCount: number | null;
+  bpm: number | null;
+  analysis: SevenKAnalysisView;
+  charts: ReturnType<typeof useChartStyles>;
+}) {
+  const chartData = analysis.samples.map((sample) => ({
+    ...sample,
+    timeLabel: formatTimeMs(sample.startMs),
+    displayPattern: formatPatternLabel(sample.dominantPattern ?? "mixed"),
+    displaySecondary: sample.secondaryPattern
+      ? formatPatternLabel(sample.secondaryPattern)
+      : null,
+  }));
+  const metricRows = [
+    { label: "Jack", value: analysis.composition.jack ?? 0 },
+    { label: "Chordjack", value: analysis.composition.chordjack ?? 0 },
+    { label: "Delay", value: analysis.composition.delay ?? 0 },
+    { label: "Chordstream", value: analysis.composition.chordstream ?? 0 },
+    { label: "Bracket", value: analysis.composition.bracket ?? 0 },
+  ];
+
+  if (analysis.error || chartData.length === 0) {
+    return (
+      <div className="space-y-3">
+        <div>
+          <h2 className="font-display text-2xl font-bold tracking-tight text-ink">
+            7K density profile
+          </h2>
+          <p className="mt-1 text-sm text-muted">
+            Chart-derived density and pattern hotspots for 7K practice.
+          </p>
+        </div>
+        <p className="text-sm text-faint">
+          {analysis.error ?? "No density samples available for this chart yet."}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+        <div>
+          <div className="text-xs font-bold uppercase tracking-[0.24em] text-accent/80">
+            7K density profile
+          </div>
+          <h2 className="mt-2 font-display text-3xl font-extrabold tracking-tight text-ink">
+            {formatPatternLabel(analysis.dominantPattern ?? "mixed")}
+            {analysis.secondaryPattern
+              ? ` · ${formatPatternLabel(analysis.secondaryPattern)}`
+              : ""}
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm text-muted">
+            A chart-first read on density, hotspots, and pattern makeup so you can
+            see where this 7K map actually spikes.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-2">
+          <HeroMetric label="Avg NPS" value={analysis.averageNps.toFixed(1)} />
+          <HeroMetric label="Peak NPS" value={analysis.peakNps.toFixed(1)} />
+          <HeroMetric label="Peak chord" value={`${analysis.peakChordSize}K`} />
+          <HeroMetric
+            label="Confidence"
+            value={
+              analysis.confidence != null
+                ? `${Math.round(analysis.confidence * 100)}%`
+                : "—"
+            }
+          />
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <MiniPanelStat label="BPM" value={bpm != null ? bpm.toFixed(0) : "—"} />
+        <MiniPanelStat label="Keys" value={keyCount != null ? `${keyCount}K` : "—"} />
+        <MiniPanelStat label="Length" value={formatPanelDuration(analysis.durationMs || beatmapLengthMs)} />
+        <MiniPanelStat label="Notes" value={analysis.noteCount.toLocaleString()} />
+        <MiniPanelStat label="LN notes" value={analysis.holdCount.toLocaleString()} />
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.75fr)_20rem]">
+        <div className="rounded-xl border border-white/8 bg-black/10 p-3 sm:p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-bold text-ink">Density over time</h3>
+              <p className="mt-0.5 text-xs text-muted">
+                Per-second note density with local pattern hints.
+              </p>
+            </div>
+            <div className="text-right text-xs text-faint">
+              {analysis.samples.length.toLocaleString()} samples
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={320}>
+            <AreaChart data={chartData}>
+              <defs>
+                <linearGradient id="sevenk-density-fill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={charts.chart} stopOpacity={0.45} />
+                  <stop offset="100%" stopColor={charts.chart} stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid stroke={charts.grid} vertical={false} />
+              <XAxis
+                dataKey="timeLabel"
+                tick={charts.tick}
+                axisLine={false}
+                tickLine={false}
+                minTickGap={20}
+              />
+              <YAxis
+                tick={charts.tick}
+                axisLine={false}
+                tickLine={false}
+                width={40}
+              />
+              <Tooltip
+                contentStyle={charts.tooltip}
+                labelFormatter={(_, payload) => {
+                  const sample = payload?.[0]?.payload as SevenKDensitySampleView | undefined;
+                  return sample
+                    ? `${formatTimeMs(sample.startMs)} - ${formatTimeMs(sample.endMs)}`
+                    : "";
+                }}
+                formatter={(value, name, item) => {
+                  if (name === "notesPerSecond") {
+                    return [`${Number(value).toFixed(1)} NPS`, "Density"];
+                  }
+                  if (name === "peakChordSize") {
+                    return [`${value}K`, "Peak chord"];
+                  }
+                  const payload = item.payload as typeof chartData[number];
+                  if (name === "displayPattern") {
+                    return [
+                      payload.displaySecondary
+                        ? `${payload.displayPattern} + ${payload.displaySecondary}`
+                        : payload.displayPattern,
+                      "Pattern",
+                    ];
+                  }
+                  return [String(value), String(name)];
+                }}
+              />
+              <Area
+                type="monotone"
+                dataKey="notesPerSecond"
+                stroke={charts.chart}
+                fill="url(#sevenk-density-fill)"
+                strokeWidth={2.5}
+                dot={false}
+                activeDot={{ r: 4 }}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+
+        <aside className="space-y-4">
+          <div className="rounded-xl border border-white/8 bg-black/10 p-4">
+            <h3 className="text-sm font-bold text-ink">Pattern weights</h3>
+            <div className="mt-4 space-y-3">
+              {metricRows.map((row) => (
+                <PatternMetricRow
+                  key={row.label}
+                  label={row.label}
+                  value={row.value}
+                  accentColor={charts.chartAlt}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-white/8 bg-black/10 p-4">
+            <h3 className="text-sm font-bold text-ink">Hotspots</h3>
+            {analysis.hotspots.length === 0 ? (
+              <p className="mt-3 text-sm text-faint">No dense sections detected.</p>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {analysis.hotspots.map((hotspot) => (
+                  <li
+                    key={`${hotspot.startMs}-${hotspot.endMs}`}
+                    className="rounded-lg border border-white/6 bg-white/[0.03] px-3 py-2"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-semibold text-ink">
+                        {formatTimeMs(hotspot.startMs)} - {formatTimeMs(hotspot.endMs)}
+                      </span>
+                      <span className="text-xs font-bold tabular-nums text-accent">
+                        {hotspot.notesPerSecond.toFixed(1)} NPS
+                      </span>
+                    </div>
+                    <div className="mt-1 text-xs text-muted">
+                      {formatPatternLabel(hotspot.dominantPattern ?? "mixed")}
+                      {hotspot.secondaryPattern
+                        ? ` + ${formatPatternLabel(hotspot.secondaryPattern)}`
+                        : ""}
+                      {hotspot.dominantCoverage > 0
+                        ? ` · ${Math.round(hotspot.dominantCoverage * 100)}% coverage`
+                        : ""}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+function HeroMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-white/8 bg-black/10 px-4 py-3">
+      <div className="text-[11px] font-bold uppercase tracking-wide text-faint">
+        {label}
+      </div>
+      <div className="mt-1 text-2xl font-extrabold tabular-nums text-ink">
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function MiniPanelStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-white/8 bg-black/10 px-4 py-3">
+      <div className="text-[11px] font-bold uppercase tracking-wide text-faint">
+        {label}
+      </div>
+      <div className="mt-1 text-base font-semibold tabular-nums text-ink">{value}</div>
+    </div>
+  );
+}
+
+function PatternMetricRow({
+  label,
+  value,
+  accentColor,
+}: {
+  label: string;
+  value: number;
+  accentColor: string;
+}) {
+  const pct = Math.max(0, Math.min(100, Math.round(value * 100)));
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between gap-3 text-xs">
+        <span className="font-semibold text-subtle">{label}</span>
+        <span className="tabular-nums text-muted">{pct}%</span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-white/8">
+        <div
+          className="h-full rounded-full"
+          style={{ width: `${pct}%`, background: accentColor }}
+        />
+      </div>
+    </div>
+  );
+}
+
 function formatTimeMs(ms: number): string {
   const sec = Math.max(0, ms / 1000);
   const mins = Math.floor(sec / 60);
   const rem = sec - mins * 60;
   return `${mins}:${rem.toFixed(1).padStart(4, "0")}`;
+}
+
+function formatPanelDuration(ms: number | null | undefined): string {
+  if (ms == null || !Number.isFinite(ms) || ms <= 0) return "—";
+  const totalSeconds = Math.round(ms / 1000);
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  return `${mins}:${String(secs).padStart(2, "0")}`;
 }

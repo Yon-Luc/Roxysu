@@ -6,7 +6,10 @@ import { dbPlugin } from "../db";
 import { toIso } from "../shared/serialize";
 import { listSessionsForBeatmap } from "../analytics/session";
 import { getOrComputeSunnyDan } from "../map-analysis/computeSunnyDan";
-import { getOrComputePatternAnalysis } from "../map-analysis/computePatternAnalysis";
+import {
+  getOrComputePatternAnalysis,
+  getSevenKPatternDetail,
+} from "../map-analysis/computePatternAnalysis";
 import { getChartTimingAnalysis } from "../map-analysis/computeTimingAnalysis";
 import { OsuFileParser } from "@roxysu/osu-chart";
 import {
@@ -95,6 +98,10 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
       const patternAnalysis = is7kMania
         ? await getOrComputePatternAnalysis(db, params.id)
         : null;
+      const sevenKAnalysis =
+        beatmap.rulesetShortName === "mania"
+          ? await getSevenKPatternDetail(db, params.id)
+          : null;
 
       const timingAnalysis =
         beatmap.rulesetShortName === "mania"
@@ -158,6 +165,7 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
           : null,
         sunnyDan,
         patternAnalysis,
+        sevenKAnalysis,
         timingAnalysis,
         notes: [] as Array<{ id: number; body: string }>,
         tags: [] as Array<{ id: number; name: string; color: string | null }>,

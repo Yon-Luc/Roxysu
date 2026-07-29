@@ -1,14 +1,15 @@
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { fetchSystemStatus } from "../lib/api";
+import { isDesktopShell } from "../lib/desktop";
 import { CommandPalette, useCommandPaletteShortcut } from "./CommandPalette";
 import { toggleTheme, useResolvedTheme } from "../lib/theme";
 import roxyIcon from "../roxy.png";
 
 const SIDEBAR_OPEN_KEY = "roxysu.sidebarOpen";
 
-const nav = [
+const ALL_NAV = [
   { to: "/", label: "Home", exact: true, icon: HomeIcon },
   { to: "/stats", label: "Stats", icon: StatsIcon },
   { to: "/practice", label: "Practice", icon: PracticeIcon },
@@ -19,6 +20,15 @@ const nav = [
   { to: "/skin", label: "Skin", icon: SkinIcon },
   { to: "/settings", label: "Settings", icon: SettingsIcon },
 ] as const;
+
+const DESKTOP_HIDDEN_NAV = new Set(["/download-maps", "/rating-lab"]);
+
+function useNavItems() {
+  return useMemo(() => {
+    if (!isDesktopShell()) return [...ALL_NAV];
+    return ALL_NAV.filter((item) => !DESKTOP_HIDDEN_NAV.has(item.to));
+  }, []);
+}
 
 function readSidebarOpen(): boolean {
   try {
@@ -31,6 +41,7 @@ function readSidebarOpen(): boolean {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
+  const nav = useNavItems();
   const [sidebarOpen, setSidebarOpen] = useState(readSidebarOpen);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const toggleCommandPalette = useCallback(

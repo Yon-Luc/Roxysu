@@ -29,17 +29,16 @@ const productApi = () =>
     .use(searchRoutes)
     .use(collectionRoutes)
     .use(settingsRoutes)
-    .use(tosuRoutes)
-    .use(mirrorRoutes);
+    .use(tosuRoutes);
 
-/** Product API without Rating Lab (desktop / Node). */
+/** Desktop / Node product API (no Rating Lab, no download mirrors). */
 export function createProductApiRoutes() {
   return productApi();
 }
 
-/** Full Bun API surface including Rating Lab. */
+/** Full Bun API surface including Rating Lab + download mirrors. */
 export function createFullApiRoutes() {
-  return productApi().use(ratingLabRoutes);
+  return productApi().use(mirrorRoutes).use(ratingLabRoutes);
 }
 
 /** @deprecated Prefer createFullApiRoutes / createProductApiRoutes. */

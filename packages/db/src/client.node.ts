@@ -1,6 +1,7 @@
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import Database from "better-sqlite3";
+import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as schema from "./schema";
@@ -15,6 +16,7 @@ export type { Db } from "./types";
 import type { Db } from "./types";
 
 export function createDb(dbPath: string) {
+  mkdirSync(path.dirname(path.resolve(dbPath)), { recursive: true });
   const sqlite = new Database(dbPath, { timeout: BUSY_TIMEOUT_MS });
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma(`busy_timeout = ${BUSY_TIMEOUT_MS}`);

@@ -19,6 +19,7 @@ import { OverlayPage } from "./features/overlay/OverlayPage";
 import { RatingLabPage } from "./features/rating-lab/RatingLabPage";
 import { DownloadMapsPage } from "./features/download/DownloadMapsPage";
 import { StatsPage } from "./features/stats/StatsPage";
+import { isDesktopShell } from "./lib/desktop";
 import type { StatsGranularity, StatsRange, StatsSkillAxis } from "./lib/api";
 import {
   readSkillTopPlays,
@@ -200,8 +201,7 @@ const routeTree = rootRoute.addChildren([
     sessionDetailRoute,
     collectionsRoute,
     collectionResultsRoute,
-    ratingLabRoute,
-    downloadMapsRoute,
+    ...(isDesktopShell() ? [] : [ratingLabRoute, downloadMapsRoute]),
     skinRoute,
     settingsRoute,
   ]),

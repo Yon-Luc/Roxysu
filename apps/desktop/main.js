@@ -3,6 +3,10 @@ const { spawn } = require("node:child_process");
 const path = require("node:path");
 const http = require("node:http");
 const fs = require("node:fs");
+const { resolveDesktopPaths, ensureParentDir } = require("./paths");
+
+// Stable userData folder: %APPDATA%\Roxysu (Windows) / XDG or Application Support.
+app.setName("Roxysu");
 
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
@@ -14,17 +18,13 @@ let shuttingDown = false;
 
 const PORT = Number(process.env.ROXYSU_PORT ?? 4321);
 const HOST = process.env.ROXYSU_HOST ?? "127.0.0.1";
-const repoRoot = path.resolve(__dirname, "../..");
-const serverDir = path.join(repoRoot, "apps", "server");
-const realmDir = path.join(repoRoot, "apps", "realm-reader");
-const staticDir = path.join(serverDir, "dist", "public");
 
-function resolveTsx() {
+function resolveTsx(repoRoot, serverDir, realmDir) {
   const candidates = [
     path.join(serverDir, "node_modules", ".bin", "tsx"),
     path.join(realmDir, "node_modules", ".bin", "tsx"),
-    path.join(repoRoot, "node_modules", ".bin", "tsx"),
-  ];
+    repoRoot ? path.join(repoRoot, "node_modules", ".bin", "tsx") : null,
+  ].filter(Boolean);
   for (const candidate of candidates) {
     if (fs.existsSync(candidate)) return candidate;
   }
@@ -32,17 +32,31 @@ function resolveTsx() {
 }
 
 /**
+ * @param {ReturnType<typeof resolveDesktopPaths>} paths
+ * @param {string} entry
  * @param {string} cwd
- * @param {string[]} args
- * @param {NodeJS.ProcessEnv} [extraEnv]
+ * @param {NodeJS.ProcessEnv} extraEnv
  */
-function spawnTsx(cwd, args, extraEnv = {}) {
-  const tsxBin = resolveTsx();
+function spawnNodeEntry(paths, entry, cwd, extraEnv) {
+  const env = { ...process.env, ...extraEnv };
+  if (paths.isPackaged || entry.endsWith(".js")) {
+    return spawn(process.execPath, [entry], {
+      cwd,
+      env: {
+        ...env,
+        ELECTRON_RUN_AS_NODE: "1",
+      },
+      stdio: "inherit",
+      shell: process.platform === "win32",
+    });
+  }
+
+  const tsxBin = resolveTsx(paths.repoRoot, paths.serverDir, paths.realmDir);
   const cmd = tsxBin === "npx" ? "npx" : tsxBin;
-  const cmdArgs = tsxBin === "npx" ? ["tsx", ...args] : args;
+  const cmdArgs = tsxBin === "npx" ? ["tsx", entry] : [entry];
   return spawn(cmd, cmdArgs, {
     cwd,
-    env: { ...process.env, ...extraEnv },
+    env,
     stdio: "inherit",
     shell: process.platform === "win32",
   });
@@ -137,22 +151,41 @@ if (!gotLock) {
   });
 
   app.whenReady().then(async () => {
-    if (!fs.existsSync(path.join(staticDir, "index.html"))) {
+    const paths = resolveDesktopPaths(app);
+    ensureParentDir(paths.dbPath);
+    fs.mkdirSync(path.join(paths.dataDir, "backups"), { recursive: true });
+
+    if (!fs.existsSync(path.join(paths.staticDir, "index.html"))) {
       console.error(
-        `[roxysu-desktop] missing UI build at ${staticDir} — run: bun run --cwd apps/server build:ui`,
+        `[roxysu-desktop] missing UI build at ${paths.staticDir}` +
+          (paths.isPackaged
+            ? ""
+            : " — run: bun run --cwd apps/server build:ui"),
       );
       app.exit(1);
       return;
     }
 
+    console.log(`[roxysu-desktop] dataDir=${paths.dataDir}`);
+    console.log(`[roxysu-desktop] dbPath=${paths.dbPath}`);
+    console.log(`[roxysu-desktop] staticDir=${paths.staticDir}`);
+
     const sharedEnv = {
+      ROXYSU_DESKTOP: "1",
       ROXYSU_PORT: String(PORT),
       ROXYSU_HOST: HOST,
-      ROXYSU_STATIC_DIR: staticDir,
-      ...(process.env.DB_PATH ? { DB_PATH: process.env.DB_PATH } : {}),
+      ROXYSU_STATIC_DIR: paths.staticDir,
+      ROXYSU_DATA_DIR: paths.dataDir,
+      DB_PATH: paths.dbPath,
+      ROXYSU_REALM_SCHEMA: paths.realmSchema,
     };
 
-    serverChild = spawnTsx(serverDir, ["src/index.node.ts"], sharedEnv);
+    serverChild = spawnNodeEntry(
+      paths,
+      paths.serverEntry,
+      paths.serverDir,
+      sharedEnv,
+    );
     serverChild.on("exit", (code, signal) => {
       if (!shuttingDown) {
         console.error(`[roxysu-desktop] server exited code=${code} signal=${signal}`);
@@ -160,10 +193,17 @@ if (!gotLock) {
       }
     });
 
-    realmChild = spawnTsx(realmDir, ["src/index.ts"], sharedEnv);
+    realmChild = spawnNodeEntry(
+      paths,
+      paths.realmEntry,
+      paths.realmDir,
+      sharedEnv,
+    );
     realmChild.on("exit", (code, signal) => {
       if (!shuttingDown) {
-        console.error(`[roxysu-desktop] realm-reader exited code=${code} signal=${signal}`);
+        console.error(
+          `[roxysu-desktop] realm-reader exited code=${code} signal=${signal}`,
+        );
       }
     });
 

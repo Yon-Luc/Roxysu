@@ -1,5 +1,6 @@
 {
   "name": "@roxysu/desktop",
+  "productName": "Roxysu",
   "version": "0.0.1",
   "private": true,
   "description": "Roxysu Electron shell (Windows product path; NixOS/Linux for smoke-testing)",

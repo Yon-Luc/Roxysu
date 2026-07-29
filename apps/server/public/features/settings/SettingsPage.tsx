@@ -21,6 +21,7 @@ import {
   stopRatingLabJob,
   stopSunnyDanJob,
 } from "../../lib/api";
+import { isDesktopShell } from "../../lib/desktop";
 import {
   ratingDisplayOptions,
   setRatingDisplayMode,
@@ -33,6 +34,7 @@ import {
 } from "../../lib/theme";
 
 export function SettingsPage() {
+  const desktop = isDesktopShell();
   const queryClient = useQueryClient();
   const ratingMode = useRatingDisplayMode();
   const themeMode = useTheme();
@@ -87,6 +89,7 @@ export function SettingsPage() {
   const ratingLabJobQuery = useQuery({
     queryKey: ["rating-lab", "job"],
     queryFn: fetchRatingLabJob,
+    enabled: !desktop,
     refetchInterval: (query) => {
       const status = query.state.data?.status;
       return status === "running" || status === "stopping" ? 1000 : false;
@@ -657,6 +660,7 @@ export function SettingsPage() {
         />
       </section>
 
+      {!desktop ? (
       <section className="rx-panel p-5">
         <h2 className="text-sm font-bold text-ink">Mania Rating Lab</h2>
         <p className="mt-1 text-sm text-muted">
@@ -788,6 +792,7 @@ export function SettingsPage() {
           <p className="mt-3 text-sm text-rose-300">{maniaJob.error}</p>
         ) : null}
       </section>
+      ) : null}
 
       <section className="rx-panel p-5">
         <h2 className="text-sm font-bold text-ink">Sunny dan calculation</h2>

@@ -1,13 +1,15 @@
-import { spawn } from "node:child_process";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { spawn } from "node:child_process";
 import type { Db } from "@roxysu/db/types";
 import { collections, settings } from "@roxysu/db/schema";
 import { SYNC_REALM_READER_PAUSED_KEY } from "@roxysu/db/settings-keys";
 import { defaultDbPath } from "@roxysu/db/path";
 import type {
+  CollectionSyncPayload,
+  CollectionSyncResult,
   LazerCollectionSyncError,
   LazerCollectionSyncSuccess,
 } from "@roxysu/collection-sync";
@@ -16,6 +18,11 @@ import {
   parseQuery,
   QueryParseError,
 } from "../query-language";
+import {
+  getCachedOsuDataOverride,
+  resolveOsuDataPath,
+  resolveRealmPath,
+} from "./osu-paths";
 
 export { SYNC_REALM_READER_PAUSED_KEY };
 export type { LazerCollectionSyncSuccess, LazerCollectionSyncError };
@@ -26,11 +33,35 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function isBunRuntime(): boolean {
+  return typeof (process.versions as { bun?: string }).bun === "string";
+}
+
 function realmReaderDir(): string {
   const here = path.dirname(fileURLToPath(import.meta.url));
   return path.resolve(here, "../../../realm-reader");
 }
 
+function resolveRealmPathForSync(): string {
+  if (process.env.REALM_PATH?.trim()) return process.env.REALM_PATH.trim();
+  const dataPath = resolveOsuDataPath(getCachedOsuDataOverride()).resolved;
+  return resolveRealmPath(dataPath);
+}
+
+/** Node/desktop: call realm-reader in-process (no bunx/tsx). */
+async function runSyncInProcess(
+  db: Db,
+  payload: CollectionSyncPayload,
+): Promise<CollectionSyncResult> {
+  const modUrl = pathToFileURL(
+    path.join(realmReaderDir(), "src", "syncCollections.ts"),
+  ).href;
+  const { runCollectionSync } = await import(modUrl);
+  const dbPath = process.env.DB_PATH?.trim() || defaultDbPath();
+  return runCollectionSync(db, dbPath, resolveRealmPathForSync(), payload);
+}
+
+/** Bun monorepo: Realm cannot load in-process — spawn the Node CLI. */
 function runSyncCli(
   payloadPath: string,
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
@@ -65,6 +96,22 @@ function runSyncCli(
   });
 }
 
+function parseCliResult(stdout: string): CollectionSyncResult {
+  const line = stdout
+    .split("\n")
+    .map((l) => l.trim())
+    .find((l) => l.startsWith("RESULT "));
+  if (!line) {
+    return {
+      ok: false,
+      error: "Collection sync produced no result",
+      code: "other",
+    };
+  }
+
+  return JSON.parse(line.slice("RESULT ".length)) as CollectionSyncResult;
+}
+
 async function setSetting(db: Db, key: string, value: string): Promise<void> {
   await db
     .insert(settings)
@@ -75,42 +122,6 @@ async function setSetting(db: Db, key: string, value: string): Promise<void> {
     });
 }
 
-function parseCliResult(stdout: string): {
-  ok: true;
-  result: LazerCollectionSyncSuccess;
-} | {
-  ok: false;
-  error: LazerCollectionSyncError;
-} {
-  const line = stdout
-    .split("\n")
-    .map((l) => l.trim())
-    .find((l) => l.startsWith("RESULT "));
-  if (!line) {
-    return {
-      ok: false,
-      error: { error: "Collection sync produced no result", code: "other" },
-    };
-  }
-
-  const parsed = JSON.parse(line.slice("RESULT ".length)) as
-    | ({ ok: true } & LazerCollectionSyncSuccess)
-    | ({ ok: false } & LazerCollectionSyncError);
-
-  if (parsed.ok) {
-    const { ok: _ok, ...result } = parsed;
-    return { ok: true, result };
-  }
-
-  return {
-    ok: false,
-    error: {
-      error: parsed.error,
-      code: parsed.code ?? "other",
-    },
-  };
-}
-
 export async function syncCollectionsToLazer(
   db: Db,
 ): Promise<
@@ -119,12 +130,7 @@ export async function syncCollectionsToLazer(
 > {
   const rows = await db.select().from(collections);
 
-  const payloadCollections: {
-    id: number;
-    name: string;
-    lazerCollectionId: string | null;
-    md5Hashes: string[];
-  }[] = [];
+  const payloadCollections: CollectionSyncPayload["collections"] = [];
   let skippedNoMd5 = 0;
 
   for (const col of rows) {
@@ -156,39 +162,53 @@ export async function syncCollectionsToLazer(
     });
   }
 
-  const tempDir = mkdtempSync(path.join(tmpdir(), "roxysu-collection-sync-"));
-  const payloadPath = path.join(tempDir, "payload.json");
+  const payload: CollectionSyncPayload = {
+    collections: payloadCollections,
+    skippedNoMd5,
+  };
+
+  await setSetting(db, SYNC_REALM_READER_PAUSED_KEY, "1");
+  await sleep(PAUSE_SETTLE_MS);
 
   try {
-    writeFileSync(
-      payloadPath,
-      JSON.stringify({
-        collections: payloadCollections,
-        skippedNoMd5,
-      }),
-    );
+    let syncResult: CollectionSyncResult;
 
-    await setSetting(db, SYNC_REALM_READER_PAUSED_KEY, "1");
-    await sleep(PAUSE_SETTLE_MS);
+    if (!isBunRuntime()) {
+      syncResult = await runSyncInProcess(db, payload);
+    } else {
+      const tempDir = mkdtempSync(path.join(tmpdir(), "roxysu-collection-sync-"));
+      const payloadPath = path.join(tempDir, "payload.json");
+      try {
+        writeFileSync(payloadPath, JSON.stringify(payload));
+        const { stdout, stderr, exitCode } = await runSyncCli(payloadPath);
+        if (exitCode !== 0 && !stdout.includes("RESULT ")) {
+          return {
+            ok: false,
+            error: {
+              error: stderr.trim() || stdout.trim() || "Collection sync failed",
+              code: "other",
+            },
+          };
+        }
+        syncResult = parseCliResult(stdout);
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    }
 
-    const { stdout, stderr, exitCode } = await runSyncCli(payloadPath);
-
-    if (exitCode !== 0 && !stdout.includes("RESULT ")) {
+    if (!syncResult.ok) {
       return {
         ok: false,
         error: {
-          error: stderr.trim() || stdout.trim() || "Collection sync failed",
-          code: "other",
+          error: syncResult.error,
+          code: syncResult.code ?? "other",
         },
       };
     }
 
-    const parsed = parseCliResult(stdout);
-    if (!parsed.ok) return parsed;
-
-    return parsed;
+    const { ok: _ok, ...result } = syncResult;
+    return { ok: true, result };
   } finally {
     await setSetting(db, SYNC_REALM_READER_PAUSED_KEY, "0");
-    rmSync(tempDir, { recursive: true, force: true });
   }
 }

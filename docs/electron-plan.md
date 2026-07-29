@@ -214,17 +214,16 @@ Optional polish (after MVP): tray icon, “Open data folder”, crash dialog, au
 - Shared `@roxysu/db/types`; routes import schema/types instead of `client.bun`.
 - Desktop mounts product routes; excludes Lab + SW.
 
-### M2 — `apps/desktop` shell (in progress)
+### M2 — `apps/desktop` shell (done for local smoke)
 
 - Electron main loads localhost UI (spawns Node server + realm-reader child).
 - Dev: `bun run desktop` (builds UI, then Electron).
-- Remaining: tighten process lifecycle / watch mode as needed.
 
-### M3 — Packaging-aware sync & paths
+### M3 — Packaging-aware sync & paths (done)
 
-- Collection sync without `bunx`/`tsx`.
-- `%APPDATA%\Roxysu` defaults for DB/backups.
-- Resource paths work under `electron-builder` output (not monorepo cwd).
+- Collection sync on Node/desktop calls `runCollectionSync` in-process (no `bunx`/`tsx`). Bun monorepo keeps the CLI spawn (Realm cannot load under Bun).
+- Desktop data dir defaults: `%APPDATA%\Roxysu` / macOS Application Support / Linux XDG (`ROXYSU_DESKTOP=1`, `ROXYSU_DATA_DIR`, Electron `userData`). Backups stay beside the DB (`{dataDir}/backups`).
+- Resource path helper [`apps/desktop/paths.js`](../apps/desktop/paths.js) resolves monorepo vs packaged `resources/` layout (`ROXYSU_STATIC_DIR`, `ROXYSU_SERVER_ENTRY`, `ROXYSU_REALM_ENTRY`, `ROXYSU_REALM_SCHEMA`).
 
 ### M4 — Windows artifact
 
@@ -234,7 +233,7 @@ Optional polish (after MVP): tray icon, “Open data folder”, crash dialog, au
 
 ### M5 — Product polish
 
-- Hide Lab in desktop UI.
+- Hide Lab / Download in desktop UI (nav, command palette, routes, settings).
 - External links → OS browser.
 - Tray / quit behavior / basic error surfacing.
 - (Later) auto-update.

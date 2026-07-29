@@ -15,6 +15,7 @@ import {
   fetchSearch,
   fetchSessions,
 } from "../lib/api";
+import { isDesktopShell } from "../lib/desktop";
 import { formatRelativeTime, formatStars } from "../lib/format";
 
 const PRACTICE_SEARCH_KEY = "roxysu:practice-search";
@@ -31,7 +32,7 @@ type CommandItem = {
   onSelect: () => void;
 };
 
-const PAGE_ITEMS: {
+const ALL_PAGE_ITEMS: {
   to: string;
   label: string;
   keywords?: string[];
@@ -50,6 +51,13 @@ const PAGE_ITEMS: {
   { to: "/skin", label: "Skin", keywords: ["preview", "keybinds"] },
   { to: "/settings", label: "Settings", keywords: ["config", "preferences"] },
 ];
+
+const DESKTOP_HIDDEN_PAGES = new Set(["/download-maps", "/rating-lab"]);
+
+function pageItems() {
+  if (!isDesktopShell()) return ALL_PAGE_ITEMS;
+  return ALL_PAGE_ITEMS.filter((item) => !DESKTOP_HIDDEN_PAGES.has(item.to));
+}
 
 function matchesQuery(text: string, query: string): boolean {
   return text.toLowerCase().includes(query.toLowerCase());
@@ -173,7 +181,7 @@ export function CommandPalette({
     const trimmed = query.trim();
     const result: CommandItem[] = [];
 
-    for (const page of PAGE_ITEMS) {
+    for (const page of pageItems()) {
       if (!itemMatches(page, trimmed)) continue;
       result.push({
         id: `page:${page.to}`,

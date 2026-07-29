@@ -16,7 +16,9 @@ let cached: ExportedRealmSchema | null = null;
 let cachedPath: string | null = null;
 
 export function loadOsuSchema(
-  schemaPath = path.join(__dirname, "..", "schemas", "osu-client.schema.json"),
+  schemaPath =
+    process.env.ROXYSU_REALM_SCHEMA?.trim() ||
+    path.join(__dirname, "..", "schemas", "osu-client.schema.json"),
 ): ExportedRealmSchema {
   if (cached && cachedPath === schemaPath) return cached;
   cached = JSON.parse(readFileSync(schemaPath, "utf8")) as ExportedRealmSchema;

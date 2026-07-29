@@ -1,6 +1,7 @@
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { migrate } from "drizzle-orm/bun-sqlite/migrator";
 import { Database } from "bun:sqlite";
+import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as schema from "./schema";
@@ -15,6 +16,7 @@ export type { Db } from "./types";
 import type { Db } from "./types";
 
 export function createDb(dbPath: string): Db {
+  mkdirSync(path.dirname(path.resolve(dbPath)), { recursive: true });
   const sqlite = new Database(dbPath);
   sqlite.exec("PRAGMA journal_mode = WAL;");
   sqlite.exec(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS};`);

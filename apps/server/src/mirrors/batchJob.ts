@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync, existsSync } from "node:fs";
 import path from "node:path";
-import type { Db } from "../db";
+import type { Db } from "../db-runtime";
 import {
   beatmapSetArchiveFilename,
   ensureBeatmapsDownloadDir,

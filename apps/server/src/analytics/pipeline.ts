@@ -1,14 +1,7 @@
-import {
-  and,
-  desc,
-  eq,
-  inArray,
-  isNotNull,
-  type Db,
-  imports,
-  scores,
-  beatmaps,
-} from "@roxysu/db/client.bun";
+
+import type { Db } from "@roxysu/db/types";
+import { beatmaps, imports, scores } from "@roxysu/db/schema";
+import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import { subscribe, publish, type AppEvent } from "../shared/events";
 import { runRetryEngine } from "./retry";
 import { runSessionEngine } from "./session";

@@ -1,5 +1,5 @@
 import { Elysia } from "elysia";
-import { dbPlugin } from "../db";
+import { dbPlugin } from "../db-runtime";
 import {
   getTosuLiveSnapshot,
   requestTosuStart,

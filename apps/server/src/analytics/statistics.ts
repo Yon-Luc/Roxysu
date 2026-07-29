@@ -1,15 +1,6 @@
-import {
-  and,
-  eq,
-  inArray,
-  isNotNull,
-  type Db,
-  scores,
-  beatmaps,
-  dailyStats,
-  weeklyStats,
-  mapperStats,
-} from "@roxysu/db/client.bun";
+import type { Db } from "@roxysu/db/types";
+import { beatmaps, dailyStats, mapperStats, scores, weeklyStats } from "@roxysu/db/schema";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 
 function toMs(value: Date | number): number {
   return value instanceof Date ? value.getTime() : value;

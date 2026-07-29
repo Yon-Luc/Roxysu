@@ -1,8 +1,9 @@
+import { beatmapSets, beatmaps, mastery, scores } from "@roxysu/db/schema";
 import { Elysia, t } from "elysia";
 import { readFileSync } from "node:fs";
 import { and, count, desc, eq, max } from "drizzle-orm";
-import { beatmaps, beatmapSets, mastery, scores } from "@roxysu/db/client.bun";
-import { dbPlugin } from "../db";
+
+import { dbPlugin } from "../db-runtime";
 import { toIso } from "../shared/serialize";
 import { listSessionsForBeatmap } from "../analytics/session";
 import { getOrComputeSunnyDan } from "../map-analysis/computeSunnyDan";

@@ -1,5 +1,5 @@
 import { Elysia, t } from "elysia";
-import { dbPlugin } from "../db";
+import { dbPlugin } from "../db-runtime";
 import { toIso } from "../shared/serialize";
 import {
   getCurrentSession,

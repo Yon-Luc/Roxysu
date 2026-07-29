@@ -1,7 +1,8 @@
+import { collections } from "@roxysu/db/schema";
 import { Elysia, t } from "elysia";
 import { desc, eq } from "drizzle-orm";
-import { collections } from "@roxysu/db/client.bun";
-import { dbPlugin } from "../db";
+
+import { dbPlugin } from "../db-runtime";
 import { toIso } from "../shared/serialize";
 import { publish } from "../shared/events";
 import { syncCollectionsToLazer } from "../shared/syncCollections";

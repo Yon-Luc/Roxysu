@@ -1,6 +1,7 @@
+import { beatmapSets } from "@roxysu/db/schema";
 import { and, eq, gt } from "drizzle-orm";
-import { beatmapSets } from "@roxysu/db/client.bun";
-import type { Db } from "../db";
+
+import type { Db } from "../db-runtime";
 import { getActiveBeatmapMirrorProvider } from "./providers";
 import {
   buildMirrorSearchUrl,

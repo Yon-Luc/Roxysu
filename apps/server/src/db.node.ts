@@ -1,6 +1,5 @@
-/** Bun SQLite singleton — bindDb runs on import for route plugins. */
 import { eq } from "drizzle-orm";
-import { ensureDb } from "@roxysu/db/client.bun";
+import { ensureDb } from "@roxysu/db/client.node";
 import { settings } from "@roxysu/db/schema";
 import type { Db } from "@roxysu/db/types";
 import { bindDb } from "./db-runtime";
@@ -16,12 +15,12 @@ bindDb(db);
 
 export type { Db };
 
-console.log(`[db] using ${dbPath}`);
+console.log(`[db] using ${dbPath} (node)`);
 
-// Hydrate path override so covers/audio see settings before the first request.
-const [pathRow] = await db
+const pathRow = db
   .select()
   .from(settings)
   .where(eq(settings.key, OSU_DATA_PATH_SETTING_KEY))
-  .limit(1);
+  .limit(1)
+  .get();
 setCachedOsuDataOverride(pathRow?.value ?? null);

@@ -1,10 +1,6 @@
-import {
-  asc,
-  eq,
-  type Db,
-  scores,
-  scoreMetrics,
-} from "@roxysu/db/client.bun";
+import type { Db } from "@roxysu/db/types";
+import { scoreMetrics, scores } from "@roxysu/db/schema";
+import { asc, eq } from "drizzle-orm";
 
 /**
  * Assign retry_index (consecutive same-beatmap plays in global timeline)

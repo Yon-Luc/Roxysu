@@ -8,6 +8,6 @@ applyTheme(getTheme());
 const root = createRoot(document.getElementById("root")!);
 root.render(<App />);
 
-if ("serviceWorker" in navigator) {
+if ("serviceWorker" in navigator && !(window as { roxysuDesktop?: unknown }).roxysuDesktop) {
 	void navigator.serviceWorker.register("/sw.js");
 }

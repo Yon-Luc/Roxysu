@@ -1,4 +1,5 @@
-import type { Db } from "@roxysu/db/client.bun";
+
+import type { Db } from "@roxysu/db/types";
 import { publish } from "../shared/events";
 import { analyzeLiveMap } from "./analyze";
 import { connectTosuWs, type TosuWsClient } from "./client";

@@ -1,13 +1,8 @@
+import { beatmapDanRatings, beatmapSets, beatmaps, imports, scores } from "@roxysu/db/schema";
 import { Elysia } from "elysia";
 import { and, count, desc, eq } from "drizzle-orm";
-import {
-  beatmapDanRatings,
-  beatmaps,
-  beatmapSets,
-  imports,
-  scores,
-} from "@roxysu/db/client.bun";
-import { dbPlugin } from "../db";
+
+import { dbPlugin } from "../db-runtime";
 import { toIso } from "../shared/serialize";
 import { getCurrentSession } from "../analytics/session";
 import {

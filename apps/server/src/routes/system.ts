@@ -1,11 +1,12 @@
+import { beatmaps, imports, scores, settings } from "@roxysu/db/schema";
 import { Elysia, t } from "elysia";
 import { count, desc, eq } from "drizzle-orm";
-import { beatmaps, imports, scores, settings } from "@roxysu/db/client.bun";
+
 import {
   SYNC_PAUSE_WHEN_UNFOCUSED_KEY,
   SYNC_UI_FOCUSED_KEY,
 } from "@roxysu/db/settings-keys";
-import { dbPlugin } from "../db";
+import { dbPlugin } from "../db-runtime";
 import { toIso } from "../shared/serialize";
 
 export { SYNC_PAUSE_WHEN_UNFOCUSED_KEY, SYNC_UI_FOCUSED_KEY };

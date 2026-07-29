@@ -1,6 +1,8 @@
+import type { Db } from "@roxysu/db/types";
+import { imports, scores } from "@roxysu/db/schema";
 import { Elysia } from "elysia";
 import { count, desc, max } from "drizzle-orm";
-import { imports, scores, type Db } from "@roxysu/db/client.bun";
+
 import { publish, subscribe, type AppEvent } from "./shared/events";
 
 type PollState = {

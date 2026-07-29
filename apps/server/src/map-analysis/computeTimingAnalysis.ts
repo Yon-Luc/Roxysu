@@ -1,6 +1,8 @@
+import type { Db } from "@roxysu/db/types";
+import { beatmaps } from "@roxysu/db/schema";
 import { readFileSync } from "node:fs";
 import { eq } from "drizzle-orm";
-import { beatmaps, type Db } from "@roxysu/db/client.bun";
+
 import { parseOsuChart } from "@roxysu/osu-chart";
 import {
   analyzeChartTiming,

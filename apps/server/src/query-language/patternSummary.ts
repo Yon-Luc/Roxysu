@@ -1,4 +1,5 @@
-import type { Db } from "@roxysu/db/client.bun";
+
+import type { Db } from "@roxysu/db/types";
 import { LN_DAN_RATIO_THRESHOLD } from "../map-analysis/estDiff";
 import { backfillSunnyDanSync, SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
 import { PATTERN_ALGORITHM } from "@roxysu/pattern-7k";

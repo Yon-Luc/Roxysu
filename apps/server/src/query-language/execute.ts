@@ -1,4 +1,5 @@
-import type { Db } from "@roxysu/db/client.bun";
+
+import type { Db } from "@roxysu/db/types";
 import { parseQuery } from "./parse";
 import { compileQuery } from "./compile";
 import type { AstNode } from "./ast";

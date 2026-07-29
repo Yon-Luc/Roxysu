@@ -77,10 +77,10 @@ Smoke test: `nix develop` → `bun run desktop` (Hello window in `apps/desktop`)
 
 Suggested `apps/desktop` growth:
 
-- Electron `main` / `preload` (done for smoke)
-- Node Elysia bootstrap (`index.node.ts` or import shared `createApp({ runtime: "node" })`)
-- `electron-builder` config (`win` only)
-- Scripts: `dev`, `pack`, `dist`
+- Electron `main` / `preload` (done for smoke; main now boots Node + realm-reader)
+- Node Elysia bootstrap (`index.node.ts` + shared `createApp`)
+- `electron-builder` config (`win` only) — not yet
+- Scripts: `dev` (build UI + Electron), `pack`, `dist`
 
 ## What is already free (or nearly free)
 
@@ -203,22 +203,22 @@ Optional polish (after MVP): tray icon, “Open data folder”, crash dialog, au
 
 ## Implementation milestones
 
-### M0 — Spike (1–2 days)
+### M0 — Spike (done)
 
-- Prove Elysia + `@elysiajs/node` + `client.node` can serve a minimal route and the existing UI over localhost.
-- Document any broken Bun-only imports found at import time.
+- Elysia + `@elysiajs/node` + `client.node` serve product API + Bun-built UI over localhost (`apps/server/src/index.node.ts`).
 
-### M1 — Runtime adapters
+### M1 — Runtime adapters (done)
 
-- `createApp` / dual entry.
-- Neutralize `serveHashedFile` and static serving.
+- `createApp` / dual entry ([`createApp.ts`](../apps/server/src/createApp.ts), Bun [`app.ts`](../apps/server/src/app.ts), Node [`index.node.ts`](../apps/server/src/index.node.ts)).
+- Neutralized `serveHashedFile` and collection sync spawn/`sleep`.
+- Shared `@roxysu/db/types`; routes import schema/types instead of `client.bun`.
 - Desktop mounts product routes; excludes Lab + SW.
 
-### M2 — `apps/desktop` shell
+### M2 — `apps/desktop` shell (in progress)
 
-- Electron main loads localhost UI.
-- Dev script: spawn/use local Node server entry (or Electron runs it in-process).
-- Realm sync wired (child/utility) using existing realm-reader code.
+- Electron main loads localhost UI (spawns Node server + realm-reader child).
+- Dev: `bun run desktop` (builds UI, then Electron).
+- Remaining: tighten process lifecycle / watch mode as needed.
 
 ### M3 — Packaging-aware sync & paths
 

@@ -5,8 +5,9 @@
   "description": "Roxysu Electron shell (Windows product path; NixOS/Linux for smoke-testing)",
   "main": "main.js",
   "scripts": {
-    "dev": "node ./scripts/run-electron.mjs .",
-    "start": "node ./scripts/run-electron.mjs ."
+    "dev": "bun run --cwd ../server build:ui && node ./scripts/run-electron.mjs .",
+    "start": "node ./scripts/run-electron.mjs .",
+    "dev:smoke": "node ./scripts/run-electron.mjs ."
   },
   "devDependencies": {
     "electron": "^42.0.0"

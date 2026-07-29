@@ -1,3 +1,6 @@
+import { createReadStream, existsSync } from "node:fs";
+import { open } from "node:fs/promises";
+import { Readable } from "node:stream";
 import {
   getOsuDataPath,
   isLazerFileHash,
@@ -5,7 +8,7 @@ import {
 } from "./lazer-files";
 
 export type ServeHashedFileResult =
-  | { ok: true; file: ReturnType<typeof Bun.file>; contentType: string }
+  | { ok: true; file: ReadableStream<Uint8Array>; contentType: string }
   | { ok: false; status: 400 | 404 | 415; error: string };
 
 /**
@@ -28,16 +31,23 @@ export async function serveHashedFile(
     return { ok: false, status: 400, error: "Invalid file hash" };
   }
 
-  const file = Bun.file(filePath);
-  if (!(await file.exists())) {
+  if (!existsSync(filePath)) {
     return { ok: false, status: 404, error: notFoundError };
   }
 
-  const head = new Uint8Array(await file.slice(0, 16).arrayBuffer());
-  const type = sniffMime(head);
-  if (!type) {
-    return { ok: false, status: 415, error: wrongTypeError };
-  }
+  const handle = await open(filePath, "r");
+  try {
+    const head = Buffer.alloc(16);
+    const { bytesRead } = await handle.read(head, 0, 16, 0);
+    const type = sniffMime(new Uint8Array(head.buffer, head.byteOffset, bytesRead));
+    if (!type) {
+      return { ok: false, status: 415, error: wrongTypeError };
+    }
 
-  return { ok: true, file, contentType: type };
+    const nodeStream = createReadStream(filePath);
+    const file = Readable.toWeb(nodeStream) as unknown as ReadableStream<Uint8Array>;
+    return { ok: true, file, contentType: type };
+  } finally {
+    await handle.close();
+  }
 }

@@ -1,12 +1,13 @@
+import { beatmapSets, beatmaps, scores } from "@roxysu/db/schema";
 import { readFileSync } from "node:fs";
 import { and, eq } from "drizzle-orm";
-import { beatmaps, beatmapSets, scores } from "@roxysu/db/client.bun";
+
 import { OsuFileParser, type ChartNote } from "@roxysu/osu-chart";
 import {
   getOsuDataPath,
   resolveLazerFilePath,
 } from "../shared/lazer-files";
-import type { Db } from "../db";
+import type { Db } from "../db-runtime";
 
 export type { ChartNote };
 

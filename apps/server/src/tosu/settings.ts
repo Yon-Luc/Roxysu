@@ -1,5 +1,6 @@
+import type { Db } from "@roxysu/db/types";
+import { settings } from "@roxysu/db/schema";
 import { eq } from "drizzle-orm";
-import { settings, type Db } from "@roxysu/db/client.bun";
 
 export const TOSU_ENABLED_KEY = "tosu.enabled";
 export const TOSU_HOST_KEY = "tosu.host";

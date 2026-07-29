@@ -1,11 +1,8 @@
-import { and, count, desc, eq, sql, type Db } from "@roxysu/db/client.bun";
-import {
-  beatmaps,
-  mapperStats,
-  scoreMetrics,
-  scores,
-  sessions,
-} from "@roxysu/db/client.bun";
+
+
+import type { Db } from "@roxysu/db/types";
+import { beatmaps, mapperStats, scoreMetrics, scores, sessions } from "@roxysu/db/schema";
+import { and, count, desc, eq, sql } from "drizzle-orm";
 import { SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
 import {
   getAccuracyTrend,

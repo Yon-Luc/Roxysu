@@ -1,4 +1,5 @@
-import type { Db } from "@roxysu/db/client.bun";
+
+import type { Db } from "@roxysu/db/types";
 import { ensureSunnyDanForIdsSync } from "../../map-analysis/computeSunnyDan";
 import { skillForAxis } from "./sevenKSkill";
 import { calculateMapMatch, mapMatchesAxis } from "./mapMatch";

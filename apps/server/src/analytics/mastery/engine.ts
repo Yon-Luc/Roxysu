@@ -1,14 +1,7 @@
-import {
-  and,
-  eq,
-  inArray,
-  isNotNull,
-  settings,
-  mastery,
-  scores,
-  scoreMetrics,
-  type Db,
-} from "@roxysu/db/client.bun";
+
+import type { Db } from "@roxysu/db/types";
+import { mastery, scoreMetrics, scores, settings } from "@roxysu/db/schema";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { publish } from "../../shared/events";
 import {
   DEFAULT_MASTERY_FORMULA,

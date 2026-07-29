@@ -1,7 +1,8 @@
+import { settings } from "@roxysu/db/schema";
 import { Elysia, t } from "elysia";
 import { eq } from "drizzle-orm";
-import { settings } from "@roxysu/db/client.bun";
-import { dbPlugin, type Db } from "../db";
+
+import { dbPlugin, type Db } from "../db-runtime";
 import {
   getActiveFormulaId,
   listFormulas,

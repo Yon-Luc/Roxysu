@@ -1,8 +1,10 @@
+import { spawn } from "node:child_process";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { collections, settings, type Db } from "@roxysu/db/client.bun";
+import type { Db } from "@roxysu/db/types";
+import { collections, settings } from "@roxysu/db/schema";
 import { SYNC_REALM_READER_PAUSED_KEY } from "@roxysu/db/settings-keys";
 import { defaultDbPath } from "@roxysu/db/path";
 import type {
@@ -20,9 +22,47 @@ export type { LazerCollectionSyncSuccess, LazerCollectionSyncError };
 
 const PAUSE_SETTLE_MS = 2_000;
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function realmReaderDir(): string {
   const here = path.dirname(fileURLToPath(import.meta.url));
   return path.resolve(here, "../../../realm-reader");
+}
+
+function runSyncCli(
+  payloadPath: string,
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      "npx",
+      ["tsx", "src/sync-collections-once.ts", payloadPath],
+      {
+        cwd: realmReaderDir(),
+        env: {
+          ...process.env,
+          DB_PATH: process.env.DB_PATH ?? defaultDbPath(),
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk: string) => {
+      stderr += chunk;
+    });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      resolve({ stdout, stderr, exitCode: code ?? 1 });
+    });
+  });
 }
 
 async function setSetting(db: Db, key: string, value: string): Promise<void> {
@@ -129,29 +169,9 @@ export async function syncCollectionsToLazer(
     );
 
     await setSetting(db, SYNC_REALM_READER_PAUSED_KEY, "1");
-    await Bun.sleep(PAUSE_SETTLE_MS);
+    await sleep(PAUSE_SETTLE_MS);
 
-    const proc = Bun.spawn({
-      cmd: [
-        "bunx",
-        "tsx",
-        "src/sync-collections-once.ts",
-        payloadPath,
-      ],
-      cwd: realmReaderDir(),
-      env: {
-        ...process.env,
-        DB_PATH: process.env.DB_PATH ?? defaultDbPath(),
-      },
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-
-    const [stdout, stderr, exitCode] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-      proc.exited,
-    ]);
+    const { stdout, stderr, exitCode } = await runSyncCli(payloadPath);
 
     if (exitCode !== 0 && !stdout.includes("RESULT ")) {
       return {

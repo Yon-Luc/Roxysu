@@ -14,19 +14,39 @@ import { systemRoutes } from "./system";
 import { tosuRoutes } from "./tosu";
 import { ratingLabRoutes } from "./ratingLab";
 import { mirrorRoutes } from "./mirrors";
-export const apiRoutes = new Elysia({ prefix: "/api" })
-  .use(systemRoutes)
-  .use(dashboardRoutes)
-  .use(statsRoutes)
-  .use(practiceRoutes)
-  .use(beatmapRoutes)
-  .use(coverRoutes)
-  .use(audioRoutes)
-  .use(scoreRoutes)
-  .use(sessionRoutes)
-  .use(searchRoutes)
-  .use(collectionRoutes)
-  .use(settingsRoutes)
-  .use(tosuRoutes)
-  .use(ratingLabRoutes)
-  .use(mirrorRoutes);
+
+const productApi = () =>
+  new Elysia({ prefix: "/api" })
+    .use(systemRoutes)
+    .use(dashboardRoutes)
+    .use(statsRoutes)
+    .use(practiceRoutes)
+    .use(beatmapRoutes)
+    .use(coverRoutes)
+    .use(audioRoutes)
+    .use(scoreRoutes)
+    .use(sessionRoutes)
+    .use(searchRoutes)
+    .use(collectionRoutes)
+    .use(settingsRoutes)
+    .use(tosuRoutes)
+    .use(mirrorRoutes);
+
+/** Product API without Rating Lab (desktop / Node). */
+export function createProductApiRoutes() {
+  return productApi();
+}
+
+/** Full Bun API surface including Rating Lab. */
+export function createFullApiRoutes() {
+  return productApi().use(ratingLabRoutes);
+}
+
+/** @deprecated Prefer createFullApiRoutes / createProductApiRoutes. */
+export function createApiRoutes(options: { includeLab?: boolean } = {}) {
+  return options.includeLab === false
+    ? createProductApiRoutes()
+    : createFullApiRoutes();
+}
+
+export const apiRoutes = createFullApiRoutes();

@@ -1,5 +1,7 @@
+import type { Db } from "@roxysu/db/types";
+import { settings } from "@roxysu/db/schema";
 import { eq } from "drizzle-orm";
-import { settings, type Db } from "@roxysu/db/client.bun";
+
 import { executableSettingKey, listVersions } from "./registry";
 
 export async function readExecutablePath(

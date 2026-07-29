@@ -1,4 +1,5 @@
-import type { Db } from "@roxysu/db/client.bun";
+
+import type { Db } from "@roxysu/db/types";
 import { SUNNY_ALGORITHM } from "../../map-analysis/computeSunnyDan";
 import {
   FLN_RATIO_THRESHOLD,

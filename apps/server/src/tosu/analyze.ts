@@ -1,6 +1,8 @@
+import type { Db } from "@roxysu/db/types";
+import { beatmaps } from "@roxysu/db/schema";
 import { and, eq } from "drizzle-orm";
 import { readFileSync } from "node:fs";
-import { beatmaps, type Db } from "@roxysu/db/client.bun";
+
 import { analyze7kFromOsuText } from "@roxysu/pattern-7k";
 import { getOrComputePatternAnalysis } from "../map-analysis";
 import { runSunnyEstimatorFromText } from "../map-analysis/sunnyEstimator";

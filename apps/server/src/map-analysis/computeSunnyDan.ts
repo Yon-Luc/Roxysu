@@ -1,10 +1,8 @@
+import type { Db } from "@roxysu/db/types";
+import { beatmapDanRatings, beatmaps } from "@roxysu/db/schema";
 import { readFileSync } from "node:fs";
 import { eq, and } from "drizzle-orm";
-import {
-  beatmapDanRatings,
-  beatmaps,
-  type Db,
-} from "@roxysu/db/client.bun";
+
 import {
   getOsuDataPath,
   resolveLazerFilePath,

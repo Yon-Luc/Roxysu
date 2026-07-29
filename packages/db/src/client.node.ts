@@ -11,20 +11,26 @@ const migrationsFolder = path.join(__dirname, "..", "drizzle");
 /** Wait this long for another process to release the write lock. */
 const BUSY_TIMEOUT_MS = 30_000;
 
-export type Db = ReturnType<typeof createDb>;
+export type { Db } from "./types";
+import type { Db } from "./types";
 
 export function createDb(dbPath: string) {
   const sqlite = new Database(dbPath, { timeout: BUSY_TIMEOUT_MS });
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma(`busy_timeout = ${BUSY_TIMEOUT_MS}`);
   sqlite.pragma("synchronous = NORMAL");
-  return drizzle(sqlite, { schema });
+  // Server code uses Bun's `db.query()` API; better-sqlite3 uses `prepare()`.
+  const withQuery = sqlite as typeof sqlite & {
+    query: (sql: string) => ReturnType<typeof sqlite.prepare>;
+  };
+  withQuery.query = (sql: string) => sqlite.prepare(sql);
+  return drizzle(withQuery, { schema }) as unknown as Db;
 }
 
 /** Open SQLite and apply pending Drizzle migrations. */
 export function ensureDb(dbPath: string) {
   const db = createDb(dbPath);
-  migrate(db, { migrationsFolder });
+  migrate(db as Parameters<typeof migrate>[0], { migrationsFolder });
   return db;
 }
 

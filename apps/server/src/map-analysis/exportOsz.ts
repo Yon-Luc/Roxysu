@@ -1,6 +1,8 @@
+import type { Db } from "@roxysu/db/types";
+import { beatmaps } from "@roxysu/db/schema";
 import { readFileSync } from "node:fs";
 import { eq, inArray } from "drizzle-orm";
-import { beatmaps, type Db } from "@roxysu/db/client.bun";
+
 import { getOsuDataPath, resolveLazerFilePath } from "../shared/lazer-files";
 import { buildZip, type ZipEntry } from "./zipStore";
 

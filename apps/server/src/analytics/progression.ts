@@ -1,9 +1,6 @@
-import {
-  desc,
-  type Db,
-  dailyStats,
-  weeklyStats,
-} from "@roxysu/db/client.bun";
+import type { Db } from "@roxysu/db/types";
+import { dailyStats, weeklyStats } from "@roxysu/db/schema";
+import { desc } from "drizzle-orm";
 
 /** Read-model helpers for dashboard PP/accuracy trends. */
 export async function getPpTrend(db: Db, days = 30) {

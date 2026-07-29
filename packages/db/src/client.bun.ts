@@ -11,20 +11,21 @@ const migrationsFolder = path.join(__dirname, "..", "drizzle");
 /** Wait this long for another process to release the write lock. */
 const BUSY_TIMEOUT_MS = 30_000;
 
-export type Db = ReturnType<typeof createDb>;
+export type { Db } from "./types";
+import type { Db } from "./types";
 
-export function createDb(dbPath: string) {
+export function createDb(dbPath: string): Db {
   const sqlite = new Database(dbPath);
   sqlite.exec("PRAGMA journal_mode = WAL;");
   sqlite.exec(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS};`);
   sqlite.exec("PRAGMA synchronous = NORMAL;");
-  return drizzle(sqlite, { schema });
+  return drizzle(sqlite, { schema }) as unknown as Db;
 }
 
 /** Open SQLite and apply pending Drizzle migrations. */
 export function ensureDb(dbPath: string) {
   const db = createDb(dbPath);
-  migrate(db, { migrationsFolder });
+  migrate(db as Parameters<typeof migrate>[0], { migrationsFolder });
   return db;
 }
 

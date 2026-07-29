@@ -1,4 +1,5 @@
-import type { Db } from "@roxysu/db/client.bun";
+
+import type { Db } from "@roxysu/db/types";
 import { PATTERN_ALGORITHM } from "@roxysu/pattern-7k";
 import { backfillPatternAnalysisSync } from "./computePatternAnalysis";
 import { publish } from "../shared/events";

@@ -1,6 +1,6 @@
 import { Elysia, t } from "elysia";
 import { readFileSync } from "node:fs";
-import { dbPlugin } from "../db";
+import { dbPlugin } from "../db-runtime";
 import { toIso } from "../shared/serialize";
 import {
   getOsuDataPath,

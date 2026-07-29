@@ -1,18 +1,7 @@
-import {
-  and,
-  asc,
-  eq,
-  isNull,
-  desc,
-  inArray,
-  type Db,
-  beatmapDanRatings,
-  beatmaps,
-  beatmapSets,
-  scores,
-  scoreMetrics,
-  sessions,
-} from "@roxysu/db/client.bun";
+
+import type { Db } from "@roxysu/db/types";
+import { beatmapDanRatings, beatmapSets, beatmaps, scoreMetrics, scores, sessions } from "@roxysu/db/schema";
+import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import { publish } from "../shared/events";
 import { SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
 

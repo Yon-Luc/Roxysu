@@ -41,6 +41,66 @@ export function formatRelativeTime(iso: string | null | undefined): string {
   return new Date(iso).toLocaleDateString();
 }
 
+const CHART_MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
+
+/** Short UTC day label for chart axes (avoids full timezone Date#toString). */
+export function formatChartDay(value: unknown): string {
+  const parts = chartDayParts(value);
+  if (!parts) return value == null ? "" : String(value);
+  return `${CHART_MONTHS[parts.month]!} ${parts.day}`;
+}
+
+function chartDayParts(
+  value: unknown,
+): { year: number; month: number; day: number } | null {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return {
+      year: value.getUTCFullYear(),
+      month: value.getUTCMonth(),
+      day: value.getUTCDate(),
+    };
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+    return {
+      year: d.getUTCFullYear(),
+      month: d.getUTCMonth(),
+      day: d.getUTCDate(),
+    };
+  }
+  const s = String(value ?? "").trim();
+  const isoDay = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoDay) {
+    return {
+      year: Number(isoDay[1]),
+      month: Number(isoDay[2]) - 1,
+      day: Number(isoDay[3]),
+    };
+  }
+  const parsed = Date.parse(s);
+  if (Number.isNaN(parsed)) return null;
+  const d = new Date(parsed);
+  return {
+    year: d.getUTCFullYear(),
+    month: d.getUTCMonth(),
+    day: d.getUTCDate(),
+  };
+}
+
 export function formatMods(mods: string | null | undefined): string {
   if (!mods || mods === "[]" || mods === "{}") return "NM";
   const entries = parseModEntries(mods);

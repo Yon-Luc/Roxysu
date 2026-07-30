@@ -34,6 +34,7 @@ import {
 } from "../../lib/api";
 import {
   formatAccuracy,
+  formatChartDay,
   formatPp,
   formatRelativeTime,
   formatStars,
@@ -523,7 +524,9 @@ export function StatsPage({
                 <XAxis
                   dataKey="at"
                   tick={charts.tick}
-                  tickFormatter={(v) => String(v).slice(5)}
+                  tickFormatter={formatChartDay}
+                  minTickGap={28}
+                  interval="preserveStartEnd"
                   axisLine={false}
                   tickLine={false}
                 />
@@ -535,6 +538,7 @@ export function StatsPage({
                 />
                 <Tooltip
                   contentStyle={charts.tooltip}
+                  labelFormatter={formatChartDay}
                   formatter={(value, name) =>
                     skillTooltipFormatter(ratingMode, value, name, skillAxis)
                   }
@@ -588,7 +592,9 @@ export function StatsPage({
                   <XAxis
                     dataKey="weekStart"
                     tick={charts.tick}
-                    tickFormatter={(v) => String(v).slice(5)}
+                    tickFormatter={formatChartDay}
+                    minTickGap={28}
+                    interval="preserveStartEnd"
                     axisLine={false}
                     tickLine={false}
                   />
@@ -598,7 +604,10 @@ export function StatsPage({
                     axisLine={false}
                     tickLine={false}
                   />
-                  <Tooltip contentStyle={charts.tooltip} />
+                  <Tooltip
+                    contentStyle={charts.tooltip}
+                    labelFormatter={formatChartDay}
+                  />
                   <Bar
                     dataKey="playCount"
                     fill={charts.chart}
@@ -628,7 +637,9 @@ export function StatsPage({
                   <XAxis
                     dataKey="day"
                     tick={charts.tick}
-                    tickFormatter={(v) => String(v).slice(5)}
+                    tickFormatter={formatChartDay}
+                    minTickGap={28}
+                    interval="preserveStartEnd"
                     axisLine={false}
                     tickLine={false}
                   />
@@ -648,7 +659,10 @@ export function StatsPage({
                     axisLine={false}
                     tickLine={false}
                   />
-                  <Tooltip contentStyle={charts.tooltip} />
+                  <Tooltip
+                    contentStyle={charts.tooltip}
+                    labelFormatter={formatChartDay}
+                  />
                   <Line
                     yAxisId="pp"
                     type="monotone"
@@ -814,6 +828,9 @@ export function StatsPage({
                   <XAxis
                     dataKey="hour"
                     tick={charts.tick}
+                    tickFormatter={(h) => `${h}h`}
+                    minTickGap={12}
+                    interval="preserveStartEnd"
                     axisLine={false}
                     tickLine={false}
                   />
@@ -823,7 +840,10 @@ export function StatsPage({
                     axisLine={false}
                     tickLine={false}
                   />
-                  <Tooltip contentStyle={charts.tooltip} />
+                  <Tooltip
+                    contentStyle={charts.tooltip}
+                    labelFormatter={(h) => `${h}:00 UTC`}
+                  />
                   <Bar dataKey="count" fill={charts.chartFln} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>

@@ -24,6 +24,7 @@ import { PageTitle } from "../../components/PageTitle";
 import { fetchDashboard } from "../../lib/api";
 import {
   formatAccuracy,
+  formatChartDay,
   formatPp,
   formatRelativeTime,
 } from "../../lib/format";
@@ -128,7 +129,9 @@ export function DashboardPage() {
                 <XAxis
                   dataKey="weekStart"
                   tick={charts.tick}
-                  tickFormatter={(v) => String(v).slice(5)}
+                  tickFormatter={formatChartDay}
+                  minTickGap={28}
+                  interval="preserveStartEnd"
                   axisLine={false}
                   tickLine={false}
                 />
@@ -138,7 +141,10 @@ export function DashboardPage() {
                   axisLine={false}
                   tickLine={false}
                 />
-                <Tooltip contentStyle={charts.tooltip} />
+                <Tooltip
+                  contentStyle={charts.tooltip}
+                  labelFormatter={formatChartDay}
+                />
                 <Bar dataKey="playCount" fill={charts.chart} radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -161,7 +167,9 @@ export function DashboardPage() {
                 <XAxis
                   dataKey="day"
                   tick={charts.tick}
-                  tickFormatter={(v) => String(v).slice(5)}
+                  tickFormatter={formatChartDay}
+                  minTickGap={28}
+                  interval="preserveStartEnd"
                   axisLine={false}
                   tickLine={false}
                 />
@@ -181,7 +189,10 @@ export function DashboardPage() {
                   axisLine={false}
                   tickLine={false}
                 />
-                <Tooltip contentStyle={charts.tooltip} />
+                <Tooltip
+                  contentStyle={charts.tooltip}
+                  labelFormatter={formatChartDay}
+                />
                 <Line
                   yAxisId="pp"
                   type="monotone"

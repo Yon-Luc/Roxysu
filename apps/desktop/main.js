@@ -124,7 +124,7 @@ function waitForServer(port, host, timeoutMs = 60_000) {
   });
 }
 
-function createWindow() {
+async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -136,7 +136,15 @@ function createWindow() {
     },
   });
 
-  void mainWindow.loadURL(`http://${HOST}:${PORT}/`);
+  // Packaged upgrades can keep a disk-cached JS response from the old
+  // @elysiajs/static bug (Content-Type ""). curl sees the live server; Chromium does not.
+  try {
+    await mainWindow.webContents.session.clearCache();
+  } catch (err) {
+    console.error("[roxysu-desktop] clearCache failed", err);
+  }
+
+  await mainWindow.loadURL(`http://${HOST}:${PORT}/`);
 
   mainWindow.on("closed", () => {
     mainWindow = null;
@@ -261,11 +269,13 @@ if (!gotLock) {
       return;
     }
 
-    createWindow();
+    await createWindow();
     console.log("[roxysu-desktop] ready");
 
     app.on("activate", () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+      if (BrowserWindow.getAllWindows().length === 0) {
+        void createWindow();
+      }
     });
   });
 

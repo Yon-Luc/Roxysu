@@ -58,10 +58,14 @@ async function readIndexHtml(staticAssetsDir: string): Promise<Response> {
 
 async function readStaticFile(filePath: string): Promise<Response> {
   const body = await readFile(filePath);
+  // Desktop Chromium caches aggressively; avoid sticky empty-MIME entries across upgrades.
+  const cacheControl = process.env.ROXYSU_DESKTOP
+    ? "no-cache"
+    : "public, max-age=86400";
   return new Response(body, {
     headers: {
       "Content-Type": contentTypeFor(filePath),
-      "Cache-Control": "public, max-age=86400",
+      "Cache-Control": cacheControl,
     },
   });
 }

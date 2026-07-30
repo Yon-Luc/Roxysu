@@ -18,6 +18,9 @@
         "esbuild": "^0.25.0",
       },
     },
+    "apps/docs": {
+      "name": "@roxysu/docs",
+    },
     "apps/realm-reader": {
       "name": "@roxysu/realm-reader",
       "version": "0.0.1",
@@ -347,6 +350,8 @@
     "@roxysu/db": ["@roxysu/db@workspace:packages/db"],
 
     "@roxysu/desktop": ["@roxysu/desktop@workspace:apps/desktop"],
+
+    "@roxysu/docs": ["@roxysu/docs@workspace:apps/docs"],
 
     "@roxysu/mania-judge": ["@roxysu/mania-judge@workspace:packages/mania-judge"],
 

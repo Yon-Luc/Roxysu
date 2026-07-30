@@ -93,7 +93,7 @@ function spawnNodeEntry(paths, entry, cwd, extraEnv, label) {
  * @param {string} host
  * @param {number} timeoutMs
  */
-function waitForServer(port, host, timeoutMs = 60_000) {
+function waitForServer(port, host, timeoutMs = 180_000) {
   const started = Date.now();
   return new Promise((resolve, reject) => {
     const tryOnce = () => {
@@ -153,16 +153,16 @@ async function maybeClearHttpCache(paths) {
 
 /**
  * Show a local splash immediately so startup wait for the API isn't a blank desktop.
- * @param {ReturnType<typeof resolveDesktopPaths>} paths
+ * Never await clearCache / children before this — on Windows that can mean minutes of
+ * no window while Defender + Chromium cache wipe run.
  */
-async function createSplashWindow(paths) {
-  await maybeClearHttpCache(paths);
-
+function createSplashWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
     title: "Roxysu",
-    show: false,
+    // Show immediately (dark chrome) — do not wait for ready-to-show / HTML.
+    show: true,
     backgroundColor: "#12141a",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -171,15 +171,34 @@ async function createSplashWindow(paths) {
     },
   });
 
-  mainWindow.once("ready-to-show", () => {
-    mainWindow?.show();
-  });
-
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
 
-  await mainWindow.loadFile(path.join(__dirname, "splash.html"));
+  // Fire-and-forget: HTML paints into the already-visible window.
+  void mainWindow.loadFile(path.join(__dirname, "splash.html"));
+}
+
+/**
+ * @param {ReturnType<typeof resolveDesktopPaths>} paths
+ * @param {NodeJS.ProcessEnv} sharedEnv
+ */
+function spawnRealmReader(paths, sharedEnv) {
+  if (realmChild && !realmChild.killed) return;
+  realmChild = spawnNodeEntry(
+    paths,
+    paths.realmEntry,
+    paths.realmDir,
+    sharedEnv,
+    "realm-reader",
+  );
+  realmChild.on("exit", (code, signal) => {
+    if (!shuttingDown) {
+      console.error(
+        `[roxysu-desktop] realm-reader exited code=${code} signal=${signal}`,
+      );
+    }
+  });
 }
 
 /**
@@ -282,9 +301,9 @@ if (!gotLock) {
     // Drop the default File/Edit/View/Window menu bar (Windows/Linux).
     Menu.setApplicationMenu(null);
 
-    // Window first so the user sees a spinner while Node children boot.
-    await createSplashWindow(paths);
-    await setSplashStatus("Starting");
+    // Window first — before child spawns — so Windows isn't blank.
+    createSplashWindow();
+    void setSplashStatus("Starting");
 
     const sharedEnv = {
       ROXYSU_DESKTOP: "1",
@@ -298,6 +317,9 @@ if (!gotLock) {
       ROXYSU_MIGRATIONS_FOLDER: paths.migrationsFolder,
     };
 
+    // Server only first. Realm natives are ~GB and AV-scanning them in parallel
+    // with the server cold-start is a common cause of multi-minute blank waits
+    // on Windows .exe launches.
     serverChild = spawnNodeEntry(
       paths,
       paths.serverEntry,
@@ -312,22 +334,7 @@ if (!gotLock) {
       }
     });
 
-    realmChild = spawnNodeEntry(
-      paths,
-      paths.realmEntry,
-      paths.realmDir,
-      sharedEnv,
-      "realm-reader",
-    );
-    realmChild.on("exit", (code, signal) => {
-      if (!shuttingDown) {
-        console.error(
-          `[roxysu-desktop] realm-reader exited code=${code} signal=${signal}`,
-        );
-      }
-    });
-
-    await setSplashStatus("Waiting for server");
+    void setSplashStatus("Waiting for server");
 
     try {
       await waitForServer(PORT, HOST);
@@ -343,13 +350,18 @@ if (!gotLock) {
     }
 
     await setSplashStatus("Loading");
+    // After :4321 is up — never before splash — and only when epoch changes.
+    await maybeClearHttpCache(paths);
     await loadAppIntoWindow();
     console.log("[roxysu-desktop] ready");
+
+    // Defer Realm until the UI is up so Defender/IO don't starve :4321.
+    spawnRealmReader(paths, sharedEnv);
 
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         void (async () => {
-          await createSplashWindow(paths);
+          createSplashWindow();
           await loadAppIntoWindow();
         })();
       }

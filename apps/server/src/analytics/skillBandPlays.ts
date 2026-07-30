@@ -1,6 +1,7 @@
 
 import type { Db } from "@roxysu/db/types";
 import { estDiff, nextDanInterval } from "@roxysu/sunny-dan";
+import { isNomodOrMirrorOnly } from "../replay/mods";
 import { classifyMapAxis } from "./recommend/axis";
 import type { MapAxis } from "./recommend/types";
 import {
@@ -132,6 +133,7 @@ function loadEnrichedSevenKPlays(db: Db): EnrichedPlayRow[] {
         COALESCE(b.difficulty_name, '') AS difficultyName,
         s.accuracy AS accuracy,
         s.played_at AS playedAt,
+        s.mods AS mods,
         dr.sunny_star AS sunnyStar,
         dr.ln_ratio AS lnRatio,
         dr.est_diff AS sunnyEstDiff
@@ -157,23 +159,26 @@ function loadEnrichedSevenKPlays(db: Db): EnrichedPlayRow[] {
     difficultyName: string;
     accuracy: number;
     playedAt: number;
+    mods: string | null;
     sunnyStar: number | null;
     lnRatio: number | null;
     sunnyEstDiff: string | null;
   }>;
 
-  return rows.map((r) => ({
-    scoreId: r.scoreId,
-    beatmapId: r.beatmapId,
-    title: r.title,
-    artist: r.artist,
-    difficultyName: r.difficultyName,
-    accuracy: Number(r.accuracy ?? 0),
-    playedAt: Number(r.playedAt ?? 0),
-    sunnyStar: r.sunnyStar != null ? Number(r.sunnyStar) : null,
-    lnRatio: r.lnRatio != null ? Number(r.lnRatio) : null,
-    sunnyEstDiff: r.sunnyEstDiff,
-  }));
+  return rows
+    .filter((r) => isNomodOrMirrorOnly(r.mods))
+    .map((r) => ({
+      scoreId: r.scoreId,
+      beatmapId: r.beatmapId,
+      title: r.title,
+      artist: r.artist,
+      difficultyName: r.difficultyName,
+      accuracy: Number(r.accuracy ?? 0),
+      playedAt: Number(r.playedAt ?? 0),
+      sunnyStar: r.sunnyStar != null ? Number(r.sunnyStar) : null,
+      lnRatio: r.lnRatio != null ? Number(r.lnRatio) : null,
+      sunnyEstDiff: r.sunnyEstDiff,
+    }));
 }
 
 function playsInDanInterval(

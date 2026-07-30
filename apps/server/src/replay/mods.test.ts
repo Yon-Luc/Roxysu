@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   formatModAcronym,
+  isNomodOrMirrorOnly,
   parseScoreMods,
   scaleManiaHitWindows,
 } from "./mods";
@@ -40,6 +41,29 @@ describe("parseScoreMods", () => {
 
   test("legacy string mod list", () => {
     expect(parseScoreMods('["DT","HD"]').rate).toBe(1.5);
+  });
+});
+
+describe("isNomodOrMirrorOnly", () => {
+  test("allows empty / null mods", () => {
+    expect(isNomodOrMirrorOnly(null)).toBe(true);
+    expect(isNomodOrMirrorOnly(undefined)).toBe(true);
+    expect(isNomodOrMirrorOnly("[]")).toBe(true);
+    expect(isNomodOrMirrorOnly("{}")).toBe(true);
+  });
+
+  test("allows Mirror only", () => {
+    expect(isNomodOrMirrorOnly('[{"acronym":"MR"}]')).toBe(true);
+    expect(isNomodOrMirrorOnly('["MR"]')).toBe(true);
+  });
+
+  test("rejects rate and other gameplay mods", () => {
+    expect(isNomodOrMirrorOnly('[{"acronym":"DT"}]')).toBe(false);
+    expect(isNomodOrMirrorOnly('[{"acronym":"HT"}]')).toBe(false);
+    expect(isNomodOrMirrorOnly('[{"acronym":"HD"}]')).toBe(false);
+    expect(isNomodOrMirrorOnly('[{"acronym":"MR"},{"acronym":"DT"}]')).toBe(
+      false,
+    );
   });
 });
 

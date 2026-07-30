@@ -312,9 +312,9 @@ export function StatsPage({
             <PageTitle>Stats</PageTitle>
             <p className="rx-subtitle">
               Skill evolution, progression, and how you play — times in UTC.
-              Skill uses your Settings rating display (Sunny ★ or dan) from your
-              top {skillTopPlays} rated maps per band (best play per map, all{" "}
-            {skillTopPlays} required)
+              Skill uses nomod (Mirror OK; DT/HT/etc. excluded) and your Settings
+              rating display (Sunny ★ or dan) from your top {skillTopPlays} rated
+              maps per band (best play per map, all {skillTopPlays} required)
               {axisFilterActive ? ` · ${skillAxisLabel(skillAxis)} only` : ""}.
             </p>
           </div>

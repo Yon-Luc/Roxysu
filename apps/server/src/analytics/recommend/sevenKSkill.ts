@@ -1,5 +1,6 @@
 
 import type { Db } from "@roxysu/db/types";
+import { isNomodOrMirrorOnly } from "../../replay/mods";
 import { classifyMapAxis } from "./axis";
 import type { MapAxis, SevenKSkillProfile, SkillAxis } from "./types";
 
@@ -671,6 +672,7 @@ export function loadSevenKPlays(db: Db): SkillPlayRow[] {
         s.beatmap_id AS beatmapId,
         s.accuracy AS accuracy,
         s.played_at AS playedAt,
+        s.mods AS mods,
         dr.sunny_star AS sunnyStar,
         dr.ln_ratio AS lnRatio
       FROM scores s
@@ -691,17 +693,20 @@ export function loadSevenKPlays(db: Db): SkillPlayRow[] {
     beatmapId: string;
     accuracy: number;
     playedAt: number;
+    mods: string | null;
     sunnyStar: number | null;
     lnRatio: number | null;
   }>;
 
-  return rows.map((r) => ({
-    beatmapId: r.beatmapId,
-    accuracy: Number(r.accuracy ?? 0),
-    playedAt: Number(r.playedAt ?? 0),
-    sunnyStar: r.sunnyStar != null ? Number(r.sunnyStar) : null,
-    lnRatio: r.lnRatio != null ? Number(r.lnRatio) : null,
-  }));
+  return rows
+    .filter((r) => isNomodOrMirrorOnly(r.mods))
+    .map((r) => ({
+      beatmapId: r.beatmapId,
+      accuracy: Number(r.accuracy ?? 0),
+      playedAt: Number(r.playedAt ?? 0),
+      sunnyStar: r.sunnyStar != null ? Number(r.sunnyStar) : null,
+      lnRatio: r.lnRatio != null ? Number(r.lnRatio) : null,
+    }));
 }
 
 /**

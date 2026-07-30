@@ -4,6 +4,7 @@ import type { Db } from "@roxysu/db/types";
 import { beatmaps, mapperStats, scoreMetrics, scores, sessions } from "@roxysu/db/schema";
 import { and, count, desc, eq, sql } from "drizzle-orm";
 import { SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
+import { isNomodOrMirrorOnly } from "../replay/mods";
 import {
   getAccuracyTrend,
   getPpTrend,
@@ -61,29 +62,35 @@ async function getRankDistribution(db: Db) {
     .query(
       `
       SELECT
-        CASE
-          WHEN s.total_score = ? OR s.rank IN (6, 7) THEN 'X'
-          WHEN s.rank IN (4, 5) THEN 'S'
-          WHEN s.rank = 3 THEN 'A'
-          WHEN s.rank = 2 THEN 'B'
-          WHEN s.rank = 1 THEN 'C'
-          WHEN s.rank = 0 THEN 'D'
-          ELSE NULL
-        END AS label,
-        COUNT(*) AS count
+        s.total_score AS totalScore,
+        s.rank AS rank,
+        s.mods AS mods
       FROM scores s
       WHERE s.delete_pending = 0
         AND s.rank != -1
-      GROUP BY label
     `,
     )
-    .all(PERFECT_TOTAL_SCORE) as Array<{ label: string | null; count: number }>;
+    .all() as Array<{
+    totalScore: number;
+    rank: number;
+    mods: string | null;
+  }>;
 
-  const byLabel = new Map(
-    rows
-      .filter((r) => r.label != null)
-      .map((r) => [r.label!, Number(r.count)]),
-  );
+  const byLabel = new Map<string, number>();
+  for (const row of rows) {
+    if (!isNomodOrMirrorOnly(row.mods)) continue;
+    let label: string | null = null;
+    if (Number(row.totalScore) === PERFECT_TOTAL_SCORE || row.rank === 6 || row.rank === 7) {
+      label = "X";
+    } else if (row.rank === 4 || row.rank === 5) {
+      label = "S";
+    } else if (row.rank === 3) label = "A";
+    else if (row.rank === 2) label = "B";
+    else if (row.rank === 1) label = "C";
+    else if (row.rank === 0) label = "D";
+    if (!label) continue;
+    byLabel.set(label, (byLabel.get(label) ?? 0) + 1);
+  }
 
   return RANK_BUCKETS.map((b, i) => ({
     rank: i,
@@ -96,7 +103,7 @@ async function getSkillsetMix(db: Db) {
   const rows = db.$client
     .query(
       `
-      SELECT dr.ln_ratio AS lnRatio, COUNT(*) AS playCount
+      SELECT dr.ln_ratio AS lnRatio, s.mods AS mods
       FROM scores s
       JOIN beatmaps b ON b.id = s.beatmap_id
       LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
@@ -107,22 +114,21 @@ async function getSkillsetMix(db: Db) {
         AND COALESCE(bs.delete_pending, 0) = 0
         AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
         AND b.circle_size = 7
-      GROUP BY dr.ln_ratio
     `,
     )
-    .all(SUNNY_ALGORITHM) as Array<{ lnRatio: number | null; playCount: number }>;
+    .all(SUNNY_ALGORITHM) as Array<{ lnRatio: number | null; mods: string | null }>;
 
   let rc = 0;
   let ln = 0;
   let fln = 0;
   for (const row of rows) {
-    const n = Number(row.playCount ?? 0);
+    if (!isNomodOrMirrorOnly(row.mods)) continue;
     const axis = classifyMapAxis(
       row.lnRatio != null ? Number(row.lnRatio) : null,
     );
-    if (axis === "fln") fln += n;
-    else if (axis === "ln") ln += n;
-    else rc += n;
+    if (axis === "fln") fln += 1;
+    else if (axis === "ln") ln += 1;
+    else rc += 1;
   }
   const total = rc + ln + fln;
   const pct = (n: number) => (total > 0 ? (n / total) * 100 : 0);
@@ -141,17 +147,18 @@ async function getPlayTimePatterns(db: Db) {
   const rows = db.$client
     .query(
       `
-      SELECT played_at AS playedAt
+      SELECT played_at AS playedAt, mods
       FROM scores
       WHERE delete_pending = 0
     `,
     )
-    .all() as Array<{ playedAt: number }>;
+    .all() as Array<{ playedAt: number; mods: string | null }>;
 
   const byHour = Array.from({ length: 24 }, () => 0);
   const byDayOfWeek = Array.from({ length: 7 }, () => 0); // 0 = Sunday UTC
 
   for (const row of rows) {
+    if (!isNomodOrMirrorOnly(row.mods)) continue;
     const ms = Number(row.playedAt ?? 0);
     if (!Number.isFinite(ms) || ms <= 0) continue;
     const d = new Date(ms);

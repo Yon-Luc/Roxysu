@@ -15,7 +15,8 @@ export function playerStatsCacheKey(parts: {
   range: number;
   skillTopPlays: number;
 }): string {
-  return `${parts.granularity}:${parts.range}:${parts.skillTopPlays}`;
+  // v2: skill/stats ignore HT/DT/etc. (NM + Mirror only)
+  return `v2:${parts.granularity}:${parts.range}:${parts.skillTopPlays}`;
 }
 
 export function getCachedPlayerStats<T>(key: string): T | null {

@@ -1,6 +1,7 @@
 import type { Db } from "@roxysu/db/types";
 import { beatmaps, dailyStats, mapperStats, scores, weeklyStats } from "@roxysu/db/schema";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { isNomodOrMirrorOnly } from "../replay/mods";
 
 function toMs(value: Date | number): number {
   return value instanceof Date ? value.getTime() : value;
@@ -66,6 +67,7 @@ export async function runStatisticsEngine(
       accuracy: scores.accuracy,
       pp: scores.pp,
       playedAt: scores.playedAt,
+      mods: scores.mods,
       mapperOnlineId: beatmaps.mapperOnlineId,
       mapperUsername: beatmaps.mapperUsername,
     })
@@ -78,6 +80,7 @@ export async function runStatisticsEngine(
   const mappers = new Map<number, Bucket & { mapperUsername: string | null }>();
 
   for (const row of rows) {
+    if (!isNomodOrMirrorOnly(row.mods)) continue;
     const played = new Date(toMs(row.playedAt));
     const pp = row.pp ?? 0;
     bump(daily, dayKey(played), row.accuracy, pp);
@@ -134,6 +137,7 @@ async function rebuildPartitionsForScores(db: Db, scoreIds: string[]) {
       accuracy: scores.accuracy,
       pp: scores.pp,
       playedAt: scores.playedAt,
+      mods: scores.mods,
       mapperOnlineId: beatmaps.mapperOnlineId,
       mapperUsername: beatmaps.mapperUsername,
     })
@@ -146,6 +150,7 @@ async function rebuildPartitionsForScores(db: Db, scoreIds: string[]) {
   const mappers = new Map<number, Bucket & { mapperUsername: string | null }>();
 
   for (const row of all) {
+    if (!isNomodOrMirrorOnly(row.mods)) continue;
     const played = new Date(toMs(row.playedAt));
     const dKey = dayKey(played);
     const wKey = weekStartKey(played);
@@ -187,6 +192,7 @@ async function rebuildMapperPartitions(db: Db, mapperOnlineIds: number[]) {
     .select({
       accuracy: scores.accuracy,
       pp: scores.pp,
+      mods: scores.mods,
       mapperOnlineId: beatmaps.mapperOnlineId,
       mapperUsername: beatmaps.mapperUsername,
     })
@@ -203,6 +209,7 @@ async function rebuildMapperPartitions(db: Db, mapperOnlineIds: number[]) {
   const mappers = new Map<number, Bucket & { mapperUsername: string | null }>();
   for (const row of all) {
     if (row.mapperOnlineId == null) continue;
+    if (!isNomodOrMirrorOnly(row.mods)) continue;
     const m =
       mappers.get(row.mapperOnlineId) ?? {
         playCount: 0,

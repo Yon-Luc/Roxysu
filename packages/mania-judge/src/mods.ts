@@ -88,6 +88,21 @@ export function parseScoreMods(mods: string | null | undefined): ModAcronyms {
   };
 }
 
+/** Mods allowed when aggregating stats / skill (NM or Mirror only). */
+const STATS_ALLOWED_MODS = new Set(["MR"]);
+
+/**
+ * True for nomod scores and Mirror-only scores.
+ * Rejects HT/DT/NC/HD/etc. — Mirror may be combined with itself only.
+ */
+export function isNomodOrMirrorOnly(mods: string | null | undefined): boolean {
+  const entries = parseModEntries(mods);
+  if (entries.length === 0) return true;
+  return entries.every(
+    (entry) => entry.acronym != null && STATS_ALLOWED_MODS.has(entry.acronym),
+  );
+}
+
 export function adjustOverallDifficulty(
   od: number,
   mods: ModAcronyms,

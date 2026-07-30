@@ -11,8 +11,7 @@ import {
 } from "./progression";
 import { classifyMapAxis } from "./recommend/axis";
 import {
-  estimateSevenKSkill,
-  estimateSevenKSkillHistory,
+  estimateSevenKSkillWithHistory,
   parseSkillTopPlays,
 } from "./recommend/sevenKSkill";
 
@@ -277,10 +276,18 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
   const trendDays = range;
   const weekCount = Math.max(12, Math.ceil(range / 7));
 
+  // Defer sync skill work so other DB queries can start in the same tick.
+  const skillBundlePromise = Promise.resolve().then(() =>
+    estimateSevenKSkillWithHistory(db, {
+      granularity,
+      rangeDays: range,
+      topPlays: skillTopPlays,
+    }),
+  );
+
   const [
     summary,
-    skill,
-    skillHistory,
+    skillBundle,
     ppTrend,
     accuracyTrend,
     weeklyActivity,
@@ -291,14 +298,7 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
     topMappers,
   ] = await Promise.all([
     getSummary(db),
-    Promise.resolve(estimateSevenKSkill(db, { topPlays: skillTopPlays })),
-    Promise.resolve(
-      estimateSevenKSkillHistory(db, {
-        granularity,
-        rangeDays: range,
-        topPlays: skillTopPlays,
-      }),
-    ),
+    skillBundlePromise,
     getPpTrend(db, trendDays),
     getAccuracyTrend(db, trendDays),
     getWeeklyActivity(db, weekCount),
@@ -318,8 +318,8 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
       sessionCount: sessionStats.sessionCount,
       pbCount: sessionStats.pbCount,
     },
-    skill,
-    skillHistory,
+    skill: skillBundle.skill,
+    skillHistory: skillBundle.skillHistory,
     ppTrend,
     accuracyTrend,
     weeklyActivity,

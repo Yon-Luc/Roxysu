@@ -124,7 +124,39 @@ function waitForServer(port, host, timeoutMs = 60_000) {
   });
 }
 
-async function createWindow() {
+/**
+ * One-shot Chromium HTTP cache wipe after upgrades that change response headers
+ * for the same hashed URLs (e.g. empty MIME → correct MIME). Do NOT clear every
+ * launch — that makes Windows .exe startups feel extremely slow.
+ * Bump CACHE_EPOCH when a future fix needs another forced wipe.
+ */
+const CACHE_EPOCH = "mime-fix-1";
+
+/**
+ * @param {ReturnType<typeof resolveDesktopPaths>} paths
+ */
+async function maybeClearHttpCache(paths) {
+  const markerPath = path.join(paths.dataDir, "http-cache-epoch");
+  const token = `${app.getVersion()}:${CACHE_EPOCH}`;
+  try {
+    if (fs.existsSync(markerPath) && fs.readFileSync(markerPath, "utf8") === token) {
+      return;
+    }
+    const { session } = require("electron");
+    await session.defaultSession.clearCache();
+    fs.writeFileSync(markerPath, token, "utf8");
+    console.log(`[roxysu-desktop] cleared HTTP cache (${token})`);
+  } catch (err) {
+    console.error("[roxysu-desktop] clearCache failed", err);
+  }
+}
+
+/**
+ * @param {ReturnType<typeof resolveDesktopPaths>} paths
+ */
+async function createWindow(paths) {
+  await maybeClearHttpCache(paths);
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -135,14 +167,6 @@ async function createWindow() {
       nodeIntegration: false,
     },
   });
-
-  // Packaged upgrades can keep a disk-cached JS response from the old
-  // @elysiajs/static bug (Content-Type ""). curl sees the live server; Chromium does not.
-  try {
-    await mainWindow.webContents.session.clearCache();
-  } catch (err) {
-    console.error("[roxysu-desktop] clearCache failed", err);
-  }
 
   await mainWindow.loadURL(`http://${HOST}:${PORT}/`);
 
@@ -269,12 +293,12 @@ if (!gotLock) {
       return;
     }
 
-    await createWindow();
+    await createWindow(paths);
     console.log("[roxysu-desktop] ready");
 
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) {
-        void createWindow();
+        void createWindow(paths);
       }
     });
   });

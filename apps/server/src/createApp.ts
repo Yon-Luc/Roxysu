@@ -56,16 +56,25 @@ async function readIndexHtml(staticAssetsDir: string): Promise<Response> {
   });
 }
 
+/** Hashed build outputs (index-deadbeef.js) are immutable; HTML must revalidate. */
+function cacheControlFor(filePath: string): string {
+  const base = path.basename(filePath);
+  if (base === "index.html" || base.endsWith(".html") || base === "sw.js") {
+    return "no-cache";
+  }
+  // bun build-ui: [name]-[hash].[ext]
+  if (/-[a-z0-9]{6,}\.(js|css|png|jpe?g|gif|svg|webp|woff2?)$/i.test(base)) {
+    return "public, max-age=31536000, immutable";
+  }
+  return "public, max-age=86400";
+}
+
 async function readStaticFile(filePath: string): Promise<Response> {
   const body = await readFile(filePath);
-  // Desktop Chromium caches aggressively; avoid sticky empty-MIME entries across upgrades.
-  const cacheControl = process.env.ROXYSU_DESKTOP
-    ? "no-cache"
-    : "public, max-age=86400";
   return new Response(body, {
     headers: {
       "Content-Type": contentTypeFor(filePath),
-      "Cache-Control": cacheControl,
+      "Cache-Control": cacheControlFor(filePath),
     },
   });
 }

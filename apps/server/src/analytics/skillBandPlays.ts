@@ -1,10 +1,6 @@
 
 import type { Db } from "@roxysu/db/types";
 import { estDiff, nextDanInterval } from "@roxysu/sunny-dan";
-import {
-  backfillSunnyDanSync,
-  ensureSunnyDanForIdsSync,
-} from "../map-analysis/computeSunnyDan";
 import { classifyMapAxis } from "./recommend/axis";
 import type { MapAxis } from "./recommend/types";
 import {
@@ -180,20 +176,6 @@ function loadEnrichedSevenKPlays(db: Db): EnrichedPlayRow[] {
   }));
 }
 
-function ensureSunnyForEnrichedPlays(
-  db: Db,
-  plays: EnrichedPlayRow[],
-): EnrichedPlayRow[] {
-  const missingIds = [
-    ...new Set(
-      plays.filter((p) => p.sunnyStar == null).map((p) => p.beatmapId),
-    ),
-  ];
-  if (missingIds.length === 0) return plays;
-  ensureSunnyDanForIdsSync(db, missingIds);
-  return loadEnrichedSevenKPlays(db);
-}
-
 function playsInDanInterval(
   plays: EnrichedPlayRow[],
   accFloor: number,
@@ -257,9 +239,8 @@ export function getSkillBandPlays(
   const { min: accMin, max: accMax } = skillBandAccRange(band);
   const lnRatioForDan = axisLnRatio(axis);
 
-  backfillSunnyDanSync(db, { limit: 120 });
-  let plays = loadEnrichedSevenKPlays(db);
-  plays = ensureSunnyForEnrichedPlays(db, plays);
+  // Cached Sunny ratings only — no request-path backfill.
+  const plays = loadEnrichedSevenKPlays(db);
 
   const skillRows: SkillPlayRow[] = plays.map((p) => ({
     beatmapId: p.beatmapId,

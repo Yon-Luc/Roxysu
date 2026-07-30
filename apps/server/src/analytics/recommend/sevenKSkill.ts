@@ -1,9 +1,5 @@
 
 import type { Db } from "@roxysu/db/types";
-import {
-  backfillSunnyDanSync,
-  ensureSunnyDanForIdsSync,
-} from "../../map-analysis/computeSunnyDan";
 import { classifyMapAxis } from "./axis";
 import type { MapAxis, SevenKSkillProfile, SkillAxis } from "./types";
 
@@ -662,7 +658,12 @@ export function estimateSevenKSkillFromPlays(
   );
 }
 
-function loadAllSevenKPlays(db: Db): SkillPlayRow[] {
+/**
+ * Load all 7K mania plays with existing Sunny ratings only.
+ * Does not compute missing ratings — callers that need ratings should
+ * run the Sunny job / pipeline separately.
+ */
+export function loadSevenKPlays(db: Db): SkillPlayRow[] {
   const rows = db.$client
     .query(
       `
@@ -703,31 +704,20 @@ function loadAllSevenKPlays(db: Db): SkillPlayRow[] {
   }));
 }
 
-function ensureSunnyForPlays(db: Db, plays: SkillPlayRow[]): SkillPlayRow[] {
-  const missingIds = [
-    ...new Set(
-      plays.filter((p) => p.sunnyStar == null).map((p) => p.beatmapId),
-    ),
-  ];
-  if (missingIds.length === 0) return plays;
-  ensureSunnyDanForIdsSync(db, missingIds);
-  return loadAllSevenKPlays(db);
-}
-
 /**
  * Estimate 7K skill:
  * - comfort (overall/rc/ln/fln): recent plays, recency × acc weight
  * - peak*: average Sunny of maps with 90–95% scores (Push base)
  * - accuracy*: average Sunny of maps with 99%+ scores (Accuracy base)
  * - consistency*: average Sunny of maps with 96–99% scores (Consistency base)
+ *
+ * Uses cached Sunny ratings only (no request-path backfill).
  */
 export function estimateSevenKSkill(
   db: Db,
   opts?: SevenKSkillOptions,
 ): SevenKSkillProfile {
-  backfillSunnyDanSync(db, { limit: 120 });
-  let plays = loadAllSevenKPlays(db);
-  plays = ensureSunnyForPlays(db, plays);
+  const plays = loadSevenKPlays(db);
   return estimateSevenKSkillFromPlays(plays, {
     topPlays: opts?.topPlays,
     coldStartFallback: () => coldStartFromMastery(db),
@@ -784,18 +774,11 @@ function buildSampleKeys(
   return [...new Set(keys)];
 }
 
-/**
- * Skill evolution series: one estimate per day or week end, from a single play load.
- */
-export function estimateSevenKSkillHistory(
-  db: Db,
+function skillHistoryFromPlays(
+  plays: SkillPlayRow[],
   opts: SkillHistoryOptions,
-  nowMs: number = Date.now(),
+  nowMs: number,
 ): SkillHistoryPoint[] {
-  backfillSunnyDanSync(db, { limit: 80 });
-  let plays = loadAllSevenKPlays(db);
-  plays = ensureSunnyForPlays(db, plays);
-
   const keys = buildSampleKeys(opts.granularity, opts.rangeDays, nowMs);
   const points: SkillHistoryPoint[] = [];
 
@@ -830,6 +813,39 @@ export function estimateSevenKSkillHistory(
   }
 
   return points;
+}
+
+/**
+ * Skill evolution series: one estimate per day or week end, from a single play load.
+ * Uses cached Sunny ratings only (no request-path backfill).
+ */
+export function estimateSevenKSkillHistory(
+  db: Db,
+  opts: SkillHistoryOptions,
+  nowMs: number = Date.now(),
+): SkillHistoryPoint[] {
+  return skillHistoryFromPlays(loadSevenKPlays(db), opts, nowMs);
+}
+
+/**
+ * Current skill + history from one 7K play load (no Sunny backfill).
+ */
+export function estimateSevenKSkillWithHistory(
+  db: Db,
+  opts: SkillHistoryOptions,
+  nowMs: number = Date.now(),
+): {
+  skill: SevenKSkillProfile;
+  skillHistory: SkillHistoryPoint[];
+} {
+  const plays = loadSevenKPlays(db);
+  return {
+    skill: estimateSevenKSkillFromPlays(plays, {
+      topPlays: opts.topPlays,
+      coldStartFallback: () => coldStartFromMastery(db),
+    }),
+    skillHistory: skillHistoryFromPlays(plays, opts, nowMs),
+  };
 }
 
 /** Exposed for unit tests. */

@@ -1,17 +1,55 @@
 import { Elysia, t } from "elysia";
+import type { Db } from "@roxysu/db/types";
 import { dbPlugin } from "../db-runtime";
 import {
   getPlayerStats,
   parseGranularity,
   parseRange,
   parseSkillTopPlays,
+  type StatsGranularity,
+  type StatsRange,
 } from "../analytics/playerStats";
+import {
+  getCachedPlayerStats,
+  playerStatsCacheKey,
+  setCachedPlayerStats,
+} from "../analytics/playerStatsCache";
 import { toIso } from "../shared/serialize";
 import {
   getSkillBandPlays,
   type SkillBandAxis,
-  type SkillBandKind,
 } from "../analytics/skillBandPlays";
+
+async function buildStatsResponse(
+  db: Db,
+  opts: {
+    granularity: StatsGranularity;
+    range: StatsRange;
+    skillTopPlays: number;
+  },
+) {
+  const data = await getPlayerStats(db, opts);
+  return {
+    ...data,
+    summary: {
+      ...data.summary,
+      firstPlayedAt: toIso(data.summary.firstPlayedAt),
+      lastPlayedAt: toIso(data.summary.lastPlayedAt),
+    },
+    sessionStats: {
+      ...data.sessionStats,
+      longest: data.sessionStats.longest
+        ? {
+            ...data.sessionStats.longest,
+            startedAt: toIso(data.sessionStats.longest.startedAt),
+            endedAt: toIso(data.sessionStats.longest.endedAt),
+          }
+        : null,
+    },
+  };
+}
+
+type StatsResponse = Awaited<ReturnType<typeof buildStatsResponse>>;
 
 export const statsRoutes = new Elysia({ prefix: "/stats" })
   .use(dbPlugin)
@@ -64,30 +102,22 @@ export const statsRoutes = new Elysia({ prefix: "/stats" })
       const granularity = parseGranularity(query.granularity);
       const range = parseRange(query.range);
       const skillTopPlays = parseSkillTopPlays(query.skillTopPlays);
-      const data = await getPlayerStats(db, {
+      const cacheKey = playerStatsCacheKey({
         granularity,
         range,
         skillTopPlays,
       });
 
-      return {
-        ...data,
-        summary: {
-          ...data.summary,
-          firstPlayedAt: toIso(data.summary.firstPlayedAt),
-          lastPlayedAt: toIso(data.summary.lastPlayedAt),
-        },
-        sessionStats: {
-          ...data.sessionStats,
-          longest: data.sessionStats.longest
-            ? {
-                ...data.sessionStats.longest,
-                startedAt: toIso(data.sessionStats.longest.startedAt),
-                endedAt: toIso(data.sessionStats.longest.endedAt),
-              }
-            : null,
-        },
-      };
+      const cached = getCachedPlayerStats<StatsResponse>(cacheKey);
+      if (cached) return cached;
+
+      const payload = await buildStatsResponse(db, {
+        granularity,
+        range,
+        skillTopPlays,
+      });
+      setCachedPlayerStats(cacheKey, payload);
+      return payload;
     },
     {
       query: t.Object({

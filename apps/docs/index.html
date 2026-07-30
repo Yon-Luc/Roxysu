@@ -461,6 +461,16 @@
       </div>
     </footer>
 
+    <dialog class="lightbox" id="lightbox" aria-label="Screenshot fullscreen">
+      <button type="button" class="lightbox-close" id="lightbox-close" aria-label="Close">
+        ×
+      </button>
+      <div class="lightbox-inner">
+        <img id="lightbox-img" src="" alt="" />
+      </div>
+      <p class="lightbox-hint">Esc or click outside to close</p>
+    </dialog>
+
     <script>
       const reveals = document.querySelectorAll(".reveal");
       if ("IntersectionObserver" in window) {
@@ -479,6 +489,67 @@
       } else {
         reveals.forEach((el) => el.classList.add("visible"));
       }
+
+      const lightbox = document.getElementById("lightbox");
+      const lightboxImg = document.getElementById("lightbox-img");
+      const lightboxClose = document.getElementById("lightbox-close");
+      let lastTrigger = null;
+
+      function openLightbox(img, trigger) {
+        lightboxImg.src = img.currentSrc || img.src;
+        lightboxImg.alt = img.alt || "Screenshot";
+        lastTrigger = trigger || img;
+        if (typeof lightbox.showModal === "function") {
+          lightbox.showModal();
+        } else {
+          lightbox.setAttribute("open", "");
+        }
+        lightboxClose.focus();
+      }
+
+      function closeLightbox() {
+        if (typeof lightbox.close === "function" && lightbox.open) {
+          lightbox.close();
+        } else {
+          lightbox.removeAttribute("open");
+        }
+        if (lastTrigger && typeof lastTrigger.focus === "function") {
+          lastTrigger.focus();
+        }
+      }
+
+      document.querySelectorAll(".shot-frame img").forEach((img) => {
+        const frame = img.closest(".shot-frame");
+        if (!frame || frame.querySelector(":scope > .shot-zoom")) return;
+
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "shot-zoom";
+        btn.setAttribute(
+          "aria-label",
+          `View fullscreen: ${img.alt || "screenshot"}`
+        );
+        img.replaceWith(btn);
+        btn.appendChild(img);
+
+        btn.addEventListener("click", () => openLightbox(img, btn));
+      });
+
+      lightboxClose.addEventListener("click", (e) => {
+        e.stopPropagation();
+        closeLightbox();
+      });
+
+      lightbox.addEventListener("click", (e) => {
+        if (e.target === lightbox || e.target.classList.contains("lightbox-inner")) {
+          closeLightbox();
+        }
+      });
+
+      lightbox.addEventListener("cancel", (e) => {
+        e.preventDefault();
+        closeLightbox();
+      });
     </script>
   </body>
 </html>

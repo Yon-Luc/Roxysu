@@ -20,6 +20,8 @@ export function connectLiveUpdates(queryClient: QueryClient): () => void {
     void queryClient.invalidateQueries({ queryKey: ["system"] });
     void queryClient.invalidateQueries({ queryKey: ["practice"] });
     void queryClient.invalidateQueries({ queryKey: ["beatmap"] });
+    void queryClient.invalidateQueries({ queryKey: ["beatmap-preview"] });
+    void queryClient.invalidateQueries({ queryKey: ["score-replay"] });
     void queryClient.invalidateQueries({ queryKey: ["sessions"] });
     void queryClient.invalidateQueries({ queryKey: ["collections"] });
     void queryClient.invalidateQueries({ queryKey: ["settings"] });

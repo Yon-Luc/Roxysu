@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import {
+  useCallback,
   useEffect,
   useId,
   useRef,
@@ -216,7 +217,12 @@ function BeatmapPreviewModal({
 }) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [audioMountGen, setAudioMountGen] = useState(0);
+  const bindAudioRef = useCallback((el: HTMLAudioElement | null) => {
+    audioRef.current = el;
+    if (el) setAudioMountGen((n) => n + 1);
+  }, []);
   const clockRef = useRef(new AudioClock());
   const previewSeekDone = useRef(false);
   const previewTimeRef = useRef<number | null>(null);
@@ -246,6 +252,9 @@ function BeatmapPreviewModal({
   const { data, error, isLoading } = useQuery({
     queryKey: ["beatmap-preview", beatmapId],
     queryFn: () => fetchBeatmapPreview(beatmapId) as Promise<BeatmapPreview>,
+    // Fresh chart/audio hashes after sync; avoid stale cached preview without audio.
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const audioUrl = localBeatmapAudioUrl(data?.audioFileHash);
@@ -642,6 +651,7 @@ function BeatmapPreviewModal({
     const audio = audioRef.current;
     if (!audio || !audioUrl) return;
     const clock = clockRef.current;
+    previewSeekDone.current = false;
 
     function seekPreviewIfNeeded() {
       if (previewSeekDone.current) return;
@@ -735,7 +745,7 @@ function BeatmapPreviewModal({
       audio.removeEventListener("ended", onEnded);
       audio.removeEventListener("error", onError);
     };
-  }, [audioUrl, previewTime, practiceRange]);
+  }, [audioUrl, previewTime, practiceRange, audioMountGen]);
 
   function onSeek(e: FormEvent<HTMLInputElement>) {
     if (mode === "play") return;
@@ -801,6 +811,16 @@ function BeatmapPreviewModal({
         }
         onClick={(e) => e.stopPropagation()}
       >
+        {audioUrl ? (
+          <audio
+            key={audioUrl}
+            ref={bindAudioRef}
+            src={audioUrl}
+            preload="auto"
+            className="hidden"
+            aria-hidden
+          />
+        ) : null}
         {solidBlack ? (
           <div
             className="pointer-events-none absolute inset-0 bg-black"
@@ -892,7 +912,7 @@ function BeatmapPreviewModal({
 
         <div className="relative flex min-h-0 flex-1 flex-col">
           {isLoading ? (
-            <p className="px-5 py-10 text-center text-sm text-muted">
+            <p className="flex flex-1 items-center justify-center px-5 py-10 text-center text-sm text-muted">
               Loading preview…
             </p>
           ) : error ? (
@@ -1001,9 +1021,6 @@ function BeatmapPreviewModal({
                     className="absolute inset-x-0 bottom-0 h-12"
                     aria-hidden
                   />
-                ) : null}
-                {audioUrl ? (
-                  <audio ref={audioRef} src={audioUrl} preload="auto" />
                 ) : null}
                 <div
                   className={

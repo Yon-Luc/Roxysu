@@ -529,6 +529,11 @@ export function ManiaNotefield({
     resize();
     const ro = new ResizeObserver(resize);
     if (canvas.parentElement) ro.observe(canvas.parentElement);
+    // Flex layouts may settle after first paint; re-measure so the field isn't 1×1.
+    requestAnimationFrame(() => {
+      resize();
+      requestAnimationFrame(resize);
+    });
 
     function colSkin(col: number): ColumnSkin {
       const cols = skinRef.current.columns;

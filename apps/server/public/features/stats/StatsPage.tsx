@@ -177,19 +177,23 @@ export function StatsPage({
   range,
   skillTopPlays,
   skillAxis,
+  keyCount,
   onGranularityChange,
   onRangeChange,
   onSkillTopPlaysChange,
   onSkillAxisChange,
+  onKeyCountChange,
 }: {
   granularity: StatsGranularity;
   range: StatsRange;
   skillTopPlays: number;
   skillAxis: StatsSkillAxis;
+  keyCount: number;
   onGranularityChange: (g: StatsGranularity) => void;
   onRangeChange: (r: StatsRange) => void;
   onSkillTopPlaysChange: (n: number) => void;
   onSkillAxisChange: (a: StatsSkillAxis) => void;
+  onKeyCountChange: (n: number) => void;
 }) {
   const ratingMode = useRatingDisplayMode();
   const charts = useChartStyles();
@@ -213,12 +217,12 @@ export function StatsPage({
 
   useEffect(() => {
     setExpandedBand(null);
-  }, [skillAxis, skillTopPlays]);
+  }, [skillAxis, skillTopPlays, keyCount]);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["stats", granularity, range, skillTopPlays],
+    queryKey: ["stats", granularity, range, skillTopPlays, keyCount],
     queryFn: () =>
-      fetchStats({ granularity, range, skillTopPlays }),
+      fetchStats({ granularity, range, skillTopPlays, keyCount }),
   });
 
   if (isLoading) {
@@ -311,10 +315,11 @@ export function StatsPage({
           <div>
             <PageTitle>Stats</PageTitle>
             <p className="rx-subtitle">
-              Skill evolution, progression, and how you play — times in UTC.
-              Skill uses nomod (Mirror OK; DT/HT/etc. excluded) and your Settings
-              rating display (Sunny ★ or dan) from your top {skillTopPlays} rated
-              maps per band (best play per map, all {skillTopPlays} required)
+              Skill evolution, progression, and how you play — {keyCount}K only,
+              times in UTC. Skill uses nomod (Mirror OK; DT/HT/etc. excluded) and
+              your Settings rating display (Sunny ★ or dan) from your top{" "}
+              {skillTopPlays} rated maps per band (best play per map, all{" "}
+              {skillTopPlays} required)
               {axisFilterActive ? ` · ${skillAxisLabel(skillAxis)} only` : ""}.
             </p>
           </div>
@@ -384,11 +389,21 @@ export function StatsPage({
           />
           </div>
         </div>
-        <ToggleGroup
-          value={skillAxis}
-          options={SKILL_AXIS_OPTIONS}
-          onChange={onSkillAxisChange}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <ToggleGroup
+            value={String(keyCount)}
+            options={(data.availableKeyCounts ?? [4, 7]).map((k) => ({
+              id: String(k),
+              label: `${k}K`,
+            }))}
+            onChange={(v) => onKeyCountChange(Number(v))}
+          />
+          <ToggleGroup
+            value={skillAxis}
+            options={SKILL_AXIS_OPTIONS}
+            onChange={onSkillAxisChange}
+          />
+        </div>
       </div>
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -497,12 +512,13 @@ export function StatsPage({
             band={expandedBand}
             axis={skillAxis}
             topPlays={skillTopPlays}
+            keyCount={keyCount}
             ratingMode={ratingMode}
           />
         ) : null}
         {skill.coldStart ? (
           <p className="mt-3 text-xs text-muted">
-            Cold-start estimate — play more 7K maps for a firmer reading.
+            Cold-start estimate — play more {keyCount}K maps for a firmer reading.
           </p>
         ) : null}
       </section>
@@ -749,7 +765,7 @@ export function StatsPage({
             )}
           </ChartCard>
 
-          <ChartCard title="7K skillset mix">
+          <ChartCard title={`${keyCount}K skillset mix`}>
             {mix == null || mix.total === 0 ? (
               <EmptyChart />
             ) : (
@@ -1022,20 +1038,23 @@ function SkillBandPlaysPanel({
   band,
   axis,
   topPlays,
+  keyCount,
   ratingMode,
 }: {
   band: SkillBandKind;
   axis: StatsSkillAxis;
   topPlays: number;
+  keyCount: number;
   ratingMode: RatingDisplayMode;
 }) {
   const { data, isLoading, error } = useQuery({
-    queryKey: ["stats", "skill-plays", band, axis, topPlays],
+    queryKey: ["stats", "skill-plays", band, axis, topPlays, keyCount],
     queryFn: () =>
       fetchSkillBandPlays({
         band,
         axis: axis === "all" ? undefined : axis,
         topPlays,
+        keyCount,
       }),
   });
 

@@ -6,14 +6,16 @@ import { classifyMapAxis } from "./recommend/axis";
 import type { MapAxis } from "./recommend/types";
 import {
   bestPlayPerMap,
+  DEFAULT_SKILL_KEY_COUNT,
   DEFAULT_SKILL_TOP_PLAYS,
   estimateSevenKSkillFromPlays,
+  parseSkillKeyCount,
   skillBandAccRange,
   type SkillBandKind,
   type SkillPlayRow,
 } from "./recommend/sevenKSkill";
 
-const SKILL_KEY_COUNT = 7;
+const DEFAULT_KEY_COUNT = DEFAULT_SKILL_KEY_COUNT;
 
 export type SkillBandAxis = "all" | MapAxis;
 
@@ -104,6 +106,7 @@ function bandLevelForAxis(
 function toDetail(
   play: EnrichedPlayRow,
   lnRatioForDan: number,
+  keyCount: number,
 ): SkillBandPlayDetail {
   const sunnyStar = play.sunnyStar ?? 0;
   return {
@@ -116,12 +119,15 @@ function toDetail(
     sunnyStar,
     danLabel:
       play.sunnyEstDiff ??
-      estDiff(sunnyStar, play.lnRatio ?? lnRatioForDan, SKILL_KEY_COUNT),
+      estDiff(sunnyStar, play.lnRatio ?? lnRatioForDan, keyCount),
     playedAt: play.playedAt,
   };
 }
 
-function loadEnrichedSevenKPlays(db: Db): EnrichedPlayRow[] {
+function loadEnrichedSevenKPlays(
+  db: Db,
+  keyCount: number,
+): EnrichedPlayRow[] {
   const rows = db.$client
     .query(
       `
@@ -146,12 +152,12 @@ function loadEnrichedSevenKPlays(db: Db): EnrichedPlayRow[] {
         AND b.hidden = 0
         AND COALESCE(bs.delete_pending, 0) = 0
         AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
-        AND b.circle_size = 7
+        AND b.circle_size = ?
         AND s.beatmap_id IS NOT NULL
       ORDER BY s.played_at DESC
     `,
     )
-    .all() as Array<{
+    .all(keyCount) as Array<{
     scoreId: string;
     beatmapId: string;
     title: string;
@@ -236,16 +242,18 @@ export function getSkillBandPlays(
     band: SkillBandKind;
     axis?: SkillBandAxis;
     topPlays?: number;
+    keyCount?: number;
   },
 ): SkillBandPlaysResult {
   const band = opts.band;
   const axis: SkillBandAxis = opts.axis ?? "all";
   const topN = normalizeTopPlays(opts.topPlays);
+  const keyCount = parseSkillKeyCount(opts.keyCount ?? DEFAULT_KEY_COUNT);
   const { min: accMin, max: accMax } = skillBandAccRange(band);
   const lnRatioForDan = axisLnRatio(axis);
 
   // Cached Sunny ratings only — no request-path backfill.
-  const plays = loadEnrichedSevenKPlays(db);
+  const plays = loadEnrichedSevenKPlays(db, keyCount);
 
   const skillRows: SkillPlayRow[] = plays.map((p) => ({
     beatmapId: p.beatmapId,
@@ -267,11 +275,11 @@ export function getSkillBandPlays(
 
   const currentDanLabel =
     currentLevel > 0
-      ? estDiff(currentLevel, lnRatioForDan, SKILL_KEY_COUNT)
+      ? estDiff(currentLevel, lnRatioForDan, keyCount)
       : null;
   const nextInterval =
     currentLevel > 0
-      ? nextDanInterval(currentLevel, lnRatioForDan, SKILL_KEY_COUNT)
+      ? nextDanInterval(currentLevel, lnRatioForDan, keyCount)
       : null;
 
   let inNextDanEnriched: EnrichedPlayRow[] = [];
@@ -295,11 +303,11 @@ export function getSkillBandPlays(
     currentLevel,
     currentDanLabel,
     nextDanLabel: nextInterval?.[2] ?? null,
-    inBand: inBandEnriched.map((p) => toDetail(p, lnRatioForDan)),
+    inBand: inBandEnriched.map((p) => toDetail(p, lnRatioForDan, keyCount)),
     inBandTotal: inBandEnriched.length,
     inNextDan: inNextDanEnriched
       .slice(0, topN)
-      .map((p) => toDetail(p, lnRatioForDan)),
+      .map((p) => toDetail(p, lnRatioForDan, keyCount)),
     inNextDanTotal: inNextDanEnriched.length,
   };
 }

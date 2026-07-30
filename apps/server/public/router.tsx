@@ -56,6 +56,7 @@ const statsRoute = createRoute({
     range: StatsRange;
     skillTopPlays: number;
     skillAxis: StatsSkillAxis;
+    keyCount: number;
   } => {
     const granularity: StatsGranularity =
       search.granularity === "week" ? "week" : "day";
@@ -72,11 +73,16 @@ const statsRoute = createRoute({
       rawAxis === "rc" || rawAxis === "ln" || rawAxis === "fln"
         ? rawAxis
         : "all";
-    return { granularity, range, skillTopPlays, skillAxis };
+    const rawKeys = Number(search.keyCount);
+    const keyCount =
+      Number.isFinite(rawKeys) && rawKeys >= 1 && rawKeys <= 18
+        ? Math.round(rawKeys)
+        : 7;
+    return { granularity, range, skillTopPlays, skillAxis, keyCount };
   },
   component: function StatsRoute() {
     const navigate = statsRoute.useNavigate();
-    const { granularity, range, skillTopPlays, skillAxis } =
+    const { granularity, range, skillTopPlays, skillAxis, keyCount } =
       statsRoute.useSearch();
     return (
       <StatsPage
@@ -84,6 +90,7 @@ const statsRoute = createRoute({
         range={range}
         skillTopPlays={skillTopPlays}
         skillAxis={skillAxis}
+        keyCount={keyCount}
         onGranularityChange={(next) =>
           navigate({ search: (prev) => ({ ...prev, granularity: next }) })
         }
@@ -96,6 +103,9 @@ const statsRoute = createRoute({
         }}
         onSkillAxisChange={(next) =>
           navigate({ search: (prev) => ({ ...prev, skillAxis: next }) })
+        }
+        onKeyCountChange={(next) =>
+          navigate({ search: (prev) => ({ ...prev, keyCount: next }) })
         }
       />
     );

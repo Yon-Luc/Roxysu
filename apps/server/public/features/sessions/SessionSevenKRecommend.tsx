@@ -221,6 +221,7 @@ export function SessionSevenKRecommend({
                   range: 30,
                   skillTopPlays,
                   skillAxis: "all",
+                  keyCount: 7,
                 }}
                 className="underline hover:text-accent"
               >

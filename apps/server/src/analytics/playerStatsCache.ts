@@ -14,9 +14,10 @@ export function playerStatsCacheKey(parts: {
   granularity: string;
   range: number;
   skillTopPlays: number;
+  keyCount: number;
 }): string {
-  // v2: skill/stats ignore HT/DT/etc. (NM + Mirror only)
-  return `v2:${parts.granularity}:${parts.range}:${parts.skillTopPlays}`;
+  // v3: per-keymode stats (NM + Mirror only)
+  return `v3:${parts.granularity}:${parts.range}:${parts.skillTopPlays}:k${parts.keyCount}`;
 }
 
 export function getCachedPlayerStats<T>(key: string): T | null {

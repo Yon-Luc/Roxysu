@@ -73,12 +73,19 @@ export type SkillHistoryOptions = {
   rangeDays: number;
   /** Top-rated plays per accuracy band (default 30). */
   topPlays?: number;
+  /** Mania key count — never mixed (default 7). */
+  keyCount?: number;
 };
 
 export type SevenKSkillOptions = {
   /** Top-rated plays per accuracy band and for comfort (default 30). */
   topPlays?: number;
+  /** Mania key count — never mixed (default 7). */
+  keyCount?: number;
 };
+
+/** Default stats / skill keymode. */
+export const DEFAULT_SKILL_KEY_COUNT = 7;
 
 export type SkillBandKind = "push" | "accuracy" | "consistency";
 
@@ -157,6 +164,18 @@ function normalizeTopPlays(raw: number | undefined): number {
 export function parseSkillTopPlays(raw: unknown): number {
   if (raw === undefined) return DEFAULT_SKILL_TOP_PLAYS;
   return normalizeTopPlays(Number(raw));
+}
+
+/** Parse mania key count (1–18). Defaults to 7K. */
+export function parseSkillKeyCount(raw: unknown): number {
+  if (raw === undefined || raw === null || raw === "") {
+    return DEFAULT_SKILL_KEY_COUNT;
+  }
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return DEFAULT_SKILL_KEY_COUNT;
+  const rounded = Math.round(n);
+  if (rounded < 1 || rounded > 18) return DEFAULT_SKILL_KEY_COUNT;
+  return rounded;
 }
 
 type PlayLike = Pick<
@@ -416,8 +435,8 @@ function coldStartFromPlays(plays: SkillPlayRow[]): SevenKSkillProfile {
   });
 }
 
-/** Cold start: best-acc weighted Sunny on played 7K maps with ratings. */
-function coldStartFromMastery(db: Db): SevenKSkillProfile {
+/** Cold start: best-acc weighted Sunny on played maps for one keymode. */
+function coldStartFromMastery(db: Db, keyCount: number): SevenKSkillProfile {
   const rows = db.$client
     .query(
       `
@@ -443,7 +462,7 @@ function coldStartFromMastery(db: Db): SevenKSkillProfile {
       WHERE b.hidden = 0
         AND COALESCE(bs.delete_pending, 0) = 0
         AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
-        AND b.circle_size = 7
+        AND b.circle_size = ?
         AND dr.sunny_star IS NOT NULL
         AND (dr.error IS NULL OR dr.error = '')
         AND COALESCE(ps.play_count, m.play_count, 0) > 0
@@ -451,7 +470,7 @@ function coldStartFromMastery(db: Db): SevenKSkillProfile {
       LIMIT 80
     `,
     )
-    .all() as Array<{
+    .all(keyCount) as Array<{
     bestAccuracy: number | null;
     playCount: number;
     sunnyStar: number;
@@ -660,11 +679,14 @@ export function estimateSevenKSkillFromPlays(
 }
 
 /**
- * Load all 7K mania plays with existing Sunny ratings only.
+ * Load mania plays for a single keymode with existing Sunny ratings only.
  * Does not compute missing ratings — callers that need ratings should
  * run the Sunny job / pipeline separately.
  */
-export function loadSevenKPlays(db: Db): SkillPlayRow[] {
+export function loadSevenKPlays(
+  db: Db,
+  keyCount: number = DEFAULT_SKILL_KEY_COUNT,
+): SkillPlayRow[] {
   const rows = db.$client
     .query(
       `
@@ -684,12 +706,12 @@ export function loadSevenKPlays(db: Db): SkillPlayRow[] {
         AND b.hidden = 0
         AND COALESCE(bs.delete_pending, 0) = 0
         AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
-        AND b.circle_size = 7
+        AND b.circle_size = ?
         AND s.beatmap_id IS NOT NULL
       ORDER BY s.played_at DESC
     `,
     )
-    .all() as Array<{
+    .all(keyCount) as Array<{
     beatmapId: string;
     accuracy: number;
     playedAt: number;
@@ -710,7 +732,7 @@ export function loadSevenKPlays(db: Db): SkillPlayRow[] {
 }
 
 /**
- * Estimate 7K skill:
+ * Estimate mania skill for one keymode:
  * - comfort (overall/rc/ln/fln): recent plays, recency × acc weight
  * - peak*: average Sunny of maps with 90–95% scores (Push base)
  * - accuracy*: average Sunny of maps with 99%+ scores (Accuracy base)
@@ -722,10 +744,11 @@ export function estimateSevenKSkill(
   db: Db,
   opts?: SevenKSkillOptions,
 ): SevenKSkillProfile {
-  const plays = loadSevenKPlays(db);
+  const keyCount = parseSkillKeyCount(opts?.keyCount);
+  const plays = loadSevenKPlays(db, keyCount);
   return estimateSevenKSkillFromPlays(plays, {
     topPlays: opts?.topPlays,
-    coldStartFallback: () => coldStartFromMastery(db),
+    coldStartFallback: () => coldStartFromMastery(db, keyCount),
   });
 }
 
@@ -829,11 +852,12 @@ export function estimateSevenKSkillHistory(
   opts: SkillHistoryOptions,
   nowMs: number = Date.now(),
 ): SkillHistoryPoint[] {
-  return skillHistoryFromPlays(loadSevenKPlays(db), opts, nowMs);
+  const keyCount = parseSkillKeyCount(opts.keyCount);
+  return skillHistoryFromPlays(loadSevenKPlays(db, keyCount), opts, nowMs);
 }
 
 /**
- * Current skill + history from one 7K play load (no Sunny backfill).
+ * Current skill + history from one keymode play load (no Sunny backfill).
  */
 export function estimateSevenKSkillWithHistory(
   db: Db,
@@ -843,11 +867,12 @@ export function estimateSevenKSkillWithHistory(
   skill: SevenKSkillProfile;
   skillHistory: SkillHistoryPoint[];
 } {
-  const plays = loadSevenKPlays(db);
+  const keyCount = parseSkillKeyCount(opts.keyCount);
+  const plays = loadSevenKPlays(db, keyCount);
   return {
     skill: estimateSevenKSkillFromPlays(plays, {
       topPlays: opts.topPlays,
-      coldStartFallback: () => coldStartFromMastery(db),
+      coldStartFallback: () => coldStartFromMastery(db, keyCount),
     }),
     skillHistory: skillHistoryFromPlays(plays, opts, nowMs),
   };

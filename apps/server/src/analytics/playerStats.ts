@@ -1,22 +1,19 @@
 
 
 import type { Db } from "@roxysu/db/types";
-import { beatmaps, mapperStats, scoreMetrics, scores, sessions } from "@roxysu/db/schema";
-import { and, count, desc, eq, sql } from "drizzle-orm";
+import { beatmaps, scoreMetrics, scores, sessions } from "@roxysu/db/schema";
+import { and, count, eq, sql } from "drizzle-orm";
 import { SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
 import { isNomodOrMirrorOnly } from "../replay/mods";
-import {
-  getAccuracyTrend,
-  getPpTrend,
-  getWeeklyActivity,
-} from "./progression";
 import { classifyMapAxis } from "./recommend/axis";
 import {
+  DEFAULT_SKILL_KEY_COUNT,
   estimateSevenKSkillWithHistory,
+  parseSkillKeyCount,
   parseSkillTopPlays,
 } from "./recommend/sevenKSkill";
 
-/** Display buckets for the rank chart (silver grades folded into gold). F/fails omitted. */
+/** Display buckets for the rank chart (silver grades folded into gold). Fails omitted. */
 const RANK_BUCKETS = [
   { key: "D", ranks: [0] },
   { key: "C", ranks: [1] },
@@ -36,6 +33,8 @@ export type PlayerStatsQuery = {
   granularity?: StatsGranularity;
   range?: StatsRange;
   skillTopPlays?: number;
+  /** Single mania keymode — never mixed (default 7). */
+  keyCount?: number;
 };
 
 function parseRange(raw: unknown): StatsRange {
@@ -53,11 +52,51 @@ function toMs(value: Date | number | null | undefined): number | null {
   return value instanceof Date ? value.getTime() : Number(value);
 }
 
+function dayKey(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function weekStartKey(d: Date): string {
+  const copy = new Date(
+    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()),
+  );
+  const day = copy.getUTCDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  copy.setUTCDate(copy.getUTCDate() + diff);
+  return copy.toISOString().slice(0, 10);
+}
+
+function listPlayedKeyCounts(db: Db): number[] {
+  const rows = db.$client
+    .query(
+      `
+      SELECT DISTINCT CAST(b.circle_size AS INTEGER) AS keyCount
+      FROM scores s
+      JOIN beatmaps b ON b.id = s.beatmap_id
+      WHERE s.delete_pending = 0
+        AND b.hidden = 0
+        AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
+        AND b.circle_size IS NOT NULL
+      ORDER BY keyCount ASC
+    `,
+    )
+    .all() as Array<{ keyCount: number }>;
+
+  const keys = rows
+    .map((r) => Math.round(Number(r.keyCount)))
+    .filter((n) => Number.isFinite(n) && n >= 1 && n <= 18);
+  // Always offer 4K/7K even with no plays yet.
+  for (const preset of [4, 7]) {
+    if (!keys.includes(preset)) keys.push(preset);
+  }
+  return [...new Set(keys)].sort((a, b) => a - b);
+}
+
 /**
  * Rank distribution with SH→S, XH→X, plus any 1,000,000 total score as X.
  * Fails (rank F / -1) are excluded. Each score is counted once (perfect wins).
  */
-async function getRankDistribution(db: Db) {
+async function getRankDistribution(db: Db, keyCount: number) {
   const rows = db.$client
     .query(
       `
@@ -66,11 +105,14 @@ async function getRankDistribution(db: Db) {
         s.rank AS rank,
         s.mods AS mods
       FROM scores s
+      JOIN beatmaps b ON b.id = s.beatmap_id
       WHERE s.delete_pending = 0
         AND s.rank != -1
+        AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
+        AND b.circle_size = ?
     `,
     )
-    .all() as Array<{
+    .all(keyCount) as Array<{
     totalScore: number;
     rank: number;
     mods: string | null;
@@ -99,7 +141,7 @@ async function getRankDistribution(db: Db) {
   }));
 }
 
-async function getSkillsetMix(db: Db) {
+async function getSkillsetMix(db: Db, keyCount: number) {
   const rows = db.$client
     .query(
       `
@@ -113,10 +155,13 @@ async function getSkillsetMix(db: Db) {
         AND b.hidden = 0
         AND COALESCE(bs.delete_pending, 0) = 0
         AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
-        AND b.circle_size = 7
+        AND b.circle_size = ?
     `,
     )
-    .all(SUNNY_ALGORITHM) as Array<{ lnRatio: number | null; mods: string | null }>;
+    .all(SUNNY_ALGORITHM, keyCount) as Array<{
+    lnRatio: number | null;
+    mods: string | null;
+  }>;
 
   let rc = 0;
   let ln = 0;
@@ -143,16 +188,19 @@ async function getSkillsetMix(db: Db) {
   };
 }
 
-async function getPlayTimePatterns(db: Db) {
+async function getPlayTimePatterns(db: Db, keyCount: number) {
   const rows = db.$client
     .query(
       `
-      SELECT played_at AS playedAt, mods
-      FROM scores
-      WHERE delete_pending = 0
+      SELECT s.played_at AS playedAt, s.mods AS mods
+      FROM scores s
+      JOIN beatmaps b ON b.id = s.beatmap_id
+      WHERE s.delete_pending = 0
+        AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
+        AND b.circle_size = ?
     `,
     )
-    .all() as Array<{ playedAt: number; mods: string | null }>;
+    .all(keyCount) as Array<{ playedAt: number; mods: string | null }>;
 
   const byHour = Array.from({ length: 24 }, () => 0);
   const byDayOfWeek = Array.from({ length: 7 }, () => 0); // 0 = Sunday UTC
@@ -223,55 +271,198 @@ async function getSessionStats(db: Db) {
   };
 }
 
-async function getTopMappers(db: Db, limit = 10) {
-  const rows = await db
-    .select()
-    .from(mapperStats)
-    .orderBy(desc(mapperStats.playCount))
-    .limit(limit);
-
-  return rows.map((r) => ({
-    mapperOnlineId: r.mapperOnlineId,
-    mapperUsername: r.mapperUsername,
-    playCount: r.playCount,
-    totalPp: r.totalPp,
-    avgAccuracy: r.avgAccuracy,
-  }));
-}
-
-async function getSummary(db: Db) {
-  const [scoreCount] = await db
-    .select({ n: count() })
-    .from(scores)
-    .where(eq(scores.deletePending, false));
-
-  const [beatmapCount] = await db.select({ n: count() }).from(beatmaps);
-
-  const [distinctMaps] = await db
-    .select({
-      n: sql<number>`count(distinct ${scores.beatmapId})`,
-    })
-    .from(scores)
-    .where(
-      and(eq(scores.deletePending, false), sql`${scores.beatmapId} is not null`),
-    );
-
-  const bounds = db.$client
+async function getTopMappers(db: Db, keyCount: number, limit = 10) {
+  const rows = db.$client
     .query(
       `
-      SELECT MIN(played_at) AS firstAt, MAX(played_at) AS lastAt
-      FROM scores
-      WHERE delete_pending = 0
+      SELECT
+        b.mapper_online_id AS mapperOnlineId,
+        b.mapper_username AS mapperUsername,
+        s.accuracy AS accuracy,
+        s.pp AS pp,
+        s.mods AS mods
+      FROM scores s
+      JOIN beatmaps b ON b.id = s.beatmap_id
+      WHERE s.delete_pending = 0
+        AND b.mapper_online_id IS NOT NULL
+        AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
+        AND b.circle_size = ?
     `,
     )
-    .get() as { firstAt: number | null; lastAt: number | null } | null;
+    .all(keyCount) as Array<{
+    mapperOnlineId: number;
+    mapperUsername: string | null;
+    accuracy: number;
+    pp: number | null;
+    mods: string | null;
+  }>;
+
+  const byMapper = new Map<
+    number,
+    { mapperUsername: string | null; playCount: number; totalPp: number; accSum: number }
+  >();
+  for (const row of rows) {
+    if (!isNomodOrMirrorOnly(row.mods)) continue;
+    const id = Number(row.mapperOnlineId);
+    const cur = byMapper.get(id) ?? {
+      mapperUsername: row.mapperUsername,
+      playCount: 0,
+      totalPp: 0,
+      accSum: 0,
+    };
+    cur.playCount += 1;
+    cur.totalPp += row.pp ?? 0;
+    cur.accSum += Number(row.accuracy ?? 0);
+    cur.mapperUsername = row.mapperUsername ?? cur.mapperUsername;
+    byMapper.set(id, cur);
+  }
+
+  return [...byMapper.entries()]
+    .map(([mapperOnlineId, b]) => ({
+      mapperOnlineId,
+      mapperUsername: b.mapperUsername,
+      playCount: b.playCount,
+      totalPp: b.totalPp,
+      avgAccuracy: b.playCount > 0 ? b.accSum / b.playCount : null,
+    }))
+    .sort((a, b) => b.playCount - a.playCount || b.totalPp - a.totalPp)
+    .slice(0, limit);
+}
+
+async function getKeymodeProgression(
+  db: Db,
+  keyCount: number,
+  days: number,
+  weeks: number,
+) {
+  const rows = db.$client
+    .query(
+      `
+      SELECT
+        s.played_at AS playedAt,
+        s.accuracy AS accuracy,
+        s.pp AS pp,
+        s.mods AS mods
+      FROM scores s
+      JOIN beatmaps b ON b.id = s.beatmap_id
+      WHERE s.delete_pending = 0
+        AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
+        AND b.circle_size = ?
+    `,
+    )
+    .all(keyCount) as Array<{
+    playedAt: number;
+    accuracy: number;
+    pp: number | null;
+    mods: string | null;
+  }>;
+
+  type Bucket = { playCount: number; totalPp: number; accSum: number };
+  const daily = new Map<string, Bucket>();
+  const weekly = new Map<string, Bucket>();
+
+  for (const row of rows) {
+    if (!isNomodOrMirrorOnly(row.mods)) continue;
+    const ms = Number(row.playedAt ?? 0);
+    if (!Number.isFinite(ms) || ms <= 0) continue;
+    const played = new Date(ms);
+    const pp = row.pp ?? 0;
+    const dKey = dayKey(played);
+    const wKey = weekStartKey(played);
+    const bump = (map: Map<string, Bucket>, key: string) => {
+      const b = map.get(key) ?? { playCount: 0, totalPp: 0, accSum: 0 };
+      b.playCount += 1;
+      b.totalPp += pp;
+      b.accSum += Number(row.accuracy ?? 0);
+      map.set(key, b);
+    };
+    bump(daily, dKey);
+    bump(weekly, wKey);
+  }
+
+  const ppTrend = [...daily.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(-days)
+    .map(([day, b]) => ({
+      day,
+      totalPp: b.totalPp,
+      playCount: b.playCount,
+    }));
+
+  const accuracyTrend = [...daily.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(-days)
+    .map(([day, b]) => ({
+      day,
+      avgAccuracy: b.playCount > 0 ? b.accSum / b.playCount : 0,
+      playCount: b.playCount,
+    }));
+
+  const weeklyActivity = [...weekly.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(-weeks)
+    .map(([weekStart, b]) => ({
+      weekStart,
+      playCount: b.playCount,
+      totalPp: b.totalPp,
+      avgAccuracy: b.playCount > 0 ? b.accSum / b.playCount : null,
+    }));
+
+  return { ppTrend, accuracyTrend, weeklyActivity };
+}
+
+async function getSummary(db: Db, keyCount: number) {
+  const rows = db.$client
+    .query(
+      `
+      SELECT
+        s.beatmap_id AS beatmapId,
+        s.played_at AS playedAt,
+        s.mods AS mods
+      FROM scores s
+      JOIN beatmaps b ON b.id = s.beatmap_id
+      WHERE s.delete_pending = 0
+        AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
+        AND b.circle_size = ?
+    `,
+    )
+    .all(keyCount) as Array<{
+    beatmapId: string | null;
+    playedAt: number;
+    mods: string | null;
+  }>;
+
+  const maps = new Set<string>();
+  let scoreCount = 0;
+  let firstAt: number | null = null;
+  let lastAt: number | null = null;
+  for (const row of rows) {
+    if (!isNomodOrMirrorOnly(row.mods)) continue;
+    scoreCount += 1;
+    if (row.beatmapId) maps.add(row.beatmapId);
+    const ms = Number(row.playedAt ?? 0);
+    if (!Number.isFinite(ms) || ms <= 0) continue;
+    if (firstAt == null || ms < firstAt) firstAt = ms;
+    if (lastAt == null || ms > lastAt) lastAt = ms;
+  }
+
+  const [beatmapCount] = await db
+    .select({ n: count() })
+    .from(beatmaps)
+    .where(
+      and(
+        eq(beatmaps.hidden, false),
+        sql`lower(coalesce(${beatmaps.rulesetShortName}, '')) = 'mania'`,
+        eq(beatmaps.circleSize, keyCount),
+      ),
+    );
 
   return {
-    scoreCount: scoreCount?.n ?? 0,
+    scoreCount,
     beatmapCount: beatmapCount?.n ?? 0,
-    distinctMapsPlayed: Number(distinctMaps?.n ?? 0),
-    firstPlayedAt: bounds?.firstAt != null ? Number(bounds.firstAt) : null,
-    lastPlayedAt: bounds?.lastAt != null ? Number(bounds.lastAt) : null,
+    distinctMapsPlayed: maps.size,
+    firstPlayedAt: firstAt,
+    lastPlayedAt: lastAt,
   };
 }
 
@@ -279,9 +470,11 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
   const granularity = parseGranularity(query.granularity);
   const range = parseRange(query.range);
   const skillTopPlays = parseSkillTopPlays(query.skillTopPlays);
+  const keyCount = parseSkillKeyCount(query.keyCount ?? DEFAULT_SKILL_KEY_COUNT);
 
   const trendDays = range;
   const weekCount = Math.max(12, Math.ceil(range / 7));
+  const availableKeyCounts = listPlayedKeyCounts(db);
 
   // Defer sync skill work so other DB queries can start in the same tick.
   const skillBundlePromise = Promise.resolve().then(() =>
@@ -289,37 +482,36 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
       granularity,
       rangeDays: range,
       topPlays: skillTopPlays,
+      keyCount,
     }),
   );
 
   const [
     summary,
     skillBundle,
-    ppTrend,
-    accuracyTrend,
-    weeklyActivity,
+    progression,
     rankDistribution,
     skillsetMix,
     playPatterns,
     sessionStats,
     topMappers,
   ] = await Promise.all([
-    getSummary(db),
+    getSummary(db, keyCount),
     skillBundlePromise,
-    getPpTrend(db, trendDays),
-    getAccuracyTrend(db, trendDays),
-    getWeeklyActivity(db, weekCount),
-    getRankDistribution(db),
-    getSkillsetMix(db),
-    getPlayTimePatterns(db),
+    getKeymodeProgression(db, keyCount, trendDays, weekCount),
+    getRankDistribution(db, keyCount),
+    getSkillsetMix(db, keyCount),
+    getPlayTimePatterns(db, keyCount),
     getSessionStats(db),
-    getTopMappers(db, 10),
+    getTopMappers(db, keyCount, 10),
   ]);
 
   return {
     granularity,
     range,
     skillTopPlays,
+    keyCount,
+    availableKeyCounts,
     summary: {
       ...summary,
       sessionCount: sessionStats.sessionCount,
@@ -327,9 +519,9 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
     },
     skill: skillBundle.skill,
     skillHistory: skillBundle.skillHistory,
-    ppTrend,
-    accuracyTrend,
-    weeklyActivity,
+    ppTrend: progression.ppTrend,
+    accuracyTrend: progression.accuracyTrend,
+    weeklyActivity: progression.weeklyActivity,
     rankDistribution,
     skillsetMix,
     playByHour: playPatterns.byHour,
@@ -343,4 +535,11 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
   };
 }
 
-export { parseGranularity, parseRange, parseSkillTopPlays, PERFECT_TOTAL_SCORE };
+export {
+  parseGranularity,
+  parseRange,
+  parseSkillTopPlays,
+  parseSkillKeyCount,
+  PERFECT_TOTAL_SCORE,
+  DEFAULT_SKILL_KEY_COUNT,
+};

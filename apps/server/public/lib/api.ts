@@ -55,6 +55,7 @@ export async function fetchStats(params?: {
   granularity?: StatsGranularity;
   range?: StatsRange;
   skillTopPlays?: number;
+  keyCount?: number;
 }) {
   return unwrap(
     await api.api.stats.get({
@@ -62,6 +63,7 @@ export async function fetchStats(params?: {
         granularity: params?.granularity,
         range: params?.range,
         skillTopPlays: params?.skillTopPlays,
+        keyCount: params?.keyCount,
       },
     }),
     "/api/stats",
@@ -74,6 +76,7 @@ export async function fetchSkillBandPlays(params: {
   band: SkillBandKind;
   axis?: StatsSkillAxis;
   topPlays?: number;
+  keyCount?: number;
 }) {
   return unwrap(
     await api.api.stats["skill-plays"].get({
@@ -81,6 +84,7 @@ export async function fetchSkillBandPlays(params: {
         band: params.band,
         axis: params.axis,
         topPlays: params.topPlays,
+        keyCount: params.keyCount,
       },
     }),
     "/api/stats/skill-plays",

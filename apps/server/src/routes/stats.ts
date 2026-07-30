@@ -5,6 +5,7 @@ import {
   getPlayerStats,
   parseGranularity,
   parseRange,
+  parseSkillKeyCount,
   parseSkillTopPlays,
   type StatsGranularity,
   type StatsRange,
@@ -26,6 +27,7 @@ async function buildStatsResponse(
     granularity: StatsGranularity;
     range: StatsRange;
     skillTopPlays: number;
+    keyCount: number;
   },
 ) {
   const data = await getPlayerStats(db, opts);
@@ -64,6 +66,7 @@ export const statsRoutes = new Elysia({ prefix: "/stats" })
         band: query.band,
         axis,
         topPlays: parseSkillTopPlays(query.topPlays),
+        keyCount: parseSkillKeyCount(query.keyCount),
       });
       return {
         ...result,
@@ -93,6 +96,7 @@ export const statsRoutes = new Elysia({ prefix: "/stats" })
           ]),
         ),
         topPlays: t.Optional(t.Union([t.Number(), t.String()])),
+        keyCount: t.Optional(t.Union([t.Number(), t.String()])),
       }),
     },
   )
@@ -102,10 +106,12 @@ export const statsRoutes = new Elysia({ prefix: "/stats" })
       const granularity = parseGranularity(query.granularity);
       const range = parseRange(query.range);
       const skillTopPlays = parseSkillTopPlays(query.skillTopPlays);
+      const keyCount = parseSkillKeyCount(query.keyCount);
       const cacheKey = playerStatsCacheKey({
         granularity,
         range,
         skillTopPlays,
+        keyCount,
       });
 
       const cached = getCachedPlayerStats<StatsResponse>(cacheKey);
@@ -115,6 +121,7 @@ export const statsRoutes = new Elysia({ prefix: "/stats" })
         granularity,
         range,
         skillTopPlays,
+        keyCount,
       });
       setCachedPlayerStats(cacheKey, payload);
       return payload;
@@ -126,6 +133,7 @@ export const statsRoutes = new Elysia({ prefix: "/stats" })
         ),
         range: t.Optional(t.Union([t.Number(), t.String()])),
         skillTopPlays: t.Optional(t.Union([t.Number(), t.String()])),
+        keyCount: t.Optional(t.Union([t.Number(), t.String()])),
       }),
     },
   );

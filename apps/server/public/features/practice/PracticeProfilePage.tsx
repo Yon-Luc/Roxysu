@@ -697,7 +697,8 @@ function SevenKDensityPanel({
                 tick={charts.tick}
                 axisLine={false}
                 tickLine={false}
-                minTickGap={20}
+                minTickGap={36}
+                interval="preserveStartEnd"
               />
               <YAxis
                 tick={charts.tick}
@@ -850,10 +851,10 @@ function PatternMetricRow({
 }
 
 function formatTimeMs(ms: number): string {
-  const sec = Math.max(0, ms / 1000);
-  const mins = Math.floor(sec / 60);
-  const rem = sec - mins * 60;
-  return `${mins}:${rem.toFixed(1).padStart(4, "0")}`;
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  return `${mins}:${String(secs).padStart(2, "0")}`;
 }
 
 function formatPanelDuration(ms: number | null | undefined): string {

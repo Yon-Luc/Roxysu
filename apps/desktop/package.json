@@ -8,9 +8,54 @@
   "scripts": {
     "dev": "bun run --cwd ../server build:ui && node ./scripts/run-electron.mjs .",
     "start": "node ./scripts/run-electron.mjs .",
-    "dev:smoke": "node ./scripts/run-electron.mjs ."
+    "dev:smoke": "node ./scripts/run-electron.mjs .",
+    "build:stage": "node ./scripts/build-pack.mjs",
+    "rebuild:native": "node ./scripts/rebuild-native.mjs",
+    "pack": "bun run build:stage && bun run rebuild:native",
+    "dist:win": "bun run pack && electron-builder --win",
+    "dist:dir": "bun run pack && electron-builder --dir"
+  },
+  "build": {
+    "appId": "dev.roxysu.desktop",
+    "productName": "Roxysu",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "paths.js"
+    ],
+    "extraResources": [
+      {
+        "from": "stage/public",
+        "to": "public"
+      },
+      {
+        "from": "stage/server",
+        "to": "server"
+      },
+      {
+        "from": "stage/realm-reader",
+        "to": "realm-reader"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "../server/public/icons/icon-512.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   },
   "devDependencies": {
-    "electron": "^42.0.0"
+    "@electron/rebuild": "^3.7.2",
+    "electron": "^42.0.0",
+    "electron-builder": "^25.1.8",
+    "esbuild": "^0.25.0"
   }
 }

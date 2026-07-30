@@ -1,6 +1,7 @@
 import type { Db } from "@roxysu/db/types";
 import { beatmapManiaRatings, beatmaps } from "@roxysu/db/schema";
 import { readFileSync } from "node:fs";
+import { spawn } from "node:child_process";
 import { and, eq } from "drizzle-orm";
 
 import {
@@ -125,31 +126,84 @@ async function runCalculator(
   beatmapPath: string,
   versionId: string,
 ): Promise<CliOutput> {
-  const proc = Bun.spawn({
-    cmd: [executablePath, "--mods", "NM", "--version-id", versionId, beatmapPath],
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  const args = [
+    "--mods",
+    "NM",
+    "--version-id",
+    versionId,
+    beatmapPath,
+  ];
 
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
+  if (typeof Bun !== "undefined" && typeof Bun.spawn === "function") {
+    const proc = Bun.spawn({
+      cmd: [executablePath, ...args],
+      stdout: "pipe",
+      stderr: "pipe",
+    });
 
-  if (exitCode !== 0) {
-    try {
-      const errJson = JSON.parse(stderr.trim()) as { error?: string };
-      if (errJson.error) throw new Error(errJson.error);
-    } catch (parseErr) {
-      if (parseErr instanceof Error && parseErr.message !== stderr.trim()) {
-        throw parseErr;
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
+
+    if (exitCode !== 0) {
+      try {
+        const errJson = JSON.parse(stderr.trim()) as { error?: string };
+        if (errJson.error) throw new Error(errJson.error);
+      } catch (parseErr) {
+        if (parseErr instanceof Error && parseErr.message !== stderr.trim()) {
+          throw parseErr;
+        }
       }
+      throw new Error(stderr.trim() || `Calculator exited with code ${exitCode}`);
     }
-    throw new Error(stderr.trim() || `Calculator exited with code ${exitCode}`);
+
+    return parseCliOutput(stdout);
   }
 
-  return parseCliOutput(stdout);
+  return new Promise((resolve, reject) => {
+    const proc = spawn(executablePath, args, {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+    proc.stdout.setEncoding("utf8");
+    proc.stderr.setEncoding("utf8");
+    proc.stdout.on("data", (chunk: string) => {
+      stdout += chunk;
+    });
+    proc.stderr.on("data", (chunk: string) => {
+      stderr += chunk;
+    });
+    proc.on("error", reject);
+    proc.on("close", (exitCode) => {
+      if (exitCode !== 0) {
+        try {
+          const errJson = JSON.parse(stderr.trim()) as { error?: string };
+          if (errJson.error) {
+            reject(new Error(errJson.error));
+            return;
+          }
+        } catch (parseErr) {
+          if (parseErr instanceof Error && parseErr.message !== stderr.trim()) {
+            reject(parseErr);
+            return;
+          }
+        }
+        reject(
+          new Error(stderr.trim() || `Calculator exited with code ${exitCode}`),
+        );
+        return;
+      }
+      try {
+        resolve(parseCliOutput(stdout));
+      } catch (err) {
+        reject(err);
+      }
+    });
+  });
 }
 
 function hasExecutableConfigured(db: Db, versionId: string): boolean {

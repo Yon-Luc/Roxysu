@@ -7,7 +7,9 @@ import { fileURLToPath } from "node:url";
 import * as schema from "./schema";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const migrationsFolder = path.join(__dirname, "..", "drizzle");
+const migrationsFolder =
+  process.env.ROXYSU_MIGRATIONS_FOLDER?.trim() ||
+  path.join(__dirname, "..", "drizzle");
 
 /** Wait this long for another process to release the write lock. */
 const BUSY_TIMEOUT_MS = 30_000;

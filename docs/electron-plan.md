@@ -80,7 +80,7 @@ Suggested `apps/desktop` growth:
 - Electron `main` / `preload` (done for smoke; main now boots Node + realm-reader)
 - Node Elysia bootstrap (`index.node.ts` + shared `createApp`)
 - `electron-builder` config (`win` only) — not yet
-- Scripts: `dev` (build UI + Electron), `pack`, `dist`
+- Scripts: `dev` (build UI + Electron), `pack` (stage + rebuild natives), `dist:win` (Windows installer)
 
 ## What is already free (or nearly free)
 
@@ -225,11 +225,14 @@ Optional polish (after MVP): tray icon, “Open data folder”, crash dialog, au
 - Desktop data dir defaults: `%APPDATA%\Roxysu` / macOS Application Support / Linux XDG (`ROXYSU_DESKTOP=1`, `ROXYSU_DATA_DIR`, Electron `userData`). Backups stay beside the DB (`{dataDir}/backups`).
 - Resource path helper [`apps/desktop/paths.js`](../apps/desktop/paths.js) resolves monorepo vs packaged `resources/` layout (`ROXYSU_STATIC_DIR`, `ROXYSU_SERVER_ENTRY`, `ROXYSU_REALM_ENTRY`, `ROXYSU_REALM_SCHEMA`).
 
-### M4 — Windows artifact
+### M4 — Windows artifact (done)
 
-- `electron-builder` win target.
-- `@electron/rebuild` for native addons.
-- Clean-machine install test; first-run lazer path via Settings if needed.
+- `electron-builder` win target (NSIS + portable): [`apps/desktop/package.json`](../apps/desktop/package.json) — `bun run desktop:dist:win`.
+- Staging pipeline [`apps/desktop/scripts/build-pack.mjs`](../apps/desktop/scripts/build-pack.mjs): bundle server + realm-reader (esbuild), copy UI + drizzle migrations + realm schema, `npm install` native deps per stage dir.
+- [`apps/desktop/scripts/rebuild-native.mjs`](../apps/desktop/scripts/rebuild-native.mjs): `@electron/rebuild` for `better-sqlite3`, `@napi-rs/lzma`, `realm` against Electron’s Node ABI.
+- Packaged layout → `resources/{public,server,realm-reader}` via `extraResources`; Electron main sets `ROXYSU_REALM_READER_DIR`, `ROXYSU_MIGRATIONS_FOLDER`, etc.
+- Collection sync in packaged builds loads `realm-reader/syncCollections.js` (not monorepo `src/`).
+- **CI:** [`.github/workflows/desktop-win.yml`](../.github/workflows/desktop-win.yml) builds on `windows-latest` when you push a `v*` / `desktop-v*` tag or run the workflow manually. Download the `.exe` files from the workflow’s **Artifacts** tab (unsigned; SmartScreen may warn on first run).
 
 ### M5 — Product polish
 

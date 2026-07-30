@@ -38,14 +38,19 @@ function isBunRuntime(): boolean {
 }
 
 function realmReaderDir(): string {
+  const fromEnv = process.env.ROXYSU_REALM_READER_DIR?.trim();
+  if (fromEnv) return fromEnv;
   const here = path.dirname(fileURLToPath(import.meta.url));
   return path.resolve(here, "../../../realm-reader");
 }
 
-function resolveRealmPathForSync(): string {
-  if (process.env.REALM_PATH?.trim()) return process.env.REALM_PATH.trim();
-  const dataPath = resolveOsuDataPath(getCachedOsuDataOverride()).resolved;
-  return resolveRealmPath(dataPath);
+function realmSyncModulePath(): string {
+  const dir = realmReaderDir();
+  const packaged = path.join(dir, "syncCollections.js");
+  if (process.env.ROXYSU_REALM_READER_DIR?.trim()) {
+    return packaged;
+  }
+  return path.join(dir, "src", "syncCollections.ts");
 }
 
 /** Node/desktop: call realm-reader in-process (no bunx/tsx). */
@@ -53,12 +58,16 @@ async function runSyncInProcess(
   db: Db,
   payload: CollectionSyncPayload,
 ): Promise<CollectionSyncResult> {
-  const modUrl = pathToFileURL(
-    path.join(realmReaderDir(), "src", "syncCollections.ts"),
-  ).href;
+  const modUrl = pathToFileURL(realmSyncModulePath()).href;
   const { runCollectionSync } = await import(modUrl);
   const dbPath = process.env.DB_PATH?.trim() || defaultDbPath();
   return runCollectionSync(db, dbPath, resolveRealmPathForSync(), payload);
+}
+
+function resolveRealmPathForSync(): string {
+  if (process.env.REALM_PATH?.trim()) return process.env.REALM_PATH.trim();
+  const dataPath = resolveOsuDataPath(getCachedOsuDataOverride()).resolved;
+  return resolveRealmPath(dataPath);
 }
 
 /** Bun monorepo: Realm cannot load in-process — spawn the Node CLI. */

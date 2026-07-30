@@ -178,6 +178,8 @@ if (!gotLock) {
       ROXYSU_DATA_DIR: paths.dataDir,
       DB_PATH: paths.dbPath,
       ROXYSU_REALM_SCHEMA: paths.realmSchema,
+      ROXYSU_REALM_READER_DIR: paths.realmDir,
+      ROXYSU_MIGRATIONS_FOLDER: path.join(paths.serverDir, "drizzle"),
     };
 
     serverChild = spawnNodeEntry(

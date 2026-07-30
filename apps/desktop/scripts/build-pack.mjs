@@ -102,7 +102,7 @@ function installProductionDeps(cwd, label, nodeBin) {
     npm_config_target: NODE_VERSION,
     npm_config_disturl: "https://nodejs.org/download/release",
   };
-  const installArgs = ["--omit=dev", "--ignore-scripts"];
+  const installArgs = ["--omit=dev", "--ignore-scripts", "--include=optional"];
   if (existsSync(path.join(cwd, "package-lock.json"))) {
     run("npm", ["ci", ...installArgs], { cwd, env });
   } else {

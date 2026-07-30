@@ -58,7 +58,19 @@ function findNativeBindings(dir) {
  */
 function hasBinding(moduleDir, mod) {
   const modDir = path.join(moduleDir, "node_modules", mod);
-  return findNativeBindings(modDir).length > 0;
+  if (findNativeBindings(modDir).length > 0) return true;
+  // @napi-rs/* ships platform packages as siblings (e.g. lzma-win32-x64-msvc).
+  if (mod.startsWith("@napi-rs/")) {
+    const scopeDir = path.join(moduleDir, "node_modules", "@napi-rs");
+    if (!existsSync(scopeDir)) return false;
+    const short = mod.slice("@napi-rs/".length);
+    for (const name of readdirSync(scopeDir)) {
+      if (name === short || name.startsWith(`${short}-`)) {
+        if (findNativeBindings(path.join(scopeDir, name)).length > 0) return true;
+      }
+    }
+  }
+  return false;
 }
 
 /**
@@ -115,11 +127,32 @@ function ensureModules(moduleDir, modules, version) {
       continue;
     }
 
-    const bindings = findNativeBindings(modDir);
-    if (bindings.length > 0 && canRequireWithStagedNode(moduleDir, mod)) {
-      console.log(
-        `[rebuild-native] ${mod}: ok (${bindings.length} binding(s), e.g. ${path.relative(modDir, bindings[0])})`,
+    const bindings = findNativeBindings(path.join(moduleDir, "node_modules", mod));
+    const napiOk = hasBinding(moduleDir, mod);
+    if ((bindings.length > 0 || napiOk) && canRequireWithStagedNode(moduleDir, mod)) {
+      console.log(`[rebuild-native] ${mod}: ok`);
+      continue;
+    }
+
+    // @napi-rs packages: reinstall optional platform binary instead of node-gyp.
+    if (mod.startsWith("@napi-rs/")) {
+      console.log(`[rebuild-native] ${mod}: reinstalling optional platform package`);
+      const reinstall = spawnSync(
+        "npm",
+        ["install", mod, "--omit=dev", "--include=optional", "--no-save"],
+        {
+          cwd: moduleDir,
+          env,
+          stdio: "inherit",
+          shell: process.platform === "win32",
+        },
       );
+      if (reinstall.status !== 0 || !canRequireWithStagedNode(moduleDir, mod)) {
+        throw new Error(
+          `${mod} has no working native binding for bundled Node ${version}`,
+        );
+      }
+      console.log(`[rebuild-native] ${mod}: reinstalled ok`);
       continue;
     }
 

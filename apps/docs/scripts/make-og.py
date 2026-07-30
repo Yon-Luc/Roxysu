@@ -9,7 +9,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 ROOT = Path(__file__).resolve().parent.parent
 ASSETS = ROOT / "assets"
-SHOT = ROOT / "screenshots" / "replay-analysis-modal.png"
+SHOT = ROOT / "screenshots" / "x.png"
 OUT = ASSETS / "og.png"
 
 W, H = 1200, 630
@@ -62,24 +62,22 @@ def main() -> None:
     tagline = "Local-first practice analytics\nfor osu!lazer"
     draw.multiline_text((72, 310), tagline, fill="#a7a7a7", font=tag_font, spacing=8)
 
-    # Screenshot panel on the right — full replay UI (playfield + analysis)
+    # Screenshot panel on the right — stats / "How you play"
     shot = Image.open(SHOT).convert("RGB")
     sw, sh = shot.size
-    # Prefer the main content band (skip a bit of bottom chrome)
-    crop = shot.crop((0, int(sh * 0.02), sw, int(sh * 0.88)))
+    crop = shot.crop((0, 0, sw, sh))
     target_w, target_h = 640, 460
     crop_ratio = crop.width / crop.height
     panel_ratio = target_w / target_h
     if crop_ratio > panel_ratio:
         new_h = crop.height
         new_w = int(new_h * panel_ratio)
-        # Bias right so the analysis sidebar stays visible
-        left = min(crop.width - new_w, int((crop.width - new_w) * 0.55))
+        left = (crop.width - new_w) // 2
         crop = crop.crop((left, 0, left + new_w, new_h))
     else:
         new_w = crop.width
         new_h = int(new_w / panel_ratio)
-        top = max(0, int((crop.height - new_h) * 0.15))
+        top = max(0, (crop.height - new_h) // 5)
         crop = crop.crop((0, top, new_w, top + new_h))
     crop = crop.resize((target_w, target_h), Image.Resampling.LANCZOS)
 

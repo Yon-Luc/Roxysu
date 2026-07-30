@@ -28,7 +28,6 @@ jobs:
     env:
       # Unsigned builds — fine for CI artifacts; users may see SmartScreen on first run.
       CSC_IDENTITY_AUTO_DISCOVERY: false
-      ROXYSU_NODE_VERSION: "22.14.0"
 
     steps:
       - name: Checkout
@@ -41,6 +40,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+
+      - name: Pin bundled Node to runner Node
+        shell: bash
+        run: |
+          echo "ROXYSU_NODE_VERSION=$(node -p process.versions.node)" >> "$GITHUB_ENV"
+          echo "Bundled Node will be $(node -p process.versions.node)"
 
       # Cache only Bun's download cache — NOT node_modules. Restoring Bun's
       # Windows junction/hardlink tree from actions/cache causes EPERM and
@@ -80,6 +85,8 @@ jobs:
 
       - name: Build Windows artifacts
         run: bun run desktop:dist:win
+        env:
+          ROXYSU_NODE_VERSION: ${{ env.ROXYSU_NODE_VERSION }}
 
       - name: Assert packaged layout
         run: bun run --cwd apps/desktop assert:packaged

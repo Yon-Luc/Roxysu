@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 /**
- * Rebuild staged native addons against the bundled Node ABI (not Electron).
+ * Ensure staged native addons load under the bundled Node ABI.
+ * Prefer existing prebuilds from build-pack; only rebuild when bindings are missing.
  */
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -21,11 +22,77 @@ function nodeVersion() {
   if (existsSync(versionFile)) {
     return readFileSync(versionFile, "utf8").trim();
   }
-  return process.env.ROXYSU_NODE_VERSION || "22.14.0";
+  return process.env.ROXYSU_NODE_VERSION || process.versions.node;
 }
 
-function rebuildModule(moduleDir, modules, version) {
-  console.log(`[rebuild-native] ${moduleDir}: ${modules.join(", ")} (node ${version})`);
+/** @param {string} dir */
+function findNativeBindings(dir) {
+  /** @type {string[]} */
+  const found = [];
+  if (!existsSync(dir)) return found;
+  const stack = [dir];
+  while (stack.length) {
+    const cur = stack.pop();
+    let entries;
+    try {
+      entries = readdirSync(cur, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const ent of entries) {
+      const full = path.join(cur, ent.name);
+      if (ent.isDirectory()) {
+        if (ent.name === ".git" || ent.name === "docs") continue;
+        stack.push(full);
+      } else if (ent.name.endsWith(".node")) {
+        found.push(full);
+      }
+    }
+  }
+  return found;
+}
+
+/**
+ * @param {string} moduleDir
+ * @param {string} mod
+ */
+function hasBinding(moduleDir, mod) {
+  const modDir = path.join(moduleDir, "node_modules", mod);
+  return findNativeBindings(modDir).length > 0;
+}
+
+/**
+ * Smoke-load a native module with the staged Node binary.
+ * @param {string} moduleDir
+ * @param {string} mod
+ */
+function canRequireWithStagedNode(moduleDir, mod) {
+  if (!existsSync(nodeBin)) return false;
+  const result = spawnSync(
+    nodeBin,
+    ["-e", `require(${JSON.stringify(mod)}); console.log('ok')`],
+    {
+      cwd: moduleDir,
+      encoding: "utf8",
+      env: { ...process.env, REALM_DISABLE_ANALYTICS: "1" },
+    },
+  );
+  if (result.status === 0) return true;
+  console.warn(
+    `[rebuild-native] require(${mod}) failed under staged node:\n${result.stderr || result.stdout}`,
+  );
+  return false;
+}
+
+/**
+ * @param {string} moduleDir
+ * @param {string[]} modules
+ * @param {string} version
+ */
+function ensureModules(moduleDir, modules, version) {
+  console.log(
+    `[rebuild-native] ${moduleDir}: ${modules.join(", ")} (node ${version})`,
+  );
   if (!existsSync(nodeBin)) {
     throw new Error(
       `bundled node missing at ${nodeBin} — run build:stage first`,
@@ -37,8 +104,8 @@ function rebuildModule(moduleDir, modules, version) {
     npm_config_runtime: "node",
     npm_config_target: version,
     npm_config_disturl: "https://nodejs.org/download/release",
-    npm_config_build_from_source: "true",
     REALM_DISABLE_ANALYTICS: "1",
+    npm_node_execpath: nodeBin,
   };
 
   for (const mod of modules) {
@@ -48,53 +115,87 @@ function rebuildModule(moduleDir, modules, version) {
       continue;
     }
 
-    // Prefer npm rebuild with staged node as the runtime for prebuilds/node-gyp.
-    console.log(`[rebuild-native] npm rebuild ${mod}`);
+    const bindings = findNativeBindings(modDir);
+    if (bindings.length > 0 && canRequireWithStagedNode(moduleDir, mod)) {
+      console.log(
+        `[rebuild-native] ${mod}: ok (${bindings.length} binding(s), e.g. ${path.relative(modDir, bindings[0])})`,
+      );
+      continue;
+    }
+
+    console.log(`[rebuild-native] ${mod}: fetching/rebuilding prebuild for node ${version}`);
     const npmResult = spawnSync(
       "npm",
       ["rebuild", mod, `--target=${version}`, "--runtime=node"],
       {
         cwd: moduleDir,
-        env: { ...env, npm_node_execpath: nodeBin },
+        env,
         stdio: "inherit",
         shell: process.platform === "win32",
       },
     );
-    if (npmResult.status === 0) continue;
 
-    const pkgJsonPath = path.join(modDir, "package.json");
-    const installScript = JSON.parse(readFileSync(pkgJsonPath, "utf8")).scripts
-      ?.install;
-    if (!installScript) {
-      console.warn(
-        `[rebuild-native] ${mod}: npm rebuild failed and no install script — assuming prebuilt ok`,
+    if (npmResult.status !== 0 || !canRequireWithStagedNode(moduleDir, mod)) {
+      // Try prebuild-install directly when present.
+      const prebuildBin = path.join(
+        modDir,
+        "node_modules",
+        "prebuild-install",
+        "bin.js",
       );
-      continue;
+      const localPrebuild = existsSync(prebuildBin)
+        ? prebuildBin
+        : path.join(moduleDir, "node_modules/prebuild-install/bin.js");
+      if (existsSync(localPrebuild) || existsSync(path.join(modDir, "package.json"))) {
+        const pkg = JSON.parse(
+          readFileSync(path.join(modDir, "package.json"), "utf8"),
+        );
+        const installScript = pkg.scripts?.install;
+        if (installScript) {
+          // Unset build-from-source so prebuild-install can download.
+          const installEnv = { ...env };
+          delete installEnv.npm_config_build_from_source;
+          const installResult = spawnSync(installScript, {
+            shell: true,
+            cwd: modDir,
+            env: installEnv,
+            stdio: "inherit",
+          });
+          if (installResult.status !== 0) {
+            throw new Error(`rebuild failed for ${mod}`);
+          }
+        } else if (npmResult.status !== 0) {
+          throw new Error(`rebuild failed for ${mod}`);
+        }
+      } else {
+        throw new Error(`rebuild failed for ${mod}`);
+      }
     }
-    console.log(`[rebuild-native] install script for ${mod}`);
-    const installResult = spawnSync(installScript, {
-      shell: true,
-      cwd: modDir,
-      env: { ...env, npm_node_execpath: nodeBin },
-      stdio: "inherit",
-    });
-    if (installResult.status !== 0) {
-      throw new Error(`rebuild failed for ${mod}`);
+
+    if (!hasBinding(moduleDir, mod) || !canRequireWithStagedNode(moduleDir, mod)) {
+      throw new Error(
+        `${mod} has no working native binding for bundled Node ${version}`,
+      );
     }
+    console.log(`[rebuild-native] ${mod}: rebuilt ok`);
   }
 }
 
 function main() {
   const version = nodeVersion();
-  rebuildModule(path.join(stageDir, "server"), ["better-sqlite3", "@napi-rs/lzma"], version);
+  ensureModules(
+    path.join(stageDir, "server"),
+    ["better-sqlite3", "@napi-rs/lzma"],
+    version,
+  );
 
   const realmDir = path.join(stageDir, "realm-reader");
   if (!existsSync(path.join(realmDir, "package.json"))) {
     throw new Error(
-      "realm-reader missing from stage — run build:stage before rebuild:native (archive comes after)",
+      "realm-reader missing from stage — run build:stage before rebuild:native",
     );
   }
-  rebuildModule(realmDir, ["realm", "better-sqlite3"], version);
+  ensureModules(realmDir, ["realm", "better-sqlite3"], version);
   console.log("[rebuild-native] done");
 }
 

@@ -28,8 +28,9 @@ const repoRoot = path.resolve(desktopRoot, "../..");
 const stageDir = path.join(desktopRoot, "stage");
 const require = createRequire(import.meta.url);
 
-/** Keep in sync with .github/workflows/desktop-win.yml node-version. */
-const NODE_VERSION = process.env.ROXYSU_NODE_VERSION || "22.14.0";
+/** Keep in sync with the Node that runs the pack (CI setup-node). Override via env. */
+const NODE_VERSION =
+  process.env.ROXYSU_NODE_VERSION || process.versions.node;
 
 const NATIVE_EXTERNALS = ["better-sqlite3", "@napi-rs/lzma", "realm"];
 const NATIVE_INSTALL_PKGS = ["better-sqlite3", "@napi-rs/lzma", "realm"];

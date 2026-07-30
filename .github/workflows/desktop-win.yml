@@ -41,15 +41,16 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Cache dependencies
+      # Cache only Bun's download cache — NOT node_modules. Restoring Bun's
+      # Windows junction/hardlink tree from actions/cache causes EPERM and
+      # broken "react/jsx-runtime" resolution during build:ui.
+      - name: Cache Bun install
         uses: actions/cache@v4
         with:
-          path: |
-            ~/.bun/install/cache
-            node_modules
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-install-${{ hashFiles('bun.lock') }}
           restore-keys: |
-            ${{ runner.os }}-bun-
+            ${{ runner.os }}-bun-install-
 
       - name: Cache Electron
         uses: actions/cache@v4
@@ -62,7 +63,8 @@ jobs:
             ${{ runner.os }}-electron-
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        # copyfile avoids flaky Windows hardlink/junction EPERM under Defender.
+        run: bun install --frozen-lockfile --backend=copyfile
 
       - name: Build Windows artifacts
         run: bun run desktop:dist:win

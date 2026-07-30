@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Roxysu — Local-first practice analytics for osu!lazer</title>
+    <meta
+      name="description"
+      content="Roxysu indexes your osu!lazer play history and serves a local practice companion — search scores, track mastery, group sessions, and sync smart collections. Offline on your machine."
+    />
+    <meta name="theme-color" content="#0c0c0c" />
+    <link rel="icon" href="assets/icon-192.png" type="image/png" />
+    <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
+    <meta property="og:title" content="Roxysu" />
+    <meta
+      property="og:description"
+      content="Local-first practice analytics for osu!lazer."
+    />
+    <meta property="og:image" content="screenshots/practice-page.png" />
+    <meta property="og:type" content="website" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Outfit:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <div class="bg-glow" aria-hidden="true"></div>
+
+    <header class="site-header">
+      <nav class="nav" aria-label="Primary">
+        <a class="brand" href="#">
+          <img src="assets/roxy.png" alt="" width="32" height="32" />
+          Roxysu
+        </a>
+        <ul class="nav-links">
+          <li><a href="#features">Features</a></li>
+          <li><a href="#query">Query language</a></li>
+          <li><a href="#start">Get started</a></li>
+          <li>
+            <a
+              class="nav-cta"
+              href="https://github.com/Yon-Luc/Roxysu"
+              rel="noopener noreferrer"
+              >GitHub</a
+            >
+          </li>
+        </ul>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="hero-brand">
+          <img src="assets/roxy.png" alt="" width="72" height="72" />
+          <span>Roxysu</span>
+        </div>
+        <h1>Local-first practice analytics for osu!lazer</h1>
+        <p class="hero-lead">
+          Index your play history, search every score, track mastery, and build
+          smart collections — all offline on your machine.
+        </p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="#start">Get started</a>
+          <a
+            class="btn btn-ghost"
+            href="https://github.com/Yon-Luc/Roxysu"
+            rel="noopener noreferrer"
+            >View on GitHub</a
+          >
+        </div>
+        <div class="hero-shot">
+          <figure class="shot-frame">
+            <img
+              src="screenshots/practice-page.png"
+              alt="Roxysu practice library with score distribution chart and map cards"
+              width="1600"
+              height="900"
+              fetchpriority="high"
+            />
+          </figure>
+        </div>
+      </section>
+
+      <section class="section" id="principles" aria-labelledby="principles-title">
+        <div class="section-head center reveal">
+          <p class="eyebrow">Why Roxysu</p>
+          <h2 id="principles-title">Practice tooling that stays on your PC</h2>
+          <p>
+            Built around read-only lazer access, one query language, and analytics
+            that help you decide what to play next.
+          </p>
+        </div>
+        <div class="pillars">
+          <article class="pillar reveal">
+            <h3>Local-only</h3>
+            <p>Your scores never leave your machine. No cloud account required.</p>
+          </article>
+          <article class="pillar reveal">
+            <h3>Read-only by default</h3>
+            <p>
+              Realm sync is read-only. Optional collection sync backs up
+              <code>client.realm</code> first.
+            </p>
+          </article>
+          <article class="pillar reveal">
+            <h3>Everything searchable</h3>
+            <p>
+              One DSL powers practice search, collections, and global find.
+            </p>
+          </article>
+          <article class="pillar reveal">
+            <h3>Analytics over browsing</h3>
+            <p>Mastery, sessions, retries, and skill trends — not just a score dump.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="features" aria-labelledby="features-title">
+        <div class="section-head reveal">
+          <p class="eyebrow">Features</p>
+          <h2 id="features-title">Everything you need between plays</h2>
+          <p>
+            From library search to live session recommendations — the same UI
+            whether you run via Bun or the desktop app.
+          </p>
+        </div>
+
+        <article class="feature reveal">
+          <div class="feature-copy">
+            <h3>Practice library</h3>
+            <p>
+              Browse every map you’ve touched as practice cards — play count,
+              best accuracy, misses, PP, mastery, and last played.
+            </p>
+            <ul>
+              <li>Plain text or query-language filters</li>
+              <li>Click distribution bars to refine the list</li>
+              <li>Sort by last played, accuracy, mastery, stars, and more</li>
+            </ul>
+          </div>
+          <div class="feature-media">
+            <figure class="shot-frame">
+              <img
+                src="screenshots/practice-page.png"
+                alt="Practice page with best-score distribution and map grid"
+                loading="lazy"
+                width="1600"
+                height="900"
+              />
+            </figure>
+          </div>
+        </article>
+
+        <article class="feature reverse reveal">
+          <div class="feature-copy">
+            <h3>Practice profiles</h3>
+            <p>
+              Per-beatmap deep dives with cover art, mastery, Sunny dan estimates,
+              pattern analysis, and recent sessions on that map.
+            </p>
+            <ul>
+              <li>7K density profile and pattern weights</li>
+              <li>Copy a search string for use in-game</li>
+              <li>Preview and open maps from one place</li>
+            </ul>
+          </div>
+          <div class="feature-media">
+            <figure class="shot-frame">
+              <img
+                src="screenshots/map-page.png"
+                alt="Beatmap practice profile with mastery, Sunny dan, and density chart"
+                loading="lazy"
+                width="1600"
+                height="900"
+              />
+            </figure>
+          </div>
+        </article>
+
+        <article class="feature reveal">
+          <div class="feature-copy">
+            <h3>Sessions &amp; Up Next</h3>
+            <p>
+              Scores auto-group into sessions by inactivity. Open the live current
+              session hub — updated as new plays land — and pull suggestions from
+              query filters or 7K recommendations.
+            </p>
+            <ul>
+              <li>Live current-session hub over SSE</li>
+              <li>Up Next accuracy / staleness filters</li>
+              <li>7K Push / Consistency / Deficit picks</li>
+            </ul>
+          </div>
+          <div class="feature-media">
+            <figure class="shot-frame">
+              <img
+                src="screenshots/current-session-page.png"
+                alt="Current session page with map suggestions and recent plays"
+                loading="lazy"
+                width="1600"
+                height="900"
+              />
+            </figure>
+          </div>
+        </article>
+
+        <article class="feature reverse reveal">
+          <div class="feature-copy">
+            <h3>Smart collections</h3>
+            <p>
+              Collections store query strings, not static lists — they stay current
+              as your library grows. Sync them into lazer as
+              <code>!Roxysu</code>-prefixed collections when you’re ready.
+            </p>
+            <ul>
+              <li>Create, edit, and paginate match results</li>
+              <li>Close lazer, then Sync to osu!lazer</li>
+              <li>Automatic <code>client.realm</code> backup before write</li>
+            </ul>
+          </div>
+          <div class="feature-media">
+            <figure class="shot-frame">
+              <img
+                src="screenshots/collections-page.png"
+                alt="Collections page with smart query collections and sync button"
+                loading="lazy"
+                width="1600"
+                height="900"
+              />
+            </figure>
+          </div>
+        </article>
+
+        <article class="feature reveal">
+          <div class="feature-copy">
+            <h3>Stats &amp; skill trends</h3>
+            <p>
+              See Push, Accuracy, and Consistency estimates, skill evolution over
+              time, weekly activity, and how you actually play sessions.
+            </p>
+            <ul>
+              <li>Top-N and timeframe filters</li>
+              <li>Rice / LN / FLN skillset mix</li>
+              <li>Grade and activity breakdowns</li>
+            </ul>
+          </div>
+          <div class="feature-media">
+            <figure class="shot-frame">
+              <img
+                src="screenshots/stats-page.png"
+                alt="Stats page with current skill cards and skill evolution chart"
+                loading="lazy"
+                width="1600"
+                height="900"
+              />
+            </figure>
+          </div>
+        </article>
+
+        <article class="feature reverse reveal">
+          <div class="feature-copy">
+            <h3>Replay analysis</h3>
+            <p>
+              Rewatch scores with timing histograms, miss patterns, and
+              column-level feedback — useful when a PB almost lands.
+            </p>
+            <ul>
+              <li>Early / late timing distribution</li>
+              <li>Miss tags for jack, chord, stream</li>
+              <li>Playback rate, scroll, and seek controls</li>
+            </ul>
+          </div>
+          <div class="feature-media">
+            <figure class="shot-frame">
+              <img
+                src="screenshots/replay-analysis-modal.png"
+                alt="Replay analysis with notefield, timing histogram, and miss list"
+                loading="lazy"
+                width="1600"
+                height="900"
+              />
+            </figure>
+          </div>
+        </article>
+      </section>
+
+      <section class="section" id="query" aria-labelledby="query-title">
+        <div class="section-head reveal">
+          <p class="eyebrow">Query language</p>
+          <h2 id="query-title">One DSL for search, collections, and Up Next</h2>
+          <p>
+            Plain text hits titles and artists. Field filters, ranges, and
+            boolean operators power everything else.
+          </p>
+        </div>
+        <div class="query-grid reveal">
+          <div class="query-chip">
+            mode:mania stars:5..6
+            <span>Mania maps in a star band</span>
+          </div>
+          <div class="query-chip">
+            key=7 ln&lt;10
+            <span>7K with low LN percentage</span>
+          </div>
+          <div class="query-chip">
+            acc:90..93 NOT played:last14d
+            <span>Stale maps in an accuracy window</span>
+          </div>
+          <div class="query-chip">
+            dan:"Regular 4" OR sunny:5..6
+            <span>Sunny dan labels and rework stars</span>
+          </div>
+        </div>
+        <div class="gallery" style="margin-top: 2rem">
+          <figure class="reveal">
+            <div class="shot-frame">
+              <img
+                src="screenshots/query-language-modal.png"
+                alt="In-app query language field reference"
+                loading="lazy"
+                width="1600"
+                height="900"
+              />
+            </div>
+            <figcaption>Field reference built into the app</figcaption>
+          </figure>
+          <figure class="reveal">
+            <div class="shot-frame">
+              <img
+                src="screenshots/control-k-modal.png"
+                alt="Global search / command palette"
+                loading="lazy"
+                width="1600"
+                height="900"
+              />
+            </div>
+            <figcaption>Global search with the same query grammar</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="more-title">
+        <div class="section-head center reveal">
+          <p class="eyebrow">More of the UI</p>
+          <h2 id="more-title">Sessions, previews, patterns, skins</h2>
+        </div>
+        <div class="gallery">
+          <figure class="reveal">
+            <div class="shot-frame">
+              <img
+                src="screenshots/sessions-page.png"
+                alt="Sessions list with live current session"
+                loading="lazy"
+                width="1600"
+                height="900"
+              />
+            </div>
+            <figcaption>Session history with a live “now playing” card</figcaption>
+          </figure>
+          <figure class="reveal">
+            <div class="shot-frame">
+              <img
+                src="screenshots/preview-modal.png"
+                alt="Beatmap preview modal"
+                loading="lazy"
+                width="1600"
+                height="900"
+              />
+            </div>
+            <figcaption>In-app beatmap preview</figcaption>
+          </figure>
+          <figure class="reveal">
+            <div class="shot-frame">
+              <img
+                src="screenshots/7kpatterns-modal.png"
+                alt="7K patterns modal"
+                loading="lazy"
+                width="1600"
+                height="900"
+              />
+            </div>
+            <figcaption>7K pattern breakdown</figcaption>
+          </figure>
+          <figure class="reveal">
+            <div class="shot-frame">
+              <img
+                src="screenshots/preview-skin-page.png"
+                alt="Skin preview settings"
+                loading="lazy"
+                width="1600"
+                height="900"
+              />
+            </div>
+            <figcaption>Skin / preview customization</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="section" id="start" aria-labelledby="start-title">
+        <div class="section-head reveal">
+          <p class="eyebrow">Get started</p>
+          <h2 id="start-title">Run it locally in a few minutes</h2>
+          <p>
+            Needs Bun, Node.js LTS, and an osu!lazer install with local play
+            history. On NixOS, use <code>nix develop</code>.
+          </p>
+        </div>
+        <div class="start reveal">
+          <ol>
+            <li>Clone the repository and install dependencies.</li>
+            <li>Start the server + realm sync with <code>bun run dev</code>.</li>
+            <li>Open <code>http://localhost:4321/</code> and wait for the first sync.</li>
+          </ol>
+          <pre class="terminal" tabindex="0"><code><span class="prompt">$</span> git clone https://github.com/Yon-Luc/Roxysu.git
+<span class="prompt">$</span> cd Roxysu
+<span class="prompt">$</span> bun install
+<span class="prompt">$</span> bun run dev
+<span class="comment"># → http://localhost:4321/</span></code></pre>
+          <p class="start-note">
+            Full setup notes, env vars, and Windows build tooling live in the
+            <a href="https://github.com/Yon-Luc/Roxysu#getting-started"
+              >README</a
+            >. A Windows desktop installer is in progress via Electron.
+          </p>
+          <div class="hero-actions" style="margin: 1.25rem 0 0; justify-content: flex-start">
+            <a
+              class="btn btn-primary"
+              href="https://github.com/Yon-Luc/Roxysu"
+              rel="noopener noreferrer"
+              >Open repository</a
+            >
+            <a
+              class="btn btn-ghost"
+              href="https://github.com/Yon-Luc/Roxysu/blob/master/README.md"
+              rel="noopener noreferrer"
+              >Read the docs</a
+            >
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="footer-inner">
+        <p>Roxysu — local-first osu!lazer practice companion.</p>
+        <div class="footer-links">
+          <a href="https://github.com/Yon-Luc/Roxysu" rel="noopener noreferrer"
+            >GitHub</a
+          >
+          <a
+            href="https://github.com/Yon-Luc/Roxysu/blob/master/README.md"
+            rel="noopener noreferrer"
+            >README</a
+          >
+          <a href="#features">Features</a>
+        </div>
+      </div>
+    </footer>
+
+    <script>
+      const reveals = document.querySelectorAll(".reveal");
+      if ("IntersectionObserver" in window) {
+        const io = new IntersectionObserver(
+          (entries) => {
+            for (const entry of entries) {
+              if (entry.isIntersecting) {
+                entry.target.classList.add("visible");
+                io.unobserve(entry.target);
+              }
+            }
+          },
+          { rootMargin: "0px 0px -8% 0px", threshold: 0.12 }
+        );
+        reveals.forEach((el) => io.observe(el));
+      } else {
+        reveals.forEach((el) => el.classList.add("visible"));
+      }
+    </script>
+  </body>
+</html>

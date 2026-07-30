@@ -1,0 +1,8 @@
+{
+  "name": "@roxysu/docs",
+  "private": true,
+  "scripts": {
+    "dev": "bunx --bun serve . -p 4173",
+    "start": "bunx --bun serve . -p 4173"
+  }
+}

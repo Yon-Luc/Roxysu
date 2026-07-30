@@ -20,11 +20,16 @@ export function connectLiveUpdates(queryClient: QueryClient): () => void {
     void queryClient.invalidateQueries({ queryKey: ["system"] });
     void queryClient.invalidateQueries({ queryKey: ["practice"] });
     void queryClient.invalidateQueries({ queryKey: ["beatmap"] });
-    void queryClient.invalidateQueries({ queryKey: ["beatmap-preview"] });
-    void queryClient.invalidateQueries({ queryKey: ["score-replay"] });
     void queryClient.invalidateQueries({ queryKey: ["sessions"] });
     void queryClient.invalidateQueries({ queryKey: ["collections"] });
     void queryClient.invalidateQueries({ queryKey: ["settings"] });
+  };
+
+  /** Fresh chart/audio hashes after sync — avoid mid-preview seeks resetting. */
+  const onSyncFinished = () => {
+    onLive();
+    void queryClient.invalidateQueries({ queryKey: ["beatmap-preview"] });
+    void queryClient.invalidateQueries({ queryKey: ["score-replay"] });
   };
 
   const onTosu = () => {
@@ -34,6 +39,8 @@ export function connectLiveUpdates(queryClient: QueryClient): () => void {
   for (const name of LIVE_EVENTS) {
     if (name === "tosu.updated") {
       source.addEventListener(name, onTosu);
+    } else if (name === "sync.finished") {
+      source.addEventListener(name, onSyncFinished);
     } else {
       source.addEventListener(name, onLive);
     }
@@ -47,6 +54,8 @@ export function connectLiveUpdates(queryClient: QueryClient): () => void {
     for (const name of LIVE_EVENTS) {
       if (name === "tosu.updated") {
         source.removeEventListener(name, onTosu);
+      } else if (name === "sync.finished") {
+        source.removeEventListener(name, onSyncFinished);
       } else {
         source.removeEventListener(name, onLive);
       }

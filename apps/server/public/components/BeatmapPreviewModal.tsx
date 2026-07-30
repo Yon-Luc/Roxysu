@@ -641,6 +641,7 @@ function BeatmapPreviewModal({
   useEffect(() => {
     previewSeekDone.current = false;
     clockRef.current.set(0, { playing: false, rate: prefsRef.current.rate });
+    audioRef.current?.pause();
     setAudioError(null);
     setCurrentMs(0);
     setDurationMs(0);
@@ -648,10 +649,18 @@ function BeatmapPreviewModal({
   }, [beatmapId, audioUrl]);
 
   useEffect(() => {
+    return () => {
+      audioRef.current?.pause();
+    };
+  }, []);
+
+  useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !audioUrl) return;
     const clock = clockRef.current;
-    previewSeekDone.current = false;
+    // Do not reset previewSeekDone here — that re-jumps to the preview
+    // point whenever listeners are re-bound (audioMountGen / canplay).
+    // Track changes already clear it in the effect above.
 
     function seekPreviewIfNeeded() {
       if (previewSeekDone.current) return;
@@ -697,6 +706,8 @@ function BeatmapPreviewModal({
       seekPreviewIfNeeded();
     }
     function onCanPlay() {
+      // Only positions once (previewSeekDone); safe even though canplay
+      // also fires after user seeks.
       seekPreviewIfNeeded();
     }
     function onPlay() {
@@ -734,7 +745,8 @@ function BeatmapPreviewModal({
     }
 
     return () => {
-      audio.pause();
+      // Don't pause here — this effect re-runs on audioMountGen and must
+      // not interrupt playback or snap the clock when re-attaching listeners.
       audio.removeEventListener("timeupdate", onTimeUpdate);
       audio.removeEventListener("seeking", onSeeking);
       audio.removeEventListener("seeked", onSeeked);
@@ -745,7 +757,7 @@ function BeatmapPreviewModal({
       audio.removeEventListener("ended", onEnded);
       audio.removeEventListener("error", onError);
     };
-  }, [audioUrl, previewTime, practiceRange, audioMountGen]);
+  }, [audioUrl, previewTime, audioMountGen]);
 
   function onSeek(e: FormEvent<HTMLInputElement>) {
     if (mode === "play") return;

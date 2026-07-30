@@ -12,6 +12,7 @@ import { toIso } from "../shared/serialize";
 export { SYNC_PAUSE_WHEN_UNFOCUSED_KEY, SYNC_UI_FOCUSED_KEY };
 
 export const systemRoutes = new Elysia({ prefix: "/system" })
+  .get("/healthz", () => ({ ok: true }))
   .use(dbPlugin)
   .get("/status", async ({ db }) => {
     const [beatmapCount] = await db.select({ n: count() }).from(beatmaps);

@@ -23,11 +23,12 @@ jobs:
   build:
     name: Build Windows installer
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
 
     env:
       # Unsigned builds — fine for CI artifacts; users may see SmartScreen on first run.
       CSC_IDENTITY_AUTO_DISCOVERY: false
+      ROXYSU_NODE_VERSION: "22.14.0"
 
     steps:
       - name: Checkout
@@ -62,12 +63,26 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-electron-
 
+      - name: Cache Node runtime downloads
+        uses: actions/cache@v4
+        with:
+          path: apps/desktop/stage/node
+          key: ${{ runner.os }}-roxysu-node-${{ env.ROXYSU_NODE_VERSION }}
+          restore-keys: |
+            ${{ runner.os }}-roxysu-node-
+
       - name: Install dependencies
         # copyfile avoids flaky Windows hardlink/junction EPERM under Defender.
         run: bun install --frozen-lockfile --backend=copyfile
 
+      - name: Setup MSVC for Win32 launcher
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Build Windows artifacts
         run: bun run desktop:dist:win
+
+      - name: Assert packaged layout
+        run: bun run --cwd apps/desktop assert:packaged
 
       - name: Upload installer artifacts
         uses: actions/upload-artifact@v4

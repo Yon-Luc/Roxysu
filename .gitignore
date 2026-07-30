@@ -5,6 +5,7 @@ node_modules/
 dist/
 apps/desktop/stage/
 apps/desktop/release/
+apps/desktop/launcher/win/dist/
 *.tsbuildinfo
 
 # .NET / mania-rating-calc publish artifacts

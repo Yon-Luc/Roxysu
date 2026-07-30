@@ -231,10 +231,12 @@ function shouldRun(event: AppEvent): boolean {
 
 /** Subscribe to import events and run the analytics pipeline (debounced). */
 export function startAnalyticsPipeline(db: Db): () => void {
-  // Boot always full-rebuilds regardless of the latest import delta payload.
+  // Defer boot work so Home's first paint is not fighting a full SQLite wipe.
+  // Use delta / needsFullRebuild — never forceFull on every launch.
+  const BOOT_IDLE_MS = 8_000;
   setTimeout(() => {
-    void runAnalyticsPipeline(db, { forceFull: true });
-  }, 1_500);
+    void runAnalyticsPipeline(db);
+  }, BOOT_IDLE_MS);
 
   return subscribe((event) => {
     if (!shouldRun(event)) return;

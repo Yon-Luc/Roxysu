@@ -48,4 +48,5 @@ export function createApiRoutes(options: { includeLab?: boolean } = {}) {
     : createFullApiRoutes();
 }
 
-export const apiRoutes = createFullApiRoutes();
+// Do NOT eagerly `createFullApiRoutes()` here — that pulls Rating Lab / mirrors
+// into the desktop Node cold-eval path even when createApp only mounts product routes.

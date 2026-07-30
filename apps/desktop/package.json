@@ -11,9 +11,12 @@
     "dev:smoke": "node ./scripts/run-electron.mjs .",
     "build:stage": "node ./scripts/build-pack.mjs",
     "rebuild:native": "node ./scripts/rebuild-native.mjs",
-    "pack": "bun run build:stage && bun run rebuild:native",
-    "dist:win": "bun run pack && electron-builder --win",
-    "dist:dir": "bun run pack && electron-builder --dir"
+    "archive:realm": "node ./scripts/archive-realm.mjs",
+    "build:launcher": "node ./scripts/build-win-launcher.mjs",
+    "pack": "bun run build:stage && bun run rebuild:native && bun run archive:realm",
+    "assert:packaged": "node ./scripts/assert-packaged.mjs",
+    "dist:win": "bun run build:launcher && bun run pack && electron-builder --win && bun run assert:packaged",
+    "dist:dir": "bun run pack && electron-builder --dir && bun run assert:packaged"
   },
   "build": {
     "appId": "dev.roxysu.desktop",
@@ -21,6 +24,7 @@
     "directories": {
       "output": "release"
     },
+    "afterPack": "./scripts/after-pack.mjs",
     "files": [
       "main.js",
       "preload.js",
@@ -37,8 +41,16 @@
         "to": "server"
       },
       {
-        "from": "stage/realm-reader",
-        "to": "realm-reader"
+        "from": "stage/node",
+        "to": "node"
+      },
+      {
+        "from": "stage/splash.html",
+        "to": "splash.html"
+      },
+      {
+        "from": "stage/realm-reader.tgz",
+        "to": "realm-reader.tgz"
       }
     ],
     "win": {

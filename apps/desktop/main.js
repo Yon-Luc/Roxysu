@@ -3,7 +3,7 @@ const { spawn } = require("node:child_process");
 const path = require("node:path");
 const http = require("node:http");
 const fs = require("node:fs");
-const { resolveDesktopPaths, ensureParentDir } = require("./paths");
+const { resolveDesktopPaths, ensureParentDir, ensureRealmExtracted } = require("./paths");
 
 // Stable userData folder: %APPDATA%\Roxysu (Windows) / XDG or Application Support.
 app.setName("Roxysu");
@@ -17,9 +17,83 @@ let realmChild = null;
 /** @type {number[]} */
 const childLogFds = [];
 let shuttingDown = false;
+/** @type {string | null} */
+let desktopLogPath = null;
+const processStartedAt = Date.now();
 
 const PORT = Number(process.env.ROXYSU_PORT ?? 4321);
 const HOST = process.env.ROXYSU_HOST ?? "127.0.0.1";
+const WINDOW_READY_MARKER = "electron-window-ready";
+
+/**
+ * Resolve a writable log dir before whenReady (userData may still work via env/name).
+ */
+function earlyDataDir() {
+  if (process.env.ROXYSU_DATA_DIR?.trim()) return process.env.ROXYSU_DATA_DIR.trim();
+  try {
+    return app.getPath("userData");
+  } catch {
+    if (process.platform === "win32") {
+      const base = process.env.APPDATA || path.join(process.env.USERPROFILE || ".", "AppData", "Roaming");
+      return path.join(base, "Roxysu");
+    }
+    if (process.platform === "darwin") {
+      const home = process.env.HOME || ".";
+      return path.join(home, "Library", "Application Support", "Roxysu");
+    }
+    const home = process.env.HOME || ".";
+    return path.join(home, ".config", "Roxysu");
+  }
+}
+
+/**
+ * @param {string} message
+ */
+function desktopLog(message) {
+  const line = `${new Date().toISOString()} (+${Date.now() - processStartedAt}ms) ${message}\n`;
+  try {
+    if (!desktopLogPath) {
+      const logDir = path.join(earlyDataDir(), "logs");
+      fs.mkdirSync(logDir, { recursive: true });
+      desktopLogPath = path.join(logDir, "desktop.log");
+    }
+    fs.appendFileSync(desktopLogPath, line);
+  } catch {
+    // ignore — logging must never block startup
+  }
+  console.log(`[roxysu-desktop] ${message}`);
+}
+
+desktopLog(`process_start pid=${process.pid} packaged=${String(app.isPackaged)} exec=${process.execPath}`);
+
+/**
+ * Tell the Win32 bootstrap stub it can exit (Electron window is visible).
+ * @param {string} dataDir
+ */
+function signalWindowReady(dataDir) {
+  try {
+    const marker = path.join(dataDir, "logs", WINDOW_READY_MARKER);
+    fs.mkdirSync(path.dirname(marker), { recursive: true });
+    fs.writeFileSync(marker, `${Date.now()}\n`, "utf8");
+  } catch (err) {
+    desktopLog(`window-ready marker failed: ${err}`);
+  }
+}
+
+/**
+ * @param {string} dataDir
+ * @param {string} label
+ */
+function openChildLogFd(dataDir, label) {
+  const logDir = path.join(dataDir, "logs");
+  fs.mkdirSync(logDir, { recursive: true });
+  const logPath = path.join(logDir, `${label}.log`);
+  const fd = fs.openSync(logPath, "a");
+  fs.writeSync(fd, `\n--- ${new Date().toISOString()} starting ${label} ---\n`);
+  childLogFds.push(fd);
+  desktopLog(`${label} log: ${logPath}`);
+  return { logPath, fd };
+}
 
 function resolveTsx(repoRoot, serverDir, realmDir) {
   const candidates = [
@@ -34,22 +108,6 @@ function resolveTsx(repoRoot, serverDir, realmDir) {
 }
 
 /**
- * Append-only log under userData so packaged GUI launches are debuggable.
- * @param {string} dataDir
- * @param {string} label
- */
-function openChildLogFd(dataDir, label) {
-  const logDir = path.join(dataDir, "logs");
-  fs.mkdirSync(logDir, { recursive: true });
-  const logPath = path.join(logDir, `${label}.log`);
-  const fd = fs.openSync(logPath, "a");
-  fs.writeSync(fd, `\n--- ${new Date().toISOString()} starting ${label} ---\n`);
-  childLogFds.push(fd);
-  console.log(`[roxysu-desktop] ${label} log: ${logPath}`);
-  return { logPath, fd };
-}
-
-/**
  * @param {ReturnType<typeof resolveDesktopPaths>} paths
  * @param {string} entry
  * @param {string} cwd
@@ -59,10 +117,21 @@ function openChildLogFd(dataDir, label) {
 function spawnNodeEntry(paths, entry, cwd, extraEnv, label) {
   const env = { ...process.env, ...extraEnv };
 
-  // Packaged (and any .js entry): run Electron as Node. Never use shell — on
-  // Windows shell:true opens blank cmd windows and can break ELECTRON_RUN_AS_NODE.
   if (paths.isPackaged || entry.endsWith(".js")) {
     const { fd } = openChildLogFd(paths.dataDir, label);
+    const nodeBin = paths.nodeBin;
+    if (nodeBin && fs.existsSync(nodeBin)) {
+      desktopLog(`spawn ${label} via nodeBin=${nodeBin}`);
+      return spawn(nodeBin, [entry], {
+        cwd,
+        env,
+        stdio: ["ignore", fd, fd],
+        windowsHide: true,
+        shell: false,
+      });
+    }
+    // Fallback: Electron as Node (dev packs / missing bundled node).
+    desktopLog(`spawn ${label} via ELECTRON_RUN_AS_NODE exec=${process.execPath}`);
     return spawn(process.execPath, [entry], {
       cwd,
       env: {
@@ -75,7 +144,6 @@ function spawnNodeEntry(paths, entry, cwd, extraEnv, label) {
     });
   }
 
-  // Dev: tsx on TypeScript entrypoints. Windows .bin shims are .cmd and need shell.
   const tsxBin = resolveTsx(paths.repoRoot, paths.serverDir, paths.realmDir);
   const cmd = tsxBin === "npx" ? "npx" : tsxBin;
   const cmdArgs = tsxBin === "npx" ? ["tsx", entry] : [entry];
@@ -95,9 +163,10 @@ function spawnNodeEntry(paths, entry, cwd, extraEnv, label) {
  */
 function waitForServer(port, host, timeoutMs = 180_000) {
   const started = Date.now();
+  const healthPath = "/api/system/healthz";
   return new Promise((resolve, reject) => {
     const tryOnce = () => {
-      const req = http.get({ host, port, path: "/api/system/status", timeout: 1500 }, (res) => {
+      const req = http.get({ host, port, path: healthPath, timeout: 1500 }, (res) => {
         res.resume();
         if ((res.statusCode ?? 500) < 500) {
           resolve(undefined);
@@ -114,7 +183,11 @@ function waitForServer(port, host, timeoutMs = 180_000) {
 
     const retry = () => {
       if (Date.now() - started > timeoutMs) {
-        reject(new Error(`Timed out waiting for Roxysu at http://${host}:${port}`));
+        reject(
+          new Error(
+            `Timed out waiting for Roxysu at http://${host}:${port}${healthPath}`,
+          ),
+        );
         return;
       }
       setTimeout(tryOnce, 250);
@@ -142,26 +215,44 @@ async function maybeClearHttpCache(paths) {
     if (fs.existsSync(markerPath) && fs.readFileSync(markerPath, "utf8") === token) {
       return;
     }
+    desktopLog(`clearCache start (${token})`);
     const { session } = require("electron");
     await session.defaultSession.clearCache();
     fs.writeFileSync(markerPath, token, "utf8");
-    console.log(`[roxysu-desktop] cleared HTTP cache (${token})`);
+    desktopLog(`clearCache done (${token})`);
   } catch (err) {
-    console.error("[roxysu-desktop] clearCache failed", err);
+    desktopLog(`clearCache failed: ${err}`);
   }
+}
+
+/**
+ * @param {ReturnType<typeof resolveDesktopPaths>} paths
+ */
+function resolveSplashHtml(paths) {
+  const candidates = [
+    path.join(paths.resourcesDir || "", "splash.html"),
+    path.join(__dirname, "splash.html"),
+  ];
+  for (const candidate of candidates) {
+    if (candidate && fs.existsSync(candidate)) return candidate;
+  }
+  return path.join(__dirname, "splash.html");
 }
 
 /**
  * Show a local splash immediately so startup wait for the API isn't a blank desktop.
  * Never await clearCache / children before this — on Windows that can mean minutes of
  * no window while Defender + Chromium cache wipe run.
+ * @param {ReturnType<typeof resolveDesktopPaths>} paths
  */
-function createSplashWindow() {
+function createSplashWindow(paths) {
+  const splashPath = resolveSplashHtml(paths);
+  desktopLog(`createSplashWindow splash=${splashPath} exists=${fs.existsSync(splashPath)}`);
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
     title: "Roxysu",
-    // Show immediately (dark chrome) — do not wait for ready-to-show / HTML.
     show: true,
     backgroundColor: "#12141a",
     webPreferences: {
@@ -175,8 +266,23 @@ function createSplashWindow() {
     mainWindow = null;
   });
 
-  // Fire-and-forget: HTML paints into the already-visible window.
-  void mainWindow.loadFile(path.join(__dirname, "splash.html"));
+  mainWindow.webContents.on("did-fail-load", (_e, code, desc, url) => {
+    desktopLog(`splash did-fail-load code=${code} desc=${desc} url=${url}`);
+  });
+
+  void mainWindow
+    .loadFile(splashPath)
+    .then(() => {
+      desktopLog("splash loadFile ok");
+      signalWindowReady(paths.dataDir);
+    })
+    .catch((err) => {
+      desktopLog(`splash loadFile failed: ${err}`);
+      signalWindowReady(paths.dataDir);
+    });
+
+  // Marker even if HTML fails — dark chrome is still a visible window for the stub.
+  signalWindowReady(paths.dataDir);
 }
 
 /**
@@ -185,6 +291,17 @@ function createSplashWindow() {
  */
 function spawnRealmReader(paths, sharedEnv) {
   if (realmChild && !realmChild.killed) return;
+  try {
+    ensureRealmExtracted(paths);
+  } catch (err) {
+    desktopLog(`realm extract failed: ${err}`);
+    return;
+  }
+  if (!fs.existsSync(paths.realmEntry)) {
+    desktopLog(`realm entry missing: ${paths.realmEntry}`);
+    return;
+  }
+  desktopLog(`spawn realm-reader dir=${paths.realmDir}`);
   realmChild = spawnNodeEntry(
     paths,
     paths.realmEntry,
@@ -194,9 +311,7 @@ function spawnRealmReader(paths, sharedEnv) {
   );
   realmChild.on("exit", (code, signal) => {
     if (!shuttingDown) {
-      console.error(
-        `[roxysu-desktop] realm-reader exited code=${code} signal=${signal}`,
-      );
+      desktopLog(`realm-reader exited code=${code} signal=${signal}`);
     }
   });
 }
@@ -223,14 +338,13 @@ async function setSplashStatus(text, opts = {}) {
   }
 }
 
-/**
- * Navigate the existing window from splash → app once the local server is up.
- */
 async function loadAppIntoWindow() {
   if (!mainWindow || mainWindow.isDestroyed()) {
     throw new Error("Main window missing when loading app");
   }
-  await mainWindow.loadURL(`http://${HOST}:${PORT}/`);
+  const url = `http://${HOST}:${PORT}/`;
+  desktopLog(`loadURL ${url}`);
+  await mainWindow.loadURL(url);
 }
 
 /**
@@ -242,7 +356,7 @@ function stopChild(child, label) {
   try {
     child.kill("SIGTERM");
   } catch (err) {
-    console.error(`[roxysu-desktop] failed to stop ${label}`, err);
+    desktopLog(`failed to stop ${label}: ${err}`);
   }
 }
 
@@ -269,6 +383,7 @@ async function shutdown() {
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
+  desktopLog("second_instance_lock_failed — quitting");
   app.quit();
 } else {
   app.on("second-instance", () => {
@@ -278,31 +393,32 @@ if (!gotLock) {
     }
   });
 
+  desktopLog("awaiting whenReady");
   app.whenReady().then(async () => {
+    desktopLog("whenReady");
     const paths = resolveDesktopPaths(app);
     ensureParentDir(paths.dbPath);
     fs.mkdirSync(path.join(paths.dataDir, "backups"), { recursive: true });
+    fs.mkdirSync(path.join(paths.dataDir, "logs"), { recursive: true });
 
     if (!fs.existsSync(path.join(paths.staticDir, "index.html"))) {
-      console.error(
-        `[roxysu-desktop] missing UI build at ${paths.staticDir}` +
-          (paths.isPackaged
-            ? ""
-            : " — run: bun run --cwd apps/server build:ui"),
+      desktopLog(
+        `missing UI build at ${paths.staticDir}` +
+          (paths.isPackaged ? "" : " — run: bun run --cwd apps/server build:ui"),
       );
       app.exit(1);
       return;
     }
 
-    console.log(`[roxysu-desktop] dataDir=${paths.dataDir}`);
-    console.log(`[roxysu-desktop] dbPath=${paths.dbPath}`);
-    console.log(`[roxysu-desktop] staticDir=${paths.staticDir}`);
+    desktopLog(`dataDir=${paths.dataDir}`);
+    desktopLog(`dbPath=${paths.dbPath}`);
+    desktopLog(`staticDir=${paths.staticDir}`);
+    desktopLog(`nodeBin=${paths.nodeBin || "(none)"}`);
+    desktopLog(`realmArchive=${paths.realmArchive || "(none)"}`);
 
-    // Drop the default File/Edit/View/Window menu bar (Windows/Linux).
     Menu.setApplicationMenu(null);
 
-    // Window first — before child spawns — so Windows isn't blank.
-    createSplashWindow();
+    createSplashWindow(paths);
     void setSplashStatus("Starting");
 
     const sharedEnv = {
@@ -317,9 +433,7 @@ if (!gotLock) {
       ROXYSU_MIGRATIONS_FOLDER: paths.migrationsFolder,
     };
 
-    // Server only first. Realm natives are ~GB and AV-scanning them in parallel
-    // with the server cold-start is a common cause of multi-minute blank waits
-    // on Windows .exe launches.
+    desktopLog("spawn server");
     serverChild = spawnNodeEntry(
       paths,
       paths.serverEntry,
@@ -329,39 +443,38 @@ if (!gotLock) {
     );
     serverChild.on("exit", (code, signal) => {
       if (!shuttingDown) {
-        console.error(`[roxysu-desktop] server exited code=${code} signal=${signal}`);
+        desktopLog(`server exited code=${code} signal=${signal}`);
         void shutdown().then(() => app.exit(code ?? 1));
       }
     });
 
     void setSplashStatus("Waiting for server");
+    desktopLog("waitForServer start");
 
     try {
       await waitForServer(PORT, HOST);
     } catch (err) {
-      console.error("[roxysu-desktop]", err);
-      console.error(
-        `[roxysu-desktop] see logs under ${path.join(paths.dataDir, "logs")}`,
-      );
+      desktopLog(`waitForServer failed: ${err}`);
+      desktopLog(`see logs under ${path.join(paths.dataDir, "logs")}`);
       await setSplashStatus("Failed to start — see logs", { animateDots: false });
       await shutdown();
       app.exit(1);
       return;
     }
 
+    desktopLog("waitForServer ok");
     await setSplashStatus("Loading");
-    // After :4321 is up — never before splash — and only when epoch changes.
     await maybeClearHttpCache(paths);
     await loadAppIntoWindow();
-    console.log("[roxysu-desktop] ready");
+    desktopLog("ready");
 
-    // Defer Realm until the UI is up so Defender/IO don't starve :4321.
+    // Defer Realm until the UI is up; extract archive lazily (shrink AV scan at install).
     spawnRealmReader(paths, sharedEnv);
 
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         void (async () => {
-          createSplashWindow();
+          createSplashWindow(paths);
           await loadAppIntoWindow();
         })();
       }

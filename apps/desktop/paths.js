@@ -1,14 +1,17 @@
 const path = require("node:path");
 const fs = require("node:fs");
+const { execFileSync } = require("node:child_process");
 
 /**
  * Resolve monorepo vs packaged Electron resource layouts.
  *
- * Packaged layout (electron-builder, future):
+ * Packaged layout (electron-builder):
  *   resources/
- *     public/           built UI
- *     server/           Node server entry + deps
- *     realm-reader/     realm sync entry + schema JSON
+ *     public/              built UI
+ *     server/              Node server entry + deps
+ *     node/                bundled Node runtime (node / node.exe)
+ *     splash.html          startup splash (also in asar)
+ *     realm-reader.tgz     compressed realm payload (extracted on first sync use)
  *
  * Dev (monorepo): apps/desktop → repo root → apps/server, apps/realm-reader
  */
@@ -24,9 +27,14 @@ function resolveDesktopPaths(app) {
     const dataDir =
       process.env.ROXYSU_DATA_DIR?.trim() || app.getPath("userData");
     const serverDir = path.join(resources, "server");
+    const nodeBinName = process.platform === "win32" ? "node.exe" : "node";
+    const nodeBin = path.join(resources, "node", nodeBinName);
+    const realmArchive = path.join(resources, "realm-reader.tgz");
+    const realmDir = path.join(dataDir, "runtime", "realm-reader");
     return {
       isPackaged: true,
       repoRoot: null,
+      resourcesDir: resources,
       dataDir,
       dbPath: process.env.DB_PATH?.trim() || path.join(dataDir, "data.sqlite"),
       staticDir:
@@ -36,15 +44,16 @@ function resolveDesktopPaths(app) {
       serverEntry:
         process.env.ROXYSU_SERVER_ENTRY?.trim() ||
         path.join(resources, "server", "index.node.js"),
-      // Packaged: migrations are copied next to the server bundle (see build-pack.mjs).
       migrationsFolder: path.join(serverDir, "drizzle"),
-      realmDir: path.join(resources, "realm-reader"),
+      nodeBin: fs.existsSync(nodeBin) ? nodeBin : null,
+      realmArchive: fs.existsSync(realmArchive) ? realmArchive : null,
+      realmDir,
       realmEntry:
         process.env.ROXYSU_REALM_ENTRY?.trim() ||
-        path.join(resources, "realm-reader", "index.js"),
+        path.join(realmDir, "index.js"),
       realmSchema:
         process.env.ROXYSU_REALM_SCHEMA?.trim() ||
-        path.join(resources, "realm-reader", "schemas", "osu-client.schema.json"),
+        path.join(realmDir, "schemas", "osu-client.schema.json"),
     };
   }
 
@@ -58,6 +67,7 @@ function resolveDesktopPaths(app) {
   return {
     isPackaged: false,
     repoRoot,
+    resourcesDir: desktopRoot,
     dataDir,
     dbPath: process.env.DB_PATH?.trim() || path.join(dataDir, "data.sqlite"),
     staticDir:
@@ -67,8 +77,9 @@ function resolveDesktopPaths(app) {
     serverEntry:
       process.env.ROXYSU_SERVER_ENTRY?.trim() ||
       path.join(serverDir, "src", "index.node.ts"),
-    // Dev: migrations live in the db package, not under apps/server.
     migrationsFolder: path.join(repoRoot, "packages", "db", "drizzle"),
+    nodeBin: null,
+    realmArchive: null,
     realmDir,
     realmEntry:
       process.env.ROXYSU_REALM_ENTRY?.trim() ||
@@ -86,4 +97,52 @@ function ensureParentDir(filePath) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
 }
 
-module.exports = { resolveDesktopPaths, ensureParentDir };
+/**
+ * Extract packaged realm-reader.tgz into userData on first use so the install
+ * tree stays small for Defender (archive is one file vs ~GB of natives).
+ * @param {{ realmArchive: string | null, realmDir: string, realmEntry: string }} paths
+ */
+function ensureRealmExtracted(paths) {
+  if (!paths.realmArchive) {
+    // Dev / unpacked layout already has realmDir.
+    if (!fs.existsSync(paths.realmEntry) && !fs.existsSync(paths.realmDir)) {
+      throw new Error(`realm-reader missing at ${paths.realmDir}`);
+    }
+    return;
+  }
+
+  const marker = path.join(paths.realmDir, ".roxysu-extracted");
+  if (fs.existsSync(marker) && fs.existsSync(paths.realmEntry)) {
+    return;
+  }
+
+  fs.mkdirSync(paths.realmDir, { recursive: true });
+  // Windows 10+ and macOS/Linux ship a tar that understands gzip.
+  execFileSync(
+    "tar",
+    ["-xzf", paths.realmArchive, "-C", paths.realmDir, "--strip-components=1"],
+    { stdio: "inherit" },
+  );
+  // tarball root is "realm-reader/..." — if strip failed on some tar, flatten.
+  const nested = path.join(paths.realmDir, "realm-reader", "index.js");
+  if (!fs.existsSync(paths.realmEntry) && fs.existsSync(nested)) {
+    // Move nested contents up.
+    const nestedDir = path.join(paths.realmDir, "realm-reader");
+    for (const name of fs.readdirSync(nestedDir)) {
+      fs.renameSync(path.join(nestedDir, name), path.join(paths.realmDir, name));
+    }
+    fs.rmSync(nestedDir, { recursive: true, force: true });
+  }
+  if (!fs.existsSync(paths.realmEntry)) {
+    throw new Error(
+      `realm extract did not produce ${paths.realmEntry} from ${paths.realmArchive}`,
+    );
+  }
+  fs.writeFileSync(marker, new Date().toISOString(), "utf8");
+}
+
+module.exports = {
+  resolveDesktopPaths,
+  ensureParentDir,
+  ensureRealmExtracted,
+};

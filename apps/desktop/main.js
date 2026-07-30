@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require("electron");
+const { app, BrowserWindow, Menu } = require("electron");
 const { spawn } = require("node:child_process");
 const path = require("node:path");
 const http = require("node:http");
@@ -278,6 +278,9 @@ if (!gotLock) {
     console.log(`[roxysu-desktop] dataDir=${paths.dataDir}`);
     console.log(`[roxysu-desktop] dbPath=${paths.dbPath}`);
     console.log(`[roxysu-desktop] staticDir=${paths.staticDir}`);
+
+    // Drop the default File/Edit/View/Window menu bar (Windows/Linux).
+    Menu.setApplicationMenu(null);
 
     // Window first so the user sees a spinner while Node children boot.
     await createSplashWindow(paths);

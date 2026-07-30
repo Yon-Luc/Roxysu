@@ -3,7 +3,14 @@
  * Stage Roxysu server + realm-reader + UI for electron-builder extraResources.
  */
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as esbuild from "esbuild";
@@ -14,6 +21,7 @@ const repoRoot = path.resolve(desktopRoot, "../..");
 const stageDir = path.join(desktopRoot, "stage");
 
 const NATIVE_EXTERNALS = ["better-sqlite3", "@napi-rs/lzma", "realm"];
+const NATIVE_INSTALL_PKGS = ["better-sqlite3", "@napi-rs/lzma", "realm"];
 
 function log(step) {
   console.log(`[build-pack] ${step}`);
@@ -30,17 +38,69 @@ function run(cmd, args, options = {}) {
   }
 }
 
+function nativeInstallPackages(cwd) {
+  const pkgJson = JSON.parse(readFileSync(path.join(cwd, "package.json"), "utf8"));
+  const deps = { ...pkgJson.dependencies, ...pkgJson.optionalDependencies };
+  return NATIVE_INSTALL_PKGS.filter((name) => deps[name]);
+}
+
+/** Run package `install` scripts only — skips realm's broken analytics postinstall. */
+function runNativeInstallScripts(cwd, packages) {
+  const binDir = path.join(cwd, "node_modules", ".bin");
+  const env = {
+    ...process.env,
+    REALM_DISABLE_ANALYTICS: "1",
+    PATH: existsSync(binDir)
+      ? `${binDir}${path.delimiter}${process.env.PATH ?? ""}`
+      : process.env.PATH,
+  };
+  for (const pkg of packages) {
+    const modDir = path.join(cwd, "node_modules", pkg);
+    const pkgJsonPath = path.join(modDir, "package.json");
+    if (!existsSync(pkgJsonPath)) continue;
+    const installScript = JSON.parse(readFileSync(pkgJsonPath, "utf8")).scripts?.install;
+    if (!installScript) continue;
+    log(`native install: ${pkg}`);
+    const result = spawnSync(installScript, {
+      shell: true,
+      cwd: modDir,
+      stdio: "inherit",
+      env,
+    });
+    if (result.status !== 0) {
+      throw new Error(`${pkg} install script failed with code ${result.status}`);
+    }
+  }
+}
+
 function installProductionDeps(cwd, label) {
   log(`installing native deps in ${label}`);
+  const env = { ...process.env, REALM_DISABLE_ANALYTICS: "1" };
+  const installArgs = ["--omit=dev", "--ignore-scripts"];
   if (existsSync(path.join(cwd, "package-lock.json"))) {
-    run("npm", ["ci", "--omit=dev"], { cwd });
-    return;
+    run("npm", ["ci", ...installArgs], { cwd, env });
+  } else {
+    try {
+      run("npm", ["install", ...installArgs, "--no-package-lock"], { cwd, env });
+    } catch {
+      run("bun", ["install", "--production", "--ignore-scripts"], { cwd, env });
+    }
   }
-  try {
-    run("npm", ["install", "--omit=dev", "--no-package-lock", "--foreground-scripts"], { cwd });
-  } catch {
-    run("bun", ["install", "--production"], { cwd });
-  }
+  runNativeInstallScripts(cwd, nativeInstallPackages(cwd));
+}
+
+function stagePackageJson(name, dependencies) {
+  const allowScripts = Object.fromEntries(
+    Object.keys(dependencies).map((pkg) => [pkg, true]),
+  );
+  return {
+    name,
+    private: true,
+    type: "module",
+    dependencies,
+    allowScripts,
+    trustedDependencies: Object.keys(dependencies),
+  };
 }
 
 async function bundleEntry({ entry, outfile, label }) {
@@ -108,38 +168,23 @@ async function main() {
     label: "realm-reader syncCollections",
   });
 
+  const serverDeps = {
+    "better-sqlite3": "^12.10.0",
+    "@napi-rs/lzma": "^1.5.1",
+  };
+  const realmReaderDeps = {
+    realm: "^12.14.0",
+    "better-sqlite3": "^12.10.0",
+  };
+
   writeFileSync(
     path.join(stageDir, "server/package.json"),
-    `${JSON.stringify(
-      {
-        name: "roxysu-server-stage",
-        private: true,
-        type: "module",
-        dependencies: {
-          "better-sqlite3": "^12.10.0",
-          "@napi-rs/lzma": "^1.5.1",
-        },
-      },
-      null,
-      2,
-    )}\n`,
+    `${JSON.stringify(stagePackageJson("roxysu-server-stage", serverDeps), null, 2)}\n`,
   );
 
   writeFileSync(
     path.join(stageDir, "realm-reader/package.json"),
-    `${JSON.stringify(
-      {
-        name: "roxysu-realm-reader-stage",
-        private: true,
-        type: "module",
-        dependencies: {
-          realm: "^12.14.0",
-          "better-sqlite3": "^12.10.0",
-        },
-      },
-      null,
-      2,
-    )}\n`,
+    `${JSON.stringify(stagePackageJson("roxysu-realm-reader-stage", realmReaderDeps), null, 2)}\n`,
   );
 
   installProductionDeps(path.join(stageDir, "server"), "server");

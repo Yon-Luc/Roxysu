@@ -152,15 +152,18 @@ async function maybeClearHttpCache(paths) {
 }
 
 /**
+ * Show a local splash immediately so startup wait for the API isn't a blank desktop.
  * @param {ReturnType<typeof resolveDesktopPaths>} paths
  */
-async function createWindow(paths) {
+async function createSplashWindow(paths) {
   await maybeClearHttpCache(paths);
 
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
     title: "Roxysu",
+    show: false,
+    backgroundColor: "#12141a",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -168,11 +171,47 @@ async function createWindow(paths) {
     },
   });
 
-  await mainWindow.loadURL(`http://${HOST}:${PORT}/`);
+  mainWindow.once("ready-to-show", () => {
+    mainWindow?.show();
+  });
 
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
+
+  await mainWindow.loadFile(path.join(__dirname, "splash.html"));
+}
+
+/**
+ * @param {string} text
+ * @param {{ animateDots?: boolean }} [opts]
+ */
+async function setSplashStatus(text, opts = {}) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const animateDots = opts.animateDots !== false;
+  const safe = JSON.stringify(text);
+  try {
+    await mainWindow.webContents.executeJavaScript(
+      `(() => {
+        const el = document.getElementById("status");
+        if (!el) return;
+        el.classList.toggle("dots", ${animateDots ? "true" : "false"});
+        el.textContent = ${safe};
+      })()`,
+    );
+  } catch {
+    // Splash may already have navigated away.
+  }
+}
+
+/**
+ * Navigate the existing window from splash → app once the local server is up.
+ */
+async function loadAppIntoWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    throw new Error("Main window missing when loading app");
+  }
+  await mainWindow.loadURL(`http://${HOST}:${PORT}/`);
 }
 
 /**
@@ -240,6 +279,10 @@ if (!gotLock) {
     console.log(`[roxysu-desktop] dbPath=${paths.dbPath}`);
     console.log(`[roxysu-desktop] staticDir=${paths.staticDir}`);
 
+    // Window first so the user sees a spinner while Node children boot.
+    await createSplashWindow(paths);
+    await setSplashStatus("Starting");
+
     const sharedEnv = {
       ROXYSU_DESKTOP: "1",
       ROXYSU_PORT: String(PORT),
@@ -281,6 +324,8 @@ if (!gotLock) {
       }
     });
 
+    await setSplashStatus("Waiting for server");
+
     try {
       await waitForServer(PORT, HOST);
     } catch (err) {
@@ -288,17 +333,22 @@ if (!gotLock) {
       console.error(
         `[roxysu-desktop] see logs under ${path.join(paths.dataDir, "logs")}`,
       );
+      await setSplashStatus("Failed to start — see logs", { animateDots: false });
       await shutdown();
       app.exit(1);
       return;
     }
 
-    await createWindow(paths);
+    await setSplashStatus("Loading");
+    await loadAppIntoWindow();
     console.log("[roxysu-desktop] ready");
 
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) {
-        void createWindow(paths);
+        void (async () => {
+          await createSplashWindow(paths);
+          await loadAppIntoWindow();
+        })();
       }
     });
   });

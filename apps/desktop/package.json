@@ -24,7 +24,8 @@
     "files": [
       "main.js",
       "preload.js",
-      "paths.js"
+      "paths.js",
+      "splash.html"
     ],
     "extraResources": [
       {

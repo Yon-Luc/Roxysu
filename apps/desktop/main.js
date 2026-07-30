@@ -14,6 +14,8 @@ let mainWindow = null;
 let serverChild = null;
 /** @type {import("node:child_process").ChildProcess | null} */
 let realmChild = null;
+/** @type {number[]} */
+const childLogFds = [];
 let shuttingDown = false;
 
 const PORT = Number(process.env.ROXYSU_PORT ?? 4321);
@@ -32,25 +34,48 @@ function resolveTsx(repoRoot, serverDir, realmDir) {
 }
 
 /**
+ * Append-only log under userData so packaged GUI launches are debuggable.
+ * @param {string} dataDir
+ * @param {string} label
+ */
+function openChildLogFd(dataDir, label) {
+  const logDir = path.join(dataDir, "logs");
+  fs.mkdirSync(logDir, { recursive: true });
+  const logPath = path.join(logDir, `${label}.log`);
+  const fd = fs.openSync(logPath, "a");
+  fs.writeSync(fd, `\n--- ${new Date().toISOString()} starting ${label} ---\n`);
+  childLogFds.push(fd);
+  console.log(`[roxysu-desktop] ${label} log: ${logPath}`);
+  return { logPath, fd };
+}
+
+/**
  * @param {ReturnType<typeof resolveDesktopPaths>} paths
  * @param {string} entry
  * @param {string} cwd
  * @param {NodeJS.ProcessEnv} extraEnv
+ * @param {string} label
  */
-function spawnNodeEntry(paths, entry, cwd, extraEnv) {
+function spawnNodeEntry(paths, entry, cwd, extraEnv, label) {
   const env = { ...process.env, ...extraEnv };
+
+  // Packaged (and any .js entry): run Electron as Node. Never use shell — on
+  // Windows shell:true opens blank cmd windows and can break ELECTRON_RUN_AS_NODE.
   if (paths.isPackaged || entry.endsWith(".js")) {
+    const { fd } = openChildLogFd(paths.dataDir, label);
     return spawn(process.execPath, [entry], {
       cwd,
       env: {
         ...env,
         ELECTRON_RUN_AS_NODE: "1",
       },
-      stdio: "inherit",
-      shell: process.platform === "win32",
+      stdio: ["ignore", fd, fd],
+      windowsHide: true,
+      shell: false,
     });
   }
 
+  // Dev: tsx on TypeScript entrypoints. Windows .bin shims are .cmd and need shell.
   const tsxBin = resolveTsx(paths.repoRoot, paths.serverDir, paths.realmDir);
   const cmd = tsxBin === "npx" ? "npx" : tsxBin;
   const cmdArgs = tsxBin === "npx" ? ["tsx", entry] : [entry];
@@ -58,6 +83,7 @@ function spawnNodeEntry(paths, entry, cwd, extraEnv) {
     cwd,
     env,
     stdio: "inherit",
+    windowsHide: true,
     shell: process.platform === "win32",
   });
 }
@@ -130,6 +156,17 @@ function stopChild(child, label) {
   }
 }
 
+function closeChildLogs() {
+  while (childLogFds.length > 0) {
+    const fd = childLogFds.pop();
+    try {
+      fs.closeSync(fd);
+    } catch {
+      // already closed
+    }
+  }
+}
+
 async function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
@@ -137,6 +174,7 @@ async function shutdown() {
   stopChild(serverChild, "server");
   realmChild = null;
   serverChild = null;
+  closeChildLogs();
 }
 
 const gotLock = app.requestSingleInstanceLock();
@@ -187,6 +225,7 @@ if (!gotLock) {
       paths.serverEntry,
       paths.serverDir,
       sharedEnv,
+      "server",
     );
     serverChild.on("exit", (code, signal) => {
       if (!shuttingDown) {
@@ -200,6 +239,7 @@ if (!gotLock) {
       paths.realmEntry,
       paths.realmDir,
       sharedEnv,
+      "realm-reader",
     );
     realmChild.on("exit", (code, signal) => {
       if (!shuttingDown) {
@@ -213,6 +253,9 @@ if (!gotLock) {
       await waitForServer(PORT, HOST);
     } catch (err) {
       console.error("[roxysu-desktop]", err);
+      console.error(
+        `[roxysu-desktop] see logs under ${path.join(paths.dataDir, "logs")}`,
+      );
       await shutdown();
       app.exit(1);
       return;

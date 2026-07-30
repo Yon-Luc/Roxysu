@@ -23,6 +23,7 @@ function resolveDesktopPaths(app) {
     const resources = process.resourcesPath;
     const dataDir =
       process.env.ROXYSU_DATA_DIR?.trim() || app.getPath("userData");
+    const serverDir = path.join(resources, "server");
     return {
       isPackaged: true,
       repoRoot: null,
@@ -31,10 +32,12 @@ function resolveDesktopPaths(app) {
       staticDir:
         process.env.ROXYSU_STATIC_DIR?.trim() ||
         path.join(resources, "public"),
-      serverDir: path.join(resources, "server"),
+      serverDir,
       serverEntry:
         process.env.ROXYSU_SERVER_ENTRY?.trim() ||
         path.join(resources, "server", "index.node.js"),
+      // Packaged: migrations are copied next to the server bundle (see build-pack.mjs).
+      migrationsFolder: path.join(serverDir, "drizzle"),
       realmDir: path.join(resources, "realm-reader"),
       realmEntry:
         process.env.ROXYSU_REALM_ENTRY?.trim() ||
@@ -64,6 +67,8 @@ function resolveDesktopPaths(app) {
     serverEntry:
       process.env.ROXYSU_SERVER_ENTRY?.trim() ||
       path.join(serverDir, "src", "index.node.ts"),
+    // Dev: migrations live in the db package, not under apps/server.
+    migrationsFolder: path.join(repoRoot, "packages", "db", "drizzle"),
     realmDir,
     realmEntry:
       process.env.ROXYSU_REALM_ENTRY?.trim() ||

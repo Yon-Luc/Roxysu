@@ -228,6 +228,14 @@ async function downloadNodeRuntime() {
   return destBin;
 }
 
+function copySplash() {
+  const splashSrc = path.join(desktopRoot, "splash.html");
+  if (!existsSync(splashSrc)) {
+    throw new Error(`missing ${splashSrc}`);
+  }
+  cpSync(splashSrc, path.join(stageDir, "splash.html"));
+}
+
 async function main() {
   // Keep outside stageDir — cleaning stage would delete an in-tree preserve.
   const nodeCache = path.join(desktopRoot, ".node-preserve");
@@ -264,6 +272,7 @@ async function main() {
 
   log("copying static assets");
   cpSync(publicDir, path.join(stageDir, "public"), { recursive: true });
+  copySplash();
 
   log("copying drizzle migrations");
   cpSync(

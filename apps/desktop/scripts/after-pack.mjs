@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * electron-builder afterPack: on Windows, rename the Electron binary to
- * RoxysuApp.exe and install the Win32 bootstrap splash as Roxysu.exe.
+ * RoxysuApp.exe and install the headless Win32 bootstrap as Roxysu.exe.
  *
  * The bootstrap must wait for RoxysuApp.exe to exit — portable NSIS ExecWaits
  * on Roxysu.exe then deletes the unpack directory.
@@ -35,6 +35,6 @@ export default async function afterPack(context) {
   renameSync(electronExe, appExe);
   copyFileSync(launcherSrc, electronExe);
   console.log(
-    `[after-pack] Roxysu.exe = bootstrap splash → launches ${path.basename(appExe)}`,
+    `[after-pack] Roxysu.exe = headless bootstrap → launches ${path.basename(appExe)}`,
   );
 }

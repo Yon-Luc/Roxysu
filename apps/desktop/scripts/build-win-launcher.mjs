@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Build the Win32 bootstrap splash (Roxysu.exe) with MSVC cl.exe.
+ * Build the Win32 headless bootstrap (Roxysu.exe) with MSVC cl.exe.
  * No-op on non-Windows hosts.
  */
 import { spawnSync } from "node:child_process";
@@ -71,7 +71,6 @@ function main() {
       `/Fe:${outExe}`,
       src,
       "user32.lib",
-      "gdi32.lib",
       "shell32.lib",
       "shlwapi.lib",
       "/link",

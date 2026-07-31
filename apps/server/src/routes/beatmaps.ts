@@ -23,6 +23,10 @@ import {
   isOszBuildError,
   oszContentDisposition,
 } from "../map-analysis/exportOsz";
+import {
+  loadManiaPpCurves,
+  resolveScorePp,
+} from "../mania-rating/estimateScorePp";
 
 function oszResponse(pack: {
   bytes: Uint8Array;
@@ -72,13 +76,39 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
         .select({
           playCount: count(scores.id),
           bestAccuracy: max(scores.accuracy),
-          bestPp: max(scores.pp),
           lastPlayedAt: max(scores.playedAt),
         })
         .from(scores)
         .where(
           and(eq(scores.beatmapId, params.id), eq(scores.deletePending, false)),
         );
+      const scorePpRows = await db
+        .select({
+          pp: scores.pp,
+          accuracy: scores.accuracy,
+          mods: scores.mods,
+          rulesetShortName: scores.rulesetShortName,
+        })
+        .from(scores)
+        .where(
+          and(eq(scores.beatmapId, params.id), eq(scores.deletePending, false)),
+        );
+      const curves = await loadManiaPpCurves(db, [params.id]);
+      const curve = curves.get(params.id);
+      const resolvePp = (score: {
+        pp: number | null;
+        accuracy: number;
+        mods: string | null;
+        rulesetShortName: string | null;
+      }) =>
+        resolveScorePp({
+          ...score,
+          curve,
+        });
+      const bestPp = scorePpRows.reduce<number | null>((best, score) => {
+        const pp = resolvePp(score);
+        return pp != null && (best == null || pp > best) ? pp : best;
+      }, null);
 
       const [masteryRow] = await db
         .select()
@@ -138,13 +168,13 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
         stats: {
           playCount: Number(stats?.playCount ?? 0),
           bestAccuracy: stats?.bestAccuracy ?? null,
-          bestPp: stats?.bestPp ?? null,
+          bestPp,
           lastPlayedAt: toIso(stats?.lastPlayedAt),
         },
         recentScores: recentScores.map((s) => ({
           id: s.id,
           accuracy: s.accuracy,
-          pp: s.pp,
+          pp: resolvePp(s),
           maxCombo: s.maxCombo,
           mods: s.mods,
           rank: s.rank,

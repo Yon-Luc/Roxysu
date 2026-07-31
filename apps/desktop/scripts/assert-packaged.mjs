@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * Assert packaged Windows/Linux tree includes splash + expected resources.
+ * Assert packaged Windows/Linux tree includes expected resources.
  * Usage: node scripts/assert-packaged.mjs [appOutDir]
  * Default: release/win-unpacked or release/linux-unpacked
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -26,7 +26,6 @@ const appOut = process.argv[2]
 
 const resources = path.join(appOut, "resources");
 const checks = [
-  path.join(resources, "splash.html"),
   path.join(resources, "public", "index.html"),
   path.join(resources, "server", "index.node.js"),
   path.join(resources, "realm-reader.tgz"),
@@ -46,15 +45,6 @@ for (const file of checks) {
     failed = true;
   } else {
     console.log(`[assert-packaged] ok ${path.relative(appOut, file)}`);
-  }
-}
-
-const splash = path.join(resources, "splash.html");
-if (existsSync(splash)) {
-  const html = readFileSync(splash, "utf8");
-  if (!html.includes("Roxysu") || !html.includes("spinner")) {
-    console.error("[assert-packaged] splash.html looks wrong");
-    failed = true;
   }
 }
 

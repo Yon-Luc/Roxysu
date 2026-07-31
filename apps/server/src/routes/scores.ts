@@ -10,6 +10,10 @@ import { decodeLegacyReplay, isManiaRulesetId } from "../replay/decode";
 import { simulateManiaJudgments } from "../replay/judge";
 import { parseScoreMods } from "../replay/mods";
 import { getScoreRow, loadChartForScore } from "../replay/loadChart";
+import {
+  loadManiaPpCurves,
+  resolveScorePp,
+} from "../mania-rating/estimateScorePp";
 
 export const scoreRoutes = new Elysia({ prefix: "/scores" })
   .use(dbPlugin)
@@ -21,6 +25,10 @@ export const scoreRoutes = new Elysia({ prefix: "/scores" })
         set.status = 404;
         return { error: "Score not found" };
       }
+      const curves = await loadManiaPpCurves(
+        db,
+        score.beatmapId ? [score.beatmapId] : [],
+      );
 
       if (score.rulesetShortName !== "mania") {
         set.status = 422;
@@ -95,7 +103,13 @@ export const scoreRoutes = new Elysia({ prefix: "/scores" })
           beatmapId: score.beatmapId,
           accuracy: score.accuracy,
           maxCombo: score.maxCombo,
-          pp: score.pp,
+          pp: resolveScorePp({
+            pp: score.pp,
+            accuracy: score.accuracy,
+            mods: score.mods,
+            rulesetShortName: score.rulesetShortName,
+            curve: score.beatmapId ? curves.get(score.beatmapId) : undefined,
+          }),
           rank: score.rank,
           totalScore: score.totalScore,
           mods: score.mods,

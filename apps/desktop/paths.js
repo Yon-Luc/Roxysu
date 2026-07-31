@@ -10,7 +10,6 @@ const { execFileSync } = require("node:child_process");
  *     public/              built UI
  *     server/              Node server entry + deps
  *     node/                bundled Node runtime (node / node.exe)
- *     splash.html          startup splash (also in asar)
  *     realm-reader.tgz     compressed realm payload (extracted on first sync use)
  *
  * Dev (monorepo): apps/desktop → repo root → apps/server, apps/realm-reader

@@ -14,6 +14,7 @@ const IMPORT_WAIT_MAX_MS = 5 * 60_000;
 
 let running = false;
 let pending = false;
+let pendingForceFull = false;
 let pendingImportId: number | null = null;
 let timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -133,17 +134,22 @@ export async function runAnalyticsPipeline(
 ): Promise<void> {
   if (running) {
     pending = true;
+    pendingForceFull ||= opts?.forceFull === true;
     if (opts?.importId != null) pendingImportId = opts.importId;
     return;
   }
   running = true;
   try {
-    let useForceFull = opts?.forceFull === true;
+    let useForceFull = opts?.forceFull === true || pendingForceFull;
+    pendingForceFull = false;
     do {
       pending = false;
-      const targetImportId = pendingImportId ?? opts?.importId ?? null;
-      const forceFull = useForceFull && targetImportId == null;
+      const forceFull = useForceFull || pendingForceFull;
       useForceFull = false;
+      pendingForceFull = false;
+      const targetImportId = forceFull
+        ? null
+        : pendingImportId ?? opts?.importId ?? null;
       pendingImportId = null;
 
       await waitForIdleImport(db);

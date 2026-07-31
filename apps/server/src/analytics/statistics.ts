@@ -2,6 +2,11 @@ import type { Db } from "@roxysu/db/types";
 import { beatmaps, dailyStats, mapperStats, scores, weeklyStats } from "@roxysu/db/schema";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { isNomodOrMirrorOnly } from "../replay/mods";
+import {
+  loadManiaPpCurves,
+  resolveScorePp,
+  type ManiaPpCurve,
+} from "../mania-rating/estimateScorePp";
 
 function toMs(value: Date | number): number {
   return value instanceof Date ? value.getTime() : value;
@@ -36,6 +41,27 @@ function bump(map: Map<string, Bucket>, key: string, accuracy: number, pp: numbe
   map.set(key, b);
 }
 
+function effectivePp(
+  row: {
+    pp: number | null;
+    accuracy: number;
+    mods: string | null;
+    rulesetShortName: string | null;
+    beatmapId: string | null;
+  },
+  curves: Map<string, ManiaPpCurve>,
+): number {
+  return (
+    resolveScorePp({
+      pp: row.pp,
+      accuracy: row.accuracy,
+      mods: row.mods,
+      rulesetShortName: row.rulesetShortName,
+      curve: row.beatmapId ? curves.get(row.beatmapId) : undefined,
+    }) ?? 0
+  );
+}
+
 export type StatisticsEngineOptions = {
   /** Rebuild only days/weeks/mappers touched by these scores. */
   scoreIds?: string[];
@@ -68,6 +94,8 @@ export async function runStatisticsEngine(
       pp: scores.pp,
       playedAt: scores.playedAt,
       mods: scores.mods,
+      beatmapId: scores.beatmapId,
+      rulesetShortName: scores.rulesetShortName,
       mapperOnlineId: beatmaps.mapperOnlineId,
       mapperUsername: beatmaps.mapperUsername,
     })
@@ -75,6 +103,7 @@ export async function runStatisticsEngine(
     .leftJoin(beatmaps, eq(scores.beatmapId, beatmaps.id))
     .where(and(eq(scores.deletePending, false), isNotNull(scores.beatmapId)));
 
+  const curves = await loadManiaPpCurves(db);
   const daily = new Map<string, Bucket>();
   const weekly = new Map<string, Bucket>();
   const mappers = new Map<number, Bucket & { mapperUsername: string | null }>();
@@ -82,7 +111,7 @@ export async function runStatisticsEngine(
   for (const row of rows) {
     if (!isNomodOrMirrorOnly(row.mods)) continue;
     const played = new Date(toMs(row.playedAt));
-    const pp = row.pp ?? 0;
+    const pp = effectivePp(row, curves);
     bump(daily, dayKey(played), row.accuracy, pp);
     bump(weekly, weekStartKey(played), row.accuracy, pp);
 
@@ -138,6 +167,8 @@ async function rebuildPartitionsForScores(db: Db, scoreIds: string[]) {
       pp: scores.pp,
       playedAt: scores.playedAt,
       mods: scores.mods,
+      beatmapId: scores.beatmapId,
+      rulesetShortName: scores.rulesetShortName,
       mapperOnlineId: beatmaps.mapperOnlineId,
       mapperUsername: beatmaps.mapperUsername,
     })
@@ -145,6 +176,7 @@ async function rebuildPartitionsForScores(db: Db, scoreIds: string[]) {
     .leftJoin(beatmaps, eq(scores.beatmapId, beatmaps.id))
     .where(and(eq(scores.deletePending, false), isNotNull(scores.beatmapId)));
 
+  const curves = await loadManiaPpCurves(db);
   const daily = new Map<string, Bucket>();
   const weekly = new Map<string, Bucket>();
   const mappers = new Map<number, Bucket & { mapperUsername: string | null }>();
@@ -154,7 +186,7 @@ async function rebuildPartitionsForScores(db: Db, scoreIds: string[]) {
     const played = new Date(toMs(row.playedAt));
     const dKey = dayKey(played);
     const wKey = weekStartKey(played);
-    const pp = row.pp ?? 0;
+    const pp = effectivePp(row, curves);
 
     if (dayKeys.has(dKey)) bump(daily, dKey, row.accuracy, pp);
     if (weekKeys.has(wKey)) bump(weekly, wKey, row.accuracy, pp);
@@ -193,6 +225,8 @@ async function rebuildMapperPartitions(db: Db, mapperOnlineIds: number[]) {
       accuracy: scores.accuracy,
       pp: scores.pp,
       mods: scores.mods,
+      beatmapId: scores.beatmapId,
+      rulesetShortName: scores.rulesetShortName,
       mapperOnlineId: beatmaps.mapperOnlineId,
       mapperUsername: beatmaps.mapperUsername,
     })
@@ -206,6 +240,7 @@ async function rebuildMapperPartitions(db: Db, mapperOnlineIds: number[]) {
       ),
     );
 
+  const curves = await loadManiaPpCurves(db);
   const mappers = new Map<number, Bucket & { mapperUsername: string | null }>();
   for (const row of all) {
     if (row.mapperOnlineId == null) continue;
@@ -218,7 +253,7 @@ async function rebuildMapperPartitions(db: Db, mapperOnlineIds: number[]) {
         mapperUsername: row.mapperUsername,
       };
     m.playCount += 1;
-    m.totalPp += row.pp ?? 0;
+    m.totalPp += effectivePp(row, curves);
     m.accSum += row.accuracy;
     m.mapperUsername = row.mapperUsername ?? m.mapperUsername;
     mappers.set(row.mapperOnlineId, m);

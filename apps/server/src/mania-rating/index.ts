@@ -47,8 +47,15 @@ export type {
 export {
   DEFAULT_PP_ACCURACY,
   ppAtAccuracy,
+  interpolatePpFromAccuracy,
 } from "./ppAccuracy";
 export type { PpByAccuracy } from "./ppAccuracy";
+export {
+  resolveScorePp,
+  loadManiaPpCurves,
+  loadManiaPpCurvesSync,
+} from "./estimateScorePp";
+export type { ManiaPpCurve } from "./estimateScorePp";
 export {
   buildRatingLabAnalyseHtml,
   slimCompareRow,

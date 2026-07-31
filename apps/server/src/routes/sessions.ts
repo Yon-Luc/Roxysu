@@ -7,6 +7,10 @@ import {
   listSessionScores,
   listSessions,
 } from "../analytics/session";
+import {
+  loadManiaPpCurves,
+  resolveScorePp,
+} from "../mania-rating/estimateScorePp";
 
 function serializeSession(s: {
   id: number;
@@ -30,6 +34,12 @@ async function sessionDetailPayload(
   session: NonNullable<Awaited<ReturnType<typeof getSessionById>>>,
 ) {
   const scoreRows = await listSessionScores(db, session.id);
+  const curves = await loadManiaPpCurves(
+    db,
+    scoreRows
+      .map((score) => score.beatmapId)
+      .filter((beatmapId): beatmapId is string => beatmapId != null),
+  );
   const pbCount = scoreRows.filter((s) => s.isPb).length;
 
   return {
@@ -39,7 +49,13 @@ async function sessionDetailPayload(
       id: s.id,
       beatmapId: s.beatmapId,
       accuracy: s.accuracy,
-      pp: s.pp,
+      pp: resolveScorePp({
+        pp: s.pp,
+        accuracy: s.accuracy,
+        mods: s.mods,
+        rulesetShortName: s.rulesetShortName,
+        curve: s.beatmapId ? curves.get(s.beatmapId) : undefined,
+      }),
       maxCombo: s.maxCombo,
       mods: s.mods,
       rank: s.rank,

@@ -11,6 +11,8 @@ import {
   BEATMAP_SET_JOIN,
   beatmapFilterWhere,
 } from "../query-language/sqlFragments";
+import { runAnalyticsPipeline } from "../analytics/pipeline";
+import { LAZER_MASTER_VERSION } from "./registry";
 
 type SqlBinding = string | number | bigint | boolean | null;
 
@@ -245,11 +247,22 @@ function clearTimer(): void {
 
 function finish(status: "completed" | "idle" | "error", error?: string): void {
   clearTimer();
+  const db = job.db;
+  const rebuildAnalytics =
+    status === "completed" && job.versionId === LAZER_MASTER_VERSION && db != null;
   job.status = status === "idle" ? "idle" : status;
   job.finishedAt = new Date();
   job.error = error ?? null;
   job.db = null;
   publish({ type: "dashboard.updated" });
+  if (rebuildAnalytics) {
+    void runAnalyticsPipeline(db, { forceFull: true }).catch((err) => {
+      console.error(
+        "[mania-rating] analytics rebuild after PP backfill failed:",
+        err,
+      );
+    });
+  }
 }
 
 function scheduleNext(): void {

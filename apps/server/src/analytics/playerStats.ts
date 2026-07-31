@@ -12,6 +12,11 @@ import {
   parseSkillKeyCount,
   parseSkillTopPlays,
 } from "./recommend/sevenKSkill";
+import {
+  loadManiaPpCurvesSync,
+  resolveScorePp,
+  type ManiaPpCurve,
+} from "../mania-rating/estimateScorePp";
 
 /** Display buckets for the rank chart (silver grades folded into gold). Fails omitted. */
 const RANK_BUCKETS = [
@@ -271,7 +276,12 @@ async function getSessionStats(db: Db) {
   };
 }
 
-async function getTopMappers(db: Db, keyCount: number, limit = 10) {
+async function getTopMappers(
+  db: Db,
+  keyCount: number,
+  curves: Map<string, ManiaPpCurve>,
+  limit = 10,
+) {
   const rows = db.$client
     .query(
       `
@@ -280,7 +290,9 @@ async function getTopMappers(db: Db, keyCount: number, limit = 10) {
         b.mapper_username AS mapperUsername,
         s.accuracy AS accuracy,
         s.pp AS pp,
-        s.mods AS mods
+        s.mods AS mods,
+        s.beatmap_id AS beatmapId,
+        s.ruleset_short_name AS rulesetShortName
       FROM scores s
       JOIN beatmaps b ON b.id = s.beatmap_id
       WHERE s.delete_pending = 0
@@ -295,6 +307,8 @@ async function getTopMappers(db: Db, keyCount: number, limit = 10) {
     accuracy: number;
     pp: number | null;
     mods: string | null;
+    beatmapId: string | null;
+    rulesetShortName: string | null;
   }>;
 
   const byMapper = new Map<
@@ -311,7 +325,14 @@ async function getTopMappers(db: Db, keyCount: number, limit = 10) {
       accSum: 0,
     };
     cur.playCount += 1;
-    cur.totalPp += row.pp ?? 0;
+    cur.totalPp +=
+      resolveScorePp({
+        pp: row.pp,
+        accuracy: row.accuracy,
+        mods: row.mods,
+        rulesetShortName: row.rulesetShortName,
+        curve: row.beatmapId ? curves.get(row.beatmapId) : undefined,
+      }) ?? 0;
     cur.accSum += Number(row.accuracy ?? 0);
     cur.mapperUsername = row.mapperUsername ?? cur.mapperUsername;
     byMapper.set(id, cur);
@@ -334,6 +355,7 @@ async function getKeymodeProgression(
   keyCount: number,
   days: number,
   weeks: number,
+  curves: Map<string, ManiaPpCurve>,
 ) {
   const rows = db.$client
     .query(
@@ -342,7 +364,9 @@ async function getKeymodeProgression(
         s.played_at AS playedAt,
         s.accuracy AS accuracy,
         s.pp AS pp,
-        s.mods AS mods
+        s.mods AS mods,
+        s.beatmap_id AS beatmapId,
+        s.ruleset_short_name AS rulesetShortName
       FROM scores s
       JOIN beatmaps b ON b.id = s.beatmap_id
       WHERE s.delete_pending = 0
@@ -355,6 +379,8 @@ async function getKeymodeProgression(
     accuracy: number;
     pp: number | null;
     mods: string | null;
+    beatmapId: string | null;
+    rulesetShortName: string | null;
   }>;
 
   type Bucket = { playCount: number; totalPp: number; accSum: number };
@@ -366,7 +392,14 @@ async function getKeymodeProgression(
     const ms = Number(row.playedAt ?? 0);
     if (!Number.isFinite(ms) || ms <= 0) continue;
     const played = new Date(ms);
-    const pp = row.pp ?? 0;
+    const pp =
+      resolveScorePp({
+        pp: row.pp,
+        accuracy: row.accuracy,
+        mods: row.mods,
+        rulesetShortName: row.rulesetShortName,
+        curve: row.beatmapId ? curves.get(row.beatmapId) : undefined,
+      }) ?? 0;
     const dKey = dayKey(played);
     const wKey = weekStartKey(played);
     const bump = (map: Map<string, Bucket>, key: string) => {
@@ -475,6 +508,7 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
   const trendDays = range;
   const weekCount = Math.max(12, Math.ceil(range / 7));
   const availableKeyCounts = listPlayedKeyCounts(db);
+  const curves = loadManiaPpCurvesSync(db);
 
   // Defer sync skill work so other DB queries can start in the same tick.
   const skillBundlePromise = Promise.resolve().then(() =>
@@ -498,12 +532,12 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
   ] = await Promise.all([
     getSummary(db, keyCount),
     skillBundlePromise,
-    getKeymodeProgression(db, keyCount, trendDays, weekCount),
+    getKeymodeProgression(db, keyCount, trendDays, weekCount, curves),
     getRankDistribution(db, keyCount),
     getSkillsetMix(db, keyCount),
     getPlayTimePatterns(db, keyCount),
     getSessionStats(db),
-    getTopMappers(db, keyCount, 10),
+    getTopMappers(db, keyCount, curves, 10),
   ]);
 
   return {

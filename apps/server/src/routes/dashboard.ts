@@ -11,6 +11,10 @@ import {
   getWeeklyActivity,
 } from "../analytics/progression";
 import { SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
+import {
+  loadManiaPpCurves,
+  resolveScorePp,
+} from "../mania-rating/estimateScorePp";
 
 export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
   .use(dbPlugin)
@@ -49,6 +53,12 @@ export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
       .where(eq(scores.deletePending, false))
       .orderBy(desc(scores.playedAt))
       .limit(25);
+    const curves = await loadManiaPpCurves(
+      db,
+      recentScores
+        .map((score) => score.beatmapId)
+        .filter((beatmapId): beatmapId is string => beatmapId != null),
+    );
 
     const [beatmapCount] = await db.select({ n: count() }).from(beatmaps);
     const [scoreCount] = await db
@@ -72,7 +82,13 @@ export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
       recentScores: recentScores.map((s) => ({
         id: s.id,
         accuracy: s.accuracy,
-        pp: s.pp,
+        pp: resolveScorePp({
+          pp: s.pp,
+          accuracy: s.accuracy,
+          mods: s.mods,
+          rulesetShortName: s.rulesetShortName,
+          curve: s.beatmapId ? curves.get(s.beatmapId) : undefined,
+        }),
         maxCombo: s.maxCombo,
         mods: s.mods,
         rank: s.rank,

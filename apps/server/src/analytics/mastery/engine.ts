@@ -9,6 +9,7 @@ import {
   listFormulas,
 } from "./registry";
 import type { MasteryComputeInput, MasteryScoreInput } from "./types";
+import { loadManiaPpCurves, resolveScorePp } from "../../mania-rating/estimateScorePp";
 
 export const MASTERY_FORMULA_SETTING = "mastery.formula";
 
@@ -58,6 +59,8 @@ export async function runMasteryEngine(
       beatmapId: scores.beatmapId,
       accuracy: scores.accuracy,
       pp: scores.pp,
+      mods: scores.mods,
+      rulesetShortName: scores.rulesetShortName,
       playedAt: scores.playedAt,
       retryIndex: scoreMetrics.retryIndex,
     })
@@ -74,6 +77,12 @@ export async function runMasteryEngine(
     );
 
   const scoreRows = await scoreQuery;
+  const curves = await loadManiaPpCurves(
+    db,
+    scoreRows
+      .map((row) => row.beatmapId)
+      .filter((beatmapId): beatmapId is string => beatmapId != null),
+  );
 
   type Agg = {
     scores: MasteryScoreInput[];
@@ -86,6 +95,13 @@ export async function runMasteryEngine(
   const byBeatmap = new Map<string, Agg>();
   for (const row of scoreRows) {
     if (!row.beatmapId) continue;
+    const pp = resolveScorePp({
+      pp: row.pp,
+      accuracy: row.accuracy,
+      mods: row.mods,
+      rulesetShortName: row.rulesetShortName,
+      curve: curves.get(row.beatmapId),
+    });
     let agg = byBeatmap.get(row.beatmapId);
     if (!agg) {
       agg = {
@@ -99,15 +115,15 @@ export async function runMasteryEngine(
     }
     agg.scores.push({
       accuracy: row.accuracy,
-      pp: row.pp,
+      pp,
       playedAt: row.playedAt,
     });
     agg.maxRetryIndex = Math.max(agg.maxRetryIndex, row.retryIndex ?? 0);
     if (agg.bestAccuracy == null || row.accuracy > agg.bestAccuracy) {
       agg.bestAccuracy = row.accuracy;
     }
-    if (row.pp != null && (agg.bestPp == null || row.pp > agg.bestPp)) {
-      agg.bestPp = row.pp;
+    if (pp != null && (agg.bestPp == null || pp > agg.bestPp)) {
+      agg.bestPp = pp;
     }
     const played = new Date(toMs(row.playedAt));
     if (!agg.lastPlayedAt || played > agg.lastPlayedAt) {

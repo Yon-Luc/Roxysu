@@ -226,28 +226,14 @@ async function maybeClearHttpCache(paths) {
 }
 
 /**
+ * Open the main window immediately so startup wait for the API isn't a blank desktop
+ * (and the Win32 bootstrap stub can exit). Never await clearCache / children before
+ * this — on Windows that can mean minutes of no window while Defender + Chromium
+ * cache wipe run. Content loads after the server is up.
  * @param {ReturnType<typeof resolveDesktopPaths>} paths
  */
-function resolveSplashHtml(paths) {
-  const candidates = [
-    path.join(paths.resourcesDir || "", "splash.html"),
-    path.join(__dirname, "splash.html"),
-  ];
-  for (const candidate of candidates) {
-    if (candidate && fs.existsSync(candidate)) return candidate;
-  }
-  return path.join(__dirname, "splash.html");
-}
-
-/**
- * Show a local splash immediately so startup wait for the API isn't a blank desktop.
- * Never await clearCache / children before this — on Windows that can mean minutes of
- * no window while Defender + Chromium cache wipe run.
- * @param {ReturnType<typeof resolveDesktopPaths>} paths
- */
-function createSplashWindow(paths) {
-  const splashPath = resolveSplashHtml(paths);
-  desktopLog(`createSplashWindow splash=${splashPath} exists=${fs.existsSync(splashPath)}`);
+function createMainWindow(paths) {
+  desktopLog("createMainWindow");
 
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -267,21 +253,10 @@ function createSplashWindow(paths) {
   });
 
   mainWindow.webContents.on("did-fail-load", (_e, code, desc, url) => {
-    desktopLog(`splash did-fail-load code=${code} desc=${desc} url=${url}`);
+    desktopLog(`did-fail-load code=${code} desc=${desc} url=${url}`);
   });
 
-  void mainWindow
-    .loadFile(splashPath)
-    .then(() => {
-      desktopLog("splash loadFile ok");
-      signalWindowReady(paths.dataDir);
-    })
-    .catch((err) => {
-      desktopLog(`splash loadFile failed: ${err}`);
-      signalWindowReady(paths.dataDir);
-    });
-
-  // Marker even if HTML fails — dark chrome is still a visible window for the stub.
+  // Dark chrome is enough for a visible window / stub handoff before loadURL.
   signalWindowReady(paths.dataDir);
 }
 
@@ -314,28 +289,6 @@ function spawnRealmReader(paths, sharedEnv) {
       desktopLog(`realm-reader exited code=${code} signal=${signal}`);
     }
   });
-}
-
-/**
- * @param {string} text
- * @param {{ animateDots?: boolean }} [opts]
- */
-async function setSplashStatus(text, opts = {}) {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  const animateDots = opts.animateDots !== false;
-  const safe = JSON.stringify(text);
-  try {
-    await mainWindow.webContents.executeJavaScript(
-      `(() => {
-        const el = document.getElementById("status");
-        if (!el) return;
-        el.classList.toggle("dots", ${animateDots ? "true" : "false"});
-        el.textContent = ${safe};
-      })()`,
-    );
-  } catch {
-    // Splash may already have navigated away.
-  }
 }
 
 async function loadAppIntoWindow() {
@@ -418,8 +371,7 @@ if (!gotLock) {
 
     Menu.setApplicationMenu(null);
 
-    createSplashWindow(paths);
-    void setSplashStatus("Starting");
+    createMainWindow(paths);
 
     const sharedEnv = {
       ROXYSU_DESKTOP: "1",
@@ -448,7 +400,6 @@ if (!gotLock) {
       }
     });
 
-    void setSplashStatus("Waiting for server");
     desktopLog("waitForServer start");
 
     try {
@@ -456,14 +407,12 @@ if (!gotLock) {
     } catch (err) {
       desktopLog(`waitForServer failed: ${err}`);
       desktopLog(`see logs under ${path.join(paths.dataDir, "logs")}`);
-      await setSplashStatus("Failed to start — see logs", { animateDots: false });
       await shutdown();
       app.exit(1);
       return;
     }
 
     desktopLog("waitForServer ok");
-    await setSplashStatus("Loading");
     await maybeClearHttpCache(paths);
     await loadAppIntoWindow();
     desktopLog("ready");
@@ -474,7 +423,7 @@ if (!gotLock) {
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         void (async () => {
-          createSplashWindow(paths);
+          createMainWindow(paths);
           await loadAppIntoWindow();
         })();
       }

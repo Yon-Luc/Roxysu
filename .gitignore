@@ -4,6 +4,7 @@ node_modules/
 # build outputs
 dist/
 apps/desktop/stage/
+apps/desktop/.node-preserve/
 apps/desktop/release/
 apps/desktop/launcher/win/dist/
 *.tsbuildinfo

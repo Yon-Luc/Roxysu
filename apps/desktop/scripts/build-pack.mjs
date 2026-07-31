@@ -237,17 +237,19 @@ function copySplash() {
 }
 
 async function main() {
+  // Keep outside stageDir — cleaning stage would delete an in-tree preserve.
+  const nodeCache = path.join(desktopRoot, ".node-preserve");
   const preservedNode = path.join(stageDir, "node");
   const preservedVersion = path.join(preservedNode, "VERSION");
-  let nodeCache = null;
+  let restoreNode = false;
   if (
     existsSync(path.join(preservedNode, process.platform === "win32" ? "node.exe" : "node")) &&
     existsSync(preservedVersion) &&
     readFileSync(preservedVersion, "utf8").trim() === NODE_VERSION
   ) {
-    nodeCache = path.join(stageDir, ".node-preserve");
     rmSync(nodeCache, { recursive: true, force: true });
     cpSync(preservedNode, nodeCache, { recursive: true });
+    restoreNode = true;
     log(`preserving cached Node ${NODE_VERSION}`);
   }
 
@@ -256,7 +258,7 @@ async function main() {
   mkdirSync(path.join(stageDir, "server"), { recursive: true });
   mkdirSync(path.join(stageDir, "realm-reader", "schemas"), { recursive: true });
 
-  if (nodeCache) {
+  if (restoreNode) {
     cpSync(nodeCache, path.join(stageDir, "node"), { recursive: true });
     rmSync(nodeCache, { recursive: true, force: true });
   }

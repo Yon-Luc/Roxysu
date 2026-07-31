@@ -25,6 +25,7 @@
       "output": "release"
     },
     "afterPack": "./scripts/after-pack.mjs",
+    "icon": "../server/public/icons/icon-512.png",
     "files": [
       "main.js",
       "preload.js",

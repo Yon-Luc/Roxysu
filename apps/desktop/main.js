@@ -226,6 +226,21 @@ async function maybeClearHttpCache(paths) {
 }
 
 /**
+ * App icon for the window / taskbar (Linux especially needs this; otherwise Electron's default).
+ * @param {ReturnType<typeof resolveDesktopPaths>} paths
+ */
+function resolveAppIcon(paths) {
+  const candidates = [
+    path.join(paths.staticDir, "icons", "icon-512.png"),
+    path.join(__dirname, "..", "server", "public", "icons", "icon-512.png"),
+  ];
+  for (const candidate of candidates) {
+    if (candidate && fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+/**
  * Open the main window immediately so startup wait for the API isn't a blank desktop
  * (and the Win32 bootstrap stub can exit). Never await clearCache / children before
  * this — on Windows that can mean minutes of no window while Defender + Chromium
@@ -235,12 +250,17 @@ async function maybeClearHttpCache(paths) {
 function createMainWindow(paths) {
   desktopLog("createMainWindow");
 
+  const icon = resolveAppIcon(paths);
+  if (icon) desktopLog(`app icon=${icon}`);
+  else desktopLog("app icon missing — using Electron default");
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
     title: "Roxysu",
     show: true,
     backgroundColor: "#12141a",
+    ...(icon ? { icon } : {}),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -345,6 +365,11 @@ if (!gotLock) {
       mainWindow.focus();
     }
   });
+
+  // Stable Windows taskbar grouping / icon association.
+  if (process.platform === "win32") {
+    app.setAppUserModelId("dev.roxysu.desktop");
+  }
 
   desktopLog("awaiting whenReady");
   app.whenReady().then(async () => {

@@ -1,7 +1,11 @@
 /*
  * Roxysu Win32 bootstrap splash.
- * Shows a window immediately, launches RoxysuApp.exe, exits when Electron
- * writes %APPDATA%\\Roxysu\\logs\\electron-window-ready (or after timeout).
+ * Shows a window immediately, launches RoxysuApp.exe, hides the splash when
+ * Electron writes %APPDATA%\\Roxysu\\logs\\electron-window-ready (or after
+ * timeout), then waits until RoxysuApp.exe exits.
+ *
+ * Must stay alive for the full Electron lifetime: electron-builder portable
+ * NSIS ExecWaits on Roxysu.exe, then RMDir's the unpack dir when it returns.
  *
  * Build (Developer Command Prompt / CI):
  *   cl /nologo /O2 /Fe:Roxysu.exe roxysu_launcher.c user32.lib gdi32.lib shell32.lib shlwapi.lib
@@ -31,6 +35,7 @@ static HWND gHwnd = NULL;
 static PROCESS_INFORMATION gChild = {0};
 static UINT_PTR gTimer = 0;
 static DWORD gStartedTick = 0;
+static int gSplashDismissed = 0;
 
 static void GetMarkerPath(wchar_t *out, size_t cch) {
   wchar_t appdata[MAX_PATH];
@@ -52,6 +57,12 @@ static void ClearStaleMarker(void) {
   wchar_t path[MAX_PATH];
   GetMarkerPath(path, MAX_PATH);
   if (path[0]) DeleteFileW(path);
+}
+
+static void DismissSplash(void) {
+  if (gSplashDismissed) return;
+  gSplashDismissed = 1;
+  if (gHwnd) ShowWindow(gHwnd, SW_HIDE);
 }
 
 static int LaunchApp(void) {
@@ -119,24 +130,28 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
       EndPaint(hwnd, &ps);
       return 0;
     }
-    case WM_TIMER:
-      if (MarkerExists()) {
-        KillTimer(hwnd, gTimer);
-        PostQuitMessage(0);
-      } else if (GetTickCount() - gStartedTick > 10 * 60 * 1000) {
-        /* 10 min safety — do not hang forever if Electron never signals. */
-        KillTimer(hwnd, gTimer);
-        PostQuitMessage(0);
-      } else if (gChild.hProcess) {
+    case WM_CLOSE:
+      /* Closing the splash must not end the launcher — portable NSIS waits on us. */
+      DismissSplash();
+      return 0;
+    case WM_TIMER: {
+      if (!gSplashDismissed) {
+        if (MarkerExists() || GetTickCount() - gStartedTick > 10 * 60 * 1000) {
+          DismissSplash();
+        }
+      }
+      if (gChild.hProcess) {
         DWORD code = 0;
         if (GetExitCodeProcess(gChild.hProcess, &code) && code != STILL_ACTIVE) {
           KillTimer(hwnd, gTimer);
+          gTimer = 0;
           PostQuitMessage(code == 0 ? 0 : 1);
         }
       }
       return 0;
+    }
     case WM_DESTROY:
-      PostQuitMessage(0);
+      /* Do not PostQuit here — lifetime is tied to RoxysuApp.exe. */
       return 0;
   }
   return DefWindowProcW(hwnd, msg, wParam, lParam);
@@ -189,7 +204,17 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, PWSTR cmdLine, int nSh
     DispatchMessageW(&msg);
   }
 
+  DWORD exitCode = (DWORD)msg.wParam;
+  if (gTimer) {
+    KillTimer(gHwnd, gTimer);
+    gTimer = 0;
+  }
+  if (gChild.hProcess) {
+    /* Safety: never return while Electron is still running (portable RMDir). */
+    WaitForSingleObject(gChild.hProcess, INFINITE);
+    GetExitCodeProcess(gChild.hProcess, &exitCode);
+    CloseHandle(gChild.hProcess);
+  }
   if (gChild.hThread) CloseHandle(gChild.hThread);
-  if (gChild.hProcess) CloseHandle(gChild.hProcess);
-  return (int)msg.wParam;
+  return (int)exitCode;
 }

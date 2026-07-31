@@ -2,6 +2,9 @@
 /**
  * electron-builder afterPack: on Windows, rename the Electron binary to
  * RoxysuApp.exe and install the Win32 bootstrap splash as Roxysu.exe.
+ *
+ * The bootstrap must wait for RoxysuApp.exe to exit — portable NSIS ExecWaits
+ * on Roxysu.exe then deletes the unpack directory.
  */
 import { existsSync, renameSync, copyFileSync, unlinkSync } from "node:fs";
 import path from "node:path";

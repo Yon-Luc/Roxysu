@@ -412,7 +412,14 @@ export function StatsPage({
           label="Maps played"
           value={summary.distinctMapsPlayed.toLocaleString()}
         />
-        <Stat label="PBs" value={summary.pbCount.toLocaleString()} />
+        <Stat
+          label="Avg plays / map"
+          value={
+            summary.distinctMapsPlayed > 0
+              ? (summary.scoreCount / summary.distinctMapsPlayed).toFixed(1)
+              : "—"
+          }
+        />
         <Stat
           label="Sessions"
           value={summary.sessionCount.toLocaleString()}

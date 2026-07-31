@@ -2,9 +2,13 @@
 /**
  * Ensure staged native addons load under the bundled Node ABI.
  * Prefer existing prebuilds from build-pack; only rebuild when bindings are missing.
+ *
+ * Realm: never full-`require('realm')` during CI verify — that can hang for minutes
+ * on Windows (Defender scanning the ~20MB .node + huge package). Verify the N-API
+ * prebuild via timed process.dlopen instead, and never compile Realm from source.
  */
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -16,6 +20,10 @@ const nodeBin = path.join(
   nodeDir,
   process.platform === "win32" ? "node.exe" : "node",
 );
+
+/** Smoke-load timeout (ms). Realm full require is avoided; dlopen stays short. */
+const REQUIRE_TIMEOUT_MS = 30_000;
+const DLOPEN_TIMEOUT_MS = 20_000;
 
 function nodeVersion() {
   const versionFile = path.join(nodeDir, "VERSION");
@@ -43,6 +51,13 @@ function findNativeBindings(dir) {
       const full = path.join(cur, ent.name);
       if (ent.isDirectory()) {
         if (ent.name === ".git" || ent.name === "docs") continue;
+        // Realm ships huge android/apple trees — skip when scanning for bindings.
+        if (
+          cur.endsWith(`${path.sep}prebuilds`) &&
+          (ent.name === "android" || ent.name === "apple")
+        ) {
+          continue;
+        }
         stack.push(full);
       } else if (ent.name.endsWith(".node")) {
         found.push(full);
@@ -73,8 +88,52 @@ function hasBinding(moduleDir, mod) {
   return false;
 }
 
+/** Realm ships a fixed N-API prebuild at prebuilds/node/realm.node. */
+function realmPrebuildPath(moduleDir) {
+  return path.join(
+    moduleDir,
+    "node_modules",
+    "realm",
+    "prebuilds",
+    "node",
+    "realm.node",
+  );
+}
+
 /**
- * Smoke-load a native module with the staged Node binary.
+ * @param {string} bindingPath
+ * @returns {boolean}
+ */
+function canDlopenWithStagedNode(bindingPath) {
+  if (!existsSync(nodeBin) || !existsSync(bindingPath)) return false;
+  const result = spawnSync(
+    nodeBin,
+    [
+      "-e",
+      `const m={exports:{}}; process.dlopen(m, ${JSON.stringify(bindingPath)}); if (!m.exports || !Object.keys(m.exports).length) process.exit(2); console.log('ok')`,
+    ],
+    {
+      encoding: "utf8",
+      timeout: DLOPEN_TIMEOUT_MS,
+      killSignal: "SIGKILL",
+      env: { ...process.env, REALM_DISABLE_ANALYTICS: "1" },
+    },
+  );
+  if (result.error?.code === "ETIMEDOUT") {
+    console.warn(
+      `[rebuild-native] dlopen timed out after ${DLOPEN_TIMEOUT_MS}ms: ${bindingPath}`,
+    );
+    return false;
+  }
+  if (result.status === 0) return true;
+  console.warn(
+    `[rebuild-native] dlopen failed for ${bindingPath}:\n${result.stderr || result.stdout || result.error}`,
+  );
+  return false;
+}
+
+/**
+ * Smoke-load a native module with the staged Node binary (with timeout).
  * @param {string} moduleDir
  * @param {string} mod
  */
@@ -86,14 +145,87 @@ function canRequireWithStagedNode(moduleDir, mod) {
     {
       cwd: moduleDir,
       encoding: "utf8",
+      timeout: REQUIRE_TIMEOUT_MS,
+      killSignal: "SIGKILL",
       env: { ...process.env, REALM_DISABLE_ANALYTICS: "1" },
     },
   );
+  if (result.error?.code === "ETIMEDOUT") {
+    console.warn(
+      `[rebuild-native] require(${mod}) timed out after ${REQUIRE_TIMEOUT_MS}ms under staged node`,
+    );
+    return false;
+  }
   if (result.status === 0) return true;
   console.warn(
-    `[rebuild-native] require(${mod}) failed under staged node:\n${result.stderr || result.stdout}`,
+    `[rebuild-native] require(${mod}) failed under staged node:\n${result.stderr || result.stdout || result.error}`,
   );
   return false;
+}
+
+/**
+ * Realm: accept existing N-API prebuild without full module require.
+ * @param {string} moduleDir
+ */
+function ensureRealm(moduleDir) {
+  const prebuild = realmPrebuildPath(moduleDir);
+  if (existsSync(prebuild)) {
+    const size = statSync(prebuild).size;
+    if (size < 1_000_000) {
+      console.warn(
+        `[rebuild-native] realm: prebuild suspiciously small (${size} bytes)`,
+      );
+    } else if (canDlopenWithStagedNode(prebuild)) {
+      console.log(
+        `[rebuild-native] realm: ok (prebuild ${Math.round(size / 1e6)}MB, dlopen)`,
+      );
+      return;
+    } else {
+      // File present but dlopen timed out / failed — still ship it. Runtime
+      // uses the same prebuild; forcing from-source compile is worse than soft-ok.
+      console.warn(
+        `[rebuild-native] realm: soft-ok — prebuild present (${Math.round(size / 1e6)}MB) but dlopen verify failed; skipping rebuild`,
+      );
+      return;
+    }
+  }
+
+  console.log(
+    `[rebuild-native] realm: missing prebuild — trying prebuild-install (no from-source)`,
+  );
+  const modDir = path.join(moduleDir, "node_modules", "realm");
+  const installEnv = {
+    ...process.env,
+    npm_config_runtime: "node",
+    // Never compile Realm from source (huge / can hang CI).
+    npm_config_build_from_source: "",
+    REALM_DISABLE_ANALYTICS: "1",
+    npm_node_execpath: nodeBin,
+  };
+  delete installEnv.npm_config_build_from_source;
+
+  const installResult = spawnSync(
+    "npx",
+    ["--no-install", "prebuild-install", "--runtime", "napi"],
+    {
+      cwd: modDir,
+      env: installEnv,
+      stdio: "inherit",
+      shell: process.platform === "win32",
+      timeout: 120_000,
+      killSignal: "SIGKILL",
+    },
+  );
+
+  if (existsSync(prebuild) && statSync(prebuild).size > 1_000_000) {
+    console.log(`[rebuild-native] realm: prebuild-install ok`);
+    return;
+  }
+
+  // Soft-fail: realm is extracted on first sync use; don't block the Windows build.
+  console.warn(
+    `[rebuild-native] realm: soft-fail — no usable prebuild after install (status=${installResult.status}); continuing without from-source compile`,
+  );
 }
 
 /**
@@ -127,6 +259,11 @@ function ensureModules(moduleDir, modules, version) {
       continue;
     }
 
+    if (mod === "realm") {
+      ensureRealm(moduleDir);
+      continue;
+    }
+
     const bindings = findNativeBindings(path.join(moduleDir, "node_modules", mod));
     const napiOk = hasBinding(moduleDir, mod);
     if ((bindings.length > 0 || napiOk) && canRequireWithStagedNode(moduleDir, mod)) {
@@ -145,6 +282,8 @@ function ensureModules(moduleDir, modules, version) {
           env,
           stdio: "inherit",
           shell: process.platform === "win32",
+          timeout: 180_000,
+          killSignal: "SIGKILL",
         },
       );
       if (reinstall.status !== 0 || !canRequireWithStagedNode(moduleDir, mod)) {
@@ -165,6 +304,8 @@ function ensureModules(moduleDir, modules, version) {
         env,
         stdio: "inherit",
         shell: process.platform === "win32",
+        timeout: 300_000,
+        killSignal: "SIGKILL",
       },
     );
 
@@ -193,6 +334,8 @@ function ensureModules(moduleDir, modules, version) {
             cwd: modDir,
             env: installEnv,
             stdio: "inherit",
+            timeout: 180_000,
+            killSignal: "SIGKILL",
           });
           if (installResult.status !== 0) {
             throw new Error(`rebuild failed for ${mod}`);

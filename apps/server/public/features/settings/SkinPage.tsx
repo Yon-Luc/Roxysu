@@ -119,6 +119,8 @@ export function SkinPage() {
       shape: NoteShape;
       columns: ColumnSkin[];
       uniformColors: boolean;
+      uniformWidth: boolean;
+      uniformSize: boolean;
     }>,
   ) {
     const prev = getPreviewSkin();
@@ -136,28 +138,26 @@ export function SkinPage() {
   }
 
   function updateColumn(index: number, patch: Partial<ColumnSkin>) {
-    const applyColorsToAll =
-      keySkin.uniformColors &&
-      index === 0 &&
-      (patch.noteColor !== undefined || patch.lnColor !== undefined);
-
-    if (applyColorsToAll) {
-      const { noteColor, lnColor, ...scalePatch } = patch;
-      updateKeymode({
-        columns: keySkin.columns.map((c, i) => ({
-          ...c,
-          ...(noteColor !== undefined ? { noteColor } : {}),
-          ...(lnColor !== undefined ? { lnColor } : {}),
-          ...(i === 0 ? scalePatch : {}),
-        })),
-      });
-      return;
-    }
-
     updateKeymode({
-      columns: keySkin.columns.map((c, i) =>
-        i === index ? { ...c, ...patch } : c,
-      ),
+      columns: keySkin.columns.map((c, i) => {
+        if (i === index) return { ...c, ...patch };
+        if (index !== 0) return c;
+        return {
+          ...c,
+          ...(keySkin.uniformColors && patch.noteColor !== undefined
+            ? { noteColor: patch.noteColor }
+            : {}),
+          ...(keySkin.uniformColors && patch.lnColor !== undefined
+            ? { lnColor: patch.lnColor }
+            : {}),
+          ...(keySkin.uniformWidth && patch.widthScale !== undefined
+            ? { widthScale: patch.widthScale }
+            : {}),
+          ...(keySkin.uniformSize && patch.heightScale !== undefined
+            ? { heightScale: patch.heightScale }
+            : {}),
+        };
+      }),
     });
   }
 
@@ -173,6 +173,36 @@ export function SkinPage() {
         ...c,
         noteColor: first.noteColor,
         lnColor: first.lnColor,
+      })),
+    });
+  }
+
+  function setUniformWidth(enabled: boolean) {
+    if (!enabled) {
+      updateKeymode({ uniformWidth: false });
+      return;
+    }
+    const first = keySkin.columns[0]!;
+    updateKeymode({
+      uniformWidth: true,
+      columns: keySkin.columns.map((c) => ({
+        ...c,
+        widthScale: first.widthScale,
+      })),
+    });
+  }
+
+  function setUniformSize(enabled: boolean) {
+    if (!enabled) {
+      updateKeymode({ uniformSize: false });
+      return;
+    }
+    const first = keySkin.columns[0]!;
+    updateKeymode({
+      uniformSize: true,
+      columns: keySkin.columns.map((c) => ({
+        ...c,
+        heightScale: first.heightScale,
       })),
     });
   }
@@ -293,6 +323,24 @@ export function SkinPage() {
                   />
                   Same color for all columns
                 </label>
+                <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
+                  <input
+                    type="checkbox"
+                    checked={keySkin.uniformWidth}
+                    onChange={(e) => setUniformWidth(e.target.checked)}
+                    className="accent-[var(--accent)]"
+                  />
+                  Same width for all columns
+                </label>
+                <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
+                  <input
+                    type="checkbox"
+                    checked={keySkin.uniformSize}
+                    onChange={(e) => setUniformSize(e.target.checked)}
+                    className="accent-[var(--accent)]"
+                  />
+                  Same size for all columns
+                </label>
                 <button
                   type="button"
                   className="rx-btn text-xs"
@@ -309,6 +357,8 @@ export function SkinPage() {
             <ul className="divide-y divide-white/5">
               {keySkin.columns.map((col, i) => {
                 const showColors = !keySkin.uniformColors || i === 0;
+                const showWidth = !keySkin.uniformWidth || i === 0;
+                const showSize = !keySkin.uniformSize || i === 0;
                 return (
                   <li key={i} className="space-y-3 px-4 py-4">
                     <div className="flex items-center gap-3">
@@ -357,39 +407,43 @@ export function SkinPage() {
                           </label>
                         </>
                       ) : null}
-                      <label className="flex flex-col gap-1 text-xs text-muted">
-                        <span>Width {Math.round(col.widthScale * 100)}%</span>
-                        <input
-                          type="range"
-                          min={0.4}
-                          max={1}
-                          step={0.01}
-                          value={col.widthScale}
-                          onInput={(e) => {
-                            const widthScale = Number(e.currentTarget.value);
-                            updateColumn(i, { widthScale });
-                          }}
-                          className="accent-[var(--accent)]"
-                        />
-                      </label>
-                      <label className="flex flex-col gap-1 text-xs text-muted">
-                        <span>
-                          {keySkin.shape === "flat" ? "Height" : "Size"}{" "}
-                          {Math.round(col.heightScale * 100)}%
-                        </span>
-                        <input
-                          type="range"
-                          min={0.5}
-                          max={2}
-                          step={0.05}
-                          value={col.heightScale}
-                          onInput={(e) => {
-                            const heightScale = Number(e.currentTarget.value);
-                            updateColumn(i, { heightScale });
-                          }}
-                          className="accent-[var(--accent)]"
-                        />
-                      </label>
+                      {showWidth ? (
+                        <label className="flex flex-col gap-1 text-xs text-muted">
+                          <span>Width {Math.round(col.widthScale * 100)}%</span>
+                          <input
+                            type="range"
+                            min={0.4}
+                            max={1}
+                            step={0.01}
+                            value={col.widthScale}
+                            onInput={(e) => {
+                              const widthScale = Number(e.currentTarget.value);
+                              updateColumn(i, { widthScale });
+                            }}
+                            className="accent-[var(--accent)]"
+                          />
+                        </label>
+                      ) : null}
+                      {showSize ? (
+                        <label className="flex flex-col gap-1 text-xs text-muted">
+                          <span>
+                            {keySkin.shape === "flat" ? "Height" : "Size"}{" "}
+                            {Math.round(col.heightScale * 100)}%
+                          </span>
+                          <input
+                            type="range"
+                            min={0.5}
+                            max={2}
+                            step={0.05}
+                            value={col.heightScale}
+                            onInput={(e) => {
+                              const heightScale = Number(e.currentTarget.value);
+                              updateColumn(i, { heightScale });
+                            }}
+                            className="accent-[var(--accent)]"
+                          />
+                        </label>
+                      ) : null}
                     </div>
                   </li>
                 );

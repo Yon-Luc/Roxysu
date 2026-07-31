@@ -20,6 +20,10 @@ export type KeymodeSkin = {
   columns: ColumnSkin[];
   /** When true, note/LN colors from column 1 apply to all columns. */
   uniformColors: boolean;
+  /** When true, widthScale from column 1 applies to all columns. */
+  uniformWidth: boolean;
+  /** When true, heightScale (size) from column 1 applies to all columns. */
+  uniformSize: boolean;
 };
 
 /** Receptor Y as a fraction of playfield height (0 = top, 1 = bottom). */
@@ -77,6 +81,8 @@ export function defaultKeymodeSkin(keys: Keymode): KeymodeSkin {
     shape: "flat",
     columns: Array.from({ length: keys }, (_, i) => defaultColumn(i)),
     uniformColors: false,
+    uniformWidth: false,
+    uniformSize: false,
   };
 }
 
@@ -136,6 +142,8 @@ function parseKeymodeSkin(raw: unknown, keys: Keymode): KeymodeSkin {
     shape,
     columns: Array.from({ length: keys }, (_, i) => parseColumn(cols[i], i)),
     uniformColors: k.uniformColors === true,
+    uniformWidth: k.uniformWidth === true,
+    uniformSize: k.uniformSize === true,
   };
 }
 
@@ -265,5 +273,7 @@ export function resolveKeymodeSkin(
       parseColumn(base.columns[i % base.columns.length], i),
     ),
     uniformColors: base.uniformColors,
+    uniformWidth: base.uniformWidth,
+    uniformSize: base.uniformSize,
   };
 }

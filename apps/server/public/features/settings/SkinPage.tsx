@@ -21,25 +21,69 @@ import {
 
 function buildSampleNotes(keys: number) {
   const notes: { column: number; startMs: number; endMs: number }[] = [];
+
   const pattern = [0, 1, 2, keys - 1, Math.floor(keys / 2), 0, keys - 2, 1];
+
+  const lastEndMs = Array(keys).fill(0);
+
+  const totalNotes = 48;
+  const minLongNotes = 8;
+  const holdDuration = 420;
+  const spacing = 140;
+
+  let longNotes = 0;
   let t = 400;
-  for (let i = 0; i < 48; i += 1) {
-    const col = pattern[i % pattern.length]! % keys;
-    const isHold = i % 5 === 0;
-    notes.push({
-      column: col,
-      startMs: t,
-      endMs: isHold ? t + 420 : t,
-    });
-    if (i % 3 === 2) {
-      notes.push({
-        column: (col + 2) % keys,
-        startMs: t,
-        endMs: t,
-      });
+
+  for (let i = 0; i < totalNotes; i++) {
+    const preferredColumn = pattern[i % pattern.length]! % keys;
+
+    const remaining = totalNotes - i;
+    const mustMakeLong =
+      longNotes < minLongNotes && remaining <= minLongNotes - longNotes;
+
+    const wantsLong = i % 5 === 0 || mustMakeLong;
+
+    let column = preferredColumn;
+
+    if (wantsLong) {
+      const availableColumn = Array.from({ length: keys }, (_, offset) => {
+        return (preferredColumn + offset) % keys;
+      }).find((c) => t >= lastEndMs[c]);
+
+      if (availableColumn !== undefined) {
+        column = availableColumn;
+      } else {
+        t += spacing;
+        i--;
+        continue;
+      }
+    } else {
+      if (t < lastEndMs[column]) {
+        t += spacing;
+        i--;
+        continue;
+      }
     }
-    t += 140;
+
+    const endMs = wantsLong ? t + holdDuration : t;
+
+    notes.push({
+      column,
+      startMs: t,
+      endMs,
+    });
+
+    lastEndMs[column] = endMs;
+
+    if (wantsLong) {
+      longNotes++;
+    }
+
+    t += spacing;
   }
+
+  console.log(`Generated ${longNotes} LNs`);
+
   return notes;
 }
 
@@ -202,9 +246,7 @@ export function SkinPage() {
             </p>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <label className="flex flex-col gap-1 text-xs text-muted">
-                <span>
-                  Hit position {Math.round(skin.hitPosition * 100)}%
-                </span>
+                <span>Hit position {Math.round(skin.hitPosition * 100)}%</span>
                 <input
                   type="range"
                   min={HIT_POSITION_MIN}
@@ -342,9 +384,7 @@ export function SkinPage() {
                           step={0.05}
                           value={col.heightScale}
                           onInput={(e) => {
-                            const heightScale = Number(
-                              e.currentTarget.value,
-                            );
+                            const heightScale = Number(e.currentTarget.value);
                             updateColumn(i, { heightScale });
                           }}
                           className="accent-[var(--accent)]"

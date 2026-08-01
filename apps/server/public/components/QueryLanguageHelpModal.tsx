@@ -98,7 +98,7 @@ export function QueryLanguageHelpButton({ className }: { className?: string }) {
         onClick={() => setOpen(true)}
         className={
           className ??
-          "text-sm font-medium text-muted underline decoration-white/20 underline-offset-2 transition hover:text-accent"
+          "text-sm font-medium text-accent underline decoration-accent/40 underline-offset-2 transition hover:text-ink"
         }
       >
         Query language help

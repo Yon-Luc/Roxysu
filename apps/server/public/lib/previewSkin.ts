@@ -2,9 +2,33 @@ import { useSyncExternalStore } from "react";
 
 export type NoteShape = "flat" | "arrow" | "circle";
 
+/** Arrow tip direction (down = toward receptor). Ignored for flat/circle. */
+export type NoteOrientation = "down" | "left" | "up" | "right";
+
+/** Cap at the far end of a long note (away from the receptor). */
+export type LnTailShape = "flat" | "pointed" | "rounded";
+
 export type Keymode = 4 | 6 | 7 | 8 | 9 | 10;
 
 export const KEYMODES: Keymode[] = [4, 6, 7, 8, 9, 10];
+
+export const NOTE_ORIENTATIONS: {
+  id: NoteOrientation;
+  label: string;
+  /** Canvas clockwise degrees from the default down-pointing arrow. */
+  deg: number;
+}[] = [
+  { id: "down", label: "↓", deg: 0 },
+  { id: "left", label: "←", deg: 90 },
+  { id: "up", label: "↑", deg: 180 },
+  { id: "right", label: "→", deg: 270 },
+];
+
+export const LN_TAIL_SHAPES: { id: LnTailShape; label: string }[] = [
+  { id: "flat", label: "Flat" },
+  { id: "pointed", label: "Pointed" },
+  { id: "rounded", label: "Rounded" },
+];
 
 export type ColumnSkin = {
   noteColor: string;
@@ -13,6 +37,10 @@ export type ColumnSkin = {
   widthScale: number;
   /** Relative tap/head height (0.5–2). */
   heightScale: number;
+  /** Arrow tip direction. */
+  orientation: NoteOrientation;
+  /** Hold body width as a fraction of notehead width (0.25–1). */
+  lnBodyScale: number;
 };
 
 export type KeymodeSkin = {
@@ -24,6 +52,10 @@ export type KeymodeSkin = {
   uniformWidth: boolean;
   /** When true, heightScale (size) from column 1 applies to all columns. */
   uniformSize: boolean;
+  /** Shape of the LN end (away from receptor). */
+  lnTailShape: LnTailShape;
+  /** When false, hold notes omit the head note graphic. */
+  lnShowHead: boolean;
 };
 
 /** Receptor Y as a fraction of playfield height (0 = top, 1 = bottom). */
@@ -66,24 +98,61 @@ const DEFAULT_NOTE_COLORS = [
   "#fca5a5",
 ];
 
-function defaultColumn(index: number): ColumnSkin {
+/** Classic dance-pad layout for 4K arrow skins: ← ↓ ↑ → */
+const DANCE_PAD_4K: NoteOrientation[] = ["left", "down", "up", "right"];
+
+function defaultOrientation(index: number, keys?: number): NoteOrientation {
+  if (keys === 4) return DANCE_PAD_4K[index] ?? "down";
+  return "down";
+}
+
+function defaultColumn(index: number, keys?: number): ColumnSkin {
   const noteColor = DEFAULT_NOTE_COLORS[index % DEFAULT_NOTE_COLORS.length]!;
   return {
     noteColor,
     lnColor: noteColor,
     widthScale: 0.92,
     heightScale: 1,
+    orientation: defaultOrientation(index, keys),
+    lnBodyScale: 0.6,
   };
 }
 
 export function defaultKeymodeSkin(keys: Keymode): KeymodeSkin {
   return {
     shape: "flat",
-    columns: Array.from({ length: keys }, (_, i) => defaultColumn(i)),
+    columns: Array.from({ length: keys }, (_, i) => defaultColumn(i, keys)),
     uniformColors: false,
     uniformWidth: false,
     uniformSize: false,
+    lnTailShape: "pointed",
+    lnShowHead: true,
   };
+}
+
+export function orientationDegrees(orientation: NoteOrientation): number {
+  return (
+    NOTE_ORIENTATIONS.find((o) => o.id === orientation)?.deg ?? 0
+  );
+}
+
+function parseOrientation(value: unknown): NoteOrientation {
+  if (
+    value === "down" ||
+    value === "left" ||
+    value === "up" ||
+    value === "right"
+  ) {
+    return value;
+  }
+  return "down";
+}
+
+function parseLnTailShape(value: unknown): LnTailShape {
+  if (value === "flat" || value === "pointed" || value === "rounded") {
+    return value;
+  }
+  return "pointed";
 }
 
 export function defaultPreviewSkin(): PreviewSkin {
@@ -109,8 +178,8 @@ function clamp(n: number, min: number, max: number) {
   return Math.min(max, Math.max(min, n));
 }
 
-function parseColumn(raw: unknown, index: number): ColumnSkin {
-  const base = defaultColumn(index);
+function parseColumn(raw: unknown, index: number, keys?: number): ColumnSkin {
+  const base = defaultColumn(index, keys);
   if (!raw || typeof raw !== "object") return base;
   const c = raw as Partial<ColumnSkin>;
   return {
@@ -126,6 +195,12 @@ function parseColumn(raw: unknown, index: number): ColumnSkin {
       0.5,
       2,
     ),
+    orientation: parseOrientation(c.orientation),
+    lnBodyScale: clamp(
+      typeof c.lnBodyScale === "number" ? c.lnBodyScale : base.lnBodyScale,
+      0.25,
+      1,
+    ),
   };
 }
 
@@ -140,10 +215,14 @@ function parseKeymodeSkin(raw: unknown, keys: Keymode): KeymodeSkin {
   const cols = Array.isArray(k.columns) ? k.columns : [];
   return {
     shape,
-    columns: Array.from({ length: keys }, (_, i) => parseColumn(cols[i], i)),
+    columns: Array.from({ length: keys }, (_, i) =>
+      parseColumn(cols[i], i, keys),
+    ),
     uniformColors: k.uniformColors === true,
     uniformWidth: k.uniformWidth === true,
     uniformSize: k.uniformSize === true,
+    lnTailShape: parseLnTailShape(k.lnTailShape),
+    lnShowHead: k.lnShowHead !== false,
   };
 }
 
@@ -270,10 +349,12 @@ export function resolveKeymodeSkin(
   return {
     shape: base.shape,
     columns: Array.from({ length: Math.max(1, columnCount) }, (_, i) =>
-      parseColumn(base.columns[i % base.columns.length], i),
+      parseColumn(base.columns[i % base.columns.length], i, columnCount),
     ),
     uniformColors: base.uniformColors,
     uniformWidth: base.uniformWidth,
     uniformSize: base.uniformSize,
+    lnTailShape: base.lnTailShape,
+    lnShowHead: base.lnShowHead,
   };
 }

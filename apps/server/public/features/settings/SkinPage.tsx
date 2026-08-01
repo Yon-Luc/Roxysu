@@ -3,6 +3,8 @@ import { PageTitle } from "../../components/PageTitle";
 import { ManiaNotefield } from "../../components/ManiaNotefield";
 import {
   KEYMODES,
+  LN_TAIL_SHAPES,
+  NOTE_ORIENTATIONS,
   NOTE_SHAPES,
   HIT_POSITION_MAX,
   HIT_POSITION_MIN,
@@ -16,6 +18,8 @@ import {
   usePreviewSkin,
   type ColumnSkin,
   type Keymode,
+  type LnTailShape,
+  type NoteOrientation,
   type NoteShape,
 } from "../../lib/previewSkin";
 
@@ -82,9 +86,77 @@ function buildSampleNotes(keys: number) {
     t += spacing;
   }
 
-  console.log(`Generated ${longNotes} LNs`);
-
   return notes;
+}
+
+function ColorField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (hex: string) => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const [draft, setDraft] = useState(value.toUpperCase());
+  const hex = value.toUpperCase();
+
+  useEffect(() => {
+    setDraft(hex);
+  }, [hex]);
+
+  useEffect(() => {
+    if (!copied) return;
+    const id = window.setTimeout(() => setCopied(false), 1200);
+    return () => window.clearTimeout(id);
+  }, [copied]);
+
+  async function copyHex() {
+    try {
+      await navigator.clipboard.writeText(hex);
+      setCopied(true);
+    } catch {
+      // Clipboard may be denied.
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5 text-xs text-muted">
+      <span>{label}</span>
+      <div className="flex items-center gap-2">
+        <input
+          type="color"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="h-8 w-10 shrink-0 cursor-pointer rounded bg-transparent"
+          aria-label={`${label} color picker`}
+        />
+        <input
+          type="text"
+          value={draft}
+          spellCheck={false}
+          maxLength={7}
+          onChange={(e) => {
+            const next = e.target.value.trim();
+            setDraft(next.toUpperCase());
+            if (/^#[0-9a-fA-F]{6}$/.test(next)) onChange(next.toLowerCase());
+          }}
+          onBlur={() => setDraft(hex)}
+          className="rx-input h-8 min-w-0 flex-1 font-mono text-xs uppercase"
+          aria-label={`${label} hex value`}
+        />
+        <button
+          type="button"
+          className="rx-btn h-8 shrink-0 px-2 text-xs"
+          title={`Copy ${hex}`}
+          onClick={() => void copyHex()}
+        >
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export function SkinPage() {
@@ -97,6 +169,7 @@ export function SkinPage() {
 
   const keySkin = skin.keymodes[keys];
   const sampleNotes = useMemo(() => buildSampleNotes(keys), [keys]);
+  const isArrow = keySkin.shape === "arrow";
 
   useEffect(() => {
     if (!playing) return;
@@ -121,6 +194,8 @@ export function SkinPage() {
       uniformColors: boolean;
       uniformWidth: boolean;
       uniformSize: boolean;
+      lnTailShape: LnTailShape;
+      lnShowHead: boolean;
     }>,
   ) {
     const prev = getPreviewSkin();
@@ -155,6 +230,9 @@ export function SkinPage() {
             : {}),
           ...(keySkin.uniformSize && patch.heightScale !== undefined
             ? { heightScale: patch.heightScale }
+            : {}),
+          ...(keySkin.uniformSize && patch.lnBodyScale !== undefined
+            ? { lnBodyScale: patch.lnBodyScale }
             : {}),
         };
       }),
@@ -203,6 +281,17 @@ export function SkinPage() {
       columns: keySkin.columns.map((c) => ({
         ...c,
         heightScale: first.heightScale,
+        lnBodyScale: first.lnBodyScale,
+      })),
+    });
+  }
+
+  function applyDancePadOrientations() {
+    const layout: NoteOrientation[] = ["left", "down", "up", "right"];
+    updateKeymode({
+      columns: keySkin.columns.map((c, i) => ({
+        ...c,
+        orientation: layout[i % layout.length]!,
       })),
     });
   }
@@ -265,6 +354,63 @@ export function SkinPage() {
                   {s.label}
                 </button>
               ))}
+            </div>
+            {isArrow ? (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <p className="text-xs text-muted">
+                  Set per-column arrow direction below. Receptors follow the same
+                  orientation.
+                </p>
+                <button
+                  type="button"
+                  className="rx-btn text-xs"
+                  onClick={applyDancePadOrientations}
+                  title="← ↓ ↑ → repeating across columns"
+                >
+                  Dance pad layout
+                </button>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="rx-panel p-4">
+            <h2 className="text-sm font-bold text-ink">Long notes</h2>
+            <p className="mt-1 text-xs text-muted">
+              Tail is the far end of the hold. Head is the note graphic at the
+              start — same as the examples with a pointed grey bar and optional
+              arrow on top.
+            </p>
+            <div className="mt-4 space-y-4">
+              <div>
+                <span className="text-xs text-muted">LN end shape</span>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {LN_TAIL_SHAPES.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      className={
+                        keySkin.lnTailShape === s.id
+                          ? "rx-btn-primary"
+                          : "rx-btn"
+                      }
+                      onClick={() => updateKeymode({ lnTailShape: s.id })}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
+                <input
+                  type="checkbox"
+                  checked={keySkin.lnShowHead}
+                  onChange={(e) =>
+                    updateKeymode({ lnShowHead: e.target.checked })
+                  }
+                  className="accent-[var(--accent)]"
+                />
+                Show note head at LN start
+              </label>
             </div>
           </div>
 
@@ -350,7 +496,7 @@ export function SkinPage() {
                     })
                   }
                 >
-                  Reset colors
+                  Reset columns
                 </button>
               </div>
             </div>
@@ -375,37 +521,56 @@ export function SkinPage() {
                         style={{ background: col.lnColor }}
                         aria-hidden
                       />
+                      {isArrow ? (
+                        <span className="text-sm text-ink" aria-hidden>
+                          {NOTE_ORIENTATIONS.find((o) => o.id === col.orientation)
+                            ?.label ?? "↓"}
+                        </span>
+                      ) : null}
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
                       {showColors ? (
                         <>
-                          <label className="flex items-center gap-2 text-xs text-muted">
-                            <span className="w-16 shrink-0">Note</span>
-                            <input
-                              type="color"
-                              value={col.noteColor}
-                              onChange={(e) =>
-                                updateColumn(i, {
-                                  noteColor: e.target.value,
-                                })
-                              }
-                              className="h-8 w-full cursor-pointer rounded bg-transparent"
-                            />
-                          </label>
-                          <label className="flex items-center gap-2 text-xs text-muted">
-                            <span className="w-16 shrink-0">LN body</span>
-                            <input
-                              type="color"
-                              value={col.lnColor}
-                              onChange={(e) =>
-                                updateColumn(i, {
-                                  lnColor: e.target.value,
-                                })
-                              }
-                              className="h-8 w-full cursor-pointer rounded bg-transparent"
-                            />
-                          </label>
+                          <ColorField
+                            label="Note"
+                            value={col.noteColor}
+                            onChange={(noteColor) =>
+                              updateColumn(i, { noteColor })
+                            }
+                          />
+                          <ColorField
+                            label="LN body"
+                            value={col.lnColor}
+                            onChange={(lnColor) =>
+                              updateColumn(i, { lnColor })
+                            }
+                          />
                         </>
+                      ) : null}
+                      {isArrow ? (
+                        <div className="flex flex-col gap-1.5 text-xs text-muted sm:col-span-2">
+                          <span>Orientation</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {NOTE_ORIENTATIONS.map((o) => (
+                              <button
+                                key={o.id}
+                                type="button"
+                                className={
+                                  col.orientation === o.id
+                                    ? "rx-btn-primary min-w-10 px-2"
+                                    : "rx-btn min-w-10 px-2"
+                                }
+                                title={o.id}
+                                aria-label={`Orient ${o.id}`}
+                                onClick={() =>
+                                  updateColumn(i, { orientation: o.id })
+                                }
+                              >
+                                {o.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                       ) : null}
                       {showWidth ? (
                         <label className="flex flex-col gap-1 text-xs text-muted">
@@ -439,6 +604,25 @@ export function SkinPage() {
                             onInput={(e) => {
                               const heightScale = Number(e.currentTarget.value);
                               updateColumn(i, { heightScale });
+                            }}
+                            className="accent-[var(--accent)]"
+                          />
+                        </label>
+                      ) : null}
+                      {showSize ? (
+                        <label className="flex flex-col gap-1 text-xs text-muted">
+                          <span>
+                            LN body width {Math.round(col.lnBodyScale * 100)}%
+                          </span>
+                          <input
+                            type="range"
+                            min={0.25}
+                            max={1}
+                            step={0.01}
+                            value={col.lnBodyScale}
+                            onInput={(e) => {
+                              const lnBodyScale = Number(e.currentTarget.value);
+                              updateColumn(i, { lnBodyScale });
                             }}
                             className="accent-[var(--accent)]"
                           />

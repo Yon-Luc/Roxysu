@@ -5,10 +5,13 @@ import {
   HIT_POSITION_MIN,
   LANE_COVER_MAX,
   LANE_COVER_MIN,
+  orientationDegrees,
   resolveKeymodeSkin,
   usePreviewSkin,
   type ColumnSkin,
   type KeymodeSkin,
+  type LnTailShape,
+  type NoteOrientation,
   type NoteShape,
 } from "../lib/previewSkin";
 
@@ -20,8 +23,6 @@ const PREVIEW_SCROLL_DEFAULT = 20;
 const BASE_TAP_HEIGHT = 14;
 /** Max fraction of column width used for circle/arrow noteheads. */
 const SHAPED_WIDTH_CAP = 0.85;
-/** Hold stem width as a fraction of notehead width. */
-const LN_STEM_RATIO = 0.6;
 
 type Note = BeatmapPreview["notes"][number];
 
@@ -219,7 +220,31 @@ function arrowPath(
   ctx.closePath();
 }
 
-/** Down-pointing arrow (toward receptor). */
+function withOrientation(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  orientation: NoteOrientation,
+  draw: () => void,
+) {
+  const deg = orientationDegrees(orientation);
+  if (deg === 0) {
+    draw();
+    return;
+  }
+  const cx = x + w / 2;
+  const cy = y;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate((deg * Math.PI) / 180);
+  ctx.translate(-cx, -cy);
+  draw();
+  ctx.restore();
+}
+
+/** Oriented arrow (default tip toward receptor / down). */
 function drawArrow(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -228,13 +253,16 @@ function drawArrow(
   h: number,
   color: string,
   alpha: number,
+  orientation: NoteOrientation = "down",
 ) {
-  ctx.fillStyle = color;
-  ctx.globalAlpha = alpha;
-  arrowPath(ctx, x, y, w, h);
-  ctx.fill();
-  strokeOutline(ctx, alpha);
-  ctx.globalAlpha = 1;
+  withOrientation(ctx, x, y, w, h, orientation, () => {
+    ctx.fillStyle = color;
+    ctx.globalAlpha = alpha;
+    arrowPath(ctx, x, y, w, h);
+    ctx.fill();
+    strokeOutline(ctx, alpha);
+    ctx.globalAlpha = 1;
+  });
 }
 
 function drawTap(
@@ -246,6 +274,7 @@ function drawTap(
   h: number,
   color: string,
   alpha: number,
+  orientation: NoteOrientation = "down",
 ) {
   if (shape === "circle") {
     const r = Math.min(w, h) / 2;
@@ -253,7 +282,7 @@ function drawTap(
     return;
   }
   if (shape === "arrow") {
-    drawArrow(ctx, x, y, w, h, color, alpha);
+    drawArrow(ctx, x, y, w, h, color, alpha, orientation);
     return;
   }
   drawFlat(ctx, x, y, w, h, color, alpha);
@@ -319,41 +348,57 @@ function drawHoldBody(
   w: number,
   height: number,
   color: string,
+  lnBodyScale = 0.6,
+  lnTailShape: LnTailShape = "pointed",
 ) {
-  ctx.fillStyle = color;
-  ctx.globalAlpha = 0.55;
-
-  if (shape === "flat") {
-    ctx.fillRect(x, top, w, height);
-    ctx.globalAlpha = 1;
-    return;
-  }
-
-  const stemW = w * LN_STEM_RATIO;
-  const stemX = x + (w - stemW) / 2;
+  const bodyW = w * lnBodyScale;
+  const bodyX = x + (w - bodyW) / 2;
   const bottom = top + height;
+  const midX = bodyX + bodyW / 2;
 
-  if (shape === "circle") {
-    const r = stemW / 2;
+  // Cap height for pointed/rounded ends (clamped so short holds still look ok).
+  const tipH =
+    lnTailShape === "flat"
+      ? 0
+      : Math.min(bodyW * 0.55, Math.max(6, height * 0.28), height * 0.45);
+  const bodyTop = top + tipH;
+
+  ctx.fillStyle = color;
+  ctx.globalAlpha = shape === "flat" ? 0.55 : 0.6;
+
+  if (lnTailShape === "pointed" && tipH > 0) {
+    // House / chevron tip at the far end (away from receptor), matching
+    // common arrow skins — tip always points "up" the timeline.
+    ctx.beginPath();
+    ctx.moveTo(midX, top);
+    ctx.lineTo(bodyX + bodyW, bodyTop);
+    ctx.lineTo(bodyX + bodyW, bottom);
+    ctx.lineTo(bodyX, bottom);
+    ctx.lineTo(bodyX, bodyTop);
+    ctx.closePath();
+    ctx.fill();
+  } else if (lnTailShape === "rounded" && tipH > 0) {
+    const r = Math.min(bodyW / 2, tipH);
+    ctx.beginPath();
+    ctx.moveTo(bodyX, bottom);
+    ctx.lineTo(bodyX + bodyW, bottom);
+    ctx.lineTo(bodyX + bodyW, bodyTop + (tipH - r));
+    ctx.arc(midX, bodyTop + (tipH - r), r, 0, Math.PI, true);
+    ctx.closePath();
+    ctx.fill();
+  } else if (shape === "circle") {
+    const r = bodyW / 2;
     const cyTop = top + r;
     const cyBot = Math.max(cyTop, bottom - r);
     ctx.beginPath();
-    ctx.moveTo(stemX, cyTop);
-    ctx.arc(stemX + r, cyTop, r, Math.PI, 0);
-    ctx.lineTo(stemX + stemW, cyBot);
-    ctx.arc(stemX + r, cyBot, r, 0, Math.PI);
+    ctx.moveTo(bodyX, cyTop);
+    ctx.arc(midX, cyTop, r, Math.PI, 0);
+    ctx.lineTo(bodyX + bodyW, cyBot);
+    ctx.arc(midX, cyBot, r, 0, Math.PI);
     ctx.closePath();
     ctx.fill();
   } else {
-    // Arrow: slightly tapered stem toward the tip direction (down).
-    const taper = stemW * 0.12;
-    ctx.beginPath();
-    ctx.moveTo(stemX, top);
-    ctx.lineTo(stemX + stemW, top);
-    ctx.lineTo(stemX + stemW - taper, bottom);
-    ctx.lineTo(stemX + taper, bottom);
-    ctx.closePath();
-    ctx.fill();
+    ctx.fillRect(bodyX, top, bodyW, height);
   }
 
   ctx.globalAlpha = 1;
@@ -368,6 +413,7 @@ function drawReceptor(
   tapH: number,
   color: string,
   held: boolean,
+  orientation: NoteOrientation = "down",
 ) {
   const alpha = held ? 0.95 : 0.35;
   const fill = held ? "#ffffff" : color;
@@ -399,18 +445,20 @@ function drawReceptor(
     return;
   }
 
-  // Arrow receptor: outline matching note silhouette.
-  ctx.globalAlpha = alpha;
-  if (held) {
-    ctx.fillStyle = fill;
+  // Arrow receptor: outline matching note silhouette + orientation.
+  withOrientation(ctx, x, receptorY, noteW, tapH, orientation, () => {
+    ctx.globalAlpha = alpha;
+    if (held) {
+      ctx.fillStyle = fill;
+      arrowPath(ctx, x, receptorY, noteW, tapH);
+      ctx.fill();
+    }
+    ctx.strokeStyle = fill;
+    ctx.lineWidth = held ? 2.5 : 1.75;
     arrowPath(ctx, x, receptorY, noteW, tapH);
-    ctx.fill();
-  }
-  ctx.strokeStyle = fill;
-  ctx.lineWidth = held ? 2.5 : 1.75;
-  arrowPath(ctx, x, receptorY, noteW, tapH);
-  ctx.stroke();
-  ctx.globalAlpha = 1;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  });
 }
 
 function buildHeadJudgmentMap(
@@ -542,6 +590,8 @@ export function ManiaNotefield({
         lnColor: "#a5b4fc",
         widthScale: 0.92,
         heightScale: 1,
+        orientation: "down",
+        lnBodyScale: 0.6,
       };
     }
 
@@ -654,9 +704,30 @@ export function ManiaNotefield({
           const top = Math.min(startY, endY);
           const bottom = Math.max(startY, endY);
           const height = Math.max(tapH, bottom - top);
-          drawHoldBody(ctx!, shape, x, top, noteW, height, displayLnColor);
-          if (headOnScreen || note.startMs >= t) {
-            drawTap(ctx!, shape, x, startY, noteW, tapH, displayNoteColor, alpha);
+          const showHead = skinRef.current.lnShowHead;
+          drawHoldBody(
+            ctx!,
+            shape,
+            x,
+            top,
+            noteW,
+            height,
+            displayLnColor,
+            skin.lnBodyScale,
+            skinRef.current.lnTailShape,
+          );
+          if (showHead && (headOnScreen || note.startMs >= t)) {
+            drawTap(
+              ctx!,
+              shape,
+              x,
+              startY,
+              noteW,
+              tapH,
+              displayNoteColor,
+              alpha,
+              skin.orientation,
+            );
           }
           if (showPressMarker && (headOnScreen || pressMarkerOnScreen)) {
             drawPressMarkerLine(
@@ -671,7 +742,17 @@ export function ManiaNotefield({
             drawMissHoldRect(ctx!, x, top, noteW, height);
           }
         } else if (markMisses && hasJudgment && headOnScreen) {
-          drawTap(ctx!, shape, x, startY, noteW, tapH, displayNoteColor, alpha);
+          drawTap(
+            ctx!,
+            shape,
+            x,
+            startY,
+            noteW,
+            tapH,
+            displayNoteColor,
+            alpha,
+            skin.orientation,
+          );
           if (isMiss) {
             drawMissRect(ctx!, x, startY, noteW, tapH);
           } else if (showPressMarker && (headOnScreen || pressMarkerOnScreen)) {
@@ -684,7 +765,17 @@ export function ManiaNotefield({
             );
           }
         } else if (note.startMs >= t) {
-          drawTap(ctx!, shape, x, startY, noteW, tapH, displayNoteColor, alpha);
+          drawTap(
+            ctx!,
+            shape,
+            x,
+            startY,
+            noteW,
+            tapH,
+            displayNoteColor,
+            alpha,
+            skin.orientation,
+          );
         } else if (!markMisses && judged && t - judgment.tMs < 120) {
           // Brief flash at receptor after hit.
           const flashY = receptorY;
@@ -701,6 +792,7 @@ export function ManiaNotefield({
             fh,
             noteColor,
             flashAlpha,
+            skin.orientation,
           );
         }
       }
@@ -722,6 +814,7 @@ export function ManiaNotefield({
           tapH,
           skin.noteColor,
           held,
+          skin.orientation,
         );
       }
 

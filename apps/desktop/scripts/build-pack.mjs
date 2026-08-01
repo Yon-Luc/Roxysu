@@ -160,6 +160,10 @@ function nodeDistUrl() {
   return `https://nodejs.org/dist/v${NODE_VERSION}/${name}.${ext}`;
 }
 
+/**
+ * Stage a Node binary into stage/node for child processes + native rebuilds.
+ * Prefer ROXYSU_NODE_BIN / ROXYSU_SKIP_NODE_DOWNLOAD for Nix (no nodejs.org fetch).
+ */
 async function downloadNodeRuntime() {
   const destDir = path.join(stageDir, "node");
   const nodeName = process.platform === "win32" ? "node.exe" : "node";
@@ -170,6 +174,34 @@ async function downloadNodeRuntime() {
   }
 
   mkdirSync(destDir, { recursive: true });
+
+  const fromEnv = process.env.ROXYSU_NODE_BIN?.trim();
+  if (fromEnv) {
+    if (!existsSync(fromEnv)) {
+      throw new Error(`ROXYSU_NODE_BIN does not exist: ${fromEnv}`);
+    }
+    cpSync(fromEnv, destBin);
+    if (process.platform !== "win32") {
+      try {
+        // Nix store sources are often immutable; ignore EPERM.
+        const mode = spawnSync("chmod", ["+x", destBin], {stdio: "inherit"});
+        if (mode.status !== 0) {
+          log(`chmod +x skipped (status=${mode.status})`);
+        }
+      } catch {
+        // ignore
+      }
+    }
+    log(`staged node from ROXYSU_NODE_BIN → ${destBin}`);
+    return destBin;
+  }
+
+  if (process.env.ROXYSU_SKIP_NODE_DOWNLOAD === "1") {
+    throw new Error(
+      "ROXYSU_SKIP_NODE_DOWNLOAD=1 but stage/node is missing — set ROXYSU_NODE_BIN",
+    );
+  }
+
   const url = nodeDistUrl();
   log(`downloading Node ${NODE_VERSION}: ${url}`);
   const res = await fetch(url);
@@ -326,8 +358,13 @@ async function main() {
     `${JSON.stringify(stagePackageJson("roxysu-realm-reader-stage", realmReaderDeps), null, 2)}\n`,
   );
 
-  installProductionDeps(path.join(stageDir, "server"), "server", nodeBin);
-  installProductionDeps(path.join(stageDir, "realm-reader"), "realm-reader", nodeBin);
+  // Nix: skip registry installs and copy natives from the workspace install instead.
+  if (process.env.ROXYSU_SKIP_NATIVE_INSTALL === "1") {
+    log("skipping stage npm install (ROXYSU_SKIP_NATIVE_INSTALL=1)");
+  } else {
+    installProductionDeps(path.join(stageDir, "server"), "server", nodeBin);
+    installProductionDeps(path.join(stageDir, "realm-reader"), "realm-reader", nodeBin);
+  }
 
   // Record node version for rebuild-native / assert.
   // Realm stays unpacked until after rebuild:native (see archive-realm.mjs).

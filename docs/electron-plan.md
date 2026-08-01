@@ -64,16 +64,18 @@ roxysu/
 
 `apps/desktop` is covered by existing workspaces (`"apps/*"`). No separate repository.
 
-### NixOS dev shell
+### NixOS
 
-`flake.nix` provides `pkgs.electron_42` (fallback: `pkgs.electron`) and sets:
+One flake, two outputs:
 
-- `ELECTRON_SKIP_BINARY_DOWNLOAD=1`
-- `ELECTRON_PATH` → nixpkgs **wrapped** `${electron}/bin/electron`
+| Command | Purpose |
+| --- | --- |
+| `nix develop` | Dev shell (Bun + nixpkgs Electron wrapper) |
+| `nix build .#roxysu` / `nix run .#roxysu` | Packaged desktop app |
+| `nix profile install .#roxysu` | Install into your profile |
+| `nix run github:Yon-Luc/Roxysu` | Same package, from GitHub (after push) |
 
-Important: use the wrapper, not `libexec/electron/electron` / `ELECTRON_OVERRIDE_DIST_PATH` — the raw dist binary can SIGILL on NixOS.
-
-Smoke test: `nix develop` → `bun run desktop` (Hello window in `apps/desktop`).
+The package wraps nixpkgs Electron + Node (no electron-builder). After `bun.lock` changes, refresh `bunDepsHash` in `flake.nix` from the hash `nix build` prints.
 
 Suggested `apps/desktop` growth:
 

@@ -5,13 +5,18 @@ const { execFileSync } = require("node:child_process");
 /**
  * Resolve monorepo vs packaged Electron resource layouts.
  *
- * Packaged layout (electron-builder):
+ * Packaged layout (electron-builder / Nix):
  *   resources/
  *     public/              built UI
  *     server/              Node server entry + deps
- *     node/                bundled Node runtime (node / node.exe)
+ *     node/                bundled Node runtime (node / node.exe) — optional on Nix
  *     splash.html          startup splash (also in asar)
- *     realm-reader.tgz     compressed realm payload (extracted on first sync use)
+ *     realm-reader/        unpacked realm (Nix) OR
+ *     realm-reader.tgz     compressed realm (Windows; extracted on first sync use)
+ *
+ * Env overrides (Nix flake package):
+ *   ROXYSU_RESOURCES  — packaged resource root without electron-builder asar
+ *   ROXYSU_NODE_BIN   — Node binary for server/realm children (nixpkgs nodejs)
  *
  * Dev (monorepo): apps/desktop → repo root → apps/server, apps/realm-reader
  */
@@ -20,17 +25,31 @@ const { execFileSync } = require("node:child_process");
  * @param {{ isPackaged: boolean, getAppPath: () => string, getPath: (name: string) => string }} app
  */
 function resolveDesktopPaths(app) {
-  const isPackaged = Boolean(app.isPackaged);
+  const resourcesOverride = process.env.ROXYSU_RESOURCES?.trim() || null;
+  const usePackagedLayout = Boolean(app.isPackaged) || Boolean(resourcesOverride);
 
-  if (isPackaged) {
-    const resources = process.resourcesPath;
+  if (usePackagedLayout) {
+    const resources = resourcesOverride || process.resourcesPath;
     const dataDir =
       process.env.ROXYSU_DATA_DIR?.trim() || app.getPath("userData");
     const serverDir = path.join(resources, "server");
     const nodeBinName = process.platform === "win32" ? "node.exe" : "node";
-    const nodeBin = path.join(resources, "node", nodeBinName);
+    const bundledNode = path.join(resources, "node", nodeBinName);
+    const nodeBinEnv = process.env.ROXYSU_NODE_BIN?.trim() || null;
+    const nodeBin =
+      (nodeBinEnv && fs.existsSync(nodeBinEnv) && nodeBinEnv) ||
+      (fs.existsSync(bundledNode) ? bundledNode : null);
+
+    const unpackedRealmDir = path.join(resources, "realm-reader");
+    const hasUnpackedRealm = fs.existsSync(
+      path.join(unpackedRealmDir, "index.js"),
+    );
     const realmArchive = path.join(resources, "realm-reader.tgz");
-    const realmDir = path.join(dataDir, "runtime", "realm-reader");
+    // Prefer store-unpacked realm (Nix). Otherwise extract tarball into userData.
+    const realmDir = hasUnpackedRealm
+      ? unpackedRealmDir
+      : path.join(dataDir, "runtime", "realm-reader");
+
     return {
       isPackaged: true,
       repoRoot: null,
@@ -45,8 +64,9 @@ function resolveDesktopPaths(app) {
         process.env.ROXYSU_SERVER_ENTRY?.trim() ||
         path.join(resources, "server", "index.node.js"),
       migrationsFolder: path.join(serverDir, "drizzle"),
-      nodeBin: fs.existsSync(nodeBin) ? nodeBin : null,
-      realmArchive: fs.existsSync(realmArchive) ? realmArchive : null,
+      nodeBin,
+      realmArchive:
+        hasUnpackedRealm || !fs.existsSync(realmArchive) ? null : realmArchive,
       realmDir,
       realmEntry:
         process.env.ROXYSU_REALM_ENTRY?.trim() ||

@@ -1,5 +1,5 @@
 {
-  description = "Roxysu (osu! Practice Companion) dev environment";
+  description = "Roxysu (osu! Practice Companion) — NixOS dev shell + installable package";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
@@ -27,7 +27,29 @@
       if pkgs ? electron_42
       then pkgs.electron_42
       else pkgs.electron;
+
+    # After changing bun.lock, rebuild once, then paste the printed sha256 here:
+    #   nix build .#roxysu
+    bunDepsHash = "sha256-NClxSwmhfWGRvvYGKun1O8KESbt2A1oHs9s7yNtK9rw=";
+
+    roxysu = pkgs.callPackage ./nix/package.nix {
+      inherit electron bunDepsHash;
+      nodejs_24 = pkgs.nodejs_24;
+    };
   in {
+    packages.${system} = {
+      default = roxysu;
+      inherit roxysu;
+    };
+
+    apps.${system}.default = {
+      type = "app";
+      program = "${roxysu}/bin/roxysu";
+    };
+
+    # nix develop — toolchain for hacking (Bun server + Electron smoke).
+    # nix build / nix run / nix profile install — packaged desktop app.
+    # From GitHub (once pushed): nix run github:OWNER/Roxysu
     devShells.${system}.default = pkgs.mkShell {
       buildInputs =
         [pkgs.bun pkgs.nodejs_24 pkgs.dotnet-sdk_8 electron]
@@ -52,6 +74,7 @@
 
       shellHook = ''
         echo "Roxysu dev shell — bun $(bun --version), node $(node --version), electron $(electron --version), dotnet $(dotnet --version)"
+        echo "Packaged app: nix build .#roxysu && nix run .#roxysu"
       '';
     };
   };

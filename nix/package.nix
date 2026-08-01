@@ -128,29 +128,90 @@
 
   # Copy a package (and scoped sibling platform pkgs) into a stage node_modules.
   copyWorkspacePkg = ''
+    # Copy every package from a bun isolate node_modules into dest, dereferencing
+    # symlinks and recursively pulling each target's isolate (transitive deps).
+    copy_isolate_into_dest() {
+      local isolate_nm="$1"
+      local dest_nm="$2"
+      local sibling sname real child cname creal
+
+      [ -d "$isolate_nm" ] || return 0
+
+      for sibling in "$isolate_nm"/*; do
+        [ -e "$sibling" ] || [ -L "$sibling" ] || continue
+        sname="$(basename "$sibling")"
+        [ "$sname" = ".bin" ] && continue
+
+        # Scoped folder (e.g. @realm) — resolve each child package.
+        if [ -d "$sibling" ] && [ "''${sname:0:1}" = "@" ] && [ ! -L "$sibling" ]; then
+          mkdir -p "$dest_nm/$sname"
+          for child in "$sibling"/*; do
+            [ -e "$child" ] || [ -L "$child" ] || continue
+            cname="$(basename "$child")"
+            if [ -e "$dest_nm/$sname/$cname" ]; then
+              continue
+            fi
+            creal="$(readlink -f "$child" || true)"
+            if [ -z "$creal" ] || [ ! -e "$creal" ]; then
+              echo "warn: skip broken $sname/$cname" >&2
+              continue
+            fi
+            cp -a "$creal" "$dest_nm/$sname/$cname"
+            chmod -R u+w "$dest_nm/$sname/$cname"
+            echo "  + $sname/$cname"
+            # Transitive: also absorb that package's isolate.
+            copy_isolate_into_dest "$(dirname "$creal")" "$dest_nm"
+          done
+          continue
+        fi
+
+        if [ -e "$dest_nm/$sname" ]; then
+          continue
+        fi
+
+        real="$(readlink -f "$sibling" || true)"
+        if [ -z "$real" ] || [ ! -e "$real" ]; then
+          echo "warn: skip broken $sname" >&2
+          continue
+        fi
+        # Scoped package path like …/node_modules/@foo/bar — rare as direct sibling.
+        mkdir -p "$dest_nm/$(dirname "$sname")"
+        cp -a "$real" "$dest_nm/$sname"
+        chmod -R u+w "$dest_nm/$sname"
+        echo "  + $sname"
+        copy_isolate_into_dest "$(dirname "$real")" "$dest_nm"
+      done
+    }
+
     copy_workspace_pkg() {
       local name="$1"
       local dest_nm="$2"
-      local found=""
-      # Prefer deepest match under the restored install tree.
-      found="$(find . -path "*/node_modules/$name/package.json" -print -quit 2>/dev/null || true)"
+      local found="" src_dir parent_nm
+
+      found="$(find ./node_modules/.bun -path "*/node_modules/$name/package.json" -print -quit 2>/dev/null || true)"
+      if [ -z "$found" ]; then
+        found="$(find . -path "*/node_modules/$name/package.json" -print -quit 2>/dev/null || true)"
+      fi
       if [ -z "$found" ]; then
         echo "error: could not find workspace package $name" >&2
         return 1
       fi
-      local src_dir
       src_dir="$(dirname "$found")"
-      mkdir -p "$dest_nm/$(dirname "$name")"
-      rm -rf "$dest_nm/$name"
-      cp -a "$src_dir" "$dest_nm/$name"
-      chmod -R u+w "$dest_nm/$name"
-      echo "copied $name ← $src_dir"
+      parent_nm="$(dirname "$src_dir")"
+      echo "copy isolate for $name ← $parent_nm"
+      copy_isolate_into_dest "$parent_nm" "$dest_nm"
+      if [ ! -e "$dest_nm/$name" ] && [ ! -e "$dest_nm/$(dirname "$name")/$(basename "$name")" ]; then
+        # name may be scoped; ensure primary package exists
+        if [ ! -d "$dest_nm/$name" ]; then
+          echo "error: $name missing after isolate copy" >&2
+          return 1
+        fi
+      fi
     }
 
     copy_napi_scope() {
       local dest_nm="$1"
       mkdir -p "$dest_nm/@napi-rs"
-      # Bun stores scoped pkgs under .bun/@napi-rs+name@ver/… — gather every @napi-rs pkg.
       find ./node_modules -type d -path '*/node_modules/@napi-rs/*' 2>/dev/null | while read -r dir; do
         local name
         name="$(basename "$dir")"

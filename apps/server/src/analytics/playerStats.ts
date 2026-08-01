@@ -17,6 +17,14 @@ import {
   resolveScorePp,
   type ManiaPpCurve,
 } from "../mania-rating/estimateScorePp";
+import {
+  resolveScoresUsernamesSync,
+  scoresUsernameSql,
+} from "./scoreUsername";
+
+function scoreUserFilter(db: Db, column = "s.user_username") {
+  return scoresUsernameSql(resolveScoresUsernamesSync(db), column);
+}
 
 /** Display buckets for the rank chart (silver grades folded into gold). Fails omitted. */
 const RANK_BUCKETS = [
@@ -72,6 +80,7 @@ function weekStartKey(d: Date): string {
 }
 
 function listPlayedKeyCounts(db: Db): number[] {
+  const user = scoreUserFilter(db);
   const rows = db.$client
     .query(
       `
@@ -79,13 +88,14 @@ function listPlayedKeyCounts(db: Db): number[] {
       FROM scores s
       JOIN beatmaps b ON b.id = s.beatmap_id
       WHERE s.delete_pending = 0
+        ${user.sql}
         AND b.hidden = 0
         AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
         AND b.circle_size IS NOT NULL
       ORDER BY keyCount ASC
     `,
     )
-    .all() as Array<{ keyCount: number }>;
+    .all(...user.params) as Array<{ keyCount: number }>;
 
   const keys = rows
     .map((r) => Math.round(Number(r.keyCount)))
@@ -102,6 +112,7 @@ function listPlayedKeyCounts(db: Db): number[] {
  * Fails (rank F / -1) are excluded. Each score is counted once (perfect wins).
  */
 async function getRankDistribution(db: Db, keyCount: number) {
+  const user = scoreUserFilter(db);
   const rows = db.$client
     .query(
       `
@@ -112,12 +123,13 @@ async function getRankDistribution(db: Db, keyCount: number) {
       FROM scores s
       JOIN beatmaps b ON b.id = s.beatmap_id
       WHERE s.delete_pending = 0
+        ${user.sql}
         AND s.rank != -1
         AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
         AND b.circle_size = ?
     `,
     )
-    .all(keyCount) as Array<{
+    .all(...user.params, keyCount) as Array<{
     totalScore: number;
     rank: number;
     mods: string | null;
@@ -147,6 +159,7 @@ async function getRankDistribution(db: Db, keyCount: number) {
 }
 
 async function getSkillsetMix(db: Db, keyCount: number) {
+  const user = scoreUserFilter(db);
   const rows = db.$client
     .query(
       `
@@ -157,13 +170,14 @@ async function getSkillsetMix(db: Db, keyCount: number) {
       LEFT JOIN beatmap_dan_ratings dr
         ON dr.beatmap_id = b.id AND dr.algorithm = ?
       WHERE s.delete_pending = 0
+        ${user.sql}
         AND b.hidden = 0
         AND COALESCE(bs.delete_pending, 0) = 0
         AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
         AND b.circle_size = ?
     `,
     )
-    .all(SUNNY_ALGORITHM, keyCount) as Array<{
+    .all(SUNNY_ALGORITHM, ...user.params, keyCount) as Array<{
     lnRatio: number | null;
     mods: string | null;
   }>;
@@ -194,6 +208,7 @@ async function getSkillsetMix(db: Db, keyCount: number) {
 }
 
 async function getPlayTimePatterns(db: Db, keyCount: number) {
+  const user = scoreUserFilter(db);
   const rows = db.$client
     .query(
       `
@@ -201,11 +216,12 @@ async function getPlayTimePatterns(db: Db, keyCount: number) {
       FROM scores s
       JOIN beatmaps b ON b.id = s.beatmap_id
       WHERE s.delete_pending = 0
+        ${user.sql}
         AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
         AND b.circle_size = ?
     `,
     )
-    .all(keyCount) as Array<{ playedAt: number; mods: string | null }>;
+    .all(...user.params, keyCount) as Array<{ playedAt: number; mods: string | null }>;
 
   const byHour = Array.from({ length: 24 }, () => 0);
   const byDayOfWeek = Array.from({ length: 7 }, () => 0); // 0 = Sunday UTC
@@ -282,6 +298,7 @@ async function getTopMappers(
   curves: Map<string, ManiaPpCurve>,
   limit = 10,
 ) {
+  const user = scoreUserFilter(db);
   const rows = db.$client
     .query(
       `
@@ -296,12 +313,13 @@ async function getTopMappers(
       FROM scores s
       JOIN beatmaps b ON b.id = s.beatmap_id
       WHERE s.delete_pending = 0
+        ${user.sql}
         AND b.mapper_online_id IS NOT NULL
         AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
         AND b.circle_size = ?
     `,
     )
-    .all(keyCount) as Array<{
+    .all(...user.params, keyCount) as Array<{
     mapperOnlineId: number;
     mapperUsername: string | null;
     accuracy: number;
@@ -357,6 +375,7 @@ async function getKeymodeProgression(
   weeks: number,
   curves: Map<string, ManiaPpCurve>,
 ) {
+  const user = scoreUserFilter(db);
   const rows = db.$client
     .query(
       `
@@ -370,11 +389,12 @@ async function getKeymodeProgression(
       FROM scores s
       JOIN beatmaps b ON b.id = s.beatmap_id
       WHERE s.delete_pending = 0
+        ${user.sql}
         AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
         AND b.circle_size = ?
     `,
     )
-    .all(keyCount) as Array<{
+    .all(...user.params, keyCount) as Array<{
     playedAt: number;
     accuracy: number;
     pp: number | null;
@@ -445,6 +465,7 @@ async function getKeymodeProgression(
 }
 
 async function getSummary(db: Db, keyCount: number) {
+  const user = scoreUserFilter(db);
   const rows = db.$client
     .query(
       `
@@ -455,11 +476,12 @@ async function getSummary(db: Db, keyCount: number) {
       FROM scores s
       JOIN beatmaps b ON b.id = s.beatmap_id
       WHERE s.delete_pending = 0
+        ${user.sql}
         AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
         AND b.circle_size = ?
     `,
     )
-    .all(keyCount) as Array<{
+    .all(...user.params, keyCount) as Array<{
     beatmapId: string | null;
     playedAt: number;
     mods: string | null;

@@ -8,3 +8,15 @@ export const SYNC_PAUSE_WHEN_UNFOCUSED_KEY = "sync.pause_when_unfocused";
 
 /** Set to "1" while Roxysu writes collections to client.realm. */
 export const SYNC_REALM_READER_PAUSED_KEY = "sync.realm_reader_paused";
+
+/**
+ * Score username filter preference.
+ * - missing / "auto" → most common `user_username` among scores
+ * - "*" → show all usernames (including downloaded replays)
+ * - a username string → exact match (legacy single select)
+ * - JSON array string → match any of the listed usernames
+ */
+export const SCORES_USERNAME_FILTER_KEY = "scores.username_filter";
+
+export const SCORES_USERNAME_AUTO = "auto";
+export const SCORES_USERNAME_ALL = "*";

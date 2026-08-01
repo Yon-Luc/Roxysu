@@ -1,6 +1,10 @@
 
 import type { Db } from "@roxysu/db/types";
 import { isNomodOrMirrorOnly } from "../../replay/mods";
+import {
+  resolveScoresUsernamesSync,
+  scoresUsernameSql,
+} from "../scoreUsername";
 import { classifyMapAxis } from "./axis";
 import type { MapAxis, SevenKSkillProfile, SkillAxis } from "./types";
 
@@ -437,6 +441,10 @@ function coldStartFromPlays(plays: SkillPlayRow[]): SevenKSkillProfile {
 
 /** Cold start: best-acc weighted Sunny on played maps for one keymode. */
 function coldStartFromMastery(db: Db, keyCount: number): SevenKSkillProfile {
+  const user = scoresUsernameSql(
+    resolveScoresUsernamesSync(db),
+    "user_username",
+  );
   const rows = db.$client
     .query(
       `
@@ -456,6 +464,7 @@ function coldStartFromMastery(db: Db, keyCount: number): SevenKSkillProfile {
           MAX(accuracy) AS best_accuracy
         FROM scores
         WHERE delete_pending = 0 AND beatmap_id IS NOT NULL
+          ${user.sql}
         GROUP BY beatmap_id
       ) ps ON ps.beatmap_id = b.id
       LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
@@ -470,7 +479,7 @@ function coldStartFromMastery(db: Db, keyCount: number): SevenKSkillProfile {
       LIMIT 80
     `,
     )
-    .all(keyCount) as Array<{
+    .all(...user.params, keyCount) as Array<{
     bestAccuracy: number | null;
     playCount: number;
     sunnyStar: number;
@@ -687,6 +696,7 @@ export function loadSevenKPlays(
   db: Db,
   keyCount: number = DEFAULT_SKILL_KEY_COUNT,
 ): SkillPlayRow[] {
+  const user = scoresUsernameSql(resolveScoresUsernamesSync(db));
   const rows = db.$client
     .query(
       `
@@ -703,6 +713,7 @@ export function loadSevenKPlays(
       LEFT JOIN beatmap_dan_ratings dr
         ON dr.beatmap_id = b.id AND dr.algorithm = 'sunny'
       WHERE s.delete_pending = 0
+        ${user.sql}
         AND b.hidden = 0
         AND COALESCE(bs.delete_pending, 0) = 0
         AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
@@ -711,7 +722,7 @@ export function loadSevenKPlays(
       ORDER BY s.played_at DESC
     `,
     )
-    .all(keyCount) as Array<{
+    .all(...user.params, keyCount) as Array<{
     beatmapId: string;
     accuracy: number;
     playedAt: number;

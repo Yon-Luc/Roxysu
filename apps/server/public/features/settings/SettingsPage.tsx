@@ -122,6 +122,20 @@ export function SettingsPage({ section }: { section?: string } = {}) {
     },
   });
 
+  const scoresUsernameMut = useMutation({
+    mutationFn: (scoresUsernameFilter: string | string[]) =>
+      patchSettings({ scoresUsernameFilter }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["settings"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      void queryClient.invalidateQueries({ queryKey: ["practice"] });
+      void queryClient.invalidateQueries({ queryKey: ["beatmap"] });
+      void queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      void queryClient.invalidateQueries({ queryKey: ["stats"] });
+      void queryClient.invalidateQueries({ queryKey: ["recommend"] });
+    },
+  });
+
   const pathMut = useMutation({
     mutationFn: (osuDataPath: string | null) => patchSettings({ osuDataPath }),
     onSuccess: (next) => {
@@ -541,6 +555,159 @@ export function SettingsPage({ section }: { section?: string } = {}) {
         ) : null}
         {mut.error ? (
           <p className="mt-3 text-sm text-rose-300">{mut.error.message}</p>
+        ) : null}
+      </section>
+
+      <section
+        id={pageSectionDomId("score-username")}
+        className="rx-panel scroll-mt-6 p-5"
+      >
+        <h2 className="text-sm font-bold text-ink">Score username</h2>
+        <p className="mt-1 text-sm text-muted">
+          Hide scores from downloaded replays by default. Auto uses the username
+          that appears most often; otherwise pick one or more usernames.
+        </p>
+        {data.scores ? (
+          <>
+            <div className="mt-4 space-y-2">
+              <label
+                className={`flex cursor-pointer gap-3 rounded-xl px-4 py-3 transition ${
+                  data.scores.mode === "auto"
+                    ? "bg-accent-glow ring-1 ring-accent/50"
+                    : "bg-elevated/50 hover:bg-elevated"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="scoresUsernameMode"
+                  checked={data.scores.mode === "auto"}
+                  disabled={scoresUsernameMut.isPending}
+                  onChange={() => scoresUsernameMut.mutate("auto")}
+                  className="mt-1 accent-[var(--color-accent)]"
+                />
+                <div>
+                  <div className="font-bold text-ink">Auto</div>
+                  <div className="mt-0.5 text-sm text-muted">
+                    Most common username
+                    {data.scores.mostCommonUsername
+                      ? ` (${data.scores.mostCommonUsername})`
+                      : ""}
+                  </div>
+                </div>
+              </label>
+
+              <label
+                className={`flex cursor-pointer gap-3 rounded-xl px-4 py-3 transition ${
+                  data.scores.mode === "all"
+                    ? "bg-accent-glow ring-1 ring-accent/50"
+                    : "bg-elevated/50 hover:bg-elevated"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="scoresUsernameMode"
+                  checked={data.scores.mode === "all"}
+                  disabled={scoresUsernameMut.isPending}
+                  onChange={() => scoresUsernameMut.mutate("*")}
+                  className="mt-1 accent-[var(--color-accent)]"
+                />
+                <div>
+                  <div className="font-bold text-ink">All usernames</div>
+                  <div className="mt-0.5 text-sm text-muted">
+                    Include scores from downloaded replays and every player.
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            <div className="mt-4">
+              <div className="text-xs font-semibold uppercase tracking-wide text-faint">
+                Selected usernames
+              </div>
+              {data.scores.usernames.length === 0 ? (
+                <p className="mt-2 text-sm text-muted">
+                  No usernames found on scores yet — sync some plays first.
+                </p>
+              ) : (
+                <div className="mt-2 max-h-64 space-y-1 overflow-y-auto rounded-xl bg-elevated/40 p-2">
+                  {data.scores.usernames.map((u) => {
+                    const checked =
+                      data.scores.mode === "selected" &&
+                      data.scores.selectedUsernames.includes(u.username);
+                    return (
+                      <label
+                        key={u.username}
+                        className={`flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 transition ${
+                          checked
+                            ? "bg-accent-glow ring-1 ring-accent/40"
+                            : "hover:bg-elevated"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={scoresUsernameMut.isPending}
+                          onChange={() => {
+                            const current =
+                              data.scores.mode === "selected"
+                                ? data.scores.selectedUsernames
+                                : [];
+                            const next = checked
+                              ? current.filter((name) => name !== u.username)
+                              : [...current, u.username];
+                            if (next.length === 0) {
+                              scoresUsernameMut.mutate("auto");
+                              return;
+                            }
+                            scoresUsernameMut.mutate(next);
+                          }}
+                          className="accent-[var(--color-accent)]"
+                        />
+                        <span className="min-w-0 flex-1 truncate font-medium text-ink">
+                          {u.username}
+                        </span>
+                        <span className="font-mono text-xs text-faint">
+                          {u.count}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {data.scores.mode === "auto" &&
+            data.scores.resolvedUsernames &&
+            data.scores.resolvedUsernames.length > 0 ? (
+              <p className="mt-2 text-sm text-muted">
+                Currently filtering to{" "}
+                <span className="font-semibold text-ink">
+                  {data.scores.resolvedUsernames.join(", ")}
+                </span>
+                .
+              </p>
+            ) : null}
+            {data.scores.mode === "selected" &&
+            data.scores.selectedUsernames.length > 0 ? (
+              <p className="mt-2 text-sm text-muted">
+                Showing{" "}
+                <span className="font-semibold text-ink">
+                  {data.scores.selectedUsernames.join(", ")}
+                </span>
+                .
+              </p>
+            ) : null}
+          </>
+        ) : null}
+        {scoresUsernameMut.isPending ? (
+          <p className="mt-3 text-sm text-muted">
+            Updating filter and recomputing analytics…
+          </p>
+        ) : null}
+        {scoresUsernameMut.error ? (
+          <p className="mt-3 text-sm text-rose-300">
+            {scoresUsernameMut.error.message}
+          </p>
         ) : null}
       </section>
 

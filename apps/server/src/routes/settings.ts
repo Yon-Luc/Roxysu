@@ -1,4 +1,5 @@
 import { settings } from "@roxysu/db/schema";
+import { SCORES_USERNAME_FILTER_KEY } from "@roxysu/db/settings-keys";
 import { Elysia, t } from "elysia";
 import { eq } from "drizzle-orm";
 
@@ -9,6 +10,13 @@ import {
   runMasteryEngine,
   setActiveFormulaId,
 } from "../analytics/mastery/engine";
+import { runAnalyticsPipeline } from "../analytics/pipeline";
+import {
+  buildScoresUsernameSettings,
+  normalizeScoresUsernameFilterInput,
+  readScoresUsernameFilter,
+  serializeScoresUsernameFilter,
+} from "../analytics/scoreUsername";
 import { publish } from "../shared/events";
 import {
   getSunnyDanJobState,
@@ -68,6 +76,7 @@ async function buildSettingsResponse(db: Db) {
   const paths = buildResolvedOsuPaths(osuOverride);
   const tosu = await readTosuSettings(db);
   const maniaRatingExecutables = await readAllExecutablePaths(db);
+  const scoresUsername = await buildScoresUsernameSettings(db);
 
   return {
     mastery: {
@@ -81,6 +90,7 @@ async function buildSettingsResponse(db: Db) {
     sync: {
       pauseWhenUnfocused: pauseRow?.value === "1",
     },
+    scores: scoresUsername,
     paths,
     tosu: {
       enabled: tosu.enabled,
@@ -119,6 +129,7 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
     "/",
     async ({ db, body, set }) => {
       let tosuChanged = false;
+      let scoresUsernameChanged = false;
 
       if (body.masteryFormulaId) {
         try {
@@ -131,6 +142,19 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
         }
         await runMasteryEngine(db);
         publish({ type: "dashboard.updated" });
+      }
+
+      if (body.scoresUsernameFilter !== undefined) {
+        const next = normalizeScoresUsernameFilterInput(
+          body.scoresUsernameFilter,
+        );
+        const prev = await readScoresUsernameFilter(db);
+        const nextSerialized = serializeScoresUsernameFilter(next);
+        const prevSerialized = serializeScoresUsernameFilter(prev);
+        if (nextSerialized !== prevSerialized) {
+          await upsertSetting(db, SCORES_USERNAME_FILTER_KEY, nextSerialized);
+          scoresUsernameChanged = true;
+        }
       }
 
       if (body.pauseWhenUnfocused !== undefined) {
@@ -226,12 +250,24 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
         }
       }
 
+      if (scoresUsernameChanged) {
+        await runAnalyticsPipeline(db, { forceFull: true });
+        publish({ type: "dashboard.updated" });
+        publish({ type: "mastery.updated" });
+      }
+
       return buildSettingsResponse(db);
     },
     {
       body: t.Object({
         masteryFormulaId: t.Optional(t.String()),
         pauseWhenUnfocused: t.Optional(t.Boolean()),
+        /**
+         * Score username filter: "auto", "*", a username, or a list of usernames.
+         */
+        scoresUsernameFilter: t.Optional(
+          t.Union([t.String(), t.Array(t.String())]),
+        ),
         /** Absolute lazer data dir, or null/"" to clear the override. */
         osuDataPath: t.Optional(t.Union([t.String(), t.Null()])),
         tosuEnabled: t.Optional(t.Boolean()),

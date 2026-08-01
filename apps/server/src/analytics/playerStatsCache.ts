@@ -15,9 +15,12 @@ export function playerStatsCacheKey(parts: {
   range: number;
   skillTopPlays: number;
   keyCount: number;
+  /** Resolved username filter; null/omit = all. */
+  username?: string | null;
 }): string {
-  // v3: per-keymode stats (NM + Mirror only)
-  return `v3:${parts.granularity}:${parts.range}:${parts.skillTopPlays}:k${parts.keyCount}`;
+  // v4: per-keymode stats + username filter (NM + Mirror only)
+  const user = parts.username ?? "*";
+  return `v4:${user}:${parts.granularity}:${parts.range}:${parts.skillTopPlays}:k${parts.keyCount}`;
 }
 
 export function getCachedPlayerStats<T>(key: string): T | null {

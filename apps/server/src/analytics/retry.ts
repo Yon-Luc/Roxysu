@@ -1,12 +1,17 @@
 import type { Db } from "@roxysu/db/types";
 import { scoreMetrics, scores } from "@roxysu/db/schema";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
+import {
+  resolveScoresUsernames,
+  scoresUsernameCondition,
+} from "./scoreUsername";
 
 /**
  * Assign retry_index (consecutive same-beatmap plays in global timeline)
  * and is_pb flags. Rebuilds score_metrics while preserving sessionId.
  */
 export async function runRetryEngine(db: Db): Promise<void> {
+  const usernames = await resolveScoresUsernames(db);
   const rows = await db
     .select({
       id: scores.id,
@@ -16,9 +21,8 @@ export async function runRetryEngine(db: Db): Promise<void> {
       playedAt: scores.playedAt,
     })
     .from(scores)
-    .where(eq(scores.deletePending, false))
+    .where(and(eq(scores.deletePending, false), scoresUsernameCondition(usernames)))
     .orderBy(asc(scores.playedAt), asc(scores.id));
-
   const existing = await db
     .select({
       scoreId: scoreMetrics.scoreId,

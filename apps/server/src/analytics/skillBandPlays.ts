@@ -14,6 +14,10 @@ import {
   type SkillBandKind,
   type SkillPlayRow,
 } from "./recommend/sevenKSkill";
+import {
+  resolveScoresUsernamesSync,
+  scoresUsernameSql,
+} from "./scoreUsername";
 
 const DEFAULT_KEY_COUNT = DEFAULT_SKILL_KEY_COUNT;
 
@@ -128,6 +132,7 @@ function loadEnrichedSevenKPlays(
   db: Db,
   keyCount: number,
 ): EnrichedPlayRow[] {
+  const user = scoresUsernameSql(resolveScoresUsernamesSync(db));
   const rows = db.$client
     .query(
       `
@@ -149,6 +154,7 @@ function loadEnrichedSevenKPlays(
       LEFT JOIN beatmap_dan_ratings dr
         ON dr.beatmap_id = b.id AND dr.algorithm = 'sunny'
       WHERE s.delete_pending = 0
+        ${user.sql}
         AND b.hidden = 0
         AND COALESCE(bs.delete_pending, 0) = 0
         AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
@@ -157,7 +163,7 @@ function loadEnrichedSevenKPlays(
       ORDER BY s.played_at DESC
     `,
     )
-    .all(keyCount) as Array<{
+    .all(...user.params, keyCount) as Array<{
     scoreId: string;
     beatmapId: string;
     title: string;

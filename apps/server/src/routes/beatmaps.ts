@@ -6,6 +6,10 @@ import { and, count, desc, eq, max } from "drizzle-orm";
 import { dbPlugin } from "../db-runtime";
 import { toIso } from "../shared/serialize";
 import { listSessionsForBeatmap } from "../analytics/session";
+import {
+  resolveScoresUsernames,
+  scoresUsernameCondition,
+} from "../analytics/scoreUsername";
 import { getOrComputeSunnyDan } from "../map-analysis/computeSunnyDan";
 import {
   getOrComputePatternAnalysis,
@@ -62,13 +66,18 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
       }
 
       const { beatmap, setOnlineId } = row;
+      const usernames = await resolveScoresUsernames(db);
+      const usernameCond = scoresUsernameCondition(usernames);
+      const scoreScope = and(
+        eq(scores.beatmapId, params.id),
+        eq(scores.deletePending, false),
+        usernameCond,
+      );
 
       const recentScores = await db
         .select()
         .from(scores)
-        .where(
-          and(eq(scores.beatmapId, params.id), eq(scores.deletePending, false)),
-        )
+        .where(scoreScope)
         .orderBy(desc(scores.playedAt))
         .limit(50);
 
@@ -79,9 +88,7 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
           lastPlayedAt: max(scores.playedAt),
         })
         .from(scores)
-        .where(
-          and(eq(scores.beatmapId, params.id), eq(scores.deletePending, false)),
-        );
+        .where(scoreScope);
       const scorePpRows = await db
         .select({
           pp: scores.pp,
@@ -90,9 +97,7 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
           rulesetShortName: scores.rulesetShortName,
         })
         .from(scores)
-        .where(
-          and(eq(scores.beatmapId, params.id), eq(scores.deletePending, false)),
-        );
+        .where(scoreScope);
       const curves = await loadManiaPpCurves(db, [params.id]);
       const curve = curves.get(params.id);
       const resolvePp = (score: {

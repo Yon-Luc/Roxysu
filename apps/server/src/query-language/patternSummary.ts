@@ -7,6 +7,10 @@ import {
   backfillPatternAnalysisSync,
   PATTERN_QUERY_BACKFILL_LIMIT,
 } from "../map-analysis/computePatternAnalysis";
+import {
+  resolveScoresUsernamesSync,
+  scoresUsernameSqlLiteral,
+} from "../analytics/scoreUsername";
 import type { PracticeCardRow } from "./execute";
 
 export type PatternAxis = "all" | "rc" | "ln";
@@ -52,7 +56,12 @@ const PATTERN_ORDER = [
   "mixed",
 ] as const;
 
-const BASE_FROM = `
+function baseFrom(db: Db): string {
+  const userFilter = scoresUsernameSqlLiteral(
+    resolveScoresUsernamesSync(db),
+    "user_username",
+  );
+  return `
   FROM beatmaps b
   LEFT JOIN mastery m ON m.beatmap_id = b.id
   LEFT JOIN (
@@ -71,6 +80,7 @@ const BASE_FROM = `
       MAX(played_at) AS last_played_at
     FROM scores
     WHERE delete_pending = 0 AND beatmap_id IS NOT NULL
+      ${userFilter}
     GROUP BY beatmap_id
   ) ps ON ps.beatmap_id = b.id
   LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
@@ -79,6 +89,7 @@ const BASE_FROM = `
   LEFT JOIN beatmap_pattern_analysis pa
     ON pa.beatmap_id = b.id AND pa.algorithm = ?
 `;
+}
 
 const SELECT_COLS = `
   b.id AS id,
@@ -164,7 +175,7 @@ function buildPatternsForCounts(
       .query(
         `
         SELECT ${SELECT_COLS}
-        ${BASE_FROM}
+        ${baseFrom(db)}
         WHERE ${SEVEN_K_WHERE}
           AND pa.dominant_pattern = ?
           AND pa.error IS NULL

@@ -11,6 +11,10 @@ import {
   backfillPatternAnalysisSync,
   PATTERN_QUERY_BACKFILL_LIMIT,
 } from "../map-analysis/computePatternAnalysis";
+import {
+  resolveScoresUsernamesSync,
+  scoresUsernameSqlLiteral,
+} from "../analytics/scoreUsername";
 
 /** Max maps to compute per dan/sunny query so first filter stays responsive. */
 const DAN_QUERY_BACKFILL_LIMIT = 120;
@@ -61,7 +65,11 @@ export type DistributionBin = {
 
 type SqlBinding = string | number | bigint | boolean | null;
 
-const BASE_FROM = `
+function baseFrom(db: Db): string {
+  const usernames = resolveScoresUsernamesSync(db);
+  const userFilter = scoresUsernameSqlLiteral(usernames, "user_username");
+  const userFilterS = scoresUsernameSqlLiteral(usernames, "s.user_username");
+  return `
   FROM beatmaps b
   LEFT JOIN mastery m ON m.beatmap_id = b.id
   LEFT JOIN (
@@ -80,6 +88,7 @@ const BASE_FROM = `
       MAX(played_at) AS last_played_at
     FROM scores
     WHERE delete_pending = 0 AND beatmap_id IS NOT NULL
+      ${userFilter}
     GROUP BY beatmap_id
   ) ps ON ps.beatmap_id = b.id
   LEFT JOIN (
@@ -87,6 +96,7 @@ const BASE_FROM = `
     FROM scores s
     JOIN score_metrics sm ON sm.score_id = s.id
     WHERE s.delete_pending = 0 AND s.beatmap_id IS NOT NULL
+      ${userFilterS}
     GROUP BY s.beatmap_id
   ) rs ON rs.beatmap_id = b.id
   LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
@@ -95,6 +105,7 @@ const BASE_FROM = `
   LEFT JOIN beatmap_pattern_analysis pa
     ON pa.beatmap_id = b.id AND pa.algorithm = '${PATTERN_ALGORITHM}'
 `;
+}
 
 const SELECT_COLS = `
   b.id AS id,
@@ -215,7 +226,10 @@ function formatAccLabel(fromPct: number, toPct: number): string {
   return `${fmt(fromPct)}–${fmt(toPct)}%`;
 }
 
-function resolveFilter(query: string | undefined): {
+function resolveFilter(
+  db: Db,
+  query: string | undefined,
+): {
   sql: string;
   params: unknown[];
   needsDanBackfill: boolean;
@@ -231,7 +245,9 @@ function resolveFilter(query: string | undefined): {
     };
   }
   const ast = parseQuery(q);
-  const compiled = compileQuery(ast);
+  const compiled = compileQuery(ast, {
+    username: resolveScoresUsernamesSync(db),
+  });
   return {
     sql: compiled.sql,
     params: compiled.params,
@@ -304,7 +320,9 @@ export function executeAst(
   if (astUsesPatternAnalysis(ast)) {
     backfillPatternAnalysisSync(db, { limit: PATTERN_QUERY_BACKFILL_LIMIT });
   }
-  const compiled = compileQuery(ast);
+  const compiled = compileQuery(ast, {
+    username: resolveScoresUsernamesSync(db),
+  });
   return executeFilter(db, compiled.sql, compiled.params, opts);
 }
 
@@ -324,14 +342,14 @@ function executeFilter(
   const sortBy = opts.sortBy ?? "lastPlayed";
   const sortDir = opts.sortDir ?? "desc";
 
-  const countSql = `SELECT COUNT(*) AS n ${BASE_FROM} ${where}`;
+  const countSql = `SELECT COUNT(*) AS n ${baseFrom(db)} ${where}`;
   const countRow = db.$client
     .query(countSql)
     .get(...bindings) as { n: number } | null;
 
   const listSql = `
     SELECT ${SELECT_COLS}
-    ${BASE_FROM}
+    ${baseFrom(db)}
     ${where}
     ORDER BY ${orderBySql(sortBy, sortDir)}
     LIMIT ? OFFSET ?
@@ -361,7 +379,7 @@ export function searchBeatmaps(
   page: number;
   pageSize: number;
 } {
-  const filter = resolveFilter(query);
+  const filter = resolveFilter(db, query);
   maybeBackfillDan(db, filter.needsDanBackfill);
   maybeBackfillPattern(db, filter.needsPatternBackfill);
   const offset = (opts.page - 1) * opts.pageSize;
@@ -387,7 +405,7 @@ export function sampleBeatmaps(
     excludeIds?: string[];
   },
 ): { items: PracticeCardRow[]; total: number } {
-  const filter = resolveFilter(query);
+  const filter = resolveFilter(db, query);
   maybeBackfillDan(db, filter.needsDanBackfill);
   maybeBackfillPattern(db, filter.needsPatternBackfill);
   let filterSql = filter.sql;
@@ -404,14 +422,14 @@ export function sampleBeatmaps(
   const bindings = asBindings(params);
   const count = Math.max(1, Math.min(20, Math.floor(opts.count)));
 
-  const countSql = `SELECT COUNT(*) AS n ${BASE_FROM} ${where}`;
+  const countSql = `SELECT COUNT(*) AS n ${baseFrom(db)} ${where}`;
   const countRow = db.$client
     .query(countSql)
     .get(...bindings) as { n: number } | null;
 
   const listSql = `
     SELECT ${SELECT_COLS}
-    ${BASE_FROM}
+    ${baseFrom(db)}
     ${where}
     ORDER BY RANDOM()
     LIMIT ?
@@ -427,11 +445,11 @@ export function sampleBeatmaps(
 }
 
 export function countMatches(db: Db, query: string): number {
-  const filter = resolveFilter(query);
+  const filter = resolveFilter(db, query);
   maybeBackfillDan(db, filter.needsDanBackfill);
   maybeBackfillPattern(db, filter.needsPatternBackfill);
   const where = baseWhere(filter.sql);
-  const countSql = `SELECT COUNT(*) AS n ${BASE_FROM} ${where}`;
+  const countSql = `SELECT COUNT(*) AS n ${baseFrom(db)} ${where}`;
   const countRow = db.$client
     .query(countSql)
     .get(...asBindings(filter.params)) as { n: number } | null;
@@ -443,12 +461,12 @@ export function listCollectionMd5Hashes(
   db: Db,
   query: string,
 ): { hashes: string[]; skippedNoMd5: number } {
-  const filter = resolveFilter(query);
+  const filter = resolveFilter(db, query);
   maybeBackfillDan(db, filter.needsDanBackfill);
   maybeBackfillPattern(db, filter.needsPatternBackfill);
   const where = baseWhere(filter.sql);
 
-  const totalSql = `SELECT COUNT(*) AS n ${BASE_FROM} ${where}`;
+  const totalSql = `SELECT COUNT(*) AS n ${baseFrom(db)} ${where}`;
   const totalRow = db.$client
     .query(totalSql)
     .get(...asBindings(filter.params)) as { n: number } | null;
@@ -456,7 +474,7 @@ export function listCollectionMd5Hashes(
 
   const hashSql = `
     SELECT DISTINCT b.md5_hash AS md5_hash
-    ${BASE_FROM}
+    ${baseFrom(db)}
     ${where}
     AND b.md5_hash IS NOT NULL
     AND TRIM(b.md5_hash) != ''
@@ -474,14 +492,14 @@ export function listDistinctSetIds(
   db: Db,
   query: string,
 ): { setIds: string[] } {
-  const filter = resolveFilter(query);
+  const filter = resolveFilter(db, query);
   maybeBackfillDan(db, filter.needsDanBackfill);
   maybeBackfillPattern(db, filter.needsPatternBackfill);
   const where = baseWhere(filter.sql);
 
   const sql = `
     SELECT DISTINCT b.set_id AS set_id
-    ${BASE_FROM}
+    ${baseFrom(db)}
     ${where}
   `;
   const rows = db.$client
@@ -498,7 +516,7 @@ function distributionMisses(
 ): DistributionBin[] {
   const distSql = `
     SELECT (${missesBucketExpr()}) AS bucket, COUNT(*) AS count
-    ${BASE_FROM}
+    ${baseFrom(db)}
     ${where}
     GROUP BY bucket
   `;
@@ -523,7 +541,7 @@ function distributionAccuracy(
       MAX(ps.best_accuracy) AS max_acc,
       SUM(CASE WHEN ps.best_accuracy IS NULL THEN 1 ELSE 0 END) AS unplayed,
       SUM(CASE WHEN ps.best_accuracy IS NOT NULL THEN 1 ELSE 0 END) AS played
-    ${BASE_FROM}
+    ${baseFrom(db)}
     ${where}
   `;
   const range = db.$client.query(rangeSql).get(...asBindings(params)) as {
@@ -552,7 +570,7 @@ function distributionAccuracy(
     .query(
       `
       SELECT ps.best_accuracy AS acc
-      ${BASE_FROM}
+      ${baseFrom(db)}
       ${where}
         AND ps.best_accuracy IS NOT NULL
       ORDER BY ps.best_accuracy ASC
@@ -569,7 +587,7 @@ function distributionAccuracy(
     SELECT
       CAST(FLOOR(ps.best_accuracy * 1000.0 / ?) * ? AS INTEGER) AS bucket_tenths,
       COUNT(*) AS count
-    ${BASE_FROM}
+    ${baseFrom(db)}
     ${where}
       AND ps.best_accuracy IS NOT NULL
     GROUP BY bucket_tenths
@@ -617,7 +635,7 @@ function distributionScore(
       MAX(ps.best_score) AS max_score,
       SUM(CASE WHEN ps.best_score IS NULL THEN 1 ELSE 0 END) AS unplayed,
       SUM(CASE WHEN ps.best_score IS NOT NULL THEN 1 ELSE 0 END) AS played
-    ${BASE_FROM}
+    ${baseFrom(db)}
     ${where}
   `;
   const range = db.$client.query(rangeSql).get(...asBindings(params)) as {
@@ -644,7 +662,7 @@ function distributionScore(
     .query(
       `
       SELECT ps.best_score AS score
-      ${BASE_FROM}
+      ${baseFrom(db)}
       ${where}
         AND ps.best_score IS NOT NULL
       ORDER BY ps.best_score ASC
@@ -659,7 +677,7 @@ function distributionScore(
     SELECT
       CAST(FLOOR(ps.best_score * 1.0 / ?) * ? AS INTEGER) AS bucket_start,
       COUNT(*) AS count
-    ${BASE_FROM}
+    ${baseFrom(db)}
     ${where}
       AND ps.best_score IS NOT NULL
     GROUP BY bucket_start
@@ -696,7 +714,7 @@ export function practiceDistribution(
   total: number;
   bins: DistributionBin[];
 } {
-  const filter = resolveFilter(query);
+  const filter = resolveFilter(db, query);
   maybeBackfillDan(db, filter.needsDanBackfill);
   maybeBackfillPattern(db, filter.needsPatternBackfill);
   const where = baseWhere(filter.sql);

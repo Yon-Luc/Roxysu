@@ -6,6 +6,10 @@ import { dbPlugin } from "../db-runtime";
 import { toIso } from "../shared/serialize";
 import { getCurrentSession } from "../analytics/session";
 import {
+  resolveScoresUsernames,
+  scoresUsernameCondition,
+} from "../analytics/scoreUsername";
+import {
   getAccuracyTrend,
   getPpTrend,
   getWeeklyActivity,
@@ -19,6 +23,9 @@ import {
 export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
   .use(dbPlugin)
   .get("/", async ({ db }) => {
+    const usernames = await resolveScoresUsernames(db);
+    const usernameCond = scoresUsernameCondition(usernames);
+
     const recentScores = await db
       .select({
         id: scores.id,
@@ -50,7 +57,7 @@ export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
           eq(beatmapDanRatings.algorithm, SUNNY_ALGORITHM),
         ),
       )
-      .where(eq(scores.deletePending, false))
+      .where(and(eq(scores.deletePending, false), usernameCond))
       .orderBy(desc(scores.playedAt))
       .limit(25);
     const curves = await loadManiaPpCurves(
@@ -64,7 +71,7 @@ export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
     const [scoreCount] = await db
       .select({ n: count() })
       .from(scores)
-      .where(eq(scores.deletePending, false));
+      .where(and(eq(scores.deletePending, false), usernameCond));
     const [lastImport] = await db
       .select()
       .from(imports)

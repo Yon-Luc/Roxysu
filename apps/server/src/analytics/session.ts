@@ -4,6 +4,10 @@ import { beatmapDanRatings, beatmapSets, beatmaps, scoreMetrics, scores, session
 import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import { publish } from "../shared/events";
 import { SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
+import {
+  resolveScoresUsernames,
+  scoresUsernameCondition,
+} from "./scoreUsername";
 
 const SESSION_GAP_MS = 30 * 60 * 1000;
 
@@ -22,6 +26,7 @@ export type SessionEngineResult = {
  * so IDs stay stable across sync/analytics rebuilds.
  */
 export async function runSessionEngine(db: Db): Promise<SessionEngineResult> {
+  const usernames = await resolveScoresUsernames(db);
   const rows = await db
     .select({
       id: scores.id,
@@ -29,7 +34,7 @@ export async function runSessionEngine(db: Db): Promise<SessionEngineResult> {
       rulesetShortName: scores.rulesetShortName,
     })
     .from(scores)
-    .where(eq(scores.deletePending, false))
+    .where(and(eq(scores.deletePending, false), scoresUsernameCondition(usernames)))
     .orderBy(asc(scores.playedAt), asc(scores.id));
 
   const started: number[] = [];
@@ -207,6 +212,7 @@ export async function getSessionById(db: Db, id: number) {
 }
 
 export async function listSessionScores(db: Db, sessionId: number) {
+  const usernames = await resolveScoresUsernames(db);
   return db
     .select({
       id: scores.id,
@@ -246,6 +252,7 @@ export async function listSessionScores(db: Db, sessionId: number) {
       and(
         eq(scoreMetrics.sessionId, sessionId),
         eq(scores.deletePending, false),
+        scoresUsernameCondition(usernames),
       ),
     )
     .orderBy(desc(scores.playedAt), desc(scores.id));
@@ -260,6 +267,7 @@ export async function listSessions(db: Db, limit = 50) {
 }
 
 export async function listSessionsForBeatmap(db: Db, beatmapId: string) {
+  const usernames = await resolveScoresUsernames(db);
   const rows = await db
     .select({
       sessionId: scoreMetrics.sessionId,
@@ -267,7 +275,11 @@ export async function listSessionsForBeatmap(db: Db, beatmapId: string) {
     .from(scores)
     .innerJoin(scoreMetrics, eq(scores.id, scoreMetrics.scoreId))
     .where(
-      and(eq(scores.beatmapId, beatmapId), eq(scores.deletePending, false)),
+      and(
+        eq(scores.beatmapId, beatmapId),
+        eq(scores.deletePending, false),
+        scoresUsernameCondition(usernames),
+      ),
     );
 
   const ids = [

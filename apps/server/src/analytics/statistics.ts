@@ -7,6 +7,10 @@ import {
   resolveScorePp,
   type ManiaPpCurve,
 } from "../mania-rating/estimateScorePp";
+import {
+  resolveScoresUsernames,
+  scoresUsernameCondition,
+} from "./scoreUsername";
 
 function toMs(value: Date | number): number {
   return value instanceof Date ? value.getTime() : value;
@@ -88,6 +92,8 @@ export async function runStatisticsEngine(
   }
 
   // Full rebuild
+  const usernames = await resolveScoresUsernames(db);
+  const usernameCond = scoresUsernameCondition(usernames);
   const rows = await db
     .select({
       accuracy: scores.accuracy,
@@ -101,7 +107,13 @@ export async function runStatisticsEngine(
     })
     .from(scores)
     .leftJoin(beatmaps, eq(scores.beatmapId, beatmaps.id))
-    .where(and(eq(scores.deletePending, false), isNotNull(scores.beatmapId)));
+    .where(
+      and(
+        eq(scores.deletePending, false),
+        isNotNull(scores.beatmapId),
+        usernameCond,
+      ),
+    );
 
   const curves = await loadManiaPpCurves(db);
   const daily = new Map<string, Bucket>();
@@ -161,6 +173,7 @@ async function rebuildPartitionsForScores(db: Db, scoreIds: string[]) {
   if (dayKeys.size === 0 && weekKeys.size === 0 && mapperIds.size === 0) return;
 
   // Re-aggregate from all non-deleted scores that fall in the touched partitions.
+  const usernames = await resolveScoresUsernames(db);
   const all = await db
     .select({
       accuracy: scores.accuracy,
@@ -174,7 +187,13 @@ async function rebuildPartitionsForScores(db: Db, scoreIds: string[]) {
     })
     .from(scores)
     .leftJoin(beatmaps, eq(scores.beatmapId, beatmaps.id))
-    .where(and(eq(scores.deletePending, false), isNotNull(scores.beatmapId)));
+    .where(
+      and(
+        eq(scores.deletePending, false),
+        isNotNull(scores.beatmapId),
+        scoresUsernameCondition(usernames),
+      ),
+    );
 
   const curves = await loadManiaPpCurves(db);
   const daily = new Map<string, Bucket>();
@@ -220,6 +239,7 @@ async function rebuildPartitionsForScores(db: Db, scoreIds: string[]) {
 }
 
 async function rebuildMapperPartitions(db: Db, mapperOnlineIds: number[]) {
+  const usernames = await resolveScoresUsernames(db);
   const all = await db
     .select({
       accuracy: scores.accuracy,
@@ -237,6 +257,7 @@ async function rebuildMapperPartitions(db: Db, mapperOnlineIds: number[]) {
         eq(scores.deletePending, false),
         isNotNull(scores.beatmapId),
         inArray(beatmaps.mapperOnlineId, mapperOnlineIds),
+        scoresUsernameCondition(usernames),
       ),
     );
 

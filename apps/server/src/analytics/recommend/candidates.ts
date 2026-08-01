@@ -5,6 +5,10 @@ import {
   FLN_RATIO_THRESHOLD,
   LN_DAN_RATIO_THRESHOLD,
 } from "../../map-analysis/estDiff";
+import {
+  resolveScoresUsernamesSync,
+  scoresUsernameSql,
+} from "../scoreUsername";
 
 export type CandidateRow = {
   id: string;
@@ -98,13 +102,22 @@ export function loadCandidates(
   excludeIds: string[],
   limit: number,
 ): CandidateRow[] {
-  const params = [...filterParams];
+  const user = scoresUsernameSql(
+    resolveScoresUsernamesSync(db),
+    "user_username",
+  );
+  const bind: Array<string | number | bigint | boolean | null> = [
+    ...user.params,
+    SUNNY_ALGORITHM,
+    ...(filterParams as Array<string | number | bigint | boolean | null>),
+  ];
   let excludeSql = "";
   if (excludeIds.length > 0) {
     const placeholders = excludeIds.map(() => "?").join(",");
     excludeSql = ` AND b.id NOT IN (${placeholders})`;
-    params.push(...excludeIds);
+    bind.push(...excludeIds);
   }
+  bind.push(limit);
 
   const sql = `
     SELECT
@@ -147,6 +160,7 @@ export function loadCandidates(
         MAX(played_at) AS last_played_at
       FROM scores
       WHERE delete_pending = 0 AND beatmap_id IS NOT NULL
+        ${user.sql}
       GROUP BY beatmap_id
     ) ps ON ps.beatmap_id = b.id
     LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
@@ -160,13 +174,7 @@ export function loadCandidates(
     LIMIT ?
   `;
 
-  const rows = db.$client
-    .query(sql)
-    .all(
-      SUNNY_ALGORITHM,
-      ...(params as Array<string | number | bigint | boolean | null>),
-      limit,
-    ) as CandidateRow[];
+  const rows = db.$client.query(sql).all(...bind) as CandidateRow[];
 
   return rows.map((r) => ({
     ...r,

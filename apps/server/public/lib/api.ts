@@ -385,6 +385,7 @@ export type MirrorBatchJob = Exclude<
 export async function patchSettings(body: {
   masteryFormulaId?: string;
   pauseWhenUnfocused?: boolean;
+  scoresUsernameFilter?: string | string[];
   osuDataPath?: string | null;
   tosuEnabled?: boolean;
   tosuHost?: string;

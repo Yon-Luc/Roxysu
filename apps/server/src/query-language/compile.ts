@@ -50,7 +50,11 @@ function compileDanMatch(
 }
 
 /** Positional `?` binders. Alias contract: b=beatmaps, m=mastery, ps=play_stats, rs=retry_stats */
-function compileTerm(term: FieldTerm, params: unknown[]): string {
+function compileTerm(
+  term: FieldTerm,
+  params: unknown[],
+  usernames: string[] | null,
+): string {
   const push = (value: unknown) => {
     params.push(value);
     return "?";
@@ -99,13 +103,22 @@ function compileTerm(term: FieldTerm, params: unknown[]): string {
       }
       return mania;
     }
-    case "mods":
+    case "mods": {
+      let usernameClause = "";
+      if (usernames != null && usernames.length === 1) {
+        usernameClause = `AND s.user_username = ${push(usernames[0])}`;
+      } else if (usernames != null && usernames.length > 1) {
+        const placeholders = usernames.map((name) => push(name)).join(", ");
+        usernameClause = `AND s.user_username IN (${placeholders})`;
+      }
       return `EXISTS (
         SELECT 1 FROM scores s
         WHERE s.beatmap_id = b.id
           AND s.delete_pending = 0
+          ${usernameClause}
           AND s.mods LIKE ${push(`%${term.value}%`)} ESCAPE '\\'
       )`;
+    }
     case "acc": {
       if (term.min != null && term.max != null) {
         return `ps.best_accuracy BETWEEN ${push(term.min / 100)} AND ${push(term.max / 100)}`;
@@ -218,13 +231,17 @@ function compileTerm(term: FieldTerm, params: unknown[]): string {
   }
 }
 
-export function compileQuery(ast: AstNode): CompiledQuery {
+export function compileQuery(
+  ast: AstNode,
+  opts?: { username?: string[] | null },
+): CompiledQuery {
   const params: unknown[] = [];
+  const usernames = opts?.username ?? null;
 
   function compileNode(node: AstNode): string {
     switch (node.type) {
       case "term":
-        return compileTerm(node.term, params);
+        return compileTerm(node.term, params, usernames);
       case "and":
         return `(${compileNode(node.left)} AND ${compileNode(node.right)})`;
       case "or":

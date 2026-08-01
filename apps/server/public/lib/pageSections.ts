@@ -35,6 +35,21 @@ export const PAGE_SECTIONS: PageSectionDef[] = [
     keywords: ["settings", "mastery", "level", "formula"],
   },
   {
+    id: "score-username",
+    to: "/settings",
+    pageLabel: "Settings",
+    label: "Score username",
+    keywords: [
+      "settings",
+      "scores",
+      "username",
+      "replay",
+      "downloaded",
+      "filter",
+      "player",
+    ],
+  },
+  {
     id: "live-sync",
     to: "/settings",
     pageLabel: "Settings",

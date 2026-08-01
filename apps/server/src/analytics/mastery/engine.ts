@@ -4,6 +4,10 @@ import { mastery, scoreMetrics, scores, settings } from "@roxysu/db/schema";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { publish } from "../../shared/events";
 import {
+  resolveScoresUsernames,
+  scoresUsernameCondition,
+} from "../scoreUsername";
+import {
   DEFAULT_MASTERY_FORMULA,
   getFormula,
   listFormulas,
@@ -52,6 +56,8 @@ export async function runMasteryEngine(
   const formulaId = await getActiveFormulaId(db);
   const formula = getFormula(formulaId)!;
   const scopeIds = options?.beatmapIds;
+  const usernames = await resolveScoresUsernames(db);
+  const usernameCond = scoresUsernameCondition(usernames);
 
   const scoreQuery = db
     .select({
@@ -72,8 +78,13 @@ export async function runMasteryEngine(
             eq(scores.deletePending, false),
             isNotNull(scores.beatmapId),
             inArray(scores.beatmapId, scopeIds),
+            usernameCond,
           )
-        : and(eq(scores.deletePending, false), isNotNull(scores.beatmapId)),
+        : and(
+            eq(scores.deletePending, false),
+            isNotNull(scores.beatmapId),
+            usernameCond,
+          ),
     );
 
   const scoreRows = await scoreQuery;

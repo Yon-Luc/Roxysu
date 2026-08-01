@@ -6,6 +6,10 @@ import { dbPlugin } from "../db-runtime";
 import { toIso } from "../shared/serialize";
 import { getCurrentSession } from "../analytics/session";
 import {
+  resolveScoresGamemode,
+  scoresGamemodeCondition,
+} from "../analytics/scoreGamemode";
+import {
   resolveScoresUsernames,
   scoresUsernameCondition,
 } from "../analytics/scoreUsername";
@@ -23,8 +27,13 @@ import {
 export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
   .use(dbPlugin)
   .get("/", async ({ db }) => {
-    const usernames = await resolveScoresUsernames(db);
+    const [usernames, gamemode] = await Promise.all([
+      resolveScoresUsernames(db),
+      resolveScoresGamemode(db),
+    ]);
     const usernameCond = scoresUsernameCondition(usernames);
+    const gamemodeCond = scoresGamemodeCondition(gamemode);
+    const scoreScope = and(eq(scores.deletePending, false), usernameCond, gamemodeCond);
 
     const recentScores = await db
       .select({
@@ -57,7 +66,7 @@ export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
           eq(beatmapDanRatings.algorithm, SUNNY_ALGORITHM),
         ),
       )
-      .where(and(eq(scores.deletePending, false), usernameCond))
+      .where(scoreScope)
       .orderBy(desc(scores.playedAt))
       .limit(25);
     const curves = await loadManiaPpCurves(
@@ -67,11 +76,18 @@ export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
         .filter((beatmapId): beatmapId is string => beatmapId != null),
     );
 
-    const [beatmapCount] = await db.select({ n: count() }).from(beatmaps);
+    const beatmapScope = and(
+      eq(beatmaps.hidden, false),
+      gamemode ? eq(beatmaps.rulesetShortName, gamemode) : undefined,
+    );
+    const [beatmapCount] = await db
+      .select({ n: count() })
+      .from(beatmaps)
+      .where(beatmapScope);
     const [scoreCount] = await db
       .select({ n: count() })
       .from(scores)
-      .where(and(eq(scores.deletePending, false), usernameCond));
+      .where(scoreScope);
     const [lastImport] = await db
       .select()
       .from(imports)

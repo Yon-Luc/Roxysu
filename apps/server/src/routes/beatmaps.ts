@@ -7,6 +7,10 @@ import { dbPlugin } from "../db-runtime";
 import { toIso } from "../shared/serialize";
 import { listSessionsForBeatmap } from "../analytics/session";
 import {
+  resolveScoresGamemode,
+  scoresGamemodeCondition,
+} from "../analytics/scoreGamemode";
+import {
   resolveScoresUsernames,
   scoresUsernameCondition,
 } from "../analytics/scoreUsername";
@@ -66,12 +70,17 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
       }
 
       const { beatmap, setOnlineId } = row;
-      const usernames = await resolveScoresUsernames(db);
+      const [usernames, gamemode] = await Promise.all([
+        resolveScoresUsernames(db),
+        resolveScoresGamemode(db),
+      ]);
       const usernameCond = scoresUsernameCondition(usernames);
+      const gamemodeCond = scoresGamemodeCondition(gamemode);
       const scoreScope = and(
         eq(scores.beatmapId, params.id),
         eq(scores.deletePending, false),
         usernameCond,
+        gamemodeCond,
       );
 
       const recentScores = await db

@@ -2,6 +2,10 @@ import type { Db } from "@roxysu/db/types";
 import { scoreMetrics, scores } from "@roxysu/db/schema";
 import { and, asc, eq } from "drizzle-orm";
 import {
+  resolveScoresGamemode,
+  scoresGamemodeCondition,
+} from "./scoreGamemode";
+import {
   resolveScoresUsernames,
   scoresUsernameCondition,
 } from "./scoreUsername";
@@ -11,7 +15,10 @@ import {
  * and is_pb flags. Rebuilds score_metrics while preserving sessionId.
  */
 export async function runRetryEngine(db: Db): Promise<void> {
-  const usernames = await resolveScoresUsernames(db);
+  const [usernames, gamemode] = await Promise.all([
+    resolveScoresUsernames(db),
+    resolveScoresGamemode(db),
+  ]);
   const rows = await db
     .select({
       id: scores.id,
@@ -21,7 +28,13 @@ export async function runRetryEngine(db: Db): Promise<void> {
       playedAt: scores.playedAt,
     })
     .from(scores)
-    .where(and(eq(scores.deletePending, false), scoresUsernameCondition(usernames)))
+    .where(
+      and(
+        eq(scores.deletePending, false),
+        scoresUsernameCondition(usernames),
+        scoresGamemodeCondition(gamemode),
+      ),
+    )
     .orderBy(asc(scores.playedAt), asc(scores.id));
   const existing = await db
     .select({

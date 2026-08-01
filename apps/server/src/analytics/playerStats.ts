@@ -18,12 +18,31 @@ import {
   type ManiaPpCurve,
 } from "../mania-rating/estimateScorePp";
 import {
+  resolveScoresGamemodeSync,
+  scoresGamemodeSql,
+} from "./scoreGamemode";
+import {
   resolveScoresUsernamesSync,
   scoresUsernameSql,
 } from "./scoreUsername";
 
-function scoreUserFilter(db: Db, column = "s.user_username") {
-  return scoresUsernameSql(resolveScoresUsernamesSync(db), column);
+/** Username + gamemode SQL fragments for score-scoped analytics queries. */
+function scoreScopeFilter(
+  db: Db,
+  opts?: { userColumn?: string; modeColumn?: string },
+) {
+  const user = scoresUsernameSql(
+    resolveScoresUsernamesSync(db),
+    opts?.userColumn ?? "s.user_username",
+  );
+  const mode = scoresGamemodeSql(
+    resolveScoresGamemodeSync(db),
+    opts?.modeColumn ?? "s.ruleset_short_name",
+  );
+  return {
+    sql: `${user.sql}${mode.sql}`,
+    params: [...user.params, ...mode.params],
+  };
 }
 
 /** Display buckets for the rank chart (silver grades folded into gold). Fails omitted. */
@@ -80,7 +99,7 @@ function weekStartKey(d: Date): string {
 }
 
 function listPlayedKeyCounts(db: Db): number[] {
-  const user = scoreUserFilter(db);
+  const user = scoreScopeFilter(db);
   const rows = db.$client
     .query(
       `
@@ -112,7 +131,7 @@ function listPlayedKeyCounts(db: Db): number[] {
  * Fails (rank F / -1) are excluded. Each score is counted once (perfect wins).
  */
 async function getRankDistribution(db: Db, keyCount: number) {
-  const user = scoreUserFilter(db);
+  const user = scoreScopeFilter(db);
   const rows = db.$client
     .query(
       `
@@ -159,7 +178,7 @@ async function getRankDistribution(db: Db, keyCount: number) {
 }
 
 async function getSkillsetMix(db: Db, keyCount: number) {
-  const user = scoreUserFilter(db);
+  const user = scoreScopeFilter(db);
   const rows = db.$client
     .query(
       `
@@ -208,7 +227,7 @@ async function getSkillsetMix(db: Db, keyCount: number) {
 }
 
 async function getPlayTimePatterns(db: Db, keyCount: number) {
-  const user = scoreUserFilter(db);
+  const user = scoreScopeFilter(db);
   const rows = db.$client
     .query(
       `
@@ -298,7 +317,7 @@ async function getTopMappers(
   curves: Map<string, ManiaPpCurve>,
   limit = 10,
 ) {
-  const user = scoreUserFilter(db);
+  const user = scoreScopeFilter(db);
   const rows = db.$client
     .query(
       `
@@ -375,7 +394,7 @@ async function getKeymodeProgression(
   weeks: number,
   curves: Map<string, ManiaPpCurve>,
 ) {
-  const user = scoreUserFilter(db);
+  const user = scoreScopeFilter(db);
   const rows = db.$client
     .query(
       `
@@ -465,7 +484,7 @@ async function getKeymodeProgression(
 }
 
 async function getSummary(db: Db, keyCount: number) {
-  const user = scoreUserFilter(db);
+  const user = scoreScopeFilter(db);
   const rows = db.$client
     .query(
       `

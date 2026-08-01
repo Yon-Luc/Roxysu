@@ -16,6 +16,10 @@ import {
   setCachedPlayerStats,
 } from "../analytics/playerStatsCache";
 import { resolveScoresUsernamesSync, scoresUsernameCacheKey } from "../analytics/scoreUsername";
+import {
+  resolveScoresGamemodeSync,
+  scoresGamemodeCacheKey,
+} from "../analytics/scoreGamemode";
 import { toIso } from "../shared/serialize";
 import {
   getSkillBandPlays,
@@ -109,12 +113,14 @@ export const statsRoutes = new Elysia({ prefix: "/stats" })
       const skillTopPlays = parseSkillTopPlays(query.skillTopPlays);
       const keyCount = parseSkillKeyCount(query.keyCount);
       const usernames = resolveScoresUsernamesSync(db);
+      const gamemode = resolveScoresGamemodeSync(db);
       const cacheKey = playerStatsCacheKey({
         granularity,
         range,
         skillTopPlays,
         keyCount,
         username: scoresUsernameCacheKey(usernames),
+        gamemode: scoresGamemodeCacheKey(gamemode),
       });
 
       const cached = getCachedPlayerStats<StatsResponse>(cacheKey);

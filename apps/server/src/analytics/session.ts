@@ -5,6 +5,10 @@ import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import { publish } from "../shared/events";
 import { SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
 import {
+  resolveScoresGamemode,
+  scoresGamemodeCondition,
+} from "./scoreGamemode";
+import {
   resolveScoresUsernames,
   scoresUsernameCondition,
 } from "./scoreUsername";
@@ -26,7 +30,10 @@ export type SessionEngineResult = {
  * so IDs stay stable across sync/analytics rebuilds.
  */
 export async function runSessionEngine(db: Db): Promise<SessionEngineResult> {
-  const usernames = await resolveScoresUsernames(db);
+  const [usernames, gamemode] = await Promise.all([
+    resolveScoresUsernames(db),
+    resolveScoresGamemode(db),
+  ]);
   const rows = await db
     .select({
       id: scores.id,
@@ -34,7 +41,13 @@ export async function runSessionEngine(db: Db): Promise<SessionEngineResult> {
       rulesetShortName: scores.rulesetShortName,
     })
     .from(scores)
-    .where(and(eq(scores.deletePending, false), scoresUsernameCondition(usernames)))
+    .where(
+      and(
+        eq(scores.deletePending, false),
+        scoresUsernameCondition(usernames),
+        scoresGamemodeCondition(gamemode),
+      ),
+    )
     .orderBy(asc(scores.playedAt), asc(scores.id));
 
   const started: number[] = [];
@@ -212,7 +225,10 @@ export async function getSessionById(db: Db, id: number) {
 }
 
 export async function listSessionScores(db: Db, sessionId: number) {
-  const usernames = await resolveScoresUsernames(db);
+  const [usernames, gamemode] = await Promise.all([
+    resolveScoresUsernames(db),
+    resolveScoresGamemode(db),
+  ]);
   return db
     .select({
       id: scores.id,
@@ -253,6 +269,7 @@ export async function listSessionScores(db: Db, sessionId: number) {
         eq(scoreMetrics.sessionId, sessionId),
         eq(scores.deletePending, false),
         scoresUsernameCondition(usernames),
+        scoresGamemodeCondition(gamemode),
       ),
     )
     .orderBy(desc(scores.playedAt), desc(scores.id));
@@ -267,7 +284,10 @@ export async function listSessions(db: Db, limit = 50) {
 }
 
 export async function listSessionsForBeatmap(db: Db, beatmapId: string) {
-  const usernames = await resolveScoresUsernames(db);
+  const [usernames, gamemode] = await Promise.all([
+    resolveScoresUsernames(db),
+    resolveScoresGamemode(db),
+  ]);
   const rows = await db
     .select({
       sessionId: scoreMetrics.sessionId,
@@ -279,6 +299,7 @@ export async function listSessionsForBeatmap(db: Db, beatmapId: string) {
         eq(scores.beatmapId, beatmapId),
         eq(scores.deletePending, false),
         scoresUsernameCondition(usernames),
+        scoresGamemodeCondition(gamemode),
       ),
     );
 

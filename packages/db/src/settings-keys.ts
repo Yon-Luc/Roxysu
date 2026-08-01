@@ -20,3 +20,14 @@ export const SCORES_USERNAME_FILTER_KEY = "scores.username_filter";
 
 export const SCORES_USERNAME_AUTO = "auto";
 export const SCORES_USERNAME_ALL = "*";
+
+/**
+ * Gamemode / ruleset filter preference.
+ * - missing / "auto" → ruleset with the most scores
+ * - "*" → show all gamemodes
+ * - a ruleset short name → exact match (`osu` / `taiko` / `fruits` / `mania`)
+ */
+export const SCORES_GAMEMODE_FILTER_KEY = "scores.gamemode_filter";
+
+export const SCORES_GAMEMODE_AUTO = "auto";
+export const SCORES_GAMEMODE_ALL = "*";

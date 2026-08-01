@@ -136,6 +136,21 @@ export function SettingsPage({ section }: { section?: string } = {}) {
     },
   });
 
+  const scoresGamemodeMut = useMutation({
+    mutationFn: (scoresGamemodeFilter: string) =>
+      patchSettings({ scoresGamemodeFilter }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["settings"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      void queryClient.invalidateQueries({ queryKey: ["practice"] });
+      void queryClient.invalidateQueries({ queryKey: ["beatmap"] });
+      void queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      void queryClient.invalidateQueries({ queryKey: ["stats"] });
+      void queryClient.invalidateQueries({ queryKey: ["recommend"] });
+      void queryClient.invalidateQueries({ queryKey: ["search"] });
+    },
+  });
+
   const pathMut = useMutation({
     mutationFn: (osuDataPath: string | null) => patchSettings({ osuDataPath }),
     onSuccess: (next) => {
@@ -707,6 +722,147 @@ export function SettingsPage({ section }: { section?: string } = {}) {
         {scoresUsernameMut.error ? (
           <p className="mt-3 text-sm text-rose-300">
             {scoresUsernameMut.error.message}
+          </p>
+        ) : null}
+      </section>
+
+      <section
+        id={pageSectionDomId("gamemode")}
+        className="rx-panel scroll-mt-6 p-5"
+      >
+        <h2 className="text-sm font-bold text-ink">Gamemode</h2>
+        <p className="mt-1 text-sm text-muted">
+          Hide scores and maps from other gamemodes. Auto picks the mode with
+          the most scores; or keep all modes visible.
+        </p>
+        {data.gamemode ? (
+          <>
+            <div className="mt-4 space-y-2">
+              <label
+                className={`flex cursor-pointer gap-3 rounded-xl px-4 py-3 transition ${
+                  data.gamemode.mode === "auto"
+                    ? "bg-accent-glow ring-1 ring-accent/50"
+                    : "bg-elevated/50 hover:bg-elevated"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="scoresGamemode"
+                  checked={data.gamemode.mode === "auto"}
+                  disabled={scoresGamemodeMut.isPending}
+                  onChange={() => scoresGamemodeMut.mutate("auto")}
+                  className="mt-1 accent-[var(--color-accent)]"
+                />
+                <div>
+                  <div className="font-bold text-ink">Auto</div>
+                  <div className="mt-0.5 text-sm text-muted">
+                    Most scores
+                    {data.gamemode.mostCommonGamemode
+                      ? ` (${
+                          data.gamemode.gamemodes.find(
+                            (g) => g.id === data.gamemode.mostCommonGamemode,
+                          )?.label ?? data.gamemode.mostCommonGamemode
+                        })`
+                      : ""}
+                  </div>
+                </div>
+              </label>
+
+              <label
+                className={`flex cursor-pointer gap-3 rounded-xl px-4 py-3 transition ${
+                  data.gamemode.mode === "all"
+                    ? "bg-accent-glow ring-1 ring-accent/50"
+                    : "bg-elevated/50 hover:bg-elevated"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="scoresGamemode"
+                  checked={data.gamemode.mode === "all"}
+                  disabled={scoresGamemodeMut.isPending}
+                  onChange={() => scoresGamemodeMut.mutate("*")}
+                  className="mt-1 accent-[var(--color-accent)]"
+                />
+                <div>
+                  <div className="font-bold text-ink">All gamemodes</div>
+                  <div className="mt-0.5 text-sm text-muted">
+                    Show std, taiko, catch, and mania together.
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            <div className="mt-4 space-y-2">
+              {data.gamemode.gamemodes.map((g) => {
+                const checked =
+                  data.gamemode.mode === "selected" &&
+                  data.gamemode.selectedGamemode === g.id;
+                return (
+                  <label
+                    key={g.id}
+                    className={`flex cursor-pointer gap-3 rounded-xl px-4 py-3 transition ${
+                      checked
+                        ? "bg-accent-glow ring-1 ring-accent/50"
+                        : "bg-elevated/50 hover:bg-elevated"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="scoresGamemode"
+                      checked={checked}
+                      disabled={scoresGamemodeMut.isPending}
+                      onChange={() => scoresGamemodeMut.mutate(g.id)}
+                      className="mt-1 accent-[var(--color-accent)]"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="font-bold text-ink">
+                        {g.label}{" "}
+                        <span className="font-normal text-faint">
+                          ({g.shortLabel})
+                        </span>
+                      </div>
+                    </div>
+                    <span className="font-mono text-xs text-faint">
+                      {g.count}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+
+            {data.gamemode.mode === "auto" && data.gamemode.resolvedGamemode ? (
+              <p className="mt-2 text-sm text-muted">
+                Currently filtering to{" "}
+                <span className="font-semibold text-ink">
+                  {data.gamemode.gamemodes.find(
+                    (g) => g.id === data.gamemode.resolvedGamemode,
+                  )?.label ?? data.gamemode.resolvedGamemode}
+                </span>
+                .
+              </p>
+            ) : null}
+            {data.gamemode.mode === "selected" &&
+            data.gamemode.selectedGamemode ? (
+              <p className="mt-2 text-sm text-muted">
+                Showing{" "}
+                <span className="font-semibold text-ink">
+                  {data.gamemode.gamemodes.find(
+                    (g) => g.id === data.gamemode.selectedGamemode,
+                  )?.label ?? data.gamemode.selectedGamemode}
+                </span>{" "}
+                only.
+              </p>
+            ) : null}
+          </>
+        ) : null}
+        {scoresGamemodeMut.isPending ? (
+          <p className="mt-3 text-sm text-muted">
+            Updating filter and recomputing analytics…
+          </p>
+        ) : null}
+        {scoresGamemodeMut.error ? (
+          <p className="mt-3 text-sm text-rose-300">
+            {scoresGamemodeMut.error.message}
           </p>
         ) : null}
       </section>

@@ -17,10 +17,13 @@ export function playerStatsCacheKey(parts: {
   keyCount: number;
   /** Resolved username filter; null/omit = all. */
   username?: string | null;
+  /** Resolved gamemode filter; null/omit = all. */
+  gamemode?: string | null;
 }): string {
-  // v4: per-keymode stats + username filter (NM + Mirror only)
+  // v5: per-keymode stats + username + gamemode filter (NM + Mirror only)
   const user = parts.username ?? "*";
-  return `v4:${user}:${parts.granularity}:${parts.range}:${parts.skillTopPlays}:k${parts.keyCount}`;
+  const mode = parts.gamemode ?? "*";
+  return `v5:${user}:${mode}:${parts.granularity}:${parts.range}:${parts.skillTopPlays}:k${parts.keyCount}`;
 }
 
 export function getCachedPlayerStats<T>(key: string): T | null {

@@ -6,6 +6,10 @@ import {
   LN_DAN_RATIO_THRESHOLD,
 } from "../../map-analysis/estDiff";
 import {
+  resolveScoresGamemodeSync,
+  scoresGamemodeSql,
+} from "../scoreGamemode";
+import {
   resolveScoresUsernamesSync,
   scoresUsernameSql,
 } from "../scoreUsername";
@@ -106,8 +110,13 @@ export function loadCandidates(
     resolveScoresUsernamesSync(db),
     "user_username",
   );
+  const mode = scoresGamemodeSql(
+    resolveScoresGamemodeSync(db),
+    "ruleset_short_name",
+  );
   const bind: Array<string | number | bigint | boolean | null> = [
     ...user.params,
+    ...mode.params,
     SUNNY_ALGORITHM,
     ...(filterParams as Array<string | number | bigint | boolean | null>),
   ];
@@ -161,6 +170,7 @@ export function loadCandidates(
       FROM scores
       WHERE delete_pending = 0 AND beatmap_id IS NOT NULL
         ${user.sql}
+        ${mode.sql}
       GROUP BY beatmap_id
     ) ps ON ps.beatmap_id = b.id
     LEFT JOIN beatmap_sets bs ON bs.id = b.set_id

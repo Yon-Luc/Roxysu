@@ -2,6 +2,10 @@
 import type { Db } from "@roxysu/db/types";
 import { isNomodOrMirrorOnly } from "../../replay/mods";
 import {
+  resolveScoresGamemodeSync,
+  scoresGamemodeSql,
+} from "../scoreGamemode";
+import {
   resolveScoresUsernamesSync,
   scoresUsernameSql,
 } from "../scoreUsername";
@@ -445,6 +449,10 @@ function coldStartFromMastery(db: Db, keyCount: number): SevenKSkillProfile {
     resolveScoresUsernamesSync(db),
     "user_username",
   );
+  const mode = scoresGamemodeSql(
+    resolveScoresGamemodeSync(db),
+    "ruleset_short_name",
+  );
   const rows = db.$client
     .query(
       `
@@ -465,6 +473,7 @@ function coldStartFromMastery(db: Db, keyCount: number): SevenKSkillProfile {
         FROM scores
         WHERE delete_pending = 0 AND beatmap_id IS NOT NULL
           ${user.sql}
+          ${mode.sql}
         GROUP BY beatmap_id
       ) ps ON ps.beatmap_id = b.id
       LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
@@ -479,7 +488,7 @@ function coldStartFromMastery(db: Db, keyCount: number): SevenKSkillProfile {
       LIMIT 80
     `,
     )
-    .all(...user.params, keyCount) as Array<{
+    .all(...user.params, ...mode.params, keyCount) as Array<{
     bestAccuracy: number | null;
     playCount: number;
     sunnyStar: number;
@@ -697,6 +706,7 @@ export function loadSevenKPlays(
   keyCount: number = DEFAULT_SKILL_KEY_COUNT,
 ): SkillPlayRow[] {
   const user = scoresUsernameSql(resolveScoresUsernamesSync(db));
+  const mode = scoresGamemodeSql(resolveScoresGamemodeSync(db));
   const rows = db.$client
     .query(
       `
@@ -714,6 +724,7 @@ export function loadSevenKPlays(
         ON dr.beatmap_id = b.id AND dr.algorithm = 'sunny'
       WHERE s.delete_pending = 0
         ${user.sql}
+        ${mode.sql}
         AND b.hidden = 0
         AND COALESCE(bs.delete_pending, 0) = 0
         AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
@@ -722,7 +733,7 @@ export function loadSevenKPlays(
       ORDER BY s.played_at DESC
     `,
     )
-    .all(...user.params, keyCount) as Array<{
+    .all(...user.params, ...mode.params, keyCount) as Array<{
     beatmapId: string;
     accuracy: number;
     playedAt: number;

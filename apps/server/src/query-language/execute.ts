@@ -12,6 +12,10 @@ import {
   PATTERN_QUERY_BACKFILL_LIMIT,
 } from "../map-analysis/computePatternAnalysis";
 import {
+  resolveScoresGamemodeSync,
+  scoresGamemodeSqlLiteral,
+} from "../analytics/scoreGamemode";
+import {
   resolveScoresUsernamesSync,
   scoresUsernameSqlLiteral,
 } from "../analytics/scoreUsername";
@@ -67,8 +71,11 @@ type SqlBinding = string | number | bigint | boolean | null;
 
 function baseFrom(db: Db): string {
   const usernames = resolveScoresUsernamesSync(db);
+  const gamemode = resolveScoresGamemodeSync(db);
   const userFilter = scoresUsernameSqlLiteral(usernames, "user_username");
   const userFilterS = scoresUsernameSqlLiteral(usernames, "s.user_username");
+  const modeFilter = scoresGamemodeSqlLiteral(gamemode, "ruleset_short_name");
+  const modeFilterS = scoresGamemodeSqlLiteral(gamemode, "s.ruleset_short_name");
   return `
   FROM beatmaps b
   LEFT JOIN mastery m ON m.beatmap_id = b.id
@@ -89,6 +96,7 @@ function baseFrom(db: Db): string {
     FROM scores
     WHERE delete_pending = 0 AND beatmap_id IS NOT NULL
       ${userFilter}
+      ${modeFilter}
     GROUP BY beatmap_id
   ) ps ON ps.beatmap_id = b.id
   LEFT JOIN (
@@ -97,6 +105,7 @@ function baseFrom(db: Db): string {
     JOIN score_metrics sm ON sm.score_id = s.id
     WHERE s.delete_pending = 0 AND s.beatmap_id IS NOT NULL
       ${userFilterS}
+      ${modeFilterS}
     GROUP BY s.beatmap_id
   ) rs ON rs.beatmap_id = b.id
   LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
@@ -130,8 +139,12 @@ const SELECT_COLS = `
   dr.sunny_star AS sunnyStar
 `;
 
-function baseWhere(extra: string): string {
-  return `WHERE b.hidden = 0 AND COALESCE(bs.delete_pending, 0) = 0 AND (${extra})`;
+function baseWhere(db: Db, extra: string): string {
+  const modeFilter = scoresGamemodeSqlLiteral(
+    resolveScoresGamemodeSync(db),
+    "b.ruleset_short_name",
+  );
+  return `WHERE b.hidden = 0 AND COALESCE(bs.delete_pending, 0) = 0${modeFilter} AND (${extra})`;
 }
 
 function asBindings(params: unknown[]): SqlBinding[] {
@@ -247,6 +260,7 @@ function resolveFilter(
   const ast = parseQuery(q);
   const compiled = compileQuery(ast, {
     username: resolveScoresUsernamesSync(db),
+    gamemode: resolveScoresGamemodeSync(db),
   });
   return {
     sql: compiled.sql,
@@ -322,6 +336,7 @@ export function executeAst(
   }
   const compiled = compileQuery(ast, {
     username: resolveScoresUsernamesSync(db),
+    gamemode: resolveScoresGamemodeSync(db),
   });
   return executeFilter(db, compiled.sql, compiled.params, opts);
 }
@@ -337,7 +352,7 @@ function executeFilter(
     sortDir?: PracticeSortDir;
   },
 ): { items: PracticeCardRow[]; total: number } {
-  const where = baseWhere(filterSql);
+  const where = baseWhere(db, filterSql);
   const bindings = asBindings(params);
   const sortBy = opts.sortBy ?? "lastPlayed";
   const sortDir = opts.sortDir ?? "desc";
@@ -418,7 +433,7 @@ export function sampleBeatmaps(
     params.push(...exclude);
   }
 
-  const where = baseWhere(filterSql);
+  const where = baseWhere(db, filterSql);
   const bindings = asBindings(params);
   const count = Math.max(1, Math.min(20, Math.floor(opts.count)));
 
@@ -448,7 +463,7 @@ export function countMatches(db: Db, query: string): number {
   const filter = resolveFilter(db, query);
   maybeBackfillDan(db, filter.needsDanBackfill);
   maybeBackfillPattern(db, filter.needsPatternBackfill);
-  const where = baseWhere(filter.sql);
+  const where = baseWhere(db, filter.sql);
   const countSql = `SELECT COUNT(*) AS n ${baseFrom(db)} ${where}`;
   const countRow = db.$client
     .query(countSql)
@@ -464,7 +479,7 @@ export function listCollectionMd5Hashes(
   const filter = resolveFilter(db, query);
   maybeBackfillDan(db, filter.needsDanBackfill);
   maybeBackfillPattern(db, filter.needsPatternBackfill);
-  const where = baseWhere(filter.sql);
+  const where = baseWhere(db, filter.sql);
 
   const totalSql = `SELECT COUNT(*) AS n ${baseFrom(db)} ${where}`;
   const totalRow = db.$client
@@ -495,7 +510,7 @@ export function listDistinctSetIds(
   const filter = resolveFilter(db, query);
   maybeBackfillDan(db, filter.needsDanBackfill);
   maybeBackfillPattern(db, filter.needsPatternBackfill);
-  const where = baseWhere(filter.sql);
+  const where = baseWhere(db, filter.sql);
 
   const sql = `
     SELECT DISTINCT b.set_id AS set_id
@@ -717,7 +732,7 @@ export function practiceDistribution(
   const filter = resolveFilter(db, query);
   maybeBackfillDan(db, filter.needsDanBackfill);
   maybeBackfillPattern(db, filter.needsPatternBackfill);
-  const where = baseWhere(filter.sql);
+  const where = baseWhere(db, filter.sql);
   const params = filter.params;
 
   const bins =

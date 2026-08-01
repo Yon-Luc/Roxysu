@@ -54,6 +54,7 @@ function compileTerm(
   term: FieldTerm,
   params: unknown[],
   usernames: string[] | null,
+  gamemode: string | null,
 ): string {
   const push = (value: unknown) => {
     params.push(value);
@@ -111,11 +112,16 @@ function compileTerm(
         const placeholders = usernames.map((name) => push(name)).join(", ");
         usernameClause = `AND s.user_username IN (${placeholders})`;
       }
+      const gamemodeClause =
+        gamemode != null
+          ? `AND lower(COALESCE(s.ruleset_short_name, '')) = lower(${push(gamemode)})`
+          : "";
       return `EXISTS (
         SELECT 1 FROM scores s
         WHERE s.beatmap_id = b.id
           AND s.delete_pending = 0
           ${usernameClause}
+          ${gamemodeClause}
           AND s.mods LIKE ${push(`%${term.value}%`)} ESCAPE '\\'
       )`;
     }
@@ -233,15 +239,16 @@ function compileTerm(
 
 export function compileQuery(
   ast: AstNode,
-  opts?: { username?: string[] | null },
+  opts?: { username?: string[] | null; gamemode?: string | null },
 ): CompiledQuery {
   const params: unknown[] = [];
   const usernames = opts?.username ?? null;
+  const gamemode = opts?.gamemode ?? null;
 
   function compileNode(node: AstNode): string {
     switch (node.type) {
       case "term":
-        return compileTerm(node.term, params, usernames);
+        return compileTerm(node.term, params, usernames, gamemode);
       case "and":
         return `(${compileNode(node.left)} AND ${compileNode(node.right)})`;
       case "or":

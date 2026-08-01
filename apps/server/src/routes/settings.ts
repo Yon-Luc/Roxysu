@@ -1,5 +1,8 @@
 import { settings } from "@roxysu/db/schema";
-import { SCORES_USERNAME_FILTER_KEY } from "@roxysu/db/settings-keys";
+import {
+  SCORES_GAMEMODE_FILTER_KEY,
+  SCORES_USERNAME_FILTER_KEY,
+} from "@roxysu/db/settings-keys";
 import { Elysia, t } from "elysia";
 import { eq } from "drizzle-orm";
 
@@ -11,6 +14,12 @@ import {
   setActiveFormulaId,
 } from "../analytics/mastery/engine";
 import { runAnalyticsPipeline } from "../analytics/pipeline";
+import {
+  buildScoresGamemodeSettings,
+  normalizeScoresGamemodeFilterInput,
+  readScoresGamemodeFilter,
+  serializeScoresGamemodeFilter,
+} from "../analytics/scoreGamemode";
 import {
   buildScoresUsernameSettings,
   normalizeScoresUsernameFilterInput,
@@ -76,7 +85,10 @@ async function buildSettingsResponse(db: Db) {
   const paths = buildResolvedOsuPaths(osuOverride);
   const tosu = await readTosuSettings(db);
   const maniaRatingExecutables = await readAllExecutablePaths(db);
-  const scoresUsername = await buildScoresUsernameSettings(db);
+  const [scoresUsername, scoresGamemode] = await Promise.all([
+    buildScoresUsernameSettings(db),
+    buildScoresGamemodeSettings(db),
+  ]);
 
   return {
     mastery: {
@@ -91,6 +103,7 @@ async function buildSettingsResponse(db: Db) {
       pauseWhenUnfocused: pauseRow?.value === "1",
     },
     scores: scoresUsername,
+    gamemode: scoresGamemode,
     paths,
     tosu: {
       enabled: tosu.enabled,
@@ -129,7 +142,7 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
     "/",
     async ({ db, body, set }) => {
       let tosuChanged = false;
-      let scoresUsernameChanged = false;
+      let scoresFilterChanged = false;
 
       if (body.masteryFormulaId) {
         try {
@@ -153,7 +166,20 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
         const prevSerialized = serializeScoresUsernameFilter(prev);
         if (nextSerialized !== prevSerialized) {
           await upsertSetting(db, SCORES_USERNAME_FILTER_KEY, nextSerialized);
-          scoresUsernameChanged = true;
+          scoresFilterChanged = true;
+        }
+      }
+
+      if (body.scoresGamemodeFilter !== undefined) {
+        const next = normalizeScoresGamemodeFilterInput(
+          body.scoresGamemodeFilter,
+        );
+        const prev = await readScoresGamemodeFilter(db);
+        const nextSerialized = serializeScoresGamemodeFilter(next);
+        const prevSerialized = serializeScoresGamemodeFilter(prev);
+        if (nextSerialized !== prevSerialized) {
+          await upsertSetting(db, SCORES_GAMEMODE_FILTER_KEY, nextSerialized);
+          scoresFilterChanged = true;
         }
       }
 
@@ -250,7 +276,7 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
         }
       }
 
-      if (scoresUsernameChanged) {
+      if (scoresFilterChanged) {
         await runAnalyticsPipeline(db, { forceFull: true });
         publish({ type: "dashboard.updated" });
         publish({ type: "mastery.updated" });
@@ -268,6 +294,11 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
         scoresUsernameFilter: t.Optional(
           t.Union([t.String(), t.Array(t.String())]),
         ),
+        /**
+         * Gamemode filter: "auto", "*", or a ruleset short name
+         * (`osu` / `taiko` / `fruits` / `mania`, aliases std/ctb accepted).
+         */
+        scoresGamemodeFilter: t.Optional(t.String()),
         /** Absolute lazer data dir, or null/"" to clear the override. */
         osuDataPath: t.Optional(t.Union([t.String(), t.Null()])),
         tosuEnabled: t.Optional(t.Boolean()),

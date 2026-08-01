@@ -8,6 +8,10 @@ import {
   PATTERN_QUERY_BACKFILL_LIMIT,
 } from "../map-analysis/computePatternAnalysis";
 import {
+  resolveScoresGamemodeSync,
+  scoresGamemodeSqlLiteral,
+} from "../analytics/scoreGamemode";
+import {
   resolveScoresUsernamesSync,
   scoresUsernameSqlLiteral,
 } from "../analytics/scoreUsername";
@@ -61,6 +65,10 @@ function baseFrom(db: Db): string {
     resolveScoresUsernamesSync(db),
     "user_username",
   );
+  const modeFilter = scoresGamemodeSqlLiteral(
+    resolveScoresGamemodeSync(db),
+    "ruleset_short_name",
+  );
   return `
   FROM beatmaps b
   LEFT JOIN mastery m ON m.beatmap_id = b.id
@@ -81,6 +89,7 @@ function baseFrom(db: Db): string {
     FROM scores
     WHERE delete_pending = 0 AND beatmap_id IS NOT NULL
       ${userFilter}
+      ${modeFilter}
     GROUP BY beatmap_id
   ) ps ON ps.beatmap_id = b.id
   LEFT JOIN beatmap_sets bs ON bs.id = b.set_id

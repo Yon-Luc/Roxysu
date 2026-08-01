@@ -28,45 +28,43 @@ function buildSampleNotes(keys: number) {
 
   const pattern = [0, 1, 2, keys - 1, Math.floor(keys / 2), 0, keys - 2, 1];
 
-  const lastEndMs = Array(keys).fill(0);
-
   const totalNotes = 48;
-  const minLongNotes = 8;
-  const holdDuration = 420;
   const spacing = 140;
 
-  let longNotes = 0;
+  const holdDuration = 420;
+  const releaseGap = 40;
+  const minLongNotes = 10;
+
+  const nextAvailable = Array(keys).fill(0);
+
   let t = 400;
+  let longNotes = 0;
 
   for (let i = 0; i < totalNotes; i++) {
-    const preferredColumn = pattern[i % pattern.length]! % keys;
-
     const remaining = totalNotes - i;
+
     const mustMakeLong =
       longNotes < minLongNotes && remaining <= minLongNotes - longNotes;
 
-    const wantsLong = i % 5 === 0 || mustMakeLong;
+    const wantsLong = mustMakeLong || i % 5 === 0;
 
-    let column = preferredColumn;
+    const preferred = pattern[i % pattern.length]! % keys;
 
-    if (wantsLong) {
-      const availableColumn = Array.from({ length: keys }, (_, offset) => {
-        return (preferredColumn + offset) % keys;
-      }).find((c) => t >= lastEndMs[c]);
+    let column = -1;
 
-      if (availableColumn !== undefined) {
-        column = availableColumn;
-      } else {
-        t += spacing;
-        i--;
-        continue;
+    for (let offset = 0; offset < keys; offset++) {
+      const c = (preferred + offset) % keys;
+
+      if (t >= nextAvailable[c]) {
+        column = c;
+        break;
       }
-    } else {
-      if (t < lastEndMs[column]) {
-        t += spacing;
-        i--;
-        continue;
-      }
+    }
+
+    if (column === -1) {
+      t += spacing;
+      i--;
+      continue;
     }
 
     const endMs = wantsLong ? t + holdDuration : t;
@@ -77,10 +75,25 @@ function buildSampleNotes(keys: number) {
       endMs,
     });
 
-    lastEndMs[column] = endMs;
-
     if (wantsLong) {
       longNotes++;
+      nextAvailable[column] = endMs + releaseGap;
+    } else {
+      nextAvailable[column] = t;
+    }
+
+    if (!wantsLong && i % 3 === 2) {
+      const chordCol = (column + 2) % keys;
+
+      if (t >= nextAvailable[chordCol]) {
+        notes.push({
+          column: chordCol,
+          startMs: t,
+          endMs: t,
+        });
+
+        nextAvailable[chordCol] = t;
+      }
     }
 
     t += spacing;
@@ -358,8 +371,8 @@ export function SkinPage() {
             {isArrow ? (
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <p className="text-xs text-muted">
-                  Set per-column arrow direction below. Receptors follow the same
-                  orientation.
+                  Set per-column arrow direction below. Receptors follow the
+                  same orientation.
                 </p>
                 <button
                   type="button"
@@ -523,8 +536,9 @@ export function SkinPage() {
                       />
                       {isArrow ? (
                         <span className="text-sm text-ink" aria-hidden>
-                          {NOTE_ORIENTATIONS.find((o) => o.id === col.orientation)
-                            ?.label ?? "↓"}
+                          {NOTE_ORIENTATIONS.find(
+                            (o) => o.id === col.orientation,
+                          )?.label ?? "↓"}
                         </span>
                       ) : null}
                     </div>
@@ -541,9 +555,7 @@ export function SkinPage() {
                           <ColorField
                             label="LN body"
                             value={col.lnColor}
-                            onChange={(lnColor) =>
-                              updateColumn(i, { lnColor })
-                            }
+                            onChange={(lnColor) => updateColumn(i, { lnColor })}
                           />
                         </>
                       ) : null}

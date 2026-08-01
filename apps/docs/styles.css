@@ -659,6 +659,19 @@ code,
   color: var(--subtle);
 }
 
+.start-subhead {
+  margin: 1.35rem 0 0.45rem;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.start-path .start-subhead:first-of-type {
+  margin-top: 0.25rem;
+}
+
 .start-path ol {
   margin: 0 0 1.25rem;
   padding-left: 1.25rem;

@@ -502,33 +502,49 @@
           </article>
 
           <article class="start-path reveal" aria-labelledby="start-flake">
-            <p class="start-path-label">Nix</p>
-            <h3 id="start-flake">Run the flake</h3>
+            <p class="start-path-label">Nix / NixOS</p>
+            <h3 id="start-flake">Run or install the flake</h3>
             <p>
-              On NixOS (or any Linux with flakes enabled), enter the dev shell
-              for hacking, or build/run the packaged desktop app.
+              Needs Nix with flakes enabled (<code>nix-command</code> +
+              <code>flakes</code>). Targets <code>x86_64-linux</code>.
             </p>
-            <ol>
-              <li>
-                <code>nix develop</code> (or direnv via <code>.envrc</code>) for
-                Bun, Node, and native-module libraries.
-              </li>
-              <li>Then <code>bun install</code> and <code>bun run dev</code> as usual.</li>
-              <li>
-                Or skip the shell and run the packaged app with
-                <code>nix run</code>.
-              </li>
-            </ol>
-            <pre class="terminal" tabindex="0"><code><span class="prompt">$</span> git clone https://github.com/Yon-Luc/Roxysu.git
-<span class="prompt">$</span> cd Roxysu
-<span class="prompt">$</span> nix develop
-<span class="prompt">$</span> bun install &amp;&amp; bun run dev
-<span class="comment"># packaged desktop app:</span>
-<span class="prompt">$</span> nix build .#roxysu
-<span class="prompt">$</span> nix run .#roxysu</code></pre>
+
+            <p class="start-subhead">One-shot from GitHub</p>
+            <p>
+              No clone required — Nix fetches the repo flake and runs the
+              packaged desktop app:
+            </p>
+            <pre class="terminal" tabindex="0"><code><span class="prompt">$</span> nix run github:Yon-Luc/Roxysu
+<span class="comment"># pin a commit or tag:</span>
+<span class="prompt">$</span> nix run github:Yon-Luc/Roxysu/v0.0.1</code></pre>
+
+            <p class="start-subhead">Add to a NixOS / home-manager flake</p>
+            <p>
+              Wire Roxysu as an input, then put the package on your system or
+              user profile:
+            </p>
+            <pre class="terminal" tabindex="0"><code><span class="comment"># flake.nix</span>
+{
+  inputs.roxysu.url = "github:Yon-Luc/Roxysu";
+
+  outputs = { nixpkgs, roxysu, ... }: {
+    <span class="comment"># NixOS:</span>
+    nixosConfigurations.myhost = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [{
+        environment.systemPackages = [
+          roxysu.packages.x86_64-linux.roxysu
+        ];
+      }];
+    };
+  };
+}</code></pre>
             <p class="start-note">
-              From GitHub without cloning:
-              <code>nix run github:Yon-Luc/Roxysu</code>.
+              Home Manager: add
+              <code>roxysu.packages.${pkgs.system}.roxysu</code> to
+              <code>home.packages</code> the same way. For hacking, clone and use
+              <code>nix develop</code> (Bun + Node toolchain) instead of the
+              packaged app.
             </p>
           </article>
         </div>

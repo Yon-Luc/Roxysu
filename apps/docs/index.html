@@ -444,49 +444,93 @@
       <section class="section" id="start" aria-labelledby="start-title">
         <div class="section-head reveal">
           <p class="eyebrow">Get started</p>
-          <h2 id="start-title">Run it locally in a few minutes</h2>
+          <h2 id="start-title">Pick a path</h2>
           <p>
-            Needs Bun, Node.js LTS, and an osu!lazer install with local play
-            history. On NixOS, use <code>nix develop</code>.
+            Install the Windows app, run the Bun dev server from source, or use
+            the Nix flake on Linux/NixOS. You’ll need an osu!lazer install with
+            local play history either way.
           </p>
         </div>
-        <div class="start reveal">
-          <ol>
-            <li>Clone the repository and install dependencies.</li>
-            <li>Start the server + realm sync with <code>bun run dev</code>.</li>
-            <li>Open <code>http://localhost:4321/</code> and wait for the first sync.</li>
-          </ol>
-          <pre class="terminal" tabindex="0"><code><span class="prompt">$</span> git clone https://github.com/Yon-Luc/Roxysu.git
+
+        <div class="start-paths">
+          <article class="start-path reveal" aria-labelledby="start-windows">
+            <p class="start-path-label">Windows</p>
+            <h3 id="start-windows">Download the desktop installer</h3>
+            <p>
+              Grab the packaged Electron app — no Bun or Node required. Launch
+              it after install and wait for the first realm sync.
+            </p>
+            <div class="start-path-actions">
+              <a
+                class="btn btn-primary"
+                href="https://github.com/Yon-Luc/Roxysu/releases/download/v0.1.0/Roxysu.Setup.0.0.1.exe"
+                rel="noopener noreferrer"
+                >Download for Windows</a
+              >
+              <a
+                class="btn btn-ghost"
+                href="https://github.com/Yon-Luc/Roxysu/releases"
+                rel="noopener noreferrer"
+                >All releases</a
+              >
+            </div>
+          </article>
+
+          <article class="start-path reveal" aria-labelledby="start-dev">
+            <p class="start-path-label">From source</p>
+            <h3 id="start-dev">Start the Bun dev server</h3>
+            <p>
+              Needs Bun and Node.js LTS. Starts the server on port
+              <code>4321</code> plus the continuous realm sync loop.
+            </p>
+            <ol>
+              <li>Clone the repository and install dependencies.</li>
+              <li>Start the server + realm sync with <code>bun run dev</code>.</li>
+              <li>Open <code>http://localhost:4321/</code> and wait for the first sync.</li>
+            </ol>
+            <pre class="terminal" tabindex="0"><code><span class="prompt">$</span> git clone https://github.com/Yon-Luc/Roxysu.git
 <span class="prompt">$</span> cd Roxysu
 <span class="prompt">$</span> bun install
 <span class="prompt">$</span> bun run dev
 <span class="comment"># → http://localhost:4321/</span></code></pre>
-          <p class="start-note">
-            Full setup notes, env vars, and Windows build tooling live in the
-            <a href="https://github.com/Yon-Luc/Roxysu#getting-started"
-              >README</a
-            >. Prefer a desktop app? Grab the Windows installer below.
-          </p>
-          <div class="hero-actions" style="margin: 1.25rem 0 0; justify-content: flex-start">
-            <a
-              class="btn btn-primary"
-              href="https://github.com/Yon-Luc/Roxysu/releases/download/v0.1.0/Roxysu.Setup.0.0.1.exe"
-              rel="noopener noreferrer"
-              >Download for Windows</a
-            >
-            <a
-              class="btn btn-ghost"
-              href="https://github.com/Yon-Luc/Roxysu"
-              rel="noopener noreferrer"
-              >Open repository</a
-            >
-            <a
-              class="btn btn-ghost"
-              href="https://github.com/Yon-Luc/Roxysu/blob/master/README.md"
-              rel="noopener noreferrer"
-              >Read the docs</a
-            >
-          </div>
+            <p class="start-note">
+              Env vars and Windows native-build notes are in the
+              <a href="https://github.com/Yon-Luc/Roxysu#getting-started"
+                >README</a
+              >.
+            </p>
+          </article>
+
+          <article class="start-path reveal" aria-labelledby="start-flake">
+            <p class="start-path-label">Nix</p>
+            <h3 id="start-flake">Run the flake</h3>
+            <p>
+              On NixOS (or any Linux with flakes enabled), enter the dev shell
+              for hacking, or build/run the packaged desktop app.
+            </p>
+            <ol>
+              <li>
+                <code>nix develop</code> (or direnv via <code>.envrc</code>) for
+                Bun, Node, and native-module libraries.
+              </li>
+              <li>Then <code>bun install</code> and <code>bun run dev</code> as usual.</li>
+              <li>
+                Or skip the shell and run the packaged app with
+                <code>nix run</code>.
+              </li>
+            </ol>
+            <pre class="terminal" tabindex="0"><code><span class="prompt">$</span> git clone https://github.com/Yon-Luc/Roxysu.git
+<span class="prompt">$</span> cd Roxysu
+<span class="prompt">$</span> nix develop
+<span class="prompt">$</span> bun install &amp;&amp; bun run dev
+<span class="comment"># packaged desktop app:</span>
+<span class="prompt">$</span> nix build .#roxysu
+<span class="prompt">$</span> nix run .#roxysu</code></pre>
+            <p class="start-note">
+              From GitHub without cloning:
+              <code>nix run github:Yon-Luc/Roxysu</code>.
+            </p>
+          </article>
         </div>
       </section>
     </main>

@@ -17,10 +17,17 @@ import {
 } from "../lib/api";
 import { isDesktopShell } from "../lib/desktop";
 import { formatRelativeTime, formatStars } from "../lib/format";
+import { searchablePageSections } from "../lib/pageSections";
 
 const PRACTICE_SEARCH_KEY = "roxysu:practice-search";
 
-type CommandGroup = "Pages" | "Actions" | "Maps" | "Sessions" | "Collections";
+type CommandGroup =
+  | "Pages"
+  | "Sections"
+  | "Actions"
+  | "Maps"
+  | "Sessions"
+  | "Collections";
 
 type CommandItem = {
   id: string;
@@ -123,14 +130,20 @@ export function CommandPalette({
   }, [onOpenChange]);
 
   const go = useCallback(
-    (to: string, params?: Record<string, string>) => {
+    (
+      to: string,
+      options?: {
+        params?: Record<string, string>;
+        search?: Record<string, string | undefined>;
+      },
+    ) => {
       close();
       setQuery("");
-      if (params) {
-        void navigate({ to, params });
-      } else {
-        void navigate({ to });
-      }
+      void navigate({
+        to,
+        ...(options?.params ? { params: options.params } : {}),
+        ...(options?.search ? { search: options.search } : {}),
+      } as Parameters<typeof navigate>[0]);
     },
     [close, navigate],
   );
@@ -183,13 +196,32 @@ export function CommandPalette({
 
     for (const page of pageItems()) {
       if (!itemMatches(page, trimmed)) continue;
+      const clearsSection = page.to === "/settings" || page.to === "/skin";
       result.push({
         id: `page:${page.to}`,
         group: "Pages",
         label: page.label,
         subtitle: "Go to page",
-        onSelect: () => go(page.to),
+        onSelect: () =>
+          go(
+            page.to,
+            clearsSection ? { search: { section: undefined } } : undefined,
+          ),
       });
+    }
+
+    if (trimmed) {
+      for (const section of searchablePageSections()) {
+        if (!itemMatches(section, trimmed)) continue;
+        result.push({
+          id: `section:${section.to}:${section.id}`,
+          group: "Sections",
+          label: section.label,
+          subtitle: section.pageLabel,
+          onSelect: () =>
+            go(section.to, { search: { section: section.id } }),
+        });
+      }
     }
 
     if (!trimmed || matchesQuery("current session", trimmed) || matchesQuery("live session", trimmed)) {
@@ -200,7 +232,8 @@ export function CommandPalette({
         subtitle: sessionsData?.current
           ? `${sessionsData.current.scoreCount} plays · ${formatRelativeTime(sessionsData.current.startedAt)}`
           : "Open live session view",
-        onSelect: () => go("/sessions/$sessionId", { sessionId: "current" }),
+        onSelect: () =>
+          go("/sessions/$sessionId", { params: { sessionId: "current" } }),
       });
     }
 
@@ -234,7 +267,9 @@ export function CommandPalette({
           hint: session.endedAt == null ? "live" : undefined,
           onSelect: () =>
             go("/sessions/$sessionId", {
-              sessionId: session.endedAt == null ? "current" : String(session.id),
+              params: {
+                sessionId: session.endedAt == null ? "current" : String(session.id),
+              },
             }),
         });
       }
@@ -250,7 +285,9 @@ export function CommandPalette({
           label: collection.name,
           subtitle: collection.query,
           onSelect: () =>
-            go("/collections/$collectionId", { collectionId: String(collection.id) }),
+            go("/collections/$collectionId", {
+              params: { collectionId: String(collection.id) },
+            }),
         });
       }
     }
@@ -269,7 +306,8 @@ export function CommandPalette({
               setOnlineId={map.setOnlineId}
             />
           ),
-          onSelect: () => go("/practice/$beatmapId", { beatmapId: map.id! }),
+          onSelect: () =>
+            go("/practice/$beatmapId", { params: { beatmapId: map.id! } }),
         });
       }
     }
@@ -325,7 +363,9 @@ export function CommandPalette({
 
   if (!open) return null;
 
-  const grouped = (["Pages", "Actions", "Maps", "Sessions", "Collections"] as const)
+  const grouped = (
+    ["Pages", "Sections", "Actions", "Maps", "Sessions", "Collections"] as const
+  )
     .map((group) => ({
       group,
       items: items.filter((item) => item.group === group),
@@ -359,7 +399,7 @@ export function CommandPalette({
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search pages, maps, sessions…"
+              placeholder="Search pages, sections, maps…"
               className="min-w-0 flex-1 bg-transparent text-base text-ink outline-none placeholder:text-faint"
               autoComplete="off"
               spellCheck={false}
@@ -400,13 +440,15 @@ export function CommandPalette({
                             <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-surface text-xs font-bold text-faint">
                               {section.group === "Pages"
                                 ? "→"
-                                : section.group === "Actions"
-                                  ? "⚡"
-                                  : section.group === "Sessions"
-                                    ? "▤"
-                                    : section.group === "Collections"
-                                      ? "▦"
-                                      : "♫"}
+                                : section.group === "Sections"
+                                  ? "§"
+                                  : section.group === "Actions"
+                                    ? "⚡"
+                                    : section.group === "Sessions"
+                                      ? "▤"
+                                      : section.group === "Collections"
+                                        ? "▦"
+                                        : "♫"}
                             </span>
                           )}
                           <span className="min-w-0 flex-1">

@@ -23,6 +23,10 @@ import {
 } from "../../lib/api";
 import { isDesktopShell } from "../../lib/desktop";
 import {
+  pageSectionDomId,
+  useScrollToPageSection,
+} from "../../lib/pageSections";
+import {
   ratingDisplayOptions,
   setRatingDisplayMode,
   useRatingDisplayMode,
@@ -33,7 +37,7 @@ import {
   useTheme,
 } from "../../lib/theme";
 
-export function SettingsPage() {
+export function SettingsPage({ section }: { section?: string } = {}) {
   const desktop = isDesktopShell();
   const queryClient = useQueryClient();
   const ratingMode = useRatingDisplayMode();
@@ -42,6 +46,8 @@ export function SettingsPage() {
     queryKey: ["settings"],
     queryFn: fetchSettings,
   });
+
+  useScrollToPageSection(section, { ready: !isLoading && !!data });
 
   const [osuPathDraft, setOsuPathDraft] = useState("");
   const [tosuHostDraft, setTosuHostDraft] = useState("");
@@ -312,7 +318,10 @@ export function SettingsPage() {
         </p>
       </div>
 
-      <section className="rx-panel p-5">
+      <section
+        id={pageSectionDomId("osu-lazer-data-folder")}
+        className="rx-panel scroll-mt-6 p-5"
+      >
         <h2 className="text-sm font-bold text-ink">osu!lazer data folder</h2>
         <p className="mt-1 text-sm text-muted">
           Folder that contains <span className="font-mono">client.realm</span>{" "}
@@ -390,7 +399,10 @@ export function SettingsPage() {
         ) : null}
       </section>
 
-      <section className="rx-panel p-5">
+      <section
+        id={pageSectionDomId("tosu-live-map")}
+        className="rx-panel scroll-mt-6 p-5"
+      >
         <h2 className="text-sm font-bold text-ink">Tosu / live map</h2>
         <p className="mt-1 text-sm text-muted">
           Connect to a local{" "}
@@ -488,7 +500,10 @@ export function SettingsPage() {
         ) : null}
       </section>
 
-      <section className="rx-panel p-5">
+      <section
+        id={pageSectionDomId("mastery-formula")}
+        className="rx-panel scroll-mt-6 p-5"
+      >
         <h2 className="text-sm font-bold text-ink">Mastery formula</h2>
         <div className="mt-4 space-y-2">
           {data.mastery.formulas.map((f) => {
@@ -529,7 +544,10 @@ export function SettingsPage() {
         ) : null}
       </section>
 
-      <section className="rx-panel p-5">
+      <section
+        id={pageSectionDomId("live-sync")}
+        className="rx-panel scroll-mt-6 p-5"
+      >
         <h2 className="text-sm font-bold text-ink">Live sync</h2>
         <p className="mt-1 text-sm text-muted">
           Optionally pause Realm imports while Roxysu is unfocused so lazer isn’t
@@ -557,7 +575,10 @@ export function SettingsPage() {
         ) : null}
       </section>
 
-      <section className="rx-panel p-5">
+      <section
+        id={pageSectionDomId("appearance")}
+        className="rx-panel scroll-mt-6 p-5"
+      >
         <h2 className="text-sm font-bold text-ink">Appearance</h2>
         <p className="mt-1 text-sm text-muted">
           Choose a light or dark interface. System follows your OS preference.
@@ -593,7 +614,10 @@ export function SettingsPage() {
         </div>
       </section>
 
-      <section className="rx-panel p-5">
+      <section
+        id={pageSectionDomId("difficulty-display")}
+        className="rx-panel scroll-mt-6 p-5"
+      >
         <h2 className="text-sm font-bold text-ink">Difficulty display</h2>
         <p className="mt-1 text-sm text-muted">
           Choose what appears in place of star rating across the app. Falls back
@@ -630,7 +654,10 @@ export function SettingsPage() {
         </div>
       </section>
 
-      <section className="rx-panel p-5">
+      <section
+        id={pageSectionDomId("preview-skin")}
+        className="rx-panel scroll-mt-6 p-5"
+      >
         <h2 className="text-sm font-bold text-ink">Preview skin</h2>
         <p className="mt-1 text-sm text-muted">
           Customize note shape, colors, size, hit position, and lane cover for
@@ -641,7 +668,10 @@ export function SettingsPage() {
         </Link>
       </section>
 
-      <section className="rx-panel p-5">
+      <section
+        id={pageSectionDomId("keybinds")}
+        className="rx-panel scroll-mt-6 p-5"
+      >
         <h2 className="text-sm font-bold text-ink">Keybinds</h2>
         <p className="mt-1 text-sm text-muted">
           Choose keys per column for each keymode when testing maps in preview
@@ -661,7 +691,10 @@ export function SettingsPage() {
       </section>
 
       {!desktop ? (
-      <section className="rx-panel p-5">
+      <section
+        id={pageSectionDomId("mania-rating-lab")}
+        className="rx-panel scroll-mt-6 p-5"
+      >
         <h2 className="text-sm font-bold text-ink">Mania Rating Lab</h2>
         <p className="mt-1 text-sm text-muted">
           Calculator binaries built from osu!lazer branches (see{" "}
@@ -794,7 +827,10 @@ export function SettingsPage() {
       </section>
       ) : null}
 
-      <section className="rx-panel p-5">
+      <section
+        id={pageSectionDomId("sunny-dan-calculation")}
+        className="rx-panel scroll-mt-6 p-5"
+      >
         <h2 className="text-sm font-bold text-ink">Sunny dan calculation</h2>
         <p className="mt-1 text-sm text-muted">
           Compute Sunny dan labels for mania maps that are still missing a
@@ -877,7 +913,10 @@ export function SettingsPage() {
         ) : null}
       </section>
 
-      <section className="rx-panel p-5">
+      <section
+        id={pageSectionDomId("pattern-analysis")}
+        className="rx-panel scroll-mt-6 p-5"
+      >
         <h2 className="text-sm font-bold text-ink">7K pattern analysis</h2>
         <p className="mt-1 text-sm text-muted">
           Classify 7K mania maps with the structural pattern algorithm (delay,

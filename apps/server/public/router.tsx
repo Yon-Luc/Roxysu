@@ -172,13 +172,29 @@ const downloadMapsRoute = createRoute({
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/settings",
-  component: SettingsPage,
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { section?: string } => ({
+    section: typeof search.section === "string" ? search.section : undefined,
+  }),
+  component: function SettingsRoute() {
+    const { section } = settingsRoute.useSearch();
+    return <SettingsPage section={section} />;
+  },
 });
 
 const skinRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/skin",
-  component: SkinPage,
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { section?: string } => ({
+    section: typeof search.section === "string" ? search.section : undefined,
+  }),
+  component: function SkinRoute() {
+    const { section } = skinRoute.useSearch();
+    return <SkinPage section={section} />;
+  },
 });
 
 const overlayRoute = createRoute({

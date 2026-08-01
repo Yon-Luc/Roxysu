@@ -22,6 +22,10 @@ import {
   type NoteOrientation,
   type NoteShape,
 } from "../../lib/previewSkin";
+import {
+  pageSectionDomId,
+  useScrollToPageSection,
+} from "../../lib/pageSections";
 
 function buildSampleNotes(keys: number) {
   const notes: { column: number; startMs: number; endMs: number }[] = [];
@@ -172,7 +176,8 @@ function ColorField({
   );
 }
 
-export function SkinPage() {
+export function SkinPage({ section }: { section?: string } = {}) {
+  useScrollToPageSection(section);
   const skin = usePreviewSkin();
   const [keys, setKeys] = useState<Keymode>(7);
   const [previewTimeMs, setPreviewTimeMs] = useState(800);
@@ -352,7 +357,10 @@ export function SkinPage() {
 
       <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,22rem)]">
         <div className="space-y-4">
-          <div className="rx-panel p-4">
+          <div
+            id={pageSectionDomId("note-shape")}
+            className="rx-panel scroll-mt-6 p-4"
+          >
             <h2 className="text-sm font-bold text-ink">Note shape</h2>
             <div className="mt-3 flex flex-wrap gap-2">
               {NOTE_SHAPES.map((s) => (
@@ -386,7 +394,10 @@ export function SkinPage() {
             ) : null}
           </div>
 
-          <div className="rx-panel p-4">
+          <div
+            id={pageSectionDomId("long-notes")}
+            className="rx-panel scroll-mt-6 p-4"
+          >
             <h2 className="text-sm font-bold text-ink">Long notes</h2>
             <p className="mt-1 text-xs text-muted">
               Tail is the far end of the hold. Head is the note graphic at the
@@ -427,7 +438,10 @@ export function SkinPage() {
             </div>
           </div>
 
-          <div className="rx-panel p-4">
+          <div
+            id={pageSectionDomId("playfield")}
+            className="rx-panel scroll-mt-6 p-4"
+          >
             <h2 className="text-sm font-bold text-ink">Playfield</h2>
             <p className="mt-1 text-xs text-muted">
               Hit position moves the receptor line. Lane cover blacks out the
@@ -469,7 +483,10 @@ export function SkinPage() {
             </div>
           </div>
 
-          <div className="rx-panel overflow-hidden p-0">
+          <div
+            id={pageSectionDomId("columns")}
+            className="rx-panel scroll-mt-6 overflow-hidden p-0"
+          >
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/5 px-4 py-3">
               <h2 className="text-sm font-bold text-ink">Columns</h2>
               <div className="flex flex-wrap items-center gap-3">
@@ -649,7 +666,10 @@ export function SkinPage() {
         </div>
 
         <div className="space-y-3 lg:sticky lg:top-4 lg:self-start">
-          <div className="rx-panel p-3">
+          <div
+            id={pageSectionDomId("live-preview")}
+            className="rx-panel scroll-mt-6 p-3"
+          >
             <div className="mb-2 flex items-center justify-between gap-2">
               <h2 className="text-sm font-bold text-ink">Live preview</h2>
               <button

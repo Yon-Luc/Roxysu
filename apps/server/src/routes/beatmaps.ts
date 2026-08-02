@@ -20,7 +20,7 @@ import {
   getSevenKPatternDetail,
 } from "../map-analysis/computePatternAnalysis";
 import { getChartTimingAnalysis } from "../map-analysis/computeTimingAnalysis";
-import { OsuFileParser } from "@roxysu/osu-chart";
+import { OsuFileParser, parseStdChart } from "@roxysu/osu-chart";
 import {
   getOsuDataPath,
   resolveLazerFilePath,
@@ -244,6 +244,8 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
           artist: beatmaps.artist,
           difficultyName: beatmaps.difficultyName,
           overallDifficulty: beatmaps.overallDifficulty,
+          circleSize: beatmaps.circleSize,
+          approachRate: beatmaps.approachRate,
           setOnlineId: beatmapSets.onlineId,
           length: beatmaps.length,
         })
@@ -269,12 +271,17 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
         backgroundFileHash: row.backgroundFileHash,
         lengthMs: Math.round(row.length ?? 0),
         overallDifficulty: row.overallDifficulty ?? 0,
+        circleSize: row.circleSize ?? 5,
+        approachRate: row.approachRate ?? row.overallDifficulty ?? 5,
         supported: false as boolean,
         columnCount: 0,
         notes: [] as Array<{ column: number; startMs: number; endMs: number }>,
+        hitObjects: [] as ReturnType<typeof parseStdChart>["hitObjects"],
       };
 
-      if (row.rulesetShortName !== "mania") {
+      const isMania = row.rulesetShortName === "mania";
+      const isStd = row.rulesetShortName === "osu";
+      if (!isMania && !isStd) {
         return { ...base, supported: false };
       }
 
@@ -295,6 +302,25 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
       } catch {
         set.status = 404;
         return { error: "Beatmap file not found in lazer files store" };
+      }
+
+      if (isStd) {
+        const chart = parseStdChart(osuText);
+        if (chart.status === "NotStd") {
+          return { ...base, supported: false };
+        }
+        if (chart.status === "Fail" || chart.hitObjects.length === 0) {
+          set.status = 422;
+          return { error: "Failed to parse beatmap" };
+        }
+        return {
+          ...base,
+          supported: true,
+          circleSize: chart.circleSize,
+          approachRate: chart.approachRate,
+          overallDifficulty: chart.overallDifficulty,
+          hitObjects: chart.hitObjects,
+        };
       }
 
       const parser = new OsuFileParser(osuText);

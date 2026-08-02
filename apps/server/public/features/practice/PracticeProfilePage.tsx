@@ -359,7 +359,9 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
                   <ScoreReplayButton
                     scoreId={score.id}
                     enabled={
-                      score.hasReplay && score.rulesetShortName === "mania"
+                      score.hasReplay &&
+                      (score.rulesetShortName === "mania" ||
+                        score.rulesetShortName === "osu")
                     }
                     className="rx-btn !px-2.5 !py-1 text-xs font-semibold"
                   />

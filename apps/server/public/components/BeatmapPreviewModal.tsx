@@ -44,6 +44,7 @@ import {
   PREVIEW_SCROLL_MIN,
   type NotefieldJudgment,
 } from "./ManiaNotefield";
+import { StdPlayfield } from "./StdPlayfield";
 import {
   TimingVisualizer,
   TIMING_VIS_X_DEFAULT,
@@ -554,12 +555,24 @@ function BeatmapPreviewModal({
       }
       if (e.key === "Enter") {
         e.preventDefault();
-        if (dataRef.current?.supported) enterPlayMode();
+        if (
+          dataRef.current?.supported &&
+          dataRef.current.rulesetShortName === "mania" &&
+          (dataRef.current.columnCount ?? 0) > 0
+        ) {
+          enterPlayMode();
+        }
         return;
       }
       if (e.key === "t" || e.key === "T") {
         e.preventDefault();
-        if (dataRef.current?.supported) enterTestFromHere();
+        if (
+          dataRef.current?.supported &&
+          dataRef.current.rulesetShortName === "mania" &&
+          (dataRef.current.columnCount ?? 0) > 0
+        ) {
+          enterTestFromHere();
+        }
         return;
       }
       if (e.key === " " || e.key === "k" || e.key === "K") {
@@ -773,7 +786,11 @@ function BeatmapPreviewModal({
   const subtitle = data
     ? [
         data.artist,
-        data.columnCount > 0 ? `${data.columnCount}K` : null,
+        data.rulesetShortName === "osu"
+          ? `CS ${(data.circleSize ?? 5).toFixed(1)} · AR ${(data.approachRate ?? 5).toFixed(1)}`
+          : data.columnCount > 0
+            ? `${data.columnCount}K`
+            : null,
         data.supported
           ? `OD ${(data.overallDifficulty ?? 0).toFixed(1)}`
           : null,
@@ -790,15 +807,22 @@ function BeatmapPreviewModal({
   })();
   const scrollLabel = Math.round(prefs.scroll);
   const fullscreen = prefs.fullscreen;
+  const isMania =
+    data?.rulesetShortName === "mania" &&
+    Boolean(data.supported) &&
+    (data.columnCount ?? 0) > 0;
+  const isStd =
+    data?.rulesetShortName === "osu" &&
+    Boolean(data.supported) &&
+    (data.hitObjects?.length ?? 0) > 0;
   const binds =
-    data?.supported && data.columnCount > 0
-      ? resolveKeybinds(keybindsAll, data.columnCount)
-      : [];
+    isMania ? resolveKeybinds(keybindsAll, data!.columnCount) : [];
   const isPlay = mode === "play";
   const solidBlack = isPlay && prefs.blackBg;
   // Full chart on the field so judgment noteIndex stays aligned; practiceRange
   // only limits which notes LiveManiaPlay judges.
   const fieldNotes = data?.notes ?? [];
+  const fieldHitObjects = data?.hitObjects ?? [];
 
   return (
     <div
@@ -819,7 +843,9 @@ function BeatmapPreviewModal({
         className={
           fullscreen
             ? "relative flex h-full w-full max-h-none max-w-none flex-col overflow-hidden rounded-none bg-canvas shadow-2xl shadow-black/70 outline-none"
-            : "relative flex h-full max-h-none w-full max-w-none flex-col overflow-hidden rounded-none bg-canvas shadow-2xl shadow-black/70 outline-none sm:h-[min(96vh,58rem)] sm:max-w-6xl sm:rounded-2xl"
+            : isStd
+              ? "relative flex h-full max-h-none w-full max-w-none flex-col overflow-hidden rounded-none bg-canvas shadow-2xl shadow-black/70 outline-none sm:h-[min(96vh,64rem)] sm:max-w-[min(96vw,96rem)] sm:rounded-2xl"
+              : "relative flex h-full max-h-none w-full max-w-none flex-col overflow-hidden rounded-none bg-canvas shadow-2xl shadow-black/70 outline-none sm:h-[min(96vh,58rem)] sm:max-w-6xl sm:rounded-2xl"
         }
         onClick={(e) => e.stopPropagation()}
       >
@@ -865,7 +891,7 @@ function BeatmapPreviewModal({
             ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-1">
-            {data?.supported ? (
+            {data?.supported && isMania ? (
               <div className="mr-1 flex rounded-full bg-black/40 p-0.5 ring-1 ring-white/10">
                 <button
                   type="button"
@@ -976,17 +1002,21 @@ function BeatmapPreviewModal({
 
               <div
                 className={
-                  fullscreen
-                    ? "relative mx-auto min-h-0 w-full flex-1 px-2 py-1 sm:px-4 sm:py-2"
-                    : "relative mx-auto min-h-0 w-full max-w-2xl flex-1 px-3 py-2 sm:max-w-3xl sm:px-6 sm:py-4"
+                  isStd
+                    ? fullscreen
+                      ? "relative mx-auto min-h-0 w-full max-w-none flex-1 px-1 py-1 sm:px-2 sm:py-2"
+                      : "relative mx-auto min-h-0 w-full max-w-none flex-1 px-2 py-2 sm:px-3 sm:py-3"
+                    : fullscreen
+                      ? "relative mx-auto min-h-0 w-full flex-1 px-2 py-1 sm:px-4 sm:py-2"
+                      : "relative mx-auto min-h-0 w-full max-w-2xl flex-1 px-3 py-2 sm:max-w-3xl sm:px-6 sm:py-4"
                 }
                 style={
-                  fullscreen
+                  fullscreen && !isStd
                     ? { maxWidth: `${prefs.fieldWidth}%` }
                     : undefined
                 }
               >
-                {data.supported && data.columnCount > 0 ? (
+                {isMania ? (
                   <div className="relative h-full w-full">
                     <div className="h-full w-full overflow-hidden rounded-xl">
                       <ManiaNotefield
@@ -1012,11 +1042,23 @@ function BeatmapPreviewModal({
                       />
                     ) : null}
                   </div>
+                ) : isStd ? (
+                  <div className="relative h-full w-full">
+                    <div className="h-full w-full overflow-hidden rounded-xl">
+                      <StdPlayfield
+                        hitObjects={fieldHitObjects}
+                        circleSize={data.circleSize ?? 5}
+                        approachRate={data.approachRate ?? 5}
+                        getCurrentTimeMs={mapTimeMs}
+                      />
+                    </div>
+                  </div>
                 ) : (
                   <div className="flex h-full min-h-[16rem] items-center justify-center rounded-xl bg-black/40 px-6 text-center text-sm text-muted">
-                    {data.rulesetShortName === "mania"
-                      ? "Could not load mania notes for this map."
-                      : "Notefield preview is mania-only. Audio and background still work."}
+                    {data.rulesetShortName === "mania" ||
+                    data.rulesetShortName === "osu"
+                      ? "Could not load playfield for this map."
+                      : "Playfield preview supports mania and standard. Audio and background still work."}
                   </div>
                 )}
               </div>
@@ -1143,7 +1185,7 @@ function BeatmapPreviewModal({
                       <button
                         type="button"
                         className="rx-btn-primary"
-                        disabled={!audioUrl || !data.supported}
+                        disabled={!audioUrl || !isMania}
                         onClick={enterTestFromHere}
                         title="Play from here (T)"
                       >
@@ -1192,6 +1234,7 @@ function BeatmapPreviewModal({
                     </select>
                   </label>
 
+                  {isMania ? (
                   <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-muted sm:max-w-xs">
                     <span className="shrink-0">Scroll {scrollLabel}</span>
                     <input
@@ -1208,7 +1251,10 @@ function BeatmapPreviewModal({
                       aria-label="Scroll speed"
                     />
                   </label>
+                  ) : null}
 
+                  {isMania ? (
+                    <>
                   <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-muted sm:max-w-xs">
                     <span className="shrink-0">
                       Hit {Math.round(skin.hitPosition * 100)}%
@@ -1246,8 +1292,10 @@ function BeatmapPreviewModal({
                       aria-label="Lane cover"
                     />
                   </label>
+                    </>
+                  ) : null}
 
-                  {fullscreen ? (
+                  {fullscreen && !isStd ? (
                     <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-muted sm:max-w-xs">
                       <span className="shrink-0">
                         Size {Math.round(prefs.fieldWidth)}%

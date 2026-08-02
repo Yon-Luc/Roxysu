@@ -231,7 +231,9 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
             {scores.map((score) => {
               const isFresh = freshIds.has(score.id);
               const canRewatch =
-                score.hasReplay && score.rulesetShortName === "mania";
+                score.hasReplay &&
+                (score.rulesetShortName === "mania" ||
+                  score.rulesetShortName === "osu");
               const main = (
                 <>
                   <BeatmapCover

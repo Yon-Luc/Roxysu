@@ -1,12 +1,22 @@
 import { decompress } from "@napi-rs/lzma/lzma";
 import { OsuBinaryReader } from "./binaryReader";
 
-export type ReplayFrame = {
-  /** Map-clock time in milliseconds. */
+/** Mania key bitmask frame. */
+export type ManiaReplayFrame = {
   tMs: number;
-  /** Mania key bitmask (bit i = column i pressed). */
   keys: number;
 };
+
+/** Standard cursor/button frame (osu! coords). */
+export type StdReplayFrame = {
+  tMs: number;
+  x: number;
+  y: number;
+  buttons: number;
+};
+
+/** @deprecated Prefer ManiaReplayFrame — kept for mania-judge compatibility. */
+export type ReplayFrame = ManiaReplayFrame;
 
 export type DecodedReplay = {
   rulesetId: number;
@@ -14,13 +24,17 @@ export type DecodedReplay = {
   beatmapMd5: string;
   playerName: string;
   modsLegacy: number;
-  frames: ReplayFrame[];
+  /** Mania key frames when ruleset is mania; empty otherwise. */
+  frames: ManiaReplayFrame[];
+  /** Standard cursor frames when ruleset is osu; empty otherwise. */
+  stdFrames: StdReplayFrame[];
 };
 
+const RULESET_OSU = 0;
 const RULESET_MANIA = 3;
 
 /**
- * Decode a lazer/legacy score blob (.osr-compatible) into mania key frames.
+ * Decode a lazer/legacy score blob (.osr-compatible).
  * Timing follows LegacyScoreDecoder: apply all deltas (including negative),
  * then drop frames that would rewind time.
  */
@@ -56,7 +70,12 @@ export async function decodeLegacyReplay(
 
   const decompressed = await decompress(compressed);
   const text = Buffer.from(decompressed).toString("ascii");
-  const frames = parseReplayFrames(text, rulesetId);
+  const legacy = parseLegacyFrames(text);
+
+  const frames =
+    rulesetId === RULESET_MANIA ? toManiaFrames(legacy) : [];
+  const stdFrames =
+    rulesetId === RULESET_OSU ? toStdFrames(legacy) : [];
 
   return {
     rulesetId,
@@ -65,6 +84,7 @@ export async function decodeLegacyReplay(
     playerName,
     modsLegacy,
     frames,
+    stdFrames,
   };
 }
 
@@ -75,7 +95,7 @@ type LegacyFrame = {
   buttons: number;
 };
 
-function parseReplayFrames(text: string, rulesetId: number): ReplayFrame[] {
+function parseLegacyFrames(text: string): LegacyFrame[] {
   const parts = text.split(",");
   const legacy: LegacyFrame[] = [];
   let lastTime = 0;
@@ -131,20 +151,19 @@ function parseReplayFrames(text: string, rulesetId: number): ReplayFrame[] {
     legacy.splice(0, 1);
   }
 
-  const frames: ReplayFrame[] = [];
+  return legacy;
+}
+
+function toManiaFrames(legacy: LegacyFrame[]): ManiaReplayFrame[] {
+  const frames: ManiaReplayFrame[] = [];
   let currentTime: number | null = null;
   let lastKeys = -1;
 
   for (const f of legacy) {
-    // Never allow backwards time relative to the last kept frame.
     if (currentTime != null && f.time < currentTime) continue;
     currentTime = f.time;
 
-    // Mania: pressed columns are encoded in mouseX (lower bits).
-    const keys =
-      rulesetId === RULESET_MANIA
-        ? Math.max(0, Math.floor(f.x)) & ((1 << 20) - 1)
-        : Math.max(0, Math.floor(f.buttons));
+    const keys = Math.max(0, Math.floor(f.x)) & ((1 << 20) - 1);
 
     if (keys !== lastKeys || frames.length === 0) {
       frames.push({ tMs: f.time, keys });
@@ -155,6 +174,45 @@ function parseReplayFrames(text: string, rulesetId: number): ReplayFrame[] {
   return frames;
 }
 
+function toStdFrames(legacy: LegacyFrame[]): StdReplayFrame[] {
+  const frames: StdReplayFrame[] = [];
+  let currentTime: number | null = null;
+  let lastX = Number.NaN;
+  let lastY = Number.NaN;
+  let lastButtons = -1;
+
+  for (const f of legacy) {
+    if (currentTime != null && f.time < currentTime) continue;
+    currentTime = f.time;
+
+    // Drop near-duplicates to keep payloads smaller.
+    if (
+      frames.length > 0 &&
+      f.buttons === lastButtons &&
+      Math.abs(f.x - lastX) < 0.01 &&
+      Math.abs(f.y - lastY) < 0.01
+    ) {
+      continue;
+    }
+
+    frames.push({
+      tMs: f.time,
+      x: f.x,
+      y: f.y,
+      buttons: Math.max(0, Math.floor(f.buttons)),
+    });
+    lastX = f.x;
+    lastY = f.y;
+    lastButtons = f.buttons;
+  }
+
+  return frames;
+}
+
 export function isManiaRulesetId(id: number): boolean {
   return id === RULESET_MANIA;
+}
+
+export function isOsuRulesetId(id: number): boolean {
+  return id === RULESET_OSU;
 }

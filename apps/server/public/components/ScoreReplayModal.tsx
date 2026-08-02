@@ -35,6 +35,7 @@ import {
   type NotefieldJudgment,
   type ReplayJudgmentResult,
 } from "./ManiaNotefield";
+import { StdPlayfield } from "./StdPlayfield";
 import {
   buildReplayAnalysis,
   MissSeekMarkers,
@@ -116,6 +117,7 @@ type LoadedScoreReplay = ScoreReplay & {
   frames: NonNullable<ScoreReplay["frames"]>;
   judgments: NonNullable<ScoreReplay["judgments"]>;
   simulated: NonNullable<ScoreReplay["simulated"]>;
+  stdFrames?: NonNullable<ScoreReplay["stdFrames"]>;
 };
 
 function isLoadedScoreReplay(
@@ -310,7 +312,13 @@ function ScoreReplayModal({
 
   const analysisOn = prefs.analysis;
   const analysis = useMemo(() => {
-    if (!analysisOn || !replayData) return null;
+    if (
+      !analysisOn ||
+      !replayData ||
+      replayData.beatmap.rulesetShortName !== "mania"
+    ) {
+      return null;
+    }
     return buildReplayAnalysis(replayData);
   }, [analysisOn, replayData]);
 
@@ -868,9 +876,11 @@ function ScoreReplayModal({
   const subtitleParts = replayData
     ? [
         replayData.beatmap.artist,
-        replayData.beatmap.columnCount > 0
-          ? `${replayData.beatmap.columnCount}K`
-          : null,
+        replayData.beatmap.rulesetShortName === "osu"
+          ? `CS ${(replayData.beatmap.circleSize ?? 5).toFixed(1)} · AR ${(replayData.beatmap.approachRate ?? 5).toFixed(1)}`
+          : replayData.beatmap.columnCount > 0
+            ? `${replayData.beatmap.columnCount}K`
+            : null,
         replayData.score.userUsername,
       ].filter(Boolean)
     : [];
@@ -884,11 +894,19 @@ function ScoreReplayModal({
   const scrollLabel = Math.round(prefs.scroll);
   const fullscreen = prefs.fullscreen;
   const isPlay = mode === "play";
-  const canLivePlay = !!(replayData && replayData.beatmap.columnCount > 0);
+  const isManiaReplay =
+    !!replayData &&
+    replayData.beatmap.rulesetShortName === "mania" &&
+    replayData.beatmap.columnCount > 0;
+  const isStdReplay =
+    !!replayData &&
+    replayData.beatmap.rulesetShortName === "osu" &&
+    (replayData.beatmap.hitObjects?.length ?? 0) > 0;
+  const canLivePlay = isManiaReplay;
   const binds = canLivePlay
-    ? resolveKeybinds(keybindsAll, replayData.beatmap.columnCount)
+    ? resolveKeybinds(keybindsAll, replayData!.beatmap.columnCount)
     : [];
-  const showAnalysis = analysisOn && !isPlay;
+  const showAnalysis = analysisOn && !isPlay && isManiaReplay;
 
   return (
     <div
@@ -909,7 +927,9 @@ function ScoreReplayModal({
         className={
           fullscreen
             ? "relative flex h-full w-full max-h-none max-w-none flex-col overflow-hidden rounded-none bg-canvas shadow-2xl shadow-black/70 outline-none"
-            : "relative flex h-full max-h-none w-full max-w-none flex-col overflow-hidden rounded-none bg-canvas shadow-2xl shadow-black/70 outline-none sm:h-[min(96vh,58rem)] sm:max-w-6xl sm:rounded-2xl"
+            : isStdReplay
+              ? "relative flex h-full max-h-none w-full max-w-none flex-col overflow-hidden rounded-none bg-canvas shadow-2xl shadow-black/70 outline-none sm:h-[min(96vh,64rem)] sm:max-w-[min(96vw,96rem)] sm:rounded-2xl"
+              : "relative flex h-full max-h-none w-full max-w-none flex-col overflow-hidden rounded-none bg-canvas shadow-2xl shadow-black/70 outline-none sm:h-[min(96vh,58rem)] sm:max-w-6xl sm:rounded-2xl"
         }
         onClick={(e) => e.stopPropagation()}
       >
@@ -1057,14 +1077,18 @@ function ScoreReplayModal({
               >
                 <div
                   className={
-                    fullscreen
-                      ? "relative mx-auto min-h-0 w-full flex-1 px-2 py-1 sm:px-4 sm:py-2"
-                      : showAnalysis
-                        ? "relative mx-auto min-h-0 w-full min-w-0 flex-1 px-3 py-2 sm:px-4 sm:py-3"
-                        : "relative mx-auto min-h-0 w-full max-w-2xl flex-1 px-3 py-2 sm:max-w-3xl sm:px-6 sm:py-4"
+                    isStdReplay
+                      ? fullscreen
+                        ? "relative mx-auto min-h-0 w-full max-w-none flex-1 px-1 py-1 sm:px-2 sm:py-2"
+                        : "relative mx-auto min-h-0 w-full max-w-none flex-1 px-2 py-2 sm:px-3 sm:py-3"
+                      : fullscreen
+                        ? "relative mx-auto min-h-0 w-full flex-1 px-2 py-1 sm:px-4 sm:py-2"
+                        : showAnalysis
+                          ? "relative mx-auto min-h-0 w-full min-w-0 flex-1 px-3 py-2 sm:px-4 sm:py-3"
+                          : "relative mx-auto min-h-0 w-full max-w-2xl flex-1 px-3 py-2 sm:max-w-3xl sm:px-6 sm:py-4"
                   }
                   style={
-                    fullscreen
+                    fullscreen && !isStdReplay
                       ? { maxWidth: `${prefs.fieldWidth}%` }
                       : undefined
                   }
@@ -1099,7 +1123,7 @@ function ScoreReplayModal({
                     </div>
                   ) : null}
 
-                  {replayData?.beatmap.columnCount ? (
+                  {isManiaReplay ? (
                     <div className="relative h-full w-full">
                       <div className="h-full w-full overflow-hidden rounded-xl">
                         <ManiaNotefield
@@ -1129,9 +1153,22 @@ function ScoreReplayModal({
                         />
                       ) : null}
                     </div>
+                  ) : isStdReplay ? (
+                    <div className="relative h-full w-full">
+                      <div className="h-full w-full overflow-hidden rounded-xl">
+                        <StdPlayfield
+                          hitObjects={replayData.beatmap.hitObjects ?? []}
+                          circleSize={replayData.beatmap.circleSize ?? 5}
+                          approachRate={replayData.beatmap.approachRate ?? 5}
+                          frames={replayData.stdFrames ?? []}
+                          judgments={replayData.judgments}
+                          getCurrentTimeMs={mapTimeMs}
+                        />
+                      </div>
+                    </div>
                   ) : (
                     <div className="flex h-full min-h-[16rem] items-center justify-center rounded-xl bg-black/40 px-6 text-center text-sm text-muted">
-                      Could not load mania notes for this score.
+                      Could not load playfield for this score.
                     </div>
                   )}
                 </div>
@@ -1327,6 +1364,7 @@ function ScoreReplayModal({
                       </select>
                     </label>
 
+                    {isManiaReplay ? (
                     <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-muted sm:max-w-xs">
                       <span className="shrink-0">Scroll {scrollLabel}</span>
                       <input
@@ -1343,8 +1381,9 @@ function ScoreReplayModal({
                         aria-label="Scroll speed"
                       />
                     </label>
+                    ) : null}
 
-                    {fullscreen ? (
+                    {fullscreen && !isStdReplay ? (
                       <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-muted sm:max-w-xs">
                         <span className="shrink-0">
                           Size {Math.round(prefs.fieldWidth)}%
@@ -1365,7 +1404,7 @@ function ScoreReplayModal({
                       </label>
                     ) : null}
 
-                    {!isPlay ? (
+                    {!isPlay && isManiaReplay ? (
                       <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
                         <input
                           type="checkbox"

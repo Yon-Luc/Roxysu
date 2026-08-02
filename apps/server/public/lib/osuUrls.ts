@@ -59,5 +59,6 @@ export function localBeatmapAudioUrl(
   if (!audioFileHash || !/^[0-9a-f]{64}$/i.test(audioFileHash)) {
     return null;
   }
-  return `/api/audio/${audioFileHash.toLowerCase()}`;
+  // `v=2` busts clients that cached pre-Range (non-seekable) responses.
+  return `/api/audio/${audioFileHash.toLowerCase()}?v=2`;
 }

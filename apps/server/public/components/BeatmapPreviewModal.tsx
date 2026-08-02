@@ -227,6 +227,11 @@ function BeatmapPreviewModal({
   const clockRef = useRef(new AudioClock());
   const previewSeekDone = useRef(false);
   const previewTimeRef = useRef<number | null>(null);
+  /** Hold UI/clock at this time until media catches up (avoids snap-back to 0). */
+  const desiredMsRef = useRef<number | null>(null);
+  const seekGuardUntilRef = useRef(0);
+  const lengthMsRef = useRef(0);
+  const durationMsRef = useRef(0);
   const audioUrlRef = useRef<string | null>(null);
   const onCloseRef = useRef(onClose);
   const modeRef = useRef<ModalMode>(initialMode);
@@ -263,10 +268,26 @@ function BeatmapPreviewModal({
     localBeatmapCoverUrl(data?.backgroundFileHash) ??
     osuBeatmapCoverUrl(data?.setOnlineId, "cover") ??
     null;
-  const previewTime = data?.previewTime ?? null;
+  // osu PreviewTime is -1 when unset; treat 0/-1/null as "no preview point".
+  const previewTime =
+    data?.previewTime != null && data.previewTime > 0 ? data.previewTime : null;
 
   prefsRef.current = prefs;
   previewTimeRef.current = previewTime;
+  {
+    let chartEnd = 0;
+    for (const n of data?.notes ?? []) {
+      chartEnd = Math.max(chartEnd, n.endMs, n.startMs);
+    }
+    for (const o of data?.hitObjects ?? []) {
+      chartEnd = Math.max(
+        chartEnd,
+        o.type === "circle" ? o.timeMs : o.endMs,
+      );
+    }
+    lengthMsRef.current = Math.max(0, data?.lengthMs ?? 0, chartEnd);
+  }
+  durationMsRef.current = durationMs;
   audioUrlRef.current = audioUrl;
   onCloseRef.current = onClose;
   modeRef.current = mode;
@@ -393,9 +414,20 @@ function BeatmapPreviewModal({
   function seekTo(ms: number) {
     const audio = audioRef.current;
     if (!audio) return;
-    const max = (audio.duration || 0) * 1000;
-    const next = clamp(ms, 0, max > 0 ? max : ms);
-    audio.currentTime = next / 1000;
+    const audioMax =
+      Number.isFinite(audio.duration) && audio.duration > 0
+        ? audio.duration * 1000
+        : 0;
+    const knownMax = Math.max(lengthMsRef.current, durationMsRef.current);
+    const max = Math.max(audioMax, knownMax);
+    const next = max > 0 ? clamp(ms, 0, max) : Math.max(0, ms);
+    desiredMsRef.current = next;
+    seekGuardUntilRef.current = performance.now() + 400;
+    try {
+      audio.currentTime = next / 1000;
+    } catch {
+      // InvalidStateError before metadata — keep desiredMs until media is ready.
+    }
     clockRef.current.set(next, {
       playing: !audio.paused && !audio.ended,
       rate: audio.playbackRate > 0 ? audio.playbackRate : 1,
@@ -653,6 +685,7 @@ function BeatmapPreviewModal({
 
   useEffect(() => {
     previewSeekDone.current = false;
+    desiredMsRef.current = null;
     clockRef.current.set(0, { playing: false, rate: prefsRef.current.rate });
     audioRef.current?.pause();
     setAudioError(null);
@@ -677,27 +710,61 @@ function BeatmapPreviewModal({
 
     function seekPreviewIfNeeded() {
       if (previewSeekDone.current) return;
+      previewSeekDone.current = true;
       if (modeRef.current === "play") {
         const start = playStartMsRef.current;
-        audio!.currentTime = start / 1000;
+        desiredMsRef.current = start;
+        seekGuardUntilRef.current = performance.now() + 400;
+        try {
+          audio!.currentTime = start / 1000;
+        } catch {
+          // ignore
+        }
         clock.set(start, {
           playing: !audio!.paused && !audio!.ended,
           rate: audio!.playbackRate > 0 ? audio!.playbackRate : 1,
         });
         setCurrentMs(start);
-      } else if (previewTime != null && previewTime > 0) {
-        audio!.currentTime = previewTime / 1000;
-        clock.set(previewTime, {
-          playing: !audio!.paused && !audio!.ended,
-          rate: audio!.playbackRate > 0 ? audio!.playbackRate : 1,
-        });
-        setCurrentMs(previewTime);
+        return;
       }
-      previewSeekDone.current = true;
+      const pt = previewTimeRef.current;
+      if (pt == null || pt <= 0) return;
+      // Don't yank the playhead if the user already scrubbed (desired seek or media).
+      if (desiredMsRef.current != null && desiredMsRef.current > 250) return;
+      const atMs = (audio!.currentTime || 0) * 1000;
+      if (atMs > 250) return;
+      desiredMsRef.current = pt;
+      seekGuardUntilRef.current = performance.now() + 400;
+      try {
+        audio!.currentTime = pt / 1000;
+      } catch {
+        // ignore
+      }
+      clock.set(pt, {
+        playing: !audio!.paused && !audio!.ended,
+        rate: audio!.playbackRate > 0 ? audio!.playbackRate : 1,
+      });
+      setCurrentMs(pt);
     }
 
     function syncClockFromAudio() {
       const ms = (audio!.currentTime || 0) * 1000;
+      const desired = desiredMsRef.current;
+      if (desired != null) {
+        if (Math.abs(ms - desired) <= 400) {
+          desiredMsRef.current = null;
+        } else if (performance.now() < seekGuardUntilRef.current) {
+          // Media hasn't applied the seek yet (or load handlers raced us).
+          clock.set(desired, {
+            playing: !audio!.paused && !audio!.ended,
+            rate: audio!.playbackRate > 0 ? audio!.playbackRate : 1,
+          });
+          setCurrentMs(desired);
+          return;
+        } else {
+          desiredMsRef.current = null;
+        }
+      }
       clock.observe(ms, {
         playing: !audio!.paused && !audio!.ended,
         rate: audio!.playbackRate > 0 ? audio!.playbackRate : 1,
@@ -717,11 +784,28 @@ function BeatmapPreviewModal({
     function onLoadedMetadata() {
       setDurationMs((audio!.duration || 0) * 1000);
       seekPreviewIfNeeded();
+      // Re-apply a pending user seek now that the media is seekable.
+      const desired = desiredMsRef.current;
+      if (desired != null) {
+        try {
+          audio!.currentTime = desired / 1000;
+        } catch {
+          // ignore
+        }
+      }
     }
     function onCanPlay() {
       // Only positions once (previewSeekDone); safe even though canplay
       // also fires after user seeks.
       seekPreviewIfNeeded();
+      const desired = desiredMsRef.current;
+      if (desired != null) {
+        try {
+          audio!.currentTime = desired / 1000;
+        } catch {
+          // ignore
+        }
+      }
     }
     function onPlay() {
       syncClockFromAudio();
@@ -770,7 +854,7 @@ function BeatmapPreviewModal({
       audio.removeEventListener("ended", onEnded);
       audio.removeEventListener("error", onError);
     };
-  }, [audioUrl, previewTime, audioMountGen]);
+  }, [audioUrl, audioMountGen]);
 
   function onSeek(e: FormEvent<HTMLInputElement>) {
     if (mode === "play") return;
@@ -798,10 +882,23 @@ function BeatmapPreviewModal({
         .filter(Boolean)
         .join(" · ")
     : null;
+  const chartEndMs = (() => {
+    let end = 0;
+    for (const n of data?.notes ?? []) {
+      end = Math.max(end, n.endMs, n.startMs);
+    }
+    for (const o of data?.hitObjects ?? []) {
+      if (o.type === "circle") end = Math.max(end, o.timeMs);
+      else end = Math.max(end, o.endMs);
+    }
+    return end;
+  })();
   const maxDuration = (() => {
-    const candidates = [durationMs, data?.lengthMs ?? 0].filter(
-      (n) => Number.isFinite(n) && n > 0 && n < 24 * 60 * 60 * 1000,
-    );
+    const candidates = [
+      durationMs,
+      data?.lengthMs ?? 0,
+      chartEndMs,
+    ].filter((n) => Number.isFinite(n) && n > 0 && n < 24 * 60 * 60 * 1000);
     const base = candidates.length > 0 ? Math.max(...candidates) : 1;
     return Math.max(base, currentMs, 1);
   })();

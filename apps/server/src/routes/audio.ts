@@ -49,22 +49,40 @@ function sniffAudioMime(bytes: Uint8Array): string | null {
 
 export const audioRoutes = new Elysia({ prefix: "/audio" }).get(
   "/:hash",
-  async ({ params, set }) => {
+  async ({ params, request, set }) => {
     const result = await serveHashedFile(
       params.hash,
       sniffAudioMime,
       "Audio not found",
       "Not an audio file",
+      request.headers.get("range"),
     );
     if (!result.ok) {
       set.status = result.status;
+      if (result.status === 416 && result.size != null) {
+        set.headers["content-range"] = `bytes */${result.size}`;
+        set.headers["accept-ranges"] = "bytes";
+      }
       return { error: result.error };
     }
 
-    set.headers["content-type"] = result.contentType;
-    set.headers["cache-control"] = "public, max-age=604800, immutable";
-    set.headers["accept-ranges"] = "bytes";
-    return result.file;
+    const length = result.end - result.start + 1;
+    // Return a Response so Content-Length / 206 are not stripped by the
+    // framework when streaming — media elements need this to seek.
+    return new Response(result.file, {
+      status: result.partial ? 206 : 200,
+      headers: {
+        "Content-Type": result.contentType,
+        "Cache-Control": "public, max-age=604800, immutable",
+        "Accept-Ranges": "bytes",
+        "Content-Length": String(length),
+        ...(result.partial
+          ? {
+              "Content-Range": `bytes ${result.start}-${result.end}/${result.size}`,
+            }
+          : {}),
+      },
+    });
   },
   {
     params: t.Object({

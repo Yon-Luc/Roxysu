@@ -63,6 +63,7 @@ export const coverRoutes = new Elysia({ prefix: "/covers" }).get(
 
     set.headers["content-type"] = result.contentType;
     set.headers["cache-control"] = "public, max-age=604800, immutable";
+    set.headers["content-length"] = String(result.end - result.start + 1);
     return result.file;
   },
   {

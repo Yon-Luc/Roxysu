@@ -272,10 +272,14 @@ function ScoreReplayModal({
   const dialogRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const clockRef = useRef(new AudioClock());
-  const startSeekDone = useRef(false);
   const audioUrlRef = useRef<string | null>(null);
   const onCloseRef = useRef(onClose);
   const rateApplied = useRef(false);
+  /** Hold UI/clock at this time until media catches up (avoids snap-back to 0). */
+  const desiredMsRef = useRef<number | null>(null);
+  const seekGuardUntilRef = useRef(0);
+  const lengthMsRef = useRef(0);
+  const durationMsRef = useRef(0);
   const modeRef = useRef<ModalMode>("rewatch");
   const livePlayRef = useRef<LiveManiaPlay | null>(null);
   const dataRef = useRef<
@@ -333,6 +337,24 @@ function ScoreReplayModal({
   onCloseRef.current = onClose;
   modeRef.current = mode;
   dataRef.current = data;
+  {
+    let chartEnd = 0;
+    for (const n of replayData?.beatmap.notes ?? []) {
+      chartEnd = Math.max(chartEnd, n.endMs, n.startMs);
+    }
+    for (const o of replayData?.beatmap.hitObjects ?? []) {
+      chartEnd = Math.max(
+        chartEnd,
+        o.type === "circle" ? o.timeMs : o.endMs,
+      );
+    }
+    lengthMsRef.current = Math.max(
+      0,
+      replayData?.beatmap.lengthMs ?? 0,
+      chartEnd,
+    );
+  }
+  durationMsRef.current = durationMs;
 
   if (replayData && replayData.beatmap.columnCount > 0) {
     bindsRef.current = resolveKeybinds(
@@ -457,9 +479,20 @@ function ScoreReplayModal({
   function seekTo(ms: number) {
     const audio = audioRef.current;
     if (!audio) return;
-    const max = (audio.duration || 0) * 1000;
-    const next = clamp(ms, 0, max > 0 ? max : ms);
-    audio.currentTime = next / 1000;
+    const audioMax =
+      Number.isFinite(audio.duration) && audio.duration > 0
+        ? audio.duration * 1000
+        : 0;
+    const knownMax = Math.max(lengthMsRef.current, durationMsRef.current);
+    const max = Math.max(audioMax, knownMax);
+    const next = max > 0 ? clamp(ms, 0, max) : Math.max(0, ms);
+    desiredMsRef.current = next;
+    seekGuardUntilRef.current = performance.now() + 400;
+    try {
+      audio.currentTime = next / 1000;
+    } catch {
+      // InvalidStateError before metadata — keep desiredMs until media is ready.
+    }
     clockRef.current.set(next, {
       playing: !audio.paused && !audio.ended,
       rate: audio.playbackRate > 0 ? audio.playbackRate : 1,
@@ -711,7 +744,7 @@ function ScoreReplayModal({
   }, []);
 
   useEffect(() => {
-    startSeekDone.current = false;
+    desiredMsRef.current = null;
     rateApplied.current = false;
     clockRef.current.set(0, { playing: false, rate: prefsRef.current.rate });
     setAudioError(null);
@@ -736,6 +769,22 @@ function ScoreReplayModal({
 
     function syncClockFromAudio() {
       const ms = (audio!.currentTime || 0) * 1000;
+      const desired = desiredMsRef.current;
+      if (desired != null) {
+        if (Math.abs(ms - desired) <= 400) {
+          desiredMsRef.current = null;
+        } else if (performance.now() < seekGuardUntilRef.current) {
+          // Media hasn't applied the seek yet (or load handlers raced us).
+          clock.set(desired, {
+            playing: !audio!.paused && !audio!.ended,
+            rate: audio!.playbackRate > 0 ? audio!.playbackRate : 1,
+          });
+          setCurrentMs(desired);
+          return;
+        } else {
+          desiredMsRef.current = null;
+        }
+      }
       clock.observe(ms, {
         playing: !audio!.paused && !audio!.ended,
         rate: audio!.playbackRate > 0 ? audio!.playbackRate : 1,
@@ -754,23 +803,25 @@ function ScoreReplayModal({
     }
     function onLoadedMetadata() {
       setDurationMs((audio!.duration || 0) * 1000);
-      if (!startSeekDone.current) {
-        audio!.currentTime = 0;
-        clock.set(0, {
-          playing: !audio!.paused && !audio!.ended,
-          rate: audio!.playbackRate > 0 ? audio!.playbackRate : 1,
-        });
-        startSeekDone.current = true;
+      // Re-apply a pending user seek now that the media is seekable.
+      // Do NOT force currentTime=0 — that raced user scrubs back to start.
+      const desired = desiredMsRef.current;
+      if (desired != null) {
+        try {
+          audio!.currentTime = desired / 1000;
+        } catch {
+          // ignore
+        }
       }
     }
     function onCanPlay() {
-      if (!startSeekDone.current) {
-        audio!.currentTime = 0;
-        clock.set(0, {
-          playing: !audio!.paused && !audio!.ended,
-          rate: audio!.playbackRate > 0 ? audio!.playbackRate : 1,
-        });
-        startSeekDone.current = true;
+      const desired = desiredMsRef.current;
+      if (desired != null) {
+        try {
+          audio!.currentTime = desired / 1000;
+        } catch {
+          // ignore
+        }
       }
     }
     function onPlay() {
@@ -884,10 +935,23 @@ function ScoreReplayModal({
         replayData.score.userUsername,
       ].filter(Boolean)
     : [];
+  const chartEndMs = (() => {
+    let end = 0;
+    for (const n of replayData?.beatmap.notes ?? []) {
+      end = Math.max(end, n.endMs, n.startMs);
+    }
+    for (const o of replayData?.beatmap.hitObjects ?? []) {
+      if (o.type === "circle") end = Math.max(end, o.timeMs);
+      else end = Math.max(end, o.endMs);
+    }
+    return end;
+  })();
   const maxDuration = (() => {
-    const candidates = [durationMs, replayData?.beatmap.lengthMs ?? 0].filter(
-      (n) => Number.isFinite(n) && n > 0 && n < 24 * 60 * 60 * 1000,
-    );
+    const candidates = [
+      durationMs,
+      replayData?.beatmap.lengthMs ?? 0,
+      chartEndMs,
+    ].filter((n) => Number.isFinite(n) && n > 0 && n < 24 * 60 * 60 * 1000);
     const base = candidates.length > 0 ? Math.max(...candidates) : 1;
     return Math.max(base, currentMs, 1);
   })();

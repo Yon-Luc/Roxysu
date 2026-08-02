@@ -2,6 +2,7 @@ import {
   beatmapSets,
   beatmaps,
   beatmapDanRatings,
+  beatmapManiaRatings,
   beatmapPatternAnalysis,
   imports,
   mastery,
@@ -221,6 +222,7 @@ function deleteByIds(
     | typeof notes
     | typeof beatmapTags
     | typeof beatmapDanRatings
+    | typeof beatmapManiaRatings
     | typeof beatmapPatternAnalysis,
   idColumn: { name: string },
   ids: string[],
@@ -455,7 +457,10 @@ function catchUpMissingFromRealm(
   const sqliteBeatmapIds = sqliteIdSet(db, beatmaps);
   const sqliteScoreIds = sqliteIdSet(db, scores);
 
-  const missingSetIds = idsMissingFromSqlite(realmIds.realmSetIds, sqliteSetIds);
+  const missingSetIds = idsMissingFromSqlite(
+    realmIds.realmSetIds,
+    sqliteSetIds,
+  );
   const missingBeatmapIds = idsMissingFromSqlite(
     realmIds.realmBeatmapIds,
     sqliteBeatmapIds,
@@ -632,11 +637,22 @@ function reconcileDeletes(
     }
     deleteByIds(db, mastery, mastery.beatmapId as never, orphanBeatmaps);
     deleteByIds(db, notes, notes.beatmapId as never, orphanBeatmaps);
-    deleteByIds(db, beatmapTags, beatmapTags.beatmapId as never, orphanBeatmaps);
+    deleteByIds(
+      db,
+      beatmapTags,
+      beatmapTags.beatmapId as never,
+      orphanBeatmaps,
+    );
     deleteByIds(
       db,
       beatmapDanRatings,
       beatmapDanRatings.beatmapId as never,
+      orphanBeatmaps,
+    );
+    deleteByIds(
+      db,
+      beatmapManiaRatings,
+      beatmapManiaRatings.beatmapId as never,
       orphanBeatmaps,
     );
     deleteByIds(
@@ -1256,8 +1272,7 @@ export function runIncrementalSync(db: Db, realmPath: string): SyncResult {
         beatmapSetsUpserted.attempted + caughtUp.beatmapSetsUpserted,
       beatmapsUpserted: beatmapsUpserted.attempted + caughtUp.beatmapsUpserted,
       scoresUpserted: scoresUpserted.attempted + caughtUp.scoresUpserted,
-      rulesetsUpserted:
-        rulesetsUpserted.attempted + caughtUp.rulesetsUpserted,
+      rulesetsUpserted: rulesetsUpserted.attempted + caughtUp.rulesetsUpserted,
       rowsChanged,
       scoresDeleted: 0,
       beatmapsDeleted: 0,

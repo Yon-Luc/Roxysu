@@ -1160,26 +1160,12 @@ function BeatmapPreviewModal({
                 )}
               </div>
 
-              <div
-                className={
-                  isPlay
-                    ? "group/ctrl absolute inset-x-0 bottom-0 z-20"
-                    : "border-t border-white/10 bg-black/50 px-4 py-3 backdrop-blur sm:px-6 sm:py-4"
-                }
-              >
-                {isPlay ? (
-                  <div
-                    className="absolute inset-x-0 bottom-0 h-12"
-                    aria-hidden
-                  />
-                ) : null}
+              <div className="group/ctrl absolute inset-x-0 bottom-0 z-20">
                 <div
-                  className={
-                    isPlay
-                      ? "pointer-events-none relative translate-y-full border-t border-white/10 bg-black/50 px-4 py-3 opacity-0 backdrop-blur transition duration-200 group-hover/ctrl:pointer-events-auto group-hover/ctrl:translate-y-0 group-hover/ctrl:opacity-100 group-focus-within/ctrl:pointer-events-auto group-focus-within/ctrl:translate-y-0 group-focus-within/ctrl:opacity-100 sm:px-6 sm:py-4"
-                      : undefined
-                  }
-                >
+                  className="absolute inset-x-0 bottom-0 h-14"
+                  aria-hidden
+                />
+                <div className="pointer-events-none relative translate-y-full border-t border-white/10 bg-black/55 px-4 py-3 opacity-0 backdrop-blur transition duration-200 group-hover/ctrl:pointer-events-auto group-hover/ctrl:translate-y-0 group-hover/ctrl:opacity-100 group-focus-within/ctrl:pointer-events-auto group-focus-within/ctrl:translate-y-0 group-focus-within/ctrl:opacity-100 sm:px-6 sm:py-4">
 
                 {audioError || !audioUrl ? (
                   <p className="mb-3 text-sm text-amber-200/90">

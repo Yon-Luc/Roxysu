@@ -36,12 +36,15 @@ import {
   themeOptions,
   useTheme,
 } from "../../lib/theme";
+import { useAppDict, t } from "../../lib/i18n";
+import type { Dictionary } from "@roxysu/i18n";
 
 export function SettingsPage({ section }: { section?: string } = {}) {
   const desktop = isDesktopShell();
   const queryClient = useQueryClient();
   const ratingMode = useRatingDisplayMode();
   const themeMode = useTheme();
+  const { dict } = useAppDict();
   const { data, isLoading, error } = useQuery({
     queryKey: ["settings"],
     queryFn: fetchSettings,
@@ -278,7 +281,9 @@ export function SettingsPage({ section }: { section?: string } = {}) {
   if (error || !data) {
     return (
       <p className="text-rose-300">
-        Failed to load settings: {error?.message ?? "unknown"}
+        {t(dict?.settings.failedToLoad, {
+          error: error?.message ?? "unknown",
+        })}
       </p>
     );
   }
@@ -340,27 +345,32 @@ export function SettingsPage({ section }: { section?: string } = {}) {
   return (
     <div className="space-y-8">
       <div>
-        <PageTitle>Settings</PageTitle>
-        <p className="rx-subtitle">
-          Display preferences and tools — mastery formulas recompute all levels
-          when changed.
-        </p>
+        <PageTitle>{dict?.settings.pageTitle ?? "Settings"}</PageTitle>
+        <p className="rx-subtitle">{dict?.settings.subtitle}</p>
       </div>
 
       <section
         id={pageSectionDomId("osu-lazer-data-folder")}
         className="rx-panel scroll-mt-6 p-5"
       >
-        <h2 className="text-sm font-bold text-ink">osu!lazer data folder</h2>
-        <p className="mt-1 text-sm text-muted">
-          Folder that contains <span className="font-mono">client.realm</span>{" "}
-          and <span className="font-mono">files/</span>. Override when the
-          default path is wrong (Flatpak, custom install, etc.).
-        </p>
+        <h2 className="text-sm font-bold text-ink">
+          {dict?.settings.lazerDataFolder}
+        </h2>
+        {dict?.settings.lazerDataFolderDesc ? (
+          <p className="mt-1 text-sm text-muted">
+            {dict.settings.lazerDataFolderDesc}
+          </p>
+        ) : (
+          <p className="mt-1 text-sm text-muted">
+            Folder that contains <span className="font-mono">client.realm</span>{" "}
+            and <span className="font-mono">files/</span>. Override when the
+            default path is wrong (Flatpak, custom install, etc.).
+          </p>
+        )}
 
         <label className="mt-4 block">
           <span className="text-xs font-semibold uppercase tracking-wide text-faint">
-            Custom path
+            {dict?.settings.customPath}
           </span>
           <input
             type="text"
@@ -376,21 +386,31 @@ export function SettingsPage({ section }: { section?: string } = {}) {
 
         <div className="mt-3 space-y-1 text-sm text-muted">
           <p>
-            Using{" "}
-            <span className="font-mono text-ink">
-              {paths.resolvedOsuDataPath}
-            </span>{" "}
-            ({pathSourceLabel(paths.source)})
+            {(() => {
+              const parts = t(dict?.settings.usingPath, {
+                path: "⟦PATH⟧",
+                source: pathSourceLabel(dict, paths.source),
+              }).split("⟦PATH⟧");
+              return (
+                <>
+                  {parts[0]}
+                  <span className="font-mono text-ink">
+                    {paths.resolvedOsuDataPath}
+                  </span>
+                  {parts[1]}
+                </>
+              );
+            })()}
           </p>
           <p className="font-mono text-xs text-faint">
             realm → {paths.resolvedRealmPath}
           </p>
-          <p className="text-xs">{pathStatusLabel(paths.status)}</p>
+          <p className="text-xs">{pathStatusLabel(dict, paths.status)}</p>
           {paths.source === "env" ? (
             <p className="text-xs text-amber-200/90">
               <span className="font-mono">OSU_DATA_PATH</span> or{" "}
-              <span className="font-mono">REALM_PATH</span> is set — env wins
-              over this setting.
+              <span className="font-mono">REALM_PATH</span> —{" "}
+              {dict?.settings.envWins}
             </p>
           ) : null}
         </div>
@@ -407,7 +427,9 @@ export function SettingsPage({ section }: { section?: string } = {}) {
             }
             onClick={() => pathMut.mutate(osuPathDraft.trim())}
           >
-            {pathMut.isPending ? "Saving…" : "Save path"}
+            {pathMut.isPending
+              ? dict?.settings.saving
+              : dict?.settings.savePath}
           </button>
           <button
             type="button"
@@ -419,7 +441,7 @@ export function SettingsPage({ section }: { section?: string } = {}) {
             }
             onClick={() => pathMut.mutate(null)}
           >
-            Clear override
+            {dict?.settings.clearOverride}
           </button>
         </div>
 
@@ -432,12 +454,11 @@ export function SettingsPage({ section }: { section?: string } = {}) {
         id={pageSectionDomId("tosu-live-map")}
         className="rx-panel scroll-mt-6 p-5"
       >
-        <h2 className="text-sm font-bold text-ink">Tosu / live map</h2>
+        <h2 className="text-sm font-bold text-ink">
+          {dict?.settings.tosuLiveMap}
+        </h2>
         <p className="mt-1 text-sm text-muted">
-          Connect to a local{" "}
-          <span className="font-mono">tosu</span> WebSocket for the currently
-          selected osu! map on the live session page. Analysis uses Roxysu Sunny
-          / 7K patterns (not Etterna MSD).
+          {dict?.settings.tosuLiveMapDesc}
         </p>
 
         <label className="mt-4 flex cursor-pointer gap-3 rounded-xl bg-elevated/50 px-4 py-3">
@@ -449,18 +470,18 @@ export function SettingsPage({ section }: { section?: string } = {}) {
             className="mt-1 accent-[var(--color-accent)]"
           />
           <div>
-            <div className="font-bold text-ink">Enable tosu live adapter</div>
+            <div className="font-bold text-ink">
+              {dict?.settings.enableTosu}
+            </div>
             <div className="mt-0.5 text-sm text-muted">
-              When on, Roxysu connects to{" "}
-              <span className="font-mono">ws://…/websocket/v2</span> and can
-              auto-start tosu if the executable path is set.
+              {dict?.settings.enableTosuDesc}
             </div>
           </div>
         </label>
 
         <label className="mt-4 block">
           <span className="text-xs font-semibold uppercase tracking-wide text-faint">
-            Host
+            {dict?.settings.host}
           </span>
           <input
             type="text"
@@ -476,7 +497,7 @@ export function SettingsPage({ section }: { section?: string } = {}) {
 
         <label className="mt-4 block">
           <span className="text-xs font-semibold uppercase tracking-wide text-faint">
-            Executable path
+            {dict?.settings.executablePath}
           </span>
           <input
             type="text"
@@ -512,7 +533,9 @@ export function SettingsPage({ section }: { section?: string } = {}) {
               })
             }
           >
-            {tosuMut.isPending ? "Saving…" : "Save tosu settings"}
+            {tosuMut.isPending
+              ? dict?.settings.saving
+              : dict?.settings.saveTosu}
           </button>
           <button
             type="button"
@@ -520,7 +543,7 @@ export function SettingsPage({ section }: { section?: string } = {}) {
             disabled={tosuMut.isPending || tosu.executablePath == null}
             onClick={() => tosuMut.mutate({ tosuExecutablePath: null })}
           >
-            Clear executable
+            {dict?.settings.clearExecutable}
           </button>
         </div>
 
@@ -558,7 +581,7 @@ export function SettingsPage({ section }: { section?: string } = {}) {
                   <div className="font-bold text-ink">{f.label}</div>
                   <div className="mt-0.5 text-sm text-muted">{f.description}</div>
                   <div className="mt-1 font-mono text-xs text-faint">
-                    id: {f.id}
+                    {t(dict?.settings.idPrefix, { id: f.id })}
                   </div>
                 </div>
               </label>
@@ -566,7 +589,9 @@ export function SettingsPage({ section }: { section?: string } = {}) {
           })}
         </div>
         {mut.isPending ? (
-          <p className="mt-3 text-sm text-muted">Recomputing mastery…</p>
+          <p className="mt-3 text-sm text-muted">
+            {dict?.settings.recomputingMastery}
+          </p>
         ) : null}
         {mut.error ? (
           <p className="mt-3 text-sm text-rose-300">{mut.error.message}</p>
@@ -577,10 +602,11 @@ export function SettingsPage({ section }: { section?: string } = {}) {
         id={pageSectionDomId("score-username")}
         className="rx-panel scroll-mt-6 p-5"
       >
-        <h2 className="text-sm font-bold text-ink">Score username</h2>
+        <h2 className="text-sm font-bold text-ink">
+          {dict?.settings.scoreUsername}
+        </h2>
         <p className="mt-1 text-sm text-muted">
-          Hide scores from downloaded replays by default. Auto uses the username
-          that appears most often; otherwise pick one or more usernames.
+          {dict?.settings.scoreUsernameDesc}
         </p>
         {data.scores ? (
           <>
@@ -601,9 +627,11 @@ export function SettingsPage({ section }: { section?: string } = {}) {
                   className="mt-1 accent-[var(--color-accent)]"
                 />
                 <div>
-                  <div className="font-bold text-ink">Auto</div>
+                  <div className="font-bold text-ink">
+                    {dict?.settings.auto}
+                  </div>
                   <div className="mt-0.5 text-sm text-muted">
-                    Most common username
+                    {dict?.settings.mostCommonUsername}
                     {data.scores.mostCommonUsername
                       ? ` (${data.scores.mostCommonUsername})`
                       : ""}
@@ -627,9 +655,11 @@ export function SettingsPage({ section }: { section?: string } = {}) {
                   className="mt-1 accent-[var(--color-accent)]"
                 />
                 <div>
-                  <div className="font-bold text-ink">All usernames</div>
+                  <div className="font-bold text-ink">
+                    {dict?.settings.allUsernames}
+                  </div>
                   <div className="mt-0.5 text-sm text-muted">
-                    Include scores from downloaded replays and every player.
+                    {dict?.settings.allUsernamesDesc}
                   </div>
                 </div>
               </label>
@@ -637,11 +667,11 @@ export function SettingsPage({ section }: { section?: string } = {}) {
 
             <div className="mt-4">
               <div className="text-xs font-semibold uppercase tracking-wide text-faint">
-                Selected usernames
+                {dict?.settings.selectedUsernames}
               </div>
               {data.scores.usernames.length === 0 ? (
                 <p className="mt-2 text-sm text-muted">
-                  No usernames found on scores yet — sync some plays first.
+                  {dict?.settings.noUsernames}
                 </p>
               ) : (
                 <div className="mt-2 max-h-64 space-y-1 overflow-y-auto rounded-xl bg-elevated/40 p-2">
@@ -695,7 +725,7 @@ export function SettingsPage({ section }: { section?: string } = {}) {
             data.scores.resolvedUsernames &&
             data.scores.resolvedUsernames.length > 0 ? (
               <p className="mt-2 text-sm text-muted">
-                Currently filtering to{" "}
+                {dict?.settings.currentlyFilteringTo}{" "}
                 <span className="font-semibold text-ink">
                   {data.scores.resolvedUsernames.join(", ")}
                 </span>
@@ -705,7 +735,7 @@ export function SettingsPage({ section }: { section?: string } = {}) {
             {data.scores.mode === "selected" &&
             data.scores.selectedUsernames.length > 0 ? (
               <p className="mt-2 text-sm text-muted">
-                Showing{" "}
+                {dict?.settings.showing}{" "}
                 <span className="font-semibold text-ink">
                   {data.scores.selectedUsernames.join(", ")}
                 </span>
@@ -716,7 +746,7 @@ export function SettingsPage({ section }: { section?: string } = {}) {
         ) : null}
         {scoresUsernameMut.isPending ? (
           <p className="mt-3 text-sm text-muted">
-            Updating filter and recomputing analytics…
+            {dict?.settings.updatingFilter}
           </p>
         ) : null}
         {scoresUsernameMut.error ? (
@@ -730,10 +760,11 @@ export function SettingsPage({ section }: { section?: string } = {}) {
         id={pageSectionDomId("gamemode")}
         className="rx-panel scroll-mt-6 p-5"
       >
-        <h2 className="text-sm font-bold text-ink">Gamemode</h2>
+        <h2 className="text-sm font-bold text-ink">
+          {dict?.settings.gamemode}
+        </h2>
         <p className="mt-1 text-sm text-muted">
-          Hide scores and maps from other gamemodes. Auto picks the mode with
-          the most scores; or keep all modes visible.
+          {dict?.settings.gamemodeDesc}
         </p>
         {data.gamemode ? (
           <>
@@ -754,9 +785,11 @@ export function SettingsPage({ section }: { section?: string } = {}) {
                   className="mt-1 accent-[var(--color-accent)]"
                 />
                 <div>
-                  <div className="font-bold text-ink">Auto</div>
+                  <div className="font-bold text-ink">
+                    {dict?.settings.auto}
+                  </div>
                   <div className="mt-0.5 text-sm text-muted">
-                    Most scores
+                    {dict?.settings.mostScores}
                     {data.gamemode.mostCommonGamemode
                       ? ` (${
                           data.gamemode.gamemodes.find(
@@ -784,9 +817,11 @@ export function SettingsPage({ section }: { section?: string } = {}) {
                   className="mt-1 accent-[var(--color-accent)]"
                 />
                 <div>
-                  <div className="font-bold text-ink">All gamemodes</div>
+                  <div className="font-bold text-ink">
+                    {dict?.settings.allGamemodes}
+                  </div>
                   <div className="mt-0.5 text-sm text-muted">
-                    Show std, taiko, catch, and mania together.
+                    {dict?.settings.allGamemodesDesc}
                   </div>
                 </div>
               </label>
@@ -832,7 +867,7 @@ export function SettingsPage({ section }: { section?: string } = {}) {
 
             {data.gamemode.mode === "auto" && data.gamemode.resolvedGamemode ? (
               <p className="mt-2 text-sm text-muted">
-                Currently filtering to{" "}
+                {dict?.settings.currentlyFilteringTo}{" "}
                 <span className="font-semibold text-ink">
                   {data.gamemode.gamemodes.find(
                     (g) => g.id === data.gamemode.resolvedGamemode,
@@ -844,20 +879,20 @@ export function SettingsPage({ section }: { section?: string } = {}) {
             {data.gamemode.mode === "selected" &&
             data.gamemode.selectedGamemode ? (
               <p className="mt-2 text-sm text-muted">
-                Showing{" "}
+                {dict?.settings.showing}{" "}
                 <span className="font-semibold text-ink">
                   {data.gamemode.gamemodes.find(
                     (g) => g.id === data.gamemode.selectedGamemode,
                   )?.label ?? data.gamemode.selectedGamemode}
                 </span>{" "}
-                only.
+                {dict?.settings.onlySuffix}.
               </p>
             ) : null}
           </>
         ) : null}
         {scoresGamemodeMut.isPending ? (
           <p className="mt-3 text-sm text-muted">
-            Updating filter and recomputing analytics…
+            {dict?.settings.updatingFilter}
           </p>
         ) : null}
         {scoresGamemodeMut.error ? (
@@ -871,10 +906,11 @@ export function SettingsPage({ section }: { section?: string } = {}) {
         id={pageSectionDomId("live-sync")}
         className="rx-panel scroll-mt-6 p-5"
       >
-        <h2 className="text-sm font-bold text-ink">Live sync</h2>
+        <h2 className="text-sm font-bold text-ink">
+          {dict?.settings.liveSync}
+        </h2>
         <p className="mt-1 text-sm text-muted">
-          Optionally pause Realm imports while Roxysu is unfocused so lazer isn’t
-          fighting for the file during score submission. Off by default.
+          {dict?.settings.liveSyncDesc}
         </p>
         <label className="mt-4 flex cursor-pointer gap-3 rounded-xl bg-elevated/50 px-4 py-3 hover:bg-elevated">
           <input
@@ -886,10 +922,10 @@ export function SettingsPage({ section }: { section?: string } = {}) {
           />
           <div>
             <div className="font-bold text-ink">
-              Pause sync when Roxysu is unfocused
+              {dict?.settings.pauseWhenUnfocused}
             </div>
             <div className="mt-0.5 text-sm text-muted">
-              When enabled, imports resume after you focus this window again.
+              {dict?.settings.pauseWhenUnfocusedDesc}
             </div>
           </div>
         </label>
@@ -902,13 +938,16 @@ export function SettingsPage({ section }: { section?: string } = {}) {
         id={pageSectionDomId("appearance")}
         className="rx-panel scroll-mt-6 p-5"
       >
-        <h2 className="text-sm font-bold text-ink">Appearance</h2>
+        <h2 className="text-sm font-bold text-ink">
+          {dict?.settings.appearance}
+        </h2>
         <p className="mt-1 text-sm text-muted">
-          Choose a light or dark interface. System follows your OS preference.
+          {dict?.settings.appearanceDesc}
         </p>
         <div className="mt-4 space-y-2">
           {themeOptions().map((opt) => {
             const active = opt.id === themeMode;
+            const optDict = dict?.settings.theme[opt.id];
             return (
               <label
                 key={opt.id}
@@ -926,9 +965,11 @@ export function SettingsPage({ section }: { section?: string } = {}) {
                   className="mt-1 accent-[var(--color-accent)]"
                 />
                 <div>
-                  <div className="font-bold text-ink">{opt.label}</div>
+                  <div className="font-bold text-ink">
+                    {optDict?.label ?? opt.label}
+                  </div>
                   <div className="mt-0.5 text-sm text-muted">
-                    {opt.description}
+                    {optDict?.description ?? opt.description}
                   </div>
                 </div>
               </label>
@@ -941,14 +982,16 @@ export function SettingsPage({ section }: { section?: string } = {}) {
         id={pageSectionDomId("difficulty-display")}
         className="rx-panel scroll-mt-6 p-5"
       >
-        <h2 className="text-sm font-bold text-ink">Difficulty display</h2>
+        <h2 className="text-sm font-bold text-ink">
+          {dict?.settings.difficultyDisplay}
+        </h2>
         <p className="mt-1 text-sm text-muted">
-          Choose what appears in place of star rating across the app. Falls back
-          to osu! stars when Sunny data is missing.
+          {dict?.settings.difficultyDisplayDesc}
         </p>
         <div className="mt-4 space-y-2">
           {ratingDisplayOptions().map((opt) => {
             const active = opt.id === ratingMode;
+            const optDict = dict?.settings.ratingDisplay[opt.id];
             return (
               <label
                 key={opt.id}
@@ -966,9 +1009,11 @@ export function SettingsPage({ section }: { section?: string } = {}) {
                   className="mt-1 accent-[var(--color-accent)]"
                 />
                 <div>
-                  <div className="font-bold text-ink">{opt.label}</div>
+                  <div className="font-bold text-ink">
+                    {optDict?.label ?? opt.label}
+                  </div>
                   <div className="mt-0.5 text-sm text-muted">
-                    {opt.description}
+                    {optDict?.description ?? opt.description}
                   </div>
                 </div>
               </label>
@@ -981,13 +1026,14 @@ export function SettingsPage({ section }: { section?: string } = {}) {
         id={pageSectionDomId("preview-skin")}
         className="rx-panel scroll-mt-6 p-5"
       >
-        <h2 className="text-sm font-bold text-ink">Preview skin</h2>
+        <h2 className="text-sm font-bold text-ink">
+          {dict?.settings.previewSkin}
+        </h2>
         <p className="mt-1 text-sm text-muted">
-          Customize note shape, colors, size, hit position, and lane cover for
-          4K–10K previews.
+          {dict?.settings.previewSkinDesc}
         </p>
         <Link to="/skin" className="rx-btn-primary mt-4 inline-flex">
-          Open skin editor
+          {dict?.settings.openSkinEditor}
         </Link>
       </section>
 
@@ -995,17 +1041,18 @@ export function SettingsPage({ section }: { section?: string } = {}) {
         id={pageSectionDomId("keybinds")}
         className="rx-panel scroll-mt-6 p-5"
       >
-        <h2 className="text-sm font-bold text-ink">Keybinds</h2>
+        <h2 className="text-sm font-bold text-ink">
+          {dict?.settings.keybinds}
+        </h2>
         <p className="mt-1 text-sm text-muted">
-          Choose keys per column for each keymode when testing maps in preview
-          Play mode.
+          {dict?.settings.keybindsDesc}
         </p>
         <button
           type="button"
           className="rx-btn-primary mt-4"
           onClick={() => setKeybindOpen(true)}
         >
-          Edit keybinds
+          {dict?.settings.editKeybinds}
         </button>
         <KeybindModal
           open={keybindOpen}
@@ -1018,16 +1065,24 @@ export function SettingsPage({ section }: { section?: string } = {}) {
         id={pageSectionDomId("mania-rating-lab")}
         className="rx-panel scroll-mt-6 p-5"
       >
-        <h2 className="text-sm font-bold text-ink">Mania Rating Lab</h2>
-        <p className="mt-1 text-sm text-muted">
-          Calculator binaries built from osu!lazer branches (see{" "}
-          <code className="text-xs">docs/mania-rating-lab.md</code>). Used by
-          the{" "}
-          <Link to="/rating-lab" className="text-accent hover:underline">
-            Rating Lab
-          </Link>{" "}
-          page to compare SR and SS PP.
-        </p>
+        <h2 className="text-sm font-bold text-ink">
+          {dict?.settings.maniaRatingLab}
+        </h2>
+        {dict?.settings.maniaRatingLabDesc ? (
+          <p className="mt-1 text-sm text-muted">
+            {dict.settings.maniaRatingLabDesc}
+          </p>
+        ) : (
+          <p className="mt-1 text-sm text-muted">
+            Calculator binaries built from osu!lazer branches (see{" "}
+            <code className="text-xs">docs/mania-rating-lab.md</code>). Used by
+            the{" "}
+            <Link to="/rating-lab" className="text-accent hover:underline">
+              Rating Lab
+            </Link>{" "}
+            page to compare SR and SS PP.
+          </p>
+        )}
 
         <div className="mt-4 space-y-4">
           {maniaVersions.map((version) => {
@@ -1039,7 +1094,9 @@ export function SettingsPage({ section }: { section?: string } = {}) {
               <label key={version.id} className="block">
                 <span className="text-xs font-semibold uppercase tracking-wide text-faint">
                   {version.label}
-                  {optional ? " (optional)" : ""}
+                  {optional
+                    ? ` ${dict?.settings.optional ?? "(optional)"}`
+                    : ""}
                 </span>
                 <input
                   type="text"
@@ -1052,8 +1109,10 @@ export function SettingsPage({ section }: { section?: string } = {}) {
                   }
                   placeholder={
                     optional
-                      ? "Optional — SS PP max only"
-                      : `/path/to/mania-rating-calc (${version.id})`
+                      ? dict?.settings.optionalPlaceholder
+                      : t(dict?.settings.calcPathPlaceholder, {
+                          id: version.id,
+                        })
                   }
                   disabled={maniaRatingMut.isPending}
                   className="mt-1.5 w-full rounded-xl border border-line bg-elevated/50 px-3 py-2 font-mono text-sm text-ink placeholder:text-faint focus:border-accent focus:outline-none disabled:opacity-60"
@@ -1072,7 +1131,7 @@ export function SettingsPage({ section }: { section?: string } = {}) {
                       })
                     }
                   >
-                    Save {version.label}
+                    {t(dict?.settings.saveLabel, { label: version.label })}
                   </button>
                 ) : null}
               </label>
@@ -1088,13 +1147,21 @@ export function SettingsPage({ section }: { section?: string } = {}) {
                   {maniaCoverage.computed.toLocaleString()}
                 </span>
                 {" / "}
-                {maniaCoverage.maniaTotal.toLocaleString()} mania maps
+                {t(dict?.settings.maniaMaps, {
+                  count: maniaCoverage.maniaTotal.toLocaleString(),
+                })}
                 {maniaJob?.versionId ? ` (${maniaJob.versionId})` : ""}
               </span>
-              <span>{maniaCoverage.missing.toLocaleString()} remaining</span>
+              <span>
+                {t(dict?.settings.remaining, {
+                  count: maniaCoverage.missing.toLocaleString(),
+                })}
+              </span>
               {maniaCoverage.failed > 0 ? (
                 <span className="text-rose-300/90">
-                  {maniaCoverage.failed.toLocaleString()} failed
+                  {t(dict?.settings.failed, {
+                    count: maniaCoverage.failed.toLocaleString(),
+                  })}
                 </span>
               ) : null}
             </div>
@@ -1107,9 +1174,12 @@ export function SettingsPage({ section }: { section?: string } = {}) {
             </div>
 
             <p className="text-xs text-faint">
-              {statusLabel(maniaJob?.status)}
+              {statusLabel(dict, maniaJob?.status)}
               {maniaRunning
-                ? ` · +${maniaJob?.computedThisRun.toLocaleString() ?? 0} computed this run`
+                ? ` · ${t(dict?.settings.computedThisRun, {
+                    count:
+                      maniaJob?.computedThisRun.toLocaleString() ?? "0",
+                  })}`
                 : null}
             </p>
           </div>
@@ -1127,7 +1197,9 @@ export function SettingsPage({ section }: { section?: string } = {}) {
             }
             onClick={() => startRatingLab.mutate(defaultExperimentVersion)}
           >
-            {maniaRunning ? "Computing…" : "Backfill experiment ratings"}
+            {maniaRunning
+              ? dict?.settings.computing
+              : dict?.settings.backfillRatings}
           </button>
           <button
             type="button"
@@ -1135,7 +1207,9 @@ export function SettingsPage({ section }: { section?: string } = {}) {
             disabled={!maniaRunning || stopRatingLab.isPending}
             onClick={() => stopRatingLab.mutate()}
           >
-            {maniaJob?.status === "stopping" ? "Stopping…" : "Stop"}
+            {maniaJob?.status === "stopping"
+              ? dict?.settings.stopping
+              : dict?.settings.stop}
           </button>
         </div>
 
@@ -1154,10 +1228,11 @@ export function SettingsPage({ section }: { section?: string } = {}) {
         id={pageSectionDomId("sunny-dan-calculation")}
         className="rx-panel scroll-mt-6 p-5"
       >
-        <h2 className="text-sm font-bold text-ink">Sunny dan calculation</h2>
+        <h2 className="text-sm font-bold text-ink">
+          {dict?.settings.sunnyDan}
+        </h2>
         <p className="mt-1 text-sm text-muted">
-          Compute Sunny dan labels for mania maps that are still missing a
-          rating. Runs in the background in small batches.
+          {dict?.settings.sunnyDanDesc}
         </p>
 
         {coverage ? (
@@ -1168,12 +1243,20 @@ export function SettingsPage({ section }: { section?: string } = {}) {
                   {coverage.computed.toLocaleString()}
                 </span>
                 {" / "}
-                {coverage.maniaTotal.toLocaleString()} mania maps
+                {t(dict?.settings.maniaMaps, {
+                  count: coverage.maniaTotal.toLocaleString(),
+                })}
               </span>
-              <span>{coverage.missing.toLocaleString()} remaining</span>
+              <span>
+                {t(dict?.settings.remaining, {
+                  count: coverage.missing.toLocaleString(),
+                })}
+              </span>
               {coverage.failed > 0 ? (
                 <span className="text-rose-300/90">
-                  {coverage.failed.toLocaleString()} failed
+                  {t(dict?.settings.failed, {
+                    count: coverage.failed.toLocaleString(),
+                  })}
                 </span>
               ) : null}
             </div>
@@ -1186,20 +1269,28 @@ export function SettingsPage({ section }: { section?: string } = {}) {
             </div>
 
             <p className="text-xs text-faint">
-              {statusLabel(sunnyDan.status)}
+              {statusLabel(dict, sunnyDan.status)}
               {running
-                ? ` · +${sunnyDan.computedThisRun.toLocaleString()} labeled this run`
+                ? ` · ${t(dict?.settings.labeledThisRun, {
+                    count: sunnyDan.computedThisRun.toLocaleString(),
+                  })}`
                 : null}
               {sunnyDan.status === "completed" && sunnyDan.computedThisRun > 0
-                ? ` · +${sunnyDan.computedThisRun.toLocaleString()} labeled`
+                ? ` · ${t(dict?.settings.labeled, {
+                    count: sunnyDan.computedThisRun.toLocaleString(),
+                  })}`
                 : null}
               {coverage && coverage.failed > 0 && !running
-                ? ` · ${coverage.failed.toLocaleString()} unparsable skipped`
+                ? ` · ${t(dict?.settings.unparsableSkipped, {
+                    count: coverage.failed.toLocaleString(),
+                  })}`
                 : null}
             </p>
           </div>
         ) : (
-          <p className="mt-3 text-sm text-muted">Loading coverage…</p>
+          <p className="mt-3 text-sm text-muted">
+            {dict?.settings.loadingCoverage}
+          </p>
         )}
 
         <div className="mt-4 flex flex-wrap gap-2">
@@ -1213,7 +1304,9 @@ export function SettingsPage({ section }: { section?: string } = {}) {
             }
             onClick={() => startDan.mutate()}
           >
-            {running ? "Calculating…" : "Calculate missing dans"}
+            {running
+              ? dict?.settings.calculating
+              : dict?.settings.calculateMissingDans}
           </button>
           <button
             type="button"
@@ -1221,7 +1314,9 @@ export function SettingsPage({ section }: { section?: string } = {}) {
             disabled={!running || stopDan.isPending}
             onClick={() => stopDan.mutate()}
           >
-            {sunnyDan?.status === "stopping" ? "Stopping…" : "Stop"}
+            {sunnyDan?.status === "stopping"
+              ? dict?.settings.stopping
+              : dict?.settings.stop}
           </button>
         </div>
 
@@ -1240,13 +1335,16 @@ export function SettingsPage({ section }: { section?: string } = {}) {
         id={pageSectionDomId("pattern-analysis")}
         className="rx-panel scroll-mt-6 p-5"
       >
-        <h2 className="text-sm font-bold text-ink">7K pattern analysis</h2>
+        <h2 className="text-sm font-bold text-ink">
+          {dict?.settings.patternAnalysis}
+        </h2>
         <p className="mt-1 text-sm text-muted">
-          Classify 7K mania maps with the structural pattern algorithm (delay,
-          chordjack, bracket, etc.) for pattern filters and the practice browser.
+          {dict?.settings.patternAnalysisDesc}
         </p>
         <p className="mt-2 font-mono text-xs text-faint">
-          Algorithm: {patternAnalysis?.algorithm ?? "7k-structural-v2"}
+          {t(dict?.settings.algorithm, {
+            name: patternAnalysis?.algorithm ?? "7k-structural-v2",
+          })}
         </p>
 
         {patternCoverage ? (
@@ -1257,12 +1355,20 @@ export function SettingsPage({ section }: { section?: string } = {}) {
                   {patternCoverage.computed.toLocaleString()}
                 </span>
                 {" / "}
-                {patternCoverage.total7k.toLocaleString()} 7K maps
+                {t(dict?.settings.maps7k, {
+                  count: patternCoverage.total7k.toLocaleString(),
+                })}
               </span>
-              <span>{patternCoverage.missing.toLocaleString()} remaining</span>
+              <span>
+                {t(dict?.settings.remaining, {
+                  count: patternCoverage.missing.toLocaleString(),
+                })}
+              </span>
               {patternCoverage.failed > 0 ? (
                 <span className="text-rose-300/90">
-                  {patternCoverage.failed.toLocaleString()} failed
+                  {t(dict?.settings.failed, {
+                    count: patternCoverage.failed.toLocaleString(),
+                  })}
                 </span>
               ) : null}
             </div>
@@ -1275,21 +1381,29 @@ export function SettingsPage({ section }: { section?: string } = {}) {
             </div>
 
             <p className="text-xs text-faint">
-              {statusLabel(patternAnalysis?.status)}
+              {statusLabel(dict, patternAnalysis?.status)}
               {patternRunning
-                ? ` · +${patternAnalysis.computedThisRun.toLocaleString()} classified this run`
+                ? ` · ${t(dict?.settings.classifiedThisRun, {
+                    count: patternAnalysis.computedThisRun.toLocaleString(),
+                  })}`
                 : null}
               {patternAnalysis?.status === "completed" &&
               patternAnalysis.computedThisRun > 0
-                ? ` · +${patternAnalysis.computedThisRun.toLocaleString()} classified`
+                ? ` · ${t(dict?.settings.classified, {
+                    count: patternAnalysis.computedThisRun.toLocaleString(),
+                  })}`
                 : null}
               {patternCoverage.failed > 0 && !patternRunning
-                ? ` · ${patternCoverage.failed.toLocaleString()} unparsable skipped`
+                ? ` · ${t(dict?.settings.unparsableSkipped, {
+                    count: patternCoverage.failed.toLocaleString(),
+                  })}`
                 : null}
             </p>
           </div>
         ) : (
-          <p className="mt-3 text-sm text-muted">Loading coverage…</p>
+          <p className="mt-3 text-sm text-muted">
+            {dict?.settings.loadingCoverage}
+          </p>
         )}
 
         <div className="mt-4 flex flex-wrap gap-2">
@@ -1303,7 +1417,9 @@ export function SettingsPage({ section }: { section?: string } = {}) {
             }
             onClick={() => startPattern.mutate()}
           >
-            {patternRunning ? "Calculating…" : "Calculate missing patterns"}
+            {patternRunning
+              ? dict?.settings.calculating
+              : dict?.settings.calculateMissingPatterns}
           </button>
           <button
             type="button"
@@ -1311,7 +1427,9 @@ export function SettingsPage({ section }: { section?: string } = {}) {
             disabled={!patternRunning || stopPattern.isPending}
             onClick={() => stopPattern.mutate()}
           >
-            {patternAnalysis?.status === "stopping" ? "Stopping…" : "Stop"}
+            {patternAnalysis?.status === "stopping"
+              ? dict?.settings.stopping
+              : dict?.settings.stop}
           </button>
         </div>
 
@@ -1333,41 +1451,54 @@ export function SettingsPage({ section }: { section?: string } = {}) {
   );
 }
 
-function pathSourceLabel(source: string): string {
+function pathSourceLabel(
+  dict: Dictionary["app"] | undefined,
+  source: string,
+): string {
   switch (source) {
     case "env":
-      return "from environment";
+      return dict?.settings.pathSource.env ?? "from environment";
     case "settings":
-      return "from settings";
+      return dict?.settings.pathSource.settings ?? "from settings";
     default:
-      return "default";
+      return dict?.settings.pathSource.default ?? "default";
   }
 }
 
-function pathStatusLabel(status: {
-  exists: boolean;
-  hasRealm: boolean;
-  hasFiles: boolean;
-}): string {
-  if (!status.exists) return "Directory not found";
+function pathStatusLabel(
+  dict: Dictionary["app"] | undefined,
+  status: {
+    exists: boolean;
+    hasRealm: boolean;
+    hasFiles: boolean;
+  },
+): string {
+  if (!status.exists) return dict?.settings.pathStatus.dirNotFound ?? "Directory not found";
   const bits = [
-    status.hasRealm ? "client.realm found" : "client.realm missing",
-    status.hasFiles ? "files/ found" : "files/ missing",
+    status.hasRealm
+      ? dict?.settings.pathStatus.realmFound ?? "client.realm found"
+      : dict?.settings.pathStatus.realmMissing ?? "client.realm missing",
+    status.hasFiles
+      ? dict?.settings.pathStatus.filesFound ?? "files/ found"
+      : dict?.settings.pathStatus.filesMissing ?? "files/ missing",
   ];
   return bits.join(" · ");
 }
 
-function statusLabel(status: string | undefined): string {
+function statusLabel(
+  dict: Dictionary["app"] | undefined,
+  status: string | undefined,
+): string {
   switch (status) {
     case "running":
-      return "Running";
+      return dict?.settings.jobStatus.running ?? "Running";
     case "stopping":
-      return "Stopping after current batch";
+      return dict?.settings.jobStatus.stopping ?? "Stopping after current batch";
     case "completed":
-      return "Complete";
+      return dict?.settings.jobStatus.completed ?? "Complete";
     case "error":
-      return "Stopped with error";
+      return dict?.settings.jobStatus.error ?? "Stopped with error";
     default:
-      return "Idle";
+      return dict?.settings.jobStatus.idle ?? "Idle";
   }
 }

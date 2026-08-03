@@ -12,6 +12,8 @@ import {
   useRatingDisplayMode,
 } from "../../lib/ratingDisplay";
 import { readSkillTopPlays, SKILL_TOP_PLAYS_STORAGE_KEY } from "../../lib/skillTopPlays";
+import { useAppDict, t } from "../../lib/i18n";
+import type { Dictionary } from "@roxysu/i18n";
 import { SessionSuggestMapRow } from "./SessionSuggestMapRow";
 
 const PREFS_KEY = "rx-session-7k-recommend";
@@ -97,6 +99,7 @@ export function SessionSevenKRecommend({
 }: {
   excludeBeatmapIds: string[];
 }) {
+  const { dict } = useAppDict();
   const ratingMode = useRatingDisplayMode();
   const [prefs, setPrefs] = useState<RecPrefs>(() => loadPrefs());
   const [shuffleKey, setShuffleKey] = useState(0);
@@ -145,7 +148,9 @@ export function SessionSevenKRecommend({
   const skill = batch?.skill;
   const requiredMaps = batch?.skillTopPlays ?? skillTopPlays;
   const focusHint =
-    FOCUS_OPTIONS.find((f) => f.id === prefs.focus)?.hint ?? "";
+    dict?.session.focus[`${prefs.focus}Hint` as "pushHint"] ??
+    FOCUS_OPTIONS.find((f) => f.id === prefs.focus)?.hint ??
+    "";
 
   return (
     <section className="space-y-4">
@@ -159,7 +164,9 @@ export function SessionSevenKRecommend({
           }}
           disabled={isFetching}
         >
-          {isFetching ? "Refreshing…" : "Refresh"}
+          {isFetching
+            ? (dict?.session.refreshing ?? "Refreshing…")
+            : (dict?.session.refresh ?? "Refresh")}
         </button>
       </div>
 
@@ -176,7 +183,7 @@ export function SessionSevenKRecommend({
               }
               onClick={() => setPrefs((prev) => ({ ...prev, focus: m.id }))}
             >
-              {m.label}
+              {dict?.session.focus[m.id] ?? m.label}
             </button>
           ))}
         </div>
@@ -184,7 +191,9 @@ export function SessionSevenKRecommend({
 
         {prefs.focus !== "deficit" ? (
           <div>
-            <div className="rx-label mb-2">Maps</div>
+            <div className="rx-label mb-2">
+              {dict?.session.mapsLabel ?? "Maps"}
+            </div>
             <div className="flex flex-wrap gap-2">
               {AXIS_OPTIONS.map((s) => (
                 <button
@@ -199,12 +208,20 @@ export function SessionSevenKRecommend({
                     setPrefs((prev) => ({ ...prev, skillset: s.id }))
                   }
                 >
-                  {s.label}
+                  {
+                    {
+                      both: dict?.stats.axisAll ?? "All",
+                      rc: dict?.stats.axisRice ?? "Rice",
+                      ln: dict?.stats.axisLn ?? "LN",
+                      fln: dict?.stats.axisFln ?? "FLN",
+                    }[s.id]
+                  }
                 </button>
               ))}
             </div>
             <p className="mt-1.5 text-xs text-faint">
-              LN is 20–80% long notes; FLN is ≥80% (full LN).
+              {dict?.session.lnFlnHint ??
+                "LN is 20–80% long notes; FLN is ≥80% (full LN)."}
             </p>
           </div>
         ) : null}
@@ -212,53 +229,85 @@ export function SessionSevenKRecommend({
         {skill ? (
           <div className="space-y-2">
             <p className="text-xs text-faint">
-              Skill from your top {requiredMaps} rated maps per band (best play
-              per map; all {requiredMaps} required). Change on{" "}
-              <Link
-                to="/stats"
-                search={{
-                  granularity: "day",
-                  range: 30,
-                  skillTopPlays,
-                  skillAxis: "all",
-                  keyCount: 7,
-                }}
-                className="underline hover:text-accent"
-              >
-                Stats
-              </Link>
-              .
+              {(() => {
+                const parts = (
+                  t(dict?.session.skillFromTop, { required: requiredMaps }) ||
+                  t(
+                    "Skill from your top {{required}} rated maps per band (best play per map; all {{required}} required). Change on ⟦STATS⟧.",
+                    { required: requiredMaps },
+                  )
+                ).split("⟦STATS⟧");
+                return (
+                  <>
+                    {parts[0]}
+                    <Link
+                      to="/stats"
+                      search={{
+                        granularity: "day",
+                        range: 30,
+                        skillTopPlays,
+                        skillAxis: "all",
+                        keyCount: 7,
+                      }}
+                      className="underline hover:text-accent"
+                    >
+                      Stats
+                    </Link>
+                    {parts[1]}
+                  </>
+                );
+              })()}
             </p>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               <SkillStat
-                label="Rice @ 90%+"
+                label={
+                  t(dict?.session.skillStat, {
+                    axis: dict?.stats.axisRice ?? "Rice",
+                    acc: 90,
+                  }) || "Rice @ 90%+"
+                }
                 value={formatSkillRating({
                   mode: ratingMode,
                   sunnyStar: skill.peakRc,
                   axis: "rc",
                 })}
-                note={bandMapsNote(skill.peakRc, skill.clearRcMaps ?? 0, requiredMaps, "Push")}
+                note={bandMapsNote(skill.peakRc, skill.clearRcMaps ?? 0, requiredMaps, dict?.session.focus.push ?? "Push", dict)}
               />
               <SkillStat
-                label="LN @ 90%+"
+                label={
+                  t(dict?.session.skillStat, {
+                    axis: dict?.stats.axisLn ?? "LN",
+                    acc: 90,
+                  }) || "LN @ 90%+"
+                }
                 value={formatSkillRating({
                   mode: ratingMode,
                   sunnyStar: skill.peakLn,
                   axis: "ln",
                 })}
-                note={bandMapsNote(skill.peakLn, skill.clearLnMaps ?? 0, requiredMaps, "Push")}
+                note={bandMapsNote(skill.peakLn, skill.clearLnMaps ?? 0, requiredMaps, dict?.session.focus.push ?? "Push", dict)}
               />
               <SkillStat
-                label="FLN @ 90%+"
+                label={
+                  t(dict?.session.skillStat, {
+                    axis: dict?.stats.axisFln ?? "FLN",
+                    acc: 90,
+                  }) || "FLN @ 90%+"
+                }
                 value={formatSkillRating({
                   mode: ratingMode,
                   sunnyStar: skill.peakFln,
                   axis: "fln",
                 })}
-                note={bandMapsNote(skill.peakFln, skill.clearFlnMaps ?? 0, requiredMaps, "Push")}
+                note={bandMapsNote(skill.peakFln, skill.clearFlnMaps ?? 0, requiredMaps, dict?.session.focus.push ?? "Push", dict)}
               />
               <SkillStat
-                label="Rice @ 99%+"
+                label={
+                  t(dict?.session.skillStat, {
+                    axis: dict?.stats.axisRice ?? "Rice",
+                    acc: 99,
+                  }) || "Rice @ 99%+"
+                }
                 value={formatSkillRating({
                   mode: ratingMode,
                   sunnyStar: skill.accuracyRc,
@@ -268,11 +317,17 @@ export function SessionSevenKRecommend({
                   skill.accuracyRc,
                   skill.accuracyRcMaps ?? 0,
                   requiredMaps,
-                  "Accuracy",
+                  dict?.session.focus.accuracy ?? "Accuracy",
+                  dict,
                 )}
               />
               <SkillStat
-                label="LN @ 99%+"
+                label={
+                  t(dict?.session.skillStat, {
+                    axis: dict?.stats.axisLn ?? "LN",
+                    acc: 99,
+                  }) || "LN @ 99%+"
+                }
                 value={formatSkillRating({
                   mode: ratingMode,
                   sunnyStar: skill.accuracyLn,
@@ -282,11 +337,17 @@ export function SessionSevenKRecommend({
                   skill.accuracyLn,
                   skill.accuracyLnMaps ?? 0,
                   requiredMaps,
-                  "Accuracy",
+                  dict?.session.focus.accuracy ?? "Accuracy",
+                  dict,
                 )}
               />
               <SkillStat
-                label="FLN @ 99%+"
+                label={
+                  t(dict?.session.skillStat, {
+                    axis: dict?.stats.axisFln ?? "FLN",
+                    acc: 99,
+                  }) || "FLN @ 99%+"
+                }
                 value={formatSkillRating({
                   mode: ratingMode,
                   sunnyStar: skill.accuracyFln,
@@ -296,24 +357,35 @@ export function SessionSevenKRecommend({
                   skill.accuracyFln,
                   skill.accuracyFlnMaps ?? 0,
                   requiredMaps,
-                  "Accuracy",
+                  dict?.session.focus.accuracy ?? "Accuracy",
+                  dict,
                 )}
               />
             </div>
             <p className="text-xs text-faint">
-              Push aims ~8% above your 90%+ clears. Accuracy picks in your 99%+
-              difficulty range.
+              {dict?.session.pushAccuracyHint ??
+                "Push aims ~8% above your 90%+ clears. Accuracy picks in your 99%+ difficulty range."}
             </p>
           </div>
         ) : null}
 
         {batch?.needsSunnyBackfill ? (
           <p className="text-xs text-amber-200/90">
-            Some mania maps still need Sunny dan ratings. Run backfill in{" "}
-            <Link to="/settings" className="underline hover:text-accent">
-              Settings
-            </Link>{" "}
-            for better 7K recommendations.
+            {(() => {
+              const parts = (
+                t(dict?.session.needsSunnyBackfill) ||
+                "Some mania maps still need Sunny dan ratings. Run backfill in ⟦SETTINGS⟧ for better 7K recommendations."
+              ).split("⟦SETTINGS⟧");
+              return (
+                <>
+                  {parts[0]}
+                  <Link to="/settings" className="underline hover:text-accent">
+                    Settings
+                  </Link>
+                  {parts[1]}
+                </>
+              );
+            })()}
           </p>
         ) : null}
       </div>
@@ -323,10 +395,13 @@ export function SessionSevenKRecommend({
       ) : null}
 
       {isLoading && items.length === 0 ? (
-        <p className="text-sm text-muted">Estimating skill and ranking maps…</p>
+        <p className="text-sm text-muted">
+          {dict?.session.estimating ?? "Estimating skill and ranking maps…"}
+        </p>
       ) : items.length === 0 ? (
         <p className="text-sm text-muted">
           {batch?.summary ??
+            dict?.session.noRecommendations ??
             "No recommendations yet. Play more 7K maps or backfill Sunny ratings."}
         </p>
       ) : (
@@ -334,7 +409,12 @@ export function SessionSevenKRecommend({
           <p className="text-xs text-faint">
             {batch?.summary}
             {batch
-              ? ` · ${batch.totalMapsConsidered.toLocaleString()} 7K maps with Sunny`
+              ? ` · ${
+                  t(dict?.session.maps7kWithSunny, {
+                    count: batch.totalMapsConsidered.toLocaleString(),
+                  }) ||
+                  `${batch.totalMapsConsidered.toLocaleString()} 7K maps with Sunny`
+                }`
               : ""}
           </p>
           <ul className="space-y-0.5">
@@ -349,7 +429,8 @@ export function SessionSevenKRecommend({
                       {" · "}
                       <span className="tabular-nums">
                         {Number(relPct) >= 0 ? "+" : ""}
-                        {relPct}% vs skill
+                        {t(dict?.session.vsSkill, { pct: relPct }) ||
+                          `${relPct}% vs skill`}
                       </span>
                     </>
                   }
@@ -369,10 +450,16 @@ function bandMapsNote(
   maps: number,
   requiredMaps: number,
   band: string,
+  dict: Dictionary["app"] | undefined,
 ): string {
-  if (maps === 0) return `No maps in band · ${band}`;
-  if (value > 0) return `${maps} maps in band · ${band}`;
-  return `${maps}/${requiredMaps} maps in band · ${band}`;
+  if (maps === 0)
+    return t(dict?.session.bandNoMaps, { band }) || `No maps in band · ${band}`;
+  if (value > 0)
+    return t(dict?.session.bandMaps, { maps, band }) || `${maps} maps in band · ${band}`;
+  return (
+    t(dict?.session.bandMapsPartial, { maps, required: requiredMaps, band }) ||
+    `${maps}/${requiredMaps} maps in band · ${band}`
+  );
 }
 
 function SkillStat({

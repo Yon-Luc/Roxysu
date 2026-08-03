@@ -26,6 +26,8 @@ import {
   pageSectionDomId,
   useScrollToPageSection,
 } from "../../lib/pageSections";
+import { useAppDict, t } from "../../lib/i18n";
+import type { Dictionary } from "@roxysu/i18n";
 
 function buildSampleNotes(keys: number) {
   const notes: { column: number; startMs: number; endMs: number }[] = [];
@@ -115,6 +117,7 @@ function ColorField({
   value: string;
   onChange: (hex: string) => void;
 }) {
+  const { dict } = useAppDict();
   const [copied, setCopied] = useState(false);
   const [draft, setDraft] = useState(value.toUpperCase());
   const hex = value.toUpperCase();
@@ -147,7 +150,7 @@ function ColorField({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           className="h-8 w-10 shrink-0 cursor-pointer rounded bg-transparent"
-          aria-label={`${label} color picker`}
+          aria-label={t(dict?.skin.colorPickerAria, { label })}
         />
         <input
           type="text"
@@ -161,15 +164,15 @@ function ColorField({
           }}
           onBlur={() => setDraft(hex)}
           className="rx-input h-8 min-w-0 flex-1 font-mono text-xs uppercase"
-          aria-label={`${label} hex value`}
+          aria-label={t(dict?.skin.hexValueAria, { label })}
         />
         <button
           type="button"
           className="rx-btn h-8 shrink-0 px-2 text-xs"
-          title={`Copy ${hex}`}
+          title={t(dict?.skin.copyTitle, { hex })}
           onClick={() => void copyHex()}
         >
-          {copied ? "Copied" : "Copy"}
+          {copied ? dict?.skin.copied : dict?.skin.copy}
         </button>
       </div>
     </div>
@@ -179,6 +182,7 @@ function ColorField({
 export function SkinPage({ section }: { section?: string } = {}) {
   useScrollToPageSection(section);
   const skin = usePreviewSkin();
+  const { dict } = useAppDict();
   const [keys, setKeys] = useState<Keymode>(7);
   const [previewTimeMs, setPreviewTimeMs] = useState(800);
   const [playing, setPlaying] = useState(true);
@@ -318,11 +322,8 @@ export function SkinPage({ section }: { section?: string } = {}) {
     <div className="space-y-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <PageTitle>Preview skin</PageTitle>
-          <p className="rx-subtitle">
-            Customize note shape, colors, size, hit position, and lane cover for
-            each keymode. Applies to beatmap preview.
-          </p>
+          <PageTitle>{dict?.skin.pageTitle}</PageTitle>
+          <p className="rx-subtitle">{dict?.skin.subtitle}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
@@ -330,14 +331,14 @@ export function SkinPage({ section }: { section?: string } = {}) {
             className="rx-btn"
             onClick={() => resetKeymodeSkin(keys)}
           >
-            Reset {keys}K
+            {t(dict?.skin.resetKeymode, { keys })}
           </button>
           <button
             type="button"
             className="rx-btn"
             onClick={() => resetPreviewSkin()}
           >
-            Reset all
+            {dict?.skin.resetAll}
           </button>
         </div>
       </div>
@@ -361,7 +362,9 @@ export function SkinPage({ section }: { section?: string } = {}) {
             id={pageSectionDomId("note-shape")}
             className="rx-panel scroll-mt-6 p-4"
           >
-            <h2 className="text-sm font-bold text-ink">Note shape</h2>
+            <h2 className="text-sm font-bold text-ink">
+              {dict?.skin.noteShape}
+            </h2>
             <div className="mt-3 flex flex-wrap gap-2">
               {NOTE_SHAPES.map((s) => (
                 <button
@@ -372,23 +375,22 @@ export function SkinPage({ section }: { section?: string } = {}) {
                   }
                   onClick={() => updateKeymode({ shape: s.id })}
                 >
-                  {s.label}
+                  {dict?.skin.shapes[s.id] ?? s.label}
                 </button>
               ))}
             </div>
             {isArrow ? (
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <p className="text-xs text-muted">
-                  Set per-column arrow direction below. Receptors follow the
-                  same orientation.
+                  {dict?.skin.noteShapeDesc}
                 </p>
                 <button
                   type="button"
                   className="rx-btn text-xs"
                   onClick={applyDancePadOrientations}
-                  title="← ↓ ↑ → repeating across columns"
+                  title={dict?.skin.dancePadTitle}
                 >
-                  Dance pad layout
+                  {dict?.skin.dancePad}
                 </button>
               </div>
             ) : null}
@@ -398,15 +400,17 @@ export function SkinPage({ section }: { section?: string } = {}) {
             id={pageSectionDomId("long-notes")}
             className="rx-panel scroll-mt-6 p-4"
           >
-            <h2 className="text-sm font-bold text-ink">Long notes</h2>
+            <h2 className="text-sm font-bold text-ink">
+              {dict?.skin.longNotes}
+            </h2>
             <p className="mt-1 text-xs text-muted">
-              Tail is the far end of the hold. Head is the note graphic at the
-              start — same as the examples with a pointed grey bar and optional
-              arrow on top.
+              {dict?.skin.longNotesDesc}
             </p>
             <div className="mt-4 space-y-4">
               <div>
-                <span className="text-xs text-muted">LN end shape</span>
+                <span className="text-xs text-muted">
+                  {dict?.skin.lnEndShape}
+                </span>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {LN_TAIL_SHAPES.map((s) => (
                     <button
@@ -419,7 +423,7 @@ export function SkinPage({ section }: { section?: string } = {}) {
                       }
                       onClick={() => updateKeymode({ lnTailShape: s.id })}
                     >
-                      {s.label}
+                      {dict?.skin.lnTailShapes[s.id] ?? s.label}
                     </button>
                   ))}
                 </div>
@@ -433,7 +437,7 @@ export function SkinPage({ section }: { section?: string } = {}) {
                   }
                   className="accent-[var(--accent)]"
                 />
-                Show note head at LN start
+                {dict?.skin.showNoteHead}
               </label>
             </div>
           </div>
@@ -442,14 +446,19 @@ export function SkinPage({ section }: { section?: string } = {}) {
             id={pageSectionDomId("playfield")}
             className="rx-panel scroll-mt-6 p-4"
           >
-            <h2 className="text-sm font-bold text-ink">Playfield</h2>
+            <h2 className="text-sm font-bold text-ink">
+              {dict?.skin.playfield}
+            </h2>
             <p className="mt-1 text-xs text-muted">
-              Hit position moves the receptor line. Lane cover blacks out the
-              top so the visible field looks shorter.
+              {dict?.skin.playfieldDesc}
             </p>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <label className="flex flex-col gap-1 text-xs text-muted">
-                <span>Hit position {Math.round(skin.hitPosition * 100)}%</span>
+                <span>
+                  {t(dict?.skin.hitPosition, {
+                    pct: Math.round(skin.hitPosition * 100),
+                  })}
+                </span>
                 <input
                   type="range"
                   min={HIT_POSITION_MIN}
@@ -465,7 +474,11 @@ export function SkinPage({ section }: { section?: string } = {}) {
                 />
               </label>
               <label className="flex flex-col gap-1 text-xs text-muted">
-                <span>Lane cover {Math.round(skin.laneCover * 100)}%</span>
+                <span>
+                  {t(dict?.skin.laneCover, {
+                    pct: Math.round(skin.laneCover * 100),
+                  })}
+                </span>
                 <input
                   type="range"
                   min={LANE_COVER_MIN}
@@ -488,7 +501,9 @@ export function SkinPage({ section }: { section?: string } = {}) {
             className="rx-panel scroll-mt-6 overflow-hidden p-0"
           >
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/5 px-4 py-3">
-              <h2 className="text-sm font-bold text-ink">Columns</h2>
+              <h2 className="text-sm font-bold text-ink">
+                {dict?.skin.columns}
+              </h2>
               <div className="flex flex-wrap items-center gap-3">
                 <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
                   <input
@@ -497,7 +512,7 @@ export function SkinPage({ section }: { section?: string } = {}) {
                     onChange={(e) => setUniformColors(e.target.checked)}
                     className="accent-[var(--accent)]"
                   />
-                  Same color for all columns
+                  {dict?.skin.sameColor}
                 </label>
                 <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
                   <input
@@ -506,7 +521,7 @@ export function SkinPage({ section }: { section?: string } = {}) {
                     onChange={(e) => setUniformWidth(e.target.checked)}
                     className="accent-[var(--accent)]"
                   />
-                  Same width for all columns
+                  {dict?.skin.sameWidth}
                 </label>
                 <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
                   <input
@@ -515,7 +530,7 @@ export function SkinPage({ section }: { section?: string } = {}) {
                     onChange={(e) => setUniformSize(e.target.checked)}
                     className="accent-[var(--accent)]"
                   />
-                  Same size for all columns
+                  {dict?.skin.sameSize}
                 </label>
                 <button
                   type="button"
@@ -526,7 +541,7 @@ export function SkinPage({ section }: { section?: string } = {}) {
                     })
                   }
                 >
-                  Reset columns
+                  {dict?.skin.resetColumns}
                 </button>
               </div>
             </div>
@@ -539,7 +554,7 @@ export function SkinPage({ section }: { section?: string } = {}) {
                   <li key={i} className="space-y-3 px-4 py-4">
                     <div className="flex items-center gap-3">
                       <span className="w-16 text-xs font-bold uppercase tracking-wider text-faint">
-                        Col {i + 1}
+                        {t(dict?.skin.colPrefix, { n: i + 1 })}
                       </span>
                       <div
                         className="h-4 w-4 rounded-sm ring-1 ring-white/20"
@@ -563,14 +578,14 @@ export function SkinPage({ section }: { section?: string } = {}) {
                       {showColors ? (
                         <>
                           <ColorField
-                            label="Note"
+                            label={dict?.skin.noteColor ?? "Note"}
                             value={col.noteColor}
                             onChange={(noteColor) =>
                               updateColumn(i, { noteColor })
                             }
                           />
                           <ColorField
-                            label="LN body"
+                            label={dict?.skin.lnBody ?? "LN body"}
                             value={col.lnColor}
                             onChange={(lnColor) => updateColumn(i, { lnColor })}
                           />
@@ -578,7 +593,7 @@ export function SkinPage({ section }: { section?: string } = {}) {
                       ) : null}
                       {isArrow ? (
                         <div className="flex flex-col gap-1.5 text-xs text-muted sm:col-span-2">
-                          <span>Orientation</span>
+                          <span>{dict?.skin.orientation}</span>
                           <div className="flex flex-wrap gap-1.5">
                             {NOTE_ORIENTATIONS.map((o) => (
                               <button
@@ -590,7 +605,9 @@ export function SkinPage({ section }: { section?: string } = {}) {
                                     : "rx-btn min-w-10 px-2"
                                 }
                                 title={o.id}
-                                aria-label={`Orient ${o.id}`}
+                                aria-label={t(dict?.skin.orientAria, {
+                                  id: o.id,
+                                })}
                                 onClick={() =>
                                   updateColumn(i, { orientation: o.id })
                                 }
@@ -603,7 +620,11 @@ export function SkinPage({ section }: { section?: string } = {}) {
                       ) : null}
                       {showWidth ? (
                         <label className="flex flex-col gap-1 text-xs text-muted">
-                          <span>Width {Math.round(col.widthScale * 100)}%</span>
+                          <span>
+                            {t(dict?.skin.width, {
+                              pct: Math.round(col.widthScale * 100),
+                            })}
+                          </span>
                           <input
                             type="range"
                             min={0.4}
@@ -621,8 +642,12 @@ export function SkinPage({ section }: { section?: string } = {}) {
                       {showSize ? (
                         <label className="flex flex-col gap-1 text-xs text-muted">
                           <span>
-                            {keySkin.shape === "flat" ? "Height" : "Size"}{" "}
-                            {Math.round(col.heightScale * 100)}%
+                            {t(
+                              keySkin.shape === "flat"
+                                ? dict?.skin.height
+                                : dict?.skin.size,
+                              { pct: Math.round(col.heightScale * 100) },
+                            )}
                           </span>
                           <input
                             type="range"
@@ -641,7 +666,9 @@ export function SkinPage({ section }: { section?: string } = {}) {
                       {showSize ? (
                         <label className="flex flex-col gap-1 text-xs text-muted">
                           <span>
-                            LN body width {Math.round(col.lnBodyScale * 100)}%
+                            {t(dict?.skin.lnBodyWidth, {
+                              pct: Math.round(col.lnBodyScale * 100),
+                            })}
                           </span>
                           <input
                             type="range"
@@ -671,13 +698,15 @@ export function SkinPage({ section }: { section?: string } = {}) {
             className="rx-panel scroll-mt-6 p-3"
           >
             <div className="mb-2 flex items-center justify-between gap-2">
-              <h2 className="text-sm font-bold text-ink">Live preview</h2>
+              <h2 className="text-sm font-bold text-ink">
+                {dict?.skin.livePreview}
+              </h2>
               <button
                 type="button"
                 className="rx-btn text-xs"
                 onClick={() => setPlaying((p) => !p)}
               >
-                {playing ? "Pause" : "Play"}
+                {playing ? dict?.skin.pause : dict?.skin.play}
               </button>
             </div>
             <input
@@ -692,7 +721,7 @@ export function SkinPage({ section }: { section?: string } = {}) {
                 setPreviewTimeMs(next);
               }}
               className="w-full accent-[var(--accent)]"
-              aria-label="Preview time"
+              aria-label={dict?.skin.previewTime}
             />
             <div className="mt-3 h-[28rem] overflow-hidden rounded-xl bg-black/40">
               <ManiaNotefield
@@ -703,10 +732,7 @@ export function SkinPage({ section }: { section?: string } = {}) {
               />
             </div>
           </div>
-          <p className="text-xs text-faint">
-            Changes save automatically in this browser and apply to preview
-            modals immediately.
-          </p>
+          <p className="text-xs text-faint">{dict?.skin.saveNote}</p>
         </div>
       </section>
     </div>

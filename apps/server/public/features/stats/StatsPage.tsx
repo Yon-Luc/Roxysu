@@ -46,6 +46,8 @@ import {
   type SkillRatingAxis,
 } from "../../lib/ratingDisplay";
 import { useChartStyles } from "../../lib/chartStyles";
+import { useAppDict, t } from "../../lib/i18n";
+import type { Dictionary } from "@roxysu/i18n";
 
 function formatDuration(ms: number | null | undefined): string {
   if (ms == null || !Number.isFinite(ms) || ms <= 0) return "—";
@@ -56,15 +58,20 @@ function formatDuration(ms: number | null | undefined): string {
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
-const SKILL_AXIS_OPTIONS: Array<{ id: StatsSkillAxis; label: string }> = [
-  { id: "all", label: "All" },
-  { id: "rc", label: "Rice" },
-  { id: "ln", label: "LN" },
-  { id: "fln", label: "FLN" },
-];
-
-function skillAxisLabel(axis: StatsSkillAxis): string {
-  return SKILL_AXIS_OPTIONS.find((o) => o.id === axis)?.label ?? "All";
+function skillAxisLabel(
+  dict: Dictionary["app"] | undefined,
+  axis: StatsSkillAxis,
+): string {
+  switch (axis) {
+    case "rc":
+      return dict?.stats.axisRice ?? "Rice";
+    case "ln":
+      return dict?.stats.axisLn ?? "LN";
+    case "fln":
+      return dict?.stats.axisFln ?? "FLN";
+    default:
+      return dict?.stats.axisAll ?? "All";
+  }
 }
 
 function skillRatingAxis(
@@ -197,6 +204,7 @@ export function StatsPage({
 }) {
   const ratingMode = useRatingDisplayMode();
   const charts = useChartStyles();
+  const { dict } = useAppDict();
   const [customTopPlays, setCustomTopPlays] = useState(
     String(skillTopPlays),
   );
@@ -275,7 +283,9 @@ export function StatsPage({
   if (error || !data) {
     return (
       <p className="text-rose-300">
-        Failed to load stats: {error?.message ?? "unknown error"}
+        {t(dict?.stats.failedToLoadStats, {
+          error: error?.message ?? "unknown error",
+        })}
       </p>
     );
   }
@@ -294,9 +304,21 @@ export function StatsPage({
   const summary = data.summary;
 
   const skillsetBars = [
-    { axis: "Rice", plays: mix?.rc ?? 0, pct: mix?.rcPct ?? 0 },
-    { axis: "LN", plays: mix?.ln ?? 0, pct: mix?.lnPct ?? 0 },
-    { axis: "FLN", plays: mix?.fln ?? 0, pct: mix?.flnPct ?? 0 },
+    {
+      axis: dict?.stats.axisRice ?? "Rice",
+      plays: mix?.rc ?? 0,
+      pct: mix?.rcPct ?? 0,
+    },
+    {
+      axis: dict?.stats.axisLn ?? "LN",
+      plays: mix?.ln ?? 0,
+      pct: mix?.lnPct ?? 0,
+    },
+    {
+      axis: dict?.stats.axisFln ?? "FLN",
+      plays: mix?.fln ?? 0,
+      pct: mix?.flnPct ?? 0,
+    },
   ];
 
   const chartHistory = history.map((point) => ({
@@ -307,31 +329,33 @@ export function StatsPage({
   }));
 
   const axisFilterActive = skillAxis !== "all";
+  const notEnoughData = dict?.stats.notEnoughData ?? "Not enough data yet.";
 
   return (
     <div className="space-y-10">
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <PageTitle>Stats</PageTitle>
+            <PageTitle>{dict?.nav.stats ?? "Stats"}</PageTitle>
             <p className="rx-subtitle">
-              Skill evolution, progression, and how you play — {keyCount}K only,
-              times in UTC. Skill uses nomod (Mirror OK; DT/HT/etc. excluded) and
-              your Settings rating display (Sunny ★ or dan) from your top{" "}
-              {skillTopPlays} rated maps per band (best play per map, all{" "}
-              {skillTopPlays} required)
-              {axisFilterActive ? ` · ${skillAxisLabel(skillAxis)} only` : ""}.
+              {t(dict?.stats.subtitle, { keyCount, topPlays: skillTopPlays })}
+              {axisFilterActive
+                ? ` · ${t(dict?.stats.axisOnly, {
+                    axis: skillAxisLabel(dict, skillAxis),
+                  })}`
+                : ""}
+              .
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
           <ToggleGroup
             value={String(topPlaysTab)}
             options={[
-              { id: "10", label: "Top 10" },
-              { id: "20", label: "Top 20" },
-              { id: "30", label: "Top 30" },
-              { id: "50", label: "Top 50" },
-              { id: "custom", label: "Custom" },
+              { id: "10", label: dict?.stats.top10 ?? "Top 10" },
+              { id: "20", label: dict?.stats.top20 ?? "Top 20" },
+              { id: "30", label: dict?.stats.top30 ?? "Top 30" },
+              { id: "50", label: dict?.stats.top50 ?? "Top 50" },
+              { id: "custom", label: dict?.stats.custom ?? "Custom" },
             ]}
             onChange={(v) => {
               if (v === "custom") {
@@ -363,18 +387,18 @@ export function StatsPage({
                 value={customTopPlays}
                 onChange={(e) => setCustomTopPlays(e.target.value)}
                 className="rx-input w-20 tabular-nums"
-                aria-label="Top plays count"
+                aria-label={dict?.stats.topPlaysCountAria ?? "Top plays count"}
               />
               <button type="submit" className="rx-btn text-xs">
-                Apply
+                {dict?.stats.apply ?? "Apply"}
               </button>
             </form>
           ) : null}
           <ToggleGroup
             value={granularity}
             options={[
-              { id: "day", label: "Day" },
-              { id: "week", label: "Week" },
+              { id: "day", label: dict?.stats.day ?? "Day" },
+              { id: "week", label: dict?.stats.week ?? "Week" },
             ]}
             onChange={onGranularityChange}
           />
@@ -400,20 +424,28 @@ export function StatsPage({
           />
           <ToggleGroup
             value={skillAxis}
-            options={SKILL_AXIS_OPTIONS}
+            options={[
+              { id: "all", label: dict?.stats.axisAll ?? "All" },
+              { id: "rc", label: dict?.stats.axisRice ?? "Rice" },
+              { id: "ln", label: dict?.stats.axisLn ?? "LN" },
+              { id: "fln", label: dict?.stats.axisFln ?? "FLN" },
+            ]}
             onChange={onSkillAxisChange}
           />
         </div>
       </div>
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Scores" value={summary.scoreCount.toLocaleString()} />
         <Stat
-          label="Maps played"
+          label={dict?.stats.scores ?? "Scores"}
+          value={summary.scoreCount.toLocaleString()}
+        />
+        <Stat
+          label={dict?.stats.mapsPlayed ?? "Maps played"}
           value={summary.distinctMapsPlayed.toLocaleString()}
         />
         <Stat
-          label="Avg plays / map"
+          label={dict?.stats.avgPlaysPerMap ?? "Avg plays / map"}
           value={
             summary.distinctMapsPlayed > 0
               ? (summary.scoreCount / summary.distinctMapsPlayed).toFixed(1)
@@ -421,22 +453,23 @@ export function StatsPage({
           }
         />
         <Stat
-          label="Sessions"
+          label={dict?.stats.sessions ?? "Sessions"}
           value={summary.sessionCount.toLocaleString()}
         />
       </section>
 
       <section>
         <h2 className="mb-4 font-display text-2xl font-bold tracking-tight text-ink">
-          Current skill
+          {dict?.stats.currentSkill ?? "Current skill"}
         </h2>
         <div className="grid gap-3 sm:grid-cols-3">
           <SkillCard
             mode={ratingMode}
             axis={skillAxis}
+            dict={dict}
             band="push"
-            title="Push"
-            hint="90%+ clears"
+            title={dict?.stats.bandPush ?? "Push"}
+            hint={dict?.stats.hintPush ?? "90%+ clears"}
             value={skillBandValue(skill, "peak", skillAxis)}
             maps={skillBandMaps(skill, "peak", skillAxis)}
             requiredPlays={skillTopPlays}
@@ -460,9 +493,10 @@ export function StatsPage({
           <SkillCard
             mode={ratingMode}
             axis={skillAxis}
+            dict={dict}
             band="accuracy"
-            title="Accuracy"
-            hint="99%+ clears"
+            title={dict?.stats.bandAccuracy ?? "Accuracy"}
+            hint={dict?.stats.hintAccuracy ?? "99%+ clears"}
             value={skillBandValue(skill, "accuracy", skillAxis)}
             maps={skillBandMaps(skill, "accuracy", skillAxis)}
             requiredPlays={skillTopPlays}
@@ -488,9 +522,10 @@ export function StatsPage({
           <SkillCard
             mode={ratingMode}
             axis={skillAxis}
+            dict={dict}
             band="consistency"
-            title="Consistency"
-            hint="96%+ clears"
+            title={dict?.stats.bandConsistency ?? "Consistency"}
+            hint={dict?.stats.hintConsistency ?? "96%+ clears"}
             value={skillBandValue(skill, "consistency", skillAxis)}
             maps={skillBandMaps(skill, "consistency", skillAxis)}
             requiredPlays={skillTopPlays}
@@ -518,6 +553,7 @@ export function StatsPage({
           <SkillBandPlaysPanel
             band={expandedBand}
             axis={skillAxis}
+            dict={dict}
             topPlays={skillTopPlays}
             keyCount={keyCount}
             ratingMode={ratingMode}
@@ -525,7 +561,7 @@ export function StatsPage({
         ) : null}
         {skill.coldStart ? (
           <p className="mt-3 text-xs text-muted">
-            Cold-start estimate — play more {keyCount}K maps for a firmer reading.
+            {t(dict?.stats.coldStart, { keyCount })}
           </p>
         ) : null}
       </section>
@@ -534,12 +570,14 @@ export function StatsPage({
         <ChartCard
           title={
             axisFilterActive
-              ? `Skill evolution · ${skillAxisLabel(skillAxis)}`
-              : "Skill evolution"
+              ? t(dict?.stats.skillEvolutionAxis, {
+                  axis: skillAxisLabel(dict, skillAxis),
+                })
+              : dict?.stats.skillEvolution ?? "Skill evolution"
           }
         >
           {chartHistory.length === 0 ? (
-            <EmptyChart />
+            <EmptyChart message={notEnoughData} />
           ) : (
             <ResponsiveContainer width="100%" height={260}>
               <LineChart data={chartHistory}>
@@ -570,7 +608,7 @@ export function StatsPage({
                 <Line
                   type="monotone"
                   dataKey="push"
-                  name="Push"
+                  name={dict?.stats.bandPush ?? "Push"}
                   stroke={charts.chartAlt}
                   dot={false}
                   strokeWidth={2.5}
@@ -578,7 +616,7 @@ export function StatsPage({
                 <Line
                   type="monotone"
                   dataKey="accuracy"
-                  name="Accuracy"
+                  name={dict?.stats.bandAccuracy ?? "Accuracy"}
                   stroke={charts.chart}
                   dot={false}
                   strokeWidth={2.5}
@@ -586,7 +624,7 @@ export function StatsPage({
                 <Line
                   type="monotone"
                   dataKey="consistency"
-                  name="Consistency"
+                  name={dict?.stats.bandConsistency ?? "Consistency"}
                   stroke={charts.chartCons}
                   dot={false}
                   strokeWidth={2.5}
@@ -599,12 +637,12 @@ export function StatsPage({
 
       <section>
         <h2 className="mb-4 font-display text-2xl font-bold tracking-tight text-ink">
-          Progression
+          {dict?.stats.progression ?? "Progression"}
         </h2>
         <div className="grid gap-4 lg:grid-cols-2">
-          <ChartCard title="Weekly activity">
+          <ChartCard title={dict?.stats.weeklyActivity ?? "Weekly activity"}>
             {weekly.length === 0 ? (
-              <EmptyChart />
+              <EmptyChart message={notEnoughData} />
             ) : (
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={weekly}>
@@ -641,9 +679,9 @@ export function StatsPage({
             )}
           </ChartCard>
 
-          <ChartCard title="PP / accuracy trend">
+          <ChartCard title={dict?.stats.ppAccTrend ?? "PP / accuracy trend"}>
             {ppTrend.length === 0 && accTrend.length === 0 ? (
-              <EmptyChart />
+              <EmptyChart message={notEnoughData} />
             ) : (
               <ResponsiveContainer width="100%" height={200}>
                 <LineChart
@@ -713,11 +751,11 @@ export function StatsPage({
 
       <section>
         <h2 className="mb-4 font-display text-2xl font-bold tracking-tight text-ink">
-          How you play
+          {dict?.stats.howYouPlay ?? "How you play"}
         </h2>
         <div className="mb-4 grid gap-3 sm:grid-cols-3">
           <Stat
-            label="Avg plays / session"
+            label={dict?.stats.avgPlaysPerSession ?? "Avg plays / session"}
             value={
               sessions.avgPlaysPerSession > 0
                 ? sessions.avgPlaysPerSession.toFixed(1)
@@ -725,22 +763,24 @@ export function StatsPage({
             }
           />
           <Stat
-            label="Avg session length"
+            label={dict?.stats.avgSessionLength ?? "Avg session length"}
             value={formatDuration(sessions.avgDurationMs)}
           />
           <Stat
-            label="Longest session"
+            label={dict?.stats.longestSession ?? "Longest session"}
             value={
               sessions.longest
-                ? `${sessions.longest.scoreCount} plays`
+                ? t(dict?.stats.playsCount, {
+                    count: sessions.longest.scoreCount,
+                  })
                 : "—"
             }
           />
         </div>
         <div className="grid gap-4 lg:grid-cols-2">
-          <ChartCard title="Rank distribution">
+          <ChartCard title={dict?.stats.rankDistribution ?? "Rank distribution"}>
             {ranks.every((r) => r.count === 0) ? (
-              <EmptyChart />
+              <EmptyChart message={notEnoughData} />
             ) : (
               <>
                 <ResponsiveContainer width="100%" height={200}>
@@ -766,15 +806,16 @@ export function StatsPage({
                   </BarChart>
                 </ResponsiveContainer>
                 <p className="mt-2 text-[11px] text-faint">
-                  S includes SH · X is SS (X/XH) or a 1,000,000 score
+                  {dict?.stats.rankFootnote ??
+                    "S includes SH · X is SS (X/XH) or a 1,000,000 score"}
                 </p>
               </>
             )}
           </ChartCard>
 
-          <ChartCard title={`${keyCount}K skillset mix`}>
+          <ChartCard title={t(dict?.stats.skillsetMix, { keyCount })}>
             {mix == null || mix.total === 0 ? (
-              <EmptyChart />
+              <EmptyChart message={notEnoughData} />
             ) : (
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={skillsetBars}>
@@ -798,7 +839,10 @@ export function StatsPage({
                     contentStyle={charts.tooltip}
                     formatter={(value, name) => {
                       if (name === "plays") {
-                        return [Number(value).toLocaleString(), "Plays"];
+                        return [
+                          Number(value).toLocaleString(),
+                          dict?.stats.plays ?? "plays",
+                        ];
                       }
                       return [value, name];
                     }}
@@ -809,9 +853,9 @@ export function StatsPage({
             )}
           </ChartCard>
 
-          <ChartCard title="Plays by weekday (UTC)">
+          <ChartCard title={dict?.stats.playsByWeekday ?? "Plays by weekday (UTC)"}>
             {byDow.every((d) => d.count === 0) ? (
-              <EmptyChart />
+              <EmptyChart message={notEnoughData} />
             ) : (
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={byDow}>
@@ -838,9 +882,9 @@ export function StatsPage({
             )}
           </ChartCard>
 
-          <ChartCard title="Plays by hour (UTC)">
+          <ChartCard title={dict?.stats.playsByHour ?? "Plays by hour (UTC)"}>
             {byHour.every((h) => h.count === 0) ? (
-              <EmptyChart />
+              <EmptyChart message={notEnoughData} />
             ) : (
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={byHour}>
@@ -877,11 +921,12 @@ export function StatsPage({
 
       <section>
         <h2 className="mb-4 font-display text-2xl font-bold tracking-tight text-ink">
-          Top mappers
+          {dict?.stats.topMappers ?? "Top mappers"}
         </h2>
         {mappers.length === 0 ? (
           <p className="text-sm text-muted">
-            No mapper stats yet — they fill in after the analytics pipeline runs.
+            {dict?.stats.noMapperStats ??
+              "No mapper stats yet — they fill in after the analytics pipeline runs."}
           </p>
         ) : (
           <ul className="space-y-0.5">
@@ -892,10 +937,12 @@ export function StatsPage({
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-semibold text-ink">
-                    {m.mapperUsername ?? `Mapper #${m.mapperOnlineId}`}
+                    {m.mapperUsername ??
+                      t(dict?.stats.mapperFallback, { id: m.mapperOnlineId })}
                   </div>
                   <div className="text-sm text-muted">
-                    {m.playCount.toLocaleString()} plays
+                    {m.playCount.toLocaleString()}{" "}
+                    {dict?.stats.plays ?? "plays"}
                     {m.avgAccuracy != null
                       ? ` · ${formatAccuracy(m.avgAccuracy)}`
                       : ""}
@@ -910,12 +957,12 @@ export function StatsPage({
         )}
         {summary.firstPlayedAt || summary.lastPlayedAt ? (
           <p className="mt-4 text-xs text-faint">
-            Play history
+            {dict?.stats.playHistory ?? "Play history"}
             {summary.firstPlayedAt
-              ? ` from ${formatRelativeTime(summary.firstPlayedAt)}`
+              ? ` ${dict?.stats.from ?? "from"} ${formatRelativeTime(summary.firstPlayedAt)}`
               : ""}
             {summary.lastPlayedAt
-              ? ` · last ${formatRelativeTime(summary.lastPlayedAt)}`
+              ? ` · ${dict?.stats.last ?? "last"} ${formatRelativeTime(summary.lastPlayedAt)}`
               : ""}
           </p>
         ) : null}
@@ -927,6 +974,7 @@ export function StatsPage({
 function SkillCard({
   mode,
   axis,
+  dict,
   band,
   title,
   hint,
@@ -939,6 +987,7 @@ function SkillCard({
 }: {
   mode: RatingDisplayMode;
   axis: StatsSkillAxis;
+  dict: Dictionary["app"] | undefined;
   band: SkillBandKind;
   title: string;
   hint: string;
@@ -959,10 +1008,13 @@ function SkillCard({
   const hasEstimate = value > 0;
   const playsLabel =
     maps === 0
-      ? "No plays in band yet"
+      ? dict?.stats.noPlaysInBand ?? "No plays in band yet"
       : hasEstimate
-        ? `${maps} maps in band`
-        : `${maps}/${requiredPlays} maps in band`;
+        ? t(dict?.stats.mapsInBand, { count: maps })
+        : t(dict?.stats.mapsInBandRequired, {
+            count: maps,
+            required: requiredPlays,
+          });
 
   return (
     <button
@@ -979,7 +1031,9 @@ function SkillCard({
       <div className="flex items-center justify-between gap-2">
         <div className="rx-label">{title}</div>
         <span className="text-[10px] font-bold uppercase tracking-wide text-faint">
-          {expanded ? "Hide" : "Plays"}
+          {expanded
+            ? dict?.stats.hide ?? "Hide"
+            : dict?.stats.plays ?? "plays"}
         </span>
       </div>
       <div
@@ -1001,7 +1055,8 @@ function SkillCard({
           <AxisCell
             mode={mode}
             axis="rc"
-            label="Rice"
+            dict={dict}
+            label={dict?.stats.axisRice ?? "Rice"}
             value={breakdown.rc}
             maps={breakdown.rcMaps}
             requiredPlays={requiredPlays}
@@ -1009,7 +1064,8 @@ function SkillCard({
           <AxisCell
             mode={mode}
             axis="ln"
-            label="LN"
+            dict={dict}
+            label={dict?.stats.axisLn ?? "LN"}
             value={breakdown.ln}
             maps={breakdown.lnMaps}
             requiredPlays={requiredPlays}
@@ -1017,7 +1073,8 @@ function SkillCard({
           <AxisCell
             mode={mode}
             axis="fln"
-            label="FLN"
+            dict={dict}
+            label={dict?.stats.axisFln ?? "FLN"}
             value={breakdown.fln}
             maps={breakdown.flnMaps}
             requiredPlays={requiredPlays}
@@ -1027,7 +1084,9 @@ function SkillCard({
         <p className="mt-4 text-xs text-faint">
           {playsLabel}
           {!hasEstimate && maps > 0
-            ? ` · need ${requiredPlays} for an estimate`
+            ? ` · ${t(dict?.stats.needMorePlays, {
+                required: requiredPlays,
+              })}`
             : ""}
         </p>
       )}
@@ -1035,21 +1094,17 @@ function SkillCard({
   );
 }
 
-const BAND_TITLES: Record<SkillBandKind, string> = {
-  push: "Push",
-  accuracy: "Accuracy",
-  consistency: "Consistency",
-};
-
 function SkillBandPlaysPanel({
   band,
   axis,
+  dict,
   topPlays,
   keyCount,
   ratingMode,
 }: {
   band: SkillBandKind;
   axis: StatsSkillAxis;
+  dict: Dictionary["app"] | undefined;
   topPlays: number;
   keyCount: number;
   ratingMode: RatingDisplayMode;
@@ -1081,45 +1136,59 @@ function SkillBandPlaysPanel({
     return (
       <div id={`skill-band-${band}`} className="rx-panel p-4">
         <p className="text-sm text-rose-300">
-          {error?.message ?? "Failed to load plays"}
+          {error?.message ?? dict?.stats.failedToLoadPlays ?? "Failed to load plays"}
         </p>
       </div>
     );
   }
 
-  const axisLabel = skillAxisLabel(axis);
-  const bandTitle = BAND_TITLES[band];
+  const axisLabel = skillAxisLabel(dict, axis);
+  const bandTitle =
+    band === "push"
+      ? dict?.stats.bandPush ?? "Push"
+      : band === "accuracy"
+        ? dict?.stats.bandAccuracy ?? "Accuracy"
+        : dict?.stats.bandConsistency ?? "Consistency";
 
   return (
     <div id={`skill-band-${band}`} className="rx-panel space-y-6 p-4 sm:p-5">
       <div>
         <h3 className="font-display text-lg font-bold text-ink">
-          {bandTitle} plays
+          {t(dict?.stats.bandPlays, { band: bandTitle })}
           {axis !== "all" ? ` · ${axisLabel}` : ""}
         </h3>
         <p className="mt-1 text-xs text-muted">
-          Top {topPlays} hardest maps in this accuracy band (best play per map),
-          plus progress in the next dan tier.
+          {t(dict?.stats.topHardest, { count: topPlays })}
         </p>
       </div>
 
       <SkillPlayList
-        title={`In band (${data.inBandTotal}/${topPlays} maps)`}
+        title={t(dict?.stats.inBand, {
+          count: data.inBandTotal,
+          total: topPlays,
+        })}
         plays={data.inBand}
         ratingMode={ratingMode}
-        empty="No plays in this band yet."
+        empty={dict?.stats.emptyBand ?? "No plays in this band yet."}
       />
 
       {data.nextDanLabel ? (
         <SkillPlayList
-          title={`Next dan · ${data.nextDanLabel} (${data.inNextDanTotal}/${topPlays} maps)`}
+          title={t(dict?.stats.nextDan, {
+            label: data.nextDanLabel,
+            count: data.inNextDanTotal,
+            total: topPlays,
+          })}
           plays={data.inNextDan}
           ratingMode={ratingMode}
-          empty={`No ${data.nextDanLabel} clears in this band yet.`}
+          empty={t(dict?.stats.noLabelClears, {
+            label: data.nextDanLabel,
+          })}
         />
       ) : (
         <p className="text-sm text-muted">
-          No higher dan tier above your current estimate.
+          {dict?.stats.noNextDan ??
+            "No higher dan tier above your current estimate."}
         </p>
       )}
     </div>
@@ -1195,6 +1264,7 @@ function SkillPlayList({
 function AxisCell({
   mode,
   axis,
+  dict,
   label,
   value,
   maps,
@@ -1202,6 +1272,7 @@ function AxisCell({
 }: {
   mode: RatingDisplayMode;
   axis: SkillRatingAxis;
+  dict: Dictionary["app"] | undefined;
   label: string;
   value: number;
   maps: number;
@@ -1222,10 +1293,10 @@ function AxisCell({
       </div>
       <div className="text-[10px] text-faint">
         {maps >= requiredPlays
-          ? `${maps} maps`
+          ? t(dict?.stats.mapsCount, { count: maps })
           : maps > 0
             ? `${maps}/${requiredPlays}`
-            : "0 maps"}
+            : dict?.stats.zeroMaps ?? "0 maps"}
       </div>
     </div>
   );
@@ -1284,10 +1355,8 @@ function ChartCard({
   );
 }
 
-function EmptyChart() {
+function EmptyChart({ message }: { message: string }) {
   return (
-    <p className="py-12 text-center text-sm text-faint">
-      Not enough data yet.
-    </p>
+    <p className="py-12 text-center text-sm text-faint">{message}</p>
   );
 }

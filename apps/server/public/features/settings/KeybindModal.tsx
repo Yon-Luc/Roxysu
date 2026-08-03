@@ -11,6 +11,8 @@ import {
   useKeybinds,
 } from "../../lib/keybinds";
 import { KEYMODES, type Keymode } from "../../lib/previewSkin";
+import { useAppDict, t } from "../../lib/i18n";
+import type { Dictionary } from "@roxysu/i18n";
 
 type KeybindModalProps = {
   open: boolean;
@@ -18,14 +20,21 @@ type KeybindModalProps = {
 };
 
 export function KeybindModal({ open, onClose }: KeybindModalProps) {
+  const { dict } = useAppDict();
   if (!open) return null;
   return createPortal(
-    <KeybindModalInner onClose={onClose} />,
+    <KeybindModalInner onClose={onClose} dict={dict} />,
     document.body,
   );
 }
 
-function KeybindModalInner({ onClose }: { onClose: () => void }) {
+function KeybindModalInner({
+  onClose,
+  dict,
+}: {
+  onClose: () => void;
+  dict: Dictionary["app"] | undefined;
+}) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const columnBtnRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -118,17 +127,17 @@ function KeybindModalInner({ onClose }: { onClose: () => void }) {
               id={titleId}
               className="font-display text-xl font-bold text-ink"
             >
-              Keybinds
+              {dict?.settings.keybinds}
             </h2>
             <p className="mt-0.5 text-sm text-muted">
-              Bind a key per column for map testing. Stored in this browser.
+              {dict?.settings.keybindsModal.subtitle}
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="rounded-full px-3 py-1 text-sm text-muted transition hover:bg-highlight hover:text-ink"
-            aria-label="Close"
+            aria-label={dict?.settings.keybindsModal.close}
           >
             Esc
           </button>
@@ -185,7 +194,7 @@ function KeybindModalInner({ onClose }: { onClose: () => void }) {
                   }`}
                 >
                   <span className="w-16 shrink-0 text-sm font-semibold tabular-nums text-subtle">
-                    Col {i + 1}
+                    {t(dict?.settings.keybindsModal.colPrefix, { n: i + 1 })}
                   </span>
                   <button
                     type="button"
@@ -201,7 +210,9 @@ function KeybindModalInner({ onClose }: { onClose: () => void }) {
                       setCapturing((c) => (c === i ? null : i))
                     }
                   >
-                    {active ? "Press a key…" : formatKeyCode(code)}
+                    {active
+                      ? dict?.settings.keybindsModal.pressAKey
+                      : formatKeyCode(code)}
                   </button>
                 </li>
               );
@@ -210,11 +221,11 @@ function KeybindModalInner({ onClose }: { onClose: () => void }) {
 
           {conflicts.length > 0 ? (
             <p className="mt-3 text-sm text-rose-300/90">
-              Duplicate keys on columns{" "}
-              {conflicts
-                .map((cols) => cols.map((c) => c + 1).join(" & "))
-                .join("; ")}
-              .
+              {t(dict?.settings.keybindsModal.duplicateKeys, {
+                cols: conflicts
+                  .map((cols) => cols.map((c) => c + 1).join(" & "))
+                  .join("; "),
+              })}
             </p>
           ) : null}
         </div>
@@ -228,7 +239,7 @@ function KeybindModalInner({ onClose }: { onClose: () => void }) {
               resetKeymodeKeybinds(keys);
             }}
           >
-            Reset {keys}K
+            {t(dict?.settings.keybindsModal.resetKeymode, { keys })}
           </button>
           <button
             type="button"
@@ -240,16 +251,15 @@ function KeybindModalInner({ onClose }: { onClose: () => void }) {
               void getKeybinds();
             }}
           >
-            Reset all
+            {dict?.settings.keybindsModal.resetAll}
           </button>
           <button
             type="button"
             className="rx-btn-primary ml-auto"
             onClick={onClose}
           >
-            Done
-          </button>
-        </div>
+            {dict?.settings.keybindsModal.done}
+          </button>        </div>
       </div>
     </div>
   );

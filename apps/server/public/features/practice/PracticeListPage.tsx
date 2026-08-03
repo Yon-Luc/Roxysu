@@ -42,6 +42,8 @@ import {
   formatPrimaryRating,
   useRatingDisplayMode,
 } from "../../lib/ratingDisplay";
+import { useAppDict, t } from "../../lib/i18n";
+import type { Dictionary } from "@roxysu/i18n";
 
 const PRACTICE_SEARCH_KEY = "roxysu:practice-search";
 
@@ -53,24 +55,36 @@ type StoredPracticeSearch = {
   metric: PracticeMetric;
 };
 
-const SORT_OPTIONS: { value: PracticeSortBy; label: string }[] = [
-  { value: "lastPlayed", label: "Last played" },
-  { value: "accuracy", label: "Accuracy" },
-  { value: "misses", label: "Misses" },
-  { value: "score", label: "Score" },
-  { value: "pp", label: "PP" },
-  { value: "mastery", label: "Mastery" },
-  { value: "stars", label: "Stars" },
+const SORT_OPTIONS: PracticeSortBy[] = [
+  "lastPlayed",
+  "accuracy",
+  "misses",
+  "score",
+  "pp",
+  "mastery",
+  "stars",
 ];
 
-const METRIC_OPTIONS: { value: PracticeMetric; label: string }[] = [
-  { value: "accuracy", label: "Accuracy" },
-  { value: "misses", label: "Misses" },
-  { value: "score", label: "Score" },
-];
+const SORT_LABEL_FALLBACK: Record<PracticeSortBy, string> = {
+  lastPlayed: "Last played",
+  accuracy: "Accuracy",
+  misses: "Misses",
+  score: "Score",
+  pp: "PP",
+  mastery: "Mastery",
+  stars: "Stars",
+};
+
+const METRIC_OPTIONS: PracticeMetric[] = ["accuracy", "misses", "score"];
+
+const METRIC_LABEL_FALLBACK: Record<PracticeMetric, string> = {
+  accuracy: "Accuracy",
+  misses: "Misses",
+  score: "Score",
+};
 
 function isSortBy(value: unknown): value is PracticeSortBy {
-  return SORT_OPTIONS.some((o) => o.value === value);
+  return (SORT_OPTIONS as readonly string[]).includes(value as string);
 }
 
 function isSortDir(value: unknown): value is PracticeSortDir {
@@ -78,7 +92,7 @@ function isSortDir(value: unknown): value is PracticeSortDir {
 }
 
 function isMetric(value: unknown): value is PracticeMetric {
-  return METRIC_OPTIONS.some((o) => o.value === value);
+  return (METRIC_OPTIONS as readonly string[]).includes(value as string);
 }
 
 /** Remove prior chart/distribution filters so a new bar click replaces them. */
@@ -206,6 +220,7 @@ function writeStoredPracticeSearch(state: StoredPracticeSearch) {
 
 export function PracticeListPage() {
   const ratingMode = useRatingDisplayMode();
+  const { dict } = useAppDict();
   const [stored] = useState(readStoredPracticeSearch);
   const [q, setQ] = useState(stored.q);
   const [page, setPage] = useState(stored.page);
@@ -293,9 +308,10 @@ export function PracticeListPage() {
     <div className="space-y-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <PageTitle>Practice</PageTitle>
+          <PageTitle>{dict?.nav.practice ?? "Practice"}</PageTitle>
           <p className="rx-subtitle">
-            Plain text or query language — e.g.{" "}
+            {dict?.practice.subtitle ??
+              "Plain text or query language — e.g."}{" "}
             <code className="text-subtle">mode:mania stars:5..6</code>
             {" · "}
             <QueryLanguageHelpButton />
@@ -314,11 +330,14 @@ export function PracticeListPage() {
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search or mode:mania mastery>50…"
+            placeholder={
+              dict?.practice.searchPlaceholder ??
+              "Search or mode:mania mastery>50…"
+            }
             className="rx-input w-72"
           />
           <button type="submit" className="rx-btn-primary">
-            Search
+            {dict?.practice.search ?? "Search"}
           </button>
         </form>
       </div>
@@ -326,10 +345,13 @@ export function PracticeListPage() {
       <section className="rx-panel px-4 py-5 sm:px-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-bold text-ink">Best-score distribution</h2>
+            <h2 className="text-sm font-bold text-ink">
+              {dict?.practice.bestScoreDistribution ??
+                "Best-score distribution"}
+            </h2>
             <p className="mt-0.5 text-xs text-muted">
-              Across all maps matching the current query — click a bar to filter
-              that range.
+              {dict?.practice.distributionHint ??
+                "Across all maps matching the current query — click a bar to filter that range."}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -340,15 +362,17 @@ export function PracticeListPage() {
                 className="rx-btn text-xs"
                 title={
                   queryHistory[queryHistory.length - 1]
-                    ? `Restore: ${queryHistory[queryHistory.length - 1]}`
-                    : "Clear range filter"
+                    ? t(dict?.practice.restoreQuery, {
+                        query: queryHistory[queryHistory.length - 1],
+                      })
+                    : dict?.practice.clearRangeFilter ?? "Clear range filter"
                 }
               >
-                Undo filter
+                {dict?.practice.undoFilter ?? "Undo filter"}
               </button>
             ) : null}
             <label className="flex items-center gap-2 text-xs text-muted">
-              Show
+              {dict?.practice.show ?? "Show"}
               <select
                 className="rx-select"
                 value={metric}
@@ -358,9 +382,10 @@ export function PracticeListPage() {
                   persist({ metric: next });
                 }}
               >
-                {METRIC_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
+                {METRIC_OPTIONS.map((value) => (
+                  <option key={value} value={value}>
+                    {dict?.practice.metricLabels[value] ??
+                      METRIC_LABEL_FALLBACK[value]}
                   </option>
                 ))}
               </select>
@@ -374,7 +399,9 @@ export function PracticeListPage() {
           </div>
         ) : distError || !bins ? (
           <p className="py-10 text-center text-sm text-rose-300">
-            {distError?.message ?? "Failed to load distribution"}
+            {distError?.message ??
+              dict?.practice.failedToLoadDistribution ??
+              "Failed to load distribution"}
           </p>
         ) : (
           <ResponsiveContainer width="100%" height={220}>
@@ -409,7 +436,7 @@ export function PracticeListPage() {
                 itemStyle={{ color: "#fff" }}
                 formatter={(value) => [
                   Number(value).toLocaleString(),
-                  "maps",
+                  dict?.practice.maps ?? "maps",
                 ]}
               />
               <Bar
@@ -440,52 +467,59 @@ export function PracticeListPage() {
         )}
       </section>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2 text-sm text-muted">
-          <label className="flex items-center gap-2">
-            Sort
-            <select
-              className="rx-select"
-              value={sortBy}
-              onChange={(e) => {
-                const next = e.target.value as PracticeSortBy;
-                setSortBy(next);
-                setPage(1);
-                persist({ sortBy: next, page: 1 });
-              }}
-            >
-              {SORT_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2 text-sm text-muted">
+            <label className="flex items-center gap-2">
+              {dict?.practice.sort ?? "Sort"}
+              <select
+                className="rx-select"
+                value={sortBy}
+                onChange={(e) => {
+                  const next = e.target.value as PracticeSortBy;
+                  setSortBy(next);
+                  setPage(1);
+                  persist({ sortBy: next, page: 1 });
+                }}
+              >
+                {SORT_OPTIONS.map((value) => (
+                  <option key={value} value={value}>
+                    {dict?.practice.sortLabels[value] ??
+                      SORT_LABEL_FALLBACK[value]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center gap-2">
+              {dict?.practice.order ?? "Order"}
+              <select
+                className="rx-select"
+                value={sortDir}
+                onChange={(e) => {
+                  const next = e.target.value as PracticeSortDir;
+                  setSortDir(next);
+                  setPage(1);
+                  persist({ sortDir: next, page: 1 });
+                }}
+              >
+                <option value="asc">
+                  {dict?.practice.ascending ?? "Ascending"}
                 </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex items-center gap-2">
-            Order
-            <select
-              className="rx-select"
-              value={sortDir}
-              onChange={(e) => {
-                const next = e.target.value as PracticeSortDir;
-                setSortDir(next);
-                setPage(1);
-                persist({ sortDir: next, page: 1 });
-              }}
-            >
-              <option value="asc">Ascending</option>
-              <option value="desc">Descending</option>
-            </select>
-          </label>
-        </div>
+                <option value="desc">
+                  {dict?.practice.descending ?? "Descending"}
+                </option>
+              </select>
+            </label>
+          </div>
 
         {list ? (
           <div className="text-xs text-muted">
-            {list.total.toLocaleString()} maps
-            {list.queryMode === "structured" ? " · query" : ""}
-            {isFetching ? " · refreshing…" : ""}
+            {t(dict?.practice.mapsCount, { count: list.total })}
+            {list.queryMode === "structured"
+              ? ` · ${dict?.practice.queryBadge ?? "query"}`
+              : ""}
+            {isFetching ? ` · ${dict?.practice.refreshing ?? "refreshing…"}` : ""}
             {" · "}
-            Page {page} / {totalPages}
+            {t(dict?.practice.page, { page, total: totalPages })}
           </div>
         ) : null}
       </div>
@@ -516,9 +550,13 @@ export function PracticeListPage() {
           <CardGridSkeleton count={6} />
         </>
       ) : error ? (
-        <p className="text-rose-300">Failed to load: {error.message}</p>
+        <p className="text-rose-300">
+          {t(dict?.practice.failedToLoad, { error: error.message })}
+        </p>
       ) : !list || list.items.length === 0 ? (
-        <p className="text-sm text-muted">No beatmaps match.</p>
+        <p className="text-sm text-muted">
+          {dict?.practice.noMatch ?? "No beatmaps match."}
+        </p>
       ) : (
         <>
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -547,10 +585,10 @@ export function PracticeListPage() {
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <div className="truncate text-sm text-muted">
-                          {item.artist ?? "Unknown artist"}
+                          {item.artist ?? dict?.practice.unknownArtist ?? "Unknown artist"}
                         </div>
                         <div className="mt-0.5 truncate font-bold text-ink">
-                          {item.title ?? "Untitled"}
+                          {item.title ?? dict?.practice.untitled ?? "Untitled"}
                         </div>
                       </div>
                       {item.masteryLevel != null ? (
@@ -570,7 +608,9 @@ export function PracticeListPage() {
                       {item.mapperUsername ? ` · ${item.mapperUsername}` : ""}
                     </div>
                     <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs tabular-nums text-subtle">
-                      <span>{item.playCount} plays</span>
+                      <span>
+                        {t(dict?.practice.playsCount, { count: item.playCount })}
+                      </span>
                       <span>{formatAccuracy(item.bestAccuracy)}</span>
                       <span>{formatMisses(item.bestMisses)}</span>
                       <span>{formatScore(item.bestScore)}</span>
@@ -601,7 +641,7 @@ export function PracticeListPage() {
               }}
               className="rx-btn"
             >
-              Previous
+              {dict?.practice.previous ?? "Previous"}
             </button>
             <button
               type="button"
@@ -613,7 +653,7 @@ export function PracticeListPage() {
               }}
               className="rx-btn"
             >
-              Next
+              {dict?.practice.next ?? "Next"}
             </button>
           </div>
         </>

@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { QueryLanguageHelpButton } from "../../components/QueryLanguageHelpModal";
+import { useAppDict, t } from "../../lib/i18n";
 import {
   fetchPracticeSample,
   type PracticeItem,
@@ -170,6 +171,7 @@ export function SessionUpNext({
   rulesetShortName: string | null;
   excludeBeatmapIds: string[];
 }) {
+  const { dict } = useAppDict();
   const [prefs, setPrefs] = useState<UpNextPrefs>(() => loadPrefs());
   const [shuffleKey, setShuffleKey] = useState(0);
   const [queryDirty, setQueryDirty] = useState(false);
@@ -245,14 +247,16 @@ export function SessionUpNext({
           }}
           disabled={isFetching || !sampleQuery}
         >
-          {isFetching ? "Shuffling…" : "Shuffle"}
+          {isFetching
+            ? t(dict?.session.shuffling) || "Shuffling…"
+            : t(dict?.session.shuffle) || "Shuffle"}
         </button>
         <Link
           to="/practice"
           className="rx-btn"
           onClick={() => openInPractice(sampleQuery)}
         >
-          Open in Practice
+          {t(dict?.session.openInPractice) || "Open in Practice"}
         </Link>
       </div>
 
@@ -274,13 +278,17 @@ export function SessionUpNext({
               }
               onClick={() => patchPresets({ mode: m.id })}
             >
-              {m.label}
+              {m.id === "improve"
+                ? t(dict?.session.modeImprove) || "Improve"
+                : t(dict?.session.modeReach) || "Reach"}
             </button>
           ))}
         </div>
 
         <div>
-          <div className="rx-label mb-2">Accuracy band</div>
+          <div className="rx-label mb-2">
+            {t(dict?.session.accuracyBand) || "Accuracy band"}
+          </div>
           <div className="flex flex-wrap gap-2">
             {BANDS.map((b) => (
               <button
@@ -300,7 +308,9 @@ export function SessionUpNext({
                   })
                 }
               >
-                {b.label}
+                {b.id === "custom"
+                  ? (dict?.session.custom ?? b.label)
+                  : b.label}
               </button>
             ))}
           </div>
@@ -316,7 +326,7 @@ export function SessionUpNext({
                 onChange={(e) =>
                   patchPresets({ accMin: Number(e.target.value) })
                 }
-                aria-label="Min accuracy %"
+                aria-label={dict?.session.minAccuracyAria ?? "Min accuracy %"}
               />
               <span className="text-muted">–</span>
               <input
@@ -329,15 +339,17 @@ export function SessionUpNext({
                 onChange={(e) =>
                   patchPresets({ accMax: Number(e.target.value) })
                 }
-                aria-label="Max accuracy %"
+                aria-label={dict?.session.maxAccuracyAria ?? "Max accuracy %"}
               />
               <span className="text-sm text-muted">%</span>
             </div>
           ) : null}
           <p className="mt-2 text-xs text-faint">
             {prefs.mode === "improve"
-              ? "Maps whose best accuracy is in this band."
-              : "Maps below the lower bound (aim to reach this band)."}
+              ? t(dict?.session.bandHintImprove) ||
+                "Maps whose best accuracy is in this band."
+              : t(dict?.session.bandHintReach) ||
+                "Maps below the lower bound (aim to reach this band)."}
           </p>
         </div>
 
@@ -351,12 +363,14 @@ export function SessionUpNext({
               }
               className="accent-(--color-accent)"
             />
-            Include never played
+            {t(dict?.session.includeNeverPlayed) || "Include never played"}
           </label>
         ) : null}
 
         <div>
-          <div className="rx-label mb-2">Not played since</div>
+          <div className="rx-label mb-2">
+            {t(dict?.session.notPlayedSince) || "Not played since"}
+          </div>
           <div className="flex flex-wrap gap-2">
             {STALE_OPTIONS.map((s) => (
               <button
@@ -369,35 +383,37 @@ export function SessionUpNext({
                 }
                 onClick={() => patchPresets({ staleDays: s.days })}
               >
-                {s.label}
+                {s.days === 0 ? (dict?.session.anyTime ?? s.label) : s.label}
               </button>
             ))}
           </div>
         </div>
 
         <div>
-          <div className="rx-label mb-2">Star range (optional)</div>
+          <div className="rx-label mb-2">
+            {t(dict?.session.starRange) || "Star range (optional)"}
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <input
               type="number"
               min={0}
               step={0.1}
-              placeholder="Min"
+              placeholder={dict?.session.minPlaceholder ?? "Min"}
               className="rx-input w-24 rounded-lg"
               value={prefs.starsMin}
               onChange={(e) => patchPresets({ starsMin: e.target.value })}
-              aria-label="Min stars"
+              aria-label={dict?.session.minStarsAria ?? "Min stars"}
             />
             <span className="text-muted">–</span>
             <input
               type="number"
               min={0}
               step={0.1}
-              placeholder="Max"
+              placeholder={dict?.session.maxPlaceholder ?? "Max"}
               className="rx-input w-24 rounded-lg"
               value={prefs.starsMax}
               onChange={(e) => patchPresets({ starsMax: e.target.value })}
-              aria-label="Max stars"
+              aria-label={dict?.session.maxStarsAria ?? "Max stars"}
             />
           </div>
         </div>
@@ -405,7 +421,9 @@ export function SessionUpNext({
         <div>
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <span className="rx-label">Query</span>
+              <span className="rx-label">
+                {t(dict?.session.query) || "Query"}
+              </span>
               <QueryLanguageHelpButton />
             </div>
             <button
@@ -413,7 +431,7 @@ export function SessionUpNext({
               className="text-xs font-medium text-muted underline decoration-white/20 underline-offset-2 hover:text-accent"
               onClick={resetFromPresets}
             >
-              Reset from presets
+              {t(dict?.session.resetFromPresets) || "Reset from presets"}
             </button>
           </div>
           <textarea
@@ -424,7 +442,7 @@ export function SessionUpNext({
               setPrefs((prev) => ({ ...prev, query: e.target.value }));
             }}
             spellCheck={false}
-            aria-label="Recommendation query"
+            aria-label={dict?.session.recommendationQueryAria ?? "Recommendation query"}
           />
         </div>
       </div>
@@ -434,17 +452,25 @@ export function SessionUpNext({
       ) : null}
 
       {isLoading && items.length === 0 ? (
-        <p className="text-sm text-muted">Finding maps…</p>
+        <p className="text-sm text-muted">
+          {t(dict?.session.findingMaps) || "Finding maps…"}
+        </p>
       ) : items.length === 0 ? (
         <p className="text-sm text-muted">
           {sampleQuery
-            ? "No maps match this query. Loosen the filters or edit the query."
-            : "Enter a query to get recommendations."}
+            ? t(dict?.session.noMapsMatch) ||
+              "No maps match this query. Loosen the filters or edit the query."
+            : t(dict?.session.enterQuery) ||
+              "Enter a query to get recommendations."}
         </p>
       ) : (
         <div className="space-y-2">
           <p className="text-xs text-faint">
-            Showing {items.length} of {total.toLocaleString()} matches
+            {t(dict?.session.showingMatches, {
+              count: items.length,
+              total: total.toLocaleString(),
+            }) ||
+              `Showing ${items.length} of ${total.toLocaleString()} matches`}
           </p>
           <ul className="space-y-0.5">
             {items.map((item) => (

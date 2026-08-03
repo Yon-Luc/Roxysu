@@ -7,6 +7,7 @@ import {
 } from "../../components/LoadingSkeleton";
 import { PageTitle } from "../../components/PageTitle";
 import { QueryLanguageHelpButton } from "../../components/QueryLanguageHelpModal";
+import { useAppDict, t } from "../../lib/i18n";
 import {
   createCollection,
   deleteCollection,
@@ -25,6 +26,7 @@ function formatSyncedAt(iso: string | null | undefined): string | null {
 }
 
 export function CollectionsPage() {
+  const { dict } = useAppDict();
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [query, setQuery] = useState("");
@@ -81,9 +83,15 @@ export function CollectionsPage() {
     mutationFn: syncCollectionsToLazer,
     onSuccess: (result) => {
       setSyncMessage(
-        `Synced to osu!lazer — ${result.created} created, ${result.updated} updated, ${result.deleted} removed` +
+        t(dict?.collection.syncSuccess, {
+          created: result.created,
+          updated: result.updated,
+          deleted: result.deleted,
+        }) +
           (result.skippedNoMd5 > 0
-            ? ` (${result.skippedNoMd5} maps skipped — no MD5 hash)`
+            ? t(dict?.collection.syncSkipped, {
+                count: result.skippedNoMd5,
+              })
             : ""),
       );
       void queryClient.invalidateQueries({ queryKey: ["collections"] });
@@ -109,17 +117,15 @@ export function CollectionsPage() {
     <div className="space-y-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <PageTitle>Collections</PageTitle>
+          <PageTitle>{dict?.nav.collections}</PageTitle>
           <p className="rx-subtitle">
-            Smart collections store query strings — e.g.{" "}
+            {dict?.collection.subtitle}{" "}
             <code className="text-subtle">stars:6..7 mapper:Lasse</code>
             {" · "}
             <QueryLanguageHelpButton />
           </p>
           <p className="mt-2 text-sm text-muted">
-            Close osu!lazer first. Sync writes collections prefixed with{" "}
-            <code className="text-subtle">!Roxysu</code> and backs up{" "}
-            <code className="text-subtle">client.realm</code> before editing.
+            {dict?.collection.closeLazer}
           </p>
         </div>
         <button
@@ -131,7 +137,9 @@ export function CollectionsPage() {
           disabled={syncMut.isPending}
           className="rx-btn-primary shrink-0"
         >
-          {syncMut.isPending ? "Syncing…" : "Sync to osu!lazer"}
+          {syncMut.isPending
+            ? dict?.collection.syncing
+            : dict?.collection.syncToLazer}
         </button>
       </div>
 
@@ -158,14 +166,14 @@ export function CollectionsPage() {
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Name"
+          placeholder={dict?.collection.namePlaceholder}
           className="rx-input"
           disabled={createMut.isPending}
         />
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Query"
+          placeholder={dict?.collection.queryPlaceholder}
           className="rx-input"
           disabled={createMut.isPending}
         />
@@ -174,7 +182,9 @@ export function CollectionsPage() {
           disabled={createMut.isPending || !name.trim() || !query.trim()}
           className="rx-btn-primary"
         >
-          {createMut.isPending ? "Creating…" : "Save"}
+          {createMut.isPending
+            ? dict?.collection.creating
+            : dict?.collection.save}
         </button>
         {createMut.error ? (
           <p className="sm:col-span-3 text-sm text-rose-300">
@@ -195,7 +205,7 @@ export function CollectionsPage() {
       ) : error ? (
         <p className="text-rose-300">{error.message}</p>
       ) : !data || data.items.length === 0 ? (
-        <p className="text-sm text-muted">No collections yet.</p>
+        <p className="text-sm text-muted">{dict?.collection.noCollections}</p>
       ) : (
         <ul className="space-y-0.5">
           {data.items.map((c) => {
@@ -227,14 +237,14 @@ export function CollectionsPage() {
                     <input
                       value={editName}
                       onChange={(e) => setEditName(e.target.value)}
-                      placeholder="Name"
+                      placeholder={dict?.collection.namePlaceholder}
                       className="rx-input min-w-0 flex-1"
                       disabled={updateMut.isPending}
                     />
                     <input
                       value={editQuery}
                       onChange={(e) => setEditQuery(e.target.value)}
-                      placeholder="Query"
+                      placeholder={dict?.collection.queryPlaceholder}
                       className="rx-input min-w-0 flex-[2] font-mono text-sm"
                       disabled={updateMut.isPending}
                     />
@@ -248,7 +258,9 @@ export function CollectionsPage() {
                         }
                         className="rx-btn-primary"
                       >
-                        {updateMut.isPending ? "Updating…" : "Update"}
+                        {updateMut.isPending
+                          ? dict?.collection.updating
+                          : dict?.collection.update}
                       </button>
                       <button
                         type="button"
@@ -256,7 +268,7 @@ export function CollectionsPage() {
                         disabled={updateMut.isPending}
                         className="rx-btn"
                       >
-                        Cancel
+                        {dict?.collection.cancel}
                       </button>
                     </div>
                     {updateMut.error ? (
@@ -287,17 +299,23 @@ export function CollectionsPage() {
                     </div>
                     {syncedLabel ? (
                       <div className="mt-0.5 text-xs text-subtle">
-                        Synced to lazer {syncedLabel}
+                        {t(dict?.collection.syncedToLazer, {
+                          time: syncedLabel,
+                        })}
                       </div>
                     ) : null}
                     {isDeleting ? (
-                      <div className="mt-0.5 text-xs text-muted">Deleting…</div>
+                      <div className="mt-0.5 text-xs text-muted">
+                        {dict?.collection.deleting}
+                      </div>
                     ) : null}
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
                     <span className="text-sm font-semibold tabular-nums text-subtle">
                       {c.matchCount != null
-                        ? `${c.matchCount.toLocaleString()} maps`
+                        ? t(dict?.collection.mapsCount, {
+                            count: c.matchCount.toLocaleString(),
+                          })
                         : "—"}
                     </span>
                     <button
@@ -306,7 +324,7 @@ export function CollectionsPage() {
                       disabled={isDeleting || updateMut.isPending}
                       className="text-xs font-medium text-muted transition hover:text-ink"
                     >
-                      Edit
+                      {dict?.collection.edit}
                     </button>
                     <button
                       type="button"
@@ -314,7 +332,9 @@ export function CollectionsPage() {
                       disabled={isDeleting || deleteMut.isPending}
                       className="text-xs font-medium text-rose-300/80 transition hover:text-rose-300 disabled:opacity-60"
                     >
-                      {isDeleting ? "Deleting…" : "Delete"}
+                      {isDeleting
+                        ? dict?.collection.deleting
+                        : dict?.collection.delete}
                     </button>
                   </div>
                 </div>

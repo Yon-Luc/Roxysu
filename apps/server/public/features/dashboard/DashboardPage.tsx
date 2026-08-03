@@ -22,6 +22,7 @@ import {
 import { ModBadges } from "../../components/ModBadges";
 import { PageTitle } from "../../components/PageTitle";
 import { fetchDashboard } from "../../lib/api";
+import { useAppDict } from "../../lib/i18n";
 import {
   formatAccuracy,
   formatChartDay,
@@ -37,6 +38,7 @@ import { useChartStyles } from "../../lib/chartStyles";
 export function DashboardPage() {
   const ratingMode = useRatingDisplayMode();
   const charts = useChartStyles();
+  const { dict } = useAppDict();
   const { data, isLoading, error } = useQuery({
     queryKey: ["dashboard"],
     queryFn: fetchDashboard,
@@ -76,26 +78,27 @@ export function DashboardPage() {
   return (
     <div className="space-y-10">
       <div>
-        <PageTitle>Home</PageTitle>
+        <PageTitle>{dict?.nav.home ?? "Home"}</PageTitle>
         <p className="rx-subtitle">
-          Recent plays from your local osu!lazer database.
+          {dict?.dashboard.subtitle ??
+            "Recent plays from your local osu!lazer database."}
         </p>
       </div>
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Stat
-          label="Scores indexed"
+          label={dict?.dashboard.scoresIndexed ?? "Scores indexed"}
           value={data.sync.scoreCount.toLocaleString()}
         />
         <Stat
-          label="Beatmaps"
+          label={dict?.dashboard.beatmaps ?? "Beatmaps"}
           value={data.sync.beatmapCount.toLocaleString()}
         />
         <Stat
-          label="Last sync"
+          label={dict?.dashboard.lastSync ?? "Last sync"}
           value={
             last
-              ? `${last.status}${last.finishedAt ? ` · ${formatRelativeTime(last.finishedAt)}` : ""}`
+              ? `${dict?.sync.status[last.status] ?? last.status}${last.finishedAt ? ` · ${formatRelativeTime(last.finishedAt)}` : ""}`
               : "—"
           }
         />
@@ -105,23 +108,33 @@ export function DashboardPage() {
             params={{ sessionId: "current" }}
             className="rx-stat block transition hover:bg-elevated hover:ring-1 hover:ring-accent/40"
           >
-            <div className="rx-label text-accent">Current session</div>
+            <div className="rx-label text-accent">
+              {dict?.dashboard.currentSession ?? "Current session"}
+            </div>
             <div className="mt-2 text-2xl font-bold tabular-nums text-ink">
-              {session.scoreCount} plays
+              {session.scoreCount} {dict?.dashboard.plays ?? "plays"}
             </div>
             <div className="mt-1 text-xs text-muted">
               {formatRelativeTime(session.startedAt)}
             </div>
           </Link>
         ) : (
-          <Stat label="Current session" value="None" />
+          <Stat
+            label={dict?.dashboard.currentSession ?? "Current session"}
+            value={dict?.dashboard.none ?? "None"}
+          />
         )}
       </section>
 
       <section className="grid gap-4 lg:grid-cols-2">
-        <ChartCard title="Weekly activity">
+        <ChartCard title={dict?.dashboard.weeklyActivity ?? "Weekly activity"}>
           {weekly.length === 0 ? (
-            <EmptyChart />
+            <EmptyChart
+              message={
+                dict?.dashboard.noDerivedStats ??
+                "No derived stats yet — analytics pipeline will fill this after sync."
+              }
+            />
           ) : (
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={weekly}>
@@ -151,9 +164,14 @@ export function DashboardPage() {
           )}
         </ChartCard>
 
-        <ChartCard title="PP / accuracy trend">
+        <ChartCard title={dict?.dashboard.ppAccTrend ?? "PP / accuracy trend"}>
           {ppTrend.length === 0 && accTrend.length === 0 ? (
-            <EmptyChart />
+            <EmptyChart
+              message={
+                dict?.dashboard.noDerivedStats ??
+                "No derived stats yet — analytics pipeline will fill this after sync."
+              }
+            />
           ) : (
             <ResponsiveContainer width="100%" height={200}>
               <LineChart
@@ -218,18 +236,19 @@ export function DashboardPage() {
       <section>
         <div className="mb-4 flex items-end justify-between gap-3">
           <h2 className="font-display text-2xl font-bold tracking-tight text-ink">
-            Recent scores
+            {dict?.dashboard.recentScores ?? "Recent scores"}
           </h2>
           <Link
             to="/practice"
             className="text-sm font-bold text-muted transition hover:text-accent"
           >
-            Practice →
+            {dict?.dashboard.practice ?? "Practice"} →
           </Link>
         </div>
         {data.recentScores.length === 0 ? (
           <p className="text-sm text-muted">
-            No scores yet. Run realm-reader to sync your client.realm.
+            {dict?.dashboard.noScoresYet ??
+              "No scores yet. Run realm-reader to sync your client.realm."}
           </p>
         ) : (
           <ul className="space-y-0.5">
@@ -245,11 +264,11 @@ export function DashboardPage() {
                   />
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-semibold text-ink">
-                      {score.title ?? "Untitled"}
+                      {score.title ?? dict?.dashboard.untitled ?? "Untitled"}
                     </div>
                     <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5 text-sm text-muted">
                       <span className="truncate">
-                        {score.artist ?? "Unknown"}
+                        {score.artist ?? dict?.dashboard.unknown ?? "Unknown"}
                         {score.difficultyName ? ` · ${score.difficultyName}` : ""}
                         {" · "}
                         {formatPrimaryRating({
@@ -319,10 +338,8 @@ function ChartCard({
   );
 }
 
-function EmptyChart() {
+function EmptyChart({ message }: { message: string }) {
   return (
-    <p className="py-12 text-center text-sm text-faint">
-      No derived stats yet — analytics pipeline will fill this after sync.
-    </p>
+    <p className="py-12 text-center text-sm text-faint">{message}</p>
   );
 }

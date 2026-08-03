@@ -9,6 +9,7 @@ import {
   formatPrimaryRating,
   useRatingDisplayMode,
 } from "../../lib/ratingDisplay";
+import { useAppDict } from "../../lib/i18n";
 
 export type SessionSuggestMapFields = {
   id: string;
@@ -37,6 +38,7 @@ export function SessionSuggestMapRow({
   subtitle?: ReactNode;
 }) {
   const ratingMode = useRatingDisplayMode();
+  const { dict } = useAppDict();
   const clientUrl = osuClientBeatmapUrl(item.onlineId);
 
   return (
@@ -55,10 +57,10 @@ export function SessionSuggestMapRow({
         />
         <div className="min-w-0 flex-1">
           <div className="truncate font-semibold text-ink">
-            {item.title ?? "Untitled"}
+            {item.title ?? dict?.session.untitled}
           </div>
           <div className="mt-0.5 truncate text-sm text-muted">
-            {item.artist ?? "Unknown"}
+            {item.artist ?? dict?.session.unknownArtist}
             {item.difficultyName ? ` · ${item.difficultyName}` : ""}
             {" · "}
             {formatPrimaryRating({
@@ -82,7 +84,7 @@ export function SessionSuggestMapRow({
           <div className="text-xs tabular-nums text-muted">
             {item.lastPlayedAt
               ? formatRelativeTime(item.lastPlayedAt)
-              : "Never played"}
+              : dict?.session.neverPlayed}
           </div>
         </div>
       </Link>
@@ -95,7 +97,7 @@ export function SessionSuggestMapRow({
         />
         {clientUrl ? (
           <a href={clientUrl} className="rx-btn">
-            Open in osu!
+            {dict?.session.openInOsu}
           </a>
         ) : null}
       </div>

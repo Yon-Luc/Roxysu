@@ -1,5 +1,8 @@
 import { i18n, checkLanguage } from './config'
 
+export { i18n, checkLanguage, checkCountry } from './config'
+export type { Locale } from './config'
+
 type DefaultLang = typeof i18n.defaultLocale
 
 export const dictionaries = {

@@ -16,12 +16,14 @@ import {
   formatPrimaryRating,
   useRatingDisplayMode,
 } from "../../lib/ratingDisplay";
+import { useAppDict, t } from "../../lib/i18n";
 
 export function CollectionResultsPage({
   collectionId,
 }: {
   collectionId: string;
 }) {
+  const { dict } = useAppDict();
   const ratingMode = useRatingDisplayMode();
   const id = Number(collectionId);
   const { data, isLoading, error } = useQuery({
@@ -38,7 +40,7 @@ export function CollectionResultsPage({
       <div className="space-y-8">
         <div>
           <Link to="/collections" className="rx-back">
-            ← Collections
+            {dict?.collection.backToCollections}
           </Link>
           <div className="mt-3">
             <SkeletonBlock className="h-10 w-56 max-w-full rounded-xl" />
@@ -58,9 +60,11 @@ export function CollectionResultsPage({
     return (
       <div className="space-y-3">
         <Link to="/collections" className="rx-back">
-          ← Collections
+          {dict?.collection.backToCollections}
         </Link>
-        <p className="text-rose-300">{error?.message ?? "Not found"}</p>
+        <p className="text-rose-300">
+          {error?.message ?? dict?.collection.notFound}
+        </p>
       </div>
     );
   }
@@ -71,13 +75,15 @@ export function CollectionResultsPage({
     <div className="space-y-8">
       <div>
         <Link to="/collections" className="rx-back">
-          ← Collections
+          {dict?.collection.backToCollections}
         </Link>
         <PageTitle className="mt-3">{collection.name}</PageTitle>
         <p className="mt-2 font-mono text-sm text-muted">{collection.query}</p>
         <div className="mt-2 flex flex-wrap items-center gap-3">
           <p className="text-xs text-faint">
-            {total.toLocaleString()} matches
+            {t(dict?.collection.matchesCount, {
+              count: total.toLocaleString(),
+            })}
           </p>
           {total > 0 && (
             <a
@@ -85,14 +91,14 @@ export function CollectionResultsPage({
               className="rx-btn"
               download
             >
-              Export collection
+              {dict?.collection.exportCollection}
             </a>
           )}
         </div>
       </div>
 
       {items.length === 0 ? (
-        <p className="text-sm text-muted">No matches.</p>
+        <p className="text-sm text-muted">{dict?.collection.noMatches}</p>
       ) : (
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((item) => (
@@ -126,7 +132,7 @@ export function CollectionResultsPage({
                       {item.masteryLevel != null
                         ? item.masteryLevel.toFixed(0)
                         : "—"}{" "}
-                      mastery
+                      {dict?.collection.mastery}
                     </span>
                     <span>{formatAccuracy(item.bestAccuracy)}</span>
                     <span>{formatPp(item.bestPp)}</span>

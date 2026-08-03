@@ -5,6 +5,8 @@ import { BeatmapPreviewButton } from "../../components/BeatmapPreviewModal";
 import { ModBadges } from "../../components/ModBadges";
 import { fetchTosuLive, startTosu, type TosuLive } from "../../lib/api";
 import { formatAccuracy } from "../../lib/format";
+import { useAppDict, t } from "../../lib/i18n";
+import type { Dictionary } from "@roxysu/i18n";
 import {
   localBeatmapCoverUrl,
   osuBeatmapCoverUrl,
@@ -23,35 +25,38 @@ function loadVisible(): boolean {
   return true;
 }
 
-function statusLabel(data: TosuLive | undefined): {
+function statusLabel(
+  dict: Dictionary["app"] | undefined,
+  data: TosuLive | undefined,
+): {
   text: string;
   className: string;
 } {
   if (!data || !data.enabled) {
     return {
-      text: "Disabled",
+      text: dict?.session.tosu.disabled ?? "Disabled",
       className: "bg-white/5 text-faint",
     };
   }
   switch (data.status) {
     case "connected":
       return {
-        text: "Connected",
+        text: dict?.session.tosu.connected ?? "Connected",
         className: "bg-accent-glow text-accent",
       };
     case "connecting":
       return {
-        text: "Connecting…",
+        text: dict?.session.tosu.connecting ?? "Connecting…",
         className: "bg-amber-400/15 text-amber-200",
       };
     case "disconnected":
       return {
-        text: "Tosu down",
+        text: dict?.session.tosu.tosuDown ?? "Tosu down",
         className: "bg-rose-400/15 text-rose-300",
       };
     default:
       return {
-        text: "Disabled",
+        text: dict?.session.tosu.disabled ?? "Disabled",
         className: "bg-white/5 text-faint",
       };
   }
@@ -78,6 +83,7 @@ function liveBackgroundSources(data: TosuLive | undefined): string[] {
 }
 
 export function SessionTosuLivePanel() {
+  const { dict } = useAppDict();
   const queryClient = useQueryClient();
   const [visible, setVisible] = useState(() => loadVisible());
   const [failedBg, setFailedBg] = useState<string | null>(null);
@@ -107,7 +113,7 @@ export function SessionTosuLivePanel() {
     },
   });
 
-  const chip = statusLabel(data);
+  const chip = statusLabel(dict, data);
   const beatmap = data?.beatmap;
   const play = data?.play;
   const sunny = data?.analysis.sunny;
@@ -134,11 +140,13 @@ export function SessionTosuLivePanel() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
           <h2 className="font-display text-2xl font-bold tracking-tight text-ink">
-            Now selected
+            {dict?.session.tosu.nowSelected ?? "Now selected"}
           </h2>
           <span className={`rx-chip ${chip.className}`}>{chip.text}</span>
           {data?.analysis.analyzing ? (
-            <span className="text-xs text-muted">Analyzing…</span>
+            <span className="text-xs text-muted">
+              {dict?.session.tosu.analyzing ?? "Analyzing…"}
+            </span>
           ) : null}
         </div>
         <button
@@ -146,7 +154,9 @@ export function SessionTosuLivePanel() {
           className="rx-btn text-sm"
           onClick={() => setVisible((v) => !v)}
         >
-          {visible ? "Hide" : "Show"}
+          {visible
+            ? dict?.session.tosu.hide ?? "Hide"
+            : dict?.session.tosu.show ?? "Show"}
         </button>
       </div>
 
@@ -177,7 +187,9 @@ export function SessionTosuLivePanel() {
 
           <div className="relative z-10 space-y-4 p-5">
             {isLoading && !data ? (
-              <p className="text-sm text-muted">Connecting to tosu…</p>
+              <p className="text-sm text-muted">
+                {dict?.session.tosu.connectingTosu ?? "Connecting to tosu…"}
+              </p>
             ) : null}
 
             {error ? (
@@ -186,11 +198,24 @@ export function SessionTosuLivePanel() {
 
             {data && !data.enabled ? (
               <p className="text-sm text-muted">
-                Tosu live adapter is off. Enable it in{" "}
-                <Link to="/settings" className="text-accent hover:underline">
-                  Settings
-                </Link>
-                .
+                {(() => {
+                  const parts = (
+                    dict?.session.tosu.adapterOff ??
+                    "Tosu live adapter is off. Enable it in ⟦SETTINGS⟧."
+                  ).split("⟦SETTINGS⟧");
+                  return (
+                    <>
+                      {parts[0]}
+                      <Link
+                        to="/settings"
+                        className="text-accent hover:underline"
+                      >
+                        Settings
+                      </Link>
+                      {parts[1]}
+                    </>
+                  );
+                })()}
               </p>
             ) : null}
 
@@ -212,7 +237,9 @@ export function SessionTosuLivePanel() {
                 disabled={startMut.isPending}
                 onClick={() => startMut.mutate()}
               >
-                {startMut.isPending ? "Starting…" : "Start tosu"}
+                {startMut.isPending
+                  ? dict?.session.tosu.starting ?? "Starting…"
+                  : dict?.session.tosu.startTosu ?? "Start tosu"}
               </button>
             ) : null}
 
@@ -221,7 +248,7 @@ export function SessionTosuLivePanel() {
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="truncate text-lg font-semibold text-ink drop-shadow-sm">
-                      {beatmap?.title ?? "Untitled"}
+                      {beatmap?.title ?? dict?.session.untitled}
                     </span>
                     {beatmap?.keys != null ? (
                       <span className="rx-chip bg-black/35 text-ink">
@@ -233,9 +260,15 @@ export function SessionTosuLivePanel() {
                     ) : null}
                   </div>
                   <p className="mt-0.5 truncate text-sm text-muted">
-                    {beatmap?.artist ?? "Unknown"}
+                    {beatmap?.artist ?? dict?.session.unknownArtist}
                     {beatmap?.version ? ` · ${beatmap.version}` : ""}
-                    {beatmap?.mapper ? ` · mapped by ${beatmap.mapper}` : ""}
+                    {beatmap?.mapper
+                      ? ` · ${
+                          t(dict?.session.tosu.mappedBy, {
+                            mapper: beatmap.mapper,
+                          }) || `mapped by ${beatmap.mapper}`
+                        }`
+                      : ""}
                   </p>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <ModBadges mods={beatmap?.mods} />
@@ -250,7 +283,7 @@ export function SessionTosuLivePanel() {
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
                     <div className="text-xs font-semibold uppercase tracking-wide text-faint">
-                      Sunny
+                      {dict?.session.tosu.sunny ?? "Sunny"}
                       {beatmap?.rate != null &&
                       Math.abs(beatmap.rate - 1) > 0.001
                         ? ` · ×${beatmap.rate.toFixed(2).replace(/\.?0+$/, "")}`
@@ -270,7 +303,7 @@ export function SessionTosuLivePanel() {
                   </div>
                   <div>
                     <div className="text-xs font-semibold uppercase tracking-wide text-faint">
-                      Patterns
+                      {dict?.session.tosu.patterns ?? "Patterns"}
                     </div>
                     <p className="mt-1 text-sm text-ink">
                       {formatPattern(pattern?.dominantPattern) ?? "—"}
@@ -291,19 +324,27 @@ export function SessionTosuLivePanel() {
 
                 {play?.active ? (
                   <p className="text-sm text-muted">
-                    Live · combo {play.combo ?? 0}
+                    {t(dict?.session.tosu.liveCombo, {
+                      combo: play.combo ?? 0,
+                    }) || `Live · combo ${play.combo ?? 0}`}
                     {play.maxCombo != null ? ` / ${play.maxCombo}` : ""}
                     {" · "}
                     {play.accuracy != null
                       ? formatAccuracy(play.accuracy)
                       : "—"}
                     {" · "}
-                    {play.misses ?? 0} miss
+                    {t(dict?.session.tosu.misses, {
+                      count: play.misses ?? 0,
+                    }) || `${play.misses ?? 0} miss`}
                     {play.pp != null ? ` · ${Math.round(play.pp)}pp` : ""}
                   </p>
                 ) : (
                   <p className="text-sm text-faint">
-                    {beatmap?.state ? `State: ${beatmap.state}` : "Song select"}
+                    {beatmap?.state
+                      ? t(dict?.session.tosu.state, {
+                          state: beatmap.state,
+                        }) || `State: ${beatmap.state}`
+                      : dict?.session.tosu.songSelect ?? "Song select"}
                   </p>
                 )}
 
@@ -315,18 +356,20 @@ export function SessionTosuLivePanel() {
                       params={{ beatmapId: data.matchedBeatmapId }}
                       className="rx-btn text-sm"
                     >
-                      Practice profile
+                      {dict?.session.tosu.practiceProfile ?? "Practice profile"}
                     </Link>
                   </div>
                 ) : (
                   <p className="text-xs text-faint">
-                    Map not in Roxysu library yet — showing ephemeral analysis.
+                    {dict?.session.tosu.notInLibrary ??
+                      "Map not in Roxysu library yet — showing ephemeral analysis."}
                   </p>
                 )}
               </div>
             ) : data?.enabled && data.status === "connected" ? (
               <p className="text-sm text-muted">
-                Waiting for a selected map from osu!…
+                {dict?.session.tosu.waitingForMap ??
+                  "Waiting for a selected map from osu!…"}
               </p>
             ) : null}
           </div>

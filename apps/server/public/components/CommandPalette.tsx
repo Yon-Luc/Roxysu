@@ -17,9 +17,73 @@ import {
 } from "../lib/api";
 import { isDesktopShell } from "../lib/desktop";
 import { formatRelativeTime, formatStars } from "../lib/format";
-import { searchablePageSections } from "../lib/pageSections";
+import {
+  searchablePageSections,
+  type PageSectionDef,
+} from "../lib/pageSections";
+import { useAppDict, t } from "../lib/i18n";
+import type { Dictionary } from "@roxysu/i18n";
 
 const PRACTICE_SEARCH_KEY = "roxysu:practice-search";
+
+const PAGE_LABEL_KEYS: Record<string, keyof Dictionary["app"]["nav"]> = {
+  "/": "home",
+  "/stats": "stats",
+  "/practice": "practice",
+  "/sessions": "sessions",
+  "/collections": "collections",
+  "/download-maps": "download",
+  "/rating-lab": "ratingLab",
+  "/skin": "skin",
+  "/settings": "settings",
+};
+
+const SETTINGS_SECTION_KEYS: Record<string, keyof Dictionary["app"]["settings"]> =
+  {
+    "osu-lazer-data-folder": "lazerDataFolder",
+    "tosu-live-map": "tosuLiveMap",
+    "mastery-formula": "masteryFormula",
+    "score-username": "scoreUsername",
+    gamemode: "gamemode",
+    "live-sync": "liveSync",
+    appearance: "appearance",
+    "difficulty-display": "difficultyDisplay",
+    "preview-skin": "previewSkin",
+    keybinds: "keybinds",
+    "mania-rating-lab": "maniaRatingLab",
+    "sunny-dan-calculation": "sunnyDan",
+    "pattern-analysis": "patternAnalysis",
+  };
+
+const SKIN_SECTION_KEYS: Record<string, keyof Dictionary["app"]["skin"]> = {
+  "note-shape": "noteShape",
+  "long-notes": "longNotes",
+  playfield: "playfield",
+  columns: "columns",
+  "live-preview": "livePreview",
+};
+
+function sectionLabels(
+  dict: Dictionary["app"] | undefined,
+  section: PageSectionDef,
+): { label: string; pageLabel: string } {
+  const settingsKey = SETTINGS_SECTION_KEYS[section.id];
+  const skinKey = SKIN_SECTION_KEYS[section.id];
+  if (settingsKey) {
+    return {
+      label: (dict?.settings[settingsKey] as string | undefined) ??
+        section.label,
+      pageLabel: dict?.nav.settings ?? section.pageLabel,
+    };
+  }
+  if (skinKey) {
+    return {
+      label: (dict?.skin[skinKey] as string | undefined) ?? section.label,
+      pageLabel: dict?.nav.skin ?? section.pageLabel,
+    };
+  }
+  return { label: section.label, pageLabel: section.pageLabel };
+}
 
 type CommandGroup =
   | "Pages"
@@ -121,6 +185,7 @@ export function CommandPalette({
   const titleId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const { dict } = useAppDict();
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -200,8 +265,8 @@ export function CommandPalette({
       result.push({
         id: `page:${page.to}`,
         group: "Pages",
-        label: page.label,
-        subtitle: "Go to page",
+        label: dict?.nav[PAGE_LABEL_KEYS[page.to]] ?? page.label,
+        subtitle: dict?.command.goToPage,
         onSelect: () =>
           go(
             page.to,
@@ -213,25 +278,36 @@ export function CommandPalette({
     if (trimmed) {
       for (const section of searchablePageSections()) {
         if (!itemMatches(section, trimmed)) continue;
+        const { label, pageLabel } = sectionLabels(dict, section);
         result.push({
           id: `section:${section.to}:${section.id}`,
           group: "Sections",
-          label: section.label,
-          subtitle: section.pageLabel,
+          label,
+          subtitle: pageLabel,
           onSelect: () =>
             go(section.to, { search: { section: section.id } }),
         });
       }
     }
 
-    if (!trimmed || matchesQuery("current session", trimmed) || matchesQuery("live session", trimmed)) {
+    const sessionKeywords = [
+      dict?.command.currentSession,
+      "current session",
+      "live session",
+    ].filter((k): k is string => Boolean(k));
+    if (
+      !trimmed ||
+      sessionKeywords.some((keyword) => matchesQuery(keyword, trimmed))
+    ) {
       result.push({
         id: "action:current-session",
         group: "Actions",
-        label: "Current session",
+        label: dict?.command.currentSession ?? "Current session",
         subtitle: sessionsData?.current
-          ? `${sessionsData.current.scoreCount} plays · ${formatRelativeTime(sessionsData.current.startedAt)}`
-          : "Open live session view",
+          ? `${t(dict?.command.playsCount, {
+              count: sessionsData.current.scoreCount,
+            })} · ${formatRelativeTime(sessionsData.current.startedAt)}`
+          : dict?.command.openLiveSession,
         onSelect: () =>
           go("/sessions/$sessionId", { params: { sessionId: "current" } }),
       });
@@ -241,8 +317,8 @@ export function CommandPalette({
       result.push({
         id: "action:practice-search",
         group: "Actions",
-        label: `Search practice library for “${trimmed}”`,
-        subtitle: "Open Practice with this query",
+        label: t(dict?.command.searchPractice, { query: trimmed }),
+        subtitle: dict?.command.searchPracticeSubtitle,
         onSelect: () => {
           setPracticeSearchQuery(trimmed);
           go("/practice");
@@ -252,7 +328,10 @@ export function CommandPalette({
 
     if (trimmed && sessionsData) {
       for (const session of sessionsData.items) {
-        const label = session.endedAt == null ? "Current session" : `Session #${session.id}`;
+        const label =
+          session.endedAt == null
+            ? dict?.command.currentSession ?? "Current session"
+            : t(dict?.command.sessionLabel, { id: session.id });
         const haystack = [
           label,
           session.rulesetShortName ?? "",
@@ -263,8 +342,10 @@ export function CommandPalette({
           id: `session:${session.id}`,
           group: "Sessions",
           label,
-          subtitle: `${session.scoreCount} plays · ${formatRelativeTime(session.startedAt)}`,
-          hint: session.endedAt == null ? "live" : undefined,
+          subtitle: `${t(dict?.command.playsCount, {
+            count: session.scoreCount,
+          })} · ${formatRelativeTime(session.startedAt)}`,
+          hint: session.endedAt == null ? dict?.command.live : undefined,
           onSelect: () =>
             go("/sessions/$sessionId", {
               params: {
@@ -298,8 +379,8 @@ export function CommandPalette({
         result.push({
           id: `map:${map.id}`,
           group: "Maps",
-          label: map.title ?? "Unknown map",
-          subtitle: `${map.artist ?? "Unknown artist"} · ${map.difficultyName ?? "Unknown"} · ${formatStars(map.starRating)}`,
+          label: map.title ?? dict?.command.unknownMap ?? "Unknown map",
+          subtitle: `${map.artist ?? dict?.command.unknownArtist ?? "Unknown artist"} · ${map.difficultyName ?? dict?.command.unknownDifficulty ?? "Unknown"} · ${formatStars(map.starRating)}`,
           icon: (
             <MapResultIcon
               backgroundFileHash={map.backgroundFileHash}
@@ -320,6 +401,7 @@ export function CommandPalette({
     sessionsData,
     collectionsData,
     go,
+    dict,
   ]);
 
   useEffect(() => {
@@ -389,7 +471,7 @@ export function CommandPalette({
       >
         <div className="border-b border-line px-4 py-3">
           <label htmlFor={titleId} className="sr-only">
-            Quick search
+            {dict?.common.quickSearch}
           </label>
           <div className="flex items-center gap-3">
             <SearchIcon className="size-5 shrink-0 text-faint" />
@@ -399,7 +481,7 @@ export function CommandPalette({
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search pages, sections, maps…"
+              placeholder={dict?.command.placeholder}
               className="min-w-0 flex-1 bg-transparent text-base text-ink outline-none placeholder:text-faint"
               autoComplete="off"
               spellCheck={false}
@@ -413,13 +495,13 @@ export function CommandPalette({
         <div ref={listRef} className="max-h-[min(60vh,24rem)] overflow-y-auto p-2">
           {grouped.length === 0 ? (
             <p className="px-3 py-8 text-center text-sm text-muted">
-              {mapsLoading ? "Searching maps…" : "No results"}
+              {mapsLoading ? dict?.command.searching : dict?.command.noResults}
             </p>
           ) : (
             grouped.map((section) => (
               <div key={section.group} className="mb-2 last:mb-0">
                 <div className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-widest text-faint">
-                  {section.group}
+                  {dict?.command.groups[section.group] ?? section.group}
                 </div>
                 <ul>
                   {section.items.map((item) => {
@@ -475,15 +557,15 @@ export function CommandPalette({
             ))
           )}
           {mapsLoading && debouncedQuery && grouped.every((s) => s.group !== "Maps") ? (
-            <p className="px-3 py-2 text-center text-xs text-faint">Searching maps…</p>
+            <p className="px-3 py-2 text-center text-xs text-faint">{dict?.command.searching}</p>
           ) : null}
         </div>
 
         <div className="flex items-center justify-between gap-3 border-t border-line px-4 py-2 text-[11px] text-faint">
-          <span>Type to filter · query language supported for maps</span>
+          <span>{dict?.command.footerHint}</span>
           <span className="hidden sm:inline">
-            <kbd className="rounded border border-border bg-surface px-1.5 py-0.5">↑↓</kbd> navigate{" "}
-            <kbd className="rounded border border-border bg-surface px-1.5 py-0.5">↵</kbd> open
+            <kbd className="rounded border border-border bg-surface px-1.5 py-0.5">↑↓</kbd> {dict?.command.navigate}{" "}
+            <kbd className="rounded border border-border bg-surface px-1.5 py-0.5">↵</kbd> {dict?.command.open}
           </span>
         </div>
       </div>

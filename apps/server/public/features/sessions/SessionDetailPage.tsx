@@ -24,9 +24,11 @@ import {
 } from "../../lib/ratingDisplay";
 import { SessionSuggest } from "./SessionSuggest";
 import { SessionTosuLivePanel } from "./SessionTosuLivePanel";
+import { useAppDict, t } from "../../lib/i18n";
 
 export function SessionDetailPage({ sessionId }: { sessionId: string }) {
   const ratingMode = useRatingDisplayMode();
+  const { dict } = useAppDict();
   const isCurrentHub = sessionId === "current";
 
   const { data, isLoading, error, isFetching } = useQuery({
@@ -73,7 +75,7 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
       <div className="space-y-8">
         <div>
           <Link to="/sessions" className="rx-back">
-            ← Sessions
+            {dict?.session.backToSessions}
           </Link>
           <div className="mt-3">
             <PageHeaderSkeleton
@@ -96,10 +98,10 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
     return (
       <div className="space-y-3">
         <Link to="/sessions" className="rx-back">
-          ← Sessions
+          {dict?.session.backToSessions}
         </Link>
         <p className="text-rose-300">
-          {error?.message ?? "Session not found"}
+          {error?.message ?? dict?.session.notFound}
         </p>
       </div>
     );
@@ -109,7 +111,7 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
     return (
       <div className="space-y-3">
         <Link to="/sessions" className="rx-back">
-          ← Sessions
+          {dict?.session.backToSessions}
         </Link>
         <p className="text-rose-300">{data.error}</p>
       </div>
@@ -126,15 +128,12 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
       <div className="space-y-8">
         <div>
           <Link to="/sessions" className="rx-back">
-            ← Sessions
+            {dict?.session.backToSessions}
           </Link>
           <div className="mt-3 flex flex-wrap items-center gap-3">
-            <PageTitle>Start a session</PageTitle>
+            <PageTitle>{dict?.session.startASession}</PageTitle>
           </div>
-          <p className="rx-subtitle">
-            No live session yet. Pick a map below — the next sync after you play
-            opens a current session.
-          </p>
+          <p className="rx-subtitle">{dict?.session.startSessionSubtitle}</p>
         </div>
 
         <SessionTosuLivePanel />
@@ -151,9 +150,9 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
     return (
       <div className="space-y-3">
         <Link to="/sessions" className="rx-back">
-          ← Sessions
+          {dict?.session.backToSessions}
         </Link>
-        <p className="text-rose-300">Session not found</p>
+        <p className="text-rose-300">{dict?.session.notFound}</p>
       </div>
     );
   }
@@ -170,11 +169,13 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
     <div className="space-y-8">
       <div>
         <Link to="/sessions" className="rx-back">
-          ← Sessions
+          {dict?.session.backToSessions}
         </Link>
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <PageTitle>
-            {isLive ? "Current session" : `Session #${session.id}`}
+            {isLive
+              ? dict?.session.currentSession
+              : t(dict?.session.sessionLabel, { id: session.id })}
           </PageTitle>
           {isLive ? (
             <span className="rx-chip bg-accent-glow text-accent">
@@ -182,27 +183,39 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60" />
                 <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent" />
               </span>
-              Live
+              {dict?.session.liveChip}
               {isFetching ? (
-                <span className="text-accent/70">· updating</span>
+                <span className="text-accent/70">
+                  {dict?.session.updating}
+                </span>
               ) : null}
             </span>
           ) : null}
         </div>
         <p className="rx-subtitle">
-          Started {formatRelativeTime(session.startedAt)}
+          {t(dict?.session.started, {
+            time: formatRelativeTime(session.startedAt),
+          })}
           {session.endedAt
-            ? ` · ended ${formatRelativeTime(session.endedAt)}`
+            ? t(dict?.session.ended, {
+                time: formatRelativeTime(session.endedAt),
+              })
             : ""}
           {session.rulesetShortName ? ` · ${session.rulesetShortName}` : ""}
         </p>
       </div>
 
       <section className="grid gap-3 sm:grid-cols-3">
-        <MiniStat label="Plays" value={String(session.scoreCount)} />
-        <MiniStat label="PBs" value={String(data.pbCount ?? 0)} />
         <MiniStat
-          label="Duration"
+          label={dict?.session.statPlays ?? "Plays"}
+          value={String(session.scoreCount)}
+        />
+        <MiniStat
+          label={dict?.session.statPbs ?? "PBs"}
+          value={String(data.pbCount ?? 0)}
+        />
+        <MiniStat
+          label={dict?.session.statDuration ?? "Duration"}
           value={formatSessionDuration(session.startedAt, session.endedAt)}
         />
       </section>
@@ -218,13 +231,13 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
 
       <section>
         <h2 className="mb-3 font-display text-2xl font-bold tracking-tight text-ink">
-          Plays
+          {dict?.session.playsHeading}
         </h2>
         {scores.length === 0 ? (
           <p className="text-sm text-muted">
             {isLive
-              ? "No plays yet — new scores will show up here after sync."
-              : "No plays in this session."}
+              ? dict?.session.noPlaysLive
+              : dict?.session.noPlaysDone}
           </p>
         ) : (
           <ul className="space-y-0.5">
@@ -246,22 +259,22 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="truncate font-semibold text-ink">
-                        {score.title ?? "Untitled"}
+                        {score.title ?? dict?.session.untitled}
                       </span>
                       {score.isPb ? (
                         <span className="shrink-0 rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-300">
-                          PB
+                          {dict?.session.pb}
                         </span>
                       ) : null}
                       {isFresh ? (
                         <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-accent">
-                          New
+                          {dict?.session.new}
                         </span>
                       ) : null}
                     </div>
                     <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5 text-sm text-muted">
                       <span className="truncate">
-                        {score.artist ?? "Unknown"}
+                        {score.artist ?? dict?.session.unknownArtist}
                         {score.difficultyName ? ` · ${score.difficultyName}` : ""}
                         {" · "}
                         {formatPrimaryRating({
@@ -271,7 +284,7 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
                           sunnyStar: score.sunnyStar,
                         })}
                         {score.retryIndex != null && score.retryIndex > 0
-                          ? ` · retry #${score.retryIndex}`
+                          ? t(dict?.session.retry, { n: score.retryIndex })
                           : ""}
                       </span>
                       <ModBadges mods={score.mods} />

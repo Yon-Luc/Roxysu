@@ -1,33 +1,41 @@
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import type { Dictionary } from "@roxysu/i18n";
 import { fetchSystemStatus } from "../lib/api";
 import { isDesktopShell } from "../lib/desktop";
+import { useAppDict } from "../lib/i18n";
 import { CommandPalette, useCommandPaletteShortcut } from "./CommandPalette";
+import { LanguageSwitcher } from "./LanguageSwitcher";
 import { toggleTheme, useResolvedTheme } from "../lib/theme";
 import roxyIcon from "../roxy.png";
 
 const SIDEBAR_OPEN_KEY = "roxysu.sidebarOpen";
 
 const ALL_NAV = [
-  { to: "/", label: "Home", exact: true, icon: HomeIcon },
-  { to: "/stats", label: "Stats", icon: StatsIcon },
-  { to: "/practice", label: "Practice", icon: PracticeIcon },
-  { to: "/sessions", label: "Sessions", icon: SessionsIcon },
-  { to: "/collections", label: "Collections", icon: CollectionsIcon },
-  { to: "/download-maps", label: "Download", icon: DownloadMapsIcon },
-  { to: "/rating-lab", label: "Rating Lab", icon: RatingLabIcon },
-  { to: "/skin", label: "Skin", icon: SkinIcon },
-  { to: "/settings", label: "Settings", icon: SettingsIcon },
+  { to: "/", label: "Home", labelKey: "home", exact: true, icon: HomeIcon },
+  { to: "/stats", label: "Stats", labelKey: "stats", icon: StatsIcon },
+  { to: "/practice", label: "Practice", labelKey: "practice", icon: PracticeIcon },
+  { to: "/sessions", label: "Sessions", labelKey: "sessions", icon: SessionsIcon },
+  { to: "/collections", label: "Collections", labelKey: "collections", icon: CollectionsIcon },
+  { to: "/download-maps", label: "Download", labelKey: "download", icon: DownloadMapsIcon },
+  { to: "/rating-lab", label: "Rating Lab", labelKey: "ratingLab", icon: RatingLabIcon },
+  { to: "/skin", label: "Skin", labelKey: "skin", icon: SkinIcon },
+  { to: "/settings", label: "Settings", labelKey: "settings", icon: SettingsIcon },
 ] as const;
 
 const DESKTOP_HIDDEN_NAV = new Set(["/download-maps", "/rating-lab"]);
 
-function useNavItems() {
+function useNavItems(dict: Dictionary["app"] | undefined) {
   return useMemo(() => {
-    if (!isDesktopShell()) return [...ALL_NAV];
-    return ALL_NAV.filter((item) => !DESKTOP_HIDDEN_NAV.has(item.to));
-  }, []);
+    const items = isDesktopShell()
+      ? ALL_NAV.filter((item) => !DESKTOP_HIDDEN_NAV.has(item.to))
+      : [...ALL_NAV];
+    return items.map((item) => ({
+      ...item,
+      label: dict?.nav[item.labelKey] ?? item.label,
+    }));
+  }, [dict]);
 }
 
 function readSidebarOpen(): boolean {
@@ -41,7 +49,8 @@ function readSidebarOpen(): boolean {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const nav = useNavItems();
+  const { dict } = useAppDict();
+  const nav = useNavItems(dict);
   const [sidebarOpen, setSidebarOpen] = useState(readSidebarOpen);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const toggleCommandPalette = useCallback(
@@ -82,16 +91,16 @@ export function AppShell({ children }: { children: ReactNode }) {
           : "accent";
   const syncLabel =
     status?.syncPaused
-      ? "Paused"
+      ? dict?.sync.paused ?? "Paused"
       : importStatus === "running"
-        ? "Syncing…"
+        ? dict?.sync.syncing ?? "Syncing…"
         : importStatus === "success"
-          ? "Synced"
+          ? dict?.sync.synced ?? "Synced"
           : importStatus === "failed"
-            ? "Sync failed"
+            ? dict?.sync.syncFailed ?? "Sync failed"
             : importStatus === "locked"
-              ? "Locked"
-              : "No sync yet";
+              ? dict?.sync.locked ?? "Locked"
+              : dict?.sync.noSyncYet ?? "No sync yet";
 
   return (
     <div className="min-h-screen bg-canvas text-ink">
@@ -124,8 +133,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             type="button"
             onClick={toggleSidebar}
             className="flex size-8 shrink-0 items-center justify-center rounded-md text-faint transition hover:bg-highlight hover:text-ink"
-            aria-label="Hide menu"
-            title="Hide menu"
+            aria-label={dict?.common.hideMenu ?? "Hide menu"}
+            title={dict?.common.hideMenu ?? "Hide menu"}
           >
             <PanelLeftCloseIcon className="size-4" />
           </button>
@@ -138,7 +147,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             className="group mb-2 flex items-center gap-3 rounded-md border border-line bg-surface/50 px-3 py-2 text-sm text-muted transition hover:border-border hover:text-ink"
           >
             <SearchIcon className="size-4 shrink-0 opacity-70" />
-            <span className="flex-1 text-left">Quick search</span>
+            <span className="flex-1 text-left">
+              {dict?.common.quickSearch ?? "Quick search"}
+            </span>
             <kbd className="hidden rounded border border-border bg-canvas px-1.5 py-0.5 text-[10px] font-medium text-faint lg:inline">
               ⌃K
             </kbd>
@@ -163,14 +174,15 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="mt-auto space-y-2 border-t border-line px-2 pt-3">
+          <LanguageSwitcher />
           <button
             type="button"
             onClick={() => toggleTheme()}
             className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm font-medium text-muted transition hover:bg-highlight hover:text-ink"
             title={
               resolvedTheme === "light"
-                ? "Switch to dark theme"
-                : "Switch to light theme"
+                ? dict?.common.darkMode ?? "Switch to dark theme"
+                : dict?.common.lightMode ?? "Switch to light theme"
             }
           >
             {resolvedTheme === "light" ? (
@@ -178,7 +190,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             ) : (
               <SunIcon className="size-4 shrink-0" />
             )}
-            {resolvedTheme === "light" ? "Dark mode" : "Light mode"}
+            {resolvedTheme === "light"
+              ? dict?.common.darkMode ?? "Dark mode"
+              : dict?.common.lightMode ?? "Light mode"}
           </button>
           <div
             className={`rx-chip ${
@@ -206,9 +220,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
           {status ? (
             <p className="px-1 text-[11px] leading-relaxed text-faint">
-              {status.scoreCount.toLocaleString()} scores
+              {status.scoreCount.toLocaleString()}{" "}
+              {dict?.sync.scores ?? "scores"}
               <br />
-              {status.beatmapCount.toLocaleString()} maps
+              {status.beatmapCount.toLocaleString()} {dict?.sync.maps ?? "maps"}
             </p>
           ) : null}
         </div>
@@ -223,8 +238,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             ? "pointer-events-none -translate-x-2 opacity-0"
             : "translate-x-0 opacity-100"
         }`}
-        aria-label="Show menu"
-        title="Show menu"
+        aria-label={dict?.common.showMenu ?? "Show menu"}
+        title={dict?.common.showMenu ?? "Show menu"}
         tabIndex={sidebarOpen ? -1 : undefined}
       >
         <PanelLeftOpenIcon className="size-4" />

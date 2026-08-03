@@ -15,8 +15,8 @@
     "build:launcher": "node ./scripts/build-win-launcher.mjs",
     "pack": "bun run build:stage && bun run rebuild:native && bun run archive:realm",
     "assert:packaged": "node ./scripts/assert-packaged.mjs",
-    "dist:win": "bun run build:launcher && bun run pack && electron-builder --win && bun run assert:packaged",
-    "dist:dir": "bun run pack && electron-builder --dir && bun run assert:packaged"
+    "dist:win": "bun run build:launcher && bun run pack && electron-builder --win --publish never && bun run assert:packaged",
+    "dist:dir": "bun run pack && electron-builder --dir --publish never && bun run assert:packaged"
   },
   "build": {
     "appId": "dev.roxysu.desktop",
@@ -26,8 +26,16 @@
     },
     "afterPack": "./scripts/after-pack.mjs",
     "icon": "../server/public/icons/icon-512.png",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Yon-Luc",
+        "repo": "Roxysu"
+      }
+    ],
     "files": [
       "main.js",
+      "auto-update.js",
       "preload.js",
       "paths.js",
       "splash.html"
@@ -65,6 +73,9 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
     }
+  },
+  "dependencies": {
+    "electron-updater": "^6.6.2"
   },
   "devDependencies": {
     "@electron/rebuild": "^3.7.2",

@@ -4,6 +4,7 @@ const path = require("node:path");
 const http = require("node:http");
 const fs = require("node:fs");
 const { resolveDesktopPaths, ensureParentDir, ensureRealmExtracted } = require("./paths");
+const { startAutoUpdate } = require("./auto-update");
 
 // Stable userData folder: %APPDATA%\Roxysu (Windows) / XDG or Application Support.
 app.setName("Roxysu");
@@ -495,6 +496,9 @@ if (!gotLock) {
 
     // Defer Realm until the UI is up; extract archive lazily (shrink AV scan at install).
     spawnRealmReader(paths, sharedEnv);
+
+    // NSIS installs only — check after UI is up so startup is not blocked.
+    startAutoUpdate({ log: desktopLog });
 
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) {

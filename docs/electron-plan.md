@@ -241,7 +241,7 @@ Optional polish (after MVP): tray icon, “Open data folder”, crash dialog, au
 - Hide Lab / Download in desktop UI (nav, command palette, routes, settings).
 - External links → OS browser.
 - Tray / quit behavior / basic error surfacing.
-- (Later) auto-update.
+- **Auto-update (NSIS / Windows):** `electron-updater` checks GitHub Releases (`Yon-Luc/Roxysu`) after the UI is ready, downloads in the background, then prompts “Restart to update”. Portable builds and unpackaged/dev runs skip the check. CI uploads `latest.yml` alongside the installer and syncs `apps/desktop` version from the release tag. Builds remain unsigned (SmartScreen may warn).
 
 ## Effort sketch
 
@@ -249,7 +249,7 @@ Optional polish (after MVP): tray icon, “Open data folder”, crash dialog, au
 | --- | --- |
 | Spike + adapters + desktop shell (dev) | several days |
 | Packaging-aware sync + Windows dist | ~1–2 weeks total to a usable ship |
-| Polish / auto-update | after first install works |
+| Polish / auto-update | NSIS auto-update via GitHub Releases (portable excluded) |
 
 Not a rewrite: React, realm-reader, and most APIs stay. Cost is adapters + Electron ABI packaging + process glue.
 

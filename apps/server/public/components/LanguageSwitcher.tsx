@@ -5,6 +5,7 @@ import { useLanguage, setLanguage } from "../lib/language";
 const LANGUAGE_LABELS: Record<Locale, string> = {
   en: "English",
   fr: "Français",
+  es: "Español",
 };
 
 export function LanguageSwitcher() {

@@ -14,6 +14,7 @@ describe('checkLanguage', () => {
 	test('returns supported locales', () => {
 		expect(checkLanguage('en')).toBe('en')
 		expect(checkLanguage('fr')).toBe('fr')
+		expect(checkLanguage('es')).toBe('es')
 	})
 })
 
@@ -32,6 +33,10 @@ describe('getDictionary', () => {
 	test('resolves a page for a supported locale', async () => {
 		const dict = await getDictionary('en', 'auth')
 		expect(dict.login.title).toBe('Sign in')
+		const esDict = await getDictionary('es', 'auth')
+		expect(esDict.login.title).toBe('Iniciar sesión')
+		const esApp = await getDictionary('es', 'app')
+		expect(esApp.nav.settings).toBe('Ajustes')
 	})
 
 	test('falls back to the default locale', async () => {
@@ -42,7 +47,8 @@ describe('getDictionary', () => {
 	test('static paths cover every locale', () => {
 		expect(getStaticPathsI18n()).toEqual([
 			{ params: { lang: 'en' } },
-			{ params: { lang: 'fr' } }
+			{ params: { lang: 'fr' } },
+			{ params: { lang: 'es' } }
 		])
 	})
 })

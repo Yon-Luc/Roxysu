@@ -1,0 +1,15 @@
+{
+	"login": {
+		"title": "Iniciar sesión",
+		"description": "Introduce tu correo electrónico a continuación para acceder a tu cuenta",
+		"forgotPassword": "¿Olvidaste tu contraseña?",
+		"loginWithGitHub": "Iniciar sesión con GitHub",
+		"signUp": "Crear una cuenta",
+		"loggingIn": "Iniciando sesión...",
+		"dontHaveAccount": "¿No tienes una cuenta?",
+		"signUpWithGitHub": "Crear una cuenta con GitHub",
+		"orContinueWith": "O continúa con",
+		"alreadyHaveAccount": "¿Ya tienes una cuenta?",
+		"signIn": "Iniciar sesión"
+	}
+}

@@ -67,11 +67,13 @@
         "nsis",
         "portable"
       ],
-      "icon": "../server/public/icons/icon-512.png"
+      "icon": "../server/public/icons/icon-512.png",
+      "artifactName": "${productName}-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "${productName}-Setup-${version}.${ext}"
     }
   },
   "dependencies": {

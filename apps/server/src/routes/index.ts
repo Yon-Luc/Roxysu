@@ -1,4 +1,5 @@
 import { Elysia } from "elysia";
+import { i18nRoutes } from "@roxysu/i18n/server";
 import { audioRoutes } from "./audio";
 import { beatmapRoutes } from "./beatmaps";
 import { collectionRoutes } from "./collections";
@@ -17,6 +18,7 @@ import { mirrorRoutes } from "./mirrors";
 
 const productApi = () =>
   new Elysia({ prefix: "/api" })
+    .use(i18nRoutes)
     .use(systemRoutes)
     .use(dashboardRoutes)
     .use(statsRoutes)

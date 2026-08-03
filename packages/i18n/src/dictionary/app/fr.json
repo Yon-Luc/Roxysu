@@ -1,0 +1,14 @@
+{
+	"media": {
+		"add_image": "ajouter une image",
+		"add_video": "ajouter une vidéo",
+		"errors": {
+			"unsupported_type": "Type de fichier non pris en charge. Veuillez sélectionner une image ou une vidéo.",
+			"unsupported_format": "Les fichiers SVG, GIF et XML ne sont pas pris en charge.",
+			"mixed_media": "Vous ne pouvez pas mélanger des photos et des vidéos dans la même publication.",
+			"image_too_large": "L’image est trop volumineuse. La taille maximale est de 20 Mo.",
+			"video_too_large": "La vidéo est trop volumineuse. La taille maximale est de 100 Mo.",
+			"max_files": "Vous pouvez joindre jusqu’à {{count}} fichiers maximum."
+		}
+	}
+}

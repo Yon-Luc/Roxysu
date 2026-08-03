@@ -18,6 +18,7 @@
     "@napi-rs/lzma": "^1.5.1",
     "@roxysu/collection-sync": "workspace:*",
     "@roxysu/db": "workspace:*",
+    "@roxysu/i18n": "workspace:*",
     "@roxysu/mania-judge": "workspace:*",
     "@roxysu/osu-chart": "workspace:*",
     "@roxysu/osu-paths": "workspace:*",

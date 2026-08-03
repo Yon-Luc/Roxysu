@@ -1,0 +1,14 @@
+{
+	"media": {
+		"add_image": "add image",
+		"add_video": "add video",
+		"errors": {
+			"unsupported_type": "Unsupported file type. Please select an image or video.",
+			"unsupported_format": "SVG, GIF, and XML files are not supported.",
+			"mixed_media": "You cannot mix photos and videos in the same post.",
+			"image_too_large": "Image is too large. Maximum size is 20 MB.",
+			"video_too_large": "Video is too large. Maximum size is 100 MB.",
+			"max_files": "You can only attach up to {{count}} files."
+		}
+	}
+}

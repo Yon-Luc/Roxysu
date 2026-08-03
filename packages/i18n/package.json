@@ -1,0 +1,25 @@
+{
+  "name": "@roxysu/i18n",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/server.ts",
+    "./react": "./src/react.ts"
+  },
+  "peerDependencies": {
+    "elysia": "^1.4.29",
+    "react": "^19"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "bun-types": "^1.3.14",
+    "elysia": "^1.4.29",
+    "react": "^19",
+    "typescript": "^5.6.0"
+  },
+  "scripts": {
+    "test": "bun test"
+  }
+}

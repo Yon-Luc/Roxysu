@@ -1,0 +1,15 @@
+{
+	"login": {
+		"title": "Sign in",
+		"description": "Enter your email below to sign in to your account",
+		"forgotPassword": "Forgot your password?",
+		"loginWithGitHub": "Sign in with GitHub",
+		"signUp": "Create an account",
+		"loggingIn": "Signing in...",
+		"dontHaveAccount": "Don't have an account?",
+		"signUpWithGitHub": "Create an account with GitHub",
+		"orContinueWith": "Or continue with",
+		"alreadyHaveAccount": "Already have an account?",
+		"signIn": "Sign in"
+	}
+}

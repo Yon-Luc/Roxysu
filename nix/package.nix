@@ -124,6 +124,9 @@
     icon = pname;
     categories = ["Game" "Utility"];
     terminal = false;
+    startupNotify = true;
+    # Electron / Chromium WM_CLASS — helps panel grouping on GNOME/KDE.
+    startupWMClass = "Roxysu";
   };
 
   # Copy a package (and scoped sibling platform pkgs) into a stage node_modules.
@@ -336,7 +339,9 @@ in
       resources="$appdir/resources"
       mkdir -p "$appdir" "$resources" "$out/share/icons/hicolor/512x512/apps"
 
+      # Keep in sync with apps/desktop electron-builder "files" (minus builder-only bits).
       cp apps/desktop/main.js \
+         apps/desktop/auto-update.js \
          apps/desktop/preload.js \
          apps/desktop/paths.js \
          apps/desktop/splash.html \

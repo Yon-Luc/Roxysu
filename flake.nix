@@ -47,9 +47,16 @@
       program = "${roxysu}/bin/roxysu";
     };
 
+    # NixOS: programs.roxysu.enable = true;
+    #   imports = [ inputs.roxysu.nixosModules.default ];
+    nixosModules.default = import ./nix/module.nix {inherit self;};
+    nixosModules.roxysu = self.nixosModules.default;
+
     # nix develop — toolchain for hacking (Bun server + Electron smoke).
     # nix build / nix run / nix profile install — packaged desktop app.
-    # From GitHub (once pushed): nix run github:OWNER/Roxysu
+    # From GitHub (once pushed): nix run github:Yon-Luc/Roxysu
+    # Install into PATH + app menu: nix profile install github:Yon-Luc/Roxysu
+    #   or on NixOS: programs.roxysu.enable (see nixosModules above).
     devShells.${system}.default = pkgs.mkShell {
       buildInputs =
         [pkgs.bun pkgs.nodejs_24 pkgs.dotnet-sdk_8 electron]

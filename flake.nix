@@ -30,7 +30,7 @@
 
     # After changing bun.lock, rebuild once, then paste the printed sha256 here:
     #   nix build .#roxysu
-    bunDepsHash = "sha256-NClxSwmhfWGRvvYGKun1O8KESbt2A1oHs9s7yNtK9rw=";
+    bunDepsHash = "sha256-rnCP8I1ob4UF1l48ApqNEGAocep+nLMwc88MdgLMCl0=";
 
     roxysu = pkgs.callPackage ./nix/package.nix {
       inherit electron bunDepsHash;

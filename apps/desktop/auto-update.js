@@ -85,8 +85,8 @@ function startAutoUpdate(opts) {
 
     if (result.response === 0) {
       log("auto-update quitAndInstall");
-      // isSilent=false, isForceRunAfter=true (relaunch after NSIS finishes).
-      autoUpdater.quitAndInstall(false, true);
+      // isSilent=true (no NSIS wizard), isForceRunAfter=true (relaunch after install).
+      autoUpdater.quitAndInstall(true, true);
     } else {
       log("auto-update deferred (will install on quit if autoInstallOnAppQuit)");
     }

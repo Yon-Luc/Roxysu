@@ -10,6 +10,7 @@ import {
   HIT_POSITION_MIN,
   LANE_COVER_MAX,
   LANE_COVER_MIN,
+  copyKeymodeColors,
   defaultKeymodeSkin,
   getPreviewSkin,
   resetKeymodeSkin,
@@ -531,6 +532,31 @@ export function SkinPage({ section }: { section?: string } = {}) {
                     className="accent-[var(--accent)]"
                   />
                   {dict?.skin.sameSize}
+                </label>
+                <label className="flex items-center gap-2 text-xs text-muted">
+                  <span className="whitespace-nowrap">
+                    {dict?.skin.copyColorsFrom}
+                  </span>
+                  <select
+                    className="rx-select py-1.5 text-xs"
+                    value=""
+                    title={dict?.skin.copyColorsFromTitle}
+                    aria-label={dict?.skin.copyColorsFromTitle}
+                    onChange={(e) => {
+                      const from = Number(e.target.value) as Keymode;
+                      if (!KEYMODES.includes(from)) return;
+                      copyKeymodeColors(from, keys);
+                    }}
+                  >
+                    <option value="" disabled>
+                      {dict?.skin.copyColorsFromPlaceholder}
+                    </option>
+                    {KEYMODES.filter((k) => k !== keys).map((k) => (
+                      <option key={k} value={k}>
+                        {t(dict?.skin.copyColorsFromOption, { keys: k })}
+                      </option>
+                    ))}
+                  </select>
                 </label>
                 <button
                   type="button"

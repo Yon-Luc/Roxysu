@@ -3,12 +3,15 @@ import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import type { Dictionary } from "@roxysu/i18n";
 import { fetchSystemStatus } from "../lib/api";
+import { formatAppVersionLabel } from "../lib/appVersion";
 import { isDesktopShell } from "../lib/desktop";
 import { useAppDict } from "../lib/i18n";
 import { CommandPalette, useCommandPaletteShortcut } from "./CommandPalette";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { toggleTheme, useResolvedTheme } from "../lib/theme";
 import roxyIcon from "../roxy.png";
+
+const APP_VERSION_LABEL = formatAppVersionLabel();
 
 const SIDEBAR_OPEN_KEY = "roxysu.sidebarOpen";
 
@@ -125,8 +128,13 @@ export function AppShell({ children }: { children: ReactNode }) {
               alt=""
               className="size-8 shrink-0 rounded-full object-cover"
             />
-            <span className="font-display text-xl font-extrabold tracking-tight">
-              Roxysu
+            <span className="min-w-0 leading-tight">
+              <span className="block font-display text-xl font-extrabold tracking-tight">
+                Roxysu
+              </span>
+              <span className="block text-[11px] font-medium tracking-wide text-faint">
+                {APP_VERSION_LABEL}
+              </span>
             </span>
           </Link>
           <button
@@ -253,7 +261,14 @@ export function AppShell({ children }: { children: ReactNode }) {
             alt=""
             className="size-7 shrink-0 rounded-full object-cover"
           />
-          <span className="font-display text-lg font-extrabold">Roxysu</span>
+          <span className="leading-tight">
+            <span className="block font-display text-lg font-extrabold">
+              Roxysu
+            </span>
+            <span className="block text-[10px] font-medium tracking-wide text-faint">
+              {APP_VERSION_LABEL}
+            </span>
+          </span>
         </Link>
         <span
           className={`rx-chip ${

@@ -302,6 +302,35 @@ export function resetKeymodeSkin(keys: Keymode): void {
   });
 }
 
+/** Copy note/LN colors (and uniformColors) from one keymode onto another. Extra columns cycle the source palette. */
+export function copyKeymodeColors(from: Keymode, to: Keymode): void {
+  if (from === to) return;
+  const skin = getPreviewSkin();
+  const source = skin.keymodes[from];
+  const target = skin.keymodes[to];
+  const columns = target.columns.map((c, i) => {
+    const src = source.uniformColors
+      ? source.columns[0]!
+      : source.columns[i % source.columns.length]!;
+    return {
+      ...c,
+      noteColor: src.noteColor,
+      lnColor: src.lnColor,
+    };
+  });
+  setPreviewSkin({
+    ...skin,
+    keymodes: {
+      ...skin.keymodes,
+      [to]: {
+        ...target,
+        uniformColors: source.uniformColors,
+        columns,
+      },
+    },
+  });
+}
+
 function subscribe(onStoreChange: () => void): () => void {
   function onChange() {
     // Reload from storage on cross-tab updates; same-tab setPreviewSkin already updated cache.

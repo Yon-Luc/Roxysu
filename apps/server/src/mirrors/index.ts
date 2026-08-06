@@ -22,6 +22,11 @@ export {
 } from "./search";
 export {
   loadOwnedSetOnlineIds,
+  diffBeatmapsetIds,
+  diffAgainstLibrary,
+  type BeatmapsetOwnershipDiff,
+} from "./ownership";
+export {
   searchOnlineBeatmapsets,
   type MirrorSearchResult,
 } from "./searchOnline";

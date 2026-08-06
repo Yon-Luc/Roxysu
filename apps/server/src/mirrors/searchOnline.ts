@@ -1,7 +1,5 @@
-import { beatmapSets } from "@roxysu/db/schema";
-import { and, eq, gt } from "drizzle-orm";
-
 import type { Db } from "../db-runtime";
+import { diffBeatmapsetIds, loadOwnedSetOnlineIds } from "./ownership";
 import { getActiveBeatmapMirrorProvider } from "./providers";
 import {
   buildMirrorSearchUrl,
@@ -10,16 +8,6 @@ import {
   type MirrorSearchParams,
   type OnlineBeatmapSet,
 } from "./search";
-
-export async function loadOwnedSetOnlineIds(db: Db): Promise<Set<number>> {
-  const rows = await db
-    .selectDistinct({ onlineId: beatmapSets.onlineId })
-    .from(beatmapSets)
-    .where(
-      and(gt(beatmapSets.onlineId, 0), eq(beatmapSets.deletePending, false)),
-    );
-  return new Set(rows.map((row) => row.onlineId));
-}
 
 export type MirrorSearchResult = {
   provider: string;
@@ -71,18 +59,21 @@ export async function searchOnlineBeatmapsets(
     ? await loadOwnedSetOnlineIds(db)
     : new Set<number>();
 
-  const items: OnlineBeatmapSet[] = [];
-  let ownedSkipped = 0;
-
+  const normalized = new Map<number, OnlineBeatmapSet>();
   for (const raw of rawSets) {
     const set = normalizeMirrorSearchResult(provider.id, raw);
     if (!set) continue;
-    if (excludeOwned && owned.has(set.id)) {
-      ownedSkipped += 1;
-      continue;
-    }
-    items.push(set);
+    normalized.set(set.id, set);
   }
+
+  const { owned: ownedIds, missing: missingIds } = diffBeatmapsetIds(
+    normalized.keys(),
+    owned,
+  );
+  const items = (excludeOwned ? missingIds : [...normalized.keys()]).map(
+    (id) => normalized.get(id)!,
+  );
+  const ownedSkipped = excludeOwned ? ownedIds.length : 0;
 
   return {
     provider: provider.id,

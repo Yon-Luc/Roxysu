@@ -177,28 +177,19 @@ export async function analyzeLiveMap(
   const isMania =
     beatmap.modeNumber === 3 || mode.includes("mania") || mode === "osu!mania";
 
-  if (!isMania && beatmap.modeNumber != null && beatmap.modeNumber !== 3) {
-    return {
-      matchedBeatmapId: null,
-      backgroundFileHash: null,
-      analysis: {
-        sunny: {
-          sunnyStar: null,
-          estDiff: null,
-          lnRatio: null,
-          columnCount: null,
-          error: "Not a mania beatmap",
-          source: "osu-text",
-        },
-        pattern: options.previousPattern ?? null,
-      },
-      osuText: options.osuTextCache ?? null,
-    };
-  }
-
   const matched = await lookupBeatmap(db, beatmap.checksum, beatmap.onlineId);
   const matchedBeatmapId = matched?.id ?? null;
   const backgroundFileHash = matched?.backgroundFileHash ?? null;
+
+  // Sunny/pattern analysis is mania-only, but still resolve library id for preview.
+  if (!isMania && beatmap.modeNumber != null && beatmap.modeNumber !== 3) {
+    return {
+      matchedBeatmapId,
+      backgroundFileHash,
+      analysis: { sunny: null, pattern: null },
+      osuText: options.osuTextCache ?? null,
+    };
+  }
 
   let osuText = options.osuTextCache ?? null;
   if (!osuText) {

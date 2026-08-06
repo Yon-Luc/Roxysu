@@ -67,6 +67,18 @@ function formatPattern(label: string | null | undefined): string | null {
   return label.replace(/([a-z])([A-Z])/g, "$1 $2");
 }
 
+function isManiaBeatmap(
+  beatmap: TosuLive["beatmap"] | null | undefined,
+): boolean {
+  if (!beatmap) return false;
+  const mode = (beatmap.mode ?? "").toLowerCase();
+  return (
+    beatmap.modeNumber === 3 ||
+    mode.includes("mania") ||
+    mode === "osu!mania"
+  );
+}
+
 function liveBackgroundSources(data: TosuLive | undefined): string[] {
   if (!data?.beatmap) return [];
   const urls: string[] = [];
@@ -119,6 +131,7 @@ export function SessionTosuLivePanel() {
   const sunny = data?.analysis.sunny;
   const pattern = data?.analysis.pattern;
   const hasMap = Boolean(beatmap?.title || beatmap?.checksum);
+  const showManiaAnalysis = isManiaBeatmap(beatmap);
 
   const bgSources = useMemo(() => liveBackgroundSources(data), [data]);
   const bgKey = `${beatmap?.checksum ?? ""}|${data?.backgroundFileHash ?? ""}|${data?.host ?? ""}`;
@@ -280,47 +293,49 @@ export function SessionTosuLivePanel() {
                   </div>
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-wide text-faint">
-                      {dict?.session.tosu.sunny ?? "Sunny"}
-                      {beatmap?.rate != null &&
-                      Math.abs(beatmap.rate - 1) > 0.001
-                        ? ` · ×${beatmap.rate.toFixed(2).replace(/\.?0+$/, "")}`
-                        : ""}
-                    </div>
-                    <p className="mt-1 text-sm text-ink">
-                      {sunny?.estDiff ?? "—"}
-                      {sunny?.sunnyStar != null
-                        ? ` · ${sunny.sunnyStar.toFixed(2)}★`
-                        : ""}
-                    </p>
-                    {sunny?.error ? (
-                      <p className="mt-0.5 text-xs text-rose-300">
-                        {sunny.error}
+                {showManiaAnalysis ? (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-faint">
+                        {dict?.session.tosu.sunny ?? "Sunny"}
+                        {beatmap?.rate != null &&
+                        Math.abs(beatmap.rate - 1) > 0.001
+                          ? ` · ×${beatmap.rate.toFixed(2).replace(/\.?0+$/, "")}`
+                          : ""}
+                      </div>
+                      <p className="mt-1 text-sm text-ink">
+                        {sunny?.estDiff ?? "—"}
+                        {sunny?.sunnyStar != null
+                          ? ` · ${sunny.sunnyStar.toFixed(2)}★`
+                          : ""}
                       </p>
-                    ) : null}
-                  </div>
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-wide text-faint">
-                      {dict?.session.tosu.patterns ?? "Patterns"}
+                      {sunny?.error ? (
+                        <p className="mt-0.5 text-xs text-rose-300">
+                          {sunny.error}
+                        </p>
+                      ) : null}
                     </div>
-                    <p className="mt-1 text-sm text-ink">
-                      {formatPattern(pattern?.dominantPattern) ?? "—"}
-                      {pattern?.secondaryPattern
-                        ? ` / ${formatPattern(pattern.secondaryPattern)}`
-                        : ""}
-                      {pattern?.confidence != null
-                        ? ` · ${Math.round(pattern.confidence * 100)}%`
-                        : ""}
-                    </p>
-                    {pattern?.error ? (
-                      <p className="mt-0.5 text-xs text-rose-300">
-                        {pattern.error}
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-faint">
+                        {dict?.session.tosu.patterns ?? "Patterns"}
+                      </div>
+                      <p className="mt-1 text-sm text-ink">
+                        {formatPattern(pattern?.dominantPattern) ?? "—"}
+                        {pattern?.secondaryPattern
+                          ? ` / ${formatPattern(pattern.secondaryPattern)}`
+                          : ""}
+                        {pattern?.confidence != null
+                          ? ` · ${Math.round(pattern.confidence * 100)}%`
+                          : ""}
                       </p>
-                    ) : null}
+                      {pattern?.error ? (
+                        <p className="mt-0.5 text-xs text-rose-300">
+                          {pattern.error}
+                        </p>
+                      ) : null}
+                    </div>
                   </div>
-                </div>
+                ) : null}
 
                 {play?.active ? (
                   <p className="text-sm text-muted">

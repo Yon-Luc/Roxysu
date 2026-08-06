@@ -11,6 +11,7 @@ import {
 } from "../../components/LoadingSkeleton";
 import { ModBadges } from "../../components/ModBadges";
 import { PageTitle } from "../../components/PageTitle";
+import { BeatmapPreviewButton } from "../../components/BeatmapPreviewModal";
 import { ScoreReplayButton } from "../../components/ScoreReplayModal";
 import { fetchSession } from "../../lib/api";
 import {
@@ -243,10 +244,12 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
           <ul className="space-y-0.5">
             {scores.map((score) => {
               const isFresh = freshIds.has(score.id);
-              const canRewatch =
-                score.hasReplay &&
-                (score.rulesetShortName === "mania" ||
-                  score.rulesetShortName === "osu");
+              const previewableRuleset =
+                score.rulesetShortName === "mania" ||
+                score.rulesetShortName === "osu";
+              const canPreview =
+                Boolean(score.beatmapId) && previewableRuleset;
+              const canRewatch = score.hasReplay && previewableRuleset;
               const main = (
                 <>
                   <BeatmapCover
@@ -325,11 +328,19 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
                         {main}
                       </div>
                     )}
-                    <ScoreReplayButton
-                      scoreId={score.id}
-                      enabled={canRewatch}
-                      className="rx-btn !px-2.5 !py-1 text-xs"
-                    />
+                    <div className="flex shrink-0 items-center gap-2">
+                      {canPreview ? (
+                        <BeatmapPreviewButton
+                          beatmapId={score.beatmapId!}
+                          className="rx-btn !px-2.5 !py-1 text-xs"
+                        />
+                      ) : null}
+                      <ScoreReplayButton
+                        scoreId={score.id}
+                        enabled={canRewatch}
+                        className="rx-btn !px-2.5 !py-1 text-xs"
+                      />
+                    </div>
                   </div>
                 </li>
               );

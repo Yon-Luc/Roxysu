@@ -1,13 +1,13 @@
 {
-  "name": "@roxysu/pattern-7k",
-  "version": "0.0.1",
+  "name": "@roxysu/mania-pattern-analysis",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
+  "description": "Companella/Interlude osu!mania pattern analysis for all keymodes.",
   "exports": {
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@roxysu/mania-pattern-analysis": "workspace:*",
     "@roxysu/osu-chart": "workspace:*"
   },
   "devDependencies": {

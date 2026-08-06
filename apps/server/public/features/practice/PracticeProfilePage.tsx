@@ -798,22 +798,15 @@ function SevenKDensityPanel({
       ? formatPatternLabel(sample.secondaryPattern, detail?.patterns)
       : null,
   }));
-  const metricRows = [
-    { label: detail?.patterns.jack, value: analysis.composition.jack ?? 0 },
-    {
-      label: detail?.patterns.chordjack,
-      value: analysis.composition.chordjack ?? 0,
-    },
-    { label: detail?.patterns.delay, value: analysis.composition.delay ?? 0 },
-    {
-      label: detail?.patterns.chordstream,
-      value: analysis.composition.chordstream ?? 0,
-    },
-    {
-      label: detail?.patterns.bracket,
-      value: analysis.composition.bracket ?? 0,
-    },
-  ];
+  const weightPatterns =
+    keyCount === 4
+      ? (["jack", "chordjack", "jumpstream", "stream"] as const)
+      : (["jack", "chordjack", "delay", "chordstream", "bracket"] as const);
+  const metricRows = weightPatterns.map((pattern) => ({
+    pattern,
+    label: formatPatternLabel(pattern, detail?.patterns),
+    value: analysis.composition[pattern] ?? 0,
+  }));
 
   if (analysis.error || chartData.length === 0) {
     return (
@@ -972,8 +965,8 @@ function SevenKDensityPanel({
             <div className="mt-4 space-y-3">
               {metricRows.map((row) => (
                 <PatternMetricRow
-                  key={row.label ?? ""}
-                  label={row.label ?? ""}
+                  key={row.pattern}
+                  label={row.label}
                   value={row.value}
                   accentColor={charts.chartAlt}
                 />

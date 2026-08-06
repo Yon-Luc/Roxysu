@@ -15,8 +15,8 @@
     "desktop:pack": "bun run --cwd apps/desktop pack",
     "desktop:dist:win": "bun run --cwd apps/desktop dist:win",
     "docs": "bun run --cwd apps/docs dev",
-    "test": "bun run --cwd apps/server test && bun run --filter '@roxysu/pattern-7k' test && bun run --filter '@roxysu/timing-analysis' test && bun run --filter '@roxysu/i18n' test && bun test packages/osu-paths packages/mania-judge packages/realm-backup",
-    "typecheck": "bunx tsc -p apps/server --noEmit && bunx tsc -p apps/realm-reader --noEmit && bunx tsc -p packages/db --noEmit && bunx tsc -p packages/osu-paths --noEmit && bunx tsc -p packages/mania-judge --noEmit && bunx tsc -p packages/sunny-dan --noEmit && bunx tsc -p packages/collection-sync --noEmit && bunx tsc -p packages/realm-backup --noEmit && bunx tsc -p packages/osu-chart --noEmit && bunx tsc -p packages/pattern-7k --noEmit && bunx tsc -p packages/timing-analysis --noEmit && bunx tsc -p packages/i18n --noEmit"
+    "test": "bun run --cwd apps/server test && bun run --filter '@roxysu/mania-pattern-analysis' test && bun run --filter '@roxysu/pattern-7k' test && bun run --filter '@roxysu/timing-analysis' test && bun run --filter '@roxysu/i18n' test && bun test packages/osu-paths packages/mania-judge packages/realm-backup",
+    "typecheck": "bunx tsc -p apps/server --noEmit && bunx tsc -p apps/realm-reader --noEmit && bunx tsc -p packages/db --noEmit && bunx tsc -p packages/osu-paths --noEmit && bunx tsc -p packages/mania-judge --noEmit && bunx tsc -p packages/sunny-dan --noEmit && bunx tsc -p packages/collection-sync --noEmit && bunx tsc -p packages/realm-backup --noEmit && bunx tsc -p packages/osu-chart --noEmit && bunx tsc -p packages/mania-pattern-analysis --noEmit && bunx tsc -p packages/pattern-7k --noEmit && bunx tsc -p packages/timing-analysis --noEmit && bunx tsc -p packages/i18n --noEmit"
   },
   "devDependencies": {
     "concurrently": "^9.0.0"

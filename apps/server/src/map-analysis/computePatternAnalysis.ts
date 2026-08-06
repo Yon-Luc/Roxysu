@@ -8,14 +8,13 @@ import {
   resolveLazerFilePath,
 } from "../shared/lazer-files";
 import {
-  analyze7kFromOsuText,
-  analyze7kStructuralNotes,
+  analyzeManiaFromOsuText,
+  analyzeManiaStructuralNotes,
   PATTERN_ALGORITHM,
-  PATTERN_ALGORITHM_V2,
   type PatternLabel,
   type PatternLabelV2,
-} from "@roxysu/pattern-7k";
-import { parse7kChart, type ChartNote } from "@roxysu/osu-chart";
+} from "@roxysu/mania-pattern-analysis";
+import { parseOsuChart, type ChartNote } from "@roxysu/osu-chart";
 import { toIso as toIsoNullable } from "../shared/serialize";
 
 export { PATTERN_ALGORITHM };
@@ -39,10 +38,19 @@ export type PatternAnalysisRating = {
   cached: boolean;
 };
 
-type SevenKPatternBreakdown = Record<
-  "jack" | "chordjack" | "delay" | "chordstream" | "bracket",
+type ManiaPatternBreakdown = Record<
+  | "jack"
+  | "chordjack"
+  | "delay"
+  | "chordstream"
+  | "bracket"
+  | "jumpstream"
+  | "stream",
   number
 >;
+
+/** @deprecated Use ManiaPatternBreakdown */
+type SevenKPatternBreakdown = ManiaPatternBreakdown;
 
 export type SevenKDensitySample = {
   startMs: number;
@@ -66,8 +74,8 @@ export type SevenKPatternHotspot = {
   dominantCoverage: number;
 };
 
-export type SevenKPatternDetail = {
-  algorithm: typeof PATTERN_ALGORITHM_V2;
+export type ManiaPatternDetail = {
+  algorithm: typeof PATTERN_ALGORITHM;
   columnCount: number | null;
   noteCount: number;
   holdCount: number;
@@ -84,12 +92,17 @@ export type SevenKPatternDetail = {
   error: string | null;
 };
 
-const EMPTY_BREAKDOWN: SevenKPatternBreakdown = {
+/** @deprecated Use ManiaPatternDetail */
+export type SevenKPatternDetail = ManiaPatternDetail;
+
+const EMPTY_BREAKDOWN: ManiaPatternBreakdown = {
   jack: 0,
   chordjack: 0,
   delay: 0,
   chordstream: 0,
   bracket: 0,
+  jumpstream: 0,
+  stream: 0,
 };
 
 const DENSITY_SAMPLE_MS = 1000;
@@ -97,19 +110,21 @@ const CHORD_EPS_MS = 8;
 
 function normalizeBreakdown(
   partial?: Partial<Record<PatternLabelV2, number>>,
-): SevenKPatternBreakdown {
+): ManiaPatternBreakdown {
   return {
     jack: partial?.jack ?? 0,
     chordjack: partial?.chordjack ?? 0,
     delay: partial?.delay ?? 0,
     chordstream: partial?.chordstream ?? 0,
     bracket: partial?.bracket ?? 0,
+    jumpstream: partial?.jumpstream ?? 0,
+    stream: partial?.stream ?? 0,
   };
 }
 
-function emptySevenKPatternDetail(error: string): SevenKPatternDetail {
+function emptyManiaPatternDetail(error: string): ManiaPatternDetail {
   return {
-    algorithm: PATTERN_ALGORITHM_V2,
+    algorithm: PATTERN_ALGORITHM,
     columnCount: null,
     noteCount: 0,
     holdCount: 0,
@@ -198,7 +213,8 @@ function buildHotspots(samples: SevenKDensitySample[]): SevenKPatternHotspot[] {
         sample.dominantPattern != null
           ? sample.dominantPattern === "mixed"
             ? 0
-            : sample.composition[sample.dominantPattern] ?? 0
+            : (sample.composition[sample.dominantPattern as keyof ManiaPatternBreakdown] ??
+              0)
           : 0,
     }))
     .sort((a, b) => {
@@ -210,9 +226,16 @@ function buildHotspots(samples: SevenKDensitySample[]): SevenKPatternHotspot[] {
     .slice(0, 5);
 }
 
-function analyzeSevenKPatternDetail(osuText: string): SevenKPatternDetail {
-  const chart = parse7kChart(osuText);
-  const result = analyze7kStructuralNotes(chart.notes);
+function analyzeManiaPatternDetail(osuText: string): ManiaPatternDetail {
+  const chart = parseOsuChart(osuText);
+  if (chart.status === "NotMania" || chart.gameMode !== "3") {
+    throw new Error("Beatmap mode is not mania");
+  }
+  if (chart.status === "Fail" || chart.columnCount <= 0) {
+    throw new Error("Beatmap parse failed");
+  }
+
+  const result = analyzeManiaStructuralNotes(chart.notes, chart.columnCount);
   const holdCount = chart.notes.filter((note) => note.endMs > note.startMs).length;
   const samples = buildDensitySamples(chart.notes, result.sections);
   const durationMs =
@@ -231,7 +254,7 @@ function analyzeSevenKPatternDetail(osuText: string): SevenKPatternDetail {
   );
 
   return {
-    algorithm: PATTERN_ALGORITHM_V2,
+    algorithm: PATTERN_ALGORITHM,
     columnCount: result.columnCount,
     noteCount: chart.notes.length,
     holdCount,
@@ -373,10 +396,10 @@ export async function getOrComputePatternAnalysis(
   return computeOnePattern(db, beatmap);
 }
 
-export async function getSevenKPatternDetail(
+export async function getManiaPatternDetail(
   db: Db,
   beatmapId: string,
-): Promise<SevenKPatternDetail | null> {
+): Promise<ManiaPatternDetail | null> {
   const [beatmap] = await db
     .select({
       id: beatmaps.id,
@@ -390,32 +413,32 @@ export async function getSevenKPatternDetail(
 
   if (!beatmap) return null;
   if (beatmap.rulesetShortName !== "mania") return null;
-  if (beatmap.circleSize != null && Math.round(beatmap.circleSize) !== 7) {
-    return emptySevenKPatternDetail("7K density profile is only available for 7K mania charts.");
-  }
   if (!beatmap.hash) {
-    return emptySevenKPatternDetail("Beatmap hash missing.");
+    return emptyManiaPatternDetail("Beatmap hash missing.");
   }
 
   const filePath = resolveLazerFilePath(beatmap.hash, getOsuDataPath());
   if (!filePath) {
-    return emptySevenKPatternDetail("Could not resolve lazer file path.");
+    return emptyManiaPatternDetail("Could not resolve lazer file path.");
   }
 
   let osuText: string;
   try {
     osuText = readFileSync(filePath, "utf8");
   } catch {
-    return emptySevenKPatternDetail("Beatmap file not found in lazer files store.");
+    return emptyManiaPatternDetail("Beatmap file not found in lazer files store.");
   }
 
   try {
-    return analyzeSevenKPatternDetail(osuText);
+    return analyzeManiaPatternDetail(osuText);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return emptySevenKPatternDetail(message);
+    return emptyManiaPatternDetail(message);
   }
 }
+
+/** @deprecated Use getManiaPatternDetail */
+export const getSevenKPatternDetail = getManiaPatternDetail;
 
 type BeatmapRow = {
   id: string;
@@ -447,27 +470,6 @@ async function computeOnePattern(
       jumpstreamScore: null,
       chordstreamScore: null,
       error: "Not a mania beatmap",
-      updatedAt: now,
-    });
-  }
-
-  if (beatmap.circleSize != null && Math.round(beatmap.circleSize) !== 7) {
-    return upsertRating(db, {
-      beatmapId: beatmap.id,
-      algorithm: PATTERN_ALGORITHM,
-      beatmapHash: beatmap.hash,
-      columnCount: Math.round(beatmap.circleSize),
-      dominantPattern: null,
-      secondaryPattern: null,
-      confidence: null,
-      jackDensity: null,
-      chordDensity: null,
-      streamDensity: null,
-      bracketDensity: null,
-      chordjackScore: null,
-      jumpstreamScore: null,
-      chordstreamScore: null,
-      error: "Pattern analysis is 7k-only",
       updatedAt: now,
     });
   }
@@ -540,7 +542,7 @@ async function computeOnePattern(
   }
 
   try {
-    const result = analyze7kFromOsuText(osuText, PATTERN_ALGORITHM);
+    const result = analyzeManiaFromOsuText(osuText, PATTERN_ALGORITHM);
     return upsertRating(db, {
       beatmapId: beatmap.id,
       algorithm: PATTERN_ALGORITHM,
@@ -679,27 +681,6 @@ function computeOnePatternSync(
     return;
   }
 
-  if (circleSize != null && Math.round(circleSize) !== 7) {
-    upsertRatingSync(db, {
-      beatmapId,
-      beatmapHash: hash,
-      columnCount: Math.round(circleSize),
-      dominantPattern: null,
-      secondaryPattern: null,
-      confidence: null,
-      jackDensity: null,
-      chordDensity: null,
-      streamDensity: null,
-      bracketDensity: null,
-      chordjackScore: null,
-      jumpstreamScore: null,
-      chordstreamScore: null,
-      error: "Pattern analysis is 7k-only",
-      updatedAtMs: now,
-    });
-    return;
-  }
-
   if (!hash) {
     upsertRatingSync(db, {
       beatmapId,
@@ -768,7 +749,7 @@ function computeOnePatternSync(
   }
 
   try {
-    const result = analyze7kFromOsuText(osuText, PATTERN_ALGORITHM);
+    const result = analyzeManiaFromOsuText(osuText, PATTERN_ALGORITHM);
     upsertRatingSync(db, {
       beatmapId,
       beatmapHash: hash,
@@ -859,7 +840,6 @@ export function backfillPatternAnalysisSync(
         ON pa.beatmap_id = b.id AND pa.algorithm = ?
       WHERE b.hidden = 0
         AND lower(COALESCE(b.ruleset_short_name, '')) = 'mania'
-        AND ROUND(COALESCE(b.circle_size, 0)) = 7
         AND ${missingClause}
       ORDER BY
         CASE
@@ -910,7 +890,6 @@ export function backfillPatternAnalysisSync(
         ON pa.beatmap_id = b.id AND pa.algorithm = ?
       WHERE b.hidden = 0
         AND lower(COALESCE(b.ruleset_short_name, '')) = 'mania'
-        AND ROUND(COALESCE(b.circle_size, 0)) = 7
         AND ${missingClause}
     `,
     )
@@ -959,7 +938,6 @@ export function ensurePatternAnalysisForIdsSync(
       continue;
     }
     if (row.rulesetShortName !== "mania") continue;
-    if (row.circleSize != null && Math.round(row.circleSize) !== 7) continue;
 
     computeOnePatternSync(
       db,

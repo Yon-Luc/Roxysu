@@ -84,6 +84,7 @@ const EXAMPLES = [
   "key=4 dan:Reform",
   'key=7 dan:"Regular 4"',
   "key=7 dan:Regular sunny:6..8",
+  "pattern:jack",
   "key=7 pattern:jack",
   "key=7 axis:rc pattern:jumpstream",
   "key=7 axis:ln pattern:chordstream",

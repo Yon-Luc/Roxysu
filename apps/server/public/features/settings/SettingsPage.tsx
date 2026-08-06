@@ -347,11 +347,13 @@ export function SettingsPage({ section }: { section?: string } = {}) {
     patternAnalysis?.status === "running" ||
     patternAnalysis?.status === "stopping";
   const patternProgressPct =
-    patternCoverage && patternCoverage.total7k > 0
+    patternCoverage && (patternCoverage.totalMania ?? patternCoverage.total7k) > 0
       ? Math.min(
           100,
           Math.round(
-            (patternCoverage.computed / patternCoverage.total7k) * 100,
+            (patternCoverage.computed /
+              (patternCoverage.totalMania ?? patternCoverage.total7k)) *
+              100,
           ),
         )
       : 0;
@@ -1487,7 +1489,7 @@ export function SettingsPage({ section }: { section?: string } = {}) {
         </p>
         <p className="mt-2 font-mono text-xs text-faint">
           {t(dict?.settings.algorithm, {
-            name: patternAnalysis?.algorithm ?? "7k-structural-v2",
+            name: patternAnalysis?.algorithm ?? "mania-interlude-v1",
           })}
         </p>
 
@@ -1500,7 +1502,9 @@ export function SettingsPage({ section }: { section?: string } = {}) {
                 </span>
                 {" / "}
                 {t(dict?.settings.maps7k, {
-                  count: patternCoverage.total7k.toLocaleString(),
+                  count: (
+                    patternCoverage.totalMania ?? patternCoverage.total7k
+                  ).toLocaleString(),
                 })}
               </span>
               <span>

@@ -22,6 +22,7 @@
     "@roxysu/mania-judge": "workspace:*",
     "@roxysu/osu-chart": "workspace:*",
     "@roxysu/osu-paths": "workspace:*",
+    "@roxysu/mania-pattern-analysis": "workspace:*",
     "@roxysu/pattern-7k": "workspace:*",
     "@roxysu/realm-backup": "workspace:*",
     "@roxysu/sunny-dan": "workspace:*",

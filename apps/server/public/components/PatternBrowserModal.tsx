@@ -11,7 +11,7 @@ import {
 type PatternAxis = "all" | "rc" | "ln";
 
 const AXIS_TABS: { value: PatternAxis; label: string; hint: string }[] = [
-  { value: "all", label: "All", hint: "Every analyzed 7K map" },
+  { value: "all", label: "All", hint: "Every analyzed mania map" },
   {
     value: "rc",
     label: "RC",
@@ -116,7 +116,7 @@ function PatternBrowserModal({
           <div className="flex items-start justify-between gap-4 px-5 py-4">
             <div>
               <h2 id={titleId} className="font-display text-xl font-bold text-ink">
-                7K patterns
+                Mania patterns
               </h2>
               <p className="mt-1 text-sm text-muted">
                 Browse by dominant rice pattern, split into mainly-RC and mainly-LN
@@ -156,7 +156,7 @@ function PatternBrowserModal({
 
           {isLoading ? (
             <p className="py-8 text-center text-sm text-muted">
-              Analyzing 7K charts…
+              Analyzing mania charts…
             </p>
           ) : error ? (
             <p className="py-8 text-center text-sm text-rose-300">
@@ -174,8 +174,8 @@ function PatternBrowserModal({
               <p className="text-xs text-muted">
                 {data.analyzed.toLocaleString()} analyzed
                 {axis === "all"
-                  ? ` of ${data.total7k.toLocaleString()} 7K maps`
-                  : ` in ${data.axisTotal7k.toLocaleString()} ${axis.toUpperCase()} maps (${data.total7k.toLocaleString()} 7K total)`}
+                  ? ` of ${(data.totalMania ?? data.total7k).toLocaleString()} mania maps`
+                  : ` in ${(data.axisTotalMania ?? data.axisTotal7k).toLocaleString()} ${axis.toUpperCase()} maps (${(data.totalMania ?? data.total7k).toLocaleString()} mania total)`}
                 {data.remaining > 0 && axis === "all"
                   ? ` · ${data.remaining.toLocaleString()} still pending`
                   : ""}

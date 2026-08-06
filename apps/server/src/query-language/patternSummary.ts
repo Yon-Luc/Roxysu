@@ -2,7 +2,7 @@
 import type { Db } from "@roxysu/db/types";
 import { LN_DAN_RATIO_THRESHOLD } from "../map-analysis/estDiff";
 import { backfillSunnyDanSync, SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
-import { PATTERN_ALGORITHM } from "@roxysu/pattern-7k";
+import { PATTERN_ALGORITHM } from "@roxysu/mania-pattern-analysis";
 import {
   backfillPatternAnalysisSync,
   PATTERN_QUERY_BACKFILL_LIMIT,
@@ -30,8 +30,12 @@ export type PatternSummaryItem = {
 
 export type PatternSummary = {
   axis: PatternAxis;
+  totalMania: number;
+  /** @deprecated Use totalMania */
   total7k: number;
-  /** 7k maps classified on the selected RC/LN axis (when axis != all). */
+  /** Maps classified on the selected RC/LN axis (when axis != all). */
+  axisTotalMania: number;
+  /** @deprecated Use axisTotalMania */
   axisTotal7k: number;
   analyzed: number;
   remaining: number;
@@ -123,10 +127,15 @@ const SELECT_COLS = `
   dr.sunny_star AS sunnyStar
 `;
 
-const SEVEN_K_WHERE = `
+const MANIA_WHERE = `
   b.hidden = 0
   AND COALESCE(bs.delete_pending, 0) = 0
   AND lower(COALESCE(b.ruleset_short_name, '')) = 'mania'
+`;
+
+/** Sunny RC/LN axis filter — still 7K-focused until Sunny supports all keymodes. */
+const SUNNY_AXIS_WHERE = `
+  ${MANIA_WHERE}
   AND ROUND(COALESCE(b.circle_size, 0)) = 7
 `;
 
@@ -149,7 +158,7 @@ function axisSqlClause(axis: PatternAxis, params: SqlParam[]): string | null {
 function patternQuery(pattern: string, axis: PatternAxis): string {
   if (axis === "rc") return `key=7 axis:rc pattern:${pattern}`;
   if (axis === "ln") return `key=7 axis:ln pattern:${pattern}`;
-  return `key=7 pattern:${pattern}`;
+  return `pattern:${pattern}`;
 }
 
 function mapSampleRow(r: PracticeCardRow): PracticeCardRow {
@@ -185,7 +194,7 @@ function buildPatternsForCounts(
         `
         SELECT ${SELECT_COLS}
         ${baseFrom(db)}
-        WHERE ${SEVEN_K_WHERE}
+        WHERE ${axis === "all" ? MANIA_WHERE : SUNNY_AXIS_WHERE}
           AND pa.dominant_pattern = ?
           AND pa.error IS NULL
           ${axisFilter}
@@ -235,7 +244,7 @@ function buildPatternsForCounts(
   return patterns;
 }
 
-/** 7k pattern overview for the practice browser modal. */
+/** Mania pattern overview for the practice browser modal. */
 export function practicePatternSummary(
   db: Db,
   opts: { samplesPerPattern?: number; axis?: string } = {},
@@ -254,6 +263,7 @@ export function practicePatternSummary(
   const axisParams: SqlParam[] = [];
   const axisClause = axisSqlClause(axis, axisParams);
   const axisFilter = axisClause ? `AND ${axisClause}` : "";
+  const scopeWhere = axis === "all" ? MANIA_WHERE : SUNNY_AXIS_WHERE;
 
   const totalRow = db.$client
     .query(
@@ -261,7 +271,7 @@ export function practicePatternSummary(
       SELECT COUNT(*) AS n
       FROM beatmaps b
       LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
-      WHERE ${SEVEN_K_WHERE}
+      WHERE ${MANIA_WHERE}
     `,
     )
     .get() as { n: number };
@@ -277,7 +287,7 @@ export function practicePatternSummary(
       LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
       LEFT JOIN beatmap_dan_ratings dr
         ON dr.beatmap_id = b.id AND dr.algorithm = ?
-      WHERE ${SEVEN_K_WHERE}
+      WHERE ${SUNNY_AXIS_WHERE}
         ${axisFilter}
     `,
           )
@@ -293,7 +303,7 @@ export function practicePatternSummary(
         ON dr.beatmap_id = b.id AND dr.algorithm = ?
       JOIN beatmap_pattern_analysis pa
         ON pa.beatmap_id = b.id AND pa.algorithm = ?
-      WHERE ${SEVEN_K_WHERE}
+      WHERE ${scopeWhere}
         AND pa.dominant_pattern IS NOT NULL
         AND pa.error IS NULL
         ${axisFilter}
@@ -311,7 +321,7 @@ export function practicePatternSummary(
         ON dr.beatmap_id = b.id AND dr.algorithm = ?
       JOIN beatmap_pattern_analysis pa
         ON pa.beatmap_id = b.id AND pa.algorithm = ?
-      WHERE ${SEVEN_K_WHERE}
+      WHERE ${scopeWhere}
         AND pa.dominant_pattern IS NOT NULL
         AND pa.error IS NULL
         ${axisFilter}
@@ -337,17 +347,19 @@ export function practicePatternSummary(
     axisParams,
   );
 
-  const total7k = Number(totalRow?.n ?? 0);
+  const totalMania = Number(totalRow?.n ?? 0);
   const analyzed = Number(analyzedRow?.n ?? 0);
-  const axisTotal7k =
-    axis === "all" ? total7k : Number(axisTotalRow?.n ?? 0);
+  const axisTotalMania =
+    axis === "all" ? totalMania : Number(axisTotalRow?.n ?? 0);
 
   return {
     axis,
-    total7k,
-    axisTotal7k,
+    totalMania,
+    total7k: totalMania,
+    axisTotalMania,
+    axisTotal7k: axisTotalMania,
     analyzed,
-    remaining: Math.max(0, total7k - analyzed),
+    remaining: Math.max(0, axisTotalMania - analyzed),
     patterns,
   };
 }

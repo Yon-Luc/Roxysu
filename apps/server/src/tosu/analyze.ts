@@ -3,7 +3,7 @@ import { beatmaps } from "@roxysu/db/schema";
 import { and, eq } from "drizzle-orm";
 import { readFileSync } from "node:fs";
 
-import { analyze7kFromOsuText } from "@roxysu/pattern-7k";
+import { analyzeManiaFromOsuText } from "@roxysu/mania-pattern-analysis";
 import { getOrComputePatternAnalysis } from "../map-analysis";
 import { runDanielEstimatorFromText } from "../map-analysis/danielEstimator";
 import {
@@ -120,7 +120,7 @@ function sunnyFromText(osuText: string, speedRate: number): TosuLiveSunny {
 
 function patternFromText(osuText: string): TosuLivePattern {
   try {
-    const result = analyze7kFromOsuText(osuText);
+    const result = analyzeManiaFromOsuText(osuText);
     return {
       dominantPattern: result.dominantPattern,
       secondaryPattern: result.secondaryPattern,

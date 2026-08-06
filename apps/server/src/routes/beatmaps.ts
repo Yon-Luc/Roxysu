@@ -18,7 +18,7 @@ import { getOrComputeSunnyDan } from "../map-analysis/computeSunnyDan";
 import { getOrComputeDanielDan } from "../map-analysis/computeDanielDan";
 import {
   getOrComputePatternAnalysis,
-  getSevenKPatternDetail,
+  getManiaPatternDetail,
 } from "../map-analysis/computePatternAnalysis";
 import { getChartTimingAnalysis } from "../map-analysis/computeTimingAnalysis";
 import { OsuFileParser, parseStdChart } from "@roxysu/osu-chart";
@@ -145,16 +145,14 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
         ? await getOrComputeDanielDan(db, params.id)
         : null;
 
-      const is7kMania =
-        beatmap.rulesetShortName === "mania" &&
-        beatmap.circleSize != null &&
-        Math.round(beatmap.circleSize) === 7;
-      const patternAnalysis = is7kMania
+      const isMania =
+        beatmap.rulesetShortName === "mania";
+      const patternAnalysis = isMania
         ? await getOrComputePatternAnalysis(db, params.id)
         : null;
       const sevenKAnalysis =
         beatmap.rulesetShortName === "mania"
-          ? await getSevenKPatternDetail(db, params.id)
+          ? await getManiaPatternDetail(db, params.id)
           : null;
 
       const timingAnalysis =

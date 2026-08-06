@@ -1,6 +1,6 @@
 
 import type { Db } from "@roxysu/db/types";
-import { PATTERN_ALGORITHM } from "@roxysu/pattern-7k";
+import { PATTERN_ALGORITHM } from "@roxysu/mania-pattern-analysis";
 import { backfillPatternAnalysisSync } from "./computePatternAnalysis";
 import { publish } from "../shared/events";
 
@@ -12,6 +12,8 @@ export type PatternAnalysisJobStatus =
   | "error";
 
 export type PatternAnalysisCoverage = {
+  totalMania: number;
+  /** @deprecated Use totalMania */
   total7k: number;
   computed: number;
   missing: number;
@@ -53,7 +55,7 @@ let job: {
   db: null,
 };
 
-/** 7k maps still needing a first successful pattern label for the active algorithm. */
+/** Mania maps still needing a first successful pattern label for the active algorithm. */
 export function countPatternAnalysisMissing(db: Db): number {
   const row = db.$client
     .query(
@@ -64,7 +66,6 @@ export function countPatternAnalysisMissing(db: Db): number {
         ON pa.beatmap_id = b.id AND pa.algorithm = ?
       WHERE b.hidden = 0
         AND lower(COALESCE(b.ruleset_short_name, '')) = 'mania'
-        AND ROUND(COALESCE(b.circle_size, 0)) = 7
         AND (
           pa.beatmap_id IS NULL
           OR (
@@ -84,7 +85,7 @@ export function getPatternAnalysisCoverage(db: Db): PatternAnalysisCoverage {
     .query(
       `
       SELECT
-        COUNT(*) AS total7k,
+        COUNT(*) AS totalMania,
         SUM(
           CASE
             WHEN pa.dominant_pattern IS NOT NULL
@@ -109,17 +110,18 @@ export function getPatternAnalysisCoverage(db: Db): PatternAnalysisCoverage {
         ON pa.beatmap_id = b.id AND pa.algorithm = ?
       WHERE b.hidden = 0
         AND lower(COALESCE(b.ruleset_short_name, '')) = 'mania'
-        AND ROUND(COALESCE(b.circle_size, 0)) = 7
     `,
     )
     .get(PATTERN_ALGORITHM) as {
-    total7k: number;
+    totalMania: number;
     computed: number;
     failed: number;
   } | null;
 
+  const totalMania = Number(totals?.totalMania ?? 0);
   return {
-    total7k: Number(totals?.total7k ?? 0),
+    totalMania,
+    total7k: totalMania,
     computed: Number(totals?.computed ?? 0),
     missing: countPatternAnalysisMissing(db),
     failed: Number(totals?.failed ?? 0),
@@ -197,7 +199,7 @@ function runBatch(): void {
   }
 }
 
-/** Start background 7k pattern analysis for maps missing the active algorithm. */
+/** Start background mania pattern analysis for maps missing the active algorithm. */
 export function startPatternAnalysisBackfill(db: Db): PatternAnalysisJobState {
   if (job.status === "running" || job.status === "stopping") {
     return getPatternAnalysisJobState(db);

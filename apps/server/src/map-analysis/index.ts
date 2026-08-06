@@ -29,15 +29,25 @@ export {
   PATTERN_ALGORITHM,
   PATTERN_QUERY_BACKFILL_LIMIT,
 } from "./computePatternAnalysis";
-export { analyze7kFromOsuText, analyze7kNotes } from "@roxysu/pattern-7k";
 export {
-  analyze7kStructuralFromOsuText,
-  analyze7kStructuralNotes,
+  analyzeManiaFromOsuText,
+  analyzeManiaNotes,
+  analyzeManiaStructuralFromOsuText,
+  analyzeManiaStructuralNotes,
+  PATTERN_ALGORITHM_INTERLUDE,
   PATTERN_ALGORITHM_V1,
   PATTERN_ALGORITHM_V2,
   PATTERN_LABELS,
-} from "@roxysu/pattern-7k";
-export type { PatternLabel } from "@roxysu/pattern-7k";
+} from "@roxysu/mania-pattern-analysis";
+export type { PatternLabel } from "@roxysu/mania-pattern-analysis";
+/** @deprecated Use analyzeManiaFromOsuText */
+export { analyzeManiaFromOsuText as analyze7kFromOsuText } from "@roxysu/mania-pattern-analysis";
+/** @deprecated Use analyzeManiaNotes */
+export { analyzeManiaNotes as analyze7kNotes } from "@roxysu/mania-pattern-analysis";
+/** @deprecated Use analyzeManiaStructuralFromOsuText */
+export { analyzeManiaStructuralFromOsuText as analyze7kStructuralFromOsuText } from "@roxysu/mania-pattern-analysis";
+/** @deprecated Use analyzeManiaStructuralNotes */
+export { analyzeManiaStructuralNotes as analyze7kStructuralNotes } from "@roxysu/mania-pattern-analysis";
 export {
   getSunnyDanJobState,
   getSunnyDanCoverage,

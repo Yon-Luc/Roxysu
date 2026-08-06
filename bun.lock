@@ -10,7 +10,7 @@
     },
     "apps/desktop": {
       "name": "@roxysu/desktop",
-      "version": "0.0.1",
+      "version": "0.1.2",
       "dependencies": {
         "electron-updater": "^6.6.2",
       },
@@ -42,7 +42,7 @@
     },
     "apps/server": {
       "name": "Roxysu",
-      "version": "1.0.50",
+      "version": "0.1.2",
       "dependencies": {
         "@elysia/eden": "^1.4.10",
         "@elysia/html": "^1.4.1",
@@ -53,6 +53,7 @@
         "@roxysu/db": "workspace:*",
         "@roxysu/i18n": "workspace:*",
         "@roxysu/mania-judge": "workspace:*",
+        "@roxysu/mania-pattern-analysis": "workspace:*",
         "@roxysu/osu-chart": "workspace:*",
         "@roxysu/osu-paths": "workspace:*",
         "@roxysu/pattern-7k": "workspace:*",
@@ -119,6 +120,16 @@
         "bun-types": "^1.3.14",
       },
     },
+    "packages/mania-pattern-analysis": {
+      "name": "@roxysu/mania-pattern-analysis",
+      "version": "0.1.0",
+      "dependencies": {
+        "@roxysu/osu-chart": "workspace:*",
+      },
+      "devDependencies": {
+        "bun-types": "^1.3.14",
+      },
+    },
     "packages/osu-chart": {
       "name": "@roxysu/osu-chart",
       "version": "0.0.1",
@@ -138,6 +149,7 @@
       "name": "@roxysu/pattern-7k",
       "version": "0.0.1",
       "dependencies": {
+        "@roxysu/mania-pattern-analysis": "workspace:*",
         "@roxysu/osu-chart": "workspace:*",
       },
       "devDependencies": {
@@ -375,6 +387,8 @@
     "@roxysu/i18n": ["@roxysu/i18n@workspace:packages/i18n"],
 
     "@roxysu/mania-judge": ["@roxysu/mania-judge@workspace:packages/mania-judge"],
+
+    "@roxysu/mania-pattern-analysis": ["@roxysu/mania-pattern-analysis@workspace:packages/mania-pattern-analysis"],
 
     "@roxysu/osu-chart": ["@roxysu/osu-chart@workspace:packages/osu-chart"],
 

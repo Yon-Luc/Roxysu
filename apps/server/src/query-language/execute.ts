@@ -10,7 +10,7 @@ import {
   backfillDanielDanSync,
   ensureDanielDanForIdsSync,
 } from "../map-analysis/computeDanielDan";
-import { PATTERN_ALGORITHM } from "@roxysu/pattern-7k";
+import { PATTERN_ALGORITHM } from "@roxysu/mania-pattern-analysis";
 import {
   backfillPatternAnalysisSync,
   PATTERN_QUERY_BACKFILL_LIMIT,

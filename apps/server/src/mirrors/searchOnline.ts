@@ -6,7 +6,7 @@ import { getActiveBeatmapMirrorProvider } from "./providers";
 import {
   buildMirrorSearchUrl,
   extractSearchBeatmapsets,
-  normalizeOnlineBeatmapSet,
+  normalizeMirrorSearchResult,
   type MirrorSearchParams,
   type OnlineBeatmapSet,
 } from "./search";
@@ -75,7 +75,7 @@ export async function searchOnlineBeatmapsets(
   let ownedSkipped = 0;
 
   for (const raw of rawSets) {
-    const set = normalizeOnlineBeatmapSet(raw);
+    const set = normalizeMirrorSearchResult(provider.id, raw);
     if (!set) continue;
     if (excludeOwned && owned.has(set.id)) {
       ownedSkipped += 1;

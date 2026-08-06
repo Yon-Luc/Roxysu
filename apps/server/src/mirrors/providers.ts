@@ -1,4 +1,4 @@
-export type BeatmapMirrorProviderId = "nerinyan" | "osu.direct";
+export type BeatmapMirrorProviderId = "nerinyan" | "osu.direct" | "hinai";
 
 export type BeatmapMirrorProvider = {
   id: BeatmapMirrorProviderId;
@@ -27,6 +27,17 @@ export const BEATMAP_MIRROR_PROVIDERS: Record<
       // osu.direct: append `n` for no-video archives when requested.
       const suffix = opts?.noVideo ? "n" : "";
       return `https://osu.direct/api/d/${setId}${suffix}`;
+    },
+  },
+  hinai: {
+    id: "hinai",
+    label: "hinai (Hinamizawa)",
+    buildDownloadUrl(setId, opts) {
+      // No-auth 7-source fallback mirror; proxy-streams a real .osz.
+      // See https://mirror.hinamizawa.ai/docs/beatmap-download
+      const url = new URL(`https://mirror.hinamizawa.ai/api/v1/hinai/d/${setId}`);
+      if (opts?.noVideo) url.searchParams.set("noVideo", "1");
+      return url.toString();
     },
   },
 };

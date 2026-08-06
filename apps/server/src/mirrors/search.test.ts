@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import {
+  buildHinaiSearchUrl,
   buildNerinyanSearchUrl,
   buildOsuDirectSearchUrl,
   extractSearchBeatmapsets,
+  normalizeCheeseGullBeatmapSet,
+  normalizeMirrorSearchResult,
   normalizeOnlineBeatmapSet,
 } from "./search";
 
@@ -77,6 +80,85 @@ describe("normalizeOnlineBeatmapSet", () => {
   });
 });
 
+describe("normalizeCheeseGullBeatmapSet", () => {
+  test("maps hinai's CheeseGull-shaped payloads", () => {
+    const set = normalizeCheeseGullBeatmapSet({
+      SetID: 292301,
+      Artist: "xi",
+      Title: "Blue Zenith",
+      Creator: "Asphyxia",
+      RankedStatus: 1,
+      HasVideo: 0,
+      Favourites: 5000,
+      PlayCount: 900000,
+      ApprovedDate: "2015-08-09 19:39:24",
+      ChildrenBeatmaps: [
+        {
+          BeatmapID: 658127,
+          DiffName: "FOUR DIMENSIONS",
+          DifficultyRating: 7.51,
+          Mode: 0,
+          CS: 4,
+        },
+      ],
+    });
+
+    expect(set).toEqual({
+      id: 292301,
+      artist: "xi",
+      title: "Blue Zenith",
+      creator: "Asphyxia",
+      status: "ranked",
+      bpm: null,
+      favouriteCount: 5000,
+      playCount: 900000,
+      hasVideo: false,
+      rankedDate: "2015-08-09 19:39:24",
+      beatmaps: [
+        {
+          id: 658127,
+          version: "FOUR DIMENSIONS",
+          stars: 7.51,
+          mode: "osu",
+          modeInt: 0,
+          keys: null,
+        },
+      ],
+    });
+  });
+
+  test("rejects invalid payloads", () => {
+    expect(normalizeCheeseGullBeatmapSet(null)).toBeNull();
+    expect(normalizeCheeseGullBeatmapSet({ SetID: 0 })).toBeNull();
+  });
+});
+
+describe("normalizeMirrorSearchResult", () => {
+  test("routes to the CheeseGull normalizer for hinai", () => {
+    const set = normalizeMirrorSearchResult("hinai", {
+      SetID: 1,
+      Artist: "a",
+      Title: "b",
+      Creator: "c",
+      RankedStatus: 4,
+      ChildrenBeatmaps: [],
+    });
+    expect(set?.status).toBe("loved");
+  });
+
+  test("routes to the osu-style normalizer for nerinyan/osu.direct", () => {
+    const set = normalizeMirrorSearchResult("nerinyan", {
+      id: 1,
+      artist: "a",
+      title: "b",
+      creator: "c",
+      status: "ranked",
+      beatmaps: [],
+    });
+    expect(set?.status).toBe("ranked");
+  });
+});
+
 describe("extractSearchBeatmapsets", () => {
   test("accepts array or wrapped payloads", () => {
     expect(extractSearchBeatmapsets([{ id: 1 }])).toEqual([{ id: 1 }]);
@@ -113,5 +195,23 @@ describe("search url builders", () => {
     ).toBe(
       "https://osu.direct/api/v2/search?query=freedom&mode=3&status=loved&page=1",
     );
+  });
+
+  test("builds hinai urls with numeric status + offset paging", () => {
+    expect(
+      buildHinaiSearchUrl({
+        q: "freedom",
+        mode: "mania",
+        status: "loved",
+        page: 2,
+      }),
+    ).toBe(
+      "https://mirror.hinamizawa.ai/api/v1/hinai/search?query=freedom&mode=3&status=4&amount=50&offset=100",
+    );
+  });
+
+  test("hinai urls omit status filter for graveyard (no documented v1 code)", () => {
+    const url = buildHinaiSearchUrl({ status: "graveyard" });
+    expect(url).not.toContain("status=");
   });
 });

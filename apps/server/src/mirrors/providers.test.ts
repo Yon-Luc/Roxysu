@@ -43,6 +43,15 @@ describe("beatmap mirror providers", () => {
     ).toBe("https://osu.direct/api/d/42n");
   });
 
+  test("builds hinai urls", () => {
+    expect(BEATMAP_MIRROR_PROVIDERS.hinai.buildDownloadUrl(42)).toBe(
+      "https://mirror.hinamizawa.ai/api/v1/hinai/d/42",
+    );
+    expect(
+      BEATMAP_MIRROR_PROVIDERS.hinai.buildDownloadUrl(42, { noVideo: true }),
+    ).toBe("https://mirror.hinamizawa.ai/api/v1/hinai/d/42?noVideo=1");
+  });
+
   test("defaults to nerinyan", () => {
     const prev = process.env.BEATMAP_MIRROR_PROVIDER;
     delete process.env.BEATMAP_MIRROR_PROVIDER;
@@ -62,6 +71,7 @@ describe("beatmap mirror providers", () => {
   test("validates provider ids", () => {
     expect(isBeatmapMirrorProviderId("nerinyan")).toBe(true);
     expect(isBeatmapMirrorProviderId("osu.direct")).toBe(true);
+    expect(isBeatmapMirrorProviderId("hinai")).toBe(true);
     expect(isBeatmapMirrorProviderId("chimu")).toBe(false);
   });
 });

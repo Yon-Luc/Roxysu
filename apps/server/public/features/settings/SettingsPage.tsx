@@ -15,6 +15,7 @@ import {
   fetchSunnyDanJob,
   fetchDanielDanJob,
   patchSettings,
+  recomputePatternAnalysisJob,
   startPatternAnalysisJob,
   startRatingLabJob,
   startSunnyDanJob,
@@ -224,6 +225,14 @@ export function SettingsPage({ section }: { section?: string } = {}) {
 
   const startPattern = useMutation({
     mutationFn: startPatternAnalysisJob,
+    onSuccess: (state) => {
+      queryClient.setQueryData(["settings", "pattern-analysis"], state);
+      void queryClient.invalidateQueries({ queryKey: ["settings"] });
+    },
+  });
+
+  const recomputePattern = useMutation({
+    mutationFn: recomputePatternAnalysisJob,
     onSuccess: (state) => {
       queryClient.setQueryData(["settings", "pattern-analysis"], state);
       void queryClient.invalidateQueries({ queryKey: ["settings"] });
@@ -1561,13 +1570,30 @@ export function SettingsPage({ section }: { section?: string } = {}) {
             disabled={
               patternRunning ||
               startPattern.isPending ||
+              recomputePattern.isPending ||
               (patternCoverage?.missing ?? 0) === 0
             }
             onClick={() => startPattern.mutate()}
           >
-            {patternRunning
+            {patternRunning && patternAnalysis?.mode !== "recompute"
               ? dict?.settings.calculating
               : dict?.settings.calculateMissingPatterns}
+          </button>
+          <button
+            type="button"
+            className="rx-btn"
+            disabled={
+              patternRunning ||
+              startPattern.isPending ||
+              recomputePattern.isPending ||
+              (patternCoverage?.totalMania ?? patternCoverage?.total7k ?? 0) ===
+                0
+            }
+            onClick={() => recomputePattern.mutate()}
+          >
+            {patternRunning && patternAnalysis?.mode === "recompute"
+              ? dict?.settings.recalculatingPatterns
+              : dict?.settings.recalculateAllPatterns}
           </button>
           <button
             type="button"
@@ -1584,6 +1610,11 @@ export function SettingsPage({ section }: { section?: string } = {}) {
         {startPattern.error ? (
           <p className="mt-3 text-sm text-rose-300">
             {startPattern.error.message}
+          </p>
+        ) : null}
+        {recomputePattern.error ? (
+          <p className="mt-3 text-sm text-rose-300">
+            {recomputePattern.error.message}
           </p>
         ) : null}
         {stopPattern.error ? (

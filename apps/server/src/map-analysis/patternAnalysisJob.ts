@@ -11,6 +11,8 @@ export type PatternAnalysisJobStatus =
   | "completed"
   | "error";
 
+export type PatternAnalysisJobMode = "missing" | "recompute";
+
 export type PatternAnalysisCoverage = {
   totalMania: number;
   /** @deprecated Use totalMania */
@@ -22,6 +24,7 @@ export type PatternAnalysisCoverage = {
 
 export type PatternAnalysisJobState = {
   status: PatternAnalysisJobStatus;
+  mode: PatternAnalysisJobMode;
   algorithm: typeof PATTERN_ALGORITHM;
   coverage: PatternAnalysisCoverage;
   computedThisRun: number;
@@ -37,6 +40,7 @@ const YIELD_MS = 10;
 
 let job: {
   status: PatternAnalysisJobStatus;
+  mode: PatternAnalysisJobMode;
   computedThisRun: number;
   attemptedThisRun: number;
   startedAt: Date | null;
@@ -46,6 +50,7 @@ let job: {
   db: Db | null;
 } = {
   status: "idle",
+  mode: "missing",
   computedThisRun: 0,
   attemptedThisRun: 0,
   startedAt: null,
@@ -131,6 +136,7 @@ export function getPatternAnalysisCoverage(db: Db): PatternAnalysisCoverage {
 export function getPatternAnalysisJobState(db: Db): PatternAnalysisJobState {
   return {
     status: job.status,
+    mode: job.mode,
     algorithm: PATTERN_ALGORITHM,
     coverage: getPatternAnalysisCoverage(db),
     computedThisRun: job.computedThisRun,
@@ -199,13 +205,23 @@ function runBatch(): void {
   }
 }
 
-/** Start background mania pattern analysis for maps missing the active algorithm. */
-export function startPatternAnalysisBackfill(db: Db): PatternAnalysisJobState {
+function startJob(
+  db: Db,
+  mode: PatternAnalysisJobMode,
+): PatternAnalysisJobState {
   if (job.status === "running" || job.status === "stopping") {
     return getPatternAnalysisJobState(db);
   }
 
+  if (mode === "recompute") {
+    // Clear active-algorithm cache so every mania map is treated as missing.
+    db.$client
+      .query(`DELETE FROM beatmap_pattern_analysis WHERE algorithm = ?`)
+      .run(PATTERN_ALGORITHM);
+  }
+
   job.status = "running";
+  job.mode = mode;
   job.computedThisRun = 0;
   job.attemptedThisRun = 0;
   job.startedAt = new Date();
@@ -213,14 +229,24 @@ export function startPatternAnalysisBackfill(db: Db): PatternAnalysisJobState {
   job.error = null;
   job.db = db;
 
-  const missing = countPatternAnalysisMissing(db);
-  if (missing === 0) {
+  const pending = countPatternAnalysisMissing(db);
+  if (pending === 0) {
     finish("completed");
     return getPatternAnalysisJobState(db);
   }
 
   scheduleNext();
   return getPatternAnalysisJobState(db);
+}
+
+/** Start background mania pattern analysis for maps missing the active algorithm. */
+export function startPatternAnalysisBackfill(db: Db): PatternAnalysisJobState {
+  return startJob(db, "missing");
+}
+
+/** Force-recompute pattern analysis for every mania map (new labels / algorithm tweaks). */
+export function startPatternAnalysisRecompute(db: Db): PatternAnalysisJobState {
+  return startJob(db, "recompute");
 }
 
 /** Request stop; current batch finishes, then job goes idle. */

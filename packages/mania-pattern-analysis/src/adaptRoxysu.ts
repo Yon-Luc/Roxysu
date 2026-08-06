@@ -30,6 +30,7 @@ const SCORABLE_LABELS: PatternLabelV2[] = [
   "chordstream",
   "bracket",
   "jumpstream",
+  "handstream",
   "stream",
 ];
 
@@ -46,7 +47,16 @@ export function chartNotesToHitObjects(notes: ChartNote[]): HitObject[] {
   }));
 }
 
-function labelFromDisplayName(displayName: string, corePattern: CorePattern): PatternLabel {
+/** 7K rice/stream family uses Roxysu "delay"; 4K uses "stream". */
+function riceStreamLabel(keyCount: number): PatternLabel {
+  return keyCount === 4 ? "stream" : "delay";
+}
+
+function labelFromDisplayName(
+  displayName: string,
+  corePattern: CorePattern,
+  keyCount: number,
+): PatternLabel {
   switch (displayName) {
     case "Brackets":
       return "bracket";
@@ -61,10 +71,16 @@ function labelFromDisplayName(displayName: string, corePattern: CorePattern): Pa
     case "Minitrills":
     case "Split Trill":
     case "Rolls":
-      return "delay";
+    case "Stream":
+      // Interlude 7K has no dedicated delay recogniser — single-note rice is
+      // Core "Stream". Roxysu 7K taxonomy calls that delay.
+      return riceStreamLabel(keyCount);
     case "Jumpstream":
+      return "jumpstream";
     case "Handstream":
+      return "handstream";
     case "Jump/Handstream":
+      return "jumpstream";
     case "Jumptrill":
       return "jumpstream";
     case "Double Stream":
@@ -72,21 +88,22 @@ function labelFromDisplayName(displayName: string, corePattern: CorePattern): Pa
     case "Light Chordstream":
     case "Chordstream":
       return "chordstream";
-    case "Stream":
-      return "stream";
     default:
       switch (corePattern) {
         case "Jacks":
           return "jack";
         case "Stream":
-          return "stream";
+          return riceStreamLabel(keyCount);
         case "Chordstream":
           return "chordstream";
       }
   }
 }
 
-function labelFromPatternType(type: PatternType): PatternLabel {
+function labelFromPatternType(
+  type: PatternType,
+  keyCount: number,
+): PatternLabel {
   switch (type) {
     case "Jack":
     case "Minijack":
@@ -97,30 +114,34 @@ function labelFromPatternType(type: PatternType): PatternLabel {
       return "bracket";
     case "Trill":
     case "Roll":
-      return "delay";
+    case "Stream":
+      return riceStreamLabel(keyCount);
     case "Jumpstream":
-    case "Handstream":
     case "Jump":
     case "Hand":
     case "Quad":
     case "Jumptrill":
       return "jumpstream";
-    case "Stream":
-      return "stream";
+    case "Handstream":
+      return "handstream";
     default:
       return "chordstream";
   }
 }
 
-function labelFromFoundPattern(pattern: {
-  specificName: string | null;
-  corePattern: string;
-  type: PatternType;
-}): PatternLabel {
+function labelFromFoundPattern(
+  pattern: {
+    specificName: string | null;
+    corePattern: string;
+    type: PatternType;
+  },
+  keyCount: number,
+): PatternLabel {
   if (pattern.specificName) {
     return labelFromDisplayName(
       pattern.specificName,
       pattern.corePattern as CorePattern,
+      keyCount,
     );
   }
   if (
@@ -131,17 +152,23 @@ function labelFromFoundPattern(pattern: {
     return labelFromDisplayName(
       pattern.corePattern,
       pattern.corePattern,
+      keyCount,
     );
   }
-  return labelFromPatternType(pattern.type);
+  return labelFromPatternType(pattern.type, keyCount);
 }
 
 function clusterScores(
   clusters: PatternCluster[],
+  keyCount: number,
 ): Map<PatternLabel, number> {
   const scores = new Map<PatternLabel, number>();
   for (const cluster of clusters) {
-    const label = labelFromDisplayName(cluster.displayName, cluster.pattern);
+    const label = labelFromDisplayName(
+      cluster.displayName,
+      cluster.pattern,
+      keyCount,
+    );
     scores.set(label, (scores.get(label) ?? 0) + cluster.importance);
   }
   return scores;
@@ -150,6 +177,7 @@ function clusterScores(
 function durationScores(
   result: InterludeResult,
   durationMs: number,
+  keyCount: number,
 ): Map<PatternLabel, number> {
   const scores = new Map<PatternLabel, number>();
   if (durationMs <= 0) return scores;
@@ -157,7 +185,7 @@ function durationScores(
   for (const patterns of Object.values(result.patterns)) {
     if (!patterns) continue;
     for (const pattern of patterns) {
-      const label = labelFromFoundPattern(pattern);
+      const label = labelFromFoundPattern(pattern, keyCount);
       const span = Math.max(0, pattern.endTime - pattern.startTime);
       scores.set(label, (scores.get(label) ?? 0) + span);
     }
@@ -240,6 +268,7 @@ function buildSections(
   result: InterludeResult,
   firstNoteTimeMs: number,
   endMs: number,
+  keyCount: number,
 ): PatternSection[] {
   if (endMs <= firstNoteTimeMs) return [];
 
@@ -261,7 +290,7 @@ function buildSections(
         const overlapEnd = Math.min(windowEnd, absEnd);
         if (overlapEnd <= overlapStart) continue;
 
-        const label = labelFromFoundPattern(pattern) as PatternLabelV2;
+        const label = labelFromFoundPattern(pattern, keyCount) as PatternLabelV2;
         if (!SCORABLE_LABELS.includes(label)) continue;
         const overlap = overlapEnd - overlapStart;
         counts.set(label, (counts.get(label) ?? 0) + overlap);
@@ -324,8 +353,8 @@ export function adaptInterludeResult(
     result.chartFirstNoteTimeMs || notes[0]!.startMs;
   const endMs = notes[notes.length - 1]!.startMs;
 
-  const importanceScores = clusterScores(result.interludeClusters);
-  const coverageScores = durationScores(result, durationMs);
+  const importanceScores = clusterScores(result.interludeClusters, keyCount);
+  const coverageScores = durationScores(result, durationMs, keyCount);
 
   // Prefer Interlude cluster importance for ranking, but only after labels are
   // consistent with coverage. Normalize importance so it mixes cleanly with
@@ -360,7 +389,7 @@ export function adaptInterludeResult(
     dominantPattern: dominant,
     secondaryPattern: secondary,
     confidence,
-    sections: buildSections(result, firstNoteTimeMs, endMs),
+    sections: buildSections(result, firstNoteTimeMs, endMs, keyCount),
     composition,
     interludeCategory: result.interludeCategory,
   };

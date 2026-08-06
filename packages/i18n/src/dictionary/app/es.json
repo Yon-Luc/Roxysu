@@ -195,6 +195,7 @@
 			"patterns": {
 				"jack": "Jack",
 				"jumpstream": "Jumpstream",
+				"handstream": "Handstream",
 				"chordjack": "Chordjack",
 				"bracket": "Bracket",
 				"chordstream": "Chordstream",
@@ -383,7 +384,9 @@
 		"maps7k": "{{count}} maps mania",
 		"classifiedThisRun": "+{{count}} clasificadas esta ejecución",
 		"classified": "+{{count}} clasificadas",
-		"calculateMissingPatterns": "Calcular patterns faltantes"
+		"calculateMissingPatterns": "Calcular patterns faltantes",
+		"recalculateAllPatterns": "Recalcular todos los patterns",
+		"recalculatingPatterns": "Recalculando…"
 	},
 	"skin": {
 		"pageTitle": "Skin de vista previa",

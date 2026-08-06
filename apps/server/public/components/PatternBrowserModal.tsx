@@ -186,8 +186,8 @@ function PatternBrowserModal({
         <div className="space-y-6 px-5 py-5">
           <p className="text-xs text-muted">
             {keymode}K · {activeTab.hint}
-            {keymode === 4
-              ? " · Jumpstream / stream families"
+                {keymode === 4
+              ? " · Jumpstream / handstream / stream families"
               : " · Delay / chordstream / bracket families"}
           </p>
 

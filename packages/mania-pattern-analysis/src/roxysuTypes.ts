@@ -2,6 +2,7 @@
 export const PATTERN_LABELS = [
   "jack",
   "jumpstream",
+  "handstream",
   "chordjack",
   "bracket",
   "chordstream",
@@ -29,6 +30,7 @@ export const PATTERN_LABELS_V2 = [
   "chordstream",
   "bracket",
   "jumpstream",
+  "handstream",
   "stream",
   "mixed",
 ] as const;

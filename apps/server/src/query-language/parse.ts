@@ -116,6 +116,8 @@ function normalizePatternValue(raw: string): string {
     jacks: "jack",
     jumpstream: "jumpstream",
     js: "jumpstream",
+    handstream: "handstream",
+    hs: "handstream",
     chordjack: "chordjack",
     cj: "chordjack",
     bracket: "bracket",

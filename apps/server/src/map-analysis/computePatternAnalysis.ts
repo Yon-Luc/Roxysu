@@ -45,6 +45,7 @@ type ManiaPatternBreakdown = Record<
   | "chordstream"
   | "bracket"
   | "jumpstream"
+  | "handstream"
   | "stream",
   number
 >;
@@ -102,6 +103,7 @@ const EMPTY_BREAKDOWN: ManiaPatternBreakdown = {
   chordstream: 0,
   bracket: 0,
   jumpstream: 0,
+  handstream: 0,
   stream: 0,
 };
 
@@ -118,6 +120,7 @@ function normalizeBreakdown(
     chordstream: partial?.chordstream ?? 0,
     bracket: partial?.bracket ?? 0,
     jumpstream: partial?.jumpstream ?? 0,
+    handstream: partial?.handstream ?? 0,
     stream: partial?.stream ?? 0,
   };
 }

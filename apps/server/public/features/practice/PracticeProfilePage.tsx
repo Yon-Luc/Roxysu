@@ -562,6 +562,7 @@ function formatPatternLabel(
     const fallback: Record<string, string> = {
       jack: "Jack",
       jumpstream: "Jumpstream",
+      handstream: "Handstream",
       chordjack: "Chordjack",
       bracket: "Bracket",
       chordstream: "Chordstream",
@@ -800,7 +801,7 @@ function SevenKDensityPanel({
   }));
   const weightPatterns =
     keyCount === 4
-      ? (["jack", "chordjack", "jumpstream", "stream"] as const)
+      ? (["jack", "chordjack", "jumpstream", "handstream", "stream"] as const)
       : (["jack", "chordjack", "delay", "chordstream", "bracket"] as const);
   const metricRows = weightPatterns.map((pattern) => ({
     pattern,

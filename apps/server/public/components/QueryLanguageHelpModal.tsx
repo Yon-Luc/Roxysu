@@ -46,8 +46,8 @@ const FIELDS: { field: string; meaning: string; example: string }[] = [
   {
     field: "pattern / dominant / style",
     meaning:
-      "7k dominant gameplay pattern (jack, jumpstream, chordjack, bracket, chordstream, stream). Computed from chart analysis.",
-    example: "pattern:jumpstream key=7",
+      "4K/7K dominant pattern (jack, jumpstream, handstream, chordjack, bracket, chordstream, stream, delay).",
+    example: "pattern:handstream key=4",
   },
   {
     field: "axis / rice / lnmap",

@@ -52,6 +52,7 @@ export type PatternSummary = {
 const PATTERN_DISPLAY: Record<string, string> = {
   jack: "Jack",
   jumpstream: "Jumpstream",
+  handstream: "Handstream",
   chordjack: "Chordjack",
   bracket: "Bracket",
   chordstream: "Chordstream",
@@ -65,6 +66,7 @@ const PATTERNS_4K = [
   "jack",
   "chordjack",
   "jumpstream",
+  "handstream",
   "stream",
   "mixed",
 ] as const;

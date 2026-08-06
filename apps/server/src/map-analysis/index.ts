@@ -66,6 +66,7 @@ export {
   getPatternAnalysisJobState,
   getPatternAnalysisCoverage,
   startPatternAnalysisBackfill,
+  startPatternAnalysisRecompute,
   stopPatternAnalysisBackfill,
   countPatternAnalysisMissing,
 } from "./patternAnalysisJob";

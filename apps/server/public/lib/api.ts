@@ -462,6 +462,13 @@ export async function startPatternAnalysisJob() {
   );
 }
 
+export async function recomputePatternAnalysisJob() {
+  return unwrap(
+    await api.api.settings["pattern-analysis"].recompute.post(),
+    "/api/settings/pattern-analysis/recompute",
+  );
+}
+
 export async function stopPatternAnalysisJob() {
   return unwrap(
     await api.api.settings["pattern-analysis"].stop.post(),

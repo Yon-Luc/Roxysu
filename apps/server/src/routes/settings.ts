@@ -40,6 +40,7 @@ import {
 import {
   getPatternAnalysisJobState,
   startPatternAnalysisBackfill,
+  startPatternAnalysisRecompute,
   stopPatternAnalysisBackfill,
 } from "../map-analysis/patternAnalysisJob";
 import {
@@ -146,6 +147,9 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
   .post("/daniel-dan/stop", ({ db }) => stopDanielDanBackfill(db))
   .get("/pattern-analysis", ({ db }) => getPatternAnalysisJobState(db))
   .post("/pattern-analysis/start", ({ db }) => startPatternAnalysisBackfill(db))
+  .post("/pattern-analysis/recompute", ({ db }) =>
+    startPatternAnalysisRecompute(db),
+  )
   .post("/pattern-analysis/stop", ({ db }) => stopPatternAnalysisBackfill(db))
   .patch(
     "/",

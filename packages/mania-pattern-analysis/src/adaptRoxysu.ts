@@ -111,6 +111,30 @@ function labelFromPatternType(type: PatternType): PatternLabel {
   }
 }
 
+function labelFromFoundPattern(pattern: {
+  specificName: string | null;
+  corePattern: string;
+  type: PatternType;
+}): PatternLabel {
+  if (pattern.specificName) {
+    return labelFromDisplayName(
+      pattern.specificName,
+      pattern.corePattern as CorePattern,
+    );
+  }
+  if (
+    pattern.corePattern === "Stream" ||
+    pattern.corePattern === "Chordstream" ||
+    pattern.corePattern === "Jacks"
+  ) {
+    return labelFromDisplayName(
+      pattern.corePattern,
+      pattern.corePattern,
+    );
+  }
+  return labelFromPatternType(pattern.type);
+}
+
 function clusterScores(
   clusters: PatternCluster[],
 ): Map<PatternLabel, number> {
@@ -132,7 +156,7 @@ function durationScores(
   for (const patterns of Object.values(result.patterns)) {
     if (!patterns) continue;
     for (const pattern of patterns) {
-      const label = labelFromPatternType(pattern.type);
+      const label = labelFromFoundPattern(pattern);
       const span = Math.max(0, pattern.endTime - pattern.startTime);
       scores.set(label, (scores.get(label) ?? 0) + span);
     }
@@ -197,12 +221,18 @@ function chordDensity(notes: ChartNote[]): number {
 }
 
 function buildComposition(
-  durationScoresMap: Map<PatternLabel, number>,
+  scores: Map<PatternLabel, number>,
 ): PatternComposition {
+  const total = SCORABLE_LABELS.reduce(
+    (sum, label) => sum + (scores.get(label) ?? 0),
+    0,
+  );
   const composition: PatternComposition = {};
+  if (total <= 0) return composition;
+
   for (const label of SCORABLE_LABELS) {
-    const value = durationScoresMap.get(label);
-    if (value != null && value > 0) composition[label] = value;
+    const value = scores.get(label) ?? 0;
+    if (value > 0) composition[label] = value / total;
   }
   return composition;
 }
@@ -232,7 +262,7 @@ function buildSections(
         const overlapEnd = Math.min(windowEnd, absEnd);
         if (overlapEnd <= overlapStart) continue;
 
-        const label = labelFromPatternType(pattern.type) as PatternLabelV2;
+        const label = labelFromFoundPattern(pattern) as PatternLabelV2;
         if (!SCORABLE_LABELS.includes(label)) continue;
         const overlap = overlapEnd - overlapStart;
         counts.set(label, (counts.get(label) ?? 0) + overlap);
@@ -297,16 +327,26 @@ export function adaptInterludeResult(
 
   const importanceScores = clusterScores(result.interludeClusters);
   const coverageScores = durationScores(result, durationMs);
-  const combined = new Map<PatternLabel, number>();
 
+  // Prefer Interlude cluster importance for ranking, but only after labels are
+  // consistent with coverage. Normalize importance so it mixes cleanly with
+  // time coverage (0–1-ish), then use the same scores for dominant + weights.
+  const importanceTotal = [...importanceScores.values()].reduce(
+    (sum, value) => sum + value,
+    0,
+  );
+  const combined = new Map<PatternLabel, number>();
   for (const label of SCORABLE_LABELS) {
-    const importance = importanceScores.get(label) ?? 0;
+    const importance =
+      importanceTotal > 0
+        ? (importanceScores.get(label) ?? 0) / importanceTotal
+        : 0;
     const coverage = coverageScores.get(label) ?? 0;
     combined.set(label, importance * 0.6 + coverage * 0.4);
   }
 
   const { dominant, secondary, confidence } = pickDominant(combined);
-  const composition = buildComposition(coverageScores);
+  const composition = buildComposition(combined);
 
   return {
     algorithm: PATTERN_ALGORITHM_INTERLUDE,

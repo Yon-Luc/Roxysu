@@ -1,6 +1,7 @@
 import { Elysia, t } from "elysia";
 import { dbPlugin } from "../db-runtime";
 import {
+  diffAgainstLibrary,
   getActiveBeatmapMirrorProvider,
   getMirrorBatchJobState,
   parsePositiveSetId,
@@ -115,6 +116,30 @@ export const mirrorRoutes = new Elysia({ prefix: "/mirrors" })
         excludeOwned: t.Optional(
           t.Union([t.Boolean(), t.Literal("1"), t.Literal("0")]),
         ),
+      }),
+    },
+  )
+  .post(
+    "/missing",
+    async ({ db, body, set }) => {
+      const ids = [...new Set(body.ids)].filter(
+        (id): id is number => parsePositiveSetId(String(id)) != null,
+      );
+      if (ids.length === 0) {
+        set.status = 400;
+        return { error: "ids must contain at least one positive beatmapset id" };
+      }
+      const diff = await diffAgainstLibrary(db, ids);
+      return {
+        checked: ids.length,
+        ...diff,
+      };
+    },
+    {
+      // Provider-agnostic: candidate ids can come from any mirror search,
+      // a bulk catalog pull, or a pasted list — this only touches SQLite.
+      body: t.Object({
+        ids: t.Array(t.Number(), { minItems: 1, maxItems: 2000 }),
       }),
     },
   )

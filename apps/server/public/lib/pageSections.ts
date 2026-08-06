@@ -118,6 +118,13 @@ export const PAGE_SECTIONS: PageSectionDef[] = [
     keywords: ["settings", "sunny", "dan", "labels", "compute"],
   },
   {
+    id: "daniel-dan-calculation",
+    to: "/settings",
+    pageLabel: "Settings",
+    label: "Daniel dan calculation",
+    keywords: ["settings", "daniel", "4k", "dan", "labels", "compute"],
+  },
+  {
     id: "pattern-analysis",
     to: "/settings",
     pageLabel: "Settings",

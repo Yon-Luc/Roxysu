@@ -69,8 +69,11 @@ async function sessionDetailPayload(
       artist: s.artist,
       difficultyName: s.difficultyName,
       starRating: s.starRating,
+      keyCount: s.keyCount != null ? Math.round(Number(s.keyCount)) : null,
       sunnyEstDiff: s.sunnyEstDiff ?? null,
       sunnyStar: s.sunnyStar ?? null,
+      danielEstDiff: s.danielEstDiff ?? null,
+      danielStar: s.danielStar != null ? Number(s.danielStar) : null,
       setOnlineId:
         s.setOnlineId != null && s.setOnlineId > 0 ? s.setOnlineId : null,
       backgroundFileHash: s.backgroundFileHash,

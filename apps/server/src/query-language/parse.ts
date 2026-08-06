@@ -298,6 +298,10 @@ function parseFieldTerm(raw: string): FieldTerm {
       if (!value) throw new QueryParseError("Invalid dan value: empty");
       return { type: "dan", value, prefix };
     }
+    case "daniel": {
+      if (!value) throw new QueryParseError("Invalid daniel value: empty");
+      return { type: "daniel", value, prefix };
+    }
     case "sunny":
     case "danstars":
     case "sunnystars": {

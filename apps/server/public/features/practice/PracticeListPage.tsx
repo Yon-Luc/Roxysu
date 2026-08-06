@@ -40,6 +40,9 @@ import {
 } from "../../lib/format";
 import {
   formatPrimaryRating,
+  primaryDanLabel,
+  primaryDanSource,
+  primaryRatingDisplayTitle,
   useRatingDisplayMode,
 } from "../../lib/ratingDisplay";
 import { useAppDict, t } from "../../lib/i18n";
@@ -163,6 +166,14 @@ function mergeRangeIntoQuery(
 
 export function PracticeListPage() {
   const ratingMode = useRatingDisplayMode();
+  const ratingListLabels = {
+    danielDan: dict?.practice.detail.danielDan ?? "Daniel dan",
+    sunnyDan: dict?.practice.detail.sunnyDan ?? "Sunny dan",
+    danielStar:
+      dict?.settings.ratingDisplay.dan?.labelDanielStar ?? "Daniel star rating",
+    sunnyStar:
+      dict?.settings.ratingDisplay.sunny?.label ?? "Sunny star rating",
+  };
   const { dict } = useAppDict();
   const [stored] = useState(readStoredPracticeSearch);
   const [q, setQ] = useState(stored.q);
@@ -515,7 +526,27 @@ export function PracticeListPage() {
       ) : (
         <>
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {list.items.map((item: PracticeItem) => (
+            {list.items.map((item: PracticeItem) => {
+              const primarySource = primaryDanSource({
+                mode: ratingMode,
+                keyCount: item.keyCount,
+                danielEstDiff: item.danielEstDiff,
+                danielStar: item.danielStar,
+                sunnyEstDiff: item.sunnyEstDiff,
+                sunnyStar: item.sunnyStar,
+              });
+              const primaryTitle = primaryRatingDisplayTitle(
+                ratingMode,
+                primarySource,
+                ratingListLabels,
+              );
+              const danLabel = primaryDanLabel({
+                sunnyEstDiff: item.sunnyEstDiff,
+                danielEstDiff: item.danielEstDiff,
+                keyCount: item.keyCount,
+              });
+
+              return (
               <li key={item.id} className="rx-card flex flex-col">
                 <Link
                   to="/practice/$beatmapId"
@@ -530,9 +561,9 @@ export function PracticeListPage() {
                       className="aspect-[2.2/1] w-full"
                       alt=""
                     />
-                    {ratingMode !== "dan" && item.sunnyEstDiff ? (
+                    {ratingMode !== "dan" && danLabel ? (
                       <span className="absolute bottom-2 left-2 max-w-[calc(100%-1rem)] truncate rounded bg-canvas/85 px-2 py-1 text-[11px] font-semibold leading-none text-ink shadow-sm ring-1 ring-white/10 backdrop-blur-sm">
-                        {item.sunnyEstDiff}
+                        {danLabel}
                       </span>
                     ) : null}
                   </div>
@@ -553,14 +584,24 @@ export function PracticeListPage() {
                       ) : null}
                     </div>
                     <div className="mt-1 truncate text-xs text-muted">
-                      [{item.difficultyName ?? "—"}] ·{" "}
-                      {formatPrimaryRating({
-                        mode: ratingMode,
-                        starRating: item.starRating,
-                        sunnyEstDiff: item.sunnyEstDiff,
-                        sunnyStar: item.sunnyStar,
-                      })}
-                      {item.mapperUsername ? ` · ${item.mapperUsername}` : ""}
+                      {ratingMode !== "osu" && primaryTitle ? (
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-faint">
+                          {primaryTitle}
+                        </div>
+                      ) : null}
+                      <div>
+                        [{item.difficultyName ?? "—"}] ·{" "}
+                        {formatPrimaryRating({
+                          mode: ratingMode,
+                          starRating: item.starRating,
+                          sunnyEstDiff: item.sunnyEstDiff,
+                          sunnyStar: item.sunnyStar,
+                          danielEstDiff: item.danielEstDiff,
+                          danielStar: item.danielStar,
+                          keyCount: item.keyCount,
+                        })}
+                        {item.mapperUsername ? ` · ${item.mapperUsername}` : ""}
+                      </div>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs tabular-nums text-subtle">
                       <span>
@@ -582,7 +623,8 @@ export function PracticeListPage() {
                   />
                 </div>
               </li>
-            ))}
+            );
+            })}
           </ul>
 
           <div className="flex justify-center gap-2">

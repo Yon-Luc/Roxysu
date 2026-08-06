@@ -5,6 +5,10 @@ import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import { publish } from "../shared/events";
 import { SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
 import {
+  danielEstDiffSelect,
+  danielStarSelect,
+} from "../map-analysis/danRatingSelect";
+import {
   resolveScoresGamemode,
   scoresGamemodeCondition,
 } from "./scoreGamemode";
@@ -248,10 +252,13 @@ export async function listSessionScores(db: Db, sessionId: number) {
       artist: beatmaps.artist,
       difficultyName: beatmaps.difficultyName,
       starRating: beatmaps.starRating,
+      keyCount: beatmaps.circleSize,
       setOnlineId: beatmapSets.onlineId,
       backgroundFileHash: beatmaps.backgroundFileHash,
       sunnyEstDiff: beatmapDanRatings.estDiff,
       sunnyStar: beatmapDanRatings.sunnyStar,
+      danielEstDiff: danielEstDiffSelect(),
+      danielStar: danielStarSelect(),
     })
     .from(scoreMetrics)
     .innerJoin(scores, eq(scoreMetrics.scoreId, scores.id))

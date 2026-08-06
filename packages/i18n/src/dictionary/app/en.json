@@ -177,6 +177,7 @@
 			"masteryFormula": "Formula: {{formula}} · {{plays}} plays",
 			"noMasteryYet": "No mastery yet.",
 			"sunnyDan": "Sunny dan",
+			"danielDan": "Daniel dan",
 			"rework": "rework",
 			"reworkStars": "{{stars}}★ rework",
 			"columnK": " · {{count}}K",
@@ -293,8 +294,18 @@
 		},
 		"ratingDisplay": {
 			"osu": { "label": "osu! star rating", "description": "Default difficulty stars from osu!/lazer." },
-			"dan": { "label": "Sunny dan", "description": "Always show the Sunny dan label when available." },
-			"sunny": { "label": "Sunny star rating", "description": "Show Sunny rework stars when available." }
+			"dan": {
+				"label": "Daniel dan (4K) / Sunny dan",
+				"labelDaniel": "Daniel dan",
+				"labelSunny": "Sunny dan",
+				"labelDanielStar": "Daniel star rating",
+				"description": "Daniel dan on 4K when available; Sunny dan on other key counts."
+			},
+			"sunny": {
+				"label": "Sunny star rating",
+				"labelDaniel": "Daniel star rating",
+				"description": "Daniel stars on 4K when available; Sunny rework stars elsewhere."
+			}
 		},
 		"lazerDataFolder": "osu!lazer data folder",
 		"lazerDataFolderDesc": "Folder that contains client.realm and files/. Override when the default path is wrong (Flatpak, custom install, etc.).",
@@ -332,7 +343,7 @@
 		"appearance": "Appearance",
 		"appearanceDesc": "Choose a light or dark interface. System follows your OS preference.",
 		"difficultyDisplay": "Difficulty display",
-		"difficultyDisplayDesc": "Choose what appears in place of star rating across the app. Falls back to osu! stars when Sunny data is missing.",
+		"difficultyDisplayDesc": "Choose what appears in place of star rating. 4K maps prefer Daniel when available; other key counts use Sunny.",
 		"previewSkin": "Preview skin",
 		"previewSkinDesc": "Customize note shape, colors, size, hit position, and lane cover for 4K–10K previews.",
 		"openSkinEditor": "Open skin editor",
@@ -360,6 +371,9 @@
 		"backfillRatings": "Backfill experiment ratings",
 		"sunnyDan": "Sunny dan calculation",
 		"sunnyDanDesc": "Compute Sunny dan labels for mania maps that are still missing a rating. Runs in the background in small batches.",
+		"danielDan": "Daniel dan calculation",
+		"danielDanDesc": "Compute Daniel dan labels for 4K mania maps still missing a rating. More accurate than Sunny for 4K rice.",
+		"maps4k": "{{count}} 4K maps",
 		"labeledThisRun": "+{{count}} labeled this run",
 		"labeled": "+{{count}} labeled",
 		"calculateMissingDans": "Calculate missing dans",

@@ -32,13 +32,13 @@ const OPTIONS: Array<{
   },
   {
     id: "dan",
-    label: "Sunny dan",
-    description: "Always show the Sunny dan label when available.",
+    label: "Daniel dan (4K) / Sunny dan",
+    description: "Daniel dan on 4K when available; Sunny dan on other key counts.",
   },
   {
     id: "sunny",
     label: "Sunny star rating",
-    description: "Show Sunny rework stars when available.",
+    description: "Daniel stars on 4K when available; Sunny rework stars elsewhere.",
   },
 ];
 
@@ -81,18 +81,98 @@ export function useRatingDisplayMode(): RatingDisplayMode {
   );
 }
 
+export function isFourKKeyCount(keyCount: number | null | undefined): boolean {
+  return keyCount != null && Math.round(keyCount) === 4;
+}
+
+/** Which dan estimator is shown for the current map + display mode. */
+export type PrimaryDanSource = "daniel" | "sunny";
+
+export function primaryDanSource(opts: {
+  mode: RatingDisplayMode;
+  sunnyEstDiff?: string | null;
+  danielEstDiff?: string | null;
+  sunnyStar?: number | null;
+  danielStar?: number | null;
+  keyCount?: number | null;
+}): PrimaryDanSource | null {
+  if (opts.mode === "osu") return null;
+  if (opts.mode === "dan") {
+    if (isFourKKeyCount(opts.keyCount) && opts.danielEstDiff) return "daniel";
+    if (opts.sunnyEstDiff) return "sunny";
+    return null;
+  }
+  if (isFourKKeyCount(opts.keyCount) && opts.danielStar != null) return "daniel";
+  if (opts.sunnyStar != null) return "sunny";
+  return null;
+}
+
+export type PrimaryRatingDisplayLabels = {
+  danielDan?: string;
+  sunnyDan?: string;
+  danielStar?: string;
+  sunnyStar?: string;
+};
+
+/** Title for the active dan/sunny display (e.g. panel heading). */
+export function primaryRatingDisplayTitle(
+  mode: RatingDisplayMode,
+  source: PrimaryDanSource | null,
+  labels: PrimaryRatingDisplayLabels = {},
+): string | null {
+  if (mode === "osu" || source == null) return null;
+  if (source === "daniel") {
+    return mode === "sunny"
+      ? (labels.danielStar ?? "Daniel star rating")
+      : (labels.danielDan ?? "Daniel dan");
+  }
+  return mode === "sunny"
+    ? (labels.sunnyStar ?? "Sunny star rating")
+    : (labels.sunnyDan ?? "Sunny dan");
+}
+
+/** Preferred dan label: Daniel on 4K when available, otherwise Sunny. */
+export function primaryDanLabel(opts: {
+  sunnyEstDiff?: string | null;
+  danielEstDiff?: string | null;
+  keyCount?: number | null;
+}): string | null {
+  if (isFourKKeyCount(opts.keyCount) && opts.danielEstDiff) {
+    return opts.danielEstDiff;
+  }
+  return opts.sunnyEstDiff ?? null;
+}
+
+/** Preferred dan star: Daniel on 4K when available, otherwise Sunny. */
+export function primaryDanStar(opts: {
+  sunnyStar?: number | null;
+  danielStar?: number | null;
+  keyCount?: number | null;
+}): number | null {
+  if (isFourKKeyCount(opts.keyCount) && opts.danielStar != null) {
+    return opts.danielStar;
+  }
+  return opts.sunnyStar ?? null;
+}
+
 export function formatPrimaryRating(opts: {
   mode: RatingDisplayMode;
   starRating: number | null | undefined;
   sunnyEstDiff?: string | null;
   sunnyStar?: number | null;
+  danielEstDiff?: string | null;
+  danielStar?: number | null;
+  keyCount?: number | null;
 }): string {
+  const danLabel = primaryDanLabel(opts);
+  const danStar = primaryDanStar(opts);
+
   switch (opts.mode) {
     case "dan":
-      if (opts.sunnyEstDiff) return opts.sunnyEstDiff;
+      if (danLabel) return danLabel;
       return formatStars(opts.starRating);
     case "sunny":
-      if (opts.sunnyStar != null) return formatStars(opts.sunnyStar);
+      if (danStar != null) return formatStars(danStar);
       return formatStars(opts.starRating);
     default:
       return formatStars(opts.starRating);

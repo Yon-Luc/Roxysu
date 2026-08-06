@@ -20,6 +20,10 @@ import {
 } from "../analytics/progression";
 import { SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
 import {
+  danielEstDiffSelect,
+  danielStarSelect,
+} from "../map-analysis/danRatingSelect";
+import {
   loadManiaPpCurves,
   resolveScorePp,
 } from "../mania-rating/estimateScorePp";
@@ -51,10 +55,13 @@ export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
         artist: beatmaps.artist,
         difficultyName: beatmaps.difficultyName,
         starRating: beatmaps.starRating,
+        keyCount: beatmaps.circleSize,
         setOnlineId: beatmapSets.onlineId,
         backgroundFileHash: beatmaps.backgroundFileHash,
         sunnyEstDiff: beatmapDanRatings.estDiff,
         sunnyStar: beatmapDanRatings.sunnyStar,
+        danielEstDiff: danielEstDiffSelect(),
+        danielStar: danielStarSelect(),
       })
       .from(scores)
       .leftJoin(beatmaps, eq(scores.beatmapId, beatmaps.id))
@@ -123,8 +130,11 @@ export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
         artist: s.artist,
         difficultyName: s.difficultyName,
         starRating: s.starRating,
+        keyCount: s.keyCount != null ? Math.round(Number(s.keyCount)) : null,
         sunnyEstDiff: s.sunnyEstDiff ?? null,
         sunnyStar: s.sunnyStar ?? null,
+        danielEstDiff: s.danielEstDiff ?? null,
+        danielStar: s.danielStar != null ? Number(s.danielStar) : null,
         setOnlineId:
           s.setOnlineId != null && s.setOnlineId > 0 ? s.setOnlineId : null,
         backgroundFileHash: s.backgroundFileHash,

@@ -27,31 +27,36 @@ function isDanTierLabel(value: string): boolean {
   return / \d+$/.test(value);
 }
 
+/** Effective dan label: Daniel on 4K when available, otherwise Sunny. */
+const EFFECTIVE_EST_DIFF =
+  "COALESCE(CASE WHEN CAST(b.circle_size AS INTEGER) = 4 THEN dr_d.est_diff END, dr.est_diff)";
+
 /**
- * Match Sunny dan labels without crossing tiers — "Regular 1" must not match "Regular 10".
+ * Match Sunny/Daniel dan labels without crossing tiers — "Regular 1" must not match "Regular 10".
  */
 function compileDanMatch(
   value: string,
   prefix: boolean | undefined,
   push: (value: unknown) => string,
+  estDiffExpr = EFFECTIVE_EST_DIFF,
 ): string {
   if (prefix && !isDanTierLabel(value)) {
     const pat = push(likePattern(value, true));
-    return `(dr.est_diff IS NOT NULL AND lower(dr.est_diff) LIKE lower(${pat}) ESCAPE '\\')`;
+    return `(${estDiffExpr} IS NOT NULL AND lower(${estDiffExpr}) LIKE lower(${pat}) ESCAPE '\\')`;
   }
 
   if (isDanTierLabel(value)) {
     const escaped = value.replace(/%/g, "\\%").replace(/_/g, "\\_");
     const tierSpace = push(`%${escaped} %`);
     const tierExact = push(value);
-    return `(dr.est_diff IS NOT NULL AND (
-      lower(dr.est_diff) LIKE lower(${tierSpace}) ESCAPE '\\'
-      OR lower(dr.est_diff) = lower(${tierExact})
+    return `(${estDiffExpr} IS NOT NULL AND (
+      lower(${estDiffExpr}) LIKE lower(${tierSpace}) ESCAPE '\\'
+      OR lower(${estDiffExpr}) = lower(${tierExact})
     ))`;
   }
 
   const pat = push(likePattern(value, prefix));
-  return `(dr.est_diff IS NOT NULL AND lower(dr.est_diff) LIKE lower(${pat}) ESCAPE '\\')`;
+  return `(${estDiffExpr} IS NOT NULL AND lower(${estDiffExpr}) LIKE lower(${pat}) ESCAPE '\\')`;
 }
 
 /** Positional `?` binders. Alias contract: b=beatmaps, m=mastery, ps=play_stats, rs=retry_stats */
@@ -173,6 +178,8 @@ function compileTerm(
     }
     case "dan":
       return compileDanMatch(term.value, term.prefix, push);
+    case "daniel":
+      return compileDanMatch(term.value, term.prefix, push, "dr_d.est_diff");
     case "sunny": {
       if (term.min != null && term.max != null) {
         return `dr.sunny_star BETWEEN ${push(term.min)} AND ${push(term.max)}`;

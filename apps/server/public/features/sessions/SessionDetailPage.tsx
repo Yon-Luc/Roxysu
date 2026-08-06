@@ -285,6 +285,9 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
                           starRating: score.starRating,
                           sunnyEstDiff: score.sunnyEstDiff,
                           sunnyStar: score.sunnyStar,
+                          danielEstDiff: score.danielEstDiff,
+                          danielStar: score.danielStar,
+                          keyCount: score.keyCount,
                         })}
                         {score.retryIndex != null && score.retryIndex > 0
                           ? t(dict?.session.retry, { n: score.retryIndex })

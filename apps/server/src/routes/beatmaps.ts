@@ -15,6 +15,7 @@ import {
   scoresUsernameCondition,
 } from "../analytics/scoreUsername";
 import { getOrComputeSunnyDan } from "../map-analysis/computeSunnyDan";
+import { getOrComputeDanielDan } from "../map-analysis/computeDanielDan";
 import {
   getOrComputePatternAnalysis,
   getSevenKPatternDetail,
@@ -136,6 +137,14 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
           ? await getOrComputeSunnyDan(db, params.id)
           : null;
 
+      const is4kMania =
+        beatmap.rulesetShortName === "mania" &&
+        beatmap.circleSize != null &&
+        Math.round(beatmap.circleSize) === 4;
+      const danielDan = is4kMania
+        ? await getOrComputeDanielDan(db, params.id)
+        : null;
+
       const is7kMania =
         beatmap.rulesetShortName === "mania" &&
         beatmap.circleSize != null &&
@@ -209,6 +218,7 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
             }
           : null,
         sunnyDan,
+        danielDan,
         patternAnalysis,
         sevenKAnalysis,
         timingAnalysis,

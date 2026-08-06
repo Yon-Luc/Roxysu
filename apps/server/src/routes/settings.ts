@@ -33,6 +33,11 @@ import {
   stopSunnyDanBackfill,
 } from "../map-analysis/sunnyDanJob";
 import {
+  getDanielDanJobState,
+  startDanielDanBackfill,
+  stopDanielDanBackfill,
+} from "../map-analysis/danielDanJob";
+import {
   getPatternAnalysisJobState,
   startPatternAnalysisBackfill,
   stopPatternAnalysisBackfill,
@@ -112,6 +117,7 @@ async function buildSettingsResponse(db: Db) {
       defaultHost: DEFAULT_TOSU_HOST,
     },
     sunnyDan: getSunnyDanJobState(db),
+    danielDan: getDanielDanJobState(db),
     patternAnalysis: getPatternAnalysisJobState(db),
       maniaRating: {
       versions: listVersions().map((v) => ({
@@ -135,6 +141,9 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
   .get("/sunny-dan", ({ db }) => getSunnyDanJobState(db))
   .post("/sunny-dan/start", ({ db }) => startSunnyDanBackfill(db))
   .post("/sunny-dan/stop", ({ db }) => stopSunnyDanBackfill(db))
+  .get("/daniel-dan", ({ db }) => getDanielDanJobState(db))
+  .post("/daniel-dan/start", ({ db }) => startDanielDanBackfill(db))
+  .post("/daniel-dan/stop", ({ db }) => stopDanielDanBackfill(db))
   .get("/pattern-analysis", ({ db }) => getPatternAnalysisJobState(db))
   .post("/pattern-analysis/start", ({ db }) => startPatternAnalysisBackfill(db))
   .post("/pattern-analysis/stop", ({ db }) => stopPatternAnalysisBackfill(db))

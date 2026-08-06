@@ -276,6 +276,9 @@ export function DashboardPage() {
                           starRating: score.starRating,
                           sunnyEstDiff: score.sunnyEstDiff,
                           sunnyStar: score.sunnyStar,
+                          danielEstDiff: score.danielEstDiff,
+                          danielStar: score.danielStar,
+                          keyCount: score.keyCount,
                         })}
                       </span>
                       <ModBadges mods={score.mods} />

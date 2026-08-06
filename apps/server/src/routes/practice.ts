@@ -73,6 +73,9 @@ function mapCard(r: {
   masteryLevel?: number | null;
   sunnyEstDiff?: string | null;
   sunnyStar?: number | null;
+  danielEstDiff?: string | null;
+  danielStar?: number | null;
+  keyCount?: number | null;
 }) {
   return {
     id: r.id,
@@ -95,6 +98,9 @@ function mapCard(r: {
     masteryLevel: r.masteryLevel ?? null,
     sunnyEstDiff: r.sunnyEstDiff ?? null,
     sunnyStar: r.sunnyStar ?? null,
+    danielEstDiff: r.danielEstDiff ?? null,
+    danielStar: r.danielStar ?? null,
+    keyCount: r.keyCount ?? null,
   };
 }
 

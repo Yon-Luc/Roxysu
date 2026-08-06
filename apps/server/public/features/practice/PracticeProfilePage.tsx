@@ -33,6 +33,9 @@ import {
 } from "../../lib/osuUrls";
 import {
   formatPrimaryRating,
+  primaryDanSource,
+  primaryDanStar,
+  primaryRatingDisplayTitle,
   useRatingDisplayMode,
 } from "../../lib/ratingDisplay";
 import { useChartStyles } from "../../lib/chartStyles";
@@ -100,6 +103,44 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
           error: string | null;
         } | null }).sunnyDan
       : null;
+  const danielDan =
+    data && "danielDan" in data
+      ? (data as { danielDan?: {
+          estDiff: string | null;
+          danielStar: number | null;
+          columnCount: number | null;
+          lnRatio: number | null;
+          numericDifficulty: number | null;
+          error: string | null;
+        } | null }).danielDan
+      : null;
+  const keyCount =
+    beatmap.circleSize != null ? Math.round(beatmap.circleSize) : null;
+  const ratingLabels = {
+    danielDan: dict?.practice.detail.danielDan ?? "Daniel dan",
+    sunnyDan: dict?.practice.detail.sunnyDan ?? "Sunny dan",
+    danielStar:
+      dict?.settings.ratingDisplay.dan?.labelDanielStar ?? "Daniel star rating",
+    sunnyStar: dict?.settings.ratingDisplay.sunny?.label ?? "Sunny star rating",
+  };
+  const primarySource = primaryDanSource({
+    mode: ratingMode,
+    keyCount,
+    danielEstDiff: danielDan?.estDiff,
+    danielStar: danielDan?.danielStar,
+    sunnyEstDiff: sunnyDan?.estDiff,
+    sunnyStar: sunnyDan?.sunnyStar,
+  });
+  const primaryTitle = primaryRatingDisplayTitle(
+    ratingMode,
+    primarySource,
+    ratingLabels,
+  );
+  const primaryStar = primaryDanStar({
+    keyCount,
+    danielStar: danielDan?.danielStar,
+    sunnyStar: sunnyDan?.sunnyStar,
+  });
   const patternAnalysis =
     data && "patternAnalysis" in data
       ? (data as { patternAnalysis?: {
@@ -128,6 +169,15 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
   const sessions = data.sessions ?? [];
   const clientUrl = osuClientBeatmapUrl(beatmap.onlineId);
   const webUrl = osuWebBeatmapUrl(beatmap.onlineId, beatmap.setOnlineId);
+  const displayedRating = formatPrimaryRating({
+    mode: ratingMode,
+    starRating: beatmap.starRating,
+    sunnyEstDiff: sunnyDan?.estDiff,
+    sunnyStar: sunnyDan?.sunnyStar,
+    danielEstDiff: danielDan?.estDiff,
+    danielStar: danielDan?.danielStar,
+    keyCount,
+  });
 
   return (
     <div className="space-y-8">
@@ -159,13 +209,7 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
               </h1>
             </div>
             <p className="mt-2 text-sm text-muted">
-              [{beatmap.difficultyName}] ·{" "}
-              {formatPrimaryRating({
-                mode: ratingMode,
-                starRating: beatmap.starRating,
-                sunnyEstDiff: sunnyDan?.estDiff,
-                sunnyStar: sunnyDan?.sunnyStar,
-              })}{" "}
+              [{beatmap.difficultyName}] · {displayedRating}{" "}
               · {beatmap.bpm.toFixed(0)} BPM
               {beatmap.mapperUsername
                 ? t(dict?.practice.detail.mappedBy, {
@@ -260,7 +304,50 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
             </p>
           )}
         </div>
-        {beatmap.rulesetShortName === "mania" && (
+        {beatmap.rulesetShortName === "mania" &&
+        (ratingMode === "dan" || ratingMode === "sunny") ? (
+          <div className="rx-panel px-5 py-5">
+            <h3 className="text-sm font-bold text-ink">
+              {primaryTitle ??
+                (ratingMode === "sunny"
+                  ? ratingLabels.sunnyStar
+                  : ratingLabels.sunnyDan)}
+            </h3>
+            {displayedRating !== "—" ? (
+              <div className="mt-3 space-y-1">
+                <div className="font-display text-2xl font-extrabold text-accent">
+                  {displayedRating}
+                </div>
+                {primaryStar != null ? (
+                  <p className="text-xs text-muted">
+                    {t(dict?.practice.detail.reworkStars, {
+                      stars: primaryStar.toFixed(2),
+                    })}
+                    {keyCount != null
+                      ? t(dict?.practice.detail.columnK, { count: keyCount })
+                      : ""}
+                    {sunnyDan?.lnRatio != null && primarySource === "sunny"
+                      ? t(dict?.practice.detail.lnRatio, {
+                          pct: (sunnyDan.lnRatio * 100).toFixed(0),
+                        })
+                      : ""}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted">
+                    {dict?.practice.detail.notAvailable}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-faint">
+                {danielDan?.error ??
+                  sunnyDan?.error ??
+                  dict?.practice.detail.notAvailable}
+              </p>
+            )}
+          </div>
+        ) : null}
+        {beatmap.rulesetShortName === "mania" && ratingMode === "osu" && (
           <div className="rx-panel px-5 py-5">
             <h3 className="text-sm font-bold text-ink">
               {dict?.practice.detail.sunnyDan}
@@ -291,6 +378,34 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
             ) : (
               <p className="mt-3 text-sm text-faint">
                 {sunnyDan?.error ?? dict?.practice.detail.notAvailable}
+              </p>
+            )}
+          </div>
+        )}
+        {keyCount === 4 && ratingMode === "osu" && (
+          <div className="rx-panel px-5 py-5">
+            <h3 className="text-sm font-bold text-ink">
+              {dict?.practice.detail.danielDan ?? "Daniel dan"}
+            </h3>
+            {danielDan?.estDiff ? (
+              <div className="mt-3 space-y-1">
+                <div className="font-display text-2xl font-extrabold text-accent">
+                  {danielDan.estDiff}
+                </div>
+                <p className="text-xs text-muted">
+                  {danielDan.danielStar != null
+                    ? t(dict?.practice.detail.reworkStars, {
+                        stars: danielDan.danielStar.toFixed(2),
+                      })
+                    : dict?.practice.detail.rework}
+                  {danielDan.numericDifficulty != null
+                    ? ` · #${danielDan.numericDifficulty.toFixed(2)}`
+                    : ""}
+                </p>
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-faint">
+                {danielDan?.error ?? dict?.practice.detail.notAvailable}
               </p>
             )}
           </div>

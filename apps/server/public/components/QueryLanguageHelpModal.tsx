@@ -30,8 +30,13 @@ const FIELDS: { field: string; meaning: string; example: string }[] = [
   {
     field: "dan",
     meaning:
-      "Sunny dan label (RC/Regular if LN&lt;20%, LN dan if LN≥20%). Quote multi-word labels.",
-    example: 'dan:"Regular 4"',
+      "Dan label — Daniel on 4K when available, otherwise Sunny (RC/Regular if LN&lt;20%, LN dan if LN≥20%). Quote multi-word labels.",
+    example: 'dan:"Alpha Mid" key=4',
+  },
+  {
+    field: "daniel",
+    meaning: "Daniel dan label (4K RC only; Alpha through Theta tiers)",
+    example: 'daniel:Beta key=4',
   },
   {
     field: "sunny / danstars",

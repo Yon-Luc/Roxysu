@@ -9,3 +9,11 @@ export {
   runSunnyEstimatorFromText,
   type SunnyEstimatorResult,
 } from "./sunnyEstimator";
+export {
+  runDanielEstimatorFromText,
+  type DanielEstimatorResult,
+} from "./danielEstimator";
+export {
+  estimateDanielDan,
+  type DanielDanEstimate,
+} from "./estimateDanielDan";

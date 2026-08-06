@@ -125,6 +125,9 @@ export function CollectionResultsPage({
                       starRating: item.starRating,
                       sunnyEstDiff: item.sunnyEstDiff,
                       sunnyStar: item.sunnyStar,
+                      danielEstDiff: item.danielEstDiff,
+                      danielStar: item.danielStar,
+                      keyCount: item.keyCount,
                     })}
                   </div>
                   <div className="mt-2 flex gap-3 text-xs tabular-nums text-subtle">

@@ -11,6 +11,12 @@ import {
   localBeatmapCoverUrl,
   osuBeatmapCoverUrl,
 } from "../../lib/osuUrls";
+import {
+  isFourKKeyCount,
+  primaryDanSource,
+  primaryRatingDisplayTitle,
+  useRatingDisplayMode,
+} from "../../lib/ratingDisplay";
 
 const PREFS_KEY = "rx-session-tosu-panel";
 
@@ -125,6 +131,7 @@ export function SessionTosuLivePanel() {
     },
   });
 
+  const ratingMode = useRatingDisplayMode();
   const chip = statusLabel(dict, data);
   const beatmap = data?.beatmap;
   const play = data?.play;
@@ -132,6 +139,32 @@ export function SessionTosuLivePanel() {
   const pattern = data?.analysis.pattern;
   const hasMap = Boolean(beatmap?.title || beatmap?.checksum);
   const showManiaAnalysis = isManiaBeatmap(beatmap);
+
+  const keyCount = sunny?.columnCount ?? beatmap?.keys ?? null;
+  const isFourK = isFourKKeyCount(keyCount);
+  const titleMode = ratingMode === "osu" ? "dan" : ratingMode;
+  const ratingLabels = {
+    danielDan: dict?.practice.detail.danielDan ?? "Daniel dan",
+    sunnyDan: dict?.practice.detail.sunnyDan ?? "Sunny dan",
+    danielStar:
+      dict?.settings.ratingDisplay.dan?.labelDanielStar ??
+      "Daniel star rating",
+    sunnyStar:
+      dict?.settings.ratingDisplay.sunny?.label ?? "Sunny star rating",
+  };
+  const primarySource =
+    primaryDanSource({
+      mode: titleMode,
+      keyCount,
+      danielEstDiff: isFourK ? sunny?.estDiff : null,
+      sunnyEstDiff: !isFourK ? sunny?.estDiff : null,
+      danielStar: isFourK ? sunny?.sunnyStar : null,
+      sunnyStar: !isFourK ? sunny?.sunnyStar : null,
+    }) ?? (isFourK ? "daniel" : keyCount != null ? "sunny" : null);
+  const analysisLabel =
+    primaryRatingDisplayTitle(titleMode, primarySource, ratingLabels) ??
+    dict?.practice.detail.sunnyDan ??
+    "Sunny dan";
 
   const bgSources = useMemo(() => liveBackgroundSources(data), [data]);
   const bgKey = `${beatmap?.checksum ?? ""}|${data?.backgroundFileHash ?? ""}|${data?.host ?? ""}`;
@@ -297,7 +330,7 @@ export function SessionTosuLivePanel() {
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div>
                       <div className="text-xs font-semibold uppercase tracking-wide text-faint">
-                        {dict?.session.tosu.sunny ?? "Sunny"}
+                        {analysisLabel}
                         {beatmap?.rate != null &&
                         Math.abs(beatmap.rate - 1) > 0.001
                           ? ` · ×${beatmap.rate.toFixed(2).replace(/\.?0+$/, "")}`

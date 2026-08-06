@@ -6,6 +6,10 @@ import type { AstNode } from "./ast";
 import { astUsesDanRating } from "./astUsesDan";
 import { astUsesPatternAnalysis } from "./astUsesPattern";
 import { backfillSunnyDanSync, ensureSunnyDanForIdsSync } from "../map-analysis/computeSunnyDan";
+import {
+  backfillDanielDanSync,
+  ensureDanielDanForIdsSync,
+} from "../map-analysis/computeDanielDan";
 import { PATTERN_ALGORITHM } from "@roxysu/pattern-7k";
 import {
   backfillPatternAnalysisSync,
@@ -46,6 +50,12 @@ export type PracticeCardRow = {
   sunnyEstDiff: string | null;
   /** Sunny rework star rating when computed. */
   sunnyStar: number | null;
+  /** Daniel dan label when computed (4K RC). */
+  danielEstDiff: string | null;
+  /** Daniel star rating when computed. */
+  danielStar: number | null;
+  /** Mania key count (circle size). */
+  keyCount: number | null;
 };
 
 export type PracticeSortBy =
@@ -111,6 +121,8 @@ function baseFrom(db: Db): string {
   LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
   LEFT JOIN beatmap_dan_ratings dr
     ON dr.beatmap_id = b.id AND dr.algorithm = 'sunny'
+  LEFT JOIN beatmap_dan_ratings dr_d
+    ON dr_d.beatmap_id = b.id AND dr_d.algorithm = 'daniel'
   LEFT JOIN beatmap_pattern_analysis pa
     ON pa.beatmap_id = b.id AND pa.algorithm = '${PATTERN_ALGORITHM}'
 `;
@@ -124,6 +136,7 @@ const SELECT_COLS = `
   b.star_rating AS starRating,
   b.bpm AS bpm,
   b.ruleset_short_name AS rulesetShortName,
+  CAST(b.circle_size AS INTEGER) AS keyCount,
   b.mapper_username AS mapperUsername,
   CASE WHEN b.online_id > 0 THEN b.online_id ELSE NULL END AS onlineId,
   CASE WHEN bs.online_id > 0 THEN bs.online_id ELSE NULL END AS setOnlineId,
@@ -136,7 +149,9 @@ const SELECT_COLS = `
   ps.last_played_at AS lastPlayedAt,
   m.level AS masteryLevel,
   dr.est_diff AS sunnyEstDiff,
-  dr.sunny_star AS sunnyStar
+  dr.sunny_star AS sunnyStar,
+  dr_d.est_diff AS danielEstDiff,
+  dr_d.sunny_star AS danielStar
 `;
 
 function baseWhere(db: Db, extra: string): string {
@@ -273,6 +288,7 @@ function resolveFilter(
 function maybeBackfillDan(db: Db, needsDanBackfill: boolean): void {
   if (!needsDanBackfill) return;
   backfillSunnyDanSync(db, { limit: DAN_QUERY_BACKFILL_LIMIT });
+  backfillDanielDanSync(db, { limit: DAN_QUERY_BACKFILL_LIMIT });
 }
 
 function maybeBackfillPattern(db: Db, needsPatternBackfill: boolean): void {
@@ -291,31 +307,60 @@ function mapRow(r: PracticeCardRow): PracticeCardRow {
     masteryLevel: r.masteryLevel != null ? Number(r.masteryLevel) : null,
     sunnyEstDiff: r.sunnyEstDiff ?? null,
     sunnyStar: r.sunnyStar != null ? Number(r.sunnyStar) : null,
+    danielEstDiff: r.danielEstDiff ?? null,
+    danielStar: r.danielStar != null ? Number(r.danielStar) : null,
+    keyCount: r.keyCount != null ? Number(r.keyCount) : null,
   };
 }
 
-function enrichSunnyLabels(
+function enrichDanLabels(
   db: Db,
   items: PracticeCardRow[],
 ): PracticeCardRow[] {
   const mapped = items.map(mapRow);
-  const missingDanIds = mapped
+  const missingSunnyIds = mapped
     .filter(
       (item) =>
         !item.sunnyEstDiff &&
         (item.rulesetShortName ?? "").toLowerCase() === "mania",
     )
     .map((item) => item.id);
-  if (missingDanIds.length === 0) return mapped;
+  const missingDanielIds = mapped
+    .filter(
+      (item) =>
+        !item.danielEstDiff &&
+        (item.rulesetShortName ?? "").toLowerCase() === "mania",
+    )
+    .map((item) => item.id);
 
-  const labels = ensureSunnyDanForIdsSync(db, missingDanIds);
-  for (const item of mapped) {
-    const rating = labels.get(item.id);
-    if (!rating) continue;
-    item.sunnyEstDiff = rating.estDiff;
-    if (rating.sunnyStar != null) item.sunnyStar = rating.sunnyStar;
+  if (missingSunnyIds.length > 0) {
+    const labels = ensureSunnyDanForIdsSync(db, missingSunnyIds);
+    for (const item of mapped) {
+      const rating = labels.get(item.id);
+      if (!rating) continue;
+      item.sunnyEstDiff = rating.estDiff;
+      if (rating.sunnyStar != null) item.sunnyStar = rating.sunnyStar;
+    }
   }
+
+  if (missingDanielIds.length > 0) {
+    const labels = ensureDanielDanForIdsSync(db, missingDanielIds);
+    for (const item of mapped) {
+      const rating = labels.get(item.id);
+      if (!rating) continue;
+      item.danielEstDiff = rating.estDiff;
+      if (rating.danielStar != null) item.danielStar = rating.danielStar;
+    }
+  }
+
   return mapped;
+}
+
+function enrichSunnyLabels(
+  db: Db,
+  items: PracticeCardRow[],
+): PracticeCardRow[] {
+  return enrichDanLabels(db, items);
 }
 
 export function executeAst(
@@ -330,6 +375,7 @@ export function executeAst(
 ): { items: PracticeCardRow[]; total: number } {
   if (astUsesDanRating(ast)) {
     backfillSunnyDanSync(db, { limit: DAN_QUERY_BACKFILL_LIMIT });
+    backfillDanielDanSync(db, { limit: DAN_QUERY_BACKFILL_LIMIT });
   }
   if (astUsesPatternAnalysis(ast)) {
     backfillPatternAnalysisSync(db, { limit: PATTERN_QUERY_BACKFILL_LIMIT });

@@ -6,6 +6,7 @@ export function astUsesDanRating(node: AstNode): boolean {
     case "term":
       return (
         node.term.type === "dan" ||
+        node.term.type === "daniel" ||
         node.term.type === "sunny" ||
         node.term.type === "axis"
       );

@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 
 import { analyze7kFromOsuText } from "@roxysu/pattern-7k";
 import { getOrComputePatternAnalysis } from "../map-analysis";
-import { runSunnyEstimatorFromText } from "../map-analysis/sunnyEstimator";
+import { runDanielEstimatorFromText } from "../map-analysis/danielEstimator";
 import {
   getOsuDataPath,
   resolveLazerFilePath,
@@ -97,7 +97,7 @@ function patternFromDb(
 
 function sunnyFromText(osuText: string, speedRate: number): TosuLiveSunny {
   try {
-    const result = runSunnyEstimatorFromText(osuText, { speedRate });
+    const result = runDanielEstimatorFromText(osuText, { speedRate });
     return {
       sunnyStar: result.star,
       estDiff: result.estDiff,

@@ -13,13 +13,16 @@ import {
   fetchPatternAnalysisJob,
   fetchRatingLabJob,
   fetchSunnyDanJob,
+  fetchDanielDanJob,
   patchSettings,
   startPatternAnalysisJob,
   startRatingLabJob,
   startSunnyDanJob,
+  startDanielDanJob,
   stopPatternAnalysisJob,
   stopRatingLabJob,
   stopSunnyDanJob,
+  stopDanielDanJob,
 } from "../../lib/api";
 import { isDesktopShell } from "../../lib/desktop";
 import {
@@ -80,6 +83,15 @@ export function SettingsPage({ section }: { section?: string } = {}) {
   const sunnyDanQuery = useQuery({
     queryKey: ["settings", "sunny-dan"],
     queryFn: fetchSunnyDanJob,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === "running" || status === "stopping" ? 1000 : false;
+    },
+  });
+
+  const danielDanQuery = useQuery({
+    queryKey: ["settings", "daniel-dan"],
+    queryFn: fetchDanielDanJob,
     refetchInterval: (query) => {
       const status = query.state.data?.status;
       return status === "running" || status === "stopping" ? 1000 : false;
@@ -195,6 +207,21 @@ export function SettingsPage({ section }: { section?: string } = {}) {
     },
   });
 
+  const startDaniel = useMutation({
+    mutationFn: startDanielDanJob,
+    onSuccess: (state) => {
+      queryClient.setQueryData(["settings", "daniel-dan"], state);
+      void queryClient.invalidateQueries({ queryKey: ["settings"] });
+    },
+  });
+
+  const stopDaniel = useMutation({
+    mutationFn: stopDanielDanJob,
+    onSuccess: (state) => {
+      queryClient.setQueryData(["settings", "daniel-dan"], state);
+    },
+  });
+
   const startPattern = useMutation({
     mutationFn: startPatternAnalysisJob,
     onSuccess: (state) => {
@@ -297,6 +324,20 @@ export function SettingsPage({ section }: { section?: string } = {}) {
       ? Math.min(
           100,
           Math.round((coverage.computed / coverage.maniaTotal) * 100),
+        )
+      : 0;
+
+  const danielDan = danielDanQuery.data ?? data.danielDan;
+  const danielCoverage = danielDan?.coverage;
+  const danielRunning =
+    danielDan?.status === "running" || danielDan?.status === "stopping";
+  const danielProgressPct =
+    danielCoverage && danielCoverage.fourKTotal > 0
+      ? Math.min(
+          100,
+          Math.round(
+            (danielCoverage.computed / danielCoverage.fourKTotal) * 100,
+          ),
         )
       : 0;
 
@@ -1328,6 +1369,109 @@ export function SettingsPage({ section }: { section?: string } = {}) {
         ) : null}
         {sunnyDan?.error ? (
           <p className="mt-3 text-sm text-rose-300">{sunnyDan.error}</p>
+        ) : null}
+      </section>
+
+      <section
+        id={pageSectionDomId("daniel-dan-calculation")}
+        className="rx-panel scroll-mt-6 p-5"
+      >
+        <h2 className="text-sm font-bold text-ink">
+          {dict?.settings.danielDan ?? "Daniel dan calculation"}
+        </h2>
+        <p className="mt-1 text-sm text-muted">
+          {dict?.settings.danielDanDesc ??
+            "Compute Daniel dan labels for 4K mania maps still missing a rating. More accurate than Sunny for 4K RC."}
+        </p>
+
+        {danielCoverage ? (
+          <div className="mt-4 space-y-3">
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm tabular-nums text-subtle">
+              <span>
+                <span className="font-semibold text-ink">
+                  {danielCoverage.computed.toLocaleString()}
+                </span>
+                {" / "}
+                {t(dict?.settings.maps4k, {
+                  count: danielCoverage.fourKTotal.toLocaleString(),
+                }) ?? `${danielCoverage.fourKTotal.toLocaleString()} 4K maps`}
+              </span>
+              <span>
+                {t(dict?.settings.remaining, {
+                  count: danielCoverage.missing.toLocaleString(),
+                })}
+              </span>
+              {danielCoverage.failed > 0 ? (
+                <span className="text-rose-300/90">
+                  {t(dict?.settings.failed, {
+                    count: danielCoverage.failed.toLocaleString(),
+                  })}
+                </span>
+              ) : null}
+            </div>
+
+            <div className="h-2 overflow-hidden rounded bg-elevated">
+              <div
+                className="h-full bg-accent transition-[width] duration-500"
+                style={{ width: `${danielProgressPct}%` }}
+              />
+            </div>
+
+            <p className="text-xs text-faint">
+              {statusLabel(dict, danielDan?.status)}
+              {danielRunning
+                ? ` · ${t(dict?.settings.labeledThisRun, {
+                    count: danielDan.computedThisRun.toLocaleString(),
+                  })}`
+                : null}
+              {danielDan?.status === "completed" &&
+              danielDan.computedThisRun > 0
+                ? ` · ${t(dict?.settings.labeled, {
+                    count: danielDan.computedThisRun.toLocaleString(),
+                  })}`
+                : null}
+            </p>
+          </div>
+        ) : (
+          <p className="mt-3 text-sm text-muted">
+            {dict?.settings.loadingCoverage}
+          </p>
+        )}
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="rx-btn-primary"
+            disabled={
+              danielRunning ||
+              startDaniel.isPending ||
+              (danielCoverage?.missing ?? 0) === 0
+            }
+            onClick={() => startDaniel.mutate()}
+          >
+            {danielRunning
+              ? dict?.settings.calculating
+              : dict?.settings.calculateMissingDans}
+          </button>
+          <button
+            type="button"
+            className="rx-btn"
+            disabled={!danielRunning || stopDaniel.isPending}
+            onClick={() => stopDaniel.mutate()}
+          >
+            {danielDan?.status === "stopping"
+              ? dict?.settings.stopping
+              : dict?.settings.stop}
+          </button>
+        </div>
+
+        {startDaniel.error ? (
+          <p className="mt-3 text-sm text-rose-300">
+            {startDaniel.error.message}
+          </p>
+        ) : null}
+        {danielDan?.error ? (
+          <p className="mt-3 text-sm text-rose-300">{danielDan.error}</p>
         ) : null}
       </section>
 

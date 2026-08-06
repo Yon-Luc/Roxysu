@@ -19,6 +19,9 @@ export type SessionSuggestMapFields = {
   starRating: number;
   sunnyEstDiff?: string | null;
   sunnyStar?: number | null;
+  danielEstDiff?: string | null;
+  danielStar?: number | null;
+  keyCount?: number | null;
   backgroundFileHash: string | null;
   setOnlineId: number | null;
   onlineId: number | null;
@@ -68,6 +71,9 @@ export function SessionSuggestMapRow({
               starRating: item.starRating,
               sunnyEstDiff: item.sunnyEstDiff,
               sunnyStar: item.sunnyStar,
+              danielEstDiff: item.danielEstDiff,
+              danielStar: item.danielStar,
+              keyCount: item.keyCount,
             })}
             {metaExtra}
           </div>

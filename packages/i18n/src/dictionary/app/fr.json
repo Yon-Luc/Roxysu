@@ -177,6 +177,7 @@
 			"masteryFormula": "Formule : {{formula}} · {{plays}} parties",
 			"noMasteryYet": "Pas encore de maîtrise.",
 			"sunnyDan": "Dan Sunny",
+			"danielDan": "Dan Daniel",
 			"rework": "rework",
 			"reworkStars": "{{stars}}★ rework",
 			"columnK": " · {{count}}K",
@@ -293,8 +294,18 @@
 		},
 		"ratingDisplay": {
 			"osu": { "label": "Star rating osu!", "description": "Étoiles de difficulté par défaut d'osu!/lazer." },
-			"dan": { "label": "Sunny dan", "description": "Toujours afficher le label Sunny dan lorsqu'il est disponible." },
-			"sunny": { "label": "Sunny star rating", "description": "Afficher les stars rework Sunny lorsqu'elles sont disponibles." }
+			"dan": {
+				"label": "Daniel dan (4K) / Sunny dan",
+				"labelDaniel": "Daniel dan",
+				"labelSunny": "Sunny dan",
+				"labelDanielStar": "Étoiles Daniel",
+				"description": "Daniel dan sur 4K quand disponible ; Sunny dan sur les autres key counts."
+			},
+			"sunny": {
+				"label": "Sunny star rating",
+				"labelDaniel": "Étoiles Daniel",
+				"description": "Étoiles Daniel sur 4K quand disponible ; étoiles Sunny rework ailleurs."
+			}
 		},
 		"lazerDataFolder": "Dossier de données osu!lazer",
 		"lazerDataFolderDesc": "Dossier contenant client.realm et files/. Surchargez lorsque le chemin par défaut est erroné (Flatpak, installation personnalisée, etc.).",
@@ -360,6 +371,9 @@
 		"backfillRatings": "Calculer les ratings expérimentaux manquants",
 		"sunnyDan": "Calcul Sunny dan",
 		"sunnyDanDesc": "Calcule les labels Sunny dan des maps mania qui n'ont toujours pas de rating. S'exécute en arrière-plan par petits lots.",
+		"danielDan": "Calcul Daniel dan",
+		"danielDanDesc": "Calcule les labels Daniel dan pour les maps mania 4K sans rating. Plus précis que Sunny pour le rice 4K.",
+		"maps4k": "{{count}} maps 4K",
 		"labeledThisRun": "+{{count}} labellisés durant cette exécution",
 		"labeled": "+{{count}} labellisés",
 		"calculateMissingDans": "Calculer les dans manquants",

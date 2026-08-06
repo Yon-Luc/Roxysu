@@ -21,6 +21,8 @@ export type FieldTerm =
   | { type: "text"; value: string }
   /** Sunny dan label substring (est_diff), e.g. Reform / Alpha / Regular. */
   | { type: "dan"; value: string; prefix?: boolean }
+  /** Daniel dan label substring (4K RC), e.g. Alpha / Beta. */
+  | { type: "daniel"; value: string; prefix?: boolean }
   /** Sunny rework star rating (numeric). */
   | {
       type: "sunny";

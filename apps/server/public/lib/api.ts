@@ -425,6 +425,27 @@ export async function stopSunnyDanJob() {
   );
 }
 
+export async function fetchDanielDanJob() {
+  return unwrap(
+    await api.api.settings["daniel-dan"].get(),
+    "/api/settings/daniel-dan",
+  );
+}
+
+export async function startDanielDanJob() {
+  return unwrap(
+    await api.api.settings["daniel-dan"].start.post(),
+    "/api/settings/daniel-dan/start",
+  );
+}
+
+export async function stopDanielDanJob() {
+  return unwrap(
+    await api.api.settings["daniel-dan"].stop.post(),
+    "/api/settings/daniel-dan/stop",
+  );
+}
+
 export async function fetchPatternAnalysisJob() {
   return unwrap(
     await api.api.settings["pattern-analysis"].get(),

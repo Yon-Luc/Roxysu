@@ -53,6 +53,9 @@ export const searchRoutes = new Elysia({ prefix: "/search" })
             masteryLevel: r.masteryLevel,
             sunnyEstDiff: r.sunnyEstDiff ?? null,
             sunnyStar: r.sunnyStar ?? null,
+            danielEstDiff: r.danielEstDiff ?? null,
+            danielStar: r.danielStar ?? null,
+            keyCount: r.keyCount ?? null,
           })),
         };
       } catch (err) {

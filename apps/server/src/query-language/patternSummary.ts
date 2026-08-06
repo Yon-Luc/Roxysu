@@ -18,6 +18,7 @@ import {
 import type { PracticeCardRow } from "./execute";
 
 export type PatternAxis = "all" | "rc" | "ln";
+export type PatternKeymode = 4 | 7;
 
 export type PatternSummaryItem = {
   pattern: string;
@@ -30,10 +31,11 @@ export type PatternSummaryItem = {
 
 export type PatternSummary = {
   axis: PatternAxis;
+  keymode: PatternKeymode;
   totalMania: number;
   /** @deprecated Use totalMania */
   total7k: number;
-  /** Maps classified on the selected RC/LN axis (when axis != all). */
+  /** Maps in the selected keymode (+ RC/LN axis when axis != all). */
   axisTotalMania: number;
   /** @deprecated Use axisTotalMania */
   axisTotal7k: number;
@@ -53,16 +55,28 @@ const PATTERN_DISPLAY: Record<string, string> = {
   mixed: "Mixed",
 };
 
-const PATTERN_ORDER = [
+/** Interlude labels shown for 4K (hide 7K-specific families). */
+const PATTERNS_4K = [
+  "jack",
+  "chordjack",
+  "jumpstream",
+  "stream",
+  "mixed",
+] as const;
+
+/** Interlude labels shown for 7K (hide 4K-specific families). */
+const PATTERNS_7K = [
   "jack",
   "chordjack",
   "delay",
   "chordstream",
   "bracket",
-  "jumpstream",
-  "stream",
   "mixed",
 ] as const;
+
+function patternsForKeymode(keymode: PatternKeymode): readonly string[] {
+  return keymode === 4 ? PATTERNS_4K : PATTERNS_7K;
+}
 
 function baseFrom(db: Db): string {
   const userFilter = scoresUsernameSqlLiteral(
@@ -112,6 +126,7 @@ const SELECT_COLS = `
   b.star_rating AS starRating,
   b.bpm AS bpm,
   b.ruleset_short_name AS rulesetShortName,
+  b.circle_size AS keyCount,
   b.mapper_username AS mapperUsername,
   CASE WHEN b.online_id > 0 THEN b.online_id ELSE NULL END AS onlineId,
   CASE WHEN bs.online_id > 0 THEN bs.online_id ELSE NULL END AS setOnlineId,
@@ -127,21 +142,23 @@ const SELECT_COLS = `
   dr.sunny_star AS sunnyStar
 `;
 
-const MANIA_WHERE = `
+function maniaKeymodeWhere(keymode: PatternKeymode): string {
+  return `
   b.hidden = 0
   AND COALESCE(bs.delete_pending, 0) = 0
   AND lower(COALESCE(b.ruleset_short_name, '')) = 'mania'
+  AND ROUND(COALESCE(b.circle_size, 0)) = ${keymode}
 `;
-
-/** Sunny RC/LN axis filter — still 7K-focused until Sunny supports all keymodes. */
-const SUNNY_AXIS_WHERE = `
-  ${MANIA_WHERE}
-  AND ROUND(COALESCE(b.circle_size, 0)) = 7
-`;
+}
 
 function parseAxis(value: string | undefined): PatternAxis {
   if (value === "rc" || value === "ln") return value;
   return "all";
+}
+
+function parseKeymode(value: string | number | undefined): PatternKeymode {
+  const n = typeof value === "number" ? value : Number(value);
+  return n === 4 ? 4 : 7;
 }
 
 type SqlParam = string | number | boolean | null;
@@ -155,10 +172,14 @@ function axisSqlClause(axis: PatternAxis, params: SqlParam[]): string | null {
   return "dr.ln_ratio IS NOT NULL AND dr.ln_ratio < ?";
 }
 
-function patternQuery(pattern: string, axis: PatternAxis): string {
-  if (axis === "rc") return `key=7 axis:rc pattern:${pattern}`;
-  if (axis === "ln") return `key=7 axis:ln pattern:${pattern}`;
-  return `pattern:${pattern}`;
+function patternQuery(
+  pattern: string,
+  axis: PatternAxis,
+  keymode: PatternKeymode,
+): string {
+  if (axis === "rc") return `key=${keymode} axis:rc pattern:${pattern}`;
+  if (axis === "ln") return `key=${keymode} axis:ln pattern:${pattern}`;
+  return `key=${keymode} pattern:${pattern}`;
 }
 
 function mapSampleRow(r: PracticeCardRow): PracticeCardRow {
@@ -172,19 +193,25 @@ function mapSampleRow(r: PracticeCardRow): PracticeCardRow {
     masteryLevel: r.masteryLevel != null ? Number(r.masteryLevel) : null,
     sunnyEstDiff: r.sunnyEstDiff ?? null,
     sunnyStar: r.sunnyStar != null ? Number(r.sunnyStar) : null,
+    keyCount: r.keyCount != null ? Number(r.keyCount) : null,
   };
 }
 
 function buildPatternsForCounts(
   db: Db,
   axis: PatternAxis,
+  keymode: PatternKeymode,
   countRows: Array<{ pattern: string; count: number }>,
   samplesPerPattern: number,
+  scopeWhere: string,
   axisFilter: string,
   axisParams: SqlParam[],
 ): PatternSummaryItem[] {
+  const allowed = new Set(patternsForKeymode(keymode));
   const countByPattern = new Map(
-    countRows.map((r) => [r.pattern, Number(r.count)]),
+    countRows
+      .filter((r) => allowed.has(r.pattern))
+      .map((r) => [r.pattern, Number(r.count)]),
   );
   const patterns: PatternSummaryItem[] = [];
 
@@ -194,7 +221,7 @@ function buildPatternsForCounts(
         `
         SELECT ${SELECT_COLS}
         ${baseFrom(db)}
-        WHERE ${axis === "all" ? MANIA_WHERE : SUNNY_AXIS_WHERE}
+        WHERE ${scopeWhere}
           AND pa.dominant_pattern = ?
           AND pa.error IS NULL
           ${axisFilter}
@@ -210,28 +237,15 @@ function buildPatternsForCounts(
         samplesPerPattern,
       ) as PracticeCardRow[];
 
-  for (const pattern of PATTERN_ORDER) {
+  for (const pattern of patternsForKeymode(keymode)) {
     const count = countByPattern.get(pattern) ?? 0;
     if (count <= 0) continue;
     patterns.push({
       pattern,
       label: PATTERN_DISPLAY[pattern] ?? pattern,
       count,
-      query: patternQuery(pattern, axis),
+      query: patternQuery(pattern, axis, keymode),
       samples: fetchSamples(pattern).map(mapSampleRow),
-    });
-  }
-
-  for (const row of countRows) {
-    if ((PATTERN_ORDER as readonly string[]).includes(row.pattern)) continue;
-    const count = Number(row.count);
-    if (count <= 0) continue;
-    patterns.push({
-      pattern: row.pattern,
-      label: PATTERN_DISPLAY[row.pattern] ?? row.pattern,
-      count,
-      query: patternQuery(row.pattern, axis),
-      samples: fetchSamples(row.pattern).map(mapSampleRow),
     });
   }
 
@@ -247,9 +261,16 @@ function buildPatternsForCounts(
 /** Mania pattern overview for the practice browser modal. */
 export function practicePatternSummary(
   db: Db,
-  opts: { samplesPerPattern?: number; axis?: string } = {},
+  opts: {
+    samplesPerPattern?: number;
+    axis?: string;
+    keymode?: string | number;
+  } = {},
 ): PatternSummary {
   const axis = parseAxis(opts.axis);
+  const keymode = parseKeymode(opts.keymode);
+  const scopeWhere = maniaKeymodeWhere(keymode);
+
   backfillPatternAnalysisSync(db, { limit: PATTERN_QUERY_BACKFILL_LIMIT });
   if (axis !== "all") {
     backfillSunnyDanSync(db, { limit: PATTERN_QUERY_BACKFILL_LIMIT });
@@ -263,7 +284,6 @@ export function practicePatternSummary(
   const axisParams: SqlParam[] = [];
   const axisClause = axisSqlClause(axis, axisParams);
   const axisFilter = axisClause ? `AND ${axisClause}` : "";
-  const scopeWhere = axis === "all" ? MANIA_WHERE : SUNNY_AXIS_WHERE;
 
   const totalRow = db.$client
     .query(
@@ -271,7 +291,7 @@ export function practicePatternSummary(
       SELECT COUNT(*) AS n
       FROM beatmaps b
       LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
-      WHERE ${MANIA_WHERE}
+      WHERE ${scopeWhere}
     `,
     )
     .get() as { n: number };
@@ -287,7 +307,7 @@ export function practicePatternSummary(
       LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
       LEFT JOIN beatmap_dan_ratings dr
         ON dr.beatmap_id = b.id AND dr.algorithm = ?
-      WHERE ${SUNNY_AXIS_WHERE}
+      WHERE ${scopeWhere}
         ${axisFilter}
     `,
           )
@@ -341,8 +361,10 @@ export function practicePatternSummary(
   const patterns = buildPatternsForCounts(
     db,
     axis,
+    keymode,
     normalizedCounts,
     samplesPerPattern,
+    scopeWhere,
     axisFilter,
     axisParams,
   );
@@ -354,6 +376,7 @@ export function practicePatternSummary(
 
   return {
     axis,
+    keymode,
     totalMania,
     total7k: totalMania,
     axisTotalMania,

@@ -149,12 +149,14 @@ export async function fetchPracticeDistribution(params: {
 export async function fetchPracticePatterns(params?: {
   samples?: number;
   axis?: "all" | "rc" | "ln";
+  keymode?: 4 | 7;
 }) {
   return unwrap(
     await api.api.practice.patterns.get({
       query: {
         samples: params?.samples,
         axis: params?.axis === "all" ? undefined : params?.axis,
+        keymode: params?.keymode,
       },
     }),
     "/api/practice/patterns",

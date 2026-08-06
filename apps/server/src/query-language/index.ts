@@ -21,7 +21,7 @@ export {
   executeAst,
   practiceDistribution,
 } from "./execute";
-export type { PatternSummary, PatternSummaryItem, PatternAxis } from "./patternSummary";
+export type { PatternSummary, PatternSummaryItem, PatternAxis, PatternKeymode } from "./patternSummary";
 export { practicePatternSummary, patternQuery } from "./patternSummary";
 export type {
   PracticeCardRow,

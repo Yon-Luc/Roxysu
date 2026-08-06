@@ -9,9 +9,15 @@ import {
 } from "../lib/ratingDisplay";
 
 type PatternAxis = "all" | "rc" | "ln";
+type PatternKeymode = 4 | 7;
+
+const KEYMODE_TABS: { value: PatternKeymode; label: string }[] = [
+  { value: 4, label: "4K" },
+  { value: 7, label: "7K" },
+];
 
 const AXIS_TABS: { value: PatternAxis; label: string; hint: string }[] = [
-  { value: "all", label: "All", hint: "Every analyzed mania map" },
+  { value: "all", label: "All", hint: "Every analyzed map in this keymode" },
   {
     value: "rc",
     label: "RC",
@@ -69,12 +75,17 @@ function PatternBrowserModal({
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const ratingMode = useRatingDisplayMode();
+  const [keymode, setKeymode] = useState<PatternKeymode>(7);
   const [axis, setAxis] = useState<PatternAxis>("rc");
 
   const { data, isLoading, error, isFetching } = useQuery({
-    queryKey: ["practice-patterns", axis],
+    queryKey: ["practice-patterns", keymode, axis],
     queryFn: () =>
-      fetchPracticePatterns({ samples: 5, axis: axis === "all" ? "all" : axis }),
+      fetchPracticePatterns({
+        samples: 5,
+        keymode,
+        axis: axis === "all" ? "all" : axis,
+      }),
   });
 
   const activeTab = AXIS_TABS.find((t) => t.value === axis) ?? AXIS_TABS[0]!;
@@ -119,8 +130,8 @@ function PatternBrowserModal({
                 Mania patterns
               </h2>
               <p className="mt-1 text-sm text-muted">
-                Browse by dominant rice pattern, split into mainly-RC and mainly-LN
-                maps. Click a group to search practice.
+                Browse by dominant Interlude pattern for 4K or 7K. Click a group
+                to search practice.
               </p>
             </div>
             <button
@@ -133,30 +144,54 @@ function PatternBrowserModal({
             </button>
           </div>
 
-          <div className="flex gap-1 px-5 pb-3">
-            {AXIS_TABS.map((tab) => (
-              <button
-                key={tab.value}
-                type="button"
-                onClick={() => setAxis(tab.value)}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-                  axis === tab.value
-                    ? "bg-accent-glow text-accent"
-                    : "text-muted hover:bg-highlight hover:text-ink"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-3 px-5 pb-3">
+            <div className="flex gap-1">
+              {KEYMODE_TABS.map((tab) => (
+                <button
+                  key={tab.value}
+                  type="button"
+                  onClick={() => setKeymode(tab.value)}
+                  className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                    keymode === tab.value
+                      ? "bg-accent-glow text-accent"
+                      : "text-muted hover:bg-highlight hover:text-ink"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            <div className="h-5 w-px bg-white/10" aria-hidden />
+            <div className="flex gap-1">
+              {AXIS_TABS.map((tab) => (
+                <button
+                  key={tab.value}
+                  type="button"
+                  onClick={() => setAxis(tab.value)}
+                  className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                    axis === tab.value
+                      ? "bg-accent-glow text-accent"
+                      : "text-muted hover:bg-highlight hover:text-ink"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
         <div className="space-y-6 px-5 py-5">
-          <p className="text-xs text-muted">{activeTab.hint}</p>
+          <p className="text-xs text-muted">
+            {keymode}K · {activeTab.hint}
+            {keymode === 4
+              ? " · Jumpstream / stream families"
+              : " · Delay / chordstream / bracket families"}
+          </p>
 
           {isLoading ? (
             <p className="py-8 text-center text-sm text-muted">
-              Analyzing mania charts…
+              Analyzing {keymode}K charts…
             </p>
           ) : error ? (
             <p className="py-8 text-center text-sm text-rose-300">
@@ -174,8 +209,8 @@ function PatternBrowserModal({
               <p className="text-xs text-muted">
                 {data.analyzed.toLocaleString()} analyzed
                 {axis === "all"
-                  ? ` of ${(data.totalMania ?? data.total7k).toLocaleString()} mania maps`
-                  : ` in ${(data.axisTotalMania ?? data.axisTotal7k).toLocaleString()} ${axis.toUpperCase()} maps (${(data.totalMania ?? data.total7k).toLocaleString()} mania total)`}
+                  ? ` of ${(data.totalMania ?? data.total7k).toLocaleString()} ${keymode}K maps`
+                  : ` in ${(data.axisTotalMania ?? data.axisTotal7k).toLocaleString()} ${axis.toUpperCase()} maps (${(data.totalMania ?? data.total7k).toLocaleString()} ${keymode}K total)`}
                 {data.remaining > 0 && axis === "all"
                   ? ` · ${data.remaining.toLocaleString()} still pending`
                   : ""}

@@ -230,15 +230,18 @@ export const practiceRoutes = new Elysia({ prefix: "/practice" })
         Math.min(8, Math.floor(query.samples ?? 5)),
       );
       const axis = query.axis?.trim().toLowerCase();
+      const keymode = query.keymode;
       return practicePatternSummary(db, {
         samplesPerPattern,
         axis,
+        keymode,
       });
     },
     {
       query: t.Object({
         samples: t.Optional(t.Numeric()),
         axis: t.Optional(t.String()),
+        keymode: t.Optional(t.Numeric()),
       }),
     },
   )

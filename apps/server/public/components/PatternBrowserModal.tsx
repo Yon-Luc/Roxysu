@@ -130,8 +130,10 @@ function PatternBrowserModal({
                 Mania patterns
               </h2>
               <p className="mt-1 text-sm text-muted">
-                Browse by dominant Interlude pattern for 4K or 7K. Click a group
-                to search practice.
+                Browse by Interlude pattern for 4K or 7K. Groups include maps
+                where the pattern is dominant or a strong secondary — same as
+                <span className="font-mono"> pattern:</span> search. Click a
+                group to search practice.
               </p>
             </div>
             <button
@@ -237,7 +239,11 @@ function PatternBrowserModal({
                       <div className="text-sm font-bold tabular-nums text-accent">
                         {group.count.toLocaleString()}
                       </div>
-                      <div className="text-[11px] text-muted">maps</div>
+                      <div className="text-[11px] text-muted">
+                        {(group.secondaryCount ?? 0) > 0
+                          ? `${(group.primaryCount ?? group.count).toLocaleString()} primary · ${group.secondaryCount.toLocaleString()} also`
+                          : "maps"}
+                      </div>
                     </div>
                   </button>
 

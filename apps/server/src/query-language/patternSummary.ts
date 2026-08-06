@@ -23,7 +23,12 @@ export type PatternKeymode = 4 | 7;
 export type PatternSummaryItem = {
   pattern: string;
   label: string;
+  /** Maps matching this pattern as dominant or secondary (same as `pattern:` search). */
   count: number;
+  /** Maps where this pattern is the primary dominant label. */
+  primaryCount: number;
+  /** Maps included only because this pattern is secondary. */
+  secondaryCount: number;
   /** Ready-made practice query for this pattern group. */
   query: string;
   samples: PracticeCardRow[];
@@ -201,7 +206,12 @@ function buildPatternsForCounts(
   db: Db,
   axis: PatternAxis,
   keymode: PatternKeymode,
-  countRows: Array<{ pattern: string; count: number }>,
+  countRows: Array<{
+    pattern: string;
+    count: number;
+    primaryCount: number;
+    secondaryCount: number;
+  }>,
   samplesPerPattern: number,
   scopeWhere: string,
   axisFilter: string,
@@ -211,7 +221,7 @@ function buildPatternsForCounts(
   const countByPattern = new Map(
     countRows
       .filter((r) => allowed.has(r.pattern))
-      .map((r) => [r.pattern, Number(r.count)]),
+      .map((r) => [r.pattern, r]),
   );
   const patterns: PatternSummaryItem[] = [];
 
@@ -222,10 +232,16 @@ function buildPatternsForCounts(
         SELECT ${SELECT_COLS}
         ${baseFrom(db)}
         WHERE ${scopeWhere}
-          AND pa.dominant_pattern = ?
           AND pa.error IS NULL
+          AND (
+            pa.dominant_pattern = ?
+            OR pa.secondary_pattern = ?
+          )
           ${axisFilter}
-        ORDER BY COALESCE(ps.last_played_at, b.last_played) DESC NULLS LAST, b.id
+        ORDER BY
+          CASE WHEN pa.dominant_pattern = ? THEN 0 ELSE 1 END,
+          COALESCE(ps.last_played_at, b.last_played) DESC NULLS LAST,
+          b.id
         LIMIT ?
       `,
       )
@@ -233,17 +249,22 @@ function buildPatternsForCounts(
         SUNNY_ALGORITHM,
         PATTERN_ALGORITHM,
         pattern,
+        pattern,
+        pattern,
         ...axisParams,
         samplesPerPattern,
       ) as PracticeCardRow[];
 
   for (const pattern of patternsForKeymode(keymode)) {
-    const count = countByPattern.get(pattern) ?? 0;
+    const row = countByPattern.get(pattern);
+    const count = row?.count ?? 0;
     if (count <= 0) continue;
     patterns.push({
       pattern,
       label: PATTERN_DISPLAY[pattern] ?? pattern,
       count,
+      primaryCount: row?.primaryCount ?? 0,
+      secondaryCount: row?.secondaryCount ?? 0,
       query: patternQuery(pattern, axis, keymode),
       samples: fetchSamples(pattern).map(mapSampleRow),
     });
@@ -334,28 +355,61 @@ export function practicePatternSummary(
   const countRows = db.$client
     .query(
       `
-      SELECT pa.dominant_pattern AS pattern, COUNT(*) AS n
-      FROM beatmaps b
-      LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
-      LEFT JOIN beatmap_dan_ratings dr
-        ON dr.beatmap_id = b.id AND dr.algorithm = ?
-      JOIN beatmap_pattern_analysis pa
-        ON pa.beatmap_id = b.id AND pa.algorithm = ?
-      WHERE ${scopeWhere}
-        AND pa.dominant_pattern IS NOT NULL
-        AND pa.error IS NULL
-        ${axisFilter}
-      GROUP BY pa.dominant_pattern
+      SELECT
+        pattern,
+        COUNT(*) AS n,
+        SUM(CASE WHEN role = 'primary' THEN 1 ELSE 0 END) AS primary_n,
+        SUM(CASE WHEN role = 'secondary' THEN 1 ELSE 0 END) AS secondary_n
+      FROM (
+        SELECT pa.dominant_pattern AS pattern, 'primary' AS role
+        FROM beatmaps b
+        LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
+        LEFT JOIN beatmap_dan_ratings dr
+          ON dr.beatmap_id = b.id AND dr.algorithm = ?
+        JOIN beatmap_pattern_analysis pa
+          ON pa.beatmap_id = b.id AND pa.algorithm = ?
+        WHERE ${scopeWhere}
+          AND pa.dominant_pattern IS NOT NULL
+          AND pa.error IS NULL
+          ${axisFilter}
+
+        UNION ALL
+
+        SELECT pa.secondary_pattern AS pattern, 'secondary' AS role
+        FROM beatmaps b
+        LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
+        LEFT JOIN beatmap_dan_ratings dr
+          ON dr.beatmap_id = b.id AND dr.algorithm = ?
+        JOIN beatmap_pattern_analysis pa
+          ON pa.beatmap_id = b.id AND pa.algorithm = ?
+        WHERE ${scopeWhere}
+          AND pa.secondary_pattern IS NOT NULL
+          AND pa.secondary_pattern != pa.dominant_pattern
+          AND pa.error IS NULL
+          ${axisFilter}
+      )
+      GROUP BY pattern
     `,
     )
-    .all(SUNNY_ALGORITHM, PATTERN_ALGORITHM, ...axisParams) as Array<{
+    .all(
+      SUNNY_ALGORITHM,
+      PATTERN_ALGORITHM,
+      ...axisParams,
+      SUNNY_ALGORITHM,
+      PATTERN_ALGORITHM,
+      ...axisParams,
+    ) as Array<{
     pattern: string;
     n: number;
+    primary_n: number;
+    secondary_n: number;
   }>;
 
   const normalizedCounts = countRows.map((r) => ({
     pattern: r.pattern,
     count: Number(r.n ?? 0),
+    primaryCount: Number(r.primary_n ?? 0),
+    secondaryCount: Number(r.secondary_n ?? 0),
   }));
 
   const patterns = buildPatternsForCounts(

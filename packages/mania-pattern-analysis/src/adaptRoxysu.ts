@@ -20,7 +20,8 @@ import {
 const SECTION_MS = 1000;
 const CHORD_EPS_MS = 8;
 const HOLD_EPS_MS = 20;
-const MIN_DOMINANCE_GAP = 0.04;
+/** Minimum score for a runner-up to be stored as secondary (helps sparse families like bracket). */
+const MIN_SECONDARY_SCORE = 0.05;
 
 const SCORABLE_LABELS: PatternLabelV2[] = [
   "jack",
@@ -193,9 +194,7 @@ function pickDominant(
 
   const confidence = Math.min(1, topScore + gap);
   const secondary =
-    gap >= MIN_DOMINANCE_GAP &&
-    ranked[1] != null &&
-    ranked[1][1] >= 0.08
+    ranked[1] != null && ranked[1][1] >= MIN_SECONDARY_SCORE
       ? ranked[1][0]
       : null;
 

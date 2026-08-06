@@ -26,6 +26,15 @@ import {
   resolveScoresUsernamesSync,
   scoresUsernameSql,
 } from "./scoreUsername";
+import {
+  bumpMapperAgg,
+  compareMapperAgg,
+  createMapperAgg,
+  dominantMapperUsername,
+  mapperGroupKey,
+  mapperOnlineIdFromGroupKey,
+  type MapperAgg,
+} from "./mapperUsername";
 
 /** Username + gamemode SQL fragments for score-scoped analytics queries. */
 function scoreScopeFilter(
@@ -324,13 +333,16 @@ async function getTopMappers(
       JOIN beatmaps b ON b.id = s.beatmap_id
       WHERE s.delete_pending = 0
         ${user.sql}
-        AND b.mapper_online_id IS NOT NULL
+        AND (
+          b.mapper_online_id > 0
+          OR (b.mapper_username IS NOT NULL AND TRIM(b.mapper_username) != '')
+        )
         AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
         AND b.circle_size = ?
     `,
     )
     .all(...user.params, keyCount) as Array<{
-    mapperOnlineId: number;
+    mapperOnlineId: number | null;
     mapperUsername: string | null;
     accuracy: number;
     pp: number | null;
@@ -339,43 +351,37 @@ async function getTopMappers(
     rulesetShortName: string | null;
   }>;
 
-  const byMapper = new Map<
-    number,
-    { mapperUsername: string | null; playCount: number; totalPp: number; accSum: number }
-  >();
+  const byMapper = new Map<string, MapperAgg>();
   for (const row of rows) {
     if (!isNomodOrMirrorOnly(row.mods)) continue;
-    const id = Number(row.mapperOnlineId);
-    const cur = byMapper.get(id) ?? {
-      mapperUsername: row.mapperUsername,
-      playCount: 0,
-      totalPp: 0,
-      accSum: 0,
-    };
-    cur.playCount += 1;
-    cur.totalPp +=
+    const key = mapperGroupKey(row.mapperOnlineId, row.mapperUsername);
+    if (!key) continue;
+    const cur = byMapper.get(key) ?? createMapperAgg();
+    bumpMapperAgg(
+      cur,
+      Number(row.accuracy ?? 0),
       resolveScorePp({
         pp: row.pp,
         accuracy: row.accuracy,
         mods: row.mods,
         rulesetShortName: row.rulesetShortName,
         curve: row.beatmapId ? curves.get(row.beatmapId) : undefined,
-      }) ?? 0;
-    cur.accSum += Number(row.accuracy ?? 0);
-    cur.mapperUsername = row.mapperUsername ?? cur.mapperUsername;
-    byMapper.set(id, cur);
+      }) ?? 0,
+      row.mapperUsername,
+    );
+    byMapper.set(key, cur);
   }
 
   return [...byMapper.entries()]
-    .map(([mapperOnlineId, b]) => ({
-      mapperOnlineId,
-      mapperUsername: b.mapperUsername,
+    .sort(([, a], [, b]) => compareMapperAgg(a, b))
+    .slice(0, limit)
+    .map(([key, b]) => ({
+      mapperOnlineId: mapperOnlineIdFromGroupKey(key),
+      mapperUsername: dominantMapperUsername(b.usernameCounts),
       playCount: b.playCount,
       totalPp: b.totalPp,
       avgAccuracy: b.playCount > 0 ? b.accSum / b.playCount : null,
-    }))
-    .sort((a, b) => b.playCount - a.playCount || b.totalPp - a.totalPp)
-    .slice(0, limit);
+    }));
 }
 
 async function getKeymodeProgression(

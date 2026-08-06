@@ -973,7 +973,10 @@ export function StatsPage({
         ) : (
           <ul className="space-y-0.5">
             {mappers.map((m, i) => (
-              <li key={m.mapperOnlineId} className="rx-row">
+              <li
+                key={`${m.mapperOnlineId}-${m.mapperUsername ?? ""}`}
+                className="rx-row"
+              >
                 <span className="w-8 shrink-0 tabular-nums text-faint">
                   {i + 1}
                 </span>

@@ -15,6 +15,12 @@ import {
   resolveScoresUsernames,
   scoresUsernameCondition,
 } from "./scoreUsername";
+import {
+  bumpMapperAgg,
+  createMapperAgg,
+  dominantMapperUsername,
+  type MapperAgg,
+} from "./mapperUsername";
 
 function toMs(value: Date | number): number {
   return value instanceof Date ? value.getTime() : value;
@@ -127,7 +133,7 @@ export async function runStatisticsEngine(
   const curves = await loadManiaPpCurves(db);
   const daily = new Map<string, Bucket>();
   const weekly = new Map<string, Bucket>();
-  const mappers = new Map<number, Bucket & { mapperUsername: string | null }>();
+  const mappers = new Map<number, MapperAgg>();
 
   for (const row of rows) {
     if (!isNomodOrMirrorOnly(row.mods)) continue;
@@ -136,18 +142,9 @@ export async function runStatisticsEngine(
     bump(daily, dayKey(played), row.accuracy, pp);
     bump(weekly, weekStartKey(played), row.accuracy, pp);
 
-    if (row.mapperOnlineId != null) {
-      const m =
-        mappers.get(row.mapperOnlineId) ?? {
-          playCount: 0,
-          totalPp: 0,
-          accSum: 0,
-          mapperUsername: row.mapperUsername,
-        };
-      m.playCount += 1;
-      m.totalPp += pp;
-      m.accSum += row.accuracy;
-      m.mapperUsername = row.mapperUsername ?? m.mapperUsername;
+    if (row.mapperOnlineId != null && row.mapperOnlineId > 0) {
+      const m = mappers.get(row.mapperOnlineId) ?? createMapperAgg();
+      bumpMapperAgg(m, row.accuracy, pp, row.mapperUsername);
       mappers.set(row.mapperOnlineId, m);
     }
   }
@@ -164,6 +161,7 @@ async function rebuildPartitionsForScores(db: Db, scoreIds: string[]) {
     .select({
       playedAt: scores.playedAt,
       mapperOnlineId: beatmaps.mapperOnlineId,
+      mapperUsername: beatmaps.mapperUsername,
     })
     .from(scores)
     .leftJoin(beatmaps, eq(scores.beatmapId, beatmaps.id))
@@ -176,7 +174,8 @@ async function rebuildPartitionsForScores(db: Db, scoreIds: string[]) {
     const played = new Date(toMs(row.playedAt));
     dayKeys.add(dayKey(played));
     weekKeys.add(weekStartKey(played));
-    if (row.mapperOnlineId != null) mapperIds.add(row.mapperOnlineId);
+    if (row.mapperOnlineId != null && row.mapperOnlineId > 0)
+      mapperIds.add(row.mapperOnlineId);
   }
 
   if (dayKeys.size === 0 && weekKeys.size === 0 && mapperIds.size === 0) return;
@@ -211,7 +210,7 @@ async function rebuildPartitionsForScores(db: Db, scoreIds: string[]) {
   const curves = await loadManiaPpCurves(db);
   const daily = new Map<string, Bucket>();
   const weekly = new Map<string, Bucket>();
-  const mappers = new Map<number, Bucket & { mapperUsername: string | null }>();
+  const mappers = new Map<number, MapperAgg>();
 
   for (const row of all) {
     if (!isNomodOrMirrorOnly(row.mods)) continue;
@@ -223,18 +222,13 @@ async function rebuildPartitionsForScores(db: Db, scoreIds: string[]) {
     if (dayKeys.has(dKey)) bump(daily, dKey, row.accuracy, pp);
     if (weekKeys.has(wKey)) bump(weekly, wKey, row.accuracy, pp);
 
-    if (row.mapperOnlineId != null && mapperIds.has(row.mapperOnlineId)) {
-      const m =
-        mappers.get(row.mapperOnlineId) ?? {
-          playCount: 0,
-          totalPp: 0,
-          accSum: 0,
-          mapperUsername: row.mapperUsername,
-        };
-      m.playCount += 1;
-      m.totalPp += pp;
-      m.accSum += row.accuracy;
-      m.mapperUsername = row.mapperUsername ?? m.mapperUsername;
+    if (
+      row.mapperOnlineId != null &&
+      row.mapperOnlineId > 0 &&
+      mapperIds.has(row.mapperOnlineId)
+    ) {
+      const m = mappers.get(row.mapperOnlineId) ?? createMapperAgg();
+      bumpMapperAgg(m, row.accuracy, pp, row.mapperUsername);
       mappers.set(row.mapperOnlineId, m);
     }
   }
@@ -279,21 +273,17 @@ async function rebuildMapperPartitions(db: Db, mapperOnlineIds: number[]) {
     );
 
   const curves = await loadManiaPpCurves(db);
-  const mappers = new Map<number, Bucket & { mapperUsername: string | null }>();
+  const mappers = new Map<number, MapperAgg>();
   for (const row of all) {
-    if (row.mapperOnlineId == null) continue;
+    if (row.mapperOnlineId == null || row.mapperOnlineId <= 0) continue;
     if (!isNomodOrMirrorOnly(row.mods)) continue;
-    const m =
-      mappers.get(row.mapperOnlineId) ?? {
-        playCount: 0,
-        totalPp: 0,
-        accSum: 0,
-        mapperUsername: row.mapperUsername,
-      };
-    m.playCount += 1;
-    m.totalPp += effectivePp(row, curves);
-    m.accSum += row.accuracy;
-    m.mapperUsername = row.mapperUsername ?? m.mapperUsername;
+    const m = mappers.get(row.mapperOnlineId) ?? createMapperAgg();
+    bumpMapperAgg(
+      m,
+      row.accuracy,
+      effectivePp(row, curves),
+      row.mapperUsername,
+    );
     mappers.set(row.mapperOnlineId, m);
   }
 
@@ -308,7 +298,7 @@ async function insertStatPartitions(
   db: Db,
   daily: Map<string, Bucket>,
   weekly: Map<string, Bucket>,
-  mappers: Map<number, Bucket & { mapperUsername: string | null }>,
+  mappers: Map<number, MapperAgg>,
 ) {
   const dailyRows = [...daily.entries()].map(([day, b]) => ({
     day,
@@ -324,7 +314,7 @@ async function insertStatPartitions(
   }));
   const mapperRows = [...mappers.entries()].map(([mapperOnlineId, b]) => ({
     mapperOnlineId,
-    mapperUsername: b.mapperUsername,
+    mapperUsername: dominantMapperUsername(b.usernameCounts),
     playCount: b.playCount,
     totalPp: b.totalPp,
     avgAccuracy: b.playCount > 0 ? b.accSum / b.playCount : null,

@@ -166,6 +166,7 @@ function mergeRangeIntoQuery(
 
 export function PracticeListPage() {
   const ratingMode = useRatingDisplayMode();
+  const { dict } = useAppDict();
   const ratingListLabels = {
     danielDan: dict?.practice.detail.danielDan ?? "Daniel dan",
     sunnyDan: dict?.practice.detail.sunnyDan ?? "Sunny dan",
@@ -174,7 +175,6 @@ export function PracticeListPage() {
     sunnyStar:
       dict?.settings.ratingDisplay.sunny?.label ?? "Sunny star rating",
   };
-  const { dict } = useAppDict();
   const [stored] = useState(readStoredPracticeSearch);
   const [q, setQ] = useState(stored.q);
   const [page, setPage] = useState(stored.page);

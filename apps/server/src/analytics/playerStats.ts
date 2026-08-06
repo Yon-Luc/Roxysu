@@ -6,6 +6,7 @@ import { and, count, eq, sql } from "drizzle-orm";
 import { SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
 import { isNomodOrMirrorOnly } from "../replay/mods";
 import { classifyMapAxis } from "./recommend/axis";
+import { classifyScoreGrade, PERFECT_TOTAL_SCORE } from "../query-language/scoreGrade";
 import {
   DEFAULT_SKILL_KEY_COUNT,
   estimateSevenKSkillWithHistory,
@@ -52,11 +53,9 @@ const RANK_BUCKETS = [
   { key: "B", ranks: [2] },
   { key: "A", ranks: [3] },
   { key: "S", ranks: [4, 5] }, // S + SH
-  { key: "X", ranks: [6, 7] }, // X + XH; also 1M score below
+  { key: "SS", ranks: [6, 7] }, // SS (X/XH) — Perfect/Marvelous only, not 1M
+  { key: "X", ranks: [] }, // 1,000,000 — all Marvelous
 ] as const;
-
-/** Mania max / perfect score (ScoreV1-style ceiling). */
-const PERFECT_TOTAL_SCORE = 1_000_000;
 
 export type StatsGranularity = "day" | "week";
 export type StatsRange = 30 | 90 | 180;
@@ -127,8 +126,8 @@ function listPlayedKeyCounts(db: Db): number[] {
 }
 
 /**
- * Rank distribution with SH→S, XH→X, plus any 1,000,000 total score as X.
- * Fails (rank F / -1) are excluded. Each score is counted once (perfect wins).
+ * Rank distribution with SH→S. SS = X/XH grade (Perfect/Marvelous). X = 1,000,000 only.
+ * Fails (rank F / -1) are excluded. Each score is counted once.
  */
 async function getRankDistribution(db: Db, keyCount: number) {
   const user = scoreScopeFilter(db);
@@ -157,15 +156,7 @@ async function getRankDistribution(db: Db, keyCount: number) {
   const byLabel = new Map<string, number>();
   for (const row of rows) {
     if (!isNomodOrMirrorOnly(row.mods)) continue;
-    let label: string | null = null;
-    if (Number(row.totalScore) === PERFECT_TOTAL_SCORE || row.rank === 6 || row.rank === 7) {
-      label = "X";
-    } else if (row.rank === 4 || row.rank === 5) {
-      label = "S";
-    } else if (row.rank === 3) label = "A";
-    else if (row.rank === 2) label = "B";
-    else if (row.rank === 1) label = "C";
-    else if (row.rank === 0) label = "D";
+    const label = classifyScoreGrade(Number(row.totalScore), row.rank);
     if (!label) continue;
     byLabel.set(label, (byLabel.get(label) ?? 0) + 1);
   }

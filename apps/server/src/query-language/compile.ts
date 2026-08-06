@@ -1,10 +1,15 @@
 import type { AstNode, FieldTerm } from "./ast";
 import { LN_DAN_RATIO_THRESHOLD } from "../map-analysis/estDiff";
+import { FLN_RATIO_THRESHOLD } from "@roxysu/sunny-dan";
 import {
   isOnlineBeatmapStatus,
   statusNameToInt,
   type BeatmapStatusName,
 } from "./status";
+import {
+  nomodOrMirrorOnlySql,
+  scoreRowGradeSql,
+} from "./scoreGrade";
 
 export type CompiledQuery = {
   /** SQL boolean expression referencing aliases: b, m, ps, rs */
@@ -190,10 +195,44 @@ function compileTerm(
       )`;
     }
     case "axis": {
+      if (term.value === "fln") {
+        return `(dr.ln_ratio IS NOT NULL AND dr.ln_ratio >= ${push(FLN_RATIO_THRESHOLD)})`;
+      }
       if (term.value === "ln") {
         return `(dr.ln_ratio IS NOT NULL AND dr.ln_ratio >= ${push(LN_DAN_RATIO_THRESHOLD)})`;
       }
       return `(dr.ln_ratio IS NOT NULL AND dr.ln_ratio < ${push(LN_DAN_RATIO_THRESHOLD)})`;
+    }
+    case "grade": {
+      const userFilter = (alias: string) => {
+        if (usernames != null && usernames.length === 1) {
+          return `AND ${alias}.user_username = ${push(usernames[0])}`;
+        }
+        if (usernames != null && usernames.length > 1) {
+          const placeholders = usernames.map((name) => push(name)).join(", ");
+          return `AND ${alias}.user_username IN (${placeholders})`;
+        }
+        return "";
+      };
+      const modeFilter = (alias: string) =>
+        gamemode != null
+          ? `AND lower(COALESCE(${alias}.ruleset_short_name, '')) = lower(${push(gamemode)})`
+          : "";
+      const nomod = nomodOrMirrorOnlySql("s");
+      const rowGrade = scoreRowGradeSql("s");
+      const userClause = userFilter("s");
+      const modeClause = modeFilter("s");
+      const grade = push(term.value);
+      return `EXISTS (
+        SELECT 1 FROM scores s
+        WHERE s.beatmap_id = b.id
+          AND s.delete_pending = 0
+          AND s.rank != -1
+          ${userClause}
+          ${modeClause}
+          AND ${nomod}
+          AND ${rowGrade} = ${grade}
+      )`;
     }
     case "status": {
       const names = term.values as BeatmapStatusName[];

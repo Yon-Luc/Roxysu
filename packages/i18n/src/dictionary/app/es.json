@@ -97,7 +97,7 @@
 		"longestSession": "Sesión más larga",
 		"playsCount": "{{count}} partidas",
 		"rankDistribution": "Distribución de ranks",
-		"rankFootnote": "S incluye SH · X es SS (X/XH) o un score de 1.000.000",
+		"rankFootnote": "S incluye SH · SS = solo Perfect/Marvelous · X = score de 1.000.000 (todo Marvelous)",
 		"skillsetMix": "Mezcla de skillsets {{keyCount}}K",
 		"playsByWeekday": "Partidas por día de la semana (UTC)",
 		"playsByHour": "Partidas por hora (UTC)",

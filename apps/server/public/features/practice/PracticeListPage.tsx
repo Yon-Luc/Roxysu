@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { Link, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
   Bar,
@@ -44,16 +44,11 @@ import {
 } from "../../lib/ratingDisplay";
 import { useAppDict, t } from "../../lib/i18n";
 import type { Dictionary } from "@roxysu/i18n";
-
-const PRACTICE_SEARCH_KEY = "roxysu:practice-search";
-
-type StoredPracticeSearch = {
-  q: string;
-  page: number;
-  sortBy: PracticeSortBy;
-  sortDir: PracticeSortDir;
-  metric: PracticeMetric;
-};
+import {
+  readStoredPracticeSearch,
+  writeStoredPracticeSearch,
+  type StoredPracticeSearch,
+} from "../../lib/practiceSearch";
 
 const SORT_OPTIONS: PracticeSortBy[] = [
   "lastPlayed",
@@ -82,18 +77,6 @@ const METRIC_LABEL_FALLBACK: Record<PracticeMetric, string> = {
   misses: "Misses",
   score: "Score",
 };
-
-function isSortBy(value: unknown): value is PracticeSortBy {
-  return (SORT_OPTIONS as readonly string[]).includes(value as string);
-}
-
-function isSortDir(value: unknown): value is PracticeSortDir {
-  return value === "asc" || value === "desc";
-}
-
-function isMetric(value: unknown): value is PracticeMetric {
-  return (METRIC_OPTIONS as readonly string[]).includes(value as string);
-}
 
 /** Remove prior chart/distribution filters so a new bar click replaces them. */
 function stripDistributionFilters(query: string): string {
@@ -178,46 +161,6 @@ function mergeRangeIntoQuery(
   return cleanupMergedQuery(`${base} ${clause}`);
 }
 
-function readStoredPracticeSearch(): StoredPracticeSearch {
-  try {
-    const raw = localStorage.getItem(PRACTICE_SEARCH_KEY);
-    if (!raw) {
-      return {
-        q: "",
-        page: 1,
-        sortBy: "lastPlayed",
-        sortDir: "desc",
-        metric: "accuracy",
-      };
-    }
-    const parsed = JSON.parse(raw) as Partial<StoredPracticeSearch>;
-    return {
-      q: typeof parsed.q === "string" ? parsed.q : "",
-      page:
-        typeof parsed.page === "number" &&
-        Number.isFinite(parsed.page) &&
-        parsed.page >= 1
-          ? Math.floor(parsed.page)
-          : 1,
-      sortBy: isSortBy(parsed.sortBy) ? parsed.sortBy : "lastPlayed",
-      sortDir: isSortDir(parsed.sortDir) ? parsed.sortDir : "desc",
-      metric: isMetric(parsed.metric) ? parsed.metric : "accuracy",
-    };
-  } catch {
-    return {
-      q: "",
-      page: 1,
-      sortBy: "lastPlayed",
-      sortDir: "desc",
-      metric: "accuracy",
-    };
-  }
-}
-
-function writeStoredPracticeSearch(state: StoredPracticeSearch) {
-  localStorage.setItem(PRACTICE_SEARCH_KEY, JSON.stringify(state));
-}
-
 export function PracticeListPage() {
   const ratingMode = useRatingDisplayMode();
   const { dict } = useAppDict();
@@ -229,6 +172,18 @@ export function PracticeListPage() {
   const [sortDir, setSortDir] = useState<PracticeSortDir>(stored.sortDir);
   const [metric, setMetric] = useState<PracticeMetric>(stored.metric);
   const [queryHistory, setQueryHistory] = useState<string[]>([]);
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+
+  useEffect(() => {
+    if (pathname !== "/practice") return;
+    const stored = readStoredPracticeSearch();
+    setQ(stored.q);
+    setSubmitted(stored.q);
+    setPage(stored.page);
+    setSortBy(stored.sortBy);
+    setSortDir(stored.sortDir);
+    setMetric(stored.metric);
+  }, [pathname]);
 
   function persist(next: Partial<StoredPracticeSearch> & { q?: string }) {
     const state: StoredPracticeSearch = {

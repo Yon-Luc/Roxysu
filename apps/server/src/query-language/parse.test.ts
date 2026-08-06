@@ -306,4 +306,33 @@ describe("compileQuery", () => {
     const compiled = compileQuery(ast);
     expect(compiled.sql).toContain("NOT (ps.last_played_at IS NOT NULL AND");
   });
+
+  test("parses grade filter", () => {
+    expect(parseQuery("grade:X")).toEqual({
+      type: "term",
+      term: { type: "grade", value: "X" },
+    });
+    expect(parseQuery("grade:SS")).toEqual({
+      type: "term",
+      term: { type: "grade", value: "SS" },
+    });
+    expect(parseQuery("rank:S")).toEqual({
+      type: "term",
+      term: { type: "grade", value: "S" },
+    });
+  });
+
+  test("compiles grade filter against any nomod/mirror score", () => {
+    const ast = parseQuery("key=7 grade:SS");
+    const compiled = compileQuery(ast);
+    expect(compiled.sql).toContain("EXISTS");
+    expect(compiled.params).toContain("SS");
+  });
+
+  test("parses fln axis", () => {
+    expect(parseQuery("axis:fln")).toEqual({
+      type: "term",
+      term: { type: "axis", value: "fln" },
+    });
+  });
 });

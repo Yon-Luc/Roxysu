@@ -54,6 +54,12 @@ const FIELDS: { field: string; meaning: string; example: string }[] = [
   { field: "acc / accuracy", meaning: "Best accuracy % (range or comparison)", example: "acc:90..92" },
   { field: "misses / miss", meaning: "Best (fewest) miss count", example: "misses:0" },
   { field: "score", meaning: "Best total score", example: "score>=900000" },
+  {
+    field: "grade / rank",
+    meaning:
+      "Best nomod/mirror score grade (D/C/B/A/S/SS/X). S includes SH; SS is Perfect/Marvelous; X is 1,000,000 (all Marvelous).",
+    example: "key=7 grade:SS",
+  },
   { field: "retry", meaning: "Retry count", example: "retry>10" },
   { field: "mastery", meaning: "Mastery level", example: "mastery>80" },
   { field: "pp", meaning: "Best PP", example: "pp>=200" },

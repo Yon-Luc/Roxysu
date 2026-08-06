@@ -1,11 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   Legend,
   Line,
   LineChart,
@@ -47,6 +48,10 @@ import {
 } from "../../lib/ratingDisplay";
 import { useChartStyles } from "../../lib/chartStyles";
 import { useAppDict, t } from "../../lib/i18n";
+import {
+  buildStatsGradeQuery,
+  openInPractice,
+} from "../../lib/practiceSearch";
 import type { Dictionary } from "@roxysu/i18n";
 
 function formatDuration(ms: number | null | undefined): string {
@@ -204,6 +209,7 @@ export function StatsPage({
 }) {
   const ratingMode = useRatingDisplayMode();
   const charts = useChartStyles();
+  const navigate = useNavigate();
   const { dict } = useAppDict();
   const [customTopPlays, setCustomTopPlays] = useState(
     String(skillTopPlays),
@@ -775,6 +781,14 @@ export function StatsPage({
                   })
                 : "—"
             }
+            to={
+              sessions.longest
+                ? {
+                    to: "/sessions/$sessionId",
+                    params: { sessionId: String(sessions.longest.id) },
+                  }
+                : undefined
+            }
           />
         </div>
         <div className="grid gap-4 lg:grid-cols-2">
@@ -802,12 +816,40 @@ export function StatsPage({
                       tickLine={false}
                     />
                     <Tooltip contentStyle={charts.tooltip} />
-                    <Bar dataKey="count" fill={charts.chartCons} radius={[4, 4, 0, 0]} />
+                    <Bar
+                      dataKey="count"
+                      fill={charts.chartCons}
+                      radius={[4, 4, 0, 0]}
+                      cursor="pointer"
+                      onClick={(_data, index) => {
+                        const rank = ranks[index];
+                        if (!rank || rank.count === 0) return;
+                        openInPractice(
+                          buildStatsGradeQuery(
+                            keyCount,
+                            skillAxis,
+                            rank.label,
+                          ),
+                        );
+                        void navigate({ to: "/practice" });
+                      }}
+                    >
+                      {ranks.map((rank) => (
+                        <Cell
+                          key={rank.label}
+                          fill={
+                            rank.count === 0
+                              ? "rgba(167, 167, 167, 0.35)"
+                              : charts.chartCons
+                          }
+                        />
+                      ))}
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
                 <p className="mt-2 text-[11px] text-faint">
                   {dict?.stats.rankFootnote ??
-                    "S includes SH · X is SS (X/XH) or a 1,000,000 score"}
+                    "S includes SH · SS is Perfect/Marvelous only · X is a 1,000,000 score (all Marvelous)"}
                 </p>
               </>
             )}
@@ -1331,13 +1373,33 @@ function ToggleGroup<T extends string>({
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rx-stat">
+function Stat({
+  label,
+  value,
+  to,
+}: {
+  label: string;
+  value: string;
+  to?: { to: "/sessions/$sessionId"; params: { sessionId: string } };
+}) {
+  const body = (
+    <>
       <div className="rx-label">{label}</div>
       <div className="mt-2 text-2xl font-bold tabular-nums text-ink">{value}</div>
-    </div>
+    </>
   );
+  if (to) {
+    return (
+      <Link
+        to={to.to}
+        params={to.params}
+        className="rx-stat block transition hover:bg-elevated/30"
+      >
+        {body}
+      </Link>
+    );
+  }
+  return <div className="rx-stat">{body}</div>;
 }
 
 function ChartCard({

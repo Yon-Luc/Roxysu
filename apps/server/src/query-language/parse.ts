@@ -131,12 +131,15 @@ function normalizePatternValue(raw: string): string {
   return aliases[compact] ?? raw.trim().toLowerCase();
 }
 
-function normalizeAxisValue(raw: string): "rc" | "ln" {
+function normalizeAxisValue(raw: string): "rc" | "ln" | "fln" {
   const compact = raw.trim().toLowerCase();
   if (compact === "rc" || compact === "rice") return "rc";
   if (compact === "ln" || compact === "lnmap") return "ln";
+  if (compact === "fln" || compact === "fullln" || compact === "full-ln") {
+    return "fln";
+  }
   throw new QueryParseError(
-    `Invalid axis value: ${raw} (expected rc, rice, ln, or lnmap)`,
+    `Invalid axis value: ${raw} (expected rc, rice, ln, lnmap, or fln)`,
   );
 }
 
@@ -314,6 +317,30 @@ function parseFieldTerm(raw: string): FieldTerm {
       if (!value) throw new QueryParseError("Invalid axis value: empty");
       return { type: "axis", value: normalizeAxisValue(value) };
     }
+    case "grade":
+    case "rank": {
+      if (!value) throw new QueryParseError("Invalid grade value: empty");
+      const normalized = value.trim().toUpperCase();
+      const gradeMap: Record<string, "D" | "C" | "B" | "A" | "S" | "SS" | "X"> =
+        {
+          D: "D",
+          C: "C",
+          B: "B",
+          A: "A",
+          S: "S",
+          SH: "S",
+          SS: "SS",
+          XH: "SS",
+          X: "X",
+        };
+      const grade = gradeMap[normalized];
+      if (!grade) {
+        throw new QueryParseError(
+          `Invalid grade value: ${value} (expected D, C, B, A, S, SS, or X)`,
+        );
+      }
+      return { type: "grade", value: grade };
+    }
     case "status": {
       if (!value) throw new QueryParseError("Invalid status value: empty");
       try {
@@ -431,8 +458,10 @@ export function looksLikeQuery(q: string): boolean {
   if (/[()]/.test(trimmed)) return true;
   if (/\b(AND|OR|NOT)\b/i.test(trimmed)) return true;
   if (/:\S/.test(trimmed)) return true;
-  if (/\b(acc|retry|mastery|pp|stars|misses|miss|score|keys|key|lns|ln|sunny|danstars|sunnystars|pattern|dominant|style|axis|rice|lnmap)(>=|<=|>|<|=)/i.test(trimmed)) return true;
-  if (/:(rc|rice|ln|lnmap)\b/i.test(trimmed)) return true;
+  if (/\b(acc|retry|mastery|pp|stars|misses|miss|score|keys|key|lns|ln|sunny|danstars|sunnystars|pattern|dominant|style|axis|rice|lnmap|grade|rank)(>=|<=|>|<|=)/i.test(trimmed)) return true;
+  if (/:(rc|rice|ln|lnmap|fln)\b/i.test(trimmed)) return true;
+  if (/\bgrade:[dcbasx]/i.test(trimmed)) return true;
+  if (/\bgrade:ss\b/i.test(trimmed)) return true;
   if (/\b(ranked|loved|pending|qualified|approved|graveyard|wip)\b/i.test(trimmed)) {
     return true;
   }

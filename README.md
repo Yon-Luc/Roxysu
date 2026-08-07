@@ -96,7 +96,7 @@ Deeper design notes live in [`docs/architecture.md`](./docs/architecture.md).
 - [Bun](https://bun.sh/)
 - [Node.js](https://nodejs.org/) LTS (for realm-reader)
 - osu!lazer installed with local play history
-- On NixOS: `nix develop` (or direnv via `.envrc`) for Bun, Node, and native-module libraries
+- On NixOS: `nix develop` (or direnv via `.envrc`) for Bun, Node, and native-module libraries. To install the desktop app without a full monorepo rebuild, pin `linuxResources.hash` in `flake.nix` after a release that includes the Linux resources tarball (`nix build .#roxysu`).
 - On Windows: if `bun install` fails building `realm` / `better-sqlite3`, install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (Desktop development with C++) and retry
 
 ### Install & run

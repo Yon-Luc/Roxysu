@@ -1,7 +1,7 @@
 {
   "name": "@roxysu/desktop",
   "productName": "Roxysu",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": true,
   "description": "Roxysu Electron shell (Windows product path; NixOS/Linux for smoke-testing)",
   "main": "main.js",
@@ -15,6 +15,9 @@
     "build:launcher": "node ./scripts/build-win-launcher.mjs",
     "pack": "bun run build:stage && bun run rebuild:native && bun run archive:realm",
     "assert:packaged": "node ./scripts/assert-packaged.mjs",
+    "assert:linux-resources": "node ./scripts/assert-linux-resources.mjs",
+    "pack:linux-resources": "node ./scripts/pack-linux-resources.mjs",
+    "dist:linux-resources": "bun run pack && bun run pack:linux-resources && bun run assert:linux-resources",
     "dist:win": "bun run build:launcher && bun run pack && electron-builder --win --publish never && bun run assert:packaged",
     "dist:dir": "bun run pack && electron-builder --dir --publish never && bun run assert:packaged"
   },

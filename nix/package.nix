@@ -20,7 +20,7 @@
   bunDepsHash ? "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
 }: let
   pname = "roxysu";
-  version = "0.1.3";
+  version = "0.1.4";
   nodejs = nodejs_24;
 
   # Keep in sync with realm version in bun.lock / apps/realm-reader.
@@ -370,7 +370,7 @@ in
     '';
 
     meta = {
-      description = "Roxysu — osu! practice companion (NixOS Electron package)";
+      description = "Roxysu — osu! practice companion (from-source NixOS Electron package)";
       homepage = "https://github.com/Yon-Luc/Roxysu";
       license = lib.licenses.mit;
       platforms = ["x86_64-linux"];

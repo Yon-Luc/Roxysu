@@ -11,7 +11,8 @@ Ship a **Windows-only** Roxysu executable for non-developer users, while keeping
 
 ## Non-goals (v1)
 
-- macOS / Linux Electron builds (can add later; same app, different electron-builder targets).
+- macOS Electron builds (can add later; same app, different electron-builder targets).
+- Linux AppImage for non-Nix users (optional later). NixOS uses the Linux resources tarball + nixpkgs Electron instead.
 - Porting the Bun server *into* Electron’s process as a Bun runtime.
 - Bundling **tosu** / ManiaMapAnalyser.
 - Shipping **Rating Lab** (dev/experiment tool; useless for end users).
@@ -66,16 +67,24 @@ roxysu/
 
 ### NixOS
 
-One flake, two outputs:
-
 | Command | Purpose |
 | --- | --- |
 | `nix develop` | Dev shell (Bun + nixpkgs Electron wrapper) |
-| `nix build .#roxysu` / `nix run .#roxysu` | Packaged desktop app |
+| `nix build .#roxysu` / `nix run .#roxysu` | Packaged desktop app (prebuilt when hash pinned) |
+| `nix build .#roxysu-from-source` | Full monorepo build (slow; needs `bunDepsHash`) |
 | `nix profile install .#roxysu` | Install into your profile |
 | `nix run github:Yon-Luc/Roxysu` | Same package, from GitHub (after push) |
 
-The package wraps nixpkgs Electron + Node (no electron-builder). After `bun.lock` changes, refresh `bunDepsHash` in `flake.nix` from the hash `nix build` prints.
+**Fast path (preferred):** CI workflow `desktop-linux-resources` uploads
+`Roxysu-*-linux-x64-resources.tar.gz` to the GitHub release. Pin
+`linuxResources.hash` in `flake.nix` (via `nix-prefetch-url` on that asset).
+The flake then wraps nixpkgs Electron around the downloaded payload — no local
+`bun install` / UI / native rebuild.
+
+**From-source fallback:** `nix/package.nix` still wraps nixpkgs Electron + Node.
+After `bun.lock` changes, refresh `bunDepsHash` from the hash `nix build .#roxysu-from-source` prints.
+
+Local tarball: `bun run desktop:dist:linux-resources` (Linux host / CI).
 
 Suggested `apps/desktop` growth:
 

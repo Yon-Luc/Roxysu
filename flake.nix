@@ -29,18 +29,50 @@
       else pkgs.electron;
 
     # After changing bun.lock, rebuild once, then paste the printed sha256 here:
-    #   nix build .#roxysu
+    #   nix build .#roxysu-from-source
     bunDepsHash = "sha256-5tfW9/T7DB56qgtLIV4/IAWa2FjLZpovc9fDzP3lfVg=";
 
-    roxysu = pkgs.callPackage ./nix/package.nix {
+    # Prebuilt Linux resources from GitHub Releases (CI: desktop-linux-resources).
+    # Leave `hash = ""` to keep `packages.roxysu` on the from-source derivation.
+    # After a release:
+    #   nix store prefetch-file https://github.com/Yon-Luc/Roxysu/releases/download/v0.1.4/Roxysu-0.1.4-linux-x64-resources.tar.gz
+    # then set hash to the printed sha256-… SRI value.
+    linuxResources = {
+      version = "0.1.4";
+      url = "https://github.com/Yon-Luc/Roxysu/releases/download/v0.1.4/Roxysu-0.1.4-linux-x64-resources.tar.gz";
+      # Empty → default package is from-source. Non-empty → fast prebuilt install.
+      hash = "";
+    };
+
+    roxysuFromSource = pkgs.callPackage ./nix/package.nix {
       inherit electron bunDepsHash;
       nodejs_24 = pkgs.nodejs_24;
     };
+
+    roxysuPrebuilt =
+      if linuxResources.hash == ""
+      then null
+      else
+        pkgs.callPackage ./nix/prebuilt.nix {
+          inherit electron;
+          inherit (linuxResources) version url hash;
+        };
+
+    # Prefer prebuilt when a release hash is pinned; otherwise from-source.
+    roxysu =
+      if roxysuPrebuilt != null
+      then roxysuPrebuilt
+      else roxysuFromSource;
   in {
-    packages.${system} = {
-      default = roxysu;
-      inherit roxysu;
-    };
+    packages.${system} =
+      {
+        default = roxysu;
+        inherit roxysu;
+        roxysu-from-source = roxysuFromSource;
+      }
+      // pkgs.lib.optionalAttrs (roxysuPrebuilt != null) {
+        roxysu-prebuilt = roxysuPrebuilt;
+      };
 
     apps.${system}.default = {
       type = "app";
@@ -54,6 +86,8 @@
 
     # nix develop — toolchain for hacking (Bun server + Electron smoke).
     # nix build / nix run / nix profile install — packaged desktop app.
+    # Prefer pinning linuxResources.hash so installs download ~tens of MB
+    # instead of re-running bun install on every lockfile change.
     # From GitHub (once pushed): nix run github:Yon-Luc/Roxysu
     # Install into PATH + app menu: nix profile install github:Yon-Luc/Roxysu
     #   or on NixOS: programs.roxysu.enable (see nixosModules above).
@@ -81,7 +115,17 @@
 
       shellHook = ''
         echo "Roxysu dev shell — bun $(bun --version), node $(node --version), electron $(electron --version), dotnet $(dotnet --version)"
-        echo "Packaged app: nix build .#roxysu && nix run .#roxysu"
+        ${
+          if linuxResources.hash == ""
+          then ''
+            echo "Packaged app (from source — pin linuxResources.hash in flake.nix for fast installs):"
+            echo "  nix build .#roxysu-from-source && nix run .#roxysu"
+          ''
+          else ''
+            echo "Packaged app (prebuilt): nix build .#roxysu && nix run .#roxysu"
+            echo "From-source fallback: nix build .#roxysu-from-source"
+          ''
+        }
       '';
     };
   };

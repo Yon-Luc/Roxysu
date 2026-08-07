@@ -1,8 +1,0 @@
---- block on electron multiple launch of the app specially 
-
-
-- add danial dan system for 4k
-- fix X in stats
-- bug top mapper name sometime change for no reason
-- add a preview / replay / skin for std / taiko / ctb 
-- auto-update system 

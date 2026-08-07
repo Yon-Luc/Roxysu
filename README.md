@@ -180,8 +180,3 @@ osu! and the osu! logo are trademarks of ppy Pty Ltd. Roxysu is an unofficial co
 
 ---
 
-## Status
-
-Phases 1–5 are in place: Realm sync, API + SSE, dashboard, practice library, query language, collections, sessions, and mania Sunny dan ratings.
-
-Still planned: notes/tags, backup/restore, further performance work, and optional live memory reading.

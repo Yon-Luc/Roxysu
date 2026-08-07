@@ -260,12 +260,26 @@ export function DownloadMapsPage() {
   });
 
   const [openInOsuMessage, setOpenInOsuMessage] = useState<string | null>(null);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  /** Immediate UI signal so Open in osu! enables without waiting on a refetch. */
+  const [readyToOpenCount, setReadyToOpenCount] = useState(0);
+  /** Set IDs downloaded this session — hide from results until search refetches. */
+  const [pendingDownloadIds, setPendingDownloadIds] = useState<Set<number>>(
+    () => new Set(),
+  );
+
   const openInOsu = useMutation({
     mutationFn: openLastBatchInOsu,
     onSuccess: (data) => {
       setBatchError(null);
-      if ("error" in data) {
-        setOpenInOsuMessage(String(data.error));
+      // Batch/open payloads always include `error: null` on success — only treat
+      // a non-empty string as a failure.
+      if (typeof data.error === "string" && data.error.length > 0) {
+        setOpenInOsuMessage(data.error);
+        return;
+      }
+      if (!("opened" in data)) {
+        setOpenInOsuMessage("Open in osu! failed");
         return;
       }
       setOpenInOsuMessage(
@@ -273,17 +287,15 @@ export function DownloadMapsPage() {
           (data.failed > 0 ? ` (${data.failed} failed)` : "") +
           ". Scripts: import-into-osu.sh / import-into-osu.bat in the download folder.",
       );
-      // Keep button enabled for the same archives; refresh counts from server.
+      if (typeof data.savedForImport === "number") {
+        setReadyToOpenCount(data.savedForImport);
+      }
       void queryClient.invalidateQueries({ queryKey: ["mirrors", "batch"] });
     },
     onError: (err) => {
       setOpenInOsuMessage(err instanceof Error ? err.message : String(err));
     },
   });
-
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  /** Immediate UI signal so Open in osu! enables without waiting on a refetch. */
-  const [readyToOpenCount, setReadyToOpenCount] = useState(0);
 
   const saveSet = useMutation({
     mutationFn: (args: {
@@ -299,8 +311,13 @@ export function DownloadMapsPage() {
       }),
     onSuccess: (data) => {
       setBatchError(null);
-      if ("error" in data) {
-        setSaveMessage(String(data.error));
+      // Success payloads include `error: null` and `result` / `savedForImport`.
+      if (typeof data.error === "string" && data.error.length > 0) {
+        setSaveMessage(data.error);
+        return;
+      }
+      if (!("result" in data) || !("savedForImport" in data)) {
+        setSaveMessage("Save failed");
         return;
       }
       setSaveMessage(
@@ -309,9 +326,11 @@ export function DownloadMapsPage() {
           : `#${data.setId} saved — ready to open in osu!`,
       );
       setReadyToOpenCount(data.savedForImport);
-      // Replace the whole batch snapshot (includes savedForImport) so the button
-      // enables immediately — do not patch+invalidate (that raced and left the
-      // UI stuck until a full page reload).
+      setPendingDownloadIds((prev) => {
+        const next = new Set(prev);
+        next.add(data.setId);
+        return next;
+      });
       const {
         setId: _setId,
         result: _result,
@@ -319,6 +338,7 @@ export function DownloadMapsPage() {
         ...batchState
       } = data;
       queryClient.setQueryData(["mirrors", "batch"], batchState as MirrorBatchJob);
+      void queryClient.invalidateQueries({ queryKey: ["mirrors", "search"] });
     },
     onError: (err) => {
       setSaveMessage(err instanceof Error ? err.message : String(err));
@@ -330,13 +350,25 @@ export function DownloadMapsPage() {
     mutationFn: (ids: number[]) => checkMissingBeatmapsets(ids),
   });
 
-  const items = query.data && "items" in query.data ? query.data.items : [];
+  const rawItems = query.data && "items" in query.data ? query.data.items : [];
   const ownedSkipped =
     query.data && "ownedSkipped" in query.data ? query.data.ownedSkipped : 0;
+  const pendingSkipped =
+    query.data && "pendingSkipped" in query.data
+      ? Number(query.data.pendingSkipped) || 0
+      : 0;
   const hasMore =
     query.data && "hasMore" in query.data ? query.data.hasMore : false;
   const provider =
     query.data && "provider" in query.data ? query.data.provider : null;
+  const items =
+    submitted.excludeOwned && pendingDownloadIds.size > 0
+      ? rawItems.filter((set) => !pendingDownloadIds.has(set.id))
+      : rawItems;
+  const hiddenPendingLocal =
+    submitted.excludeOwned && pendingDownloadIds.size > 0
+      ? rawItems.length - items.length
+      : 0;
   const batch = batchQuery.data;
   const batchBusy =
     batch?.status === "running" || batch?.status === "stopping";
@@ -357,6 +389,12 @@ export function DownloadMapsPage() {
       setReadyToOpenCount(batch.savedForImport);
     }
   }, [batch]);
+
+  useEffect(() => {
+    if (batch?.status === "completed") {
+      void queryClient.invalidateQueries({ queryKey: ["mirrors", "search"] });
+    }
+  }, [batch?.status, queryClient]);
 
   const missingIds =
     checkMissing.data && "missing" in checkMissing.data
@@ -427,7 +465,7 @@ export function DownloadMapsPage() {
               checked={excludeOwned}
               onChange={(e) => setExcludeOwned(e.target.checked)}
             />
-            Hide maps I already own
+            Hide maps I already own or downloaded
           </label>
           <label className="inline-flex items-center gap-2">
             <input
@@ -728,6 +766,9 @@ export function DownloadMapsPage() {
               {items.length} result{items.length === 1 ? "" : "s"}
               {ownedSkipped > 0
                 ? ` · hid ${ownedSkipped} you already own`
+                : ""}
+              {pendingSkipped + hiddenPendingLocal > 0
+                ? ` · hid ${pendingSkipped + hiddenPendingLocal} recently downloaded`
                 : ""}
               {provider ? ` · via ${provider}` : ""}
             </p>

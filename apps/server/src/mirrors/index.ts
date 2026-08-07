@@ -28,6 +28,12 @@ export {
   type BeatmapsetOwnershipDiff,
 } from "./ownership";
 export {
+  loadPendingDownloadIds,
+  recordPendingDownloads,
+  prunePendingDownloadsAgainstOwned,
+  loadIdsToHideFromDownloadSearch,
+} from "./pendingDownloads";
+export {
   OnlineQueryError,
   parseOnlineMirrorQuery,
   setMatchesOnlinePostFilters,

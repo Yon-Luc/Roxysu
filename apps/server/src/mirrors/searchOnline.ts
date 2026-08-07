@@ -1,5 +1,4 @@
 import type { Db } from "../db-runtime";
-import { loadOwnedSetOnlineIds } from "./ownership";
 import {
   OnlineQueryError,
   parseOnlineMirrorQuery,
@@ -7,6 +6,7 @@ import {
   type OnlineMirrorQuery,
   type OnlinePostFilter,
 } from "./onlineQuery";
+import { loadIdsToHideFromDownloadSearch } from "./pendingDownloads";
 import { getActiveBeatmapMirrorProvider } from "./providers";
 import {
   buildMirrorSearchUrl,
@@ -22,6 +22,8 @@ export type MirrorSearchResult = {
   page: number;
   excludeOwned: boolean;
   ownedSkipped: number;
+  /** Hidden because Roxysu already downloaded them (awaiting lazer import/sync). */
+  pendingSkipped: number;
   mirrorCount: number;
   hasMore: boolean;
   items: OnlineBeatmapSet[];
@@ -120,13 +122,18 @@ export async function searchOnlineBeatmapsets(
   const postFilters = onlineQuery?.postFilters ?? [];
   const needsOverfetch = postFilters.length > 0;
 
-  const owned = excludeOwned
-    ? await loadOwnedSetOnlineIds(db)
-    : new Set<number>();
+  const { owned, pending, hide } = excludeOwned
+    ? await loadIdsToHideFromDownloadSearch(db)
+    : {
+        owned: new Set<number>(),
+        pending: new Set<number>(),
+        hide: new Set<number>(),
+      };
 
   const matched: OnlineBeatmapSet[] = [];
   const seen = new Set<number>();
   let ownedSkipped = 0;
+  let pendingSkipped = 0;
   let lastRawCount = 0;
   let mirrorHasMore = true;
   let pagesScanned = 0;
@@ -160,8 +167,9 @@ export async function searchOnlineBeatmapsets(
 
       if (!setMatchesOnlinePostFilters(set, postFilters)) continue;
 
-      if (excludeOwned && owned.has(set.id)) {
-        ownedSkipped += 1;
+      if (excludeOwned && hide.has(set.id)) {
+        if (owned.has(set.id)) ownedSkipped += 1;
+        else if (pending.has(set.id)) pendingSkipped += 1;
         continue;
       }
 
@@ -186,12 +194,13 @@ export async function searchOnlineBeatmapsets(
     page,
     excludeOwned,
     ownedSkipped,
+    pendingSkipped,
     mirrorCount: lastRawCount,
     hasMore,
     items: matched,
     query: onlineQuery?.rawQuery,
     note:
-      "Open or drag downloaded .osz files into osu!lazer to import. Sets already in your local library are hidden by default.",
+      "Downloads save into the beatmaps folder. Maps already in your library or recently downloaded (awaiting import) are hidden by default.",
   };
 }
 
@@ -225,9 +234,13 @@ export async function collectMatchingOnlineBeatmapsets(
   const maxPages = opts.maxPages ?? 200;
   const maxSets = opts.maxSets ?? 10_000;
   const postFilters = opts.onlineQuery.postFilters;
-  const owned = excludeOwned
-    ? await loadOwnedSetOnlineIds(db)
-    : new Set<number>();
+  const { owned, pending, hide } = excludeOwned
+    ? await loadIdsToHideFromDownloadSearch(db)
+    : {
+        owned: new Set<number>(),
+        pending: new Set<number>(),
+        hide: new Set<number>(),
+      };
 
   const sets: OnlineBeatmapSet[] = [];
   const seen = new Set<number>();
@@ -256,8 +269,8 @@ export async function collectMatchingOnlineBeatmapsets(
       seen.add(set.id);
       if (!setMatchesOnlinePostFilters(set, postFilters)) continue;
 
-      if (excludeOwned && owned.has(set.id)) {
-        ownedSkipped += 1;
+      if (excludeOwned && hide.has(set.id)) {
+        if (owned.has(set.id) || pending.has(set.id)) ownedSkipped += 1;
         continue;
       }
 

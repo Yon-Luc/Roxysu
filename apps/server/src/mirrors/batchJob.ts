@@ -12,6 +12,7 @@ import {
   writeOsuImportScripts,
   type OpenOszBatchResult,
 } from "./openInOsu";
+import { recordPendingDownloads } from "./pendingDownloads";
 import { getActiveBeatmapMirrorProvider } from "./providers";
 import {
   collectMatchingOnlineBeatmapsets,
@@ -380,6 +381,7 @@ async function downloadQueue(
   mkdirSync(downloadDir, { recursive: true });
   job.queued = sets.length;
   job.savedPaths = [];
+  const downloadedIds: number[] = [];
 
   for (const set of sets) {
     if (job.stopRequested) break;
@@ -397,6 +399,7 @@ async function downloadQueue(
       if (result === "exists") job.skippedExisting += 1;
       else job.downloaded += 1;
       job.savedPaths.push(destPath);
+      downloadedIds.push(set.id);
     } catch (err) {
       job.failed += 1;
       const message = err instanceof Error ? err.message : String(err);
@@ -406,6 +409,10 @@ async function downloadQueue(
       ].slice(0, MAX_RECENT_ERRORS);
     }
     await sleep(DELAY_BETWEEN_MS);
+  }
+
+  if (downloadedIds.length > 0) {
+    recordPendingDownloads(downloadedIds, downloadDir);
   }
 
   if (job.savedPaths.length > 0) {
@@ -607,6 +614,7 @@ export async function saveBeatmapsetArchive(opts: {
   if (!job.savedPaths.includes(destPath)) {
     job.savedPaths.push(destPath);
   }
+  recordPendingDownloads([setId], downloadDir);
   const scripts = writeOsuImportScripts(downloadDir, job.savedPaths);
   job.importScriptSh = scripts.sh;
   job.importScriptBat = scripts.bat;

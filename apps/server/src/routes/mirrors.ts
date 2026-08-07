@@ -2,6 +2,7 @@ import { Elysia, t } from "elysia";
 import { dbPlugin } from "../db-runtime";
 import {
   OnlineQueryError,
+  countMatchingOnlineBeatmapsets,
   diffAgainstLibrary,
   getActiveBeatmapMirrorProvider,
   getMirrorBatchJobState,
@@ -76,6 +77,37 @@ export const mirrorRoutes = new Elysia({ prefix: "/mirrors" })
     };
   })
   .get("/download-dir", () => probeBeatmapsDownloadDir())
+  .get(
+    "/count",
+    async ({ db, query, set }) => {
+      try {
+        if (query.query == null || query.query.trim() === "") {
+          set.status = 400;
+          return { error: "query is required" };
+        }
+        return await countMatchingOnlineBeatmapsets(db, {
+          query: query.query,
+          sort: query.sort ?? "ranked_desc",
+          excludeOwned:
+            query.excludeOwned !== false && query.excludeOwned !== "0",
+        });
+      } catch (err) {
+        set.status = httpStatusForMirrorError(err);
+        return {
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
+    },
+    {
+      query: t.Object({
+        query: t.String(),
+        sort: t.Optional(sortSchema),
+        excludeOwned: t.Optional(
+          t.Union([t.Boolean(), t.Literal("1"), t.Literal("0")]),
+        ),
+      }),
+    },
+  )
   .get("/batch", () => getMirrorBatchJobState())
   .post("/batch/stop", () => stopMirrorBatchJob())
   .post("/batch/open-in-osu", async ({ set }) => {

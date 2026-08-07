@@ -388,6 +388,38 @@ export async function openLastBatchInOsu() {
   );
 }
 
+export async function saveMirrorBeatmapset(body: {
+  setId: number;
+  artist?: string;
+  title?: string;
+  noVideo?: boolean;
+}) {
+  const res = await fetch(`/api/mirrors/beatmapsets/${body.setId}/save`, {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify({
+      artist: body.artist,
+      title: body.title,
+      noVideo: body.noVideo,
+    }),
+  });
+  const data: unknown = await res.json().catch(() => null);
+  if (!res.ok) {
+    const detail =
+      data && typeof data === "object" && "error" in data
+        ? String((data as { error: unknown }).error)
+        : `HTTP ${res.status}`;
+    throw new Error(
+      `/api/mirrors/beatmapsets/${body.setId}/save failed: ${detail}`,
+    );
+  }
+  return data as MirrorBatchJob & {
+    setId: number;
+    result: "downloaded" | "exists";
+    path: string;
+  };
+}
+
 export async function fetchMirrorProviders() {
   return unwrap(
     await api.api.mirrors.providers.get(),

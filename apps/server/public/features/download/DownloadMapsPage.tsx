@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BeatmapCover } from "../../components/BeatmapCover";
 import { SkeletonBlock, CardGridSkeleton } from "../../components/LoadingSkeleton";
@@ -10,12 +10,13 @@ import {
   fetchMirrorDownloadDir,
   fetchMirrorSearch,
   openLastBatchInOsu,
+  saveMirrorBeatmapset,
   startMirrorBatchJob,
   stopMirrorBatchJob,
+  type MirrorBatchJob,
   type OnlineBeatmapSet,
 } from "../../lib/api";
 import {
-  mirrorBeatmapSetDownloadUrl,
   osuWebBeatmapUrl,
 } from "../../lib/osuUrls";
 
@@ -272,10 +273,55 @@ export function DownloadMapsPage() {
           (data.failed > 0 ? ` (${data.failed} failed)` : "") +
           ". Scripts: import-into-osu.sh / import-into-osu.bat in the download folder.",
       );
+      // Keep button enabled for the same archives; refresh counts from server.
       void queryClient.invalidateQueries({ queryKey: ["mirrors", "batch"] });
     },
     onError: (err) => {
       setOpenInOsuMessage(err instanceof Error ? err.message : String(err));
+    },
+  });
+
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  /** Immediate UI signal so Open in osu! enables without waiting on a refetch. */
+  const [readyToOpenCount, setReadyToOpenCount] = useState(0);
+
+  const saveSet = useMutation({
+    mutationFn: (args: {
+      setId: number;
+      artist?: string;
+      title?: string;
+    }) =>
+      saveMirrorBeatmapset({
+        setId: args.setId,
+        artist: args.artist,
+        title: args.title,
+        noVideo,
+      }),
+    onSuccess: (data) => {
+      setBatchError(null);
+      if ("error" in data) {
+        setSaveMessage(String(data.error));
+        return;
+      }
+      setSaveMessage(
+        data.result === "exists"
+          ? `#${data.setId} already on disk — ready to open in osu!`
+          : `#${data.setId} saved — ready to open in osu!`,
+      );
+      setReadyToOpenCount(data.savedForImport);
+      // Replace the whole batch snapshot (includes savedForImport) so the button
+      // enables immediately — do not patch+invalidate (that raced and left the
+      // UI stuck until a full page reload).
+      const {
+        setId: _setId,
+        result: _result,
+        path: _path,
+        ...batchState
+      } = data;
+      queryClient.setQueryData(["mirrors", "batch"], batchState as MirrorBatchJob);
+    },
+    onError: (err) => {
+      setSaveMessage(err instanceof Error ? err.message : String(err));
     },
   });
 
@@ -300,11 +346,17 @@ export function DownloadMapsPage() {
     (items.length > 0 || hasMore) &&
     !batchBusy &&
     !query.isLoading;
-  const canOpenInOsu =
-    !batchBusy &&
-    batch != null &&
-    batch.status === "completed" &&
-    (batch.savedForImport ?? 0) > 0;
+  const savedForImport = Math.max(
+    readyToOpenCount,
+    batch && "savedForImport" in batch ? Number(batch.savedForImport) || 0 : 0,
+  );
+  const canOpenInOsu = !batchBusy && savedForImport > 0;
+
+  useEffect(() => {
+    if (batch && "savedForImport" in batch && typeof batch.savedForImport === "number") {
+      setReadyToOpenCount(batch.savedForImport);
+    }
+  }, [batch]);
 
   const missingIds =
     checkMissing.data && "missing" in checkMissing.data
@@ -317,10 +369,11 @@ export function DownloadMapsPage() {
         <PageTitle>Download maps</PageTitle>
         <p className="rx-subtitle mt-2 max-w-2xl">
           Search online with the same query language as Practice — then download
-          every missing set that matches. Batch saves{" "}
+          every missing set that matches. Downloads (single or batch) save{" "}
           <code className="text-ink">.osz</code> files into{" "}
-          <code className="text-ink">{downloadDir}</code> — open or drag them
-          into osu!lazer to import.
+          <code className="text-ink">{downloadDir}</code>. Use{" "}
+          <span className="font-medium text-ink">Open in osu!</span> to import
+          them into osu!lazer.
         </p>
       </div>
 
@@ -461,9 +514,13 @@ export function DownloadMapsPage() {
               setOpenInOsuMessage(null);
               openInOsu.mutate();
             }}
-            title="Open the last batch’s .osz files with osu!lazer (also writes import-into-osu.sh / .bat)"
+            title="Open saved .osz files with osu!lazer (also writes import-into-osu.sh / .bat)"
           >
-            {openInOsu.isPending ? "Opening…" : "Open in osu!"}
+            {openInOsu.isPending
+              ? "Opening…"
+              : savedForImport > 0
+                ? `Open in osu! (${savedForImport})`
+                : "Open in osu!"}
           </button>
         </div>
 
@@ -471,8 +528,8 @@ export function DownloadMapsPage() {
           <span className="font-medium text-ink">Download all missing</span>{" "}
           walks every mirror page for{" "}
           <code className="text-ink">{submitted.q || "(defaults)"}</code> until
-          exhausted (capped), skips owned sets and files already on disk. After
-          a batch finishes,{" "}
+          exhausted (capped), skips owned sets and files already on disk. Single
+          downloads also save into that folder. After anything is saved,{" "}
           <span className="font-medium text-ink">Open in osu!</span> launches
           the archives (or run{" "}
           <code className="text-ink">import-into-osu.sh</code> /{" "}
@@ -482,6 +539,9 @@ export function DownloadMapsPage() {
 
         {batchError ? (
           <p className="text-sm text-rose-400">{batchError}</p>
+        ) : null}
+        {saveMessage ? (
+          <p className="text-sm text-muted">{saveMessage}</p>
         ) : null}
         {openInOsuMessage ? (
           <p className="text-sm text-muted">{openInOsuMessage}</p>
@@ -507,8 +567,8 @@ export function DownloadMapsPage() {
                 ? ` · hid ${batch.skippedOwned} owned`
                 : ""}
               {batch.failed > 0 ? ` · ${batch.failed} failed` : ""}
-              {batch.savedForImport > 0
-                ? ` · ${batch.savedForImport} ready to open`
+              {savedForImport > 0
+                ? ` · ${savedForImport} ready to open`
                 : ""}
             </p>
             {batch.importScriptSh || batch.importScriptBat ? (
@@ -611,9 +671,8 @@ export function DownloadMapsPage() {
             {missingIds.length > 0 ? (
               <ul className="flex flex-wrap gap-2">
                 {missingIds.map((id) => {
-                  const downloadUrl = mirrorBeatmapSetDownloadUrl(id, {
-                    noVideo,
-                  });
+                  const saving =
+                    saveSet.isPending && saveSet.variables?.setId === id;
                   return (
                     <li
                       key={id}
@@ -626,15 +685,15 @@ export function DownloadMapsPage() {
                         alt=""
                       />
                       <span className="text-ink">#{id}</span>
-                      {downloadUrl ? (
-                        <a
-                          href={downloadUrl}
-                          className="rx-btn-primary"
-                          title="Download .osz from mirror — open or drag into osu!lazer to import"
-                        >
-                          Download
-                        </a>
-                      ) : null}
+                      <button
+                        type="button"
+                        className="rx-btn-primary"
+                        disabled={batchBusy || saveSet.isPending}
+                        title={`Save .osz into ${downloadDir}`}
+                        onClick={() => saveSet.mutate({ setId: id })}
+                      >
+                        {saving ? "Saving…" : "Download"}
+                      </button>
                     </li>
                   );
                 })}
@@ -683,7 +742,20 @@ export function DownloadMapsPage() {
             <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {items.map((set) => (
                 <li key={set.id}>
-                  <OnlineSetCard set={set} noVideo={noVideo} />
+                  <OnlineSetCard
+                    set={set}
+                    downloadBusy={batchBusy || saveSet.isPending}
+                    saving={
+                      saveSet.isPending && saveSet.variables?.setId === set.id
+                    }
+                    onDownload={() =>
+                      saveSet.mutate({
+                        setId: set.id,
+                        artist: set.artist,
+                        title: set.title,
+                      })
+                    }
+                  />
                 </li>
               ))}
             </ul>
@@ -723,12 +795,15 @@ export function DownloadMapsPage() {
 
 function OnlineSetCard({
   set,
-  noVideo,
+  downloadBusy,
+  saving,
+  onDownload,
 }: {
   set: OnlineBeatmapSet;
-  noVideo: boolean;
+  downloadBusy: boolean;
+  saving: boolean;
+  onDownload: () => void;
 }) {
-  const downloadUrl = mirrorBeatmapSetDownloadUrl(set.id, { noVideo });
   const firstDiff = set.beatmaps[0];
   const webUrl =
     (firstDiff ? osuWebBeatmapUrl(firstDiff.id, set.id) : null) ??
@@ -786,15 +861,15 @@ function OnlineSetCard({
           <a href={webUrl} target="_blank" rel="noreferrer" className="rx-btn">
             Website
           </a>
-          {downloadUrl ? (
-            <a
-              href={downloadUrl}
-              className="rx-btn-primary"
-              title="Download .osz from mirror — open or drag into osu!lazer to import"
-            >
-              Download
-            </a>
-          ) : null}
+          <button
+            type="button"
+            className="rx-btn-primary"
+            disabled={downloadBusy}
+            title="Save .osz into the shared beatmaps download folder"
+            onClick={onDownload}
+          >
+            {saving ? "Saving…" : "Download"}
+          </button>
         </div>
       </div>
     </div>

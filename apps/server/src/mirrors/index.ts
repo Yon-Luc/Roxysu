@@ -52,6 +52,7 @@ export {
   startMirrorBatchJob,
   stopMirrorBatchJob,
   openLastBatchArchivesInOsu,
+  saveBeatmapsetArchive,
   type MirrorBatchJobState,
   type MirrorBatchJobStatus,
   type MirrorBatchMode,

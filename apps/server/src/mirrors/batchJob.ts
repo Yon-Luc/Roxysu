@@ -566,8 +566,62 @@ export function startMirrorBatchJob(
 }
 
 /**
- * Open archives from the last completed batch in osu!lazer (OS file association /
- * `osu!` on PATH). Also regenerates import scripts if paths are still known.
+ * Save one beatmapset `.osz` into the shared download folder and register it
+ * for "Open in osu!". Safe to call while idle (not mid-batch).
+ */
+export async function saveBeatmapsetArchive(opts: {
+  setId: number;
+  artist?: string;
+  title?: string;
+  noVideo?: boolean;
+}): Promise<
+  MirrorBatchJobState & {
+    setId: number;
+    result: "downloaded" | "exists";
+    path: string;
+  }
+> {
+  if (job.running) {
+    throw new Error("A batch download is already running");
+  }
+  const setId = opts.setId;
+  if (!Number.isSafeInteger(setId) || setId <= 0) {
+    throw new Error("Invalid beatmapset id");
+  }
+
+  const downloadDir = ensureBeatmapsDownloadDir();
+  job.downloadDir = downloadDir;
+  mkdirSync(downloadDir, { recursive: true });
+
+  const set = {
+    id: setId,
+    artist: opts.artist,
+    title: opts.title,
+  };
+  const { result, path: destPath } = await downloadSetToDisk(
+    set,
+    downloadDir,
+    opts.noVideo !== false,
+  );
+
+  if (!job.savedPaths.includes(destPath)) {
+    job.savedPaths.push(destPath);
+  }
+  const scripts = writeOsuImportScripts(downloadDir, job.savedPaths);
+  job.importScriptSh = scripts.sh;
+  job.importScriptBat = scripts.bat;
+
+  return {
+    ...getMirrorBatchJobState(),
+    setId,
+    result,
+    path: destPath,
+  };
+}
+
+/**
+ * Open registered archives in osu!lazer (from the last batch and/or individual
+ * saves). Regenerates import scripts for paths that still exist on disk.
  */
 export async function openLastBatchArchivesInOsu(): Promise<
   OpenOszBatchResult & {
@@ -581,14 +635,14 @@ export async function openLastBatchArchivesInOsu(): Promise<
   }
   if (job.savedPaths.length === 0) {
     throw new Error(
-      "No archives from the last batch to open. Run a download first.",
+      "No archives ready to open. Download a map or run a batch first.",
     );
   }
 
   const existing = job.savedPaths.filter((p) => existsSync(p));
   if (existing.length === 0) {
     throw new Error(
-      "Saved archives from the last batch are missing on disk. Re-download them.",
+      "Saved archives are missing on disk. Re-download them.",
     );
   }
 

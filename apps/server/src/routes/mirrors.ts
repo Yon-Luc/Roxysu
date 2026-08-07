@@ -8,6 +8,7 @@ import {
   openLastBatchArchivesInOsu,
   parsePositiveSetId,
   probeBeatmapsDownloadDir,
+  saveBeatmapsetArchive,
   searchOnlineBeatmapsets,
   startMirrorBatchJob,
   stopMirrorBatchJob,
@@ -234,6 +235,8 @@ export const mirrorRoutes = new Elysia({ prefix: "/mirrors" })
         noVideo: query.noVideo === true || query.noVideo === "1",
       });
 
+      // Browser redirect to the mirror (external clients). Prefer POST …/save
+      // from the Download Maps UI so files land in the shared folder.
       return Response.redirect(target, 302);
     },
     {
@@ -244,6 +247,39 @@ export const mirrorRoutes = new Elysia({ prefix: "/mirrors" })
         noVideo: t.Optional(
           t.Union([t.Boolean(), t.Literal("1"), t.Literal("0")]),
         ),
+      }),
+    },
+  )
+  .post(
+    "/beatmapsets/:setId/save",
+    async ({ params, body, set }) => {
+      const setId = parsePositiveSetId(params.setId);
+      if (setId == null) {
+        set.status = 400;
+        return { error: "Invalid beatmapset id" };
+      }
+      try {
+        return await saveBeatmapsetArchive({
+          setId,
+          artist: body.artist,
+          title: body.title,
+          noVideo: body.noVideo !== false,
+        });
+      } catch (err) {
+        set.status = httpStatusForMirrorError(err);
+        return {
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
+    },
+    {
+      params: t.Object({
+        setId: t.String(),
+      }),
+      body: t.Object({
+        artist: t.Optional(t.String()),
+        title: t.Optional(t.String()),
+        noVideo: t.Optional(t.Boolean()),
       }),
     },
   );

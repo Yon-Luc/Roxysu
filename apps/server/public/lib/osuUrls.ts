@@ -19,8 +19,8 @@ export function osuWebBeatmapUrl(
 }
 
 /**
- * Download a beatmapset `.osz` via Roxysu's mirror redirect.
- * Open or drag the file into osu!lazer to import — not auto-imported.
+ * Download a beatmapset `.osz` via Roxysu's mirror redirect (browser download).
+ * Prefer `saveMirrorBeatmapset` so archives land in the shared beatmaps folder.
  */
 export function mirrorBeatmapSetDownloadUrl(
   setOnlineId: number | null | undefined,

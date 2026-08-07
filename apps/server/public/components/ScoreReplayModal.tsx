@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -259,6 +260,46 @@ export function ScoreReplayButton({
         : null}
     </>
   );
+}
+
+/**
+ * Measures `outerRef`'s box via ResizeObserver and returns the largest
+ * `ratio`-shaped rect (in px) that fits inside it, centered. Mirrors the
+ * ResizeObserver technique StdPlayfield's own canvas uses internally —
+ * more reliable across browsers than CSS `aspect-ratio` on a flex-grow
+ * item, whose cross-axis resolution against a flex-basis:0% main size
+ * isn't consistently supported.
+ */
+function useAspectFit(ratio: number) {
+  const outerRef = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState<{ width: number; height: number } | null>(
+    null,
+  );
+
+  useLayoutEffect(() => {
+    const el = outerRef.current;
+    if (!el) return;
+
+    const compute = () => {
+      const w = el.clientWidth;
+      const h = el.clientHeight;
+      if (w <= 0 || h <= 0) return;
+      const fitW = Math.min(w, h * ratio);
+      const fitH = fitW / ratio;
+      setSize((prev) =>
+        prev && Math.abs(prev.width - fitW) < 0.5 && Math.abs(prev.height - fitH) < 0.5
+          ? prev
+          : { width: fitW, height: fitH },
+      );
+    };
+
+    compute();
+    const ro = new ResizeObserver(compute);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ratio]);
+
+  return { outerRef, size };
 }
 
 function ScoreReplayModal({
@@ -966,6 +1007,7 @@ function ScoreReplayModal({
     !!replayData &&
     replayData.beatmap.rulesetShortName === "osu" &&
     (replayData.beatmap.hitObjects?.length ?? 0) > 0;
+  const { outerRef: stdFitRef, size: stdFitSize } = useAspectFit(4 / 3);
   const canLivePlay = isManiaReplay;
   const binds = canLivePlay
     ? resolveKeybinds(keybindsAll, replayData!.beatmap.columnCount)
@@ -1133,6 +1175,7 @@ function ScoreReplayModal({
               ) : null}
 
               <div
+                ref={isStdReplay ? stdFitRef : undefined}
                 className={
                   showAnalysis
                     ? "relative flex min-h-0 flex-1 flex-col sm:flex-row"
@@ -1142,9 +1185,7 @@ function ScoreReplayModal({
                 <div
                   className={
                     isStdReplay
-                      ? fullscreen
-                        ? "relative mx-auto min-h-0 h-full flex-1 px-1 py-1 sm:px-2 sm:py-2"
-                        : "relative mx-auto min-h-0 h-full flex-1 px-2 py-2 sm:px-3 sm:py-3"
+                      ? "relative mx-auto min-h-0 shrink-0"
                       : fullscreen
                         ? "relative mx-auto min-h-0 w-full flex-1 px-2 py-1 sm:px-4 sm:py-2"
                         : showAnalysis
@@ -1153,12 +1194,12 @@ function ScoreReplayModal({
                   }
                   style={
                     isStdReplay
-                      ? {
-                          aspectRatio: "4 / 3",
-                          width: "auto",
-                          maxWidth: "100%",
-                          maxHeight: "100%",
-                        }
+                      ? stdFitSize
+                        ? {
+                            width: `${stdFitSize.width}px`,
+                            height: `${stdFitSize.height}px`,
+                          }
+                        : { width: "100%", height: "100%", visibility: "hidden" }
                       : fullscreen
                         ? { maxWidth: `${prefs.fieldWidth}%` }
                         : undefined

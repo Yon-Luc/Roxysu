@@ -373,6 +373,20 @@ export async function stopMirrorBatchJob() {
   );
 }
 
+export async function fetchMirrorProviders() {
+  return unwrap(
+    await api.api.mirrors.providers.get(),
+    "/api/mirrors/providers",
+  );
+}
+
+export async function checkMissingBeatmapsets(ids: number[]) {
+  return unwrap(
+    await api.api.mirrors.missing.post({ ids }),
+    "/api/mirrors/missing",
+  );
+}
+
 export type MirrorSearchPayload = Exclude<
   Awaited<ReturnType<typeof fetchMirrorSearch>>,
   { error: string }
@@ -380,6 +394,14 @@ export type MirrorSearchPayload = Exclude<
 export type OnlineBeatmapSet = MirrorSearchPayload["items"][number];
 export type MirrorBatchJob = Exclude<
   Awaited<ReturnType<typeof fetchMirrorBatchJob>>,
+  { error: string }
+>;
+export type MirrorProviders = Exclude<
+  Awaited<ReturnType<typeof fetchMirrorProviders>>,
+  { error: string }
+>;
+export type MissingBeatmapsets = Exclude<
+  Awaited<ReturnType<typeof checkMissingBeatmapsets>>,
   { error: string }
 >;
 

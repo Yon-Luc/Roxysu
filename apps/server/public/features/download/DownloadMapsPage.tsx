@@ -4,8 +4,10 @@ import { BeatmapCover } from "../../components/BeatmapCover";
 import { ListSkeleton, SkeletonBlock } from "../../components/LoadingSkeleton";
 import { PageTitle } from "../../components/PageTitle";
 import {
+  checkMissingBeatmapsets,
   fetchMirrorBatchJob,
   fetchMirrorDownloadDir,
+  fetchMirrorProviders,
   fetchMirrorSearch,
   startMirrorBatchJob,
   stopMirrorBatchJob,
@@ -72,6 +74,17 @@ const SORT_OPTIONS: { value: Sort; label: string }[] = [
 ];
 
 const PAGE_COUNT_OPTIONS = [1, 2, 3, 5, 10] as const;
+
+/** Splits pasted text on commas/whitespace/newlines into positive beatmapset ids. */
+function parseIdList(raw: string): number[] {
+  const ids = raw
+    .split(/[\s,]+/)
+    .map((token) => token.trim())
+    .filter(Boolean)
+    .map((token) => Number(token))
+    .filter((n) => Number.isSafeInteger(n) && n > 0);
+  return [...new Set(ids)];
+}
 
 function isMode(value: unknown): value is Mode {
   return MODE_OPTIONS.some((o) => o.value === value);
@@ -244,6 +257,11 @@ export function DownloadMapsPage() {
     onSuccess: (data) => {
       queryClient.setQueryData(["mirrors", "batch"], data);
     },
+  });
+
+  const [checkIdsInput, setCheckIdsInput] = useState("");
+  const checkMissing = useMutation({
+    mutationFn: (ids: number[]) => checkMissingBeatmapsets(ids),
   });
 
   const items = query.data && "items" in query.data ? query.data.items : [];
@@ -464,6 +482,81 @@ export function DownloadMapsPage() {
                 ))}
               </ul>
             ) : null}
+          </div>
+        ) : null}
+      </section>
+
+      <section className="rx-panel space-y-3 p-4">
+        <div>
+          <h2 className="font-semibold text-ink">Check specific IDs</h2>
+          <p className="text-sm text-muted">
+            Paste beatmapset IDs (from a mirror, a pack, or anywhere else) to
+            see which ones you&apos;re missing — no search needed.
+          </p>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <textarea
+            className="rx-input min-w-0 flex-1"
+            rows={2}
+            value={checkIdsInput}
+            onChange={(e) => setCheckIdsInput(e.target.value)}
+            placeholder="e.g. 292301, 1012634 658127"
+            aria-label="Beatmapset IDs to check"
+          />
+          <button
+            type="button"
+            className="rx-btn-primary shrink-0"
+            disabled={checkMissing.isPending || parseIdList(checkIdsInput).length === 0}
+            onClick={() => checkMissing.mutate(parseIdList(checkIdsInput))}
+          >
+            Check
+          </button>
+        </div>
+
+        {checkMissing.isError ? (
+          <p className="text-sm text-rose-400">
+            {checkMissing.error instanceof Error
+              ? checkMissing.error.message
+              : "Check failed"}
+          </p>
+        ) : null}
+
+        {checkMissing.data && "error" in checkMissing.data ? (
+          <p className="text-sm text-rose-400">
+            {String(checkMissing.data.error)}
+          </p>
+        ) : checkMissing.data ? (
+          <div className="space-y-2 text-sm">
+            <p className="text-muted">
+              {checkMissing.data.checked} checked ·{" "}
+              {checkMissing.data.missing.length} missing ·{" "}
+              {checkMissing.data.owned.length} already owned
+            </p>
+            {checkMissing.data.missing.length > 0 ? (
+              <ul className="flex flex-wrap gap-2">
+                {checkMissing.data.missing.map((id) => {
+                  const downloadUrl = mirrorBeatmapSetDownloadUrl(id, {
+                    noVideo,
+                  });
+                  return (
+                    <li key={id} className="rx-row inline-flex items-center gap-2">
+                      <span className="text-ink">#{id}</span>
+                      {downloadUrl ? (
+                        <a
+                          href={downloadUrl}
+                          className="rx-btn-primary"
+                          title="Download .osz from mirror — open or drag into osu!lazer to import"
+                        >
+                          Download
+                        </a>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="text-muted">You already own everything checked.</p>
+            )}
           </div>
         ) : null}
       </section>

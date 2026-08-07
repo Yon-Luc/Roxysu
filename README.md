@@ -161,6 +161,25 @@ If the UI looks empty after first start, wait for the realm-reader to finish an 
 
 ---
 
+## Credits
+
+Roxysu builds on work and services from the osu! community. Thank you to:
+
+| Project | Used for |
+| --- | --- |
+| [osu!](https://osu.ppy.sh) / [osu!lazer](https://github.com/ppy/osu) | Game client, play history (`client.realm`), beatmaps, and official star ratings |
+| [Hinamizawa (hinai)](https://mirror.hinamizawa.ai/) | Online beatmap search and `.osz` downloads |
+| [Nerinyan](https://nerinyan.moe/) / [osu.direct](https://osu.direct/) | Alternate beatmap download mirrors |
+| [Daniel](https://thebagelofman.github.io/Daniel/) ([TheBagelOfMan](https://github.com/TheBagelOfMan)) | 4K rice dan / star difficulty estimates |
+| [Sunny Rework](https://github.com/sunnyxxy/Star-Rating-Rebirth) ([Crz]sunnyxxy and collaborators) | Mania Sunny star and dan label estimates |
+| [tosu](https://github.com/tosuapp/tosu) | Live selected-map data via WebSocket |
+| [Companella](https://github.com/Leinadix/companella) / [Interlude (YAVSRG)](https://github.com/YAVSRG/YAVSRG) | Mania pattern analysis (ported) |
+| [Enissay mania SR rework](https://github.com/EnissayDev/osu/tree/enissay-mania-sr-rework) | Rating Lab experiment calculator branch |
+
+osu! and the osu! logo are trademarks of ppy Pty Ltd. Roxysu is an unofficial community tool and is not affiliated with or endorsed by ppy.
+
+---
+
 ## Status
 
 Phases 1–5 are in place: Realm sync, API + SSE, dashboard, practice library, query language, collections, sessions, and mania Sunny dan ratings.

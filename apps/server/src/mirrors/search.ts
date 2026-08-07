@@ -40,6 +40,15 @@ export type MirrorSearchParams = {
     | "title_asc";
   /** 0-based mirror page. */
   page?: number;
+  /** Star-rating bounds (hinai / providers that support them). */
+  minStars?: number;
+  maxStars?: number;
+  minBpm?: number;
+  maxBpm?: number;
+  minLength?: number;
+  maxLength?: number;
+  /** Mapper name filter (hinai `creator`). */
+  creator?: string;
 };
 
 const MODE_INT: Record<Exclude<MirrorSearchParams["mode"], "any" | undefined>, number> =
@@ -122,6 +131,7 @@ export function extractSearchBeatmapsets(payload: unknown): unknown[] {
   if (Array.isArray(row.beatmapsets)) return row.beatmapsets;
   if (Array.isArray(row.data)) return row.data;
   if (Array.isArray(row.sets)) return row.sets;
+  if (Array.isArray(row.results)) return row.results;
   return [];
 }
 
@@ -172,7 +182,53 @@ const HINAI_STATUS_CODE: Partial<
 /** Page size requested from mirrors; keep in sync with MIRROR_PAGE_CAPACITY in searchOnline.ts. */
 const HINAI_PAGE_SIZE = 50;
 
+function setOptionalNumberParam(
+  url: URL,
+  key: string,
+  value: number | undefined,
+): void {
+  if (value != null && Number.isFinite(value)) {
+    url.searchParams.set(key, String(value));
+  }
+}
+
+/**
+ * hinai v2 advanced search — used when v1 cannot express the filter
+ * (notably `graveyard`, which has no CheeseGull status code).
+ * See https://mirror.hinamizawa.ai/docs/beatmap-search
+ */
+export function buildHinaiV2SearchUrl(params: MirrorSearchParams): string {
+  const url = new URL(
+    "https://mirror.hinamizawa.ai/v3/osu/beatmaps/search/v2",
+  );
+  const q = params.q?.trim();
+  if (q) url.searchParams.set("query", q);
+  if (params.mode && params.mode !== "any") {
+    url.searchParams.set("mode", String(MODE_INT[params.mode]));
+  }
+  if (params.status && params.status !== "any") {
+    url.searchParams.set("status", params.status);
+  }
+  if (params.sort) url.searchParams.set("sort", params.sort);
+  const creator = params.creator?.trim();
+  if (creator) url.searchParams.set("creator", creator);
+  setOptionalNumberParam(url, "min_stars", params.minStars);
+  setOptionalNumberParam(url, "max_stars", params.maxStars);
+  setOptionalNumberParam(url, "min_bpm", params.minBpm);
+  setOptionalNumberParam(url, "max_bpm", params.maxBpm);
+  setOptionalNumberParam(url, "min_length", params.minLength);
+  setOptionalNumberParam(url, "max_length", params.maxLength);
+  url.searchParams.set("limit", String(HINAI_PAGE_SIZE));
+  url.searchParams.set("page", String(Math.max(0, params.page ?? 0)));
+  return url.toString();
+}
+
 export function buildHinaiSearchUrl(params: MirrorSearchParams): string {
+  // Graveyard has no v1 RankedStatus code — use the advanced v2 endpoint.
+  if (params.status === "graveyard") {
+    return buildHinaiV2SearchUrl(params);
+  }
+
   // Stable v1 contract (CheeseGull-compatible), see:
   // https://mirror.hinamizawa.ai/docs/beatmap-search
   const url = new URL("https://mirror.hinamizawa.ai/api/v1/hinai/search");
@@ -186,6 +242,14 @@ export function buildHinaiSearchUrl(params: MirrorSearchParams): string {
     if (code != null) url.searchParams.set("status", String(code));
   }
   if (params.sort) url.searchParams.set("sort", params.sort);
+  const creator = params.creator?.trim();
+  if (creator) url.searchParams.set("creator", creator);
+  setOptionalNumberParam(url, "min_stars", params.minStars);
+  setOptionalNumberParam(url, "max_stars", params.maxStars);
+  setOptionalNumberParam(url, "min_bpm", params.minBpm);
+  setOptionalNumberParam(url, "max_bpm", params.maxBpm);
+  setOptionalNumberParam(url, "min_length", params.minLength);
+  setOptionalNumberParam(url, "max_length", params.maxLength);
   url.searchParams.set("amount", String(HINAI_PAGE_SIZE));
   const page = Math.max(0, params.page ?? 0);
   url.searchParams.set("offset", String(page * HINAI_PAGE_SIZE));
@@ -277,7 +341,13 @@ export function normalizeMirrorSearchResult(
   providerId: "nerinyan" | "osu.direct" | "hinai",
   raw: unknown,
 ): OnlineBeatmapSet | null {
-  return providerId === "hinai"
-    ? normalizeCheeseGullBeatmapSet(raw)
-    : normalizeOnlineBeatmapSet(raw);
+  if (providerId === "hinai") {
+    const row = asRecord(raw);
+    // v1 CheeseGull uses SetID / ChildrenBeatmaps; v2 (graveyard) uses osu-style ids.
+    if (row && ("SetID" in row || "ChildrenBeatmaps" in row)) {
+      return normalizeCheeseGullBeatmapSet(raw);
+    }
+    return normalizeOnlineBeatmapSet(raw);
+  }
+  return normalizeOnlineBeatmapSet(raw);
 }

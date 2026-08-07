@@ -167,6 +167,17 @@ function QueryLanguageHelpModal({ onClose }: { onClose: () => void }) {
               <code className="text-subtle">field:value</code> for structured
               filters.
             </p>
+            <p className="mt-2 text-sm text-muted">
+              Download Maps supports the catalog subset only:{" "}
+              <code className="text-subtle">status</code>,{" "}
+              <code className="text-subtle">mode</code>,{" "}
+              <code className="text-subtle">key/keys</code>,{" "}
+              <code className="text-subtle">stars</code>,{" "}
+              <code className="text-subtle">mapper</code>,{" "}
+              <code className="text-subtle">title</code>,{" "}
+              <code className="text-subtle">artist</code>, and free text (AND
+              only). Score and practice fields are local-library only.
+            </p>
           </div>
           <button
             type="button"

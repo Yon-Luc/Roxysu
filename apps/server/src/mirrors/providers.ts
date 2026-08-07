@@ -43,7 +43,7 @@ export const BEATMAP_MIRROR_PROVIDERS: Record<
 };
 
 export const DEFAULT_BEATMAP_MIRROR_PROVIDER: BeatmapMirrorProviderId =
-  "nerinyan";
+  "hinai";
 
 export function isBeatmapMirrorProviderId(
   value: string,

@@ -1,9 +1,11 @@
 import { Elysia, t } from "elysia";
 import { dbPlugin } from "../db-runtime";
 import {
+  OnlineQueryError,
   diffAgainstLibrary,
   getActiveBeatmapMirrorProvider,
   getMirrorBatchJobState,
+  openLastBatchArchivesInOsu,
   parsePositiveSetId,
   probeBeatmapsDownloadDir,
   searchOnlineBeatmapsets,
@@ -11,7 +13,7 @@ import {
   stopMirrorBatchJob,
 } from "../mirrors";
 
-const modeSchema = t.Union([
+const rulesetSchema = t.Union([
   t.Literal("any"),
   t.Literal("osu"),
   t.Literal("taiko"),
@@ -37,6 +39,29 @@ const sortSchema = t.Union([
   t.Literal("title_asc"),
 ]);
 
+const batchModeSchema = t.Union([
+  t.Literal("pages"),
+  t.Literal("query"),
+  t.Literal("ids"),
+]);
+
+function httpStatusForMirrorError(err: unknown): number {
+  if (err instanceof OnlineQueryError) return 400;
+  const message = err instanceof Error ? err.message : String(err);
+  if (message.includes("already running")) return 409;
+  if (message.includes("ids must") || message.includes("ids is capped")) {
+    return 400;
+  }
+  if (
+    message.includes("No archives") ||
+    message.includes("missing on disk") ||
+    message.includes("Cannot open archives")
+  ) {
+    return 400;
+  }
+  return 502;
+}
+
 export const mirrorRoutes = new Elysia({ prefix: "/mirrors" })
   .use(dbPlugin)
   .get("/providers", () => {
@@ -46,19 +71,54 @@ export const mirrorRoutes = new Elysia({ prefix: "/mirrors" })
       label: active.label,
       downloadDir: probeBeatmapsDownloadDir(),
       note:
-        "Single downloads redirect to a mirror. Batch downloads save .osz files into the beatmaps folder — open or drag them into osu!lazer to import.",
+        "Single downloads redirect to a mirror. Batch downloads save .osz files and write import-into-osu.sh / import-into-osu.bat — use Open in osu! or run the script to import into osu!lazer.",
     };
   })
   .get("/download-dir", () => probeBeatmapsDownloadDir())
   .get("/batch", () => getMirrorBatchJobState())
   .post("/batch/stop", () => stopMirrorBatchJob())
+  .post("/batch/open-in-osu", async ({ set }) => {
+    try {
+      return await openLastBatchArchivesInOsu();
+    } catch (err) {
+      set.status = httpStatusForMirrorError(err);
+      return {
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  })
   .post(
     "/batch/start",
     ({ db, body, set }) => {
       try {
+        const mode = body.mode ?? "pages";
+        if (mode === "ids") {
+          return startMirrorBatchJob(db, {
+            mode: "ids",
+            ids: body.ids ?? [],
+            noVideo: body.noVideo !== false,
+          });
+        }
+        if (mode === "query") {
+          if (body.query == null || body.query.trim() === "") {
+            set.status = 400;
+            return { error: "query is required for mode=query" };
+          }
+          return startMirrorBatchJob(db, {
+            mode: "query",
+            query: body.query,
+            sort: body.sort ?? "ranked_desc",
+            noVideo: body.noVideo !== false,
+            excludeOwned: body.excludeOwned !== false,
+            maxPages: body.maxPages,
+            maxSets: body.maxSets,
+          });
+        }
         return startMirrorBatchJob(db, {
+          mode: "pages",
+          query: body.query,
           q: body.q,
-          mode: body.mode ?? "mania",
+          ruleset: body.ruleset ?? body.searchMode ?? "mania",
           status: body.status ?? "ranked",
           sort: body.sort ?? "ranked_desc",
           startPage: body.startPage ?? 0,
@@ -67,7 +127,7 @@ export const mirrorRoutes = new Elysia({ prefix: "/mirrors" })
           excludeOwned: body.excludeOwned !== false,
         });
       } catch (err) {
-        set.status = 409;
+        set.status = httpStatusForMirrorError(err);
         return {
           error: err instanceof Error ? err.message : String(err),
         };
@@ -75,12 +135,19 @@ export const mirrorRoutes = new Elysia({ prefix: "/mirrors" })
     },
     {
       body: t.Object({
+        mode: t.Optional(batchModeSchema),
+        query: t.Optional(t.String()),
         q: t.Optional(t.String()),
-        mode: t.Optional(modeSchema),
+        /** @deprecated Prefer `ruleset`; kept for older clients. */
+        searchMode: t.Optional(rulesetSchema),
+        ruleset: t.Optional(rulesetSchema),
         status: t.Optional(statusSchema),
         sort: t.Optional(sortSchema),
         startPage: t.Optional(t.Number()),
         pageCount: t.Optional(t.Number()),
+        ids: t.Optional(t.Array(t.Number(), { maxItems: 2000 })),
+        maxPages: t.Optional(t.Number()),
+        maxSets: t.Optional(t.Number()),
         noVideo: t.Optional(t.Boolean()),
         excludeOwned: t.Optional(t.Boolean()),
       }),
@@ -90,6 +157,16 @@ export const mirrorRoutes = new Elysia({ prefix: "/mirrors" })
     "/search",
     async ({ db, query, set }) => {
       try {
+        // Prefer app QL via `query`; fall back to legacy mirror dropdown params.
+        if (query.query != null) {
+          return await searchOnlineBeatmapsets(db, {
+            query: query.query,
+            sort: query.sort ?? "ranked_desc",
+            page: query.page ?? 0,
+            excludeOwned:
+              query.excludeOwned !== false && query.excludeOwned !== "0",
+          });
+        }
         return await searchOnlineBeatmapsets(db, {
           q: query.q,
           mode: query.mode ?? "mania",
@@ -100,7 +177,7 @@ export const mirrorRoutes = new Elysia({ prefix: "/mirrors" })
             query.excludeOwned !== false && query.excludeOwned !== "0",
         });
       } catch (err) {
-        set.status = 502;
+        set.status = httpStatusForMirrorError(err);
         return {
           error: err instanceof Error ? err.message : String(err),
         };
@@ -108,8 +185,10 @@ export const mirrorRoutes = new Elysia({ prefix: "/mirrors" })
     },
     {
       query: t.Object({
+        /** App query language (catalog subset). */
+        query: t.Optional(t.String()),
         q: t.Optional(t.String()),
-        mode: t.Optional(modeSchema),
+        mode: t.Optional(rulesetSchema),
         status: t.Optional(statusSchema),
         sort: t.Optional(sortSchema),
         page: t.Optional(t.Numeric()),
@@ -136,8 +215,6 @@ export const mirrorRoutes = new Elysia({ prefix: "/mirrors" })
       };
     },
     {
-      // Provider-agnostic: candidate ids can come from any mirror search,
-      // a bulk catalog pull, or a pasted list — this only touches SQLite.
       body: t.Object({
         ids: t.Array(t.Number(), { minItems: 1, maxItems: 2000 }),
       }),
@@ -157,7 +234,6 @@ export const mirrorRoutes = new Elysia({ prefix: "/mirrors" })
         noVideo: query.noVideo === true || query.noVideo === "1",
       });
 
-      // Browser follows the mirror redirect / attachment; Roxysu never stores the archive.
       return Response.redirect(target, 302);
     },
     {

@@ -293,6 +293,8 @@ export async function fetchSettings() {
 }
 
 export async function fetchMirrorSearch(params: {
+  /** App query language (catalog subset). Preferred over legacy q/mode/status. */
+  query?: string;
   q?: string;
   mode?: "any" | "osu" | "taiko" | "fruits" | "mania";
   status?:
@@ -315,6 +317,7 @@ export async function fetchMirrorSearch(params: {
   return unwrap(
     await api.api.mirrors.search.get({
       query: {
+        query: params.query,
         q: params.q,
         mode: params.mode,
         status: params.status,
@@ -339,8 +342,10 @@ export async function fetchMirrorBatchJob() {
 }
 
 export async function startMirrorBatchJob(body: {
+  mode?: "pages" | "query" | "ids";
+  query?: string;
   q?: string;
-  mode?: "any" | "osu" | "taiko" | "fruits" | "mania";
+  ruleset?: "any" | "osu" | "taiko" | "fruits" | "mania";
   status?:
     | "any"
     | "ranked"
@@ -357,6 +362,9 @@ export async function startMirrorBatchJob(body: {
     | "title_asc";
   startPage?: number;
   pageCount?: number;
+  ids?: number[];
+  maxPages?: number;
+  maxSets?: number;
   noVideo?: boolean;
   excludeOwned?: boolean;
 }) {
@@ -370,6 +378,13 @@ export async function stopMirrorBatchJob() {
   return unwrap(
     await api.api.mirrors.batch.stop.post(),
     "/api/mirrors/batch/stop",
+  );
+}
+
+export async function openLastBatchInOsu() {
+  return unwrap(
+    await api.api.mirrors.batch["open-in-osu"].post(),
+    "/api/mirrors/batch/open-in-osu",
   );
 }
 

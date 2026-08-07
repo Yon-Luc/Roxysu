@@ -146,6 +146,19 @@ describe("normalizeMirrorSearchResult", () => {
     expect(set?.status).toBe("loved");
   });
 
+  test("routes hinai v2-shaped rows to the osu-style normalizer", () => {
+    const set = normalizeMirrorSearchResult("hinai", {
+      id: 9,
+      artist: "a",
+      title: "b",
+      creator: "c",
+      status: "graveyard",
+      beatmaps: [],
+    });
+    expect(set?.id).toBe(9);
+    expect(set?.status).toBe("graveyard");
+  });
+
   test("routes to the osu-style normalizer for nerinyan/osu.direct", () => {
     const set = normalizeMirrorSearchResult("nerinyan", {
       id: 1,
@@ -210,8 +223,24 @@ describe("search url builders", () => {
     );
   });
 
-  test("hinai urls omit status filter for graveyard (no documented v1 code)", () => {
-    const url = buildHinaiSearchUrl({ status: "graveyard" });
-    expect(url).not.toContain("status=");
+  test("hinai urls include star bounds and creator", () => {
+    const url = buildHinaiSearchUrl({
+      mode: "mania",
+      status: "ranked",
+      minStars: 5,
+      maxStars: 7,
+      creator: "Lasse",
+      page: 0,
+    });
+    expect(url).toContain("min_stars=5");
+    expect(url).toContain("max_stars=7");
+    expect(url).toContain("creator=Lasse");
+  });
+
+  test("hinai graveyard uses v2 search endpoint", () => {
+    const url = buildHinaiSearchUrl({ status: "graveyard", mode: "mania" });
+    expect(url).toContain("/v3/osu/beatmaps/search/v2");
+    expect(url).toContain("status=graveyard");
+    expect(url).toContain("mode=3");
   });
 });

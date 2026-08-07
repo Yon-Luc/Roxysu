@@ -6,12 +6,20 @@ import {
   ensureBeatmapsDownloadDir,
   resolveBeatmapsDownloadDir,
 } from "./downloadDir";
+import { parseOnlineMirrorQuery, type OnlineMirrorQuery } from "./onlineQuery";
+import {
+  openOszFilesInOsu,
+  writeOsuImportScripts,
+  type OpenOszBatchResult,
+} from "./openInOsu";
 import { getActiveBeatmapMirrorProvider } from "./providers";
 import {
+  collectMatchingOnlineBeatmapsets,
   searchOnlineBeatmapsets,
   type MirrorSearchResult,
 } from "./searchOnline";
 import type { MirrorSearchParams, OnlineBeatmapSet } from "./search";
+import { MIRROR_USER_AGENT } from "./userAgent";
 
 export type MirrorBatchJobStatus =
   | "idle"
@@ -20,9 +28,13 @@ export type MirrorBatchJobStatus =
   | "completed"
   | "error";
 
+export type MirrorBatchMode = "pages" | "query" | "ids";
+
 export type MirrorBatchJobState = {
   status: MirrorBatchJobStatus;
+  mode: MirrorBatchMode;
   downloadDir: string;
+  query: string | null;
   startPage: number;
   pageCount: number;
   noVideo: boolean;
@@ -32,6 +44,13 @@ export type MirrorBatchJobState = {
   skippedExisting: number;
   skippedOwned: number;
   failed: number;
+  matched: number;
+  pagesScanned: number;
+  hitCap: boolean;
+  /** Archives from the last batch that can be opened in osu! (new + already on disk). */
+  savedForImport: number;
+  importScriptSh: string | null;
+  importScriptBat: string | null;
   currentSetId: number | null;
   currentTitle: string | null;
   startedAt: string | null;
@@ -40,21 +59,57 @@ export type MirrorBatchJobState = {
   recentErrors: Array<{ setId: number; error: string }>;
 };
 
-type BatchRequest = MirrorSearchParams & {
-  startPage: number;
-  pageCount: number;
+/** Shared download options. */
+type BatchDownloadOpts = {
   noVideo?: boolean;
   excludeOwned?: boolean;
 };
+
+export type MirrorBatchPagesRequest = BatchDownloadOpts & {
+  mode?: "pages";
+  /** App QL — preferred when set. */
+  query?: string;
+  /** Legacy free-text mirror `q` when not using QL. */
+  q?: string;
+  ruleset?: MirrorSearchParams["mode"];
+  status?: MirrorSearchParams["status"];
+  sort?: MirrorSearchParams["sort"];
+  startPage: number;
+  pageCount: number;
+};
+
+export type MirrorBatchQueryRequest = BatchDownloadOpts & {
+  mode: "query";
+  query: string;
+  sort?: MirrorSearchParams["sort"];
+  maxPages?: number;
+  maxSets?: number;
+};
+
+export type MirrorBatchIdsRequest = {
+  mode: "ids";
+  ids: number[];
+  noVideo?: boolean;
+};
+
+export type MirrorBatchStartRequest =
+  | MirrorBatchPagesRequest
+  | MirrorBatchQueryRequest
+  | MirrorBatchIdsRequest;
 
 const DOWNLOAD_TIMEOUT_MS = 120_000;
 const DELAY_BETWEEN_MS = 1_200;
 const MAX_PAGE_COUNT = 10;
 const MAX_RECENT_ERRORS = 8;
+const MAX_QUERY_PAGES = 200;
+const MAX_QUERY_SETS = 10_000;
+const MAX_IDS = 2000;
 
-let job: {
+type JobInternal = {
   status: MirrorBatchJobStatus;
+  mode: MirrorBatchMode;
   downloadDir: string;
+  query: string | null;
   startPage: number;
   pageCount: number;
   noVideo: boolean;
@@ -64,6 +119,12 @@ let job: {
   skippedExisting: number;
   skippedOwned: number;
   failed: number;
+  matched: number;
+  pagesScanned: number;
+  hitCap: boolean;
+  savedPaths: string[];
+  importScriptSh: string | null;
+  importScriptBat: string | null;
   currentSetId: number | null;
   currentTitle: string | null;
   startedAt: Date | null;
@@ -72,9 +133,13 @@ let job: {
   recentErrors: Array<{ setId: number; error: string }>;
   stopRequested: boolean;
   running: boolean;
-} = {
+};
+
+let job: JobInternal = {
   status: "idle",
+  mode: "pages",
   downloadDir: resolveBeatmapsDownloadDir(),
+  query: null,
   startPage: 0,
   pageCount: 0,
   noVideo: true,
@@ -84,6 +149,12 @@ let job: {
   skippedExisting: 0,
   skippedOwned: 0,
   failed: 0,
+  matched: 0,
+  pagesScanned: 0,
+  hitCap: false,
+  savedPaths: [],
+  importScriptSh: null,
+  importScriptBat: null,
   currentSetId: null,
   currentTitle: null,
   startedAt: null,
@@ -98,10 +169,24 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function parseRetryAfterSeconds(res: Response): number | null {
+  const raw = res.headers.get("retry-after");
+  if (!raw) return null;
+  const asInt = Number(raw);
+  if (Number.isFinite(asInt) && asInt >= 0) return asInt;
+  const asDate = Date.parse(raw);
+  if (!Number.isNaN(asDate)) {
+    return Math.max(0, (asDate - Date.now()) / 1000);
+  }
+  return null;
+}
+
 export function getMirrorBatchJobState(): MirrorBatchJobState {
   return {
     status: job.status,
+    mode: job.mode,
     downloadDir: job.downloadDir,
+    query: job.query,
     startPage: job.startPage,
     pageCount: job.pageCount,
     noVideo: job.noVideo,
@@ -111,6 +196,12 @@ export function getMirrorBatchJobState(): MirrorBatchJobState {
     skippedExisting: job.skippedExisting,
     skippedOwned: job.skippedOwned,
     failed: job.failed,
+    matched: job.matched,
+    pagesScanned: job.pagesScanned,
+    hitCap: job.hitCap,
+    savedForImport: job.savedPaths.length,
+    importScriptSh: job.importScriptSh,
+    importScriptBat: job.importScriptBat,
     currentSetId: job.currentSetId,
     currentTitle: job.currentTitle,
     startedAt: job.startedAt?.toISOString() ?? null,
@@ -128,25 +219,76 @@ export function stopMirrorBatchJob(): MirrorBatchJobState {
   return getMirrorBatchJobState();
 }
 
-async function collectSets(
+function resetJob(
+  partial: Partial<JobInternal> & { mode: MirrorBatchMode },
+): void {
+  job = {
+    status: "running",
+    mode: partial.mode,
+    downloadDir: resolveBeatmapsDownloadDir(),
+    query: partial.query ?? null,
+    startPage: partial.startPage ?? 0,
+    pageCount: partial.pageCount ?? 0,
+    noVideo: partial.noVideo !== false,
+    excludeOwned: partial.excludeOwned !== false,
+    queued: 0,
+    downloaded: 0,
+    skippedExisting: 0,
+    skippedOwned: 0,
+    failed: 0,
+    matched: 0,
+    pagesScanned: 0,
+    hitCap: false,
+    savedPaths: [],
+    importScriptSh: null,
+    importScriptBat: null,
+    currentSetId: null,
+    currentTitle: null,
+    startedAt: new Date(),
+    finishedAt: null,
+    error: null,
+    recentErrors: [],
+    stopRequested: false,
+    running: true,
+  };
+}
+
+function archivePathForSet(
+  set: OnlineBeatmapSet | { id: number; artist?: string; title?: string },
+  destDir: string,
+): string {
+  const filename =
+    "artist" in set && set.artist && set.title
+      ? beatmapSetArchiveFilename(set as OnlineBeatmapSet)
+      : `${set.id}.osz`;
+  return path.join(destDir, filename);
+}
+
+async function collectSetsPages(
   db: Db,
-  params: BatchRequest,
+  params: MirrorBatchPagesRequest,
 ): Promise<{ sets: OnlineBeatmapSet[]; ownedSkipped: number }> {
   const sets: OnlineBeatmapSet[] = [];
   const seen = new Set<number>();
   let ownedSkipped = 0;
+  const useQl = params.query != null;
 
   for (let i = 0; i < params.pageCount; i += 1) {
     if (job.stopRequested) break;
     const page = params.startPage + i;
     const result: MirrorSearchResult = await searchOnlineBeatmapsets(db, {
-      q: params.q,
-      mode: params.mode,
-      status: params.status,
+      ...(useQl
+        ? { query: params.query }
+        : {
+            q: params.q,
+            mode: params.ruleset,
+            status: params.status,
+          }),
       sort: params.sort,
       page,
       excludeOwned: params.excludeOwned,
     });
+    job.pagesScanned += 1;
     ownedSkipped += result.ownedSkipped;
     for (const set of result.items) {
       if (seen.has(set.id)) continue;
@@ -159,65 +301,173 @@ async function collectSets(
   return { sets, ownedSkipped };
 }
 
+async function collectSetsQuery(
+  db: Db,
+  onlineQuery: OnlineMirrorQuery,
+  opts: { excludeOwned: boolean; maxPages: number; maxSets: number },
+): Promise<{
+  sets: OnlineBeatmapSet[];
+  ownedSkipped: number;
+  hitCap: boolean;
+}> {
+  const result = await collectMatchingOnlineBeatmapsets(db, {
+    onlineQuery,
+    excludeOwned: opts.excludeOwned,
+    maxPages: opts.maxPages,
+    maxSets: opts.maxSets,
+    shouldStop: () => job.stopRequested,
+    onPage: (info) => {
+      job.pagesScanned = info.mirrorPage + 1;
+      job.matched = info.matchedSoFar;
+      job.skippedOwned = info.ownedSkipped;
+    },
+  });
+  return {
+    sets: result.sets,
+    ownedSkipped: result.ownedSkipped,
+    hitCap: result.hitPageCap || result.hitSetCap,
+  };
+}
+
 async function downloadSetToDisk(
-  set: OnlineBeatmapSet,
+  set: OnlineBeatmapSet | { id: number; artist?: string; title?: string },
   destDir: string,
   noVideo: boolean,
-): Promise<"downloaded" | "exists"> {
-  const filename = beatmapSetArchiveFilename(set);
-  const destPath = path.join(destDir, filename);
-  if (existsSync(destPath)) return "exists";
+): Promise<{ result: "downloaded" | "exists"; path: string }> {
+  const destPath = archivePathForSet(set, destDir);
+  if (existsSync(destPath)) return { result: "exists", path: destPath };
 
   const provider = getActiveBeatmapMirrorProvider();
   const url = provider.buildDownloadUrl(set.id, { noVideo });
-  const res = await fetch(url, {
-    headers: { "user-agent": "roxysu", accept: "*/*" },
-    redirect: "follow",
-    signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
-  });
 
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status}`);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const res = await fetch(url, {
+      headers: { "user-agent": MIRROR_USER_AGENT, accept: "*/*" },
+      redirect: "follow",
+      signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+    });
+
+    if (res.status === 429) {
+      const waitSec = parseRetryAfterSeconds(res) ?? 5;
+      await sleep(Math.min(60, Math.max(1, waitSec)) * 1000);
+      continue;
+    }
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    if (bytes.byteLength < 64) {
+      throw new Error("Response too small to be an .osz");
+    }
+
+    writeFileSync(destPath, bytes);
+    return { result: "downloaded", path: destPath };
   }
 
-  const bytes = new Uint8Array(await res.arrayBuffer());
-  if (bytes.byteLength < 64) {
-    throw new Error("Response too small to be an .osz");
-  }
-
-  // Write via temp-ish unique name then rename would be nicer; keep simple for local use.
-  writeFileSync(destPath, bytes);
-  return "downloaded";
+  throw new Error("HTTP 429 (rate limited after retries)");
 }
 
-async function runBatch(db: Db, params: BatchRequest): Promise<void> {
-  try {
-    const downloadDir = ensureBeatmapsDownloadDir();
-    job.downloadDir = downloadDir;
-    mkdirSync(downloadDir, { recursive: true });
+async function downloadQueue(
+  sets: Array<
+    OnlineBeatmapSet | { id: number; artist?: string; title?: string }
+  >,
+  noVideo: boolean,
+): Promise<void> {
+  const downloadDir = ensureBeatmapsDownloadDir();
+  job.downloadDir = downloadDir;
+  mkdirSync(downloadDir, { recursive: true });
+  job.queued = sets.length;
+  job.savedPaths = [];
 
-    const { sets, ownedSkipped } = await collectSets(db, params);
-    job.skippedOwned = ownedSkipped;
-    job.queued = sets.length;
-
-    for (const set of sets) {
-      if (job.stopRequested) break;
-      job.currentSetId = set.id;
-      job.currentTitle = `${set.artist} - ${set.title}`;
-      try {
-        const result = await downloadSetToDisk(set, downloadDir, params.noVideo === true);
-        if (result === "exists") job.skippedExisting += 1;
-        else job.downloaded += 1;
-      } catch (err) {
-        job.failed += 1;
-        const message = err instanceof Error ? err.message : String(err);
-        job.recentErrors = [
-          { setId: set.id, error: message },
-          ...job.recentErrors,
-        ].slice(0, MAX_RECENT_ERRORS);
-      }
-      await sleep(DELAY_BETWEEN_MS);
+  for (const set of sets) {
+    if (job.stopRequested) break;
+    job.currentSetId = set.id;
+    job.currentTitle =
+      "artist" in set && set.artist && set.title
+        ? `${set.artist} - ${set.title}`
+        : `#${set.id}`;
+    try {
+      const { result, path: destPath } = await downloadSetToDisk(
+        set,
+        downloadDir,
+        noVideo,
+      );
+      if (result === "exists") job.skippedExisting += 1;
+      else job.downloaded += 1;
+      job.savedPaths.push(destPath);
+    } catch (err) {
+      job.failed += 1;
+      const message = err instanceof Error ? err.message : String(err);
+      job.recentErrors = [
+        { setId: set.id, error: message },
+        ...job.recentErrors,
+      ].slice(0, MAX_RECENT_ERRORS);
     }
+    await sleep(DELAY_BETWEEN_MS);
+  }
+
+  if (job.savedPaths.length > 0) {
+    const scripts = writeOsuImportScripts(downloadDir, job.savedPaths);
+    job.importScriptSh = scripts.sh;
+    job.importScriptBat = scripts.bat;
+  }
+}
+
+async function runBatch(
+  db: Db,
+  request: MirrorBatchStartRequest,
+): Promise<void> {
+  try {
+    const mode: MirrorBatchMode = request.mode ?? "pages";
+    let sets: Array<OnlineBeatmapSet | { id: number }> = [];
+
+    if (mode === "ids" && request.mode === "ids") {
+      const ids = [...new Set(request.ids)].filter(
+        (id) => Number.isSafeInteger(id) && id > 0,
+      );
+      job.matched = ids.length;
+      sets = ids.map((id) => ({ id }));
+    } else if (mode === "query" && request.mode === "query") {
+      const onlineQuery = parseOnlineMirrorQuery(request.query, {
+        defaultSort: request.sort ?? "ranked_desc",
+      });
+      const collected = await collectSetsQuery(db, onlineQuery, {
+        excludeOwned: job.excludeOwned,
+        maxPages: Math.min(
+          MAX_QUERY_PAGES,
+          Math.max(1, request.maxPages ?? MAX_QUERY_PAGES),
+        ),
+        maxSets: Math.min(
+          MAX_QUERY_SETS,
+          Math.max(1, request.maxSets ?? MAX_QUERY_SETS),
+        ),
+      });
+      job.skippedOwned = collected.ownedSkipped;
+      job.matched = collected.sets.length;
+      job.hitCap = collected.hitCap;
+      sets = collected.sets;
+    } else {
+      const pagesReq = request as MirrorBatchPagesRequest;
+      const pageCount = Math.min(
+        MAX_PAGE_COUNT,
+        Math.max(1, Math.floor(pagesReq.pageCount)),
+      );
+      const startPage = Math.max(0, Math.floor(pagesReq.startPage));
+      const collected = await collectSetsPages(db, {
+        ...pagesReq,
+        mode: "pages",
+        startPage,
+        pageCount,
+        excludeOwned: job.excludeOwned,
+      });
+      job.skippedOwned = collected.ownedSkipped;
+      job.matched = collected.sets.length;
+      sets = collected.sets;
+    }
+
+    await downloadQueue(sets, job.noVideo);
 
     job.currentSetId = null;
     job.currentTitle = null;
@@ -235,42 +485,77 @@ async function runBatch(db: Db, params: BatchRequest): Promise<void> {
 
 export function startMirrorBatchJob(
   db: Db,
-  params: BatchRequest,
+  request: MirrorBatchStartRequest,
 ): MirrorBatchJobState {
   if (job.running) {
     throw new Error("A batch download is already running");
   }
 
+  const mode: MirrorBatchMode = request.mode ?? "pages";
+
+  if (mode === "ids" && request.mode === "ids") {
+    const ids = [...new Set(request.ids)].filter(
+      (id) => Number.isSafeInteger(id) && id > 0,
+    );
+    if (ids.length === 0) {
+      throw new Error("ids must contain at least one positive beatmapset id");
+    }
+    if (ids.length > MAX_IDS) {
+      throw new Error(`ids is capped at ${MAX_IDS}`);
+    }
+    resetJob({
+      mode: "ids",
+      query: null,
+      noVideo: request.noVideo !== false,
+      excludeOwned: false,
+    });
+    void runBatch(db, { mode: "ids", ids, noVideo: job.noVideo });
+    return getMirrorBatchJobState();
+  }
+
+  if (mode === "query" && request.mode === "query") {
+    parseOnlineMirrorQuery(request.query);
+    resetJob({
+      mode: "query",
+      query: request.query.trim(),
+      noVideo: request.noVideo !== false,
+      excludeOwned: request.excludeOwned !== false,
+    });
+    void runBatch(db, {
+      mode: "query",
+      query: request.query,
+      sort: request.sort,
+      noVideo: job.noVideo,
+      excludeOwned: job.excludeOwned,
+      maxPages: request.maxPages,
+      maxSets: request.maxSets,
+    });
+    return getMirrorBatchJobState();
+  }
+
+  const pagesReq = request as MirrorBatchPagesRequest;
   const pageCount = Math.min(
     MAX_PAGE_COUNT,
-    Math.max(1, Math.floor(params.pageCount)),
+    Math.max(1, Math.floor(pagesReq.pageCount)),
   );
-  const startPage = Math.max(0, Math.floor(params.startPage));
+  const startPage = Math.max(0, Math.floor(pagesReq.startPage));
 
-  job = {
-    status: "running",
-    downloadDir: resolveBeatmapsDownloadDir(),
+  if (pagesReq.query != null) {
+    parseOnlineMirrorQuery(pagesReq.query);
+  }
+
+  resetJob({
+    mode: "pages",
+    query: pagesReq.query?.trim() ?? pagesReq.q?.trim() ?? null,
     startPage,
     pageCount,
-    noVideo: params.noVideo !== false,
-    excludeOwned: params.excludeOwned !== false,
-    queued: 0,
-    downloaded: 0,
-    skippedExisting: 0,
-    skippedOwned: 0,
-    failed: 0,
-    currentSetId: null,
-    currentTitle: null,
-    startedAt: new Date(),
-    finishedAt: null,
-    error: null,
-    recentErrors: [],
-    stopRequested: false,
-    running: true,
-  };
+    noVideo: pagesReq.noVideo !== false,
+    excludeOwned: pagesReq.excludeOwned !== false,
+  });
 
   void runBatch(db, {
-    ...params,
+    ...pagesReq,
+    mode: "pages",
     startPage,
     pageCount,
     noVideo: job.noVideo,
@@ -278,4 +563,45 @@ export function startMirrorBatchJob(
   });
 
   return getMirrorBatchJobState();
+}
+
+/**
+ * Open archives from the last completed batch in osu!lazer (OS file association /
+ * `osu!` on PATH). Also regenerates import scripts if paths are still known.
+ */
+export async function openLastBatchArchivesInOsu(): Promise<
+  OpenOszBatchResult & {
+    importScriptSh: string | null;
+    importScriptBat: string | null;
+    savedForImport: number;
+  }
+> {
+  if (job.running) {
+    throw new Error("Cannot open archives while a batch download is running");
+  }
+  if (job.savedPaths.length === 0) {
+    throw new Error(
+      "No archives from the last batch to open. Run a download first.",
+    );
+  }
+
+  const existing = job.savedPaths.filter((p) => existsSync(p));
+  if (existing.length === 0) {
+    throw new Error(
+      "Saved archives from the last batch are missing on disk. Re-download them.",
+    );
+  }
+
+  const scripts = writeOsuImportScripts(job.downloadDir, existing);
+  job.importScriptSh = scripts.sh;
+  job.importScriptBat = scripts.bat;
+  job.savedPaths = existing;
+
+  const result = await openOszFilesInOsu(existing);
+  return {
+    ...result,
+    importScriptSh: job.importScriptSh,
+    importScriptBat: job.importScriptBat,
+    savedForImport: existing.length,
+  };
 }

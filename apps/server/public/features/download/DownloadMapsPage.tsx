@@ -3,12 +3,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BeatmapCover } from "../../components/BeatmapCover";
 import { SkeletonBlock, CardGridSkeleton } from "../../components/LoadingSkeleton";
 import { PageTitle } from "../../components/PageTitle";
+import { QueryLanguageHelpButton } from "../../components/QueryLanguageHelpModal";
 import {
   checkMissingBeatmapsets,
   fetchMirrorBatchJob,
   fetchMirrorDownloadDir,
-  fetchMirrorProviders,
   fetchMirrorSearch,
+  openLastBatchInOsu,
   startMirrorBatchJob,
   stopMirrorBatchJob,
   type OnlineBeatmapSet,
@@ -18,16 +19,8 @@ import {
   osuWebBeatmapUrl,
 } from "../../lib/osuUrls";
 
-const SEARCH_KEY = "roxysu:download-maps-search";
+const SEARCH_KEY = "roxysu:download-maps-search-v2";
 
-type Mode = "any" | "osu" | "taiko" | "fruits" | "mania";
-type Status =
-  | "any"
-  | "ranked"
-  | "qualified"
-  | "loved"
-  | "pending"
-  | "graveyard";
 type Sort =
   | "ranked_desc"
   | "ranked_asc"
@@ -38,31 +31,12 @@ type Sort =
 
 type StoredSearch = {
   q: string;
-  mode: Mode;
-  status: Status;
   sort: Sort;
   excludeOwned: boolean;
   page: number;
   noVideo: boolean;
   pageCount: number;
 };
-
-const MODE_OPTIONS: { value: Mode; label: string }[] = [
-  { value: "mania", label: "Mania" },
-  { value: "osu", label: "osu!" },
-  { value: "taiko", label: "Taiko" },
-  { value: "fruits", label: "Catch" },
-  { value: "any", label: "Any mode" },
-];
-
-const STATUS_OPTIONS: { value: Status; label: string }[] = [
-  { value: "ranked", label: "Ranked" },
-  { value: "loved", label: "Loved" },
-  { value: "qualified", label: "Qualified" },
-  { value: "pending", label: "Pending" },
-  { value: "graveyard", label: "Graveyard" },
-  { value: "any", label: "Any status" },
-];
 
 const SORT_OPTIONS: { value: Sort; label: string }[] = [
   { value: "ranked_desc", label: "Recently ranked" },
@@ -86,21 +60,13 @@ function parseIdList(raw: string): number[] {
   return [...new Set(ids)];
 }
 
-function isMode(value: unknown): value is Mode {
-  return MODE_OPTIONS.some((o) => o.value === value);
-}
-function isStatus(value: unknown): value is Status {
-  return STATUS_OPTIONS.some((o) => o.value === value);
-}
 function isSort(value: unknown): value is Sort {
   return SORT_OPTIONS.some((o) => o.value === value);
 }
 
 function readStored(): StoredSearch {
   const defaults: StoredSearch = {
-    q: "",
-    mode: "mania",
-    status: "ranked",
+    q: "key=7 status=r",
     sort: "ranked_desc",
     excludeOwned: true,
     page: 0,
@@ -120,8 +86,6 @@ function readStored(): StoredSearch {
         : defaults.pageCount;
     return {
       q: typeof parsed.q === "string" ? parsed.q : defaults.q,
-      mode: isMode(parsed.mode) ? parsed.mode : defaults.mode,
-      status: isStatus(parsed.status) ? parsed.status : defaults.status,
       sort: isSort(parsed.sort) ? parsed.sort : defaults.sort,
       excludeOwned:
         typeof parsed.excludeOwned === "boolean"
@@ -185,8 +149,6 @@ export function DownloadMapsPage() {
   const initial = readStored();
   const queryClient = useQueryClient();
   const [q, setQ] = useState(initial.q);
-  const [mode, setMode] = useState<Mode>(initial.mode);
-  const [status, setStatus] = useState<Status>(initial.status);
   const [sort, setSort] = useState<Sort>(initial.sort);
   const [excludeOwned, setExcludeOwned] = useState(initial.excludeOwned);
   const [noVideo, setNoVideo] = useState(initial.noVideo);
@@ -195,8 +157,6 @@ export function DownloadMapsPage() {
   const [batchError, setBatchError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState({
     q: initial.q,
-    mode: initial.mode,
-    status: initial.status,
     sort: initial.sort,
     excludeOwned: initial.excludeOwned,
     page: initial.page,
@@ -204,8 +164,6 @@ export function DownloadMapsPage() {
 
   function commit(next: {
     q: string;
-    mode: Mode;
-    status: Status;
     sort: Sort;
     excludeOwned: boolean;
     page: number;
@@ -218,9 +176,7 @@ export function DownloadMapsPage() {
     queryKey: ["mirrors", "search", submitted],
     queryFn: () =>
       fetchMirrorSearch({
-        q: submitted.q || undefined,
-        mode: submitted.mode,
-        status: submitted.status,
+        query: submitted.q,
         sort: submitted.sort,
         page: submitted.page,
         excludeOwned: submitted.excludeOwned,
@@ -241,12 +197,11 @@ export function DownloadMapsPage() {
     },
   });
 
-  const startBatch = useMutation({
+  const startPagesBatch = useMutation({
     mutationFn: () =>
       startMirrorBatchJob({
-        q: submitted.q || undefined,
-        mode: submitted.mode,
-        status: submitted.status,
+        mode: "pages",
+        query: submitted.q,
         sort: submitted.sort,
         startPage: submitted.page,
         pageCount,
@@ -262,10 +217,65 @@ export function DownloadMapsPage() {
     },
   });
 
+  const startQueryBatch = useMutation({
+    mutationFn: () =>
+      startMirrorBatchJob({
+        mode: "query",
+        query: submitted.q,
+        sort: submitted.sort,
+        noVideo,
+        excludeOwned: true,
+      }),
+    onSuccess: (data) => {
+      setBatchError(null);
+      queryClient.setQueryData(["mirrors", "batch"], data);
+    },
+    onError: (err) => {
+      setBatchError(err instanceof Error ? err.message : String(err));
+    },
+  });
+
+  const startIdsBatch = useMutation({
+    mutationFn: (ids: number[]) =>
+      startMirrorBatchJob({
+        mode: "ids",
+        ids,
+        noVideo,
+      }),
+    onSuccess: (data) => {
+      setBatchError(null);
+      queryClient.setQueryData(["mirrors", "batch"], data);
+    },
+    onError: (err) => {
+      setBatchError(err instanceof Error ? err.message : String(err));
+    },
+  });
+
   const stopBatch = useMutation({
     mutationFn: stopMirrorBatchJob,
     onSuccess: (data) => {
       queryClient.setQueryData(["mirrors", "batch"], data);
+    },
+  });
+
+  const [openInOsuMessage, setOpenInOsuMessage] = useState<string | null>(null);
+  const openInOsu = useMutation({
+    mutationFn: openLastBatchInOsu,
+    onSuccess: (data) => {
+      setBatchError(null);
+      if ("error" in data) {
+        setOpenInOsuMessage(String(data.error));
+        return;
+      }
+      setOpenInOsuMessage(
+        `Opened ${data.opened} archive${data.opened === 1 ? "" : "s"} in osu!` +
+          (data.failed > 0 ? ` (${data.failed} failed)` : "") +
+          ". Scripts: import-into-osu.sh / import-into-osu.bat in the download folder.",
+      );
+      void queryClient.invalidateQueries({ queryKey: ["mirrors", "batch"] });
+    },
+    onError: (err) => {
+      setOpenInOsuMessage(err instanceof Error ? err.message : String(err));
     },
   });
 
@@ -285,14 +295,30 @@ export function DownloadMapsPage() {
   const batchBusy =
     batch?.status === "running" || batch?.status === "stopping";
   const downloadDir = downloadDirQuery.data?.path ?? "~/Downloads/beatmaps";
+  const canDownloadAllMissing =
+    submitted.excludeOwned &&
+    (items.length > 0 || hasMore) &&
+    !batchBusy &&
+    !query.isLoading;
+  const canOpenInOsu =
+    !batchBusy &&
+    batch != null &&
+    batch.status === "completed" &&
+    (batch.savedForImport ?? 0) > 0;
+
+  const missingIds =
+    checkMissing.data && "missing" in checkMissing.data
+      ? checkMissing.data.missing
+      : [];
 
   return (
     <div className="space-y-8">
       <div>
         <PageTitle>Download maps</PageTitle>
         <p className="rx-subtitle mt-2 max-w-2xl">
-          Search online beatmapsets you don&apos;t already have. Batch download
-          saves <code className="text-ink">.osz</code> files into{" "}
+          Search online with the same query language as Practice — then download
+          every missing set that matches. Batch saves{" "}
+          <code className="text-ink">.osz</code> files into{" "}
           <code className="text-ink">{downloadDir}</code> — open or drag them
           into osu!lazer to import.
         </p>
@@ -304,8 +330,6 @@ export function DownloadMapsPage() {
           e.preventDefault();
           const next = {
             q: q.trim(),
-            mode,
-            status,
             sort,
             excludeOwned,
             page: 0,
@@ -314,44 +338,21 @@ export function DownloadMapsPage() {
           commit(next);
         }}
       >
-        <div className="flex flex-col gap-2 sm:flex-row">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <input
             className="rx-input min-w-0 flex-1"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder='Search… e.g. keys=7, stars>=5, artist, title'
-            aria-label="Search online beatmaps"
+            placeholder="e.g. key=7 status=r"
+            aria-label="Online beatmap query"
           />
           <button type="submit" className="rx-btn-primary shrink-0">
             Search
           </button>
+          <QueryLanguageHelpButton />
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <select
-            className="rx-select"
-            value={mode}
-            onChange={(e) => setMode(e.target.value as Mode)}
-            aria-label="Mode"
-          >
-            {MODE_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-          <select
-            className="rx-select"
-            value={status}
-            onChange={(e) => setStatus(e.target.value as Status)}
-            aria-label="Status"
-          >
-            {STATUS_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
           <select
             className="rx-select"
             value={sort}
@@ -384,8 +385,6 @@ export function DownloadMapsPage() {
                 setNoVideo(next);
                 persist({
                   q,
-                  mode,
-                  status,
                   sort,
                   excludeOwned,
                   page,
@@ -401,8 +400,17 @@ export function DownloadMapsPage() {
 
       <section className="rx-panel space-y-3 p-4">
         <div className="flex flex-wrap items-end gap-3">
+          <button
+            type="button"
+            className="rx-btn-primary"
+            disabled={!canDownloadAllMissing || startQueryBatch.isPending}
+            onClick={() => startQueryBatch.mutate()}
+            title="Crawl the mirror for every missing set matching this query"
+          >
+            Download all missing
+          </button>
           <label className="flex flex-col gap-1 text-sm text-muted">
-            Pages from here
+            Or pages from here
             <select
               className="rx-select"
               value={pageCount}
@@ -411,8 +419,6 @@ export function DownloadMapsPage() {
                 setPageCount(next);
                 persist({
                   q,
-                  mode,
-                  status,
                   sort,
                   excludeOwned,
                   page,
@@ -431,9 +437,9 @@ export function DownloadMapsPage() {
           </label>
           <button
             type="button"
-            className="rx-btn-primary"
-            disabled={batchBusy || startBatch.isPending || query.isLoading}
-            onClick={() => startBatch.mutate()}
+            className="rx-btn"
+            disabled={batchBusy || startPagesBatch.isPending || query.isLoading}
+            onClick={() => startPagesBatch.mutate()}
           >
             Download {pageCount} page{pageCount === 1 ? "" : "s"}
           </button>
@@ -447,17 +453,38 @@ export function DownloadMapsPage() {
               {batch?.status === "stopping" ? "Stopping…" : "Stop"}
             </button>
           ) : null}
+          <button
+            type="button"
+            className="rx-btn-primary"
+            disabled={!canOpenInOsu || openInOsu.isPending}
+            onClick={() => {
+              setOpenInOsuMessage(null);
+              openInOsu.mutate();
+            }}
+            title="Open the last batch’s .osz files with osu!lazer (also writes import-into-osu.sh / .bat)"
+          >
+            {openInOsu.isPending ? "Opening…" : "Open in osu!"}
+          </button>
         </div>
 
         <p className="text-sm text-muted">
-          Saves unowned sets from page {page + 1}
-          {pageCount > 1 ? `–${page + pageCount}` : ""} into{" "}
-          <code className="text-ink">{downloadDir}</code>. Existing files are
-          skipped.
+          <span className="font-medium text-ink">Download all missing</span>{" "}
+          walks every mirror page for{" "}
+          <code className="text-ink">{submitted.q || "(defaults)"}</code> until
+          exhausted (capped), skips owned sets and files already on disk. After
+          a batch finishes,{" "}
+          <span className="font-medium text-ink">Open in osu!</span> launches
+          the archives (or run{" "}
+          <code className="text-ink">import-into-osu.sh</code> /{" "}
+          <code className="text-ink">import-into-osu.bat</code> in the download
+          folder).
         </p>
 
         {batchError ? (
           <p className="text-sm text-rose-400">{batchError}</p>
+        ) : null}
+        {openInOsuMessage ? (
+          <p className="text-sm text-muted">{openInOsuMessage}</p>
         ) : null}
 
         {batch && batch.status !== "idle" ? (
@@ -465,7 +492,14 @@ export function DownloadMapsPage() {
             <p>
               Batch: <span className="text-ink">{batch.status}</span>
               {" · "}
+              {batch.mode}
+              {" · "}
               {batch.downloaded}/{batch.queued || "?"} saved
+              {batch.matched > 0 ? ` · ${batch.matched} matched` : ""}
+              {batch.pagesScanned > 0
+                ? ` · ${batch.pagesScanned} pages scanned`
+                : ""}
+              {batch.hitCap ? " · hit safety cap" : ""}
               {batch.skippedExisting > 0
                 ? ` · ${batch.skippedExisting} already on disk`
                 : ""}
@@ -473,7 +507,25 @@ export function DownloadMapsPage() {
                 ? ` · hid ${batch.skippedOwned} owned`
                 : ""}
               {batch.failed > 0 ? ` · ${batch.failed} failed` : ""}
+              {batch.savedForImport > 0
+                ? ` · ${batch.savedForImport} ready to open`
+                : ""}
             </p>
+            {batch.importScriptSh || batch.importScriptBat ? (
+              <p className="truncate text-faint">
+                Import scripts:{" "}
+                {batch.importScriptSh
+                  ? batch.importScriptSh.split(/[/\\]/).pop()
+                  : null}
+                {batch.importScriptSh && batch.importScriptBat ? " / " : null}
+                {batch.importScriptBat
+                  ? batch.importScriptBat.split(/[/\\]/).pop()
+                  : null}
+              </p>
+            ) : null}
+            {batch.query ? (
+              <p className="truncate text-faint">Query: {batch.query}</p>
+            ) : null}
             {batch.currentTitle ? (
               <p className="truncate text-faint">
                 Current: {batch.currentTitle}
@@ -516,7 +568,9 @@ export function DownloadMapsPage() {
           <button
             type="button"
             className="rx-btn-primary shrink-0"
-            disabled={checkMissing.isPending || parseIdList(checkIdsInput).length === 0}
+            disabled={
+              checkMissing.isPending || parseIdList(checkIdsInput).length === 0
+            }
             onClick={() => checkMissing.mutate(parseIdList(checkIdsInput))}
           >
             Check
@@ -537,14 +591,26 @@ export function DownloadMapsPage() {
           </p>
         ) : checkMissing.data ? (
           <div className="space-y-2 text-sm">
-            <p className="text-muted">
-              {checkMissing.data.checked} checked ·{" "}
-              {checkMissing.data.missing.length} missing ·{" "}
-              {checkMissing.data.owned.length} already owned
-            </p>
-            {checkMissing.data.missing.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-muted">
+                {checkMissing.data.checked} checked ·{" "}
+                {missingIds.length} missing ·{" "}
+                {checkMissing.data.owned.length} already owned
+              </p>
+              {missingIds.length > 0 ? (
+                <button
+                  type="button"
+                  className="rx-btn-primary"
+                  disabled={batchBusy || startIdsBatch.isPending}
+                  onClick={() => startIdsBatch.mutate(missingIds)}
+                >
+                  Download missing IDs ({missingIds.length})
+                </button>
+              ) : null}
+            </div>
+            {missingIds.length > 0 ? (
               <ul className="flex flex-wrap gap-2">
-                {checkMissing.data.missing.map((id) => {
+                {missingIds.map((id) => {
                   const downloadUrl = mirrorBeatmapSetDownloadUrl(id, {
                     noVideo,
                   });

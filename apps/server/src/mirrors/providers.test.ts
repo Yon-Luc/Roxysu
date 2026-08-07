@@ -52,9 +52,10 @@ describe("beatmap mirror providers", () => {
     ).toBe("https://mirror.hinamizawa.ai/api/v1/hinai/d/42?noVideo=1");
   });
 
-  test("defaults to nerinyan", () => {
+  test("defaults to hinai", () => {
     const prev = process.env.BEATMAP_MIRROR_PROVIDER;
     delete process.env.BEATMAP_MIRROR_PROVIDER;
+    expect(DEFAULT_BEATMAP_MIRROR_PROVIDER).toBe("hinai");
     expect(getActiveBeatmapMirrorProvider().id).toBe(
       DEFAULT_BEATMAP_MIRROR_PROVIDER,
     );

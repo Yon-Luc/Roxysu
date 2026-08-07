@@ -39,7 +39,8 @@ export function osuBeatmapCoverUrl(
   size: OsuCoverSize = "card",
 ): string | null {
   if (setOnlineId == null || setOnlineId <= 0) return null;
-  return `https://assets.ppy.sh/beatmapsets/${setOnlineId}/covers/${size}.jpg`;
+  // CDN path is `beatmaps/{setId}/covers/…` (not `beatmapsets`).
+  return `https://assets.ppy.sh/beatmaps/${setOnlineId}/covers/${size}.jpg`;
 }
 
 /** Local background served from lazer's files/ store via Roxysu. */

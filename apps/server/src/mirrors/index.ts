@@ -12,6 +12,7 @@ export {
   buildNerinyanSearchUrl,
   buildOsuDirectSearchUrl,
   buildHinaiSearchUrl,
+  buildHinaiV2SearchUrl,
   extractSearchBeatmapsets,
   normalizeOnlineBeatmapSet,
   normalizeCheeseGullBeatmapSet,
@@ -27,7 +28,16 @@ export {
   type BeatmapsetOwnershipDiff,
 } from "./ownership";
 export {
+  OnlineQueryError,
+  parseOnlineMirrorQuery,
+  setMatchesOnlinePostFilters,
+  type OnlineMirrorQuery,
+  type OnlinePostFilter,
+} from "./onlineQuery";
+export {
   searchOnlineBeatmapsets,
+  collectMatchingOnlineBeatmapsets,
+  MIRROR_PAGE_CAPACITY,
   type MirrorSearchResult,
 } from "./searchOnline";
 export {
@@ -41,6 +51,16 @@ export {
   getMirrorBatchJobState,
   startMirrorBatchJob,
   stopMirrorBatchJob,
+  openLastBatchArchivesInOsu,
   type MirrorBatchJobState,
   type MirrorBatchJobStatus,
+  type MirrorBatchMode,
+  type MirrorBatchStartRequest,
 } from "./batchJob";
+export { MIRROR_USER_AGENT } from "./userAgent";
+export {
+  writeOsuImportScripts,
+  openOszFilesInOsu,
+  type ImportScriptPaths,
+  type OpenOszBatchResult,
+} from "./openInOsu";

@@ -41,7 +41,7 @@
       version = "0.1.4";
       url = "https://github.com/Yon-Luc/Roxysu/releases/download/v0.1.4/Roxysu-0.1.4-linux-x64-resources.tar.gz";
       # Empty → default package is from-source. Non-empty → fast prebuilt install.
-      hash = "";
+      hash = "sha256-V0EqeWhNoZbDhTAihlOX37ttwf/lGjIv+QU9ZA2mKLg=";
     };
 
     roxysuFromSource = pkgs.callPackage ./nix/package.nix {

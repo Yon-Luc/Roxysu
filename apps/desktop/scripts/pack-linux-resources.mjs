@@ -147,6 +147,12 @@ if (existsSync(artifactPath)) rmSync(artifactPath);
 log(`creating ${artifactName}`);
 run("tar", ["-czf", artifactPath, "-C", path.join(releaseDir, "linux-resources"), "roxysu"]);
 
+# Stable name for flake input `releases/latest/download/…` (nix flake update).
+const stableName = "Roxysu-linux-x64-resources.tar.gz";
+const stablePath = path.join(releaseDir, stableName);
+cpSync(artifactPath, stablePath);
+
 const mb = (statSync(artifactPath).size / (1024 * 1024)).toFixed(1);
 log(`ok size=${mb}MB path=${artifactPath}`);
+log(`ok stable alias → ${stablePath}`);
 log(`node=${nodeVersion} version=${version}`);

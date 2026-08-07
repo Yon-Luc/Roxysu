@@ -75,10 +75,17 @@ roxysu/
 | `nix profile install .#roxysu` | Install into your profile |
 | `nix run github:Yon-Luc/Roxysu` | Same package, from GitHub (after push) |
 
-**Fast path (preferred):** CI workflow `desktop-linux-resources` uploads
-`Roxysu-*-linux-x64-resources.tar.gz` to the GitHub release. Pin
-`linuxResources.hash` in `flake.nix` (via `nix-prefetch-url` on that asset).
-The flake then wraps nixpkgs Electron around the downloaded payload — no local
+**Fast path (preferred):** CI uploads `Roxysu-*-linux-x64-resources.tar.gz` and a
+stable `Roxysu-linux-x64-resources.tar.gz` on each release. The flake input
+`linux-resources` points at `releases/latest/download/…`; content is pinned in
+`flake.lock`. Refresh with:
+
+```bash
+nix flake update linux-resources
+# or: nix flake update
+```
+
+Then `nix build .#roxysu` wraps nixpkgs Electron around that payload — no local
 `bun install` / UI / native rebuild.
 
 **From-source fallback:** `nix/package.nix` still wraps nixpkgs Electron + Node.

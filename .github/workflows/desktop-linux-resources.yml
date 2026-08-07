@@ -92,19 +92,21 @@ jobs:
 
       - name: Print nix hash hint
         run: |
-          ART="$(ls apps/desktop/release/Roxysu-*-linux-x64-resources.tar.gz | head -1)"
+          ART="$(ls apps/desktop/release/Roxysu-[0-9]*-linux-x64-resources.tar.gz | head -1)"
           echo "Artifact: $ART"
+          echo "Stable: apps/desktop/release/Roxysu-linux-x64-resources.tar.gz"
           echo "Size: $(du -h "$ART" | cut -f1)"
           echo "sha256 (hex): $(sha256sum "$ART" | awk '{print $1}')"
-          echo "After uploading to a release, pin flake.nix linuxResources.hash with:"
-          echo "  nix store prefetch-file <release-asset-url>"
-          echo "or paste the SRI hash Nix prints on a failed fetchurl."
+          echo "After the release is published, refresh the flake lock with:"
+          echo "  nix flake update linux-resources"
 
       - name: Upload resources artifact
         uses: actions/upload-artifact@v4
         with:
           name: roxysu-linux-resources-${{ github.ref_name }}
-          path: apps/desktop/release/Roxysu-*-linux-x64-resources.tar.gz
+          path: |
+            apps/desktop/release/Roxysu-[0-9]*-linux-x64-resources.tar.gz
+            apps/desktop/release/Roxysu-linux-x64-resources.tar.gz
           retention-days: 30
           if-no-files-found: error
 
@@ -113,5 +115,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.release_tag || github.ref_name }}
-          files: apps/desktop/release/Roxysu-*-linux-x64-resources.tar.gz
+          files: |
+            apps/desktop/release/Roxysu-[0-9]*-linux-x64-resources.tar.gz
+            apps/desktop/release/Roxysu-linux-x64-resources.tar.gz
           fail_on_unmatched_files: true

@@ -1,5 +1,18 @@
 {
   "nodes": {
+    "linux-resources": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1786096368,
+        "narHash": "sha256-OA3U/sRUMwvF3pzytE1vKqQRDTavRVZE/t/k3y8eQ48=",
+        "type": "tarball",
+        "url": "https://github.com/Yon-Luc/Roxysu/releases/latest/download/Roxysu-linux-x64-resources.tar.gz"
+      },
+      "original": {
+        "type": "tarball",
+        "url": "https://github.com/Yon-Luc/Roxysu/releases/latest/download/Roxysu-linux-x64-resources.tar.gz"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1784356753,
@@ -18,6 +31,7 @@
     },
     "root": {
       "inputs": {
+        "linux-resources": "linux-resources",
         "nixpkgs": "nixpkgs"
       }
     }

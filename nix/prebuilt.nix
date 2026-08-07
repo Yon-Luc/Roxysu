@@ -1,7 +1,6 @@
 {
   lib,
   stdenv,
-  fetchurl,
   autoPatchelfHook,
   makeWrapper,
   makeDesktopItem,
@@ -10,10 +9,9 @@
   zlib,
   openssl,
   icu,
-  # Pinned release asset from CI (`desktop:dist:linux-resources`).
+  # Path to the unpacked `roxysu/` app root (main.js, resources/, …).
+  src,
   version,
-  url,
-  hash,
 }: let
   pname = "roxysu";
 
@@ -38,13 +36,7 @@
   };
 in
   stdenv.mkDerivation {
-    inherit pname version;
-
-    src = fetchurl {
-      inherit url hash;
-    };
-
-    sourceRoot = "roxysu";
+    inherit pname version src;
 
     nativeBuildInputs = [
       autoPatchelfHook

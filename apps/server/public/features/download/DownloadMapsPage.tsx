@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BeatmapCover } from "../../components/BeatmapCover";
-import { ListSkeleton, SkeletonBlock } from "../../components/LoadingSkeleton";
+import { SkeletonBlock, CardGridSkeleton } from "../../components/LoadingSkeleton";
 import { PageTitle } from "../../components/PageTitle";
 import {
   checkMissingBeatmapsets,
@@ -146,6 +146,16 @@ function persist(state: StoredSearch) {
   } catch {
     // ignore quota / private mode
   }
+}
+
+/** Approximate osu! difficulty color bands, for small star-rating dots on cards. */
+function starDotColor(stars: number): string {
+  if (stars < 2) return "bg-lime-400";
+  if (stars < 2.7) return "bg-sky-400";
+  if (stars < 4) return "bg-amber-400";
+  if (stars < 5.3) return "bg-pink-400";
+  if (stars < 6.5) return "bg-violet-400";
+  return "bg-rose-500";
 }
 
 function formatStars(stars: number): string {
@@ -539,7 +549,16 @@ export function DownloadMapsPage() {
                     noVideo,
                   });
                   return (
-                    <li key={id} className="rx-row inline-flex items-center gap-2">
+                    <li
+                      key={id}
+                      className="rx-row inline-flex items-center gap-2"
+                    >
+                      <BeatmapCover
+                        setOnlineId={id}
+                        size="list"
+                        className="h-8 w-8 shrink-0 rounded"
+                        alt=""
+                      />
                       <span className="text-ink">#{id}</span>
                       {downloadUrl ? (
                         <a
@@ -567,7 +586,7 @@ export function DownloadMapsPage() {
             <SkeletonBlock className="h-4 w-48" />
             <SkeletonBlock className="h-4 w-20" />
           </div>
-          <ListSkeleton count={5} />
+          <CardGridSkeleton count={6} />
         </div>
       ) : query.isError ? (
         <p className="text-rose-400">
@@ -595,9 +614,11 @@ export function DownloadMapsPage() {
               No unowned maps on this page. Try another query or next page.
             </p>
           ) : (
-            <ul className="space-y-2">
+            <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {items.map((set) => (
-                <OnlineSetRow key={set.id} set={set} noVideo={noVideo} />
+                <li key={set.id}>
+                  <OnlineSetCard set={set} noVideo={noVideo} />
+                </li>
               ))}
             </ul>
           )}
@@ -634,7 +655,7 @@ export function DownloadMapsPage() {
   );
 }
 
-function OnlineSetRow({
+function OnlineSetCard({
   set,
   noVideo,
 }: {
@@ -647,54 +668,69 @@ function OnlineSetRow({
     (firstDiff ? osuWebBeatmapUrl(firstDiff.id, set.id) : null) ??
     `https://osu.ppy.sh/beatmapsets/${set.id}`;
 
+  const diffDots = set.beatmaps.slice(0, 6);
+  const extraDiffs = set.beatmaps.length - diffDots.length;
+
   return (
-    <li className="rx-row">
-      <div className="flex min-w-0 flex-1 items-center gap-3">
+    <div className="rx-card flex h-full flex-col">
+      <div className="relative">
         <BeatmapCover
           setOnlineId={set.id}
-          size="list"
-          className="h-12 w-12 shrink-0 rounded shadow-md shadow-black/40"
+          size="card"
+          className="aspect-[2.2/1] w-full"
           alt=""
         />
-        <div className="min-w-0 flex-1">
-          <div className="truncate font-semibold text-ink">
-            {set.title}
-            {set.hasVideo ? (
-              <span className="ml-2 text-xs font-medium text-faint">video</span>
-            ) : null}
-          </div>
-          <div className="mt-0.5 truncate text-sm text-muted">
-            {set.artist}
-            {" · "}
-            mapped by {set.creator}
-            {" · "}
-            {set.status}
-            {set.bpm != null ? ` · ${Math.round(set.bpm)} BPM` : ""}
-          </div>
-          <div className="mt-0.5 truncate text-xs text-faint">
-            {difficultySummary(set)}
-          </div>
-        </div>
-      </div>
-      <div className="flex shrink-0 flex-wrap justify-end gap-2">
-        <a
-          href={webUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="rx-btn"
-        >
-          Website
-        </a>
-        {downloadUrl ? (
-          <a
-            href={downloadUrl}
-            className="rx-btn-primary"
-            title="Download .osz from mirror — open or drag into osu!lazer to import"
-          >
-            Download
-          </a>
+        {set.hasVideo ? (
+          <span className="absolute right-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-xs font-medium text-ink backdrop-blur-sm">
+            video
+          </span>
         ) : null}
       </div>
-    </li>
+
+      <div className="flex flex-1 flex-col p-4">
+        <div className="truncate text-sm text-muted">{set.artist}</div>
+        <div className="truncate font-bold text-ink">{set.title}</div>
+        <div className="mt-1 truncate text-xs text-muted">
+          mapped by {set.creator}
+          {" · "}
+          {set.status}
+          {set.bpm != null ? ` · ${Math.round(set.bpm)} BPM` : ""}
+        </div>
+
+        {diffDots.length > 0 ? (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            {diffDots.map((diff) => (
+              <span
+                key={diff.id}
+                title={`[${diff.version}] ${formatStars(diff.stars)}`}
+                className={`h-2.5 w-2.5 shrink-0 rounded-full ${starDotColor(diff.stars)}`}
+              />
+            ))}
+            {extraDiffs > 0 ? (
+              <span className="text-xs text-faint">+{extraDiffs}</span>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="mt-1 truncate text-xs text-faint">
+          {difficultySummary(set)}
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          <a href={webUrl} target="_blank" rel="noreferrer" className="rx-btn">
+            Website
+          </a>
+          {downloadUrl ? (
+            <a
+              href={downloadUrl}
+              className="rx-btn-primary"
+              title="Download .osz from mirror — open or drag into osu!lazer to import"
+            >
+              Download
+            </a>
+          ) : null}
+        </div>
+      </div>
+    </div>
   );
 }

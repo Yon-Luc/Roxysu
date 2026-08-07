@@ -338,9 +338,9 @@ export function DownloadMapsPage() {
           `Opened ${data.opened} archive${data.opened === 1 ? "" : "s"} in osu!` +
             (data.failed > 0 ? ` (${data.failed} failed)` : "") +
             (data.savedForImport === 0
-              ? " · folder empty after open"
-              : ` · ${data.savedForImport} still on disk`) +
-            ". Scripts: import-into-osu.sh / .bat in the download folder.",
+              ? " · osu! is importing (task count is per difficulty, not per set)"
+              : ` · ${data.savedForImport} still to open`) +
+            ". Don't click Open again while tasks are running.",
         );
       }
       void queryClient.invalidateQueries({ queryKey: ["mirrors", "batch"] });

@@ -16,6 +16,10 @@ import {
 import { recordPendingDownloads } from "./pendingDownloads";
 import { getActiveBeatmapMirrorProvider } from "./providers";
 import {
+  filterNotSentToOsu,
+  recordSentToOsu,
+} from "./sentToOsu";
+import {
   collectMatchingOnlineBeatmapsets,
   searchOnlineBeatmapsets,
   type MirrorSearchResult,
@@ -142,6 +146,15 @@ type JobInternal = {
   running: boolean;
 };
 
+let openingInProgress = false;
+
+function pathsReadyToOpen(downloadDir: string = job.downloadDir): string[] {
+  return filterNotSentToOsu(
+    job.savedPaths.filter((p) => existsSync(p)),
+    downloadDir,
+  );
+}
+
 let job: JobInternal = {
   status: "idle",
   phase: "idle",
@@ -201,6 +214,7 @@ export function getMirrorBatchJobState(): MirrorBatchJobState {
       }
     }
   }
+  const ready = pathsReadyToOpen();
   return {
     status: job.status,
     phase: job.phase,
@@ -219,7 +233,7 @@ export function getMirrorBatchJobState(): MirrorBatchJobState {
     matched: job.matched,
     pagesScanned: job.pagesScanned,
     hitCap: job.hitCap,
-    savedForImport: job.savedPaths.length,
+    savedForImport: ready.length,
     importScriptSh: job.importScriptSh,
     importScriptBat: job.importScriptBat,
     currentSetId: job.currentSetId,
@@ -656,31 +670,18 @@ export async function saveBeatmapsetArchive(opts: {
  * Drop gone paths from the in-memory import list; if none remain, rescan the
  * download folder for leftover `.osz` files (e.g. after osu! already imported).
  */
-function refreshSavedPathsFromDisk(): string[] {
-  const downloadDir = ensureBeatmapsDownloadDir();
-  job.downloadDir = downloadDir;
-
-  const stillTracked = job.savedPaths.filter((p) => existsSync(p));
-  if (stillTracked.length > 0) {
-    job.savedPaths = stillTracked;
-    return stillTracked;
-  }
-
-  const onDisk = listOszArchivesInDir(downloadDir);
-  job.savedPaths = onDisk;
-  return onDisk;
-}
 
 /**
  * Open registered archives in osu!lazer (from the last batch and/or individual
- * saves). If tracked paths are gone (already imported/moved), rescans the
- * download folder and refreshes `savedForImport` instead of hard-failing.
+ * saves). Each archive is only sent once — osu! may keep the .osz on disk while
+ * import tasks run, so we persist a sent list to avoid duplicate queues.
  */
 export async function openLastBatchArchivesInOsu(): Promise<
   OpenOszBatchResult & {
     importScriptSh: string | null;
     importScriptBat: string | null;
     savedForImport: number;
+    skippedAlreadySent: number;
     message: string | null;
     rescanned: boolean;
   }
@@ -688,57 +689,88 @@ export async function openLastBatchArchivesInOsu(): Promise<
   if (job.running) {
     throw new Error("Cannot open archives while a batch download is running");
   }
+  if (openingInProgress) {
+    throw new Error(
+      "Already opening archives in osu! — wait for the current batch to finish.",
+    );
+  }
 
-  const trackedBefore = job.savedPaths.length;
-  const existingBefore = job.savedPaths.filter((p) => existsSync(p)).length;
-  const paths = refreshSavedPathsFromDisk();
-  const rescanned = trackedBefore > 0 && existingBefore === 0;
+  openingInProgress = true;
+  try {
+    const trackedBefore = job.savedPaths.length;
+    const existingBefore = job.savedPaths.filter((p) => existsSync(p)).length;
+    const downloadDir = ensureBeatmapsDownloadDir();
+    job.downloadDir = downloadDir;
 
-  if (paths.length === 0) {
-    job.importScriptSh = null;
-    job.importScriptBat = null;
+    const stillTracked = job.savedPaths.filter((p) => existsSync(p));
+    const candidates =
+      stillTracked.length > 0 ? stillTracked : listOszArchivesInDir(downloadDir);
+    const skippedAlreadySent =
+      candidates.length -
+      filterNotSentToOsu(candidates, downloadDir).length;
+    const paths = filterNotSentToOsu(candidates, downloadDir);
+    const rescanned = trackedBefore > 0 && existingBefore === 0;
+
+    if (paths.length === 0) {
+      job.savedPaths = [];
+      job.importScriptSh = null;
+      job.importScriptBat = null;
+      return {
+        opened: 0,
+        failed: 0,
+        openedPaths: [],
+        errors: [],
+        platform: process.platform,
+        importScriptSh: null,
+        importScriptBat: null,
+        savedForImport: 0,
+        skippedAlreadySent,
+        rescanned,
+        message:
+          skippedAlreadySent > 0
+            ? `${skippedAlreadySent} archive(s) were already sent to osu! — wait for import tasks to finish (osu! counts tasks per difficulty, not per set).`
+            : trackedBefore > 0
+              ? "No .osz archives left in the download folder — they were likely already opened or moved."
+              : "No archives ready to open. Download a map or run a batch first.",
+      };
+    }
+
+    job.savedPaths = paths;
+    const scripts = writeOsuImportScripts(job.downloadDir, paths);
+    job.importScriptSh = scripts.sh;
+    job.importScriptBat = scripts.bat;
+
+    const result = await openOszFilesInOsu(paths);
+
+    if (result.openedPaths.length > 0) {
+      recordSentToOsu(result.openedPaths, job.downloadDir);
+    }
+
+    const failedSet = new Set(result.errors.map((e) => path.resolve(e.path)));
+    job.savedPaths = paths.filter((p) => failedSet.has(path.resolve(p)));
+    if (job.savedPaths.length > 0) {
+      const nextScripts = writeOsuImportScripts(job.downloadDir, job.savedPaths);
+      job.importScriptSh = nextScripts.sh;
+      job.importScriptBat = nextScripts.bat;
+    } else {
+      job.importScriptSh = null;
+      job.importScriptBat = null;
+    }
+
     return {
-      opened: 0,
-      failed: 0,
-      errors: [],
-      platform: process.platform,
-      importScriptSh: null,
-      importScriptBat: null,
-      savedForImport: 0,
-      rescanned: true,
-      message:
-        trackedBefore > 0
-          ? "No .osz archives left in the download folder — they were likely already opened or moved. Ready-to-open list cleared."
-          : "No archives ready to open. Download a map or run a batch first.",
+      ...result,
+      importScriptSh: job.importScriptSh,
+      importScriptBat: job.importScriptBat,
+      savedForImport: job.savedPaths.length,
+      skippedAlreadySent,
+      rescanned,
+      message: rescanned
+        ? `Tracked archives were gone; opened ${result.opened} leftover .osz from the download folder.`
+        : skippedAlreadySent > 0
+          ? `Skipped ${skippedAlreadySent} already sent. Opened ${result.opened} new archive(s) in osu!.`
+          : null,
     };
+  } finally {
+    openingInProgress = false;
   }
-
-  const scripts = writeOsuImportScripts(job.downloadDir, paths);
-  job.importScriptSh = scripts.sh;
-  job.importScriptBat = scripts.bat;
-
-  const result = await openOszFilesInOsu(paths);
-
-  // osu! may consume/move archives; drop anything that disappeared.
-  const stillThere = paths.filter((p) => existsSync(p));
-  job.savedPaths = stillThere;
-  if (stillThere.length > 0) {
-    const nextScripts = writeOsuImportScripts(job.downloadDir, stillThere);
-    job.importScriptSh = nextScripts.sh;
-    job.importScriptBat = nextScripts.bat;
-  } else {
-    job.importScriptSh = null;
-    job.importScriptBat = null;
-  }
-
-  return {
-    ...result,
-    importScriptSh: job.importScriptSh,
-    importScriptBat: job.importScriptBat,
-    savedForImport: stillThere.length,
-    rescanned,
-    message: rescanned
-      ? `Tracked archives were gone; opened ${result.opened} leftover .osz from the download folder.`
-      : null,
-  };
 }

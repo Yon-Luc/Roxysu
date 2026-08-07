@@ -159,6 +159,7 @@ export async function openOszWithOsu(
 export type OpenOszBatchResult = {
   opened: number;
   failed: number;
+  openedPaths: string[];
   errors: Array<{ path: string; error: string }>;
   platform: string;
 };
@@ -176,6 +177,7 @@ export async function openOszFilesInOsu(
   const platform = opts?.platform ?? (osPlatform() as NodeJS.Platform);
   let opened = 0;
   let failed = 0;
+  const openedPaths: string[] = [];
   const errors: Array<{ path: string; error: string }> = [];
 
   for (const filePath of filePaths) {
@@ -183,6 +185,7 @@ export async function openOszFilesInOsu(
     try {
       await openOszWithOsu(filePath, platform);
       opened += 1;
+      openedPaths.push(filePath);
     } catch (err) {
       failed += 1;
       errors.push({
@@ -193,5 +196,11 @@ export async function openOszFilesInOsu(
     if (delayMs > 0) await sleep(delayMs);
   }
 
-  return { opened, failed, errors: errors.slice(0, 8), platform };
+  return {
+    opened,
+    failed,
+    openedPaths,
+    errors: errors.slice(0, 8),
+    platform,
+  };
 }

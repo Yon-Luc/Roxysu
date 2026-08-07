@@ -67,7 +67,12 @@ export {
   type MirrorBatchPhase,
   type MirrorBatchStartRequest,
 } from "./batchJob";
-export { MIRROR_USER_AGENT } from "./userAgent";
+export {
+  filterNotSentToOsu,
+  isSentToOsu,
+  loadSentToOsuPaths,
+  recordSentToOsu,
+} from "./sentToOsu";
 export {
   writeOsuImportScripts,
   openOszFilesInOsu,

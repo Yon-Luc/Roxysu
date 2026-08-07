@@ -56,7 +56,6 @@ function httpStatusForMirrorError(err: unknown): number {
   }
   if (
     message.includes("No archives") ||
-    message.includes("missing on disk") ||
     message.includes("Cannot open archives")
   ) {
     return 400;

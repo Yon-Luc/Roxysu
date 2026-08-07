@@ -124,7 +124,7 @@ const ALL_PAGE_ITEMS: {
   { to: "/settings", label: "Settings", keywords: ["config", "preferences"] },
 ];
 
-const DESKTOP_HIDDEN_PAGES = new Set(["/download-maps", "/rating-lab"]);
+const DESKTOP_HIDDEN_PAGES = new Set(["/rating-lab"]);
 
 function pageItems() {
   if (!isDesktopShell()) return ALL_PAGE_ITEMS;

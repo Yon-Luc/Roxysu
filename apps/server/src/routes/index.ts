@@ -33,12 +33,12 @@ const productApi = () =>
     .use(settingsRoutes)
     .use(tosuRoutes);
 
-/** Desktop / Node product API (no Rating Lab, no download mirrors). */
+/** Desktop / Node product API (no Rating Lab). */
 export function createProductApiRoutes() {
-  return productApi();
+  return productApi().use(mirrorRoutes);
 }
 
-/** Full Bun API surface including Rating Lab + download mirrors. */
+/** Full Bun API surface including Rating Lab. */
 export function createFullApiRoutes() {
   return productApi().use(mirrorRoutes).use(ratingLabRoutes);
 }
@@ -50,5 +50,5 @@ export function createApiRoutes(options: { includeLab?: boolean } = {}) {
     : createFullApiRoutes();
 }
 
-// Do NOT eagerly `createFullApiRoutes()` here — that pulls Rating Lab / mirrors
-// into the desktop Node cold-eval path even when createApp only mounts product routes.
+// Do NOT eagerly `createFullApiRoutes()` here — that pulls Rating Lab into the
+// desktop Node cold-eval path even when createApp only mounts product routes.

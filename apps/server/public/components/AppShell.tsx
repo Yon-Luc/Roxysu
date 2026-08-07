@@ -27,7 +27,7 @@ const ALL_NAV = [
   { to: "/settings", label: "Settings", labelKey: "settings", icon: SettingsIcon },
 ] as const;
 
-const DESKTOP_HIDDEN_NAV = new Set(["/download-maps", "/rating-lab"]);
+const DESKTOP_HIDDEN_NAV = new Set(["/rating-lab"]);
 
 function useNavItems(dict: Dictionary["app"] | undefined) {
   return useMemo(() => {

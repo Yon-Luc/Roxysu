@@ -80,7 +80,7 @@ async function readStaticFile(filePath: string): Promise<Response> {
 }
 
 /**
- * Node / Electron product app (no Lab, no download mirrors, no service worker).
+ * Node / Electron product app (no Lab, no service worker).
  * Bun Eden typing lives in `app.ts` — do not widen that chain through this helper.
  */
 export async function createApp(options: CreateAppOptions) {

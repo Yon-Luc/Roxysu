@@ -1136,15 +1136,15 @@ function ScoreReplayModal({
                 className={
                   showAnalysis
                     ? "relative flex min-h-0 flex-1 flex-col sm:flex-row"
-                    : "relative flex min-h-0 flex-1 flex-col"
+                    : `relative flex min-h-0 flex-1 flex-col${isStdReplay ? " items-center justify-center" : ""}`
                 }
               >
                 <div
                   className={
                     isStdReplay
                       ? fullscreen
-                        ? "relative mx-auto min-h-0 w-full max-w-none flex-1 px-1 py-1 sm:px-2 sm:py-2"
-                        : "relative mx-auto min-h-0 w-full max-w-none flex-1 px-2 py-2 sm:px-3 sm:py-3"
+                        ? "relative mx-auto min-h-0 h-full flex-1 px-1 py-1 sm:px-2 sm:py-2"
+                        : "relative mx-auto min-h-0 h-full flex-1 px-2 py-2 sm:px-3 sm:py-3"
                       : fullscreen
                         ? "relative mx-auto min-h-0 w-full flex-1 px-2 py-1 sm:px-4 sm:py-2"
                         : showAnalysis
@@ -1152,9 +1152,16 @@ function ScoreReplayModal({
                           : "relative mx-auto min-h-0 w-full max-w-2xl flex-1 px-3 py-2 sm:max-w-3xl sm:px-6 sm:py-4"
                   }
                   style={
-                    fullscreen && !isStdReplay
-                      ? { maxWidth: `${prefs.fieldWidth}%` }
-                      : undefined
+                    isStdReplay
+                      ? {
+                          aspectRatio: "4 / 3",
+                          width: "auto",
+                          maxWidth: "100%",
+                          maxHeight: "100%",
+                        }
+                      : fullscreen
+                        ? { maxWidth: `${prefs.fieldWidth}%` }
+                        : undefined
                   }
                 >
                   {!isPlay ? (

@@ -1,6 +1,6 @@
 import path from "node:path";
 import os from "node:os";
-import { existsSync, mkdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 
 /** Env override for where batch .osz downloads are written. */
 export const BEATMAPS_DOWNLOAD_DIR_ENV = "BEATMAPS_DOWNLOAD_DIR";
@@ -44,6 +44,26 @@ export function probeBeatmapsDownloadDir(dir: string = resolveBeatmapsDownloadDi
     // Parent can usually be created; actual write is verified when a batch starts.
     writableHint: true,
   };
+}
+
+/** List `.osz` archives currently in the download folder (non-recursive). */
+export function listOszArchivesInDir(dir: string): string[] {
+  try {
+    if (!existsSync(dir) || !statSync(dir).isDirectory()) return [];
+    return readdirSync(dir)
+      .filter((name) => name.toLowerCase().endsWith(".osz"))
+      .map((name) => path.join(dir, name))
+      .filter((filePath) => {
+        try {
+          return statSync(filePath).isFile();
+        } catch {
+          return false;
+        }
+      })
+      .sort((a, b) => a.localeCompare(b));
+  } catch {
+    return [];
+  }
 }
 
 /** Safe on-disk name: `{id} Artist - Title.osz` */

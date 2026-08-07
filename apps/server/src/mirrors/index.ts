@@ -51,6 +51,7 @@ export {
   BEATMAPS_DOWNLOAD_DIR_ENV,
   beatmapSetArchiveFilename,
   ensureBeatmapsDownloadDir,
+  listOszArchivesInDir,
   probeBeatmapsDownloadDir,
   resolveBeatmapsDownloadDir,
 } from "./downloadDir";

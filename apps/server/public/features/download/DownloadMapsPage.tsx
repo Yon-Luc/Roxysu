@@ -301,28 +301,55 @@ export function DownloadMapsPage() {
     mutationFn: openLastBatchInOsu,
     onSuccess: (data) => {
       setBatchError(null);
-      // Batch/open payloads always include `error: null` on success — only treat
+      // Soft empty result (folder rescanned, nothing left) still updates the UI.
+      if ("savedForImport" in data && typeof data.savedForImport === "number") {
+        setReadyToOpenCount(data.savedForImport);
+      }
+      // Batch/open payloads may include `error: null` on success — only treat
       // a non-empty string as a failure.
-      if (typeof data.error === "string" && data.error.length > 0) {
-        setOpenInOsuMessage(data.error);
+      if (
+        data &&
+        typeof data === "object" &&
+        "error" in data &&
+        typeof (data as { error: unknown }).error === "string" &&
+        (data as { error: string }).error.length > 0
+      ) {
+        setOpenInOsuMessage((data as { error: string }).error);
+        void queryClient.invalidateQueries({ queryKey: ["mirrors", "batch"] });
         return;
       }
       if (!("opened" in data)) {
         setOpenInOsuMessage("Open in osu! failed");
+        void queryClient.invalidateQueries({ queryKey: ["mirrors", "batch"] });
         return;
       }
-      setOpenInOsuMessage(
-        `Opened ${data.opened} archive${data.opened === 1 ? "" : "s"} in osu!` +
-          (data.failed > 0 ? ` (${data.failed} failed)` : "") +
-          ". Scripts: import-into-osu.sh / import-into-osu.bat in the download folder.",
-      );
-      if (typeof data.savedForImport === "number") {
-        setReadyToOpenCount(data.savedForImport);
+      if (
+        "message" in data &&
+        typeof data.message === "string" &&
+        data.message.length > 0
+      ) {
+        setOpenInOsuMessage(data.message);
+      } else if (data.opened === 0 && data.savedForImport === 0) {
+        setOpenInOsuMessage(
+          "No .osz archives left in the download folder — ready-to-open list cleared.",
+        );
+      } else {
+        setOpenInOsuMessage(
+          `Opened ${data.opened} archive${data.opened === 1 ? "" : "s"} in osu!` +
+            (data.failed > 0 ? ` (${data.failed} failed)` : "") +
+            (data.savedForImport === 0
+              ? " · folder empty after open"
+              : ` · ${data.savedForImport} still on disk`) +
+            ". Scripts: import-into-osu.sh / .bat in the download folder.",
+        );
       }
       void queryClient.invalidateQueries({ queryKey: ["mirrors", "batch"] });
     },
     onError: (err) => {
       setOpenInOsuMessage(err instanceof Error ? err.message : String(err));
+      // Folder may have changed; refresh so the Open button count matches disk.
+      void queryClient.invalidateQueries({ queryKey: ["mirrors", "batch"] });
+      setReadyToOpenCount(0);
     },
   });
 

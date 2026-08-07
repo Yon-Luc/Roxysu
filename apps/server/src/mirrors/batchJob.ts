@@ -4,6 +4,7 @@ import type { Db } from "../db-runtime";
 import {
   beatmapSetArchiveFilename,
   ensureBeatmapsDownloadDir,
+  listOszArchivesInDir,
   resolveBeatmapsDownloadDir,
 } from "./downloadDir";
 import { parseOnlineMirrorQuery, type OnlineMirrorQuery } from "./onlineQuery";
@@ -189,6 +190,17 @@ function parseRetryAfterSeconds(res: Response): number | null {
 }
 
 export function getMirrorBatchJobState(): MirrorBatchJobState {
+  // Keep ready-to-open count honest if archives were imported/moved elsewhere.
+  if (!job.running && job.savedPaths.length > 0) {
+    const existing = job.savedPaths.filter((p) => existsSync(p));
+    if (existing.length !== job.savedPaths.length) {
+      job.savedPaths = existing;
+      if (existing.length === 0) {
+        job.importScriptSh = null;
+        job.importScriptBat = null;
+      }
+    }
+  }
   return {
     status: job.status,
     phase: job.phase,
@@ -641,42 +653,92 @@ export async function saveBeatmapsetArchive(opts: {
 }
 
 /**
+ * Drop gone paths from the in-memory import list; if none remain, rescan the
+ * download folder for leftover `.osz` files (e.g. after osu! already imported).
+ */
+function refreshSavedPathsFromDisk(): string[] {
+  const downloadDir = ensureBeatmapsDownloadDir();
+  job.downloadDir = downloadDir;
+
+  const stillTracked = job.savedPaths.filter((p) => existsSync(p));
+  if (stillTracked.length > 0) {
+    job.savedPaths = stillTracked;
+    return stillTracked;
+  }
+
+  const onDisk = listOszArchivesInDir(downloadDir);
+  job.savedPaths = onDisk;
+  return onDisk;
+}
+
+/**
  * Open registered archives in osu!lazer (from the last batch and/or individual
- * saves). Regenerates import scripts for paths that still exist on disk.
+ * saves). If tracked paths are gone (already imported/moved), rescans the
+ * download folder and refreshes `savedForImport` instead of hard-failing.
  */
 export async function openLastBatchArchivesInOsu(): Promise<
   OpenOszBatchResult & {
     importScriptSh: string | null;
     importScriptBat: string | null;
     savedForImport: number;
+    message: string | null;
+    rescanned: boolean;
   }
 > {
   if (job.running) {
     throw new Error("Cannot open archives while a batch download is running");
   }
-  if (job.savedPaths.length === 0) {
-    throw new Error(
-      "No archives ready to open. Download a map or run a batch first.",
-    );
+
+  const trackedBefore = job.savedPaths.length;
+  const existingBefore = job.savedPaths.filter((p) => existsSync(p)).length;
+  const paths = refreshSavedPathsFromDisk();
+  const rescanned = trackedBefore > 0 && existingBefore === 0;
+
+  if (paths.length === 0) {
+    job.importScriptSh = null;
+    job.importScriptBat = null;
+    return {
+      opened: 0,
+      failed: 0,
+      errors: [],
+      platform: process.platform,
+      importScriptSh: null,
+      importScriptBat: null,
+      savedForImport: 0,
+      rescanned: true,
+      message:
+        trackedBefore > 0
+          ? "No .osz archives left in the download folder — they were likely already opened or moved. Ready-to-open list cleared."
+          : "No archives ready to open. Download a map or run a batch first.",
+    };
   }
 
-  const existing = job.savedPaths.filter((p) => existsSync(p));
-  if (existing.length === 0) {
-    throw new Error(
-      "Saved archives are missing on disk. Re-download them.",
-    );
-  }
-
-  const scripts = writeOsuImportScripts(job.downloadDir, existing);
+  const scripts = writeOsuImportScripts(job.downloadDir, paths);
   job.importScriptSh = scripts.sh;
   job.importScriptBat = scripts.bat;
-  job.savedPaths = existing;
 
-  const result = await openOszFilesInOsu(existing);
+  const result = await openOszFilesInOsu(paths);
+
+  // osu! may consume/move archives; drop anything that disappeared.
+  const stillThere = paths.filter((p) => existsSync(p));
+  job.savedPaths = stillThere;
+  if (stillThere.length > 0) {
+    const nextScripts = writeOsuImportScripts(job.downloadDir, stillThere);
+    job.importScriptSh = nextScripts.sh;
+    job.importScriptBat = nextScripts.bat;
+  } else {
+    job.importScriptSh = null;
+    job.importScriptBat = null;
+  }
+
   return {
     ...result,
     importScriptSh: job.importScriptSh,
     importScriptBat: job.importScriptBat,
-    savedForImport: existing.length,
+    savedForImport: stillThere.length,
+    rescanned,
+    message: rescanned
+      ? `Tracked archives were gone; opened ${result.opened} leftover .osz from the download folder.`
+      : null,
   };
 }

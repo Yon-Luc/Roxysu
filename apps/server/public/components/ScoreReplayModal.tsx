@@ -1199,6 +1199,7 @@ function ScoreReplayModal({
                           }
                           highlightMissNotes={showAnalysis}
                           scrollSpeed={prefs.scroll}
+                          playbackRate={prefs.rate}
                           liveHeldMask={isPlay ? liveHeldMask : null}
                           getCurrentTimeMs={mapTimeMs}
                         />

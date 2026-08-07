@@ -15,7 +15,10 @@ import {
   type NoteShape,
 } from "../lib/previewSkin";
 
-/** osu!lazer mania: timeRangeMs = MAX_TIME_RANGE / scrollSpeed (speed 1–40). */
+/**
+ * osu!lazer mania: timeRangeMs = MAX_TIME_RANGE / scrollSpeed (speed 1–40).
+ * At non-1× playback, timeRange is also × rate so visual scroll px/s stays fixed.
+ */
 const OSU_MAX_TIME_RANGE_MS = 11485;
 const PREVIEW_SCROLL_MIN = 1;
 const PREVIEW_SCROLL_MAX = 40;
@@ -55,9 +58,16 @@ type ManiaNotefieldProps = {
   getCurrentTimeMs: () => number;
   /**
    * osu!mania scroll speed (1–40). Notes take
-   * `11485 / scrollSpeed` ms to travel top → receptor.
+   * `11485 / scrollSpeed` ms of map time to travel top → receptor at rate 1.
+   * Visual px/s is kept independent of `playbackRate` (rate only slows/speeds
+   * the song and hit timing).
    */
   scrollSpeed?: number;
+  /**
+   * Audio / map playback rate. Scroll px/wall-sec stays constant; only the
+   * song and note timing stretch with rate.
+   */
+  playbackRate?: number;
   /** Override skin (e.g. live editor preview). Falls back to stored skin. */
   skinOverride?: KeymodeSkin;
   /** Replay key frames (bitmask per column). */
@@ -499,6 +509,7 @@ export function ManiaNotefield({
   notes,
   getCurrentTimeMs,
   scrollSpeed = PREVIEW_SCROLL_DEFAULT,
+  playbackRate = 1,
   skinOverride,
   frames,
   liveHeldMask = null,
@@ -511,6 +522,7 @@ export function ManiaNotefield({
   const columnsRef = useRef(columnCount);
   const getTimeRef = useRef(getCurrentTimeMs);
   const scrollSpeedRef = useRef(scrollSpeed);
+  const playbackRateRef = useRef(playbackRate);
   const framesRef = useRef<NotefieldFrame[]>([]);
   const liveHeldMaskRef = useRef<number | null>(null);
   const headJudgmentsRef = useRef<Map<number, NotefieldJudgment>>(new Map());
@@ -546,6 +558,8 @@ export function ManiaNotefield({
   columnsRef.current = columnCount;
   getTimeRef.current = getCurrentTimeMs;
   scrollSpeedRef.current = clampScrollSpeed(scrollSpeed);
+  playbackRateRef.current =
+    Number.isFinite(playbackRate) && playbackRate > 0 ? playbackRate : 1;
   framesRef.current = frames ?? [];
   liveHeldMaskRef.current = liveHeldMask ?? null;
   headJudgmentsRef.current = buildHeadJudgmentMap(judgments);
@@ -612,8 +626,11 @@ export function ManiaNotefield({
         h * laneCoverRef.current,
         Math.max(0, receptorY - 12),
       );
+      // Keep visual approach speed (px/wall-sec) independent of playback rate:
+      // map time advances at `rate`, so scale the map-time window by rate.
+      const rate = Math.max(0.01, playbackRateRef.current);
       const timeRangeMs =
-        OSU_MAX_TIME_RANGE_MS / scrollSpeedRef.current;
+        (OSU_MAX_TIME_RANGE_MS / scrollSpeedRef.current) * rate;
       const scroll = Math.max(0.05, receptorY / timeRangeMs);
       const colW = w / cols;
       const lookaheadMs = timeRangeMs + 200;

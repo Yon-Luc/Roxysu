@@ -1120,6 +1120,7 @@ function BeatmapPreviewModal({
                         columnCount={data.columnCount}
                         notes={fieldNotes}
                         scrollSpeed={prefs.scroll}
+                        playbackRate={prefs.rate}
                         liveHeldMask={isPlay ? liveHeldMask : null}
                         judgments={isPlay ? liveJudgments : undefined}
                         getCurrentTimeMs={mapTimeMs}

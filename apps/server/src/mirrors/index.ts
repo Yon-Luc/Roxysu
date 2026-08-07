@@ -43,6 +43,7 @@ export {
 export {
   searchOnlineBeatmapsets,
   collectMatchingOnlineBeatmapsets,
+  countMatchingOnlineBeatmapsets,
   MIRROR_PAGE_CAPACITY,
   type MirrorSearchResult,
 } from "./searchOnline";
@@ -62,6 +63,7 @@ export {
   type MirrorBatchJobState,
   type MirrorBatchJobStatus,
   type MirrorBatchMode,
+  type MirrorBatchPhase,
   type MirrorBatchStartRequest,
 } from "./batchJob";
 export { MIRROR_USER_AGENT } from "./userAgent";

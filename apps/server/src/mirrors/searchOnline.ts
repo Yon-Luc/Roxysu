@@ -206,7 +206,7 @@ export async function searchOnlineBeatmapsets(
 
 /**
  * Crawl mirror pages with a bridged QL query until exhausted or caps hit.
- * Used by "download all missing".
+ * Used by "download all missing" and by count-only previews.
  */
 export async function collectMatchingOnlineBeatmapsets(
   db: Db,
@@ -215,6 +215,8 @@ export async function collectMatchingOnlineBeatmapsets(
     excludeOwned?: boolean;
     maxPages?: number;
     maxSets?: number;
+    /** When true, only count matches — do not retain set payloads. */
+    countOnly?: boolean;
     shouldStop?: () => boolean;
     onPage?: (info: {
       mirrorPage: number;
@@ -224,6 +226,7 @@ export async function collectMatchingOnlineBeatmapsets(
   },
 ): Promise<{
   sets: OnlineBeatmapSet[];
+  matched: number;
   ownedSkipped: number;
   pagesScanned: number;
   hitPageCap: boolean;
@@ -233,6 +236,7 @@ export async function collectMatchingOnlineBeatmapsets(
   const excludeOwned = opts.excludeOwned !== false;
   const maxPages = opts.maxPages ?? 200;
   const maxSets = opts.maxSets ?? 10_000;
+  const countOnly = opts.countOnly === true;
   const postFilters = opts.onlineQuery.postFilters;
   const { owned, pending, hide } = excludeOwned
     ? await loadIdsToHideFromDownloadSearch(db)
@@ -244,6 +248,7 @@ export async function collectMatchingOnlineBeatmapsets(
 
   const sets: OnlineBeatmapSet[] = [];
   const seen = new Set<number>();
+  let matched = 0;
   let ownedSkipped = 0;
   let pagesScanned = 0;
   let hitPageCap = false;
@@ -274,8 +279,9 @@ export async function collectMatchingOnlineBeatmapsets(
         continue;
       }
 
-      sets.push(set);
-      if (sets.length >= maxSets) {
+      matched += 1;
+      if (!countOnly) sets.push(set);
+      if (matched >= maxSets) {
         hitSetCap = true;
         break;
       }
@@ -283,7 +289,7 @@ export async function collectMatchingOnlineBeatmapsets(
 
     opts.onPage?.({
       mirrorPage,
-      matchedSoFar: sets.length,
+      matchedSoFar: matched,
       ownedSkipped,
     });
 
@@ -291,5 +297,61 @@ export async function collectMatchingOnlineBeatmapsets(
     if (!mirrorHasMore) break;
   }
 
-  return { sets, ownedSkipped, pagesScanned, hitPageCap, hitSetCap };
+  return {
+    sets,
+    matched,
+    ownedSkipped,
+    pagesScanned,
+    hitPageCap,
+    hitSetCap,
+  };
+}
+
+const COUNT_MAX_PAGES = 200;
+const COUNT_MAX_SETS = 10_000;
+
+/** Count matching missing sets for a QL query (no downloads). */
+export async function countMatchingOnlineBeatmapsets(
+  db: Db,
+  opts: {
+    query: string;
+    sort?: MirrorSearchParams["sort"];
+    excludeOwned?: boolean;
+    maxPages?: number;
+    maxSets?: number;
+  },
+): Promise<{
+  query: string;
+  matched: number;
+  ownedSkipped: number;
+  pagesScanned: number;
+  hitCap: boolean;
+  cappedAt: { maxPages: number; maxSets: number };
+}> {
+  const onlineQuery = parseOnlineMirrorQuery(opts.query, {
+    defaultSort: opts.sort ?? "ranked_desc",
+  });
+  const maxPages = Math.min(
+    COUNT_MAX_PAGES,
+    Math.max(1, opts.maxPages ?? COUNT_MAX_PAGES),
+  );
+  const maxSets = Math.min(
+    COUNT_MAX_SETS,
+    Math.max(1, opts.maxSets ?? COUNT_MAX_SETS),
+  );
+  const result = await collectMatchingOnlineBeatmapsets(db, {
+    onlineQuery,
+    excludeOwned: opts.excludeOwned !== false,
+    maxPages,
+    maxSets,
+    countOnly: true,
+  });
+  return {
+    query: onlineQuery.rawQuery,
+    matched: result.matched,
+    ownedSkipped: result.ownedSkipped,
+    pagesScanned: result.pagesScanned,
+    hitCap: result.hitPageCap || result.hitSetCap,
+    cappedAt: { maxPages, maxSets },
+  };
 }

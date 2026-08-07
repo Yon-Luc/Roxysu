@@ -341,6 +341,29 @@ export async function fetchMirrorBatchJob() {
   return unwrap(await api.api.mirrors.batch.get(), "/api/mirrors/batch");
 }
 
+export async function countMirrorMissing(params: {
+  query: string;
+  sort?:
+    | "ranked_desc"
+    | "ranked_asc"
+    | "plays_desc"
+    | "favourites_desc"
+    | "difficulty_desc"
+    | "title_asc";
+  excludeOwned?: boolean;
+}) {
+  return unwrap(
+    await api.api.mirrors.count.get({
+      query: {
+        query: params.query,
+        sort: params.sort,
+        excludeOwned: params.excludeOwned,
+      },
+    }),
+    "/api/mirrors/count",
+  );
+}
+
 export async function startMirrorBatchJob(body: {
   mode?: "pages" | "query" | "ids";
   query?: string;
@@ -449,6 +472,10 @@ export type MirrorProviders = Exclude<
 >;
 export type MissingBeatmapsets = Exclude<
   Awaited<ReturnType<typeof checkMissingBeatmapsets>>,
+  { error: string }
+>;
+export type MirrorMissingCount = Exclude<
+  Awaited<ReturnType<typeof countMirrorMissing>>,
   { error: string }
 >;
 

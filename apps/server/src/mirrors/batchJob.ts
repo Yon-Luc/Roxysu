@@ -29,10 +29,14 @@ export type MirrorBatchJobStatus =
   | "completed"
   | "error";
 
+/** Sub-step while status is running/stopping. */
+export type MirrorBatchPhase = "idle" | "scanning" | "downloading";
+
 export type MirrorBatchMode = "pages" | "query" | "ids";
 
 export type MirrorBatchJobState = {
   status: MirrorBatchJobStatus;
+  phase: MirrorBatchPhase;
   mode: MirrorBatchMode;
   downloadDir: string;
   query: string | null;
@@ -108,6 +112,7 @@ const MAX_IDS = 2000;
 
 type JobInternal = {
   status: MirrorBatchJobStatus;
+  phase: MirrorBatchPhase;
   mode: MirrorBatchMode;
   downloadDir: string;
   query: string | null;
@@ -138,6 +143,7 @@ type JobInternal = {
 
 let job: JobInternal = {
   status: "idle",
+  phase: "idle",
   mode: "pages",
   downloadDir: resolveBeatmapsDownloadDir(),
   query: null,
@@ -185,6 +191,7 @@ function parseRetryAfterSeconds(res: Response): number | null {
 export function getMirrorBatchJobState(): MirrorBatchJobState {
   return {
     status: job.status,
+    phase: job.phase,
     mode: job.mode,
     downloadDir: job.downloadDir,
     query: job.query,
@@ -225,6 +232,7 @@ function resetJob(
 ): void {
   job = {
     status: "running",
+    phase: "scanning",
     mode: partial.mode,
     downloadDir: resolveBeatmapsDownloadDir(),
     query: partial.query ?? null,
@@ -296,6 +304,8 @@ async function collectSetsPages(
       seen.add(set.id);
       sets.push(set);
     }
+    job.matched = sets.length;
+    job.skippedOwned = ownedSkipped;
     if (!result.hasMore && result.mirrorCount === 0) break;
   }
 
@@ -379,6 +389,7 @@ async function downloadQueue(
   const downloadDir = ensureBeatmapsDownloadDir();
   job.downloadDir = downloadDir;
   mkdirSync(downloadDir, { recursive: true });
+  job.phase = "downloading";
   job.queued = sets.length;
   job.savedPaths = [];
   const downloadedIds: number[] = [];
@@ -479,9 +490,11 @@ async function runBatch(
     job.currentSetId = null;
     job.currentTitle = null;
     job.finishedAt = new Date();
+    job.phase = "idle";
     job.status = "completed";
   } catch (err) {
     job.error = err instanceof Error ? err.message : String(err);
+    job.phase = "idle";
     job.status = "error";
     job.finishedAt = new Date();
   } finally {

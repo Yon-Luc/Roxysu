@@ -209,6 +209,17 @@ export function DownloadMapsPage() {
     queryFn: fetchMirrorDownloadDir,
   });
 
+  function onStartBatchError(err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    // Race: another start won, or UI missed busy state — adopt the running job.
+    if (/already running/i.test(message)) {
+      setBatchError(null);
+      void queryClient.invalidateQueries({ queryKey: MIRROR_BATCH_QUERY_KEY });
+      return;
+    }
+    setBatchError(message);
+  }
+
   const startPagesBatch = useMutation({
     mutationFn: () =>
       startMirrorBatchJob({
@@ -225,9 +236,7 @@ export function DownloadMapsPage() {
       setBatchError(null);
       queryClient.setQueryData(MIRROR_BATCH_QUERY_KEY, data);
     },
-    onError: (err) => {
-      setBatchError(err instanceof Error ? err.message : String(err));
-    },
+    onError: onStartBatchError,
   });
 
   const startQueryBatch = useMutation({
@@ -244,9 +253,7 @@ export function DownloadMapsPage() {
       setBatchError(null);
       queryClient.setQueryData(MIRROR_BATCH_QUERY_KEY, data);
     },
-    onError: (err) => {
-      setBatchError(err instanceof Error ? err.message : String(err));
-    },
+    onError: onStartBatchError,
   });
 
   const [missingCount, setMissingCount] = useState<MirrorMissingCount | null>(

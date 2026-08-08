@@ -33,11 +33,10 @@ export function useMirrorBatchJob() {
     },
   });
 
+  // `error` is a job field (`string | null`), not an API failure envelope.
   const batch: MirrorBatchJob | undefined = fakeActive
     ? (fakeJob ?? undefined)
-    : batchQuery.data && !("error" in batchQuery.data)
-      ? batchQuery.data
-      : undefined;
+    : (batchQuery.data ?? undefined);
 
   const busy = isBatchBusy(batch);
   const phase =

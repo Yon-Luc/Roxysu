@@ -38,6 +38,14 @@ export const MIRROR_PAGE_CAPACITY = 50;
 /** Max raw mirror pages to scan while filling one UI page under post-filters. */
 const MAX_OVERFETCH_PAGES = 20;
 
+/**
+ * Number of pages to fetch in parallel when crawling with post-filters or
+ * during batch collect. The hinai JSON search lane is unlimited per the docs,
+ * so 4 concurrent requests is safe and keeps the pipeline full without being
+ * rude to other mirrors.
+ */
+const PARALLEL_FETCH_WIDTH = 4;
+
 export { OnlineQueryError, parseOnlineMirrorQuery };
 export type { OnlineMirrorQuery, OnlinePostFilter };
 
@@ -68,6 +76,25 @@ async function fetchMirrorPage(
   return { rawCount: rawSets.length, sets };
 }
 
+/**
+ * Fetch `count` consecutive mirror pages starting at `startPage` in parallel.
+ * Pages that fail are returned as empty (rawCount=0, sets=[]) so the caller
+ * can stop gracefully rather than throwing.
+ */
+async function fetchMirrorPagesBatch(
+  providerId: "nerinyan" | "osu.direct" | "hinai",
+  baseParams: MirrorSearchParams,
+  startPage: number,
+  count: number,
+): Promise<Array<{ rawCount: number; sets: OnlineBeatmapSet[] }>> {
+  const fetches = Array.from({ length: count }, (_, i) =>
+    fetchMirrorPage(providerId, { ...baseParams, page: startPage + i }).catch(
+      () => ({ rawCount: 0, sets: [] as OnlineBeatmapSet[] }),
+    ),
+  );
+  return Promise.all(fetches);
+}
+
 export type SearchOnlineOpts = MirrorSearchParams & {
   excludeOwned?: boolean;
   /**
@@ -82,6 +109,11 @@ export type SearchOnlineOpts = MirrorSearchParams & {
 /**
  * Search online beatmapsets. Prefer `query` (app QL) when provided; otherwise
  * use legacy MirrorSearchParams (mode/status/q dropdowns).
+ *
+ * When post-filters are active we must overfetch. After the first page comes
+ * back we know whether there are more pages; subsequent pages are fetched in
+ * parallel batches of PARALLEL_FETCH_WIDTH so we don't stall on each
+ * round-trip individually.
  */
 export async function searchOnlineBeatmapsets(
   db: Db,
@@ -145,44 +177,104 @@ export async function searchOnlineBeatmapsets(
   let matchIndex = 0;
   let mirrorPage = needsOverfetch ? 0 : page;
 
-  while (matched.length < MIRROR_PAGE_CAPACITY && mirrorHasMore) {
-    if (needsOverfetch && pagesScanned >= MAX_OVERFETCH_PAGES && matched.length === 0) {
-      break;
-    }
-    if (needsOverfetch && pagesScanned >= MAX_OVERFETCH_PAGES * (page + 2)) {
-      break;
-    }
-
+  if (!needsOverfetch) {
+    // Fast path: no post-filters — fetch exactly the requested mirror page.
     const { rawCount, sets } = await fetchMirrorPage(provider.id, {
       ...mirrorBase,
       page: mirrorPage,
     });
-    pagesScanned += 1;
     lastRawCount = rawCount;
     mirrorHasMore = rawCount >= MIRROR_PAGE_CAPACITY;
-
     for (const set of sets) {
       if (seen.has(set.id)) continue;
       seen.add(set.id);
-
-      if (!setMatchesOnlinePostFilters(set, postFilters)) continue;
-
       if (excludeOwned && hide.has(set.id)) {
         if (owned.has(set.id)) ownedSkipped += 1;
         else if (pending.has(set.id)) pendingSkipped += 1;
         continue;
       }
-
-      if (matchIndex >= skipMatches) {
-        matched.push(set);
-        if (matched.length >= MIRROR_PAGE_CAPACITY) break;
-      }
-      matchIndex += 1;
+      matched.push(set);
     }
+  } else {
+    // Overfetch path: we need to scan multiple pages to fill one UI page.
+    // Fetch the first page alone so we can bail early if it's the last page,
+    // then switch to parallel batches for the rest.
+    const firstResult = await fetchMirrorPage(provider.id, {
+      ...mirrorBase,
+      page: mirrorPage,
+    });
+    pagesScanned += 1;
+    lastRawCount = firstResult.rawCount;
+    mirrorHasMore = firstResult.rawCount >= MIRROR_PAGE_CAPACITY;
 
-    if (!needsOverfetch) break;
+    const pagesToProcess: Array<{ rawCount: number; sets: OnlineBeatmapSet[] }> =
+      [firstResult];
+
+    // Helper to drain a batch of page results into matched/seen/skipped.
+    const drainPages = (
+      pages: Array<{ rawCount: number; sets: OnlineBeatmapSet[] }>,
+    ): boolean => {
+      for (const { rawCount, sets } of pages) {
+        lastRawCount = rawCount;
+        mirrorHasMore = rawCount >= MIRROR_PAGE_CAPACITY;
+
+        for (const set of sets) {
+          if (seen.has(set.id)) continue;
+          seen.add(set.id);
+
+          if (!setMatchesOnlinePostFilters(set, postFilters)) continue;
+
+          if (excludeOwned && hide.has(set.id)) {
+            if (owned.has(set.id)) ownedSkipped += 1;
+            else if (pending.has(set.id)) pendingSkipped += 1;
+            continue;
+          }
+
+          if (matchIndex >= skipMatches) {
+            matched.push(set);
+            if (matched.length >= MIRROR_PAGE_CAPACITY) return true;
+          }
+          matchIndex += 1;
+        }
+
+        if (!mirrorHasMore) return false;
+      }
+      return false;
+    };
+
     mirrorPage += 1;
-    if (!mirrorHasMore) break;
+
+    // Drain the first page.
+    let done = drainPages(pagesToProcess);
+
+    // Now fetch in parallel batches until we have enough matches or run dry.
+    while (!done && mirrorHasMore) {
+      if (pagesScanned >= MAX_OVERFETCH_PAGES && matched.length === 0) break;
+      if (pagesScanned >= MAX_OVERFETCH_PAGES * (page + 2)) break;
+
+      const batchSize = Math.min(
+        PARALLEL_FETCH_WIDTH,
+        MAX_OVERFETCH_PAGES * (page + 2) - pagesScanned,
+      );
+      if (batchSize <= 0) break;
+
+      const batchPages = await fetchMirrorPagesBatch(
+        provider.id,
+        mirrorBase,
+        mirrorPage,
+        batchSize,
+      );
+      pagesScanned += batchPages.length;
+      mirrorPage += batchPages.length;
+
+      done = drainPages(batchPages);
+
+      // If any page in the batch was short, the mirror has no more results.
+      if (batchPages.some((p) => p.rawCount < MIRROR_PAGE_CAPACITY)) {
+        mirrorHasMore = false;
+        break;
+      }
+    }
   }
 
   const hasMore = needsOverfetch
@@ -207,6 +299,9 @@ export async function searchOnlineBeatmapsets(
 /**
  * Crawl mirror pages with a bridged QL query until exhausted or caps hit.
  * Used by "download all missing" and by count-only previews.
+ *
+ * Pages are fetched in parallel batches of PARALLEL_FETCH_WIDTH after the
+ * first page establishes that more results exist.
  */
 export async function collectMatchingOnlineBeatmapsets(
   db: Db,
@@ -255,46 +350,70 @@ export async function collectMatchingOnlineBeatmapsets(
   let hitSetCap = false;
   let mirrorHasMore = true;
 
-  for (let mirrorPage = 0; mirrorHasMore; mirrorPage += 1) {
+  for (
+    let mirrorPage = 0;
+    mirrorHasMore && !hitPageCap && !hitSetCap;
+    mirrorPage += PARALLEL_FETCH_WIDTH
+  ) {
     if (opts.shouldStop?.()) break;
-    if (pagesScanned >= maxPages) {
+
+    const remaining = maxPages - pagesScanned;
+    if (remaining <= 0) {
       hitPageCap = true;
       break;
     }
 
-    const { rawCount, sets: pageSets } = await fetchMirrorPage(provider.id, {
-      ...opts.onlineQuery.mirrorParams,
-      page: mirrorPage,
-    });
-    pagesScanned += 1;
-    mirrorHasMore = rawCount >= MIRROR_PAGE_CAPACITY;
+    const batchSize = Math.min(PARALLEL_FETCH_WIDTH, remaining);
+    const batchResults = await fetchMirrorPagesBatch(
+      provider.id,
+      opts.onlineQuery.mirrorParams,
+      mirrorPage,
+      batchSize,
+    );
 
-    for (const set of pageSets) {
-      if (seen.has(set.id)) continue;
-      seen.add(set.id);
-      if (!setMatchesOnlinePostFilters(set, postFilters)) continue;
+    for (let i = 0; i < batchResults.length; i++) {
+      if (opts.shouldStop?.()) break;
 
-      if (excludeOwned && hide.has(set.id)) {
-        if (owned.has(set.id) || pending.has(set.id)) ownedSkipped += 1;
-        continue;
+      const { rawCount, sets: pageSets } = batchResults[i];
+      pagesScanned += 1;
+      mirrorHasMore = rawCount >= MIRROR_PAGE_CAPACITY;
+
+      for (const set of pageSets) {
+        if (seen.has(set.id)) continue;
+        seen.add(set.id);
+        if (!setMatchesOnlinePostFilters(set, postFilters)) continue;
+
+        if (excludeOwned && hide.has(set.id)) {
+          if (owned.has(set.id) || pending.has(set.id)) ownedSkipped += 1;
+          continue;
+        }
+
+        matched += 1;
+        if (!countOnly) sets.push(set);
+        if (matched >= maxSets) {
+          hitSetCap = true;
+          break;
+        }
       }
 
-      matched += 1;
-      if (!countOnly) sets.push(set);
-      if (matched >= maxSets) {
-        hitSetCap = true;
+      opts.onPage?.({
+        mirrorPage: mirrorPage + i,
+        matchedSoFar: matched,
+        ownedSkipped,
+      });
+
+      if (hitSetCap) break;
+
+      // If this page was short, no point fetching more pages in the batch.
+      if (!mirrorHasMore) {
+        mirrorHasMore = false;
         break;
       }
     }
 
-    opts.onPage?.({
-      mirrorPage,
-      matchedSoFar: matched,
-      ownedSkipped,
-    });
-
-    if (hitSetCap) break;
-    if (!mirrorHasMore) break;
+    if (pagesScanned >= maxPages) {
+      hitPageCap = true;
+    }
   }
 
   return {

@@ -41,11 +41,11 @@ const MAX_OVERFETCH_PAGES = 20;
 
 /**
  * Number of pages to fetch in parallel when crawling with post-filters or
- * during batch collect. The hinai JSON search lane is unlimited per the docs,
- * so 4 concurrent requests is safe and keeps the pipeline full without being
- * rude to other mirrors.
+ * during batch collect. The hinai JSON search lane is unlimited per the docs.
+ * 32 concurrent requests keeps latency low over a 300+ page crawl (~11
+ * round-trips for 33K maps) without being rude to other mirrors.
  */
-const PARALLEL_FETCH_WIDTH = 4;
+const PARALLEL_FETCH_WIDTH = 32;
 
 export { OnlineQueryError, parseOnlineMirrorQuery };
 export type { OnlineMirrorQuery, OnlinePostFilter };

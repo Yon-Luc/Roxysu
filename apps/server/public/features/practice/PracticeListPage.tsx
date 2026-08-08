@@ -14,7 +14,7 @@ import {
 import { QueryLanguageHelpButton } from "../../components/QueryLanguageHelpModal";
 import { PatternBrowserButton } from "../../components/PatternBrowserModal";
 import { BeatmapCover } from "../../components/BeatmapCover";
-import { BeatmapPreviewButton } from "../../components/BeatmapPreviewModal";
+import { BeatmapPreviewButton } from "../../components/BeatmapPreviewButton";
 import { CopyBeatmapSearchButton } from "../../components/CopyBeatmapSearchButton";
 import {
   CardGridSkeleton,

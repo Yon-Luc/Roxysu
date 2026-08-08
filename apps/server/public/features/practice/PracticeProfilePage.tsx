@@ -10,7 +10,7 @@ import {
   YAxis,
 } from "recharts";
 import { BeatmapCover } from "../../components/BeatmapCover";
-import { BeatmapPreviewButton } from "../../components/BeatmapPreviewModal";
+import { BeatmapPreviewButton } from "../../components/BeatmapPreviewButton";
 import { CopyBeatmapSearchButton } from "../../components/CopyBeatmapSearchButton";
 import {
   HeroSkeleton,
@@ -20,10 +20,12 @@ import {
   StatGridSkeleton,
 } from "../../components/LoadingSkeleton";
 import { ModBadges } from "../../components/ModBadges";
-import { ScoreReplayButton } from "../../components/ScoreReplayModal";
+import { ScoreReplayButton } from "../../components/ScoreReplayButton";
 import { fetchBeatmap } from "../../lib/api";
 import {
   formatAccuracy,
+  formatClock,
+  formatPanelDuration,
   formatPp,
   formatRelativeTime,
 } from "../../lib/format";
@@ -757,7 +759,7 @@ function TimingAnalysisPanel({ timing }: { timing: ChartTimingView }) {
               className={`flex gap-2 ${severityClass(issue.severity)}`}
             >
               <span className="shrink-0 font-mono text-xs text-faint">
-                {formatTimeMs(issue.startMs)}
+                {formatClock(issue.startMs)}
               </span>
               <span className="shrink-0 text-xs uppercase tracking-wide opacity-80">
                 {formatIssueKind(issue.kind, detail?.issueKinds)}
@@ -790,7 +792,7 @@ function SevenKDensityPanel({
   const detail = dict?.practice.detail;
   const chartData = analysis.samples.map((sample) => ({
     ...sample,
-    timeLabel: formatTimeMs(sample.startMs),
+    timeLabel: formatClock(sample.startMs),
     displayPattern: formatPatternLabel(
       sample.dominantPattern ?? "mixed",
       detail?.patterns,
@@ -923,7 +925,7 @@ function SevenKDensityPanel({
                 labelFormatter={(_, payload) => {
                   const sample = payload?.[0]?.payload as SevenKDensitySampleView | undefined;
                   return sample
-                    ? `${formatTimeMs(sample.startMs)} - ${formatTimeMs(sample.endMs)}`
+                    ? `${formatClock(sample.startMs)} - ${formatClock(sample.endMs)}`
                     : "";
                 }}
                 formatter={(value, name, item) => {
@@ -990,7 +992,7 @@ function SevenKDensityPanel({
                   >
                     <div className="flex items-center justify-between gap-3">
                       <span className="text-sm font-semibold text-ink">
-                        {formatTimeMs(hotspot.startMs)} - {formatTimeMs(hotspot.endMs)}
+                        {formatClock(hotspot.startMs)} - {formatClock(hotspot.endMs)}
                       </span>
                       <span className="text-xs font-bold tabular-nums text-accent">
                         {hotspot.notesPerSecond.toFixed(1)} NPS
@@ -1074,19 +1076,4 @@ function PatternMetricRow({
       </div>
     </div>
   );
-}
-
-function formatTimeMs(ms: number): string {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const mins = Math.floor(totalSeconds / 60);
-  const secs = totalSeconds % 60;
-  return `${mins}:${String(secs).padStart(2, "0")}`;
-}
-
-function formatPanelDuration(ms: number | null | undefined): string {
-  if (ms == null || !Number.isFinite(ms) || ms <= 0) return "—";
-  const totalSeconds = Math.round(ms / 1000);
-  const mins = Math.floor(totalSeconds / 60);
-  const secs = totalSeconds % 60;
-  return `${mins}:${String(secs).padStart(2, "0")}`;
 }

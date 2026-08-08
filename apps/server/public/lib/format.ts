@@ -101,6 +101,36 @@ function chartDayParts(
   };
 }
 
+export function clamp(n: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, n));
+}
+
+/** `m:ss` clock label for seek bars and timestamps. */
+export function formatClock(ms: number): string {
+  const totalSec = Math.max(0, Math.floor(ms / 1000));
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+/** `m:ss.t` clock label with a tenths digit (finer than `formatClock`). */
+export function formatClockFrac(ms: number): string {
+  const totalSec = Math.max(0, Math.floor(ms / 1000));
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  const frac = Math.floor((ms % 1000) / 100);
+  return `${m}:${s.toString().padStart(2, "0")}.${frac}`;
+}
+
+/** Null-safe `m:ss` duration label; returns "—" for missing/non-finite values. */
+export function formatPanelDuration(ms: number | null | undefined): string {
+  if (ms == null || !Number.isFinite(ms) || ms <= 0) return "—";
+  const totalSeconds = Math.round(ms / 1000);
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  return `${mins}:${String(secs).padStart(2, "0")}`;
+}
+
 export function formatMods(mods: string | null | undefined): string {
   if (!mods || mods === "[]" || mods === "{}") return "NM";
   const entries = parseModEntries(mods);

@@ -1,5 +1,6 @@
 import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
 import type { HitWindows, JudgmentResult } from "../lib/maniaWindows";
+import { clamp } from "../lib/format";
 import { JUDGMENT_COLORS } from "./ManiaNotefield";
 
 const FADE_MS = 2800;
@@ -32,10 +33,6 @@ type ActiveMark = {
   born: number;
   key: string;
 };
-
-function clamp(n: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, n));
-}
 
 function markKey(j: TimingMark): string {
   return `${j.noteIndex}:${j.isTail ? "t" : "h"}:${j.result}`;

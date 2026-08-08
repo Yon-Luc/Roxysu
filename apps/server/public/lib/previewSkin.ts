@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { clamp } from "./format";
 
 export type NoteShape = "flat" | "arrow" | "circle";
 
@@ -172,10 +173,6 @@ export function defaultPreviewSkin(): PreviewSkin {
 
 function isHexColor(value: unknown): value is string {
   return typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value);
-}
-
-function clamp(n: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, n));
 }
 
 function parseColumn(raw: unknown, index: number, keys?: number): ColumnSkin {

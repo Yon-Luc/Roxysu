@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
 import {
   Bar,
   BarChart,
@@ -24,27 +23,36 @@ import {
   SkeletonBlock,
   StatGridSkeleton,
 } from "../../components/LoadingSkeleton";
+import { ChartCard } from "../../components/ChartCard";
+import { EmptyChart } from "../../components/EmptyChart";
+import { Stat } from "../../components/Stat";
+import { ToggleGroup } from "../../components/ToggleGroup";
+import { SkillCard } from "./components/SkillCard";
+import { SkillBandPlaysPanel } from "./components/SkillBandPlaysPanel";
 import {
-  fetchSkillBandPlays,
+  formatDuration,
+  historyBandValue,
+  skillAxisLabel,
+  skillBandMaps,
+  skillBandValue,
+  skillTooltipFormatter,
+} from "./statsHelpers";
+import {
   fetchStats,
   type SkillBandKind,
   type StatsGranularity,
   type StatsRange,
   type StatsSkillAxis,
-  type PlayerStats,
 } from "../../lib/api";
 import {
   formatAccuracy,
   formatChartDay,
   formatPp,
   formatRelativeTime,
-  formatStars,
 } from "../../lib/format";
 import {
-  formatSkillRating,
   useRatingDisplayMode,
   type RatingDisplayMode,
-  type SkillRatingAxis,
 } from "../../lib/ratingDisplay";
 import { useChartStyles } from "../../lib/chartStyles";
 import { useAppDict, t } from "../../lib/i18n";
@@ -52,137 +60,6 @@ import {
   buildStatsGradeQuery,
   openInPractice,
 } from "../../lib/practiceSearch";
-import type { Dictionary } from "@roxysu/i18n";
-
-function formatDuration(ms: number | null | undefined): string {
-  if (ms == null || !Number.isFinite(ms) || ms <= 0) return "—";
-  const mins = Math.round(ms / 60_000);
-  if (mins < 60) return `${mins}m`;
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return m > 0 ? `${h}h ${m}m` : `${h}h`;
-}
-
-function skillAxisLabel(
-  dict: Dictionary["app"] | undefined,
-  axis: StatsSkillAxis,
-): string {
-  switch (axis) {
-    case "rc":
-      return dict?.stats.axisRice ?? "Rice";
-    case "ln":
-      return dict?.stats.axisLn ?? "LN";
-    case "fln":
-      return dict?.stats.axisFln ?? "FLN";
-    default:
-      return dict?.stats.axisAll ?? "All";
-  }
-}
-
-function skillRatingAxis(
-  axis: StatsSkillAxis,
-): SkillRatingAxis {
-  if (axis === "rc" || axis === "ln" || axis === "fln") return axis;
-  return "overall";
-}
-
-function skillBandValue(
-  skill: PlayerStats["skill"],
-  band: "peak" | "accuracy" | "consistency",
-  axis: StatsSkillAxis,
-): number {
-  const values = {
-    peak: {
-      all: skill.peakOverall,
-      rc: skill.peakRc,
-      ln: skill.peakLn,
-      fln: skill.peakFln,
-    },
-    accuracy: {
-      all: skill.accuracyOverall,
-      rc: skill.accuracyRc,
-      ln: skill.accuracyLn,
-      fln: skill.accuracyFln,
-    },
-    consistency: {
-      all: skill.consistencyOverall,
-      rc: skill.consistencyRc,
-      ln: skill.consistencyLn,
-      fln: skill.consistencyFln,
-    },
-  } as const;
-  if (axis === "all") return values[band].all;
-  return values[band][axis];
-}
-
-function skillBandMaps(
-  skill: PlayerStats["skill"],
-  band: "peak" | "accuracy" | "consistency",
-  axis: StatsSkillAxis,
-): number {
-  const values = {
-    peak: {
-      all: skill.clearRcMaps + skill.clearLnMaps + skill.clearFlnMaps,
-      rc: skill.clearRcMaps,
-      ln: skill.clearLnMaps,
-      fln: skill.clearFlnMaps,
-    },
-    accuracy: {
-      all: skill.accuracyRcMaps + skill.accuracyLnMaps + skill.accuracyFlnMaps,
-      rc: skill.accuracyRcMaps,
-      ln: skill.accuracyLnMaps,
-      fln: skill.accuracyFlnMaps,
-    },
-    consistency: {
-      all:
-        skill.consistencyRcMaps +
-        skill.consistencyLnMaps +
-        skill.consistencyFlnMaps,
-      rc: skill.consistencyRcMaps,
-      ln: skill.consistencyLnMaps,
-      fln: skill.consistencyFlnMaps,
-    },
-  } as const;
-  return values[band][axis];
-}
-
-function historyBandValue(
-  point: NonNullable<PlayerStats["skillHistory"]>[number],
-  band: "push" | "accuracy" | "consistency",
-  axis: StatsSkillAxis,
-): number {
-  if (axis === "all") return point[band];
-  const key = `${band}${axis.charAt(0).toUpperCase()}${axis.slice(1)}` as
-    | "pushRc"
-    | "pushLn"
-    | "pushFln"
-    | "accuracyRc"
-    | "accuracyLn"
-    | "accuracyFln"
-    | "consistencyRc"
-    | "consistencyLn"
-    | "consistencyFln";
-  const axisValue = point[key];
-  return axisValue > 0 ? axisValue : point[band];
-}
-
-function skillTooltipFormatter(
-  mode: RatingDisplayMode,
-  value: unknown,
-  name: unknown,
-  axis: StatsSkillAxis,
-): [string, string] {
-  const label = String(name ?? "");
-  const n = typeof value === "number" ? value : Number(value);
-  return [
-    formatSkillRating({
-      mode,
-      sunnyStar: n,
-      axis: skillRatingAxis(axis),
-    }),
-    label,
-  ];
-}
 
 export function StatsPage({
   granularity,
@@ -472,7 +349,6 @@ export function StatsPage({
           <SkillCard
             mode={ratingMode}
             axis={skillAxis}
-            dict={dict}
             band="push"
             title={dict?.stats.bandPush ?? "Push"}
             hint={dict?.stats.hintPush ?? "90%+ clears"}
@@ -499,7 +375,6 @@ export function StatsPage({
           <SkillCard
             mode={ratingMode}
             axis={skillAxis}
-            dict={dict}
             band="accuracy"
             title={dict?.stats.bandAccuracy ?? "Accuracy"}
             hint={dict?.stats.hintAccuracy ?? "99%+ clears"}
@@ -528,7 +403,6 @@ export function StatsPage({
           <SkillCard
             mode={ratingMode}
             axis={skillAxis}
-            dict={dict}
             band="consistency"
             title={dict?.stats.bandConsistency ?? "Consistency"}
             hint={dict?.stats.hintConsistency ?? "96%+ clears"}
@@ -559,7 +433,6 @@ export function StatsPage({
           <SkillBandPlaysPanel
             band={expandedBand}
             axis={skillAxis}
-            dict={dict}
             topPlays={skillTopPlays}
             keyCount={keyCount}
             ratingMode={ratingMode}
@@ -1013,415 +886,5 @@ export function StatsPage({
         ) : null}
       </section>
     </div>
-  );
-}
-
-function SkillCard({
-  mode,
-  axis,
-  dict,
-  band,
-  title,
-  hint,
-  value,
-  maps,
-  requiredPlays,
-  expanded,
-  onToggle,
-  breakdown,
-}: {
-  mode: RatingDisplayMode;
-  axis: StatsSkillAxis;
-  dict: Dictionary["app"] | undefined;
-  band: SkillBandKind;
-  title: string;
-  hint: string;
-  value: number;
-  maps: number;
-  requiredPlays: number;
-  expanded: boolean;
-  onToggle: () => void;
-  breakdown: {
-    rc: number;
-    ln: number;
-    fln: number;
-    rcMaps: number;
-    lnMaps: number;
-    flnMaps: number;
-  } | null;
-}) {
-  const hasEstimate = value > 0;
-  const playsLabel =
-    maps === 0
-      ? dict?.stats.noPlaysInBand ?? "No plays in band yet"
-      : hasEstimate
-        ? t(dict?.stats.mapsInBand, { count: maps })
-        : t(dict?.stats.mapsInBandRequired, {
-            count: maps,
-            required: requiredPlays,
-          });
-
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className={`rx-panel w-full px-4 py-4 text-left transition ${
-        expanded
-          ? "ring-1 ring-accent/40"
-          : "hover:bg-elevated/30"
-      }`}
-      aria-expanded={expanded}
-      aria-controls={`skill-band-${band}`}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <div className="rx-label">{title}</div>
-        <span className="text-[10px] font-bold uppercase tracking-wide text-faint">
-          {expanded
-            ? dict?.stats.hide ?? "Hide"
-            : dict?.stats.plays ?? "plays"}
-        </span>
-      </div>
-      <div
-        className={`mt-2 font-bold tabular-nums text-ink ${
-          mode === "dan" ? "text-xl leading-snug" : "text-3xl"
-        }`}
-      >
-        {hasEstimate
-          ? formatSkillRating({
-              mode,
-              sunnyStar: value,
-              axis: skillRatingAxis(axis),
-            })
-          : "—"}
-      </div>
-      <p className="mt-1 text-xs text-muted">{hint}</p>
-      {breakdown ? (
-        <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
-          <AxisCell
-            mode={mode}
-            axis="rc"
-            dict={dict}
-            label={dict?.stats.axisRice ?? "Rice"}
-            value={breakdown.rc}
-            maps={breakdown.rcMaps}
-            requiredPlays={requiredPlays}
-          />
-          <AxisCell
-            mode={mode}
-            axis="ln"
-            dict={dict}
-            label={dict?.stats.axisLn ?? "LN"}
-            value={breakdown.ln}
-            maps={breakdown.lnMaps}
-            requiredPlays={requiredPlays}
-          />
-          <AxisCell
-            mode={mode}
-            axis="fln"
-            dict={dict}
-            label={dict?.stats.axisFln ?? "FLN"}
-            value={breakdown.fln}
-            maps={breakdown.flnMaps}
-            requiredPlays={requiredPlays}
-          />
-        </div>
-      ) : (
-        <p className="mt-4 text-xs text-faint">
-          {playsLabel}
-          {!hasEstimate && maps > 0
-            ? ` · ${t(dict?.stats.needMorePlays, {
-                required: requiredPlays,
-              })}`
-            : ""}
-        </p>
-      )}
-    </button>
-  );
-}
-
-function SkillBandPlaysPanel({
-  band,
-  axis,
-  dict,
-  topPlays,
-  keyCount,
-  ratingMode,
-}: {
-  band: SkillBandKind;
-  axis: StatsSkillAxis;
-  dict: Dictionary["app"] | undefined;
-  topPlays: number;
-  keyCount: number;
-  ratingMode: RatingDisplayMode;
-}) {
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["stats", "skill-plays", band, axis, topPlays, keyCount],
-    queryFn: () =>
-      fetchSkillBandPlays({
-        band,
-        axis: axis === "all" ? undefined : axis,
-        topPlays,
-        keyCount,
-      }),
-  });
-
-  if (isLoading) {
-    return (
-      <div id={`skill-band-${band}`} className="rx-panel p-4">
-        <SkeletonBlock className="h-5 w-36" />
-        <SkeletonBlock className="mt-2 h-3 w-64 max-w-full" />
-        <div className="mt-5">
-          <ListSkeleton count={4} showThumbnail={false} />
-        </div>
-      </div>
-    );
-  }
-
-  if (error || !data) {
-    return (
-      <div id={`skill-band-${band}`} className="rx-panel p-4">
-        <p className="text-sm text-rose-300">
-          {error?.message ?? dict?.stats.failedToLoadPlays ?? "Failed to load plays"}
-        </p>
-      </div>
-    );
-  }
-
-  const axisLabel = skillAxisLabel(dict, axis);
-  const bandTitle =
-    band === "push"
-      ? dict?.stats.bandPush ?? "Push"
-      : band === "accuracy"
-        ? dict?.stats.bandAccuracy ?? "Accuracy"
-        : dict?.stats.bandConsistency ?? "Consistency";
-
-  return (
-    <div id={`skill-band-${band}`} className="rx-panel space-y-6 p-4 sm:p-5">
-      <div>
-        <h3 className="font-display text-lg font-bold text-ink">
-          {t(dict?.stats.bandPlays, { band: bandTitle })}
-          {axis !== "all" ? ` · ${axisLabel}` : ""}
-        </h3>
-        <p className="mt-1 text-xs text-muted">
-          {t(dict?.stats.topHardest, { count: topPlays })}
-        </p>
-      </div>
-
-      <SkillPlayList
-        title={t(dict?.stats.inBand, {
-          count: data.inBandTotal,
-          total: topPlays,
-        })}
-        plays={data.inBand}
-        ratingMode={ratingMode}
-        empty={dict?.stats.emptyBand ?? "No plays in this band yet."}
-      />
-
-      {data.nextDanLabel ? (
-        <SkillPlayList
-          title={t(dict?.stats.nextDan, {
-            label: data.nextDanLabel,
-            count: data.inNextDanTotal,
-            total: topPlays,
-          })}
-          plays={data.inNextDan}
-          ratingMode={ratingMode}
-          empty={t(dict?.stats.noLabelClears, {
-            label: data.nextDanLabel,
-          })}
-        />
-      ) : (
-        <p className="text-sm text-muted">
-          {dict?.stats.noNextDan ??
-            "No higher dan tier above your current estimate."}
-        </p>
-      )}
-    </div>
-  );
-}
-
-function SkillPlayList({
-  title,
-  plays,
-  ratingMode,
-  empty,
-}: {
-  title: string;
-  plays: Array<{
-    beatmapId: string;
-    title: string;
-    artist: string;
-    difficultyName: string;
-    accuracy: number;
-    sunnyStar: number;
-    danLabel: string;
-    playedAt: string | number | null;
-  }>;
-  ratingMode: RatingDisplayMode;
-  empty: string;
-}) {
-  return (
-    <section>
-      <h4 className="mb-2 text-sm font-bold text-ink">{title}</h4>
-      {plays.length === 0 ? (
-        <p className="text-sm text-muted">{empty}</p>
-      ) : (
-        <ul className="space-y-0.5">
-          {plays.map((play) => (
-            <li key={`${play.beatmapId}-${play.playedAt}`}>
-              <Link
-                to="/practice/$beatmapId"
-                params={{ beatmapId: play.beatmapId }}
-                className="rx-row gap-3 !py-2 hover:bg-elevated/30"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-semibold text-ink">
-                    {play.title}
-                  </div>
-                  <div className="mt-0.5 truncate text-sm text-muted">
-                    {play.artist}
-                    {play.difficultyName ? ` · ${play.difficultyName}` : ""}
-                  </div>
-                </div>
-                <div className="shrink-0 text-right text-sm">
-                  <div className="font-semibold tabular-nums text-ink">
-                    {formatAccuracy(play.accuracy)}
-                  </div>
-                  <div className="text-xs tabular-nums text-muted">
-                    {ratingMode === "dan"
-                      ? play.danLabel
-                      : formatStars(play.sunnyStar)}
-                    {" · "}
-                    {play.playedAt != null
-                      ? formatRelativeTime(String(play.playedAt))
-                      : "—"}
-                  </div>
-                </div>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-  );
-}
-
-function AxisCell({
-  mode,
-  axis,
-  dict,
-  label,
-  value,
-  maps,
-  requiredPlays,
-}: {
-  mode: RatingDisplayMode;
-  axis: SkillRatingAxis;
-  dict: Dictionary["app"] | undefined;
-  label: string;
-  value: number;
-  maps: number;
-  requiredPlays: number;
-}) {
-  const hasEstimate = value > 0 && maps >= requiredPlays;
-  return (
-    <div>
-      <div className="text-faint">{label}</div>
-      <div
-        className={`mt-0.5 font-semibold tabular-nums text-ink ${
-          mode === "dan" ? "text-[11px] leading-tight" : ""
-        }`}
-      >
-        {hasEstimate
-          ? formatSkillRating({ mode, sunnyStar: value, axis })
-          : "—"}
-      </div>
-      <div className="text-[10px] text-faint">
-        {maps >= requiredPlays
-          ? t(dict?.stats.mapsCount, { count: maps })
-          : maps > 0
-            ? `${maps}/${requiredPlays}`
-            : dict?.stats.zeroMaps ?? "0 maps"}
-      </div>
-    </div>
-  );
-}
-
-function ToggleGroup<T extends string>({
-  value,
-  options,
-  onChange,
-}: {
-  value: T;
-  options: Array<{ id: T; label: string }>;
-  onChange: (v: T) => void;
-}) {
-  return (
-    <div className="flex rounded-md border border-white/10 bg-panel p-0.5">
-      {options.map((opt) => (
-        <button
-          key={opt.id}
-          type="button"
-          onClick={() => onChange(opt.id)}
-          className={`rounded px-2.5 py-1 text-xs font-bold transition ${
-            value === opt.id
-              ? "bg-accent/20 text-accent"
-              : "text-muted hover:text-ink"
-          }`}
-        >
-          {opt.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  to,
-}: {
-  label: string;
-  value: string;
-  to?: { to: "/sessions/$sessionId"; params: { sessionId: string } };
-}) {
-  const body = (
-    <>
-      <div className="rx-label">{label}</div>
-      <div className="mt-2 text-2xl font-bold tabular-nums text-ink">{value}</div>
-    </>
-  );
-  if (to) {
-    return (
-      <Link
-        to={to.to}
-        params={to.params}
-        className="rx-stat block transition hover:bg-elevated/30"
-      >
-        {body}
-      </Link>
-    );
-  }
-  return <div className="rx-stat">{body}</div>;
-}
-
-function ChartCard({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="rx-panel px-4 py-4 sm:px-5">
-      <h3 className="mb-4 text-sm font-bold text-ink">{title}</h3>
-      {children}
-    </div>
-  );
-}
-
-function EmptyChart({ message }: { message: string }) {
-  return (
-    <p className="py-12 text-center text-sm text-faint">{message}</p>
   );
 }

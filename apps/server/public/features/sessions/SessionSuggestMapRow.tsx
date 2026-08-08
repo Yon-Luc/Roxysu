@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { BeatmapCover } from "../../components/BeatmapCover";
-import { BeatmapPreviewButton } from "../../components/BeatmapPreviewModal";
+import { BeatmapPreviewButton } from "../../components/BeatmapPreviewButton";
 import { CopyBeatmapSearchButton } from "../../components/CopyBeatmapSearchButton";
 import { formatAccuracy, formatRelativeTime } from "../../lib/format";
 import { osuClientBeatmapUrl } from "../../lib/osuUrls";

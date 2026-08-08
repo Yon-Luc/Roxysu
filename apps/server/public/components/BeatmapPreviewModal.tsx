@@ -7,10 +7,9 @@ import {
   useState,
   type FormEvent,
 } from "react";
-import { createPortal } from "react-dom";
 import { fetchBeatmapPreview, type BeatmapPreview } from "../lib/api";
 import { AudioClock, sampleAudioClock } from "../lib/audioClock";
-import { formatAccuracy } from "../lib/format";
+import { clamp, formatAccuracy, formatClock } from "../lib/format";
 import {
   localBeatmapAudioUrl,
   localBeatmapCoverUrl,
@@ -37,175 +36,27 @@ import {
   usePreviewSkin,
 } from "../lib/previewSkin";
 import {
-  ManiaNotefield,
-  migratePreviewScroll,
-  PREVIEW_SCROLL_DEFAULT,
   PREVIEW_SCROLL_MAX,
   PREVIEW_SCROLL_MIN,
   type NotefieldJudgment,
 } from "./ManiaNotefield";
 import { StdPlayfield } from "./StdPlayfield";
+import { NotefieldStage } from "./NotefieldStage";
 import {
-  TimingVisualizer,
-  TIMING_VIS_X_DEFAULT,
-  TIMING_VIS_Y_DEFAULT,
-} from "./TimingVisualizer";
+  EMPTY_SUMMARY,
+  FIELD_WIDTH_DEFAULT,
+  FIELD_WIDTH_MAX,
+  FIELD_WIDTH_MIN,
+  loadPrefs,
+  PRESET_RATES,
+  PREFS_KEY,
+  SKIP_MS,
+  type PreviewPrefs,
+} from "./previewPrefs";
 
-const PREFS_KEY = "rx-beatmap-preview";
-const SKIP_MS = 5000;
-const RATES = [0.5, 0.75, 1, 1.25, 1.5] as const;
-/** Fullscreen playfield width as % of the modal (saved). */
-const FIELD_WIDTH_MIN = 40;
-const FIELD_WIDTH_MAX = 100;
-const FIELD_WIDTH_DEFAULT = 55;
+export type ModalMode = "preview" | "play";
 
-type PreviewPrefs = {
-  volume: number;
-  rate: number;
-  scroll: number;
-  fullscreen: boolean;
-  /** Fullscreen playfield max-width (% of dialog). */
-  fieldWidth: number;
-  /** Timing visualizer center X (% of playfield). */
-  timingX: number;
-  /** Timing visualizer center Y (% of playfield). */
-  timingY: number;
-  /** Solid black backdrop while in Play mode. */
-  blackBg: boolean;
-  /** Preserved for ScoreReplayModal; unused here. */
-  analysis?: boolean;
-};
-
-type ModalMode = "preview" | "play";
-
-const DEFAULT_PREFS: PreviewPrefs = {
-  volume: 0.85,
-  rate: 1,
-  scroll: PREVIEW_SCROLL_DEFAULT,
-  fullscreen: false,
-  fieldWidth: FIELD_WIDTH_DEFAULT,
-  timingX: TIMING_VIS_X_DEFAULT,
-  timingY: TIMING_VIS_Y_DEFAULT,
-  blackBg: false,
-};
-
-const EMPTY_SUMMARY: JudgmentSummary = {
-  accuracy: 1,
-  combo: 0,
-  maxCombo: 0,
-  counts: {
-    perfect: 0,
-    great: 0,
-    good: 0,
-    ok: 0,
-    meh: 0,
-    miss: 0,
-  },
-};
-
-function loadPrefs(): PreviewPrefs {
-  try {
-    const raw = localStorage.getItem(PREFS_KEY);
-    if (!raw) return DEFAULT_PREFS;
-    const parsed = JSON.parse(raw) as Partial<PreviewPrefs>;
-    return {
-      volume: clamp(
-        typeof parsed.volume === "number" ? parsed.volume : DEFAULT_PREFS.volume,
-        0,
-        1,
-      ),
-      rate: RATES.includes(parsed.rate as (typeof RATES)[number])
-        ? (parsed.rate as number)
-        : DEFAULT_PREFS.rate,
-      scroll: migratePreviewScroll(
-        typeof parsed.scroll === "number" ? parsed.scroll : DEFAULT_PREFS.scroll,
-      ),
-      fullscreen:
-        typeof parsed.fullscreen === "boolean"
-          ? parsed.fullscreen
-          : DEFAULT_PREFS.fullscreen,
-      fieldWidth: clamp(
-        typeof parsed.fieldWidth === "number"
-          ? parsed.fieldWidth
-          : DEFAULT_PREFS.fieldWidth,
-        FIELD_WIDTH_MIN,
-        FIELD_WIDTH_MAX,
-      ),
-      timingX: clamp(
-        typeof parsed.timingX === "number"
-          ? parsed.timingX
-          : DEFAULT_PREFS.timingX,
-        0,
-        100,
-      ),
-      timingY: clamp(
-        typeof parsed.timingY === "number"
-          ? parsed.timingY
-          : DEFAULT_PREFS.timingY,
-        0,
-        100,
-      ),
-      blackBg:
-        typeof parsed.blackBg === "boolean"
-          ? parsed.blackBg
-          : DEFAULT_PREFS.blackBg,
-      analysis:
-        typeof parsed.analysis === "boolean" ? parsed.analysis : undefined,
-    };
-  } catch {
-    return DEFAULT_PREFS;
-  }
-}
-
-function clamp(n: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, n));
-}
-
-type BeatmapPreviewButtonProps = {
-  beatmapId: string;
-  className?: string;
-  /** Open directly in Play mode (e.g. future miss-practice entry). */
-  initialMode?: ModalMode;
-  practiceRange?: PracticeRange | null;
-};
-
-export function BeatmapPreviewButton({
-  beatmapId,
-  className,
-  initialMode = "preview",
-  practiceRange = null,
-}: BeatmapPreviewButtonProps) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <>
-      <button
-        type="button"
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          setOpen(true);
-        }}
-        className={className ?? "rx-btn"}
-      >
-        Preview
-      </button>
-      {open
-        ? createPortal(
-            <BeatmapPreviewModal
-              beatmapId={beatmapId}
-              onClose={() => setOpen(false)}
-              initialMode={initialMode}
-              practiceRange={practiceRange}
-            />,
-            document.body,
-          )
-        : null}
-    </>
-  );
-}
-
-function BeatmapPreviewModal({
+export function BeatmapPreviewModal({
   beatmapId,
   onClose,
   initialMode = "preview",
@@ -453,9 +304,9 @@ function BeatmapPreviewModal({
 
   function cycleRate(dir: -1 | 1) {
     setPrefs((p) => {
-      const idx = RATES.indexOf(p.rate as (typeof RATES)[number]);
-      const cur = idx >= 0 ? idx : RATES.indexOf(1);
-      const next = RATES[clamp(cur + dir, 0, RATES.length - 1)]!;
+      const idx = PRESET_RATES.indexOf(p.rate as (typeof PRESET_RATES)[number]);
+      const cur = idx >= 0 ? idx : PRESET_RATES.indexOf(1);
+      const next = PRESET_RATES[clamp(cur + dir, 0, PRESET_RATES.length - 1)]!;
       return { ...p, rate: next };
     });
   }
@@ -1114,32 +965,22 @@ function BeatmapPreviewModal({
                 }
               >
                 {isMania ? (
-                  <div className="relative h-full w-full">
-                    <div className="h-full w-full overflow-hidden rounded-xl">
-                      <ManiaNotefield
-                        columnCount={data.columnCount}
-                        notes={fieldNotes}
-                        scrollSpeed={prefs.scroll}
-                        playbackRate={prefs.rate}
-                        liveHeldMask={isPlay ? liveHeldMask : null}
-                        judgments={isPlay ? liveJudgments : undefined}
-                        getCurrentTimeMs={mapTimeMs}
-                      />
-                    </div>
-                    {isPlay ? (
-                      <TimingVisualizer
-                        judgments={liveJudgments}
-                        windows={maniaHitWindows(
-                          data.overallDifficulty ?? 0,
-                        )}
-                        xPct={prefs.timingX}
-                        yPct={prefs.timingY}
-                        onMove={(timingX, timingY) =>
-                          setPrefs((p) => ({ ...p, timingX, timingY }))
-                        }
-                      />
-                    ) : null}
-                  </div>
+                  <NotefieldStage
+                    columnCount={data.columnCount}
+                    notes={fieldNotes}
+                    scrollSpeed={prefs.scroll}
+                    playbackRate={prefs.rate}
+                    liveHeldMask={isPlay ? liveHeldMask : null}
+                    getCurrentTimeMs={mapTimeMs}
+                    timingX={prefs.timingX}
+                    timingY={prefs.timingY}
+                    onMoveTiming={(timingX, timingY) =>
+                      setPrefs((p) => ({ ...p, timingX, timingY }))
+                    }
+                    windows={maniaHitWindows(data.overallDifficulty ?? 0)}
+                    showTiming={isPlay}
+                    judgments={isPlay ? liveJudgments : undefined}
+                  />
                 ) : isStd ? (
                   <div className="relative h-full w-full">
                     <div className="h-full w-full overflow-hidden rounded-xl">
@@ -1310,7 +1151,7 @@ function BeatmapPreviewModal({
                       }
                       aria-label="Playback rate"
                     >
-                      {RATES.map((r) => (
+                      {PRESET_RATES.map((r) => (
                         <option key={r} value={r}>
                           {r}×
                         </option>
@@ -1453,11 +1294,4 @@ function BeatmapPreviewModal({
       </div>
     </div>
   );
-}
-
-function formatClock(ms: number): string {
-  const totalSec = Math.max(0, Math.floor(ms / 1000));
-  const m = Math.floor(totalSec / 60);
-  const s = totalSec % 60;
-  return `${m}:${s.toString().padStart(2, "0")}`;
 }

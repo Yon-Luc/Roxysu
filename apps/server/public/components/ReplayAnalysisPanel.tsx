@@ -10,7 +10,7 @@ import {
   type PatternTag,
   type TimingStats,
 } from "../lib/replayPatterns";
-import { formatAccuracy } from "../lib/format";
+import { formatAccuracy, formatClockFrac } from "../lib/format";
 import { JUDGMENT_COLORS } from "./ManiaNotefield";
 
 export type ReplayAnalysis = ReturnType<typeof buildReplayAnalysis>;
@@ -208,7 +208,7 @@ export function ReplayAnalysisPanel({
                   >
                     <div className="flex items-center justify-between gap-2 text-xs">
                       <span className="font-medium tabular-nums text-ink">
-                        {formatClock(m.tMs)}
+                        {formatClockFrac(m.tMs)}
                       </span>
                       <span className="tabular-nums text-muted">
                         col {m.column + 1}
@@ -280,14 +280,6 @@ function TimingHistogram({ timing }: { timing: TimingStats }) {
   );
 }
 
-function formatClock(ms: number): string {
-  const totalSec = Math.max(0, Math.floor(ms / 1000));
-  const m = Math.floor(totalSec / 60);
-  const s = totalSec % 60;
-  const frac = Math.floor((ms % 1000) / 100);
-  return `${m}:${s.toString().padStart(2, "0")}.${frac}`;
-}
-
 export function MissSeekMarkers({
   misses,
   maxDuration,
@@ -308,8 +300,8 @@ export function MissSeekMarkers({
             type="button"
             className="pointer-events-auto absolute top-0 h-full w-1 -translate-x-1/2 rounded-full bg-rose-400/90 hover:bg-rose-300"
             style={{ left: `${pct}%` }}
-            title={`Miss ${formatClock(m.tMs)} col ${m.column + 1}`}
-            aria-label={`Jump to miss at ${formatClock(m.tMs)}`}
+            title={`Miss ${formatClockFrac(m.tMs)} col ${m.column + 1}`}
+            aria-label={`Jump to miss at ${formatClockFrac(m.tMs)}`}
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();

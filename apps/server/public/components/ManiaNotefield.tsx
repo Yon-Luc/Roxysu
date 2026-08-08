@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { BeatmapPreview } from "../lib/api";
+import { clamp } from "../lib/format";
 import {
   HIT_POSITION_MAX,
   HIT_POSITION_MIN,
@@ -488,10 +489,6 @@ function clampScrollSpeed(speed: number): number {
     PREVIEW_SCROLL_MAX,
     Math.max(PREVIEW_SCROLL_MIN, speed),
   );
-}
-
-function clamp(n: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, n));
 }
 
 /** Convert legacy px/ms prefs (≤2) to an approximate osu scroll speed. */

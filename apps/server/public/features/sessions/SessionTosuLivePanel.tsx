@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import { BeatmapPreviewButton } from "../../components/BeatmapPreviewModal";
+import { BeatmapPreviewButton } from "../../components/BeatmapPreviewButton";
 import { ModBadges } from "../../components/ModBadges";
 import { fetchTosuLive, startTosu, type TosuLive } from "../../lib/api";
 import { formatAccuracy } from "../../lib/format";

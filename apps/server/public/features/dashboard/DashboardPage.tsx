@@ -1,6 +1,5 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import type { ReactNode } from "react";
 import {
   Bar,
   BarChart,
@@ -21,6 +20,9 @@ import {
 } from "../../components/LoadingSkeleton";
 import { ModBadges } from "../../components/ModBadges";
 import { PageTitle } from "../../components/PageTitle";
+import { ChartCard } from "../../components/ChartCard";
+import { EmptyChart } from "../../components/EmptyChart";
+import { Stat } from "../../components/Stat";
 import { fetchDashboard } from "../../lib/api";
 import { useAppDict } from "../../lib/i18n";
 import {
@@ -317,32 +319,3 @@ export function DashboardPage() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rx-stat">
-      <div className="rx-label">{label}</div>
-      <div className="mt-2 text-2xl font-bold tabular-nums text-ink">{value}</div>
-    </div>
-  );
-}
-
-function ChartCard({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="rx-panel px-4 py-4 sm:px-5">
-      <h3 className="mb-4 text-sm font-bold text-ink">{title}</h3>
-      {children}
-    </div>
-  );
-}
-
-function EmptyChart({ message }: { message: string }) {
-  return (
-    <p className="py-12 text-center text-sm text-faint">{message}</p>
-  );
-}

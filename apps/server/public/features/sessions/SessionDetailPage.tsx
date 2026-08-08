@@ -11,8 +11,8 @@ import {
 } from "../../components/LoadingSkeleton";
 import { ModBadges } from "../../components/ModBadges";
 import { PageTitle } from "../../components/PageTitle";
-import { BeatmapPreviewButton } from "../../components/BeatmapPreviewModal";
-import { ScoreReplayButton } from "../../components/ScoreReplayModal";
+import { BeatmapPreviewButton } from "../../components/BeatmapPreviewButton";
+import { ScoreReplayButton } from "../../components/ScoreReplayButton";
 import { fetchSession } from "../../lib/api";
 import {
   formatAccuracy,

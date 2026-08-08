@@ -8,10 +8,9 @@ import {
   useState,
   type FormEvent,
 } from "react";
-import { createPortal } from "react-dom";
 import { fetchScoreReplay, type ScoreReplay } from "../lib/api";
 import { AudioClock, sampleAudioClock } from "../lib/audioClock";
-import { formatAccuracy } from "../lib/format";
+import { clamp, formatAccuracy, formatClock } from "../lib/format";
 import { ModBadges } from "./ModBadges";
 import {
   codeToColumn,
@@ -28,33 +27,30 @@ import {
 } from "../lib/osuUrls";
 import {
   JUDGMENT_COLORS,
-  ManiaNotefield,
-  migratePreviewScroll,
-  PREVIEW_SCROLL_DEFAULT,
   PREVIEW_SCROLL_MAX,
   PREVIEW_SCROLL_MIN,
   type NotefieldJudgment,
   type ReplayJudgmentResult,
 } from "./ManiaNotefield";
 import { StdPlayfield } from "./StdPlayfield";
+import { NotefieldStage } from "./NotefieldStage";
 import {
   buildReplayAnalysis,
   MissSeekMarkers,
   ReplayAnalysisPanel,
 } from "./ReplayAnalysisPanel";
 import {
-  TimingVisualizer,
-  TIMING_VIS_X_DEFAULT,
-  TIMING_VIS_Y_DEFAULT,
-} from "./TimingVisualizer";
-
-const PREFS_KEY = "rx-beatmap-preview";
-const SKIP_MS = 5000;
-const PRESET_RATES = [0.5, 0.75, 1, 1.25, 1.5] as const;
-/** Fullscreen playfield width as % of the modal (saved). */
-const FIELD_WIDTH_MIN = 40;
-const FIELD_WIDTH_MAX = 100;
-const FIELD_WIDTH_DEFAULT = 55;
+  clampRate,
+  EMPTY_SUMMARY,
+  FIELD_WIDTH_DEFAULT,
+  FIELD_WIDTH_MAX,
+  FIELD_WIDTH_MIN,
+  loadPrefs,
+  PRESET_RATES,
+  PREFS_KEY,
+  SKIP_MS,
+  type PreviewPrefs,
+} from "./previewPrefs";
 
 /** Mania accuracy contribution — Perfect is 305 (matches lazer/stable display). */
 const RESULT_WEIGHT: Record<ReplayJudgmentResult, number> = {
@@ -66,49 +62,6 @@ const RESULT_WEIGHT: Record<ReplayJudgmentResult, number> = {
   miss: 0,
 };
 const ACC_SCALE = 305;
-
-type PreviewPrefs = {
-  volume: number;
-  rate: number;
-  scroll: number;
-  fullscreen: boolean;
-  /** Fullscreen playfield max-width (% of dialog). */
-  fieldWidth: number;
-  /** Timing visualizer center X (% of playfield). */
-  timingX: number;
-  /** Timing visualizer center Y (% of playfield). */
-  timingY: number;
-  /** Solid black backdrop while in Play mode (preview modal). */
-  blackBg: boolean;
-  /** Opt-in miss/timing/pattern tools. Default off. */
-  analysis: boolean;
-};
-
-const DEFAULT_PREFS: PreviewPrefs = {
-  volume: 0.85,
-  rate: 1,
-  scroll: PREVIEW_SCROLL_DEFAULT,
-  fullscreen: false,
-  fieldWidth: FIELD_WIDTH_DEFAULT,
-  timingX: TIMING_VIS_X_DEFAULT,
-  timingY: TIMING_VIS_Y_DEFAULT,
-  blackBg: false,
-  analysis: false,
-};
-
-const EMPTY_SUMMARY: JudgmentSummary = {
-  accuracy: 1,
-  combo: 0,
-  maxCombo: 0,
-  counts: {
-    perfect: 0,
-    great: 0,
-    good: 0,
-    ok: 0,
-    meh: 0,
-    miss: 0,
-  },
-};
 
 type ModalMode = "rewatch" | "play";
 type LoadedScoreReplay = ScoreReplay & {
@@ -136,75 +89,6 @@ function isLoadedScoreReplay(
   );
 }
 
-function loadPrefs(): PreviewPrefs {
-  try {
-    const raw = localStorage.getItem(PREFS_KEY);
-    if (!raw) return DEFAULT_PREFS;
-    const parsed = JSON.parse(raw) as Partial<PreviewPrefs>;
-    return {
-      volume: clamp(
-        typeof parsed.volume === "number"
-          ? parsed.volume
-          : DEFAULT_PREFS.volume,
-        0,
-        1,
-      ),
-      rate:
-        typeof parsed.rate === "number" && parsed.rate > 0
-          ? clampRate(parsed.rate)
-          : DEFAULT_PREFS.rate,
-      scroll: migratePreviewScroll(
-        typeof parsed.scroll === "number"
-          ? parsed.scroll
-          : DEFAULT_PREFS.scroll,
-      ),
-      fullscreen:
-        typeof parsed.fullscreen === "boolean"
-          ? parsed.fullscreen
-          : DEFAULT_PREFS.fullscreen,
-      fieldWidth: clamp(
-        typeof parsed.fieldWidth === "number"
-          ? parsed.fieldWidth
-          : DEFAULT_PREFS.fieldWidth,
-        FIELD_WIDTH_MIN,
-        FIELD_WIDTH_MAX,
-      ),
-      timingX: clamp(
-        typeof parsed.timingX === "number"
-          ? parsed.timingX
-          : DEFAULT_PREFS.timingX,
-        0,
-        100,
-      ),
-      timingY: clamp(
-        typeof parsed.timingY === "number"
-          ? parsed.timingY
-          : DEFAULT_PREFS.timingY,
-        0,
-        100,
-      ),
-      blackBg:
-        typeof parsed.blackBg === "boolean"
-          ? parsed.blackBg
-          : DEFAULT_PREFS.blackBg,
-      analysis:
-        typeof parsed.analysis === "boolean"
-          ? parsed.analysis
-          : DEFAULT_PREFS.analysis,
-    };
-  } catch {
-    return DEFAULT_PREFS;
-  }
-}
-
-function clamp(n: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, n));
-}
-
-function clampRate(rate: number): number {
-  return clamp(rate, 0.5, 2);
-}
-
 function playbackRateOptions(current: number): number[] {
   const options: number[] = [...PRESET_RATES];
   if (!options.some((r) => Math.abs(r - current) < 0.001) && current > 0) {
@@ -217,49 +101,6 @@ function playbackRateOptions(current: number): number[] {
 function formatRateLabel(rate: number): string {
   const label = rate.toFixed(2).replace(/\.?0+$/, "");
   return `${label}×`;
-}
-
-type ScoreReplayButtonProps = {
-  scoreId: string;
-  /** When false, button is hidden. */
-  enabled?: boolean;
-  className?: string;
-  label?: string;
-};
-
-export function ScoreReplayButton({
-  scoreId,
-  enabled = true,
-  className,
-  label = "Rewatch",
-}: ScoreReplayButtonProps) {
-  const [open, setOpen] = useState(false);
-  if (!enabled) return null;
-
-  return (
-    <>
-      <button
-        type="button"
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          setOpen(true);
-        }}
-        className={className ?? "rx-btn"}
-      >
-        {label}
-      </button>
-      {open
-        ? createPortal(
-            <ScoreReplayModal
-              scoreId={scoreId}
-              onClose={() => setOpen(false)}
-            />,
-            document.body,
-          )
-        : null}
-    </>
-  );
 }
 
 /**
@@ -302,7 +143,7 @@ function useAspectFit(ratio: number) {
   return { outerRef, size };
 }
 
-function ScoreReplayModal({
+export function ScoreReplayModal({
   scoreId,
   onClose,
 }: {
@@ -1236,36 +1077,28 @@ function ScoreReplayModal({
                   ) : null}
 
                   {isManiaReplay ? (
-                    <div className="relative h-full w-full">
-                      <div className="h-full w-full overflow-hidden rounded-xl">
-                        <ManiaNotefield
-                          columnCount={replayData.beatmap.columnCount}
-                          notes={replayData.beatmap.notes}
-                          frames={isPlay ? undefined : replayData.frames}
-                          judgments={
-                            isPlay ? liveJudgments : replayData.judgments
-                          }
-                          highlightMissNotes={showAnalysis}
-                          scrollSpeed={prefs.scroll}
-                          playbackRate={prefs.rate}
-                          liveHeldMask={isPlay ? liveHeldMask : null}
-                          getCurrentTimeMs={mapTimeMs}
-                        />
-                      </div>
-                      {isPlay ? (
-                        <TimingVisualizer
-                          judgments={liveJudgments}
-                          windows={maniaHitWindows(
-                            replayData.beatmap.overallDifficulty ?? 0,
-                          )}
-                          xPct={prefs.timingX}
-                          yPct={prefs.timingY}
-                          onMove={(timingX, timingY) =>
-                            setPrefs((p) => ({ ...p, timingX, timingY }))
-                          }
-                        />
-                      ) : null}
-                    </div>
+                    <NotefieldStage
+                      columnCount={replayData.beatmap.columnCount}
+                      notes={replayData.beatmap.notes}
+                      scrollSpeed={prefs.scroll}
+                      playbackRate={prefs.rate}
+                      liveHeldMask={isPlay ? liveHeldMask : null}
+                      getCurrentTimeMs={mapTimeMs}
+                      timingX={prefs.timingX}
+                      timingY={prefs.timingY}
+                      onMoveTiming={(timingX, timingY) =>
+                        setPrefs((p) => ({ ...p, timingX, timingY }))
+                      }
+                      windows={maniaHitWindows(
+                        replayData.beatmap.overallDifficulty ?? 0,
+                      )}
+                      showTiming={isPlay}
+                      judgments={
+                        isPlay ? liveJudgments : replayData.judgments
+                      }
+                      frames={isPlay ? undefined : replayData.frames}
+                      highlightMissNotes={showAnalysis}
+                    />
                   ) : isStdReplay ? (
                     <div className="relative h-full w-full">
                       <div className="h-full w-full overflow-hidden rounded-xl">
@@ -1580,11 +1413,4 @@ function ReplayStatsBar({ data }: { data: LoadedScoreReplay }) {
       </span>
     </div>
   );
-}
-
-function formatClock(ms: number): string {
-  const totalSec = Math.max(0, Math.floor(ms / 1000));
-  const m = Math.floor(totalSec / 60);
-  const s = totalSec % 60;
-  return `${m}:${s.toString().padStart(2, "0")}`;
 }

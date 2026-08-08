@@ -219,7 +219,7 @@ describe("search url builders", () => {
         page: 2,
       }),
     ).toBe(
-      "https://mirror.hinamizawa.ai/api/v1/hinai/search?query=freedom&mode=3&status=4&amount=50&offset=100",
+      "https://mirror.hinamizawa.ai/api/v1/hinai/search?query=freedom&mode=3&status=4&amount=100&offset=200",
     );
   });
 

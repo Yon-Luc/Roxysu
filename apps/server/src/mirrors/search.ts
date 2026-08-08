@@ -180,7 +180,7 @@ const HINAI_STATUS_CODE: Partial<
 };
 
 /** Page size requested from mirrors; keep in sync with MIRROR_PAGE_CAPACITY in searchOnline.ts. */
-const HINAI_PAGE_SIZE = 50;
+const HINAI_PAGE_SIZE = 100;
 
 function setOptionalNumberParam(
   url: URL,

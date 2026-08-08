@@ -34,7 +34,7 @@ export type MirrorSearchResult = {
 
 const MIRROR_FETCH_TIMEOUT_MS = 20_000;
 /** Nerinyan / osu.direct / hinai typically return up to this many sets per page. */
-export const MIRROR_PAGE_CAPACITY = 50;
+export const MIRROR_PAGE_CAPACITY = 100;
 /** Max raw mirror pages to scan while filling one UI page under post-filters. */
 const MAX_OVERFETCH_PAGES = 20;
 

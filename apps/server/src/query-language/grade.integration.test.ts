@@ -22,7 +22,7 @@ function insertScore(
   rank: number,
 ) {
   db.$client
-    .prepare(
+    .query(
       `INSERT INTO scores (
         id, online_id, legacy_online_id, beatmap_id, ruleset_short_name,
         total_score, total_score_without_mods, accuracy, rank, mods,

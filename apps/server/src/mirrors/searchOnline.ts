@@ -11,6 +11,7 @@ import { getActiveBeatmapMirrorProvider } from "./providers";
 import {
   buildMirrorSearchUrl,
   extractSearchBeatmapsets,
+  extractTotalCount,
   normalizeMirrorSearchResult,
   type MirrorSearchParams,
   type OnlineBeatmapSet,
@@ -52,7 +53,7 @@ export type { OnlineMirrorQuery, OnlinePostFilter };
 async function fetchMirrorPage(
   providerId: "nerinyan" | "osu.direct" | "hinai",
   params: MirrorSearchParams,
-): Promise<{ rawCount: number; sets: OnlineBeatmapSet[] }> {
+): Promise<{ rawCount: number; sets: OnlineBeatmapSet[]; totalCount: number | null }> {
   const url = buildMirrorSearchUrl(providerId, params);
   const res = await fetch(url, {
     headers: {
@@ -68,12 +69,13 @@ async function fetchMirrorPage(
 
   const payload: unknown = await res.json();
   const rawSets = extractSearchBeatmapsets(payload);
+  const totalCount = extractTotalCount(payload);
   const sets: OnlineBeatmapSet[] = [];
   for (const raw of rawSets) {
     const set = normalizeMirrorSearchResult(providerId, raw);
     if (set) sets.push(set);
   }
-  return { rawCount: rawSets.length, sets };
+  return { rawCount: rawSets.length, sets, totalCount };
 }
 
 /**
@@ -86,10 +88,10 @@ async function fetchMirrorPagesBatch(
   baseParams: MirrorSearchParams,
   startPage: number,
   count: number,
-): Promise<Array<{ rawCount: number; sets: OnlineBeatmapSet[] }>> {
+): Promise<Array<{ rawCount: number; sets: OnlineBeatmapSet[]; totalCount: number | null }>> {
   const fetches = Array.from({ length: count }, (_, i) =>
     fetchMirrorPage(providerId, { ...baseParams, page: startPage + i }).catch(
-      () => ({ rawCount: 0, sets: [] as OnlineBeatmapSet[] }),
+      () => ({ rawCount: 0, sets: [] as OnlineBeatmapSet[], totalCount: null }),
     ),
   );
   return Promise.all(fetches);
@@ -426,8 +428,8 @@ export async function collectMatchingOnlineBeatmapsets(
   };
 }
 
-const COUNT_MAX_PAGES = 200;
-const COUNT_MAX_SETS = 10_000;
+const COUNT_MAX_PAGES = 1000;
+const COUNT_MAX_SETS = 100_000;
 
 /** Count matching missing sets for a QL query (no downloads). */
 export async function countMatchingOnlineBeatmapsets(
@@ -458,9 +460,39 @@ export async function countMatchingOnlineBeatmapsets(
     COUNT_MAX_SETS,
     Math.max(1, opts.maxSets ?? COUNT_MAX_SETS),
   );
+
+  // Fast path: hinai v2 returns total_count on the first page for locally-served
+  // queries (ranked/loved, no post-filters). When available, skip the full crawl.
+  // We can only use this when excludeOwned is false — we can't subtract owned
+  // maps without knowing which specific sets appear in the results.
+  const hasPostFilters = onlineQuery.postFilters.length > 0;
+  const excludeOwned = opts.excludeOwned !== false;
+  const provider = getActiveBeatmapMirrorProvider();
+
+  if (!hasPostFilters && !excludeOwned && provider.id === "hinai") {
+    try {
+      const firstPage = await fetchMirrorPage(provider.id, {
+        ...onlineQuery.mirrorParams,
+        page: 0,
+      });
+      if (firstPage.totalCount !== null) {
+        return {
+          query: onlineQuery.rawQuery,
+          matched: firstPage.totalCount,
+          ownedSkipped: 0,
+          pagesScanned: 1,
+          hitCap: false,
+          cappedAt: { maxPages, maxSets },
+        };
+      }
+    } catch {
+      // Fall through to crawl if the fast-path fetch fails.
+    }
+  }
+
   const result = await collectMatchingOnlineBeatmapsets(db, {
     onlineQuery,
-    excludeOwned: opts.excludeOwned !== false,
+    excludeOwned,
     maxPages,
     maxSets,
     countOnly: true,

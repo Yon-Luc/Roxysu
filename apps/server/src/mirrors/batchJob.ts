@@ -111,8 +111,8 @@ const DOWNLOAD_TIMEOUT_MS = 120_000;
 const DELAY_BETWEEN_MS = 1_200;
 const MAX_PAGE_COUNT = 10;
 const MAX_RECENT_ERRORS = 8;
-const MAX_QUERY_PAGES = 200;
-const MAX_QUERY_SETS = 10_000;
+const MAX_QUERY_PAGES = 1000;
+const MAX_QUERY_SETS = 100_000;
 const MAX_IDS = 2000;
 
 type JobInternal = {

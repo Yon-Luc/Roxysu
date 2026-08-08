@@ -135,6 +135,18 @@ export function extractSearchBeatmapsets(payload: unknown): unknown[] {
   return [];
 }
 
+/**
+ * Extract the total catalogue count from a hinai v2 response.
+ * The v2 endpoint (`/v3/osu/beatmaps/search/v2`) wraps results in an object
+ * that includes `total_count` for locally-served queries (ranked/loved).
+ * Returns null for v1 flat arrays or any response that doesn't carry the field.
+ */
+export function extractTotalCount(payload: unknown): number | null {
+  const row = asRecord(payload);
+  if (!row) return null;
+  return asNumber(row.total_count);
+}
+
 export function buildNerinyanSearchUrl(params: MirrorSearchParams): string {
   const url = new URL("https://api.nerinyan.moe/search");
   const q = params.q?.trim();

@@ -49,6 +49,7 @@ export type MirrorBatchJobState = {
   pageCount: number;
   noVideo: boolean;
   excludeOwned: boolean;
+  downloadConcurrency: number;
   queued: number;
   downloaded: number;
   skippedExisting: number;
@@ -73,6 +74,8 @@ export type MirrorBatchJobState = {
 type BatchDownloadOpts = {
   noVideo?: boolean;
   excludeOwned?: boolean;
+  /** Number of maps to download in parallel (1–DOWNLOAD_CONCURRENCY_MAX). Default: DOWNLOAD_CONCURRENCY_DEFAULT. */
+  downloadConcurrency?: number;
 };
 
 export type MirrorBatchPagesRequest = BatchDownloadOpts & {
@@ -101,11 +104,16 @@ export type MirrorBatchStartRequest =
   | MirrorBatchQueryRequest;
 
 const DOWNLOAD_TIMEOUT_MS = 120_000;
-const DELAY_BETWEEN_MS = 1_200;
+/** Minimum pause between finishing one download slot and starting the next. */
+const DELAY_BETWEEN_MS = 200;
 const MAX_PAGE_COUNT = 10;
 const MAX_RECENT_ERRORS = 8;
 const MAX_QUERY_PAGES = 1000;
 const MAX_QUERY_SETS = 100_000;
+/** Default number of simultaneous downloads. */
+export const DOWNLOAD_CONCURRENCY_DEFAULT = 3;
+/** Upper cap the user can raise to via the UI. */
+export const DOWNLOAD_CONCURRENCY_MAX = 10;
 
 type JobInternal = {
   status: MirrorBatchJobStatus;
@@ -117,6 +125,7 @@ type JobInternal = {
   pageCount: number;
   noVideo: boolean;
   excludeOwned: boolean;
+  downloadConcurrency: number;
   queued: number;
   downloaded: number;
   skippedExisting: number;
@@ -157,6 +166,7 @@ let job: JobInternal = {
   pageCount: 0,
   noVideo: true,
   excludeOwned: true,
+  downloadConcurrency: DOWNLOAD_CONCURRENCY_DEFAULT,
   queued: 0,
   downloaded: 0,
   skippedExisting: 0,
@@ -217,6 +227,7 @@ export function getMirrorBatchJobState(): MirrorBatchJobState {
     pageCount: job.pageCount,
     noVideo: job.noVideo,
     excludeOwned: job.excludeOwned,
+    downloadConcurrency: job.downloadConcurrency,
     queued: job.queued,
     downloaded: job.downloaded,
     skippedExisting: job.skippedExisting,
@@ -258,6 +269,10 @@ function resetJob(
     pageCount: partial.pageCount ?? 0,
     noVideo: partial.noVideo !== false,
     excludeOwned: partial.excludeOwned !== false,
+    downloadConcurrency: Math.min(
+      DOWNLOAD_CONCURRENCY_MAX,
+      Math.max(1, Math.floor(partial.downloadConcurrency ?? DOWNLOAD_CONCURRENCY_DEFAULT)),
+    ),
     queued: 0,
     downloaded: 0,
     skippedExisting: 0,
@@ -403,6 +418,7 @@ async function downloadQueue(
     OnlineBeatmapSet | { id: number; artist?: string; title?: string }
   >,
   noVideo: boolean,
+  concurrency: number,
 ): Promise<void> {
   const downloadDir = ensureBeatmapsDownloadDir();
   job.downloadDir = downloadDir;
@@ -412,33 +428,45 @@ async function downloadQueue(
   job.savedPaths = [];
   const downloadedIds: number[] = [];
 
-  for (const set of sets) {
-    if (job.stopRequested) break;
-    job.currentSetId = set.id;
-    job.currentTitle =
-      "artist" in set && set.artist && set.title
-        ? `${set.artist} - ${set.title}`
-        : `#${set.id}`;
-    try {
-      const { result, path: destPath } = await downloadSetToDisk(
-        set,
-        downloadDir,
-        noVideo,
-      );
-      if (result === "exists") job.skippedExisting += 1;
-      else job.downloaded += 1;
-      job.savedPaths.push(destPath);
-      downloadedIds.push(set.id);
-    } catch (err) {
-      job.failed += 1;
-      const message = err instanceof Error ? err.message : String(err);
-      job.recentErrors = [
-        { setId: set.id, error: message },
-        ...job.recentErrors,
-      ].slice(0, MAX_RECENT_ERRORS);
+  let index = 0;
+
+  async function runSlot(): Promise<void> {
+    while (index < sets.length) {
+      if (job.stopRequested) break;
+      const set = sets[index++];
+      job.currentSetId = set.id;
+      job.currentTitle =
+        "artist" in set && set.artist && set.title
+          ? `${set.artist} - ${set.title}`
+          : `#${set.id}`;
+      try {
+        const { result, path: destPath } = await downloadSetToDisk(
+          set,
+          downloadDir,
+          noVideo,
+        );
+        if (result === "exists") job.skippedExisting += 1;
+        else job.downloaded += 1;
+        job.savedPaths.push(destPath);
+        downloadedIds.push(set.id);
+      } catch (err) {
+        job.failed += 1;
+        const message = err instanceof Error ? err.message : String(err);
+        job.recentErrors = [
+          { setId: set.id, error: message },
+          ...job.recentErrors,
+        ].slice(0, MAX_RECENT_ERRORS);
+      }
+      // Small courtesy pause between downloads per slot — much shorter than
+      // before since multiple slots now run in parallel.
+      await sleep(DELAY_BETWEEN_MS);
     }
-    await sleep(DELAY_BETWEEN_MS);
   }
+
+  // Launch `concurrency` slots that each pull from the shared queue.
+  await Promise.all(
+    Array.from({ length: concurrency }, () => runSlot()),
+  );
 
   if (downloadedIds.length > 0) {
     recordPendingDownloads(downloadedIds, downloadDir);
@@ -497,7 +525,7 @@ async function runBatch(
       sets = collected.sets;
     }
 
-    await downloadQueue(sets, job.noVideo);
+    await downloadQueue(sets, job.noVideo, job.downloadConcurrency);
 
     job.currentSetId = null;
     job.currentTitle = null;
@@ -532,6 +560,7 @@ export function startMirrorBatchJob(
       query: request.query.trim(),
       noVideo: request.noVideo !== false,
       excludeOwned: request.excludeOwned !== false,
+      downloadConcurrency: request.downloadConcurrency,
     });
     void runBatch(db, {
       mode: "query",
@@ -563,6 +592,7 @@ export function startMirrorBatchJob(
     pageCount,
     noVideo: pagesReq.noVideo !== false,
     excludeOwned: pagesReq.excludeOwned !== false,
+    downloadConcurrency: pagesReq.downloadConcurrency,
   });
 
   void runBatch(db, {

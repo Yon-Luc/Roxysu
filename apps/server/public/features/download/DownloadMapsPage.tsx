@@ -47,6 +47,7 @@ type StoredSearch = {
   page: number;
   noVideo: boolean;
   pageCount: number;
+  downloadConcurrency: number;
 };
 
 const SORT_OPTIONS: { value: Sort; label: string }[] = [
@@ -72,6 +73,7 @@ function readStored(): StoredSearch {
     page: 0,
     noVideo: true,
     pageCount: 3,
+    downloadConcurrency: 3,
   };
   try {
     const raw = localStorage.getItem(SEARCH_KEY);
@@ -84,6 +86,12 @@ function readStored(): StoredSearch {
       )
         ? parsed.pageCount
         : defaults.pageCount;
+    const downloadConcurrency =
+      typeof parsed.downloadConcurrency === "number" &&
+      parsed.downloadConcurrency >= 1 &&
+      parsed.downloadConcurrency <= 10
+        ? Math.floor(parsed.downloadConcurrency)
+        : defaults.downloadConcurrency;
     return {
       q: typeof parsed.q === "string" ? parsed.q : defaults.q,
       sort: isSort(parsed.sort) ? parsed.sort : defaults.sort,
@@ -98,6 +106,7 @@ function readStored(): StoredSearch {
       noVideo:
         typeof parsed.noVideo === "boolean" ? parsed.noVideo : defaults.noVideo,
       pageCount,
+      downloadConcurrency,
     };
   } catch {
     return defaults;
@@ -152,6 +161,7 @@ export function DownloadMapsPage() {
   const [sort, setSort] = useState<Sort>(initial.sort);
   const [excludeOwned, setExcludeOwned] = useState(initial.excludeOwned);
   const [noVideo, setNoVideo] = useState(initial.noVideo);
+  const [downloadConcurrency, setDownloadConcurrency] = useState(initial.downloadConcurrency);
   const [page, setPage] = useState(initial.page);
   const [pageCount, setPageCount] = useState(initial.pageCount);
   const [batchError, setBatchError] = useState<string | null>(null);
@@ -180,7 +190,7 @@ export function DownloadMapsPage() {
     page: number;
   }) {
     setSubmitted(next);
-    persist({ ...next, noVideo, pageCount });
+    persist({ ...next, noVideo, pageCount, downloadConcurrency });
   }
 
   const query = useQuery({
@@ -209,6 +219,7 @@ export function DownloadMapsPage() {
         pageCount,
         noVideo,
         excludeOwned: submitted.excludeOwned,
+        downloadConcurrency,
       }),
     onSuccess: (data) => {
       setBatchError(null);
@@ -227,6 +238,7 @@ export function DownloadMapsPage() {
         sort: submitted.sort,
         noVideo,
         excludeOwned: true,
+        downloadConcurrency,
       }),
     onSuccess: (data) => {
       setBatchError(null);
@@ -522,6 +534,7 @@ export function DownloadMapsPage() {
                   page,
                   noVideo,
                   pageCount,
+                  downloadConcurrency,
                 });
               }}
             />
@@ -541,10 +554,28 @@ export function DownloadMapsPage() {
                   page,
                   noVideo: next,
                   pageCount,
+                  downloadConcurrency,
                 });
               }}
             />
             Download without video
+          </label>
+          <label className="inline-flex items-center gap-2">
+            <span className="text-muted">Parallel downloads:</span>
+            <input
+              type="number"
+              min={1}
+              max={10}
+              value={downloadConcurrency}
+              onChange={(e) => {
+                const next = Math.min(10, Math.max(1, Math.floor(Number(e.target.value))));
+                setDownloadConcurrency(next);
+                persist({ q, sort, excludeOwned, page, noVideo, pageCount, downloadConcurrency: next });
+              }}
+              className="w-12 rounded border border-subtle bg-surface px-1 py-0.5 text-center text-sm"
+              aria-label="Number of maps to download in parallel (1–10)"
+            />
+            <span className="text-muted text-xs">(1–10)</span>
           </label>
         </div>
       </form>
@@ -597,6 +628,7 @@ export function DownloadMapsPage() {
                     page,
                     noVideo,
                     pageCount: next,
+                    downloadConcurrency,
                   });
                 }}
                 aria-label="Number of pages to batch download"

@@ -389,6 +389,7 @@ export async function startMirrorBatchJob(body: {
   maxSets?: number;
   noVideo?: boolean;
   excludeOwned?: boolean;
+  downloadConcurrency?: number;
 }) {
   return unwrap(
     await api.api.mirrors.batch.start.post(body),

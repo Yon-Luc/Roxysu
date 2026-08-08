@@ -129,6 +129,7 @@ export const mirrorRoutes = new Elysia({ prefix: "/mirrors" })
             excludeOwned: body.excludeOwned !== false,
             maxPages: body.maxPages,
             maxSets: body.maxSets,
+            downloadConcurrency: body.downloadConcurrency,
           });
         }
         return startMirrorBatchJob(db, {
@@ -142,6 +143,7 @@ export const mirrorRoutes = new Elysia({ prefix: "/mirrors" })
           pageCount: body.pageCount ?? 3,
           noVideo: body.noVideo !== false,
           excludeOwned: body.excludeOwned !== false,
+          downloadConcurrency: body.downloadConcurrency,
         });
       } catch (err) {
         set.status = httpStatusForMirrorError(err);
@@ -166,6 +168,7 @@ export const mirrorRoutes = new Elysia({ prefix: "/mirrors" })
         maxSets: t.Optional(t.Number()),
         noVideo: t.Optional(t.Boolean()),
         excludeOwned: t.Optional(t.Boolean()),
+        downloadConcurrency: t.Optional(t.Number()),
       }),
     },
   )

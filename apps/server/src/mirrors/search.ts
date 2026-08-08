@@ -268,6 +268,14 @@ export function buildHinaiSearchUrl(params: MirrorSearchParams): string {
   return url.toString();
 }
 
+/**
+ * hinai URL for count probes. Always uses v2 so ranked/loved responses include
+ * `total_count` / `total_pages` (v1 returns a flat CheeseGull array).
+ */
+export function buildHinaiCountSearchUrl(params: MirrorSearchParams): string {
+  return buildHinaiV2SearchUrl({ ...params, page: 0 });
+}
+
 export function buildMirrorSearchUrl(
   providerId: "nerinyan" | "osu.direct" | "hinai",
   params: MirrorSearchParams,

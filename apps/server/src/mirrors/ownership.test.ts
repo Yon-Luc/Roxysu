@@ -1,12 +1,19 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createDb, closeDb } from "@roxysu/db/client.bun";
 import { migrate } from "drizzle-orm/bun-sqlite/migrator";
-import { beatmapSets } from "@roxysu/db/schema";
+import { beatmapSets, beatmaps } from "@roxysu/db/schema";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { diffAgainstLibrary, diffBeatmapsetIds, loadOwnedSetOnlineIds } from "./ownership";
+import {
+  countOwnedSetsMatchingMirrorParams,
+  diffAgainstLibrary,
+  diffBeatmapsetIds,
+  loadOwnedSetOnlineIds,
+  mirrorStatusToLocalInts,
+} from "./ownership";
 import type { Db } from "../db-runtime";
+import { BEATMAP_STATUS } from "../query-language/status";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const migrationsFolder = path.join(
@@ -49,6 +56,89 @@ beforeAll(() => {
         dateAdded: new Date(),
         status: 1,
         deletePending: true,
+      },
+      {
+        id: "set-approved-osu",
+        onlineId: 400,
+        dateAdded: new Date(),
+        status: BEATMAP_STATUS.approved,
+        deletePending: false,
+      },
+      {
+        id: "set-loved-mania",
+        onlineId: 500,
+        dateAdded: new Date(),
+        status: BEATMAP_STATUS.loved,
+        deletePending: false,
+      },
+      {
+        id: "set-ranked-mania",
+        onlineId: 600,
+        dateAdded: new Date(),
+        status: BEATMAP_STATUS.ranked,
+        deletePending: false,
+      },
+    ])
+    .run();
+
+  db.insert(beatmaps)
+    .values([
+      {
+        id: "bm-100",
+        onlineId: 1001,
+        setId: "set-owned-1",
+        rulesetShortName: "osu",
+        status: 1,
+        length: 120,
+        bpm: 180,
+        starRating: 5.2,
+        mapperUsername: "Alice",
+      },
+      {
+        id: "bm-200",
+        onlineId: 2001,
+        setId: "set-owned-2",
+        rulesetShortName: "osu",
+        status: 1,
+        length: 90,
+        bpm: 140,
+        starRating: 3.1,
+        mapperUsername: "Bob",
+      },
+      {
+        id: "bm-400",
+        onlineId: 4001,
+        setId: "set-approved-osu",
+        rulesetShortName: "osu",
+        status: 2,
+        length: 100,
+        bpm: 160,
+        starRating: 4.0,
+        mapperUsername: "Alice",
+      },
+      {
+        id: "bm-500",
+        onlineId: 5001,
+        setId: "set-loved-mania",
+        rulesetShortName: "mania",
+        status: 4,
+        length: 80,
+        bpm: 170,
+        starRating: 6.0,
+        circleSize: 7,
+        mapperUsername: "Carol",
+      },
+      {
+        id: "bm-600",
+        onlineId: 6001,
+        setId: "set-ranked-mania",
+        rulesetShortName: "mania",
+        status: 1,
+        length: 110,
+        bpm: 150,
+        starRating: 4.5,
+        circleSize: 4,
+        mapperUsername: "Dan",
       },
     ])
     .run();
@@ -95,5 +185,47 @@ describe("diffAgainstLibrary", () => {
     // 300 is pending-delete, so it is NOT owned despite existing on disk.
     expect(result.owned).toEqual([100]);
     expect(result.missing).toEqual([300, 999]);
+  });
+});
+
+describe("mirrorStatusToLocalInts", () => {
+  test("ranked includes approved", () => {
+    expect(mirrorStatusToLocalInts("ranked")).toEqual([
+      BEATMAP_STATUS.ranked,
+      BEATMAP_STATUS.approved,
+    ]);
+  });
+
+  test("any / undefined means no filter", () => {
+    expect(mirrorStatusToLocalInts("any")).toBeNull();
+    expect(mirrorStatusToLocalInts(undefined)).toBeNull();
+  });
+});
+
+describe("countOwnedSetsMatchingMirrorParams", () => {
+  test("counts ranked+approved osu sets for mode:osu status=ranked", async () => {
+    const count = await countOwnedSetsMatchingMirrorParams(db, {
+      mode: "osu",
+      status: "ranked",
+    });
+    // 100, 200 (ranked osu) + 400 (approved osu); not mania / loved / pending-delete
+    expect(count).toBe(3);
+  });
+
+  test("counts loved mania only", async () => {
+    const count = await countOwnedSetsMatchingMirrorParams(db, {
+      mode: "mania",
+      status: "loved",
+    });
+    expect(count).toBe(1);
+  });
+
+  test("applies star bounds on difficulties", async () => {
+    const count = await countOwnedSetsMatchingMirrorParams(db, {
+      mode: "osu",
+      status: "ranked",
+      minStars: 5,
+    });
+    expect(count).toBe(1); // only set 100 at 5.2★
   });
 });

@@ -6,9 +6,13 @@ import {
   type OnlineMirrorQuery,
   type OnlinePostFilter,
 } from "./onlineQuery";
+import {
+  countOwnedSetsMatchingMirrorParams,
+} from "./ownership";
 import { loadIdsToHideFromDownloadSearch } from "./pendingDownloads";
 import { getActiveBeatmapMirrorProvider } from "./providers";
 import {
+  buildHinaiCountSearchUrl,
   buildMirrorSearchUrl,
   extractSearchBeatmapsets,
   extractTotalCount,
@@ -76,6 +80,30 @@ async function fetchMirrorPage(
     if (set) sets.push(set);
   }
   return { rawCount: rawSets.length, sets, totalCount };
+}
+
+/**
+ * Fetch page 0 via hinai v2 specifically to read `total_count` (v1 CheeseGull
+ * search returns a flat array with no catalogue size).
+ */
+async function fetchHinaiCountPage(
+  params: MirrorSearchParams,
+): Promise<{ totalCount: number | null }> {
+  const url = buildHinaiCountSearchUrl(params);
+  const res = await fetch(url, {
+    headers: {
+      accept: "application/json",
+      "user-agent": MIRROR_USER_AGENT,
+    },
+    signal: AbortSignal.timeout(MIRROR_FETCH_TIMEOUT_MS),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Mirror search failed: HTTP ${res.status}`);
+  }
+
+  const payload: unknown = await res.json();
+  return { totalCount: extractTotalCount(payload) };
 }
 
 /**
@@ -461,32 +489,52 @@ export async function countMatchingOnlineBeatmapsets(
     Math.max(1, opts.maxSets ?? COUNT_MAX_SETS),
   );
 
-  // Fast path: hinai v2 returns total_count on the first page for locally-served
-  // queries (ranked/loved, no post-filters). When available, skip the full crawl.
-  // We can only use this when excludeOwned is false — we can't subtract owned
-  // maps without knowing which specific sets appear in the results.
+  // Fast path: hinai v2 returns total_count for locally-served queries
+  // (ranked/loved, no post-filters). With excludeOwned + no free-text q we
+  // subtract owned sets that match the same mirror filters from SQLite.
+  // Post-filters (e.g. key=7) and text search still need a full crawl.
   const hasPostFilters = onlineQuery.postFilters.length > 0;
   const excludeOwned = opts.excludeOwned !== false;
   const provider = getActiveBeatmapMirrorProvider();
+  const freeText = onlineQuery.mirrorParams.q?.trim() ?? "";
 
-  if (!hasPostFilters && !excludeOwned && provider.id === "hinai") {
-    try {
-      const firstPage = await fetchMirrorPage(provider.id, {
-        ...onlineQuery.mirrorParams,
-        page: 0,
-      });
-      if (firstPage.totalCount !== null) {
-        return {
-          query: onlineQuery.rawQuery,
-          matched: firstPage.totalCount,
-          ownedSkipped: 0,
-          pagesScanned: 1,
-          hitCap: false,
-          cappedAt: { maxPages, maxSets },
-        };
+  if (!hasPostFilters && provider.id === "hinai") {
+    const canSubtractOwned = excludeOwned && freeText.length === 0;
+    const canUseTotalOnly = !excludeOwned;
+
+    if (canUseTotalOnly || canSubtractOwned) {
+      try {
+        const { totalCount } = await fetchHinaiCountPage(
+          onlineQuery.mirrorParams,
+        );
+        if (totalCount !== null) {
+          if (canUseTotalOnly) {
+            return {
+              query: onlineQuery.rawQuery,
+              matched: totalCount,
+              ownedSkipped: 0,
+              pagesScanned: 1,
+              hitCap: false,
+              cappedAt: { maxPages, maxSets },
+            };
+          }
+
+          const ownedMatching = await countOwnedSetsMatchingMirrorParams(
+            db,
+            onlineQuery.mirrorParams,
+          );
+          return {
+            query: onlineQuery.rawQuery,
+            matched: Math.max(0, totalCount - ownedMatching),
+            ownedSkipped: ownedMatching,
+            pagesScanned: 1,
+            hitCap: false,
+            cappedAt: { maxPages, maxSets },
+          };
+        }
+      } catch {
+        // Fall through to crawl if the fast-path fetch fails.
       }
-    } catch {
-      // Fall through to crawl if the fast-path fetch fails.
     }
   }
 

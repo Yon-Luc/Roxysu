@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import {
+  buildHinaiCountSearchUrl,
   buildHinaiSearchUrl,
   buildNerinyanSearchUrl,
   buildOsuDirectSearchUrl,
   extractSearchBeatmapsets,
+  extractTotalCount,
   normalizeCheeseGullBeatmapSet,
   normalizeMirrorSearchResult,
   normalizeOnlineBeatmapSet,
@@ -242,5 +244,30 @@ describe("search url builders", () => {
     expect(url).toContain("/v3/osu/beatmaps/search/v2");
     expect(url).toContain("status=graveyard");
     expect(url).toContain("mode=3");
+  });
+
+  test("hinai count probes always use v2 for total_count", () => {
+    const url = buildHinaiCountSearchUrl({
+      mode: "osu",
+      status: "ranked",
+      page: 5,
+    });
+    expect(url).toContain("/v3/osu/beatmaps/search/v2");
+    expect(url).toContain("status=ranked");
+    expect(url).toContain("mode=0");
+    expect(url).toContain("page=0");
+    expect(url).not.toContain("/api/v1/hinai/search");
+  });
+});
+
+describe("extractTotalCount", () => {
+  test("reads total_count from hinai v2 wrapper", () => {
+    expect(extractTotalCount({ beatmapsets: [], total_count: 42100 })).toBe(
+      42100,
+    );
+  });
+
+  test("returns null for v1 flat arrays", () => {
+    expect(extractTotalCount([{ SetID: 1 }])).toBeNull();
   });
 });

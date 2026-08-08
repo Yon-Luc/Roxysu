@@ -13,7 +13,9 @@ export {
   buildOsuDirectSearchUrl,
   buildHinaiSearchUrl,
   buildHinaiV2SearchUrl,
+  buildHinaiCountSearchUrl,
   extractSearchBeatmapsets,
+  extractTotalCount,
   normalizeOnlineBeatmapSet,
   normalizeCheeseGullBeatmapSet,
   normalizeMirrorSearchResult,
@@ -25,6 +27,8 @@ export {
   loadOwnedSetOnlineIds,
   diffBeatmapsetIds,
   diffAgainstLibrary,
+  countOwnedSetsMatchingMirrorParams,
+  mirrorStatusToLocalInts,
   type BeatmapsetOwnershipDiff,
 } from "./ownership";
 export {

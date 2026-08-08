@@ -654,13 +654,14 @@ export function DownloadMapsPage() {
 
         <p className="text-sm text-muted">
           Search shows one page (~50).{" "}
-          <span className="font-medium text-ink">Count all missing</span> crawls
-          the full mirror result for{" "}
+          <span className="font-medium text-ink">Count all missing</span> totals
+          the mirror result for{" "}
           <code className="text-ink">{submitted.q || "(defaults)"}</code>{" "}
-          (owned / pending hidden) so you know the real total before{" "}
+          minus owned maps so you know the real total before{" "}
           <span className="font-medium text-ink">Download all missing</span>.
-          Both are capped (~200 pages / 10k sets). Files go to the shared
-          folder; then use{" "}
+          Broad ranked/loved counts on hinai are usually instant; filters like{" "}
+          <code className="text-ink">key=7</code> still crawl mirror pages
+          (capped). Files go to the shared folder; then use{" "}
           <span className="font-medium text-ink">Open in osu!</span> or{" "}
           <code className="text-ink">import-into-osu.sh</code> /{" "}
           <code className="text-ink">import-into-osu.bat</code>.
@@ -689,9 +690,10 @@ export function DownloadMapsPage() {
         ) : null}
         {countMissing.isPending ? (
           <p className="text-sm text-muted">
-            Counting missing maps across mirror pages… this can take a minute
-            for broad queries like{" "}
-            <code className="text-ink">key=7 status=r</code>.
+            Counting missing maps… broad ranked/loved queries are usually
+            instant; post-filters like{" "}
+            <code className="text-ink">key=7 status=r</code> may still crawl
+            mirror pages.
           </p>
         ) : null}
 

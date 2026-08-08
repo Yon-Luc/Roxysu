@@ -37,6 +37,9 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
     queryFn: () => fetchSession(sessionId),
     enabled: Boolean(sessionId),
     placeholderData: keepPreviousData,
+    // Historical sessions are immutable once closed; only the live "current"
+    // hub needs to pick up SSE-driven invalidations immediately.
+    staleTime: isCurrentHub ? 0 : 5 * 60_000,
   });
 
   const knownIds = useRef<Set<string>>(new Set());

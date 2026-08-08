@@ -1,49 +1,89 @@
 import type { QueryClient } from "@tanstack/react-query";
 
-const LIVE_EVENTS = new Set([
-  "sync.finished",
-  "score.imported",
-  "dashboard.updated",
-  "mastery.updated",
-  "session.started",
-  "session.finished",
-  "collection.updated",
-  "tosu.updated",
-]);
+/**
+ * Scoped SSE → cache invalidation map.
+ *
+ * Each event only invalidates the query keys that depend on it.
+ * Previously a single `onLive` handler blasted all 7 keys on every event,
+ * causing 5–6 redundant refetches per score import / session event.
+ */
 
 /** Subscribe to server SSE and invalidate React Query caches on live events. */
 export function connectLiveUpdates(queryClient: QueryClient): () => void {
   const source = new EventSource("/api/events");
 
-  const onLive = () => {
-    void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-    void queryClient.invalidateQueries({ queryKey: ["system"] });
-    void queryClient.invalidateQueries({ queryKey: ["practice"] });
-    void queryClient.invalidateQueries({ queryKey: ["beatmap"] });
-    void queryClient.invalidateQueries({ queryKey: ["sessions"] });
-    void queryClient.invalidateQueries({ queryKey: ["collections"] });
-    void queryClient.invalidateQueries({ queryKey: ["settings"] });
+  const inv = (key: unknown[]) =>
+    void queryClient.invalidateQueries({ queryKey: key });
+
+  // score.imported: new play landed — refresh session feed + dashboard.
+  // Practice list is marked stale but not refetched immediately (refetchType: "none")
+  // so it picks up the update on the next user interaction rather than mid-browse.
+  const onScoreImported = () => {
+    inv(["dashboard"]);
+    inv(["sessions"]);
+    void queryClient.invalidateQueries({
+      queryKey: ["practice"],
+      refetchType: "none",
+    });
+    void queryClient.invalidateQueries({
+      queryKey: ["beatmap"],
+      refetchType: "none",
+    });
   };
 
-  /** Fresh chart/audio hashes after sync — avoid mid-preview seeks resetting. */
+  // dashboard.updated: aggregate stats changed (sync pipeline ran analytics).
+  const onDashboardUpdated = () => {
+    inv(["dashboard"]);
+  };
+
+  // mastery.updated: recompute finished — practice cards + beatmap detail change.
+  const onMasteryUpdated = () => {
+    inv(["practice"]);
+    inv(["beatmap"]);
+    inv(["dashboard"]);
+  };
+
+  // session.started / session.finished: session list + dashboard session stat.
+  const onSessionEvent = () => {
+    inv(["sessions"]);
+    inv(["dashboard"]);
+  };
+
+  // collection.updated: only collections page cares.
+  const onCollectionUpdated = () => {
+    inv(["collections"]);
+  };
+
+  /** sync.finished: full resync done — refresh everything + preview/replay hashes. */
   const onSyncFinished = () => {
-    onLive();
-    void queryClient.invalidateQueries({ queryKey: ["beatmap-preview"] });
-    void queryClient.invalidateQueries({ queryKey: ["score-replay"] });
+    inv(["dashboard"]);
+    inv(["system", "status"]);
+    inv(["practice"]);
+    inv(["beatmap"]);
+    inv(["sessions"]);
+    inv(["collections"]);
+    inv(["settings"]);
+    inv(["beatmap-preview"]);
+    inv(["score-replay"]);
   };
 
   const onTosu = () => {
-    void queryClient.invalidateQueries({ queryKey: ["tosu", "live"] });
+    inv(["tosu", "live"]);
   };
 
-  for (const name of LIVE_EVENTS) {
-    if (name === "tosu.updated") {
-      source.addEventListener(name, onTosu);
-    } else if (name === "sync.finished") {
-      source.addEventListener(name, onSyncFinished);
-    } else {
-      source.addEventListener(name, onLive);
-    }
+  const HANDLERS: Record<string, () => void> = {
+    "score.imported": onScoreImported,
+    "dashboard.updated": onDashboardUpdated,
+    "mastery.updated": onMasteryUpdated,
+    "session.started": onSessionEvent,
+    "session.finished": onSessionEvent,
+    "collection.updated": onCollectionUpdated,
+    "sync.finished": onSyncFinished,
+    "tosu.updated": onTosu,
+  };
+
+  for (const [name, handler] of Object.entries(HANDLERS)) {
+    source.addEventListener(name, handler);
   }
 
   source.onerror = () => {
@@ -51,14 +91,8 @@ export function connectLiveUpdates(queryClient: QueryClient): () => void {
   };
 
   return () => {
-    for (const name of LIVE_EVENTS) {
-      if (name === "tosu.updated") {
-        source.removeEventListener(name, onTosu);
-      } else if (name === "sync.finished") {
-        source.removeEventListener(name, onSyncFinished);
-      } else {
-        source.removeEventListener(name, onLive);
-      }
+    for (const [name, handler] of Object.entries(HANDLERS)) {
+      source.removeEventListener(name, handler);
     }
     source.close();
   };

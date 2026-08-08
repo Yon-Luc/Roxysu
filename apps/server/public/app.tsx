@@ -9,7 +9,12 @@ import { connectSyncFocus } from "./lib/syncFocus";
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 5_000,
+      // SSE events drive cache invalidation, so a long staleTime avoids
+      // redundant background refetches on tab focus / back-navigation.
+      // Pages that need true real-time behaviour (Overlay, BeatmapPreview)
+      // set their own staleTime: 0 or refetchInterval overrides.
+      staleTime: 60_000,
+      gcTime: 5 * 60_000,
       retry: 1,
     },
   },

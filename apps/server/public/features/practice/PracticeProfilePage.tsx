@@ -192,6 +192,7 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
             backgroundFileHash={beatmap.backgroundFileHash}
             setOnlineId={beatmap.setOnlineId}
             size="cover"
+            priority
             className="aspect-[21/9] w-full max-h-64 sm:max-h-72"
             alt=""
           />

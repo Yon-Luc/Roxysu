@@ -11,6 +11,8 @@ type BeatmapCoverProps = {
   size?: OsuCoverSize;
   className?: string;
   alt?: string;
+  /** Set to true for above-the-fold hero images to skip lazy-loading. */
+  priority?: boolean;
 };
 
 function coverSources(
@@ -32,6 +34,7 @@ export function BeatmapCover({
   size = "card",
   className = "",
   alt = "",
+  priority = false,
 }: BeatmapCoverProps) {
   const sources = coverSources(backgroundFileHash, setOnlineId, size);
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
@@ -58,8 +61,10 @@ export function BeatmapCover({
       key={activeSrc}
       src={activeSrc}
       alt={alt}
-      loading="lazy"
-      decoding="async"
+      loading={priority ? "eager" : "lazy"}
+      decoding={priority ? "sync" : "async"}
+      // eslint-disable-next-line react/no-unknown-property
+      fetchPriority={priority ? "high" : "auto"}
       onError={() => setFailedSrc(activeSrc)}
       className={`object-cover ${className}`}
     />

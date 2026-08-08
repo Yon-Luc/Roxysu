@@ -81,7 +81,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { data: status } = useQuery({
     queryKey: ["system", "status"],
     queryFn: fetchSystemStatus,
-    refetchInterval: 30_000,
+    staleTime: 30_000,
+    // SSE (sync.finished) handles urgent updates; polling is a safety net only.
+    // Double the interval and stop polling when the tab is hidden.
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
   });
 
   const resolvedTheme = useResolvedTheme();

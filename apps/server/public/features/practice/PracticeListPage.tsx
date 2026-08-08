@@ -230,6 +230,11 @@ export function PracticeListPage() {
         q: submitted || undefined,
         metric,
       }),
+    // Don't compete with the list fetch — start after the list resolves.
+    enabled: !isLoading,
+    // Distribution is derived from the same underlying data; stay in sync
+    // with the global 60 s window and let SSE invalidations drive freshness.
+    staleTime: 60_000,
   });
 
   const list =

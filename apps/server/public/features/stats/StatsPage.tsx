@@ -114,6 +114,9 @@ export function StatsPage({
     queryKey: ["stats", granularity, range, skillTopPlays, keyCount],
     queryFn: () =>
       fetchStats({ granularity, range, skillTopPlays, keyCount }),
+    // Stats only change after a sync completes; SSE sync.finished invalidates
+    // this. Explicit staleTime prevents unnecessary refetches on tab focus.
+    staleTime: 5 * 60_000,
   });
 
   if (isLoading) {

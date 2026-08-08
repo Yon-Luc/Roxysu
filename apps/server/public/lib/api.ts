@@ -365,7 +365,7 @@ export async function countMirrorMissing(params: {
 }
 
 export async function startMirrorBatchJob(body: {
-  mode?: "pages" | "query" | "ids";
+  mode?: "pages" | "query";
   query?: string;
   q?: string;
   ruleset?: "any" | "osu" | "taiko" | "fruits" | "mania";
@@ -385,7 +385,6 @@ export async function startMirrorBatchJob(body: {
     | "title_asc";
   startPage?: number;
   pageCount?: number;
-  ids?: number[];
   maxPages?: number;
   maxSets?: number;
   noVideo?: boolean;
@@ -450,13 +449,6 @@ export async function fetchMirrorProviders() {
   );
 }
 
-export async function checkMissingBeatmapsets(ids: number[]) {
-  return unwrap(
-    await api.api.mirrors.missing.post({ ids }),
-    "/api/mirrors/missing",
-  );
-}
-
 export type MirrorSearchPayload = Exclude<
   Awaited<ReturnType<typeof fetchMirrorSearch>>,
   { error: string }
@@ -468,10 +460,6 @@ export type MirrorBatchJob = Exclude<
 >;
 export type MirrorProviders = Exclude<
   Awaited<ReturnType<typeof fetchMirrorProviders>>,
-  { error: string }
->;
-export type MissingBeatmapsets = Exclude<
-  Awaited<ReturnType<typeof checkMissingBeatmapsets>>,
   { error: string }
 >;
 export type MirrorMissingCount = Exclude<

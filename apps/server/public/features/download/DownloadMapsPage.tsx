@@ -5,22 +5,30 @@ import { SkeletonBlock, CardGridSkeleton } from "../../components/LoadingSkeleto
 import { PageTitle } from "../../components/PageTitle";
 import { QueryLanguageHelpButton } from "../../components/QueryLanguageHelpModal";
 import {
-  checkMissingBeatmapsets,
   countMirrorMissing,
-  fetchMirrorBatchJob,
   fetchMirrorDownloadDir,
   fetchMirrorSearch,
   openLastBatchInOsu,
   saveMirrorBeatmapset,
   startMirrorBatchJob,
-  stopMirrorBatchJob,
   type MirrorBatchJob,
   type MirrorMissingCount,
   type OnlineBeatmapSet,
 } from "../../lib/api";
+import { pushToast } from "../../lib/toasts";
+import { osuWebBeatmapUrl } from "../../lib/osuUrls";
 import {
-  osuWebBeatmapUrl,
-} from "../../lib/osuUrls";
+  isDevUi,
+} from "./batchProgress";
+import { DownloadSessionPanel } from "./DownloadSessionPanel";
+import {
+  startFakeMirrorBatch,
+  type FakeDownloadPreset,
+} from "./fakeMirrorBatch";
+import {
+  MIRROR_BATCH_QUERY_KEY,
+  useMirrorBatchJob,
+} from "./useMirrorBatchJob";
 
 const SEARCH_KEY = "roxysu:download-maps-search-v2";
 
@@ -51,17 +59,6 @@ const SORT_OPTIONS: { value: Sort; label: string }[] = [
 ];
 
 const PAGE_COUNT_OPTIONS = [1, 2, 3, 5, 10] as const;
-
-/** Splits pasted text on commas/whitespace/newlines into positive beatmapset ids. */
-function parseIdList(raw: string): number[] {
-  const ids = raw
-    .split(/[\s,]+/)
-    .map((token) => token.trim())
-    .filter(Boolean)
-    .map((token) => Number(token))
-    .filter((n) => Number.isSafeInteger(n) && n > 0);
-  return [...new Set(ids)];
-}
 
 function isSort(value: unknown): value is Sort {
   return SORT_OPTIONS.some((o) => o.value === value);
@@ -165,6 +162,17 @@ export function DownloadMapsPage() {
     page: initial.page,
   });
 
+  const {
+    batch,
+    busy: batchBusy,
+    phase: batchPhase,
+    processed: batchProcessed,
+    progressPct: downloadProgressPct,
+    eta,
+    stopBatch,
+    isFake,
+  } = useMirrorBatchJob();
+
   function commit(next: {
     q: string;
     sort: Sort;
@@ -191,15 +199,6 @@ export function DownloadMapsPage() {
     queryFn: fetchMirrorDownloadDir,
   });
 
-  const batchQuery = useQuery({
-    queryKey: ["mirrors", "batch"],
-    queryFn: fetchMirrorBatchJob,
-    refetchInterval: (q) => {
-      const status = q.state.data?.status;
-      return status === "running" || status === "stopping" ? 1000 : false;
-    },
-  });
-
   const startPagesBatch = useMutation({
     mutationFn: () =>
       startMirrorBatchJob({
@@ -213,7 +212,7 @@ export function DownloadMapsPage() {
       }),
     onSuccess: (data) => {
       setBatchError(null);
-      queryClient.setQueryData(["mirrors", "batch"], data);
+      queryClient.setQueryData(MIRROR_BATCH_QUERY_KEY, data);
     },
     onError: (err) => {
       setBatchError(err instanceof Error ? err.message : String(err));
@@ -231,33 +230,10 @@ export function DownloadMapsPage() {
       }),
     onSuccess: (data) => {
       setBatchError(null);
-      queryClient.setQueryData(["mirrors", "batch"], data);
+      queryClient.setQueryData(MIRROR_BATCH_QUERY_KEY, data);
     },
     onError: (err) => {
       setBatchError(err instanceof Error ? err.message : String(err));
-    },
-  });
-
-  const startIdsBatch = useMutation({
-    mutationFn: (ids: number[]) =>
-      startMirrorBatchJob({
-        mode: "ids",
-        ids,
-        noVideo,
-      }),
-    onSuccess: (data) => {
-      setBatchError(null);
-      queryClient.setQueryData(["mirrors", "batch"], data);
-    },
-    onError: (err) => {
-      setBatchError(err instanceof Error ? err.message : String(err));
-    },
-  });
-
-  const stopBatch = useMutation({
-    mutationFn: stopMirrorBatchJob,
-    onSuccess: (data) => {
-      queryClient.setQueryData(["mirrors", "batch"], data);
     },
   });
 
@@ -301,12 +277,9 @@ export function DownloadMapsPage() {
     mutationFn: openLastBatchInOsu,
     onSuccess: (data) => {
       setBatchError(null);
-      // Soft empty result (folder rescanned, nothing left) still updates the UI.
       if ("savedForImport" in data && typeof data.savedForImport === "number") {
         setReadyToOpenCount(data.savedForImport);
       }
-      // Batch/open payloads may include `error: null` on success — only treat
-      // a non-empty string as a failure.
       if (
         data &&
         typeof data === "object" &&
@@ -315,12 +288,12 @@ export function DownloadMapsPage() {
         (data as { error: string }).error.length > 0
       ) {
         setOpenInOsuMessage((data as { error: string }).error);
-        void queryClient.invalidateQueries({ queryKey: ["mirrors", "batch"] });
+        void queryClient.invalidateQueries({ queryKey: MIRROR_BATCH_QUERY_KEY });
         return;
       }
       if (!("opened" in data)) {
         setOpenInOsuMessage("Open in osu! failed");
-        void queryClient.invalidateQueries({ queryKey: ["mirrors", "batch"] });
+        void queryClient.invalidateQueries({ queryKey: MIRROR_BATCH_QUERY_KEY });
         return;
       }
       if (
@@ -343,12 +316,11 @@ export function DownloadMapsPage() {
             ". Don't click Open again while tasks are running.",
         );
       }
-      void queryClient.invalidateQueries({ queryKey: ["mirrors", "batch"] });
+      void queryClient.invalidateQueries({ queryKey: MIRROR_BATCH_QUERY_KEY });
     },
     onError: (err) => {
       setOpenInOsuMessage(err instanceof Error ? err.message : String(err));
-      // Folder may have changed; refresh so the Open button count matches disk.
-      void queryClient.invalidateQueries({ queryKey: ["mirrors", "batch"] });
+      void queryClient.invalidateQueries({ queryKey: MIRROR_BATCH_QUERY_KEY });
       setReadyToOpenCount(0);
     },
   });
@@ -367,7 +339,6 @@ export function DownloadMapsPage() {
       }),
     onSuccess: (data) => {
       setBatchError(null);
-      // Success payloads include `error: null` and `result` / `savedForImport`.
       if (typeof data.error === "string" && data.error.length > 0) {
         setSaveMessage(data.error);
         return;
@@ -393,17 +364,15 @@ export function DownloadMapsPage() {
         path: _path,
         ...batchState
       } = data;
-      queryClient.setQueryData(["mirrors", "batch"], batchState as MirrorBatchJob);
+      queryClient.setQueryData(
+        MIRROR_BATCH_QUERY_KEY,
+        batchState as MirrorBatchJob,
+      );
       void queryClient.invalidateQueries({ queryKey: ["mirrors", "search"] });
     },
     onError: (err) => {
       setSaveMessage(err instanceof Error ? err.message : String(err));
     },
-  });
-
-  const [checkIdsInput, setCheckIdsInput] = useState("");
-  const checkMissing = useMutation({
-    mutationFn: (ids: number[]) => checkMissingBeatmapsets(ids),
   });
 
   const rawItems = query.data && "items" in query.data ? query.data.items : [];
@@ -425,9 +394,6 @@ export function DownloadMapsPage() {
     submitted.excludeOwned && pendingDownloadIds.size > 0
       ? rawItems.length - items.length
       : 0;
-  const batch = batchQuery.data;
-  const batchBusy =
-    batch?.status === "running" || batch?.status === "stopping";
   const downloadDir = downloadDirQuery.data?.path ?? "~/Downloads/beatmaps";
   const canDownloadAllMissing =
     submitted.excludeOwned &&
@@ -439,6 +405,12 @@ export function DownloadMapsPage() {
     batch && "savedForImport" in batch ? Number(batch.savedForImport) || 0 : 0,
   );
   const canOpenInOsu = !batchBusy && savedForImport > 0;
+  const canCountMissing =
+    submitted.excludeOwned &&
+    !batchBusy &&
+    !query.isLoading &&
+    !countMissing.isPending;
+  const showDevTools = isDevUi();
 
   useEffect(() => {
     setMissingCount(null);
@@ -446,39 +418,33 @@ export function DownloadMapsPage() {
   }, [submitted.q, submitted.sort, submitted.excludeOwned]);
 
   useEffect(() => {
-    if (batch && "savedForImport" in batch && typeof batch.savedForImport === "number") {
+    if (
+      batch &&
+      "savedForImport" in batch &&
+      typeof batch.savedForImport === "number"
+    ) {
       setReadyToOpenCount(batch.savedForImport);
     }
   }, [batch]);
 
   useEffect(() => {
-    if (batch?.status === "completed") {
+    if (batch?.status === "completed" && !isFake) {
       setMissingCount(null);
       void queryClient.invalidateQueries({ queryKey: ["mirrors", "search"] });
     }
-  }, [batch?.status, queryClient]);
+  }, [batch?.status, isFake, queryClient]);
 
-  const batchPhase =
-    batch && "phase" in batch && typeof batch.phase === "string"
-      ? batch.phase
-      : "idle";
-  const batchProcessed =
-    batch != null
-      ? batch.downloaded + batch.skippedExisting + batch.failed
-      : 0;
-  const downloadProgressPct =
-    batch != null && batch.queued > 0
-      ? Math.min(100, Math.round((batchProcessed / batch.queued) * 100))
-      : 0;
-  const canCountMissing =
-    submitted.excludeOwned &&
-    !batchBusy &&
-    !query.isLoading &&
-    !countMissing.isPending;
-  const missingIds =
-    checkMissing.data && "missing" in checkMissing.data
-      ? checkMissing.data.missing
-      : [];
+  function runFake(preset: FakeDownloadPreset) {
+    try {
+      startFakeMirrorBatch({
+        preset,
+        count: preset === "fast" ? 40 : preset === "fail" ? 24 : 20,
+      });
+      setBatchError(null);
+    } catch (err) {
+      setBatchError(err instanceof Error ? err.message : String(err));
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -499,7 +465,7 @@ export function DownloadMapsPage() {
         onSubmit={(e) => {
           e.preventDefault();
           const next = {
-            q: q.trim(),
+            q,
             sort,
             excludeOwned,
             page: 0,
@@ -508,43 +474,58 @@ export function DownloadMapsPage() {
           commit(next);
         }}
       >
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <input
-            className="rx-input min-w-0 flex-1"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="e.g. key=7 status=r"
-            aria-label="Online beatmap query"
-          />
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm text-muted">
+            <span className="flex items-center gap-2">
+              Query
+              <QueryLanguageHelpButton />
+            </span>
+            <input
+              className="rx-input"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="key=7 status=r"
+              aria-label="Beatmap search query"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-muted">
+            Sort
+            <select
+              className="rx-select"
+              value={sort}
+              onChange={(e) => setSort(e.target.value as Sort)}
+              aria-label="Sort order"
+            >
+              {SORT_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <button type="submit" className="rx-btn-primary shrink-0">
             Search
           </button>
-          <QueryLanguageHelpButton />
         </div>
-
-        <div className="flex flex-wrap gap-2">
-          <select
-            className="rx-select"
-            value={sort}
-            onChange={(e) => setSort(e.target.value as Sort)}
-            aria-label="Sort"
-          >
-            {SORT_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
         <div className="flex flex-wrap gap-4 text-sm text-muted">
           <label className="inline-flex items-center gap-2">
             <input
               type="checkbox"
               checked={excludeOwned}
-              onChange={(e) => setExcludeOwned(e.target.checked)}
+              onChange={(e) => {
+                const next = e.target.checked;
+                setExcludeOwned(next);
+                persist({
+                  q,
+                  sort,
+                  excludeOwned: next,
+                  page,
+                  noVideo,
+                  pageCount,
+                });
+              }}
             />
-            Hide maps I already own or downloaded
+            Hide maps I already own
           </label>
           <label className="inline-flex items-center gap-2">
             <input
@@ -568,338 +549,257 @@ export function DownloadMapsPage() {
         </div>
       </form>
 
-      <section className="rx-panel space-y-3 p-4">
-        <div className="flex flex-wrap items-end gap-3">
-          <button
-            type="button"
-            className="rx-btn"
-            disabled={!canCountMissing}
-            onClick={() => countMissing.mutate()}
-            title="Crawl the mirror to count how many missing sets match (same caps as download all)"
-          >
-            {countMissing.isPending ? "Counting…" : "Count all missing"}
-          </button>
-          <button
-            type="button"
-            className="rx-btn-primary"
-            disabled={!canDownloadAllMissing || startQueryBatch.isPending}
-            onClick={() => startQueryBatch.mutate()}
-            title="Crawl the mirror for every missing set matching this query"
-          >
-            {missingCount
-              ? `Download all missing (${missingCount.matched.toLocaleString()}${missingCount.hitCap ? "+" : ""})`
-              : "Download all missing"}
-          </button>
-          <label className="flex flex-col gap-1 text-sm text-muted">
-            Or pages from here
-            <select
-              className="rx-select"
-              value={pageCount}
-              onChange={(e) => {
-                const next = Number(e.target.value);
-                setPageCount(next);
-                persist({
-                  q,
-                  sort,
-                  excludeOwned,
-                  page,
-                  noVideo,
-                  pageCount: next,
-                });
-              }}
-              aria-label="Number of pages to batch download"
-            >
-              {PAGE_COUNT_OPTIONS.map((n) => (
-                <option key={n} value={n}>
-                  {n} page{n === 1 ? "" : "s"}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            className="rx-btn"
-            disabled={batchBusy || startPagesBatch.isPending || query.isLoading}
-            onClick={() => startPagesBatch.mutate()}
-          >
-            Download {pageCount} page{pageCount === 1 ? "" : "s"}
-          </button>
-          {batchBusy ? (
+      {batchBusy && batch ? (
+        <DownloadSessionPanel
+          batch={batch}
+          phase={batchPhase}
+          processed={batchProcessed}
+          progressPct={downloadProgressPct}
+          eta={eta}
+          stopping={stopBatch.isPending}
+          onStop={() => stopBatch.mutate()}
+        />
+      ) : (
+        <section className="rx-panel space-y-3 p-4">
+          <div className="flex flex-wrap items-end gap-3">
             <button
               type="button"
               className="rx-btn"
-              disabled={stopBatch.isPending || batch?.status === "stopping"}
-              onClick={() => stopBatch.mutate()}
+              disabled={!canCountMissing}
+              onClick={() => countMissing.mutate()}
+              title="Crawl the mirror to count how many missing sets match (same caps as download all)"
             >
-              {batch?.status === "stopping" ? "Stopping…" : "Stop"}
+              {countMissing.isPending ? "Counting…" : "Count all missing"}
             </button>
-          ) : null}
-          <button
-            type="button"
-            className="rx-btn-primary"
-            disabled={!canOpenInOsu || openInOsu.isPending}
-            onClick={() => {
-              setOpenInOsuMessage(null);
-              openInOsu.mutate();
-            }}
-            title="Open saved .osz files with osu!lazer (also writes import-into-osu.sh / .bat)"
-          >
-            {openInOsu.isPending
-              ? "Opening…"
-              : savedForImport > 0
-                ? `Open in osu! (${savedForImport})`
-                : "Open in osu!"}
-          </button>
-        </div>
-
-        <p className="text-sm text-muted">
-          Search shows one page (~50).{" "}
-          <span className="font-medium text-ink">Count all missing</span> totals
-          the mirror result for{" "}
-          <code className="text-ink">{submitted.q || "(defaults)"}</code>{" "}
-          minus owned maps so you know the real total before{" "}
-          <span className="font-medium text-ink">Download all missing</span>.
-          Broad ranked/loved counts on hinai are usually instant; filters like{" "}
-          <code className="text-ink">key=7</code> still crawl mirror pages
-          (capped). Files go to the shared folder; then use{" "}
-          <span className="font-medium text-ink">Open in osu!</span> or{" "}
-          <code className="text-ink">import-into-osu.sh</code> /{" "}
-          <code className="text-ink">import-into-osu.bat</code>.
-        </p>
-
-        {countError ? (
-          <p className="text-sm text-rose-400">{countError}</p>
-        ) : null}
-        {missingCount ? (
-          <p className="text-sm text-muted">
-            Count:{" "}
-            <span className="font-medium text-ink">
-              {missingCount.matched.toLocaleString()}
-            </span>{" "}
-            missing
-            {missingCount.ownedSkipped > 0
-              ? ` · hid ${missingCount.ownedSkipped.toLocaleString()} owned/pending`
-              : ""}
-            {" · "}
-            {missingCount.pagesScanned} page
-            {missingCount.pagesScanned === 1 ? "" : "s"} scanned
-            {missingCount.hitCap
-              ? ` · hit safety cap (${missingCount.cappedAt.maxPages} pages / ${missingCount.cappedAt.maxSets.toLocaleString()} sets)`
-              : ""}
-          </p>
-        ) : null}
-        {countMissing.isPending ? (
-          <p className="text-sm text-muted">
-            Counting missing maps… broad ranked/loved queries are usually
-            instant; post-filters like{" "}
-            <code className="text-ink">key=7 status=r</code> may still crawl
-            mirror pages.
-          </p>
-        ) : null}
-
-        {batchError ? (
-          <p className="text-sm text-rose-400">{batchError}</p>
-        ) : null}
-        {saveMessage ? (
-          <p className="text-sm text-muted">{saveMessage}</p>
-        ) : null}
-        {openInOsuMessage ? (
-          <p className="text-sm text-muted">{openInOsuMessage}</p>
-        ) : null}
-
-        {batch && batch.status !== "idle" ? (
-          <div className="space-y-2 text-sm text-muted">
-            <p>
-              {batchBusy ? (
-                batch.status === "stopping" ? (
-                  <span className="text-ink">Stopping…</span>
-                ) : batchPhase === "scanning" ? (
-                  <span className="text-ink">
-                    Scanning mirror… {batch.matched.toLocaleString()} matched
-                    so far
-                    {batch.pagesScanned > 0
-                      ? ` · ${batch.pagesScanned} page${batch.pagesScanned === 1 ? "" : "s"}`
-                      : ""}
-                  </span>
-                ) : (
-                  <span className="text-ink">
-                    Downloading {batchProcessed}/{batch.queued || "?"}
-                    {batch.queued > 0 ? ` (${downloadProgressPct}%)` : ""}
-                    {batch.currentTitle
-                      ? ` · ${batch.currentTitle}`
-                      : batch.currentSetId
-                        ? ` · #${batch.currentSetId}`
-                        : ""}
-                  </span>
-                )
-              ) : (
-                <>
-                  Batch: <span className="text-ink">{batch.status}</span>
-                  {" · "}
-                  {batch.mode}
-                  {" · "}
-                  {batch.downloaded}/{batch.queued || "?"} saved
-                  {batch.matched > 0
-                    ? ` · ${batch.matched.toLocaleString()} matched`
-                    : ""}
-                  {batch.pagesScanned > 0
-                    ? ` · ${batch.pagesScanned} pages scanned`
-                    : ""}
-                  {batch.hitCap ? " · hit safety cap" : ""}
-                  {batch.skippedExisting > 0
-                    ? ` · ${batch.skippedExisting} already on disk`
-                    : ""}
-                  {batch.skippedOwned > 0
-                    ? ` · hid ${batch.skippedOwned} owned`
-                    : ""}
-                  {batch.failed > 0 ? ` · ${batch.failed} failed` : ""}
-                  {savedForImport > 0
-                    ? ` · ${savedForImport} ready to open`
-                    : ""}
-                </>
-              )}
-            </p>
-            {batchBusy ? (
-              <div className="h-2 overflow-hidden rounded bg-elevated">
-                <div
-                  className={`h-full bg-accent transition-[width] duration-500 ${
-                    batchPhase === "scanning" ? "w-1/3 animate-pulse" : ""
-                  }`}
-                  style={
-                    batchPhase === "downloading"
-                      ? { width: `${downloadProgressPct}%` }
-                      : undefined
-                  }
-                />
-              </div>
-            ) : null}
-            {batch.query ? (
-              <p className="truncate text-faint">Query: {batch.query}</p>
-            ) : null}
-            {batch.error ? (
-              <p className="text-rose-400">{batch.error}</p>
-            ) : null}
-            {batch.importScriptSh || batch.importScriptBat ? (
-              <p className="truncate text-faint">
-                Import scripts:{" "}
-                {batch.importScriptSh
-                  ? batch.importScriptSh.split(/[/\\]/).pop()
-                  : null}
-                {batch.importScriptSh && batch.importScriptBat ? " / " : null}
-                {batch.importScriptBat
-                  ? batch.importScriptBat.split(/[/\\]/).pop()
-                  : null}
-              </p>
-            ) : null}
-            {batch.recentErrors.length > 0 ? (
-              <ul className="text-xs text-faint">
-                {batch.recentErrors.slice(0, 3).map((err) => (
-                  <li key={`${err.setId}-${err.error}`}>
-                    #{err.setId}: {err.error}
-                  </li>
+            <button
+              type="button"
+              className="rx-btn-primary"
+              disabled={!canDownloadAllMissing || startQueryBatch.isPending}
+              onClick={() => startQueryBatch.mutate()}
+              title="Crawl the mirror for every missing set matching this query"
+            >
+              {missingCount
+                ? `Download all missing (${missingCount.matched.toLocaleString()}${missingCount.hitCap ? "+" : ""})`
+                : "Download all missing"}
+            </button>
+            <label className="flex flex-col gap-1 text-sm text-muted">
+              Or pages from here
+              <select
+                className="rx-select"
+                value={pageCount}
+                onChange={(e) => {
+                  const next = Number(e.target.value);
+                  setPageCount(next);
+                  persist({
+                    q,
+                    sort,
+                    excludeOwned,
+                    page,
+                    noVideo,
+                    pageCount: next,
+                  });
+                }}
+                aria-label="Number of pages to batch download"
+              >
+                {PAGE_COUNT_OPTIONS.map((n) => (
+                  <option key={n} value={n}>
+                    {n} page{n === 1 ? "" : "s"}
+                  </option>
                 ))}
-              </ul>
-            ) : null}
+              </select>
+            </label>
+            <button
+              type="button"
+              className="rx-btn"
+              disabled={
+                batchBusy || startPagesBatch.isPending || query.isLoading
+              }
+              onClick={() => startPagesBatch.mutate()}
+            >
+              Download {pageCount} page{pageCount === 1 ? "" : "s"}
+            </button>
+            <button
+              type="button"
+              className="rx-btn-primary"
+              disabled={!canOpenInOsu || openInOsu.isPending}
+              onClick={() => {
+                setOpenInOsuMessage(null);
+                openInOsu.mutate();
+              }}
+              title="Open saved .osz files with osu!lazer (also writes import-into-osu.sh / .bat)"
+            >
+              {openInOsu.isPending
+                ? "Opening…"
+                : savedForImport > 0
+                  ? `Open in osu! (${savedForImport})`
+                  : "Open in osu!"}
+            </button>
           </div>
-        ) : null}
-      </section>
 
-      <section className="rx-panel space-y-3 p-4">
-        <div>
-          <h2 className="font-semibold text-ink">Check specific IDs</h2>
           <p className="text-sm text-muted">
-            Paste beatmapset IDs (from a mirror, a pack, or anywhere else) to
-            see which ones you&apos;re missing — no search needed.
+            Search shows one page (~50).{" "}
+            <span className="font-medium text-ink">Count all missing</span> totals
+            the mirror result for{" "}
+            <code className="text-ink">{submitted.q || "(defaults)"}</code>{" "}
+            minus owned maps so you know the real total before{" "}
+            <span className="font-medium text-ink">Download all missing</span>.
+            Broad ranked/loved counts on hinai are usually instant; filters like{" "}
+            <code className="text-ink">key=7</code> still crawl mirror pages
+            (capped). Files go to the shared folder; then use{" "}
+            <span className="font-medium text-ink">Open in osu!</span> or{" "}
+            <code className="text-ink">import-into-osu.sh</code> /{" "}
+            <code className="text-ink">import-into-osu.bat</code>.
           </p>
-        </div>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <textarea
-            className="rx-input min-w-0 flex-1"
-            rows={2}
-            value={checkIdsInput}
-            onChange={(e) => setCheckIdsInput(e.target.value)}
-            placeholder="e.g. 292301, 1012634 658127"
-            aria-label="Beatmapset IDs to check"
-          />
-          <button
-            type="button"
-            className="rx-btn-primary shrink-0"
-            disabled={
-              checkMissing.isPending || parseIdList(checkIdsInput).length === 0
-            }
-            onClick={() => checkMissing.mutate(parseIdList(checkIdsInput))}
-          >
-            Check
-          </button>
-        </div>
 
-        {checkMissing.isError ? (
-          <p className="text-sm text-rose-400">
-            {checkMissing.error instanceof Error
-              ? checkMissing.error.message
-              : "Check failed"}
-          </p>
-        ) : null}
+          {countError ? (
+            <p className="text-sm text-rose-400">{countError}</p>
+          ) : null}
+          {missingCount ? (
+            <p className="text-sm text-muted">
+              Count:{" "}
+              <span className="font-medium text-ink">
+                {missingCount.matched.toLocaleString()}
+              </span>{" "}
+              missing
+              {missingCount.ownedSkipped > 0
+                ? ` · hid ${missingCount.ownedSkipped.toLocaleString()} owned/pending`
+                : ""}
+              {" · "}
+              {missingCount.pagesScanned} page
+              {missingCount.pagesScanned === 1 ? "" : "s"} scanned
+              {missingCount.hitCap
+                ? ` · hit safety cap (${missingCount.cappedAt.maxPages} pages / ${missingCount.cappedAt.maxSets.toLocaleString()} sets)`
+                : ""}
+            </p>
+          ) : null}
+          {countMissing.isPending ? (
+            <p className="text-sm text-muted">
+              Counting missing maps… broad ranked/loved queries are usually
+              instant; post-filters like{" "}
+              <code className="text-ink">key=7 status=r</code> may still crawl
+              mirror pages.
+            </p>
+          ) : null}
 
-        {checkMissing.data && "error" in checkMissing.data ? (
-          <p className="text-sm text-rose-400">
-            {String(checkMissing.data.error)}
-          </p>
-        ) : checkMissing.data ? (
-          <div className="space-y-2 text-sm">
-            <div className="flex flex-wrap items-center gap-3">
-              <p className="text-muted">
-                {checkMissing.data.checked} checked ·{" "}
-                {missingIds.length} missing ·{" "}
-                {checkMissing.data.owned.length} already owned
+          {batchError ? (
+            <p className="text-sm text-rose-400">{batchError}</p>
+          ) : null}
+          {saveMessage ? (
+            <p className="text-sm text-muted">{saveMessage}</p>
+          ) : null}
+          {openInOsuMessage ? (
+            <p className="text-sm text-muted">{openInOsuMessage}</p>
+          ) : null}
+
+          {batch && batch.status !== "idle" ? (
+            <div className="space-y-2 text-sm text-muted">
+              <p>
+                Batch: <span className="text-ink">{batch.status}</span>
+                {" · "}
+                {batch.mode}
+                {" · "}
+                {batch.downloaded}/{batch.queued || "?"} saved
+                {batch.matched > 0
+                  ? ` · ${batch.matched.toLocaleString()} matched`
+                  : ""}
+                {batch.pagesScanned > 0
+                  ? ` · ${batch.pagesScanned} pages scanned`
+                  : ""}
+                {batch.hitCap ? " · hit safety cap" : ""}
+                {batch.skippedExisting > 0
+                  ? ` · ${batch.skippedExisting} already on disk`
+                  : ""}
+                {batch.skippedOwned > 0
+                  ? ` · hid ${batch.skippedOwned} owned`
+                  : ""}
+                {batch.failed > 0 ? ` · ${batch.failed} failed` : ""}
+                {savedForImport > 0
+                  ? ` · ${savedForImport} ready to open`
+                  : ""}
               </p>
-              {missingIds.length > 0 ? (
-                <button
-                  type="button"
-                  className="rx-btn-primary"
-                  disabled={batchBusy || startIdsBatch.isPending}
-                  onClick={() => startIdsBatch.mutate(missingIds)}
-                >
-                  Download missing IDs ({missingIds.length})
-                </button>
+              {batch.query ? (
+                <p className="truncate text-faint">Query: {batch.query}</p>
+              ) : null}
+              {batch.error ? (
+                <p className="text-rose-400">{batch.error}</p>
+              ) : null}
+              {batch.importScriptSh || batch.importScriptBat ? (
+                <p className="truncate text-faint">
+                  Import scripts:{" "}
+                  {batch.importScriptSh
+                    ? batch.importScriptSh.split(/[/\\]/).pop()
+                    : null}
+                  {batch.importScriptSh && batch.importScriptBat ? " / " : null}
+                  {batch.importScriptBat
+                    ? batch.importScriptBat.split(/[/\\]/).pop()
+                    : null}
+                </p>
+              ) : null}
+              {batch.recentErrors.length > 0 ? (
+                <ul className="text-xs text-faint">
+                  {batch.recentErrors.slice(0, 3).map((err) => (
+                    <li key={`${err.setId}-${err.error}`}>
+                      #{err.setId}: {err.error}
+                    </li>
+                  ))}
+                </ul>
               ) : null}
             </div>
-            {missingIds.length > 0 ? (
-              <ul className="flex flex-wrap gap-2">
-                {missingIds.map((id) => {
-                  const saving =
-                    saveSet.isPending && saveSet.variables?.setId === id;
-                  return (
-                    <li
-                      key={id}
-                      className="rx-row inline-flex items-center gap-2"
-                    >
-                      <BeatmapCover
-                        setOnlineId={id}
-                        size="list"
-                        className="h-8 w-8 shrink-0 rounded"
-                        alt=""
-                      />
-                      <span className="text-ink">#{id}</span>
-                      <button
-                        type="button"
-                        className="rx-btn-primary"
-                        disabled={batchBusy || saveSet.isPending}
-                        title={`Save .osz into ${downloadDir}`}
-                        onClick={() => saveSet.mutate({ setId: id })}
-                      >
-                        {saving ? "Saving…" : "Download"}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              <p className="text-muted">You already own everything checked.</p>
-            )}
+          ) : null}
+        </section>
+      )}
+
+      {showDevTools ? (
+        <section className="rx-panel space-y-3 border border-dashed border-amber-500/40 p-4">
+          <div>
+            <h2 className="font-semibold text-ink">Dev · download UI</h2>
+            <p className="text-sm text-muted">
+              Client-only fake jobs — no mirror traffic, no{" "}
+              <code className="text-ink">.osz</code> writes. Use these to try
+              the session view, floating chip, ETA, and completion toast.
+            </p>
           </div>
-        ) : null}
-      </section>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="rx-btn"
+              disabled={batchBusy}
+              onClick={() => runFake("fast")}
+            >
+              Fake fast (40)
+            </button>
+            <button
+              type="button"
+              className="rx-btn"
+              disabled={batchBusy}
+              onClick={() => runFake("realistic")}
+            >
+              Fake realistic (20)
+            </button>
+            <button
+              type="button"
+              className="rx-btn"
+              disabled={batchBusy}
+              onClick={() => runFake("fail")}
+            >
+              Fake fail mid-way
+            </button>
+            <button
+              type="button"
+              className="rx-btn"
+              onClick={() =>
+                pushToast({
+                  title: "Download finished",
+                  detail: "12 maps saved (dev toast)",
+                  tone: "success",
+                })
+              }
+            >
+              Test completion toast
+            </button>
+          </div>
+        </section>
+      ) : null}
 
       {query.isLoading ? (
         <div className="space-y-4">

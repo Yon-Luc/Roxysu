@@ -3,7 +3,6 @@ import { dbPlugin } from "../db-runtime";
 import {
   OnlineQueryError,
   countMatchingOnlineBeatmapsets,
-  diffAgainstLibrary,
   getActiveBeatmapMirrorProvider,
   getMirrorBatchJobState,
   openLastBatchArchivesInOsu,
@@ -41,19 +40,12 @@ const sortSchema = t.Union([
   t.Literal("title_asc"),
 ]);
 
-const batchModeSchema = t.Union([
-  t.Literal("pages"),
-  t.Literal("query"),
-  t.Literal("ids"),
-]);
+const batchModeSchema = t.Union([t.Literal("pages"), t.Literal("query")]);
 
 function httpStatusForMirrorError(err: unknown): number {
   if (err instanceof OnlineQueryError) return 400;
   const message = err instanceof Error ? err.message : String(err);
   if (message.includes("already running")) return 409;
-  if (message.includes("ids must") || message.includes("ids is capped")) {
-    return 400;
-  }
   if (
     message.includes("No archives") ||
     message.includes("Cannot open archives")
@@ -124,13 +116,6 @@ export const mirrorRoutes = new Elysia({ prefix: "/mirrors" })
     ({ db, body, set }) => {
       try {
         const mode = body.mode ?? "pages";
-        if (mode === "ids") {
-          return startMirrorBatchJob(db, {
-            mode: "ids",
-            ids: body.ids ?? [],
-            noVideo: body.noVideo !== false,
-          });
-        }
         if (mode === "query") {
           if (body.query == null || body.query.trim() === "") {
             set.status = 400;
@@ -177,7 +162,6 @@ export const mirrorRoutes = new Elysia({ prefix: "/mirrors" })
         sort: t.Optional(sortSchema),
         startPage: t.Optional(t.Number()),
         pageCount: t.Optional(t.Number()),
-        ids: t.Optional(t.Array(t.Number(), { maxItems: 2000 })),
         maxPages: t.Optional(t.Number()),
         maxSets: t.Optional(t.Number()),
         noVideo: t.Optional(t.Boolean()),
@@ -227,28 +211,6 @@ export const mirrorRoutes = new Elysia({ prefix: "/mirrors" })
         excludeOwned: t.Optional(
           t.Union([t.Boolean(), t.Literal("1"), t.Literal("0")]),
         ),
-      }),
-    },
-  )
-  .post(
-    "/missing",
-    async ({ db, body, set }) => {
-      const ids = [...new Set(body.ids)].filter(
-        (id): id is number => parsePositiveSetId(String(id)) != null,
-      );
-      if (ids.length === 0) {
-        set.status = 400;
-        return { error: "ids must contain at least one positive beatmapset id" };
-      }
-      const diff = await diffAgainstLibrary(db, ids);
-      return {
-        checked: ids.length,
-        ...diff,
-      };
-    },
-    {
-      body: t.Object({
-        ids: t.Array(t.Number(), { minItems: 1, maxItems: 2000 }),
       }),
     },
   )

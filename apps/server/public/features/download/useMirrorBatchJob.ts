@@ -1,0 +1,122 @@
+import { useEffect, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  fetchMirrorBatchJob,
+  stopMirrorBatchJob,
+  type MirrorBatchJob,
+} from "../../lib/api";
+import {
+  batchProcessedCount,
+  batchProgressPct,
+  estimateBatchEta,
+  isBatchBusy,
+} from "./batchProgress";
+import {
+  isFakeMirrorBatchActive,
+  stopFakeMirrorBatch,
+  useFakeMirrorBatch,
+} from "./fakeMirrorBatch";
+
+export const MIRROR_BATCH_QUERY_KEY = ["mirrors", "batch"] as const;
+
+export function useMirrorBatchJob() {
+  const queryClient = useQueryClient();
+  const { fakeJob, fakeActive } = useFakeMirrorBatch();
+
+  const batchQuery = useQuery({
+    queryKey: MIRROR_BATCH_QUERY_KEY,
+    queryFn: fetchMirrorBatchJob,
+    refetchInterval: (q) => {
+      if (fakeActive) return false;
+      const status = q.state.data?.status;
+      return status === "running" || status === "stopping" ? 1000 : false;
+    },
+  });
+
+  const batch: MirrorBatchJob | undefined = fakeActive
+    ? (fakeJob ?? undefined)
+    : batchQuery.data && !("error" in batchQuery.data)
+      ? batchQuery.data
+      : undefined;
+
+  const busy = isBatchBusy(batch);
+  const phase =
+    batch && typeof batch.phase === "string" ? batch.phase : "idle";
+  const processed = batchProcessedCount(batch);
+  const progressPct = batchProgressPct(batch);
+
+  const downloadingStartedAtMs = useDownloadingClock(batch, phase, busy);
+
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    if (!busy || phase !== "downloading") return;
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [busy, phase]);
+
+  const eta = estimateBatchEta({
+    phase,
+    queued: Number(batch?.queued) || 0,
+    processed,
+    downloadingStartedAtMs,
+    nowMs,
+  });
+
+  const stopBatch = useMutation({
+    mutationFn: async () => {
+      if (isFakeMirrorBatchActive()) {
+        return stopFakeMirrorBatch();
+      }
+      return stopMirrorBatchJob();
+    },
+    onSuccess: (data) => {
+      if (data && !isFakeMirrorBatchActive()) {
+        queryClient.setQueryData(MIRROR_BATCH_QUERY_KEY, data);
+      }
+    },
+  });
+
+  return {
+    batch,
+    busy,
+    phase,
+    processed,
+    progressPct,
+    eta,
+    isFake: fakeActive,
+    stopBatch,
+    refetch: batchQuery.refetch,
+    queryClient,
+  };
+}
+
+/** Remember when the downloading phase began so ETA ignores scan time. */
+function useDownloadingClock(
+  batch: MirrorBatchJob | undefined,
+  phase: string,
+  busy: boolean,
+): number | null {
+  const [startedAtMs, setStartedAtMs] = useState<number | null>(null);
+  const jobKeyRef = useRef<string | null>(null);
+
+  const jobKey = batch?.startedAt ?? null;
+
+  useEffect(() => {
+    if (jobKey !== jobKeyRef.current) {
+      jobKeyRef.current = jobKey;
+      setStartedAtMs(null);
+    }
+  }, [jobKey]);
+
+  useEffect(() => {
+    if (!busy) {
+      setStartedAtMs(null);
+      return;
+    }
+    if (phase === "downloading") {
+      setStartedAtMs((prev) => prev ?? Date.now());
+    }
+  }, [busy, phase]);
+
+  return busy && phase === "downloading" ? startedAtMs : null;
+}

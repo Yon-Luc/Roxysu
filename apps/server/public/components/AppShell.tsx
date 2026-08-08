@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState, type ReactNode } from "react";
-import { Link } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import type { Dictionary } from "@roxysu/i18n";
 import { fetchSystemStatus } from "../lib/api";
@@ -8,7 +8,10 @@ import { isDesktopShell } from "../lib/desktop";
 import { useAppDict } from "../lib/i18n";
 import { CommandPalette, useCommandPaletteShortcut } from "./CommandPalette";
 import { LanguageSwitcher } from "./LanguageSwitcher";
+import { DownloadBatchChrome } from "../features/download/DownloadBatchChrome";
+import { useMirrorBatchJob } from "../features/download/useMirrorBatchJob";
 import { toggleTheme, useResolvedTheme } from "../lib/theme";
+import { ToastHost } from "../lib/toasts";
 import roxyIcon from "../roxy.png";
 
 const APP_VERSION_LABEL = formatAppVersionLabel();
@@ -82,6 +85,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   });
 
   const resolvedTheme = useResolvedTheme();
+  const { busy: downloadBusy } = useMirrorBatchJob();
+  const onDownloadPage = useRouterState({
+    select: (s) => s.location.pathname === "/download-maps",
+  });
+  const toastOffset =
+    downloadBusy && !onDownloadPage
+      ? "bottom-44 md:bottom-28"
+      : "bottom-20 md:bottom-4";
 
   const importStatus = status?.lastImport?.status;
   const syncTone =
@@ -111,6 +122,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         open={commandPaletteOpen}
         onOpenChange={setCommandPaletteOpen}
       />
+      <DownloadBatchChrome />
+      <ToastHost offsetBottomClass={toastOffset} />
       {/* Desktop sidebar */}
       <aside
         className={`fixed inset-y-0 left-0 z-30 hidden w-60 flex-col bg-sidebar p-3 transition-transform duration-200 ease-out md:flex ${

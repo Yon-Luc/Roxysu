@@ -37,7 +37,7 @@ export type MirrorBatchJobStatus =
 /** Sub-step while status is running/stopping. */
 export type MirrorBatchPhase = "idle" | "scanning" | "downloading";
 
-export type MirrorBatchMode = "pages" | "query" | "ids";
+export type MirrorBatchMode = "pages" | "query";
 
 export type MirrorBatchJobState = {
   status: MirrorBatchJobStatus;
@@ -96,16 +96,9 @@ export type MirrorBatchQueryRequest = BatchDownloadOpts & {
   maxSets?: number;
 };
 
-export type MirrorBatchIdsRequest = {
-  mode: "ids";
-  ids: number[];
-  noVideo?: boolean;
-};
-
 export type MirrorBatchStartRequest =
   | MirrorBatchPagesRequest
-  | MirrorBatchQueryRequest
-  | MirrorBatchIdsRequest;
+  | MirrorBatchQueryRequest;
 
 const DOWNLOAD_TIMEOUT_MS = 120_000;
 const DELAY_BETWEEN_MS = 1_200;
@@ -113,7 +106,6 @@ const MAX_PAGE_COUNT = 10;
 const MAX_RECENT_ERRORS = 8;
 const MAX_QUERY_PAGES = 1000;
 const MAX_QUERY_SETS = 100_000;
-const MAX_IDS = 2000;
 
 type JobInternal = {
   status: MirrorBatchJobStatus;
@@ -467,13 +459,7 @@ async function runBatch(
     const mode: MirrorBatchMode = request.mode ?? "pages";
     let sets: Array<OnlineBeatmapSet | { id: number }> = [];
 
-    if (mode === "ids" && request.mode === "ids") {
-      const ids = [...new Set(request.ids)].filter(
-        (id) => Number.isSafeInteger(id) && id > 0,
-      );
-      job.matched = ids.length;
-      sets = ids.map((id) => ({ id }));
-    } else if (mode === "query" && request.mode === "query") {
+    if (mode === "query" && request.mode === "query") {
       const onlineQuery = parseOnlineMirrorQuery(request.query, {
         defaultSort: request.sort ?? "ranked_desc",
       });
@@ -538,26 +524,6 @@ export function startMirrorBatchJob(
   }
 
   const mode: MirrorBatchMode = request.mode ?? "pages";
-
-  if (mode === "ids" && request.mode === "ids") {
-    const ids = [...new Set(request.ids)].filter(
-      (id) => Number.isSafeInteger(id) && id > 0,
-    );
-    if (ids.length === 0) {
-      throw new Error("ids must contain at least one positive beatmapset id");
-    }
-    if (ids.length > MAX_IDS) {
-      throw new Error(`ids is capped at ${MAX_IDS}`);
-    }
-    resetJob({
-      mode: "ids",
-      query: null,
-      noVideo: request.noVideo !== false,
-      excludeOwned: false,
-    });
-    void runBatch(db, { mode: "ids", ids, noVideo: job.noVideo });
-    return getMirrorBatchJobState();
-  }
 
   if (mode === "query" && request.mode === "query") {
     parseOnlineMirrorQuery(request.query);

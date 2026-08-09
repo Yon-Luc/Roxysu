@@ -320,7 +320,7 @@ export function HubDetailPage({ id }: { id: string }) {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <Link to="/hub" className="text-xs text-muted hover:text-ink">
-            ← Hub
+            ← Workshop
           </Link>
           <PageTitle>{c?.name ?? "Collection"}</PageTitle>
           {c ? (

@@ -115,7 +115,7 @@ const ALL_PAGE_ITEMS: {
   { to: "/practice", label: "Practice", keywords: ["maps", "library", "beatmaps"] },
   { to: "/sessions", label: "Sessions", keywords: ["plays", "live"] },
   { to: "/collections", label: "Collections", keywords: ["queries"] },
-  { to: "/hub", label: "Hub", keywords: ["share", "osu", "oauth"] },
+  { to: "/hub", label: "Workshop", keywords: ["hub", "share", "osu", "oauth", "packs", "collections"] },
   {
     to: "/download-maps",
     label: "Download",

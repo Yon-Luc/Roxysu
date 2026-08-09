@@ -17,7 +17,7 @@ export function HubCallbackPage() {
 
   return (
     <div className="space-y-2 p-6">
-      <p className="text-sm text-muted">Signing in to hub…</p>
+      <p className="text-sm text-muted">Signing in to Workshop…</p>
     </div>
   );
 }

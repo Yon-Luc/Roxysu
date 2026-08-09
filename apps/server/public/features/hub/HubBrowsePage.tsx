@@ -219,9 +219,9 @@ export function HubBrowsePage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <PageTitle>Hub</PageTitle>
+          <PageTitle>Workshop</PageTitle>
           <p className="rx-subtitle">
-            Browse and download shared beatmap collections.
+            Browse and share beatmap collection packs.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -341,7 +341,7 @@ export function HubBrowsePage() {
         <p className="text-sm text-muted">
           {debouncedQ
             ? "No added collections match your search."
-            : "No collections saved from the hub yet. Open a collection and tap Save collection."}
+            : "No collections saved from the Workshop yet. Open a collection and tap Save collection."}
         </p>
       ) : (
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

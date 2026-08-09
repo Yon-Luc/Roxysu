@@ -216,7 +216,7 @@ export function HubSharePage() {
     },
     onSuccess: (data) => {
       pushToast({
-        title: "Shared to hub",
+        title: "Shared to Workshop",
         detail: "Your collection is now public.",
         tone: "success",
       });
@@ -252,11 +252,11 @@ export function HubSharePage() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <Link to="/hub" className="text-xs text-muted hover:text-ink">
-            ← Hub
+            ← Workshop
           </Link>
           <PageTitle>Share collection</PageTitle>
           <p className="rx-subtitle">
-            Upload a local smart or lazer collection to the public hub.
+            Upload a local smart or lazer collection to the Workshop.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -280,7 +280,7 @@ export function HubSharePage() {
             disabled={!canSubmit || shareMut.isPending}
             onClick={() => shareMut.mutate()}
           >
-            {shareMut.isPending ? "Sharing…" : "Share to hub"}
+            {shareMut.isPending ? "Sharing…" : "Share to Workshop"}
           </button>
         </div>
       </div>
@@ -289,7 +289,7 @@ export function HubSharePage() {
         <div className="rx-card p-5">
           <div className="font-semibold text-ink">Sign in required</div>
           <p className="mt-1 text-sm text-muted">
-            Log in with osu! to publish a collection to the hub.
+            Log in with osu! to publish a collection to the Workshop.
           </p>
           <HubLoginButton className="rx-btn-primary mt-4 inline-flex" />
         </div>
@@ -381,7 +381,7 @@ export function HubSharePage() {
         <div>
           <h2 className="text-sm font-semibold text-ink">Details</h2>
           <p className="mt-0.5 text-xs text-muted">
-            How this collection appears on the hub.
+            How this collection appears in the Workshop.
           </p>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -444,7 +444,7 @@ export function HubSharePage() {
           disabled={!canSubmit || shareMut.isPending}
           onClick={() => shareMut.mutate()}
         >
-          {shareMut.isPending ? "Sharing…" : "Share to hub"}
+          {shareMut.isPending ? "Sharing…" : "Share to Workshop"}
         </button>
       </div>
     </div>

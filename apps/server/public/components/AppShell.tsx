@@ -24,7 +24,7 @@ const ALL_NAV = [
   { to: "/practice", label: "Practice", labelKey: "practice", icon: PracticeIcon },
   { to: "/sessions", label: "Sessions", labelKey: "sessions", icon: SessionsIcon },
   { to: "/collections", label: "Collections", labelKey: "collections", icon: CollectionsIcon },
-  { to: "/hub", label: "Hub", labelKey: "hub", icon: HubIcon },
+  { to: "/hub", label: "Workshop", labelKey: "hub", icon: WorkshopIcon },
   { to: "/download-maps", label: "Download", labelKey: "download", icon: DownloadMapsIcon },
   { to: "/rating-lab", label: "Rating Lab", labelKey: "ratingLab", icon: RatingLabIcon },
   { to: "/skin", label: "Skin", labelKey: "skin", icon: SkinIcon },
@@ -426,10 +426,16 @@ function CollectionsIcon({ className }: { className?: string }) {
   );
 }
 
-function HubIcon({ className }: { className?: string }) {
+function WorkshopIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d="M12 2.25a.75.75 0 0 1 .53.22l7.5 7.5a.75.75 0 0 1-.53 1.28h-1.5v7.5A1.75 1.75 0 0 1 16.25 20.5h-2.5a.75.75 0 0 1-.75-.75v-4.5h-2v4.5a.75.75 0 0 1-.75.75h-2.5A1.75 1.75 0 0 1 5.75 18.75v-7.5h-1.5a.75.75 0 0 1-.53-1.28l7.5-7.5a.75.75 0 0 1 .53-.22Z" />
+      <path
+        fillRule="evenodd"
+        d="M8.25 3.75A2.25 2.25 0 0 0 6 6v7.5A2.25 2.25 0 0 0 8.25 15.75h7.5A2.25 2.25 0 0 0 18 13.5V6a2.25 2.25 0 0 0-2.25-2.25h-7.5ZM7.5 6a.75.75 0 0 1 .75-.75h7.5a.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-.75.75h-7.5a.75.75 0 0 1-.75-.75V6Z"
+        clipRule="evenodd"
+      />
+      <path d="M4.5 8.25a.75.75 0 0 0-1.5 0V16.5A2.25 2.25 0 0 0 5.25 18.75H15a.75.75 0 0 0 0-1.5H5.25a.75.75 0 0 1-.75-.75V8.25Z" />
+      <path d="M15.97 16.97a.75.75 0 0 1 1.06 0l2.25 2.25a.75.75 0 0 1 0 1.06l-2.25 2.25a.75.75 0 1 1-1.06-1.06l.97-.97H13.5a.75.75 0 0 1 0-1.5h3.44l-.97-.97a.75.75 0 0 1 0-1.06Z" />
     </svg>
   );
 }

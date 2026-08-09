@@ -1,4 +1,7 @@
-import { closeDb } from "@roxysu/db/client.node";
+import {
+  clearStuckRealmReaderPause,
+  closeDb,
+} from "@roxysu/db/client.node";
 import { db } from "./db.node";
 import { createApp } from "./createApp";
 import { startPollLoop } from "./sse";
@@ -14,6 +17,12 @@ async function main() {
 
   const port = Number(process.env.ROXYSU_PORT ?? process.env.PORT ?? 4321);
   const hostname = process.env.ROXYSU_HOST ?? "127.0.0.1";
+
+  if (clearStuckRealmReaderPause(db)) {
+    console.log(
+      "[sync] cleared stuck sync.realm_reader_paused — realm-reader can resume",
+    );
+  }
 
   const app = await createApp({
     staticAssetsDir,
@@ -32,6 +41,13 @@ async function main() {
     if (shuttingDown) return;
     shuttingDown = true;
     console.log(`\nshutting down (${signal})…`);
+
+    // If we die mid-collection-sync, don't leave realm-reader paused forever.
+    try {
+      clearStuckRealmReaderPause(db);
+    } catch {
+      // best-effort
+    }
 
     stopAnalytics();
     stopPoll();

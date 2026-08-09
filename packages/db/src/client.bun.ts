@@ -59,3 +59,4 @@ export {
   min,
 } from "drizzle-orm";
 export * from "./schema";
+export { clearStuckRealmReaderPause } from "./clearStuckRealmReaderPause";

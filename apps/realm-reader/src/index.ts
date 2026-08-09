@@ -1,4 +1,11 @@
-import { closeDb, ensureDb, eq, settings, type Db } from "@roxysu/db/client.node";
+import {
+  clearStuckRealmReaderPause,
+  closeDb,
+  ensureDb,
+  eq,
+  settings,
+  type Db,
+} from "@roxysu/db/client.node";
 import { defaultDbPath } from "@roxysu/db/path";
 import {
   SYNC_PAUSE_WHEN_UNFOCUSED_KEY,
@@ -145,6 +152,12 @@ async function main() {
 
   const db = ensureDb(dbPath);
   console.log("SQLite ready (migrations applied)");
+
+  if (clearStuckRealmReaderPause(db)) {
+    console.log(
+      "cleared stuck sync.realm_reader_paused from a previous crash — resuming",
+    );
+  }
 
   let lastRealmPath: string | null = null;
   let lockLogged = false;

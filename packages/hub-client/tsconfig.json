@@ -5,6 +5,7 @@
     "moduleResolution": "bundler",
     "strict": true,
     "skipLibCheck": true,
+    "baseUrl": ".",
     "paths": {
       "@roxysu/hub": ["../../apps/hub/src/index.ts"]
     }

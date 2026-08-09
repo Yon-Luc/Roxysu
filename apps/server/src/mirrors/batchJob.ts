@@ -149,11 +149,86 @@ type JobInternal = {
 
 let openingInProgress = false;
 
+/** Reset in-memory batch state (tests / process-start equivalent). */
+export function resetMirrorBatchJobForTests(): void {
+  openingInProgress = false;
+  job = {
+    status: "idle",
+    phase: "idle",
+    mode: "pages",
+    downloadDir: resolveBeatmapsDownloadDir(),
+    query: null,
+    startPage: 0,
+    pageCount: 0,
+    noVideo: true,
+    excludeOwned: true,
+    downloadConcurrency: DOWNLOAD_CONCURRENCY_DEFAULT,
+    queued: 0,
+    downloaded: 0,
+    skippedExisting: 0,
+    skippedOwned: 0,
+    failed: 0,
+    matched: 0,
+    pagesScanned: 0,
+    hitCap: false,
+    savedPaths: [],
+    importScriptSh: null,
+    importScriptBat: null,
+    currentSetId: null,
+    currentTitle: null,
+    startedAt: null,
+    finishedAt: null,
+    error: null,
+    recentErrors: [],
+    stopRequested: false,
+    running: false,
+  };
+}
+
 function pathsReadyToOpen(downloadDir: string = job.downloadDir): string[] {
   return filterNotSentToOsu(
     job.savedPaths.filter((p) => existsSync(p)),
     downloadDir,
   );
+}
+
+/**
+ * After a process restart the in-memory import list is empty even though
+ * `.osz` files may still be in the download folder. Re-discover unsent
+ * leftovers so "Open in osu!" stays available across Roxysu restarts.
+ */
+function reconcileIdleSavedPaths(): void {
+  const downloadDir = resolveBeatmapsDownloadDir();
+  job.downloadDir = downloadDir;
+
+  const existing = job.savedPaths.filter((p) => existsSync(p));
+  if (existing.length !== job.savedPaths.length) {
+    job.savedPaths = existing;
+  }
+
+  if (job.savedPaths.length > 0) {
+    if (!job.importScriptSh && !job.importScriptBat) {
+      const scripts = writeOsuImportScripts(downloadDir, job.savedPaths);
+      job.importScriptSh = scripts.sh;
+      job.importScriptBat = scripts.bat;
+    }
+    return;
+  }
+
+  const leftovers = filterNotSentToOsu(
+    listOszArchivesInDir(downloadDir),
+    downloadDir,
+  );
+  if (leftovers.length === 0) {
+    job.importScriptSh = null;
+    job.importScriptBat = null;
+    return;
+  }
+
+  job.savedPaths = leftovers;
+  const scripts = writeOsuImportScripts(downloadDir, leftovers);
+  job.importScriptSh = scripts.sh;
+  job.importScriptBat = scripts.bat;
 }
 
 let job: JobInternal = {
@@ -205,16 +280,8 @@ function parseRetryAfterSeconds(res: Response): number | null {
 }
 
 export function getMirrorBatchJobState(): MirrorBatchJobState {
-  // Keep ready-to-open count honest if archives were imported/moved elsewhere.
-  if (!job.running && job.savedPaths.length > 0) {
-    const existing = job.savedPaths.filter((p) => existsSync(p));
-    if (existing.length !== job.savedPaths.length) {
-      job.savedPaths = existing;
-      if (existing.length === 0) {
-        job.importScriptSh = null;
-        job.importScriptBat = null;
-      }
-    }
+  if (!job.running) {
+    reconcileIdleSavedPaths();
   }
   const ready = pathsReadyToOpen();
   return {
@@ -695,6 +762,8 @@ export async function openLastBatchArchivesInOsu(): Promise<
   try {
     const trackedBefore = job.savedPaths.length;
     const existingBefore = job.savedPaths.filter((p) => existsSync(p)).length;
+    // Pick up leftover .osz after a Roxysu restart (in-memory list is empty).
+    reconcileIdleSavedPaths();
     const downloadDir = ensureBeatmapsDownloadDir();
     job.downloadDir = downloadDir;
 

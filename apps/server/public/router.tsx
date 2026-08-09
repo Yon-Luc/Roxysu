@@ -13,6 +13,10 @@ import { SessionsPage } from "./features/sessions/SessionsPage";
 import { SessionDetailPage } from "./features/sessions/SessionDetailPage";
 import { CollectionsPage } from "./features/collections/CollectionsPage";
 import { CollectionResultsPage } from "./features/collections/CollectionResultsPage";
+import { HubBrowsePage } from "./features/hub/HubBrowsePage";
+import { HubCallbackPage } from "./features/hub/HubCallbackPage";
+import { HubDetailPage } from "./features/hub/HubDetailPage";
+import { HubSharePage } from "./features/hub/HubSharePage";
 import { SettingsPage } from "./features/settings/SettingsPage";
 import { SkinPage } from "./features/settings/SkinPage";
 import { OverlayPage } from "./features/overlay/OverlayPage";
@@ -169,6 +173,33 @@ const downloadMapsRoute = createRoute({
   component: DownloadMapsPage,
 });
 
+const hubRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/hub",
+  component: HubBrowsePage,
+});
+
+const hubCallbackRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/hub-callback",
+  component: HubCallbackPage,
+});
+
+const hubShareRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/hub/share",
+  component: HubSharePage,
+});
+
+const hubDetailRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/hub/$id",
+  component: function HubDetailRoute() {
+    const { id } = hubDetailRoute.useParams();
+    return <HubDetailPage id={id} />;
+  },
+});
+
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/settings",
@@ -228,6 +259,10 @@ const routeTree = rootRoute.addChildren([
     collectionsRoute,
     collectionResultsRoute,
     downloadMapsRoute,
+    hubRoute,
+    hubCallbackRoute,
+    hubShareRoute,
+    hubDetailRoute,
     ...(isDesktopShell() ? [] : [ratingLabRoute]),
     skinRoute,
     settingsRoute,

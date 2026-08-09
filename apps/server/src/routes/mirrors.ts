@@ -40,7 +40,11 @@ const sortSchema = t.Union([
   t.Literal("title_asc"),
 ]);
 
-const batchModeSchema = t.Union([t.Literal("pages"), t.Literal("query")]);
+const batchModeSchema = t.Union([
+  t.Literal("pages"),
+  t.Literal("query"),
+  t.Literal("setIds"),
+]);
 
 function httpStatusForMirrorError(err: unknown): number {
   if (err instanceof OnlineQueryError) return 400;
@@ -116,6 +120,19 @@ export const mirrorRoutes = new Elysia({ prefix: "/mirrors" })
     ({ db, body, set }) => {
       try {
         const mode = body.mode ?? "pages";
+        if (mode === "setIds") {
+          if (!Array.isArray(body.setIds) || body.setIds.length === 0) {
+            set.status = 400;
+            return { error: "setIds is required for mode=setIds" };
+          }
+          return startMirrorBatchJob(db, {
+            mode: "setIds",
+            setIds: body.setIds,
+            noVideo: body.noVideo !== false,
+            excludeOwned: body.excludeOwned !== false,
+            downloadConcurrency: body.downloadConcurrency,
+          });
+        }
         if (mode === "query") {
           if (body.query == null || body.query.trim() === "") {
             set.status = 400;
@@ -157,6 +174,7 @@ export const mirrorRoutes = new Elysia({ prefix: "/mirrors" })
         mode: t.Optional(batchModeSchema),
         query: t.Optional(t.String()),
         q: t.Optional(t.String()),
+        setIds: t.Optional(t.Array(t.Number())),
         /** @deprecated Prefer `ruleset`; kept for older clients. */
         searchMode: t.Optional(rulesetSchema),
         ruleset: t.Optional(rulesetSchema),

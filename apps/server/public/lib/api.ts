@@ -239,7 +239,68 @@ export async function fetchSession(id: string | number) {
 }
 
 export async function fetchCollections() {
-  return unwrap(await api.api.collections.get(), "/api/collections");
+  return unwrap(await api.api.collections.get(), "/api/collections") as {
+    items: CollectionListItem[];
+  };
+}
+
+export type SmartCollectionItem = {
+  kind: "smart";
+  id: number;
+  name: string;
+  query: string;
+  matchCount: number | null;
+  lazerSyncedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RealmCollectionItem = {
+  kind: "realm";
+  id: string;
+  name: string;
+  mapCount: number;
+  resolvedSetCount: number;
+  managed: boolean;
+  lastModified: string | null;
+  syncedAt: string | null;
+};
+
+export type CollectionListItem = SmartCollectionItem | RealmCollectionItem;
+
+export async function fetchSmartCollectionSetIds(id: number) {
+  return unwrap(
+    await api.api.collections({ id: String(id) })["set-ids"].get(),
+    `/api/collections/${id}/set-ids`,
+  ) as {
+    kind: "smart";
+    id: number;
+    name: string;
+    beatmapsetIds: number[];
+    unresolvedInternalSets: number;
+  };
+}
+
+export async function fetchRealmCollectionSetIds(id: string) {
+  const res = await fetch(
+    `/api/collections/realm/${encodeURIComponent(id)}/set-ids`,
+  );
+  const data = (await res.json()) as {
+    error?: string;
+    kind: "realm";
+    id: string;
+    name: string;
+    beatmapsetIds: number[];
+    hashCount: number;
+    resolvedSetCount: number;
+    unresolvedHashCount: number;
+  };
+  if (!res.ok) {
+    throw new Error(
+      `/api/collections/realm/${id}/set-ids failed: ${data.error ?? res.status}`,
+    );
+  }
+  return data;
 }
 
 export async function createCollection(body: { name: string; query: string }) {
@@ -365,9 +426,10 @@ export async function countMirrorMissing(params: {
 }
 
 export async function startMirrorBatchJob(body: {
-  mode?: "pages" | "query";
+  mode?: "pages" | "query" | "setIds";
   query?: string;
   q?: string;
+  setIds?: number[];
   ruleset?: "any" | "osu" | "taiko" | "fruits" | "mania";
   status?:
     | "any"

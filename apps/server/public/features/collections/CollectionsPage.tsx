@@ -14,6 +14,8 @@ import {
   fetchCollections,
   syncCollectionsToLazer,
   updateCollection,
+  type RealmCollectionItem,
+  type SmartCollectionItem,
 } from "../../lib/api";
 
 function formatSyncedAt(iso: string | null | undefined): string | null {
@@ -40,6 +42,13 @@ export function CollectionsPage() {
     queryKey: ["collections"],
     queryFn: fetchCollections,
   });
+
+  const smartItems = (data?.items ?? []).filter(
+    (c): c is SmartCollectionItem => c.kind === "smart",
+  );
+  const realmItems = (data?.items ?? []).filter(
+    (c): c is RealmCollectionItem => c.kind === "realm" && !c.managed,
+  );
 
   const createMut = useMutation({
     mutationFn: createCollection,
@@ -101,7 +110,7 @@ export function CollectionsPage() {
     },
   });
 
-  function startEdit(c: { id: number; name: string; query: string }) {
+  function startEdit(c: SmartCollectionItem) {
     setEditingId(c.id);
     setEditName(c.name);
     setEditQuery(c.query);
@@ -204,144 +213,197 @@ export function CollectionsPage() {
         </div>
       ) : error ? (
         <p className="text-rose-300">{error.message}</p>
-      ) : !data || data.items.length === 0 ? (
-        <p className="text-sm text-muted">{dict?.collection.noCollections}</p>
       ) : (
-        <ul className="space-y-0.5">
-          {data.items.map((c) => {
-            const syncedLabel = formatSyncedAt(c.lazerSyncedAt);
-            const isEditing = editingId === c.id;
-            const isDeleting = deletingId === c.id;
+        <div className="space-y-8">
+          <section className="space-y-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
+              Smart collections
+            </h2>
+            {smartItems.length === 0 ? (
+              <p className="text-sm text-muted">
+                {dict?.collection.noCollections}
+              </p>
+            ) : (
+              <ul className="space-y-0.5">
+                {smartItems.map((c) => {
+                  const syncedLabel = formatSyncedAt(c.lazerSyncedAt);
+                  const isEditing = editingId === c.id;
+                  const isDeleting = deletingId === c.id;
 
-            if (isEditing) {
-              return (
-                <li key={c.id}>
-                  <form
-                    className="rx-row flex-col gap-3 !items-stretch sm:flex-row sm:items-end"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      if (
-                        !editName.trim() ||
-                        !editQuery.trim() ||
-                        updateMut.isPending
-                      ) {
-                        return;
-                      }
-                      updateMut.mutate({
-                        id: c.id,
-                        name: editName.trim(),
-                        query: editQuery.trim(),
-                      });
-                    }}
-                  >
-                    <input
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      placeholder={dict?.collection.namePlaceholder}
-                      className="rx-input min-w-0 flex-1"
-                      disabled={updateMut.isPending}
-                    />
-                    <input
-                      value={editQuery}
-                      onChange={(e) => setEditQuery(e.target.value)}
-                      placeholder={dict?.collection.queryPlaceholder}
-                      className="rx-input min-w-0 flex-[2] font-mono text-sm"
-                      disabled={updateMut.isPending}
-                    />
-                    <div className="flex shrink-0 gap-2">
-                      <button
-                        type="submit"
-                        disabled={
-                          updateMut.isPending ||
-                          !editName.trim() ||
-                          !editQuery.trim()
-                        }
-                        className="rx-btn-primary"
-                      >
-                        {updateMut.isPending
-                          ? dict?.collection.updating
-                          : dict?.collection.update}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={cancelEdit}
-                        disabled={updateMut.isPending}
-                        className="rx-btn"
-                      >
-                        {dict?.collection.cancel}
-                      </button>
-                    </div>
-                    {updateMut.error ? (
-                      <p className="text-sm text-rose-300 sm:col-span-3">
-                        {updateMut.error.message}
-                      </p>
-                    ) : null}
-                  </form>
-                </li>
-              );
-            }
+                  if (isEditing) {
+                    return (
+                      <li key={`smart-${c.id}`}>
+                        <form
+                          className="rx-row flex-col gap-3 !items-stretch sm:flex-row sm:items-end"
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            if (
+                              !editName.trim() ||
+                              !editQuery.trim() ||
+                              updateMut.isPending
+                            ) {
+                              return;
+                            }
+                            updateMut.mutate({
+                              id: c.id,
+                              name: editName.trim(),
+                              query: editQuery.trim(),
+                            });
+                          }}
+                        >
+                          <input
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                            placeholder={dict?.collection.namePlaceholder}
+                            className="rx-input min-w-0 flex-1"
+                            disabled={updateMut.isPending}
+                          />
+                          <input
+                            value={editQuery}
+                            onChange={(e) => setEditQuery(e.target.value)}
+                            placeholder={dict?.collection.queryPlaceholder}
+                            className="rx-input min-w-0 flex-[2] font-mono text-sm"
+                            disabled={updateMut.isPending}
+                          />
+                          <div className="flex shrink-0 gap-2">
+                            <button
+                              type="submit"
+                              disabled={
+                                updateMut.isPending ||
+                                !editName.trim() ||
+                                !editQuery.trim()
+                              }
+                              className="rx-btn-primary"
+                            >
+                              {updateMut.isPending
+                                ? dict?.collection.updating
+                                : dict?.collection.update}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={cancelEdit}
+                              disabled={updateMut.isPending}
+                              className="rx-btn"
+                            >
+                              {dict?.collection.cancel}
+                            </button>
+                          </div>
+                          {updateMut.error ? (
+                            <p className="text-sm text-rose-300 sm:col-span-3">
+                              {updateMut.error.message}
+                            </p>
+                          ) : null}
+                        </form>
+                      </li>
+                    );
+                  }
 
-            return (
-              <li key={c.id}>
-                <div
-                  className={`rx-row justify-between transition-opacity ${isDeleting ? "opacity-50" : ""}`}
-                >
-                  <div className="min-w-0">
-                    <Link
-                      to="/collections/$collectionId"
-                      params={{ collectionId: String(c.id) }}
-                      className="font-bold text-ink transition hover:underline"
-                    >
-                      {c.name}
-                    </Link>
-                    <div className="mt-0.5 truncate font-mono text-xs text-muted">
-                      {c.query}
+                  return (
+                    <li key={`smart-${c.id}`}>
+                      <div
+                        className={`rx-row justify-between transition-opacity ${isDeleting ? "opacity-50" : ""}`}
+                      >
+                        <div className="min-w-0">
+                          <Link
+                            to="/collections/$collectionId"
+                            params={{ collectionId: String(c.id) }}
+                            className="font-bold text-ink transition hover:underline"
+                          >
+                            {c.name}
+                          </Link>
+                          <div className="mt-0.5 truncate font-mono text-xs text-muted">
+                            {c.query}
+                          </div>
+                          {syncedLabel ? (
+                            <div className="mt-0.5 text-xs text-subtle">
+                              {t(dict?.collection.syncedToLazer, {
+                                time: syncedLabel,
+                              })}
+                            </div>
+                          ) : null}
+                          {isDeleting ? (
+                            <div className="mt-0.5 text-xs text-muted">
+                              {dict?.collection.deleting}
+                            </div>
+                          ) : null}
+                        </div>
+                        <div className="flex shrink-0 items-center gap-3">
+                          <span className="text-sm font-semibold tabular-nums text-subtle">
+                            {c.matchCount != null
+                              ? t(dict?.collection.mapsCount, {
+                                  count: c.matchCount.toLocaleString(),
+                                })
+                              : "—"}
+                          </span>
+                          <Link
+                            to="/hub/share"
+                            className="text-xs font-medium text-muted transition hover:text-ink"
+                          >
+                            Share
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => startEdit(c)}
+                            disabled={isDeleting || updateMut.isPending}
+                            className="text-xs font-medium text-muted transition hover:text-ink"
+                          >
+                            {dict?.collection.edit}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteMut.mutate(c.id)}
+                            disabled={isDeleting || deleteMut.isPending}
+                            className="text-xs font-medium text-rose-300/80 transition hover:text-rose-300 disabled:opacity-60"
+                          >
+                            {isDeleting
+                              ? dict?.collection.deleting
+                              : dict?.collection.delete}
+                          </button>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+
+          {realmItems.length > 0 ? (
+            <section className="space-y-2">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
+                Lazer collections
+              </h2>
+              <ul className="space-y-0.5">
+                {realmItems.map((c) => (
+                  <li key={`realm-${c.id}`}>
+                    <div className="rx-row justify-between">
+                      <div className="min-w-0">
+                        <div className="font-bold text-ink">{c.name}</div>
+                        <div className="mt-0.5 text-xs text-muted">
+                          {c.resolvedSetCount.toLocaleString()} /{" "}
+                          {c.mapCount.toLocaleString()} sets resolved locally
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-3">
+                        <span className="text-sm font-semibold tabular-nums text-subtle">
+                          {t(dict?.collection.mapsCount, {
+                            count: c.mapCount.toLocaleString(),
+                          })}
+                        </span>
+                        <Link
+                          to="/hub/share"
+                          className="text-xs font-medium text-muted transition hover:text-ink"
+                        >
+                          Share
+                        </Link>
+                      </div>
                     </div>
-                    {syncedLabel ? (
-                      <div className="mt-0.5 text-xs text-subtle">
-                        {t(dict?.collection.syncedToLazer, {
-                          time: syncedLabel,
-                        })}
-                      </div>
-                    ) : null}
-                    {isDeleting ? (
-                      <div className="mt-0.5 text-xs text-muted">
-                        {dict?.collection.deleting}
-                      </div>
-                    ) : null}
-                  </div>
-                  <div className="flex shrink-0 items-center gap-3">
-                    <span className="text-sm font-semibold tabular-nums text-subtle">
-                      {c.matchCount != null
-                        ? t(dict?.collection.mapsCount, {
-                            count: c.matchCount.toLocaleString(),
-                          })
-                        : "—"}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => startEdit(c)}
-                      disabled={isDeleting || updateMut.isPending}
-                      className="text-xs font-medium text-muted transition hover:text-ink"
-                    >
-                      {dict?.collection.edit}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => deleteMut.mutate(c.id)}
-                      disabled={isDeleting || deleteMut.isPending}
-                      className="text-xs font-medium text-rose-300/80 transition hover:text-rose-300 disabled:opacity-60"
-                    >
-                      {isDeleting
-                        ? dict?.collection.deleting
-                        : dict?.collection.delete}
-                    </button>
-                  </div>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+        </div>
       )}
     </div>
   );

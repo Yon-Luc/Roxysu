@@ -21,6 +21,7 @@ import {
   type OnlineBeatmapSet,
 } from "./search";
 import { MIRROR_USER_AGENT } from "./userAgent";
+import { hubIdsToStubSets, tryHubCachedSearch } from "./hubSearch";
 
 export type MirrorSearchResult = {
   provider: string;
@@ -35,6 +36,8 @@ export type MirrorSearchResult = {
   note: string;
   /** Echo of the QL / bridged query when search used app QL. */
   query?: string;
+  /** True when results came from the hub search cache. */
+  hubCached?: boolean;
 };
 
 const MIRROR_FETCH_TIMEOUT_MS = 20_000;
@@ -208,6 +211,46 @@ export async function searchOnlineBeatmapsets(
   let mirrorPage = needsOverfetch ? 0 : page;
 
   if (!needsOverfetch) {
+    // Prefer hub cache when HUB_URL is set and the entry is primed.
+    const hubHit = await tryHubCachedSearch({
+      ...mirrorBase,
+      page: mirrorPage,
+      limit: MIRROR_PAGE_CAPACITY,
+    });
+    if (hubHit) {
+      lastRawCount = hubHit.beatmapsetIds.length;
+      mirrorHasMore =
+        (hubHit.page + 1) * hubHit.limit < hubHit.total ||
+        hubHit.beatmapsetIds.length >= MIRROR_PAGE_CAPACITY;
+      for (const set of hubIdsToStubSets(hubHit.beatmapsetIds)) {
+        if (seen.has(set.id)) continue;
+        seen.add(set.id);
+        if (excludeOwned && hide.has(set.id)) {
+          if (owned.has(set.id)) ownedSkipped += 1;
+          else if (pending.has(set.id)) pendingSkipped += 1;
+          continue;
+        }
+        matched.push(set);
+      }
+
+      const hasMore = mirrorHasMore || matched.length >= MIRROR_PAGE_CAPACITY;
+      return {
+        provider: `hub-cache/${provider.id}`,
+        page,
+        excludeOwned,
+        ownedSkipped,
+        pendingSkipped,
+        mirrorCount: lastRawCount,
+        hasMore,
+        items: matched,
+        query: onlineQuery?.rawQuery,
+        hubCached: true,
+        note: hubHit.label
+          ? `Served from hub cache (${hubHit.label}${hubHit.stale ? ", refreshing" : ""}).`
+          : `Served from hub cache${hubHit.stale ? " (refreshing in background)" : ""}.`,
+      };
+    }
+
     // Fast path: no post-filters — fetch exactly the requested mirror page.
     const { rawCount, sets } = await fetchMirrorPage(provider.id, {
       ...mirrorBase,

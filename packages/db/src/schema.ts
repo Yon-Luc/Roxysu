@@ -214,6 +214,31 @@ export const collections = sqliteTable("collections", {
     .default(sql`(unixepoch() * 1000)`),
 });
 
+/** Mirrored from lazer BeatmapCollection (realm-reader owned). */
+export const realmCollections = sqliteTable("realm_collections", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  lastModified: integer("last_modified", { mode: "timestamp_ms" }),
+  hashCount: integer("hash_count").notNull().default(0),
+  resolvedSetCount: integer("resolved_set_count").notNull().default(0),
+  syncedAt: integer("synced_at", { mode: "timestamp_ms" }).notNull(),
+});
+
+export const realmCollectionHashes = sqliteTable(
+  "realm_collection_hashes",
+  {
+    collectionId: text("collection_id")
+      .notNull()
+      .references(() => realmCollections.id, { onDelete: "cascade" }),
+    md5Hash: text("md5_hash").notNull(),
+    beatmapsetOnlineId: integer("beatmapset_online_id"),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.collectionId, t.md5Hash] }),
+    md5Idx: index("realm_collection_hashes_md5_idx").on(t.md5Hash),
+  }),
+);
+
 export const tags = sqliteTable("tags", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull().unique(),

@@ -26,6 +26,7 @@ import {
 } from "./searchOnline";
 import type { MirrorSearchParams, OnlineBeatmapSet } from "./search";
 import { MIRROR_USER_AGENT } from "./userAgent";
+import { diffAgainstLibrary } from "./ownership";
 
 export type MirrorBatchJobStatus =
   | "idle"
@@ -37,7 +38,7 @@ export type MirrorBatchJobStatus =
 /** Sub-step while status is running/stopping. */
 export type MirrorBatchPhase = "idle" | "scanning" | "downloading";
 
-export type MirrorBatchMode = "pages" | "query";
+export type MirrorBatchMode = "pages" | "query" | "setIds";
 
 export type MirrorBatchJobState = {
   status: MirrorBatchJobStatus;
@@ -99,9 +100,15 @@ export type MirrorBatchQueryRequest = BatchDownloadOpts & {
   maxSets?: number;
 };
 
+export type MirrorBatchSetIdsRequest = BatchDownloadOpts & {
+  mode: "setIds";
+  setIds: number[];
+};
+
 export type MirrorBatchStartRequest =
   | MirrorBatchPagesRequest
-  | MirrorBatchQueryRequest;
+  | MirrorBatchQueryRequest
+  | MirrorBatchSetIdsRequest;
 
 const DOWNLOAD_TIMEOUT_MS = 120_000;
 /** Minimum pause between finishing one download slot and starting the next. */
@@ -554,7 +561,22 @@ async function runBatch(
     const mode: MirrorBatchMode = request.mode ?? "pages";
     let sets: Array<OnlineBeatmapSet | { id: number }> = [];
 
-    if (mode === "query" && request.mode === "query") {
+    if (mode === "setIds" && request.mode === "setIds") {
+      job.phase = "scanning";
+      const unique = [
+        ...new Set(
+          request.setIds.filter((id) => Number.isSafeInteger(id) && id > 0),
+        ),
+      ];
+      if (job.excludeOwned) {
+        const diff = await diffAgainstLibrary(db, unique);
+        job.skippedOwned = diff.owned.length;
+        sets = diff.missing.map((id) => ({ id }));
+      } else {
+        sets = unique.map((id) => ({ id }));
+      }
+      job.matched = sets.length;
+    } else if (mode === "query" && request.mode === "query") {
       const onlineQuery = parseOnlineMirrorQuery(request.query, {
         defaultSort: request.sort ?? "ranked_desc",
       });
@@ -619,6 +641,27 @@ export function startMirrorBatchJob(
   }
 
   const mode: MirrorBatchMode = request.mode ?? "pages";
+
+  if (mode === "setIds" && request.mode === "setIds") {
+    if (!Array.isArray(request.setIds) || request.setIds.length === 0) {
+      throw new Error("setIds is required for mode=setIds");
+    }
+    resetJob({
+      mode: "setIds",
+      query: `setIds:${request.setIds.length}`,
+      noVideo: request.noVideo !== false,
+      excludeOwned: request.excludeOwned !== false,
+      downloadConcurrency: request.downloadConcurrency,
+    });
+    void runBatch(db, {
+      mode: "setIds",
+      setIds: request.setIds,
+      noVideo: job.noVideo,
+      excludeOwned: job.excludeOwned,
+      downloadConcurrency: job.downloadConcurrency,
+    });
+    return getMirrorBatchJobState();
+  }
 
   if (mode === "query" && request.mode === "query") {
     parseOnlineMirrorQuery(request.query);

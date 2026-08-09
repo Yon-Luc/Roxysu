@@ -1,7 +1,7 @@
-import Elysia, { t } from "elysia";
+import Elysia, { status, t } from "elysia";
 import { desc, eq } from "drizzle-orm";
 import { db } from "../db";
-import { searchCache } from "../../../../packages/db/src/hub/schema";
+import { searchCache } from "@roxysu/db/hub";
 import { requireAdmin } from "../middleware/auth";
 import { fetchAllBeatmapsetIds, type HinamizawaSearchParams } from "../services/hinamizawa";
 import { hashQueryParams, refreshCache } from "../services/cache";
@@ -40,7 +40,7 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
   // -------------------------------------------------------------------------
   .post(
     "/cache",
-    async ({ body, error }) => {
+    async ({ body }) => {
       const params = body.query_params as HinamizawaSearchParams;
       const queryHash = hashQueryParams(params);
 
@@ -52,7 +52,7 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
         .get();
 
       if (existing) {
-        return error(409, {
+        return status(409, {
           message: "Cache entry for these params already exists",
           id: existing.id,
         });
@@ -80,7 +80,7 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
         // Clean up placeholder on failure
         await db.delete(searchCache).where(eq(searchCache.id, inserted.id));
         console.error("[admin] Cache prime failed:", err);
-        return error(502, { message: "Failed to fetch from Hinamizawa" });
+        return status(502, { message: "Failed to fetch from Hinamizawa" });
       }
 
       const row = await db
@@ -122,20 +122,20 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
   // -------------------------------------------------------------------------
   .post(
     "/cache/:id/refresh",
-    async ({ params, error }) => {
+    async ({ params }) => {
       const row = await db
         .select()
         .from(searchCache)
         .where(eq(searchCache.id, params.id))
         .get();
 
-      if (!row) return error(404, { message: "Cache entry not found" });
+      if (!row) return status(404, { message: "Cache entry not found" });
 
       try {
         await refreshCache(params.id);
       } catch (err) {
         console.error("[admin] Refresh failed:", err);
-        return error(502, { message: "Hinamizawa search failed during refresh" });
+        return status(502, { message: "Hinamizawa search failed during refresh" });
       }
 
       const updated = await db
@@ -159,14 +159,14 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
   // -------------------------------------------------------------------------
   .delete(
     "/cache/:id",
-    async ({ params, error }) => {
+    async ({ params }) => {
       const row = await db
         .select()
         .from(searchCache)
         .where(eq(searchCache.id, params.id))
         .get();
 
-      if (!row) return error(404, { message: "Cache entry not found" });
+      if (!row) return status(404, { message: "Cache entry not found" });
 
       await db.delete(searchCache).where(eq(searchCache.id, params.id));
       return { message: "Cache entry deleted" };

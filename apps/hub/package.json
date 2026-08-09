@@ -2,6 +2,11 @@
   "name": "@roxysu/hub",
   "version": "0.1.0",
   "private": true,
+  "module": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
@@ -14,7 +19,7 @@
     "@elysiajs/cors": "^1.4.2",
     "@elysiajs/jwt": "^1.4.2",
     "@roxysu/db": "workspace:*",
-    "drizzle-orm": "^0.45.2",
+    "drizzle-orm": "0.36.4",
     "elysia": "^1.4.29"
   },
   "devDependencies": {

@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db } from "../db";
-import { searchCache } from "../../../../packages/db/src/hub/schema";
+import { searchCache } from "@roxysu/db/hub";
 import { fetchAllBeatmapsetIds, type HinamizawaSearchParams } from "./hinamizawa";
 
 const TTL_MS = parseInt(process.env.HUB_CACHE_TTL_MS ?? "86400000", 10);

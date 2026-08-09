@@ -61,6 +61,7 @@ function idleJob(): MirrorBatchJob {
     pageCount: 1,
     noVideo: true,
     excludeOwned: true,
+    downloadConcurrency: 3,
     queued: 0,
     downloaded: 0,
     skippedExisting: 0,

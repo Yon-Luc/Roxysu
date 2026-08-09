@@ -32,6 +32,7 @@ const PAGE_LABEL_KEYS: Record<string, keyof Dictionary["app"]["nav"]> = {
   "/practice": "practice",
   "/sessions": "sessions",
   "/collections": "collections",
+  "/hub": "hub",
   "/download-maps": "download",
   "/rating-lab": "ratingLab",
   "/skin": "skin",
@@ -114,6 +115,7 @@ const ALL_PAGE_ITEMS: {
   { to: "/practice", label: "Practice", keywords: ["maps", "library", "beatmaps"] },
   { to: "/sessions", label: "Sessions", keywords: ["plays", "live"] },
   { to: "/collections", label: "Collections", keywords: ["queries"] },
+  { to: "/hub", label: "Hub", keywords: ["share", "osu", "oauth"] },
   {
     to: "/download-maps",
     label: "Download",
@@ -359,6 +361,7 @@ export function CommandPalette({
 
     if (trimmed && collectionsData) {
       for (const collection of collectionsData.items) {
+        if (collection.kind !== "smart") continue;
         const haystack = [collection.name, collection.query].join(" ");
         if (!matchesQuery(haystack, trimmed)) continue;
         result.push({

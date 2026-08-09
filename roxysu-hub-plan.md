@@ -345,11 +345,20 @@ apps/hub/
 OSU_CLIENT_ID=
 OSU_CLIENT_SECRET=
 OSU_REDIRECT_URI=https://hub.yourdomain.com/auth/callback
+HUB_CLIENT_REDIRECT_URI=http://127.0.0.1:4321/#/hub-callback
 JWT_SECRET=
+ADMIN_OSU_ID=
 HUB_CACHE_TTL_MS=86400000
 DATABASE_URL=/app/data/hub.sqlite
 PORT=4322
+CORS_ORIGIN=*
 ```
+
+**OAuth URI split:**
+- `OSU_REDIRECT_URI` must match the hub callback registered on osu! (`…/auth/callback` on the hub domain).
+- `HUB_CLIENT_REDIRECT_URI` is where the hub sends the browser after issuing a JWT (local Roxysu UI). Desktop and web both use `http://127.0.0.1:4321/#/hub-callback` by default.
+
+On the Roxysu app side, set `HUB_URL` (default `http://localhost:4322`, or your public hub URL) so Download Maps / Hub UI can reach the API.
 
 ### `apps/hub/Dockerfile`
 

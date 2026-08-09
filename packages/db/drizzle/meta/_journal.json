@@ -78,6 +78,13 @@
       "when": 1784478000000,
       "tag": "0010_mania_rating_pp_by_accuracy",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1784481600000,
+      "tag": "0011_realm_collections",
+      "breakpoints": true
     }
   ]
 }

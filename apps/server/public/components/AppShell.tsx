@@ -24,6 +24,7 @@ const ALL_NAV = [
   { to: "/practice", label: "Practice", labelKey: "practice", icon: PracticeIcon },
   { to: "/sessions", label: "Sessions", labelKey: "sessions", icon: SessionsIcon },
   { to: "/collections", label: "Collections", labelKey: "collections", icon: CollectionsIcon },
+  { to: "/hub", label: "Hub", labelKey: "hub", icon: HubIcon },
   { to: "/download-maps", label: "Download", labelKey: "download", icon: DownloadMapsIcon },
   { to: "/rating-lab", label: "Rating Lab", labelKey: "ratingLab", icon: RatingLabIcon },
   { to: "/skin", label: "Skin", labelKey: "skin", icon: SkinIcon },
@@ -421,6 +422,14 @@ function CollectionsIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
       <path d="M3.75 5.5A1.75 1.75 0 0 1 5.5 3.75h5A1.75 1.75 0 0 1 12.25 5.5v5A1.75 1.75 0 0 1 10.5 12.25h-5A1.75 1.75 0 0 1 3.75 10.5v-5Zm8 0A1.75 1.75 0 0 1 13.5 3.75h5A1.75 1.75 0 0 1 20.25 5.5v5A1.75 1.75 0 0 1 18.5 12.25h-5A1.75 1.75 0 0 1 11.75 10.5v-5ZM3.75 13.5A1.75 1.75 0 0 1 5.5 11.75h5a1.75 1.75 0 0 1 1.75 1.75v5A1.75 1.75 0 0 1 10.5 20.25h-5A1.75 1.75 0 0 1 3.75 18.5v-5Zm8 0a1.75 1.75 0 0 1 1.75-1.75h5a1.75 1.75 0 0 1 1.75 1.75v5a1.75 1.75 0 0 1-1.75 1.75h-5a1.75 1.75 0 0 1-1.75-1.75v-5Z" />
+    </svg>
+  );
+}
+
+function HubIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M12 2.25a.75.75 0 0 1 .53.22l7.5 7.5a.75.75 0 0 1-.53 1.28h-1.5v7.5A1.75 1.75 0 0 1 16.25 20.5h-2.5a.75.75 0 0 1-.75-.75v-4.5h-2v4.5a.75.75 0 0 1-.75.75h-2.5A1.75 1.75 0 0 1 5.75 18.75v-7.5h-1.5a.75.75 0 0 1-.53-1.28l7.5-7.5a.75.75 0 0 1 .53-.22Z" />
     </svg>
   );
 }

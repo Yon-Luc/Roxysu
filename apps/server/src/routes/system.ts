@@ -36,6 +36,8 @@ export const systemRoutes = new Elysia({ prefix: "/system" })
     return {
       beatmapCount: beatmapCount?.n ?? 0,
       scoreCount: scoreCount?.n ?? 0,
+      /** Public hub base URL for collection sharing / search cache. */
+      hubUrl: process.env.HUB_URL?.trim() || "http://localhost:4322",
       /** True only when pause-when-unfocused is enabled and the web UI reported unfocused. */
       syncPaused:
         pauseWhenUnfocusedRow?.value === "1" && focusRow?.value === "0",

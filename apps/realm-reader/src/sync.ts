@@ -36,6 +36,7 @@ import {
 } from "./map";
 import { loadOsuSchema } from "./schema";
 import { platformDefaultOsuDataPath } from "./osu-paths";
+import { syncRealmCollectionsFromRealm } from "./syncRealmCollections";
 
 export { defaultDbPath } from "@roxysu/db/path";
 
@@ -809,6 +810,8 @@ export function runFullSync(db: Db, realmPath: string): SyncResult {
       collected.realmSetIds,
     );
 
+    syncRealmCollectionsFromRealm(db, realm);
+
     const rowsChanged =
       rulesetsUpserted.changed +
       beatmapSetsUpserted.changed +
@@ -1000,6 +1003,8 @@ export function runReconcileSync(db: Db, realmPath: string): SyncResult {
         .run();
       replayBackfillRan = true;
     }
+
+    syncRealmCollectionsFromRealm(db, realm);
 
     const rowsChanged =
       deleted.scoresDeleted +
@@ -1241,6 +1246,8 @@ export function runIncrementalSync(db: Db, realmPath: string): SyncResult {
     ) {
       caughtUp = catchUpMissingFromRealm(db, realm, collectRealmIdSets(realm));
     }
+
+    syncRealmCollectionsFromRealm(db, realm);
 
     const rowsChanged =
       rulesetsUpserted.changed +

@@ -1,8 +1,15 @@
-import { collections } from "@roxysu/db/schema";
+import {
+  beatmapSets,
+  collections,
+  realmCollectionHashes,
+  realmCollections,
+} from "@roxysu/db/schema";
+import { isManagedCollectionName } from "@roxysu/collection-sync";
 import { Elysia, t } from "elysia";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 
 import { dbPlugin } from "../db-runtime";
+import type { Db } from "../db-runtime";
 import { toIso } from "../shared/serialize";
 import { publish } from "../shared/events";
 import { syncCollectionsToLazer } from "../shared/syncCollections";
@@ -19,6 +26,34 @@ import {
   oszContentDisposition,
 } from "../map-analysis/exportOsz";
 
+async function resolveSmartSetOnlineIds(
+  db: Db,
+  query: string,
+): Promise<{ beatmapsetIds: number[]; unresolvedInternalSets: number }> {
+  const { setIds } = listDistinctSetIds(db, query);
+  if (setIds.length === 0) {
+    return { beatmapsetIds: [], unresolvedInternalSets: 0 };
+  }
+
+  const rows = await db
+    .select({ id: beatmapSets.id, onlineId: beatmapSets.onlineId })
+    .from(beatmapSets)
+    .where(inArray(beatmapSets.id, setIds));
+
+  const byId = new Map(rows.map((r) => [r.id, r.onlineId]));
+  const beatmapsetIds: number[] = [];
+  let unresolvedInternalSets = 0;
+  for (const id of setIds) {
+    const onlineId = byId.get(id);
+    if (onlineId != null && onlineId > 0) beatmapsetIds.push(onlineId);
+    else unresolvedInternalSets += 1;
+  }
+  return {
+    beatmapsetIds: [...new Set(beatmapsetIds)],
+    unresolvedInternalSets,
+  };
+}
+
 export const collectionRoutes = new Elysia({ prefix: "/collections" })
   .use(dbPlugin)
   .get("/", async ({ db }) => {
@@ -27,7 +62,7 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
       .from(collections)
       .orderBy(desc(collections.updatedAt));
 
-    const items = rows.map((c) => {
+    const smartItems = rows.map((c) => {
       let matchCount: number | null = null;
       try {
         matchCount = countMatches(db, c.query);
@@ -35,6 +70,7 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
         matchCount = null;
       }
       return {
+        kind: "smart" as const,
         id: c.id,
         name: c.name,
         query: c.query,
@@ -45,8 +81,64 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
       };
     });
 
-    return { items };
+    const realmRows = await db
+      .select()
+      .from(realmCollections)
+      .orderBy(desc(realmCollections.lastModified));
+
+    const realmItems = realmRows.map((c) => ({
+      kind: "realm" as const,
+      id: c.id,
+      name: c.name,
+      mapCount: c.hashCount,
+      resolvedSetCount: c.resolvedSetCount,
+      managed: isManagedCollectionName(c.name),
+      lastModified: toIso(c.lastModified),
+      syncedAt: toIso(c.syncedAt),
+    }));
+
+    return { items: [...smartItems, ...realmItems] };
   })
+  .get(
+    "/realm/:id/set-ids",
+    async ({ db, params, set }) => {
+      const [col] = await db
+        .select()
+        .from(realmCollections)
+        .where(eq(realmCollections.id, params.id))
+        .limit(1);
+      if (!col) {
+        set.status = 404;
+        return { error: "Realm collection not found" };
+      }
+
+      const rows = await db
+        .select({
+          onlineId: realmCollectionHashes.beatmapsetOnlineId,
+        })
+        .from(realmCollectionHashes)
+        .where(eq(realmCollectionHashes.collectionId, params.id));
+
+      const beatmapsetIds = [
+        ...new Set(
+          rows
+            .map((r) => r.onlineId)
+            .filter((id): id is number => id != null && id > 0),
+        ),
+      ];
+
+      return {
+        kind: "realm" as const,
+        id: col.id,
+        name: col.name,
+        beatmapsetIds,
+        hashCount: col.hashCount,
+        resolvedSetCount: beatmapsetIds.length,
+        unresolvedHashCount: Math.max(0, col.hashCount - beatmapsetIds.length),
+      };
+    },
+    { params: t.Object({ id: t.String({ minLength: 1 }) }) },
+  )
   .post("/sync-lazer", async ({ db, set }) => {
     const outcome = await syncCollectionsToLazer(db);
     if (!outcome.ok) {
@@ -82,6 +174,7 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
       publish({ type: "collection.updated", collectionId: row!.id });
 
       return {
+        kind: "smart" as const,
         id: row!.id,
         name: row!.name,
         query: row!.query,
@@ -98,6 +191,39 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
   )
   .group("/:id", (app) =>
     app
+      .get(
+        "/set-ids",
+        async ({ db, params, set }) => {
+          const id = Number(params.id);
+          const [col] = await db
+            .select()
+            .from(collections)
+            .where(eq(collections.id, id))
+            .limit(1);
+          if (!col) {
+            set.status = 404;
+            return { error: "Collection not found" };
+          }
+
+          try {
+            const resolved = await resolveSmartSetOnlineIds(db, col.query);
+            return {
+              kind: "smart" as const,
+              id: col.id,
+              name: col.name,
+              beatmapsetIds: resolved.beatmapsetIds,
+              unresolvedInternalSets: resolved.unresolvedInternalSets,
+            };
+          } catch (err) {
+            if (err instanceof QueryParseError) {
+              set.status = 400;
+              return { error: err.message };
+            }
+            throw err;
+          }
+        },
+        { params: t.Object({ id: t.String() }) },
+      )
       .patch(
         "/",
         async ({ db, params, body, set }) => {

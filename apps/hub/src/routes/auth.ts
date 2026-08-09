@@ -1,53 +1,61 @@
-import Elysia, { t } from "elysia";
+import Elysia, { status, t } from "elysia";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
-import { hubUsers } from "../../../../packages/db/src/hub/schema";
-import { buildAuthorizationUrl, exchangeCode, fetchOsuMe } from "../services/osu-oauth";
+import { hubUsers } from "@roxysu/db/hub";
+import {
+  buildAuthorizationUrl,
+  exchangeCode,
+  fetchOsuMe,
+} from "../services/osu-oauth";
 import { jwtPlugin, requireAuth } from "../middleware/auth";
+
+const DEFAULT_CLIENT_REDIRECT = "http://127.0.0.1:4321/#/hub-callback";
+
+function buildClientRedirect(token: string): string {
+  const base =
+    process.env.HUB_CLIENT_REDIRECT_URI?.trim() || DEFAULT_CLIENT_REDIRECT;
+  const sep = base.includes("?") ? "&" : "?";
+  return `${base}${sep}token=${encodeURIComponent(token)}`;
+}
 
 export const authRoutes = new Elysia({ prefix: "/auth" })
   .use(jwtPlugin)
-  .use(requireAuth)
 
   // -------------------------------------------------------------------------
-  // GET /auth/login — redirect to osu! OAuth
+  // GET /auth/login — redirect to osu! OAuth (public)
   // -------------------------------------------------------------------------
   .get("/login", ({ redirect }) => {
     return redirect(buildAuthorizationUrl());
   })
 
   // -------------------------------------------------------------------------
-  // GET /auth/callback — exchange code, upsert user, return JWT
+  // GET /auth/callback — exchange code, upsert user, redirect with JWT
   // -------------------------------------------------------------------------
   .get(
     "/callback",
-    async ({ query, jwt, error }) => {
+    async ({ query, jwt, redirect }) => {
       const { code } = query;
-      if (!code) return error(400, { message: "Missing code parameter" });
+      if (!code) return status(400, { message: "Missing code parameter" });
 
-      // 1. Exchange code for osu! access token
       let accessToken: string;
       try {
         accessToken = await exchangeCode(code);
-      } catch (e) {
-        return error(502, { message: "Failed to exchange code with osu!" });
+      } catch {
+        return status(502, { message: "Failed to exchange code with osu!" });
       }
 
-      // 2. Fetch osu! user profile
       let osuUser: Awaited<ReturnType<typeof fetchOsuMe>>;
       try {
         osuUser = await fetchOsuMe(accessToken);
-      } catch (e) {
-        return error(502, { message: "Failed to fetch osu! profile" });
+      } catch {
+        return status(502, { message: "Failed to fetch osu! profile" });
       }
 
-      // 3. Determine role — ADMIN_OSU_ID env grants admin on first/every login
       const adminOsuId = process.env.ADMIN_OSU_ID
         ? parseInt(process.env.ADMIN_OSU_ID, 10)
         : null;
       const role = adminOsuId && osuUser.id === adminOsuId ? "admin" : "user";
 
-      // 4. Upsert user row
       const existing = await db
         .select()
         .from(hubUsers)
@@ -57,7 +65,6 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
       let userId: number;
 
       if (existing) {
-        // Update username/avatar in case they changed on osu!
         await db
           .update(hubUsers)
           .set({
@@ -81,35 +88,42 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
         userId = inserted.id;
       }
 
-      // 5. Issue hub JWT — osu! token is discarded after this point
       const token = await jwt.sign({
-        sub: userId,
+        // JWT `sub` is a string claim; we coerce back to number in requireAuth.
+        sub: String(userId),
         osuId: osuUser.id,
         username: osuUser.username,
         role,
       });
 
-      return { token };
+      if (!token) {
+        return status(500, { message: "Failed to issue session token" });
+      }
+
+      return redirect(buildClientRedirect(token));
     },
     {
       query: t.Object({
         code: t.Optional(t.String()),
+        // osu! may send ?error=access_denied — keep as oauthError to avoid
+        // clashing with response helpers named `error`/`status`.
         error: t.Optional(t.String()),
       }),
-    }
+    },
   )
 
   // -------------------------------------------------------------------------
-  // GET /auth/me — current user info
+  // GET /auth/me — current user info (JWT required)
   // -------------------------------------------------------------------------
-  .get("/me", async ({ user, error }) => {
+  .use(requireAuth)
+  .get("/me", async ({ user }) => {
     const row = await db
       .select()
       .from(hubUsers)
       .where(eq(hubUsers.id, user.sub))
       .get();
 
-    if (!row) return error(404, { message: "User not found" });
+    if (!row) return status(404, { message: "User not found" });
 
     return {
       id: row.id,

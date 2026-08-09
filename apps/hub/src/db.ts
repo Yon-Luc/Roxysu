@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { migrate } from "drizzle-orm/bun-sqlite/migrator";
-import * as schema from "../../../packages/db/src/hub/schema";
+import * as schema from "@roxysu/db/hub";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 

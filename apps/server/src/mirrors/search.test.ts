@@ -32,6 +32,7 @@ describe("normalizeOnlineBeatmapSet", () => {
           mode: "mania",
           mode_int: 3,
           cs: 7,
+          total_length: 185,
         },
         {
           id: 2,
@@ -40,6 +41,7 @@ describe("normalizeOnlineBeatmapSet", () => {
           mode: "mania",
           mode_int: 3,
           cs: 4,
+          total_length: 180,
         },
       ],
     });
@@ -55,6 +57,7 @@ describe("normalizeOnlineBeatmapSet", () => {
       playCount: 100,
       hasVideo: true,
       rankedDate: "2020-01-01T00:00:00Z",
+      lengthSeconds: 185,
       beatmaps: [
         {
           id: 2,
@@ -63,6 +66,7 @@ describe("normalizeOnlineBeatmapSet", () => {
           mode: "mania",
           modeInt: 3,
           keys: 4,
+          totalLength: 180,
         },
         {
           id: 1,
@@ -71,6 +75,7 @@ describe("normalizeOnlineBeatmapSet", () => {
           mode: "mania",
           modeInt: 3,
           keys: 7,
+          totalLength: 185,
         },
       ],
     });
@@ -101,6 +106,7 @@ describe("normalizeCheeseGullBeatmapSet", () => {
           DifficultyRating: 7.51,
           Mode: 0,
           CS: 4,
+          TotalLength: 280,
         },
       ],
     });
@@ -116,6 +122,7 @@ describe("normalizeCheeseGullBeatmapSet", () => {
       playCount: 900000,
       hasVideo: false,
       rankedDate: "2015-08-09 19:39:24",
+      lengthSeconds: 280,
       beatmaps: [
         {
           id: 658127,
@@ -124,6 +131,7 @@ describe("normalizeCheeseGullBeatmapSet", () => {
           mode: "osu",
           modeInt: 0,
           keys: null,
+          totalLength: 280,
         },
       ],
     });

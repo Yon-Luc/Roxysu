@@ -52,6 +52,11 @@ export {
   type MirrorSearchResult,
 } from "./searchOnline";
 export {
+  fetchHinaiBeatmapsetInfo,
+  loadLocalBeatmapsetInfo,
+  resolveBeatmapsetInfoBatch,
+} from "./beatmapInfo";
+export {
   BEATMAPS_DOWNLOAD_DIR_ENV,
   beatmapSetArchiveFilename,
   ensureBeatmapsDownloadDir,

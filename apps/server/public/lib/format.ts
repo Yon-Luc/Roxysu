@@ -26,6 +26,17 @@ export function formatStars(value: number | null | undefined): string {
   return `${value.toFixed(2)}★`;
 }
 
+/** Format a duration in seconds as `m:ss` (e.g. `3:05`). */
+export function formatDurationSeconds(
+  value: number | null | undefined,
+): string {
+  if (value == null || !Number.isFinite(value) || value <= 0) return "—";
+  const total = Math.round(value);
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
 export function formatRelativeTime(iso: string | null | undefined): string {
   if (!iso) return "—";
   const then = new Date(iso).getTime();

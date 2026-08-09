@@ -112,6 +112,7 @@ export function hubIdsToStubSets(ids: number[]): OnlineBeatmapSet[] {
     playCount: 0,
     hasVideo: false,
     rankedDate: null,
+    lengthSeconds: null,
     beatmaps: [],
   }));
 }

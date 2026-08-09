@@ -8,6 +8,7 @@ import {
   openLastBatchArchivesInOsu,
   parsePositiveSetId,
   probeBeatmapsDownloadDir,
+  resolveBeatmapsetInfoBatch,
   saveBeatmapsetArchive,
   searchOnlineBeatmapsets,
   startMirrorBatchJob,
@@ -115,6 +116,24 @@ export const mirrorRoutes = new Elysia({ prefix: "/mirrors" })
       };
     }
   })
+  .post(
+    "/beatmapsets/info",
+    async ({ db, body, set }) => {
+      try {
+        return await resolveBeatmapsetInfoBatch(db, body.setIds);
+      } catch (err) {
+        set.status = httpStatusForMirrorError(err);
+        return {
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
+    },
+    {
+      body: t.Object({
+        setIds: t.Array(t.Number(), { minItems: 1, maxItems: 100 }),
+      }),
+    },
+  )
   .post(
     "/batch/start",
     ({ db, body, set }) => {

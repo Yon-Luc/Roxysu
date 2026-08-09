@@ -5,6 +5,8 @@ export type OnlineBeatmapDifficulty = {
   mode: string;
   modeInt: number;
   keys: number | null;
+  /** Audio length in seconds (osu! `total_length`). */
+  totalLength: number | null;
 };
 
 export type OnlineBeatmapSet = {
@@ -18,6 +20,8 @@ export type OnlineBeatmapSet = {
   playCount: number;
   hasVideo: boolean;
   rankedDate: string | null;
+  /** Longest difficulty length in seconds (for card display). */
+  lengthSeconds: number | null;
   beatmaps: OnlineBeatmapDifficulty[];
 };
 
@@ -77,6 +81,17 @@ function asBool(value: unknown): boolean {
   return value === true;
 }
 
+function maxLengthSeconds(
+  beatmaps: Array<{ totalLength: number | null }>,
+): number | null {
+  let max: number | null = null;
+  for (const b of beatmaps) {
+    if (b.totalLength == null || !(b.totalLength > 0)) continue;
+    max = max == null ? b.totalLength : Math.max(max, b.totalLength);
+  }
+  return max;
+}
+
 function normalizeDifficulty(raw: unknown): OnlineBeatmapDifficulty | null {
   const row = asRecord(raw);
   if (!row) return null;
@@ -91,6 +106,7 @@ function normalizeDifficulty(raw: unknown): OnlineBeatmapDifficulty | null {
     mode: asString(row.mode) ?? "osu",
     modeInt,
     keys: modeInt === 3 && cs != null ? Math.round(cs) : null,
+    totalLength: asNumber(row.total_length),
   };
 }
 
@@ -120,6 +136,7 @@ export function normalizeOnlineBeatmapSet(
     playCount: asNumber(row.play_count) ?? 0,
     hasVideo: asBool(row.video),
     rankedDate: asString(row.ranked_date),
+    lengthSeconds: maxLengthSeconds(beatmaps),
     beatmaps,
   };
 }
@@ -321,6 +338,7 @@ function normalizeCheeseGullDifficulty(
     mode: modeName,
     modeInt,
     keys: modeInt === 3 && cs != null ? Math.round(cs) : null,
+    totalLength: asNumber(row.TotalLength ?? row.HitLength ?? row.Length),
   };
 }
 
@@ -352,6 +370,7 @@ export function normalizeCheeseGullBeatmapSet(
     playCount: asNumber(row.PlayCount) ?? 0,
     hasVideo: row.HasVideo === 1 || row.HasVideo === true,
     rankedDate: asString(row.ApprovedDate) ?? null,
+    lengthSeconds: maxLengthSeconds(beatmaps),
     beatmaps,
   };
 }

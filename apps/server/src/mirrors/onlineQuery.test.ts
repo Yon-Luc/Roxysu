@@ -22,6 +22,7 @@ function sampleSet(
     playCount: 0,
     hasVideo: false,
     rankedDate: null,
+    lengthSeconds: 120,
     beatmaps: [
       {
         id: 10,
@@ -30,6 +31,7 @@ function sampleSet(
         mode: "mania",
         modeInt: 3,
         keys: 7,
+        totalLength: 120,
       },
       {
         id: 11,
@@ -38,6 +40,7 @@ function sampleSet(
         mode: "mania",
         modeInt: 3,
         keys: 4,
+        totalLength: 120,
       },
     ],
     ...overrides,

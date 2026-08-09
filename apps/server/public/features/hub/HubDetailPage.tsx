@@ -1,8 +1,13 @@
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { OnlineSetCard } from "../../components/OnlineSetCard";
 import { PageTitle } from "../../components/PageTitle";
-import { ListSkeleton } from "../../components/LoadingSkeleton";
-import { startMirrorBatchJob } from "../../lib/api";
+import { CardGridSkeleton, ListSkeleton } from "../../components/LoadingSkeleton";
+import {
+  fetchBeatmapsetInfo,
+  startMirrorBatchJob,
+  type OnlineBeatmapSet,
+} from "../../lib/api";
 import {
   exportHubCollection,
   favoriteHubCollection,
@@ -14,6 +19,60 @@ import {
 import { pushToast } from "../../lib/toasts";
 import { MIRROR_BATCH_QUERY_KEY } from "../download/useMirrorBatchJob";
 
+const INFO_BATCH = 100;
+
+async function loadCollectionSetCards(setIds: number[]): Promise<{
+  items: OnlineBeatmapSet[];
+  missing: number[];
+}> {
+  const unique = [...new Set(setIds.filter((id) => id > 0))];
+  const byId = new Map<number, OnlineBeatmapSet>();
+  const missing: number[] = [];
+
+  for (let i = 0; i < unique.length; i += INFO_BATCH) {
+    const chunk = unique.slice(i, i + INFO_BATCH);
+    if (chunk.length === 0) continue;
+    const res = await fetchBeatmapsetInfo(chunk);
+    for (const set of res.items) byId.set(set.id, set);
+    missing.push(...res.missing);
+  }
+
+  return {
+    items: unique
+      .map((id) => byId.get(id))
+      .filter((s): s is OnlineBeatmapSet => s != null),
+    missing,
+  };
+}
+
+function PlaceholderSetCard({
+  setId,
+  mapName,
+}: {
+  setId: number;
+  mapName: string;
+}) {
+  return (
+    <div className="rx-card flex h-full flex-col p-4">
+      <div className="truncate text-sm text-muted">Beatmapset</div>
+      <div className="truncate font-bold text-ink">
+        {mapName || `Set ${setId}`}
+      </div>
+      <div className="mt-1 text-xs text-faint">#{setId} · metadata unavailable</div>
+      <div className="mt-3">
+        <a
+          href={`https://osu.ppy.sh/beatmapsets/${setId}`}
+          target="_blank"
+          rel="noreferrer"
+          className="rx-btn"
+        >
+          Website
+        </a>
+      </div>
+    </div>
+  );
+}
+
 export function HubDetailPage({ id }: { id: string }) {
   const collectionId = Number(id);
   const hubUrl = useHubUrl();
@@ -24,6 +83,23 @@ export function HubDetailPage({ id }: { id: string }) {
     queryKey: ["hub-collection", hubUrl, collectionId, jwt],
     enabled: Number.isFinite(collectionId),
     queryFn: () => fetchHubCollection(hubUrl, collectionId, jwt),
+  });
+
+  const setIds = detailQuery.data?.maps.map((m) => m.beatmapsetId) ?? [];
+  const nameById = new Map(
+    (detailQuery.data?.maps ?? []).map((m) => [m.beatmapsetId, m.mapName]),
+  );
+
+  const cardsQuery = useQuery({
+    queryKey: [
+      "hub-collection-cards",
+      collectionId,
+      detailQuery.dataUpdatedAt,
+      setIds.length,
+    ],
+    enabled: detailQuery.isSuccess && setIds.length > 0,
+    staleTime: 5 * 60_000,
+    queryFn: () => loadCollectionSetCards(setIds),
   });
 
   const favoriteMut = useMutation({
@@ -73,6 +149,9 @@ export function HubDetailPage({ id }: { id: string }) {
   });
 
   const c = detailQuery.data;
+  const byId = new Map(
+    (cardsQuery.data?.items ?? []).map((set) => [set.id, set]),
+  );
 
   return (
     <div className="space-y-6">
@@ -138,18 +217,32 @@ export function HubDetailPage({ id }: { id: string }) {
               ))}
             </div>
           ) : null}
-          <ul className="max-h-[28rem] space-y-1 overflow-auto rounded-xl bg-surface p-3 text-sm">
-            {c.maps.map((m) => (
-              <li key={m.beatmapsetId} className="flex justify-between gap-3">
-                <span className="truncate text-ink">
-                  {m.mapName || `Beatmapset ${m.beatmapsetId}`}
-                </span>
-                <span className="shrink-0 tabular-nums text-subtle">
-                  {m.beatmapsetId}
-                </span>
-              </li>
-            ))}
-          </ul>
+
+          {setIds.length === 0 ? (
+            <p className="text-muted">This collection has no maps.</p>
+          ) : cardsQuery.isLoading ? (
+            <CardGridSkeleton count={6} />
+          ) : cardsQuery.error ? (
+            <p className="text-sm text-rose-300">{cardsQuery.error.message}</p>
+          ) : (
+            <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {setIds.map((setId) => {
+                const set = byId.get(setId);
+                return (
+                  <li key={setId}>
+                    {set ? (
+                      <OnlineSetCard set={set} />
+                    ) : (
+                      <PlaceholderSetCard
+                        setId={setId}
+                        mapName={nameById.get(setId) ?? ""}
+                      />
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </>
       ) : null}
     </div>

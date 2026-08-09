@@ -530,6 +530,26 @@ export type MirrorMissingCount = Exclude<
   { error: string }
 >;
 
+/** Resolve beatmapset card metadata (local library first, then hinai). Max 100 ids. */
+export async function fetchBeatmapsetInfo(setIds: number[]) {
+  const res = await fetch("/api/mirrors/beatmapsets/info", {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify({ setIds }),
+  });
+  const data = (await res.json()) as {
+    error?: string;
+    items: OnlineBeatmapSet[];
+    missing: number[];
+  };
+  if (!res.ok) {
+    throw new Error(
+      `/api/mirrors/beatmapsets/info failed: ${data.error ?? res.status}`,
+    );
+  }
+  return data;
+}
+
 
 export async function patchSettings(body: {
   masteryFormulaId?: string;

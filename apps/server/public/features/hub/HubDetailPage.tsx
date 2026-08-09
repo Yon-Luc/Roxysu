@@ -15,6 +15,10 @@ import {
   useHubJwt,
   useHubUrl,
 } from "../../lib/hub";
+import {
+  formatHubDominantMode,
+  formatHubStarsRange,
+} from "../../lib/hubStats";
 import { pushToast } from "../../lib/toasts";
 import { MIRROR_BATCH_QUERY_KEY } from "../download/useMirrorBatchJob";
 import { HubLoginButton } from "./HubLoginButton";
@@ -202,6 +206,14 @@ export function HubDetailPage({ id }: { id: string }) {
             <span>{c.mapCount.toLocaleString()} maps</span>
             <span>{c.downloadCount.toLocaleString()} downloads</span>
             <span>{c.favoriteCount.toLocaleString()} favorites</span>
+            {formatHubStarsRange(c.starsMin, c.starsMax) ? (
+              <span>{formatHubStarsRange(c.starsMin, c.starsMax)}</span>
+            ) : null}
+            {formatHubDominantMode(c.dominantMode, c.dominantKeys) ? (
+              <span className="capitalize">
+                {formatHubDominantMode(c.dominantMode, c.dominantKeys)}
+              </span>
+            ) : null}
           </div>
           {c.tags.length > 0 ? (
             <div className="flex flex-wrap gap-1">
@@ -218,9 +230,9 @@ export function HubDetailPage({ id }: { id: string }) {
 
           {setIds.length === 0 ? (
             <p className="text-muted">This collection has no maps.</p>
-          ) : cardsQuery.isLoading ? (
+          ) : cardsQuery.isPending && !cardsQuery.data ? (
             <CardGridSkeleton count={6} />
-          ) : cardsQuery.error ? (
+          ) : cardsQuery.error && !cardsQuery.data ? (
             <p className="text-sm text-rose-300">{cardsQuery.error.message}</p>
           ) : (
             <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

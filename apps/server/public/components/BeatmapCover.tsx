@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   localBeatmapCoverUrl,
   osuBeatmapCoverUrl,
@@ -38,6 +38,8 @@ export function BeatmapCover({
 }: BeatmapCoverProps) {
   const sources = coverSources(backgroundFileHash, setOnlineId, size);
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
 
   const activeSrc = (() => {
     if (sources.length === 0) return null;
@@ -47,26 +49,39 @@ export function BeatmapCover({
     return sources[idx + 1] ?? null;
   })();
 
-  if (!activeSrc) {
-    return (
-      <div
-        aria-hidden={alt ? undefined : true}
-        className={`bg-gradient-to-br from-elevated to-canvas ${className}`}
-      />
-    );
-  }
+  useEffect(() => {
+    setLoaded(false);
+    const img = imgRef.current;
+    if (img?.complete && img.naturalWidth > 0) {
+      setLoaded(true);
+    }
+  }, [activeSrc]);
 
   return (
-    <img
-      key={activeSrc}
-      src={activeSrc}
-      alt={alt}
-      loading={priority ? "eager" : "lazy"}
-      decoding={priority ? "sync" : "async"}
-      // eslint-disable-next-line react/no-unknown-property
-      fetchPriority={priority ? "high" : "auto"}
-      onError={() => setFailedSrc(activeSrc)}
-      className={`object-cover ${className}`}
-    />
+    <div
+      aria-hidden={alt ? undefined : true}
+      className={`relative overflow-hidden bg-gradient-to-br from-elevated to-canvas ${className}`}
+    >
+      {activeSrc ? (
+        <img
+          key={activeSrc}
+          ref={imgRef}
+          src={activeSrc}
+          alt={alt}
+          loading={priority ? "eager" : "lazy"}
+          decoding={priority ? "sync" : "async"}
+          // eslint-disable-next-line react/no-unknown-property
+          fetchPriority={priority ? "high" : "auto"}
+          onLoad={() => setLoaded(true)}
+          onError={() => {
+            setLoaded(false);
+            setFailedSrc(activeSrc);
+          }}
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ${
+            loaded ? "opacity-100" : "opacity-0"
+          }`}
+        />
+      ) : null}
+    </div>
   );
 }

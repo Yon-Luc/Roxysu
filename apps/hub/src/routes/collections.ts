@@ -1,5 +1,16 @@
 import Elysia, { status, t } from "elysia";
-import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  gte,
+  inArray,
+  lte,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import { db } from "../db";
 import {
   collections,
@@ -12,6 +23,12 @@ import {
 } from "@roxysu/db/hub";
 import { requireAuth, jwtPlugin, optionalViewerUserId } from "../middleware/auth";
 import { bearer } from "@elysiajs/bearer";
+import {
+  computeCollectionStatsFromSetIds,
+  isHubRuleset,
+  type CollectionPlayStats,
+} from "../services/collectionStats";
+import { parseHubSearchQuery } from "../services/hubSearchQuery";
 
 function parseTagFilters(raw: {
   tag?: string;
@@ -62,6 +79,50 @@ async function collectionIdsMatchingAllTags(tags: Tag[]): Promise<number[]> {
   return [...(matched ?? [])];
 }
 
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
+/** Case-insensitive match on collection name or owner username. */
+function textSearchFilter(text: string): SQL | undefined {
+  const trimmed = text.trim();
+  if (!trimmed) return undefined;
+  const pattern = `%${escapeLike(trimmed.toLowerCase())}%`;
+  return or(
+    sql`lower(${collections.name}) like ${pattern} escape '\\'`,
+    sql`lower(${hubUsers.username}) like ${pattern} escape '\\'`,
+  );
+}
+
+function normalizeIncomingStats(
+  raw: CollectionPlayStats | undefined,
+): CollectionPlayStats | null {
+  if (!raw) return null;
+  const starsMin =
+    raw.starsMin != null && Number.isFinite(raw.starsMin) ? raw.starsMin : null;
+  const starsMax =
+    raw.starsMax != null && Number.isFinite(raw.starsMax) ? raw.starsMax : null;
+  const dominantMode =
+    raw.dominantMode && isHubRuleset(raw.dominantMode)
+      ? raw.dominantMode
+      : null;
+  const dominantKeys =
+    raw.dominantKeys != null &&
+    Number.isSafeInteger(raw.dominantKeys) &&
+    raw.dominantKeys > 0
+      ? raw.dominantKeys
+      : null;
+  if (
+    starsMin == null &&
+    starsMax == null &&
+    dominantMode == null &&
+    dominantKeys == null
+  ) {
+    return null;
+  }
+  return { starsMin, starsMax, dominantMode, dominantKeys };
+}
+
 // ---------------------------------------------------------------------------
 // Helper — build the collection list item shape
 // ---------------------------------------------------------------------------
@@ -76,6 +137,10 @@ async function buildCollectionItem(
       description: collections.description,
       downloadCount: collections.downloadCount,
       createdAt: collections.createdAt,
+      starsMin: collections.starsMin,
+      starsMax: collections.starsMax,
+      dominantMode: collections.dominantMode,
+      dominantKeys: collections.dominantKeys,
       ownerId: collections.ownerId,
       ownerUsername: hubUsers.username,
       ownerAvatarUrl: hubUsers.avatarUrl,
@@ -134,6 +199,13 @@ async function buildCollectionItem(
     description: col.description,
     downloadCount: col.downloadCount,
     createdAt: col.createdAt,
+    starsMin: col.starsMin,
+    starsMax: col.starsMax,
+    dominantMode:
+      col.dominantMode && isHubRuleset(col.dominantMode)
+        ? col.dominantMode
+        : null,
+    dominantKeys: col.dominantKeys,
     owner: {
       id: col.ownerId,
       osuId: col.ownerOsuId,
@@ -156,46 +228,58 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
   .use(bearer())
 
   // -------------------------------------------------------------------------
-  // GET /collections — paginated list with optional tag filter
+  // GET /collections — paginated list with optional tag + text search
   // -------------------------------------------------------------------------
   .get(
     "/",
     async ({ query, jwt, bearer }) => {
-      const { page = 0, limit = 20 } = query;
+      const { page = 0, limit = 20, q } = query;
       const selectedTags = parseTagFilters(query);
+      const search = parseHubSearchQuery(q);
+      const textFilter = textSearchFilter(search.text);
 
       const viewerUserId = await optionalViewerUserId(jwt, bearer);
 
-      let rows: Array<{ id: number }>;
-      let total: number;
-
+      const filters: SQL[] = [];
       if (selectedTags.length > 0) {
         const matchedIds = await collectionIdsMatchingAllTags(selectedTags);
-        total = matchedIds.length;
         if (matchedIds.length === 0) {
           return { data: [], total: 0, page, limit };
         }
+        filters.push(inArray(collections.id, matchedIds));
+      }
+      if (textFilter) filters.push(textFilter);
+      if (search.mode) {
+        filters.push(eq(collections.dominantMode, search.mode));
+      }
+      if (search.keys != null) {
+        filters.push(eq(collections.dominantKeys, search.keys));
+      }
+      if (search.starsMin != null) {
+        filters.push(gte(collections.starsMax, search.starsMin));
+      }
+      if (search.starsMax != null) {
+        filters.push(lte(collections.starsMin, search.starsMax));
+      }
 
-        rows = await db
+      const where = filters.length > 0 ? and(...filters) : undefined;
+
+      const [rows, totalRow] = await Promise.all([
+        db
           .select({ id: collections.id })
           .from(collections)
-          .where(inArray(collections.id, matchedIds))
+          .innerJoin(hubUsers, eq(collections.ownerId, hubUsers.id))
+          .where(where)
           .orderBy(desc(collections.createdAt))
           .limit(limit)
-          .offset(page * limit);
-      } else {
-        const [pageRows, totalRow] = await Promise.all([
-          db
-            .select({ id: collections.id })
-            .from(collections)
-            .orderBy(desc(collections.createdAt))
-            .limit(limit)
-            .offset(page * limit),
-          db.select({ count: count() }).from(collections).get(),
-        ]);
-        rows = pageRows;
-        total = totalRow?.count ?? 0;
-      }
+          .offset(page * limit),
+        db
+          .select({ count: count() })
+          .from(collections)
+          .innerJoin(hubUsers, eq(collections.ownerId, hubUsers.id))
+          .where(where)
+          .get(),
+      ]);
 
       const items = await Promise.all(
         rows.map((row) => buildCollectionItem(row.id, viewerUserId)),
@@ -203,7 +287,7 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
 
       return {
         data: items.filter(Boolean),
-        total,
+        total: totalRow?.count ?? 0,
         page,
         limit,
       };
@@ -212,6 +296,8 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
       query: t.Object({
         page: t.Optional(t.Numeric({ minimum: 0 })),
         limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100 })),
+        /** Free text + filters like mode=m key=7 stars>=5 */
+        q: t.Optional(t.String({ maxLength: 200 })),
         /** @deprecated Prefer `tags` (comma-separated or repeated). */
         tag: t.Optional(t.String()),
         tags: t.Optional(t.Union([t.String(), t.Array(t.String())])),
@@ -348,12 +434,20 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
         return status(400, { message: `Invalid tags: ${invalidTags.join(", ")}` });
       }
 
+      const stats =
+        normalizeIncomingStats(body.stats) ??
+        (await computeCollectionStatsFromSetIds(body.beatmapsetIds));
+
       const col = await db
         .insert(collections)
         .values({
           ownerId: user.sub,
           name: body.name,
           description: body.description ?? "",
+          starsMin: stats.starsMin,
+          starsMax: stats.starsMax,
+          dominantMode: stats.dominantMode,
+          dominantKeys: stats.dominantKeys,
         })
         .returning()
         .get();
@@ -386,6 +480,21 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
         beatmapsetIds: t.Array(t.Number(), { minItems: 1 }),
         mapNames: t.Optional(t.Array(t.String())),
         tags: t.Array(t.String()),
+        stats: t.Optional(
+          t.Object({
+            starsMin: t.Nullable(t.Number()),
+            starsMax: t.Nullable(t.Number()),
+            dominantMode: t.Nullable(
+              t.Union([
+                t.Literal("osu"),
+                t.Literal("taiko"),
+                t.Literal("fruits"),
+                t.Literal("mania"),
+              ]),
+            ),
+            dominantKeys: t.Nullable(t.Number()),
+          }),
+        ),
       }),
     }
   )

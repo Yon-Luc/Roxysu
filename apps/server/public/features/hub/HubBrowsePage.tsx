@@ -1,6 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { HubCollectionCard } from "../../components/HubCollectionCard";
 import { PageTitle } from "../../components/PageTitle";
 import { CardGridSkeleton } from "../../components/LoadingSkeleton";
@@ -19,8 +24,21 @@ export function HubBrowsePage() {
   const hubUrl = useHubUrl();
   const queryClient = useQueryClient();
   const [tags, setTags] = useState<HubTag[]>([]);
+  const [q, setQ] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
   const [page, setPage] = useState(0);
   const jwt = useHubJwt();
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setDebouncedQ(q.trim());
+    }, 300);
+    return () => window.clearTimeout(handle);
+  }, [q]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [debouncedQ]);
 
   const meQuery = useQuery({
     queryKey: ["hub-me", hubUrl, jwt],
@@ -30,14 +48,16 @@ export function HubBrowsePage() {
   });
 
   const listQuery = useQuery({
-    queryKey: ["hub-collections", hubUrl, tags, page, jwt],
+    queryKey: ["hub-collections", hubUrl, tags, debouncedQ, page, jwt],
     queryFn: () =>
       fetchHubCollections(hubUrl, {
         page,
         limit: 20,
+        q: debouncedQ || undefined,
         tags: tags.length > 0 ? tags : undefined,
         token: jwt,
       }),
+    placeholderData: keepPreviousData,
   });
 
   const logout = useMutation({
@@ -67,6 +87,9 @@ export function HubBrowsePage() {
     setPage(0);
     setTags([]);
   }
+
+  const hasFilters = tags.length > 0 || debouncedQ.length > 0;
+  const showSkeleton = listQuery.isPending && !listQuery.isPlaceholderData;
 
   return (
     <div className="space-y-6">
@@ -107,40 +130,62 @@ export function HubBrowsePage() {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          className={`rx-btn text-xs ${tags.length === 0 ? "rx-btn-primary" : ""}`}
-          onClick={clearTags}
-        >
-          All
-        </button>
-        {HUB_TAGS.map((t) => (
+      <div className="flex flex-col gap-3">
+        <input
+          type="search"
+          className="rx-input w-full max-w-xl"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search name, player, mode=m key=7 stars>=5…"
+          aria-label="Search collections"
+        />
+        <div className="flex flex-wrap gap-2">
           <button
-            key={t}
             type="button"
-            className={`rx-btn text-xs ${tags.includes(t) ? "rx-btn-primary" : ""}`}
-            onClick={() => toggleTag(t)}
+            className={`rx-btn text-xs ${tags.length === 0 ? "rx-btn-primary" : ""}`}
+            onClick={clearTags}
           >
-            {t}
+            All
           </button>
-        ))}
+          {HUB_TAGS.map((t) => (
+            <button
+              key={t}
+              type="button"
+              className={`rx-btn text-xs ${tags.includes(t) ? "rx-btn-primary" : ""}`}
+              onClick={() => toggleTag(t)}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {listQuery.isLoading ? (
+      {showSkeleton ? (
         <CardGridSkeleton count={6} />
-      ) : listQuery.error ? (
+      ) : listQuery.error && !listQuery.data ? (
         <p className="text-sm text-rose-300">{listQuery.error.message}</p>
       ) : !listQuery.data || listQuery.data.data.length === 0 ? (
-        <p className="text-sm text-muted">No collections yet.</p>
+        <p className="text-sm text-muted">
+          {hasFilters
+            ? "No collections match your search."
+            : "No collections yet."}
+        </p>
       ) : (
-        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <ul
+          className={`grid gap-4 transition-opacity duration-150 sm:grid-cols-2 lg:grid-cols-3 ${
+            listQuery.isFetching ? "opacity-70" : ""
+          }`}
+        >
           {listQuery.data.data.map((c) => (
             <li key={c.id}>
               <HubCollectionCard
                 collection={{
                   ...c,
                   previewBeatmapsetIds: c.previewBeatmapsetIds ?? [],
+                  starsMin: c.starsMin ?? null,
+                  starsMax: c.starsMax ?? null,
+                  dominantMode: c.dominantMode ?? null,
+                  dominantKeys: c.dominantKeys ?? null,
                 }}
               />
             </li>
@@ -149,22 +194,23 @@ export function HubBrowsePage() {
       )}
 
       {listQuery.data && listQuery.data.total > (listQuery.data.limit ?? 20) ? (
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <button
             type="button"
             className="rx-btn"
-            disabled={page <= 0}
+            disabled={page <= 0 || listQuery.isFetching}
             onClick={() => setPage((p) => Math.max(0, p - 1))}
           >
             Previous
           </button>
           <span className="text-sm text-muted">
             Page {page + 1} / {totalPages}
+            {listQuery.isFetching ? " · updating…" : ""}
           </span>
           <button
             type="button"
             className="rx-btn"
-            disabled={page + 1 >= totalPages}
+            disabled={page + 1 >= totalPages || listQuery.isFetching}
             onClick={() => setPage((p) => p + 1)}
           >
             Next

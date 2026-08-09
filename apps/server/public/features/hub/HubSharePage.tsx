@@ -1,28 +1,143 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { BeatmapCover } from "../../components/BeatmapCover";
+import { ListSkeleton } from "../../components/LoadingSkeleton";
 import { PageTitle } from "../../components/PageTitle";
 import {
   fetchCollections,
+  fetchBeatmapsetInfo,
   fetchRealmCollectionSetIds,
   fetchSmartCollectionSetIds,
+  type OnlineBeatmapSet,
   type RealmCollectionItem,
   type SmartCollectionItem,
 } from "../../lib/api";
 import {
   HUB_TAGS,
   createHubCollection,
+  fetchHubMe,
   useHubJwt,
   useHubUrl,
   type HubTag,
 } from "../../lib/hub";
+import { computeHubCollectionStats } from "../../lib/hubStats";
 import { pushToast } from "../../lib/toasts";
 import { HubLoginButton } from "./HubLoginButton";
+
+const INFO_BATCH = 100;
+
+async function loadSetsForStats(setIds: number[]): Promise<OnlineBeatmapSet[]> {
+  const unique = [...new Set(setIds.filter((id) => id > 0))];
+  const byId = new Map<number, OnlineBeatmapSet>();
+  for (let i = 0; i < unique.length; i += INFO_BATCH) {
+    const chunk = unique.slice(i, i + INFO_BATCH);
+    if (chunk.length === 0) continue;
+    const res = await fetchBeatmapsetInfo(chunk);
+    for (const set of res.items) byId.set(set.id, set);
+  }
+  return unique
+    .map((id) => byId.get(id))
+    .filter((s): s is OnlineBeatmapSet => s != null);
+}
 
 type SourceKey =
   | { kind: "smart"; id: number }
   | { kind: "realm"; id: string }
   | null;
+
+const PREVIEW_SLOTS = 4;
+
+function SourceListCard({
+  title,
+  emptyLabel,
+  loading,
+  isEmpty,
+  children,
+}: {
+  title: string;
+  emptyLabel: string;
+  loading: boolean;
+  isEmpty: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rx-card flex min-h-0 flex-col overflow-hidden">
+      <div className="border-b border-highlight/60 px-4 py-3">
+        <h3 className="text-sm font-semibold text-ink">{title}</h3>
+      </div>
+      <div className="max-h-56 overflow-auto p-2">
+        {loading ? (
+          <ListSkeleton count={4} showThumbnail={false} />
+        ) : isEmpty ? (
+          <p className="px-2 py-3 text-xs text-muted">{emptyLabel}</p>
+        ) : (
+          <ul className="space-y-1">{children}</ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SourceOption({
+  selected,
+  title,
+  meta,
+  onSelect,
+}: {
+  selected: boolean;
+  title: string;
+  meta?: string;
+  onSelect: () => void;
+}) {
+  return (
+    <li>
+      <button
+        type="button"
+        className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left transition ${
+          selected
+            ? "bg-ink/10 text-ink ring-1 ring-ink/15"
+            : "text-muted hover:bg-elevated/50 hover:text-ink"
+        }`}
+        onClick={onSelect}
+      >
+        <span className="min-w-0 truncate text-sm font-medium">{title}</span>
+        {meta ? (
+          <span className="shrink-0 text-xs tabular-nums text-subtle">{meta}</span>
+        ) : null}
+      </button>
+    </li>
+  );
+}
+
+function CoverMosaic({ setIds }: { setIds: number[] }) {
+  const previews = Array.from(
+    { length: PREVIEW_SLOTS },
+    (_, i) => setIds[i] ?? 0,
+  );
+
+  return (
+    <div className="mx-auto grid h-20 w-full max-w-[14rem] grid-cols-4 overflow-hidden rounded-md sm:h-24 sm:max-w-[16rem]">
+      {previews.map((setId, index) =>
+        setId > 0 ? (
+          <BeatmapCover
+            key={`${setId}-${index}`}
+            setOnlineId={setId}
+            size="list"
+            className="h-full w-full min-h-0"
+            alt=""
+          />
+        ) : (
+          <div
+            key={`empty-${index}`}
+            aria-hidden
+            className="h-full w-full bg-gradient-to-br from-elevated to-canvas"
+          />
+        ),
+      )}
+    </div>
+  );
+}
 
 export function HubSharePage() {
   const hubUrl = useHubUrl();
@@ -32,6 +147,13 @@ export function HubSharePage() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState<HubTag[]>([]);
+
+  const meQuery = useQuery({
+    queryKey: ["hub-me", hubUrl, jwt],
+    enabled: !!jwt,
+    queryFn: () => fetchHubMe(hubUrl, jwt!),
+    retry: false,
+  });
 
   const collectionsQuery = useQuery({
     queryKey: ["collections"],
@@ -80,11 +202,14 @@ export function HubSharePage() {
       if (!name.trim()) throw new Error("Name is required");
       if (beatmapsetIds.length === 0) throw new Error("No maps to share");
       if (tags.length === 0) throw new Error("Pick at least one tag");
+      const sets = await loadSetsForStats(beatmapsetIds);
+      const stats = computeHubCollectionStats(sets);
       return createHubCollection(hubUrl, jwt, {
         name: name.trim(),
         description: description.trim() || undefined,
         beatmapsetIds,
         tags,
+        stats,
       });
     },
     onSuccess: (data) => {
@@ -119,147 +244,221 @@ export function HubSharePage() {
     );
   }
 
+  const selectedLabel =
+    source?.kind === "smart"
+      ? smartItems.find((c) => c.id === source.id)?.name
+      : source?.kind === "realm"
+        ? realmItems.find((c) => c.id === source.id)?.name
+        : null;
+
   return (
     <div className="space-y-6">
-      <div>
-        <Link to="/hub" className="text-xs text-muted hover:text-ink">
-          ← Hub
-        </Link>
-        <PageTitle>Share collection</PageTitle>
-        <p className="rx-subtitle">
-          Upload a local smart or lazer collection to the public hub.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <Link to="/hub" className="text-xs text-muted hover:text-ink">
+            ← Hub
+          </Link>
+          <PageTitle>Share collection</PageTitle>
+          <p className="rx-subtitle">
+            Upload a local smart or lazer collection to the public hub.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          {meQuery.data ? (
+            <div className="flex items-center gap-2 text-sm text-muted">
+              {meQuery.data.avatarUrl ? (
+                <img
+                  src={meQuery.data.avatarUrl}
+                  alt=""
+                  className="h-7 w-7 rounded-full object-cover"
+                />
+              ) : null}
+              <span className="text-ink">{meQuery.data.username}</span>
+            </div>
+          ) : (
+            <HubLoginButton />
+          )}
+          <button
+            type="button"
+            className="rx-btn-primary"
+            disabled={!canSubmit || shareMut.isPending}
+            onClick={() => shareMut.mutate()}
+          >
+            {shareMut.isPending ? "Sharing…" : "Share to hub"}
+          </button>
+        </div>
       </div>
 
       {!jwt ? (
-        <div className="rounded-xl bg-surface p-4">
-          <p className="text-sm text-muted">
-            Sign in with osu! to share collections.
+        <div className="rx-card p-5">
+          <div className="font-semibold text-ink">Sign in required</div>
+          <p className="mt-1 text-sm text-muted">
+            Log in with osu! to publish a collection to the hub.
           </p>
-          <HubLoginButton className="rx-btn-primary mt-3 inline-flex" />
+          <HubLoginButton className="rx-btn-primary mt-4 inline-flex" />
         </div>
       ) : null}
 
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
-          Source
-        </h2>
-        {collectionsQuery.isLoading ? (
-          <p className="text-sm text-muted">Loading local collections…</p>
-        ) : (
-          <div className="grid gap-4 lg:grid-cols-2">
-            <div className="space-y-1">
-              <h3 className="text-xs text-subtle">Smart</h3>
-              <ul className="max-h-48 space-y-1 overflow-auto rounded-xl bg-surface p-2">
-                {smartItems.map((c) => {
-                  const selected =
-                    source?.kind === "smart" && source.id === c.id;
-                  return (
-                    <li key={`smart-${c.id}`}>
-                      <button
-                        type="button"
-                        className={`w-full rounded px-2 py-1.5 text-left text-sm ${selected ? "bg-ink/10 text-ink" : "text-muted hover:text-ink"}`}
-                        onClick={() => selectSmart(c)}
-                      >
-                        {c.name}
-                      </button>
-                    </li>
-                  );
-                })}
-                {smartItems.length === 0 ? (
-                  <li className="px-2 py-1 text-xs text-muted">None</li>
-                ) : null}
-              </ul>
-            </div>
-            <div className="space-y-1">
-              <h3 className="text-xs text-subtle">Lazer</h3>
-              <ul className="max-h-48 space-y-1 overflow-auto rounded-xl bg-surface p-2">
-                {realmItems.map((c) => {
-                  const selected =
-                    source?.kind === "realm" && source.id === c.id;
-                  return (
-                    <li key={`realm-${c.id}`}>
-                      <button
-                        type="button"
-                        className={`w-full rounded px-2 py-1.5 text-left text-sm ${selected ? "bg-ink/10 text-ink" : "text-muted hover:text-ink"}`}
-                        onClick={() => selectRealm(c)}
-                      >
-                        {c.name}
-                        <span className="ml-2 text-xs text-subtle">
-                          {c.resolvedSetCount}/{c.mapCount}
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-                {realmItems.length === 0 ? (
-                  <li className="px-2 py-1 text-xs text-muted">None</li>
-                ) : null}
-              </ul>
-            </div>
-          </div>
-        )}
-        {source ? (
-          <p className="text-sm text-muted">
-            {previewQuery.isLoading
-              ? "Resolving maps…"
-              : previewQuery.error
-                ? previewQuery.error.message
-                : `${beatmapsetIds.length.toLocaleString()} beatmapsets ready${unresolved > 0 ? ` · ${unresolved} unresolved locally` : ""}`}
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-sm font-semibold text-ink">Source</h2>
+          <p className="mt-0.5 text-xs text-muted">
+            Pick a local collection to upload.
           </p>
-        ) : null}
-      </section>
-
-      <section className="grid gap-3 sm:grid-cols-2">
-        <label className="space-y-1 text-sm">
-          <span className="text-muted">Name</span>
-          <input
-            className="rx-input w-full"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            maxLength={100}
-          />
-        </label>
-        <label className="space-y-1 text-sm sm:col-span-2">
-          <span className="text-muted">Description</span>
-          <input
-            className="rx-input w-full"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            maxLength={500}
-          />
-        </label>
-      </section>
-
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
-          Tags
-        </h2>
-        <div className="flex flex-wrap gap-2">
-          {HUB_TAGS.map((tag) => {
-            const on = tags.includes(tag);
-            return (
-              <button
-                key={tag}
-                type="button"
-                className={`rx-btn text-xs ${on ? "rx-btn-primary" : ""}`}
-                onClick={() => toggleTag(tag)}
-              >
-                {tag}
-              </button>
-            );
-          })}
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <SourceListCard
+            title="Smart"
+            emptyLabel="No smart collections yet."
+            loading={collectionsQuery.isLoading}
+            isEmpty={smartItems.length === 0}
+          >
+            {smartItems.map((c) => (
+              <SourceOption
+                key={`smart-${c.id}`}
+                selected={source?.kind === "smart" && source.id === c.id}
+                title={c.name}
+                onSelect={() => selectSmart(c)}
+              />
+            ))}
+          </SourceListCard>
+          <SourceListCard
+            title="Lazer"
+            emptyLabel="No lazer collections synced yet."
+            loading={collectionsQuery.isLoading}
+            isEmpty={realmItems.length === 0}
+          >
+            {realmItems.map((c) => (
+              <SourceOption
+                key={`realm-${c.id}`}
+                selected={source?.kind === "realm" && source.id === c.id}
+                title={c.name}
+                meta={`${c.resolvedSetCount}/${c.mapCount}`}
+                onSelect={() => selectRealm(c)}
+              />
+            ))}
+          </SourceListCard>
         </div>
       </section>
 
-      <button
-        type="button"
-        className="rx-btn-primary"
-        disabled={!canSubmit || shareMut.isPending}
-        onClick={() => shareMut.mutate()}
-      >
-        {shareMut.isPending ? "Sharing…" : "Share to hub"}
-      </button>
+      {source ? (
+        <section className="rx-card overflow-hidden">
+          <div className="flex justify-center px-4 pt-4">
+            {previewQuery.isLoading ? (
+              <div className="h-20 w-full max-w-[14rem] animate-pulse rounded-md bg-highlight/80 sm:h-24 sm:max-w-[16rem]" />
+            ) : (
+              <CoverMosaic setIds={beatmapsetIds} />
+            )}
+          </div>
+          <div className="p-4">
+            <div className="truncate font-bold text-ink">
+              {selectedLabel ?? "Selected collection"}
+            </div>
+            <div className="mt-1 text-sm text-muted">
+              {previewQuery.isLoading
+                ? "Resolving maps…"
+                : previewQuery.error
+                  ? previewQuery.error.message
+                  : `${beatmapsetIds.length.toLocaleString()} beatmapsets ready${
+                      unresolved > 0
+                        ? ` · ${unresolved.toLocaleString()} unresolved locally`
+                        : ""
+                    }`}
+            </div>
+            {tags.length > 0 ? (
+              <div className="mt-3 flex flex-wrap gap-1">
+                {tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="rounded bg-surface px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-subtle"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
+      <section className="rx-panel space-y-4 p-4 sm:p-5">
+        <div>
+          <h2 className="text-sm font-semibold text-ink">Details</h2>
+          <p className="mt-0.5 text-xs text-muted">
+            How this collection appears on the hub.
+          </p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="space-y-1.5 text-sm sm:col-span-2">
+            <span className="rx-label">Name</span>
+            <input
+              className="rx-input w-full"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={100}
+              placeholder="Collection name"
+            />
+          </label>
+          <label className="space-y-1.5 text-sm sm:col-span-2">
+            <span className="rx-label">Description</span>
+            <textarea
+              className="rx-textarea min-h-[5.5rem] w-full resize-y"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              maxLength={500}
+              placeholder="Optional short description"
+            />
+          </label>
+        </div>
+
+        <div className="space-y-2">
+          <div>
+            <span className="rx-label">Tags</span>
+            <p className="mt-0.5 text-xs text-muted">
+              Select one or more tags (required).
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {HUB_TAGS.map((tag) => {
+              const on = tags.includes(tag);
+              return (
+                <button
+                  key={tag}
+                  type="button"
+                  className={`rx-btn text-xs ${on ? "rx-btn-primary" : ""}`}
+                  onClick={() => toggleTag(tag)}
+                >
+                  {tag}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs text-muted">
+          {!jwt
+            ? "Log in to share."
+            : !source
+              ? "Select a source collection."
+              : beatmapsetIds.length === 0 && !previewQuery.isLoading
+                ? "Selected collection has no resolvable maps."
+                : tags.length === 0
+                  ? "Pick at least one tag."
+                  : !name.trim()
+                    ? "Add a name."
+                    : "Ready to publish."}
+        </p>
+        <button
+          type="button"
+          className="rx-btn-primary"
+          disabled={!canSubmit || shareMut.isPending}
+          onClick={() => shareMut.mutate()}
+        >
+          {shareMut.isPending ? "Sharing…" : "Share to hub"}
+        </button>
+      </div>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { integer, primaryKey, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
 // ---------------------------------------------------------------------------
@@ -31,6 +31,14 @@ export const collections = sqliteTable("collections", {
   name: text("name").notNull(),
   description: text("description").notNull().default(""),
   downloadCount: integer("download_count").notNull().default(0),
+  /** Min star rating across difficulties in the collection (nullable until computed). */
+  starsMin: real("stars_min"),
+  /** Max star rating across difficulties in the collection. */
+  starsMax: real("stars_max"),
+  /** Most common ruleset among difficulties: osu | taiko | fruits | mania. */
+  dominantMode: text("dominant_mode"),
+  /** Most common mania key count when dominantMode is mania. */
+  dominantKeys: integer("dominant_keys"),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),

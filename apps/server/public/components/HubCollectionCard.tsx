@@ -1,6 +1,10 @@
 import { Link } from "@tanstack/react-router";
 import { BeatmapCover } from "./BeatmapCover";
 import type { HubCollectionListItem } from "../lib/hub";
+import {
+  formatHubDominantMode,
+  formatHubStarsRange,
+} from "../lib/hubStats";
 import { osuWebUserUrl } from "../lib/osuUrls";
 
 const PREVIEW_SLOTS = 4;
@@ -15,6 +19,14 @@ export function HubCollectionCard({
     (_, i) => collection.previewBeatmapsetIds[i] ?? 0,
   );
   const profileUrl = osuWebUserUrl(collection.owner.osuId);
+  const starsLabel = formatHubStarsRange(
+    collection.starsMin,
+    collection.starsMax,
+  );
+  const modeLabel = formatHubDominantMode(
+    collection.dominantMode,
+    collection.dominantKeys,
+  );
 
   return (
     <div className="rx-card relative flex h-full flex-col transition hover:bg-elevated/40">
@@ -51,6 +63,13 @@ export function HubCollectionCard({
           {collection.description ? (
             <div className="mt-1 line-clamp-2 text-xs text-muted">
               {collection.description}
+            </div>
+          ) : null}
+
+          {starsLabel || modeLabel ? (
+            <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
+              {starsLabel ? <span>{starsLabel}</span> : null}
+              {modeLabel ? <span className="capitalize">{modeLabel}</span> : null}
             </div>
           ) : null}
 

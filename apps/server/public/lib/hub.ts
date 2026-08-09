@@ -175,6 +175,10 @@ export type HubCollectionListItem = {
   tags: string[];
   /** First few set IDs for cover mosaics on browse cards. */
   previewBeatmapsetIds: number[];
+  starsMin: number | null;
+  starsMax: number | null;
+  dominantMode: "osu" | "taiko" | "fruits" | "mania" | null;
+  dominantKeys: number | null;
   owner: {
     username: string;
     avatarUrl: string | null;
@@ -195,6 +199,7 @@ export function fetchHubCollections(
   opts: {
     page?: number;
     limit?: number;
+    q?: string;
     /** @deprecated Prefer `tags`. */
     tag?: string;
     tags?: string[];
@@ -204,6 +209,8 @@ export function fetchHubCollections(
   const q = new URLSearchParams();
   q.set("page", String(opts.page ?? 0));
   q.set("limit", String(opts.limit ?? 20));
+  const search = opts.q?.trim();
+  if (search) q.set("q", search);
   const tags = [
     ...new Set([
       ...(opts.tags ?? []),
@@ -261,6 +268,12 @@ export function createHubCollection(
     description?: string;
     beatmapsetIds: number[];
     tags: string[];
+    stats?: {
+      starsMin: number | null;
+      starsMax: number | null;
+      dominantMode: "osu" | "taiko" | "fruits" | "mania" | null;
+      dominantKeys: number | null;
+    };
   },
 ) {
   return hubFetch<{ id: number; message: string }>(hubUrl, "/collections", {

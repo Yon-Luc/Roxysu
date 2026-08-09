@@ -1,10 +1,26 @@
 import Elysia, { t } from "elysia";
 import { hashQueryParams, lookupCache, refreshCache, sliceIds } from "../services/cache";
 import { searchPage, type HinamizawaSearchParams } from "../services/hinamizawa";
+import { allowRateLimit } from "../services/rateLimit";
+
+function clientIp(request: Request): string {
+  const forwarded = request.headers.get("x-forwarded-for");
+  if (forwarded) return forwarded.split(",")[0]!.trim() || "unknown";
+  return request.headers.get("x-real-ip")?.trim() || "unknown";
+}
+
+/** In-flight background refreshes — at most one per cache row at a time. */
+const refreshing = new Set<number>();
 
 export const searchRoutes = new Elysia({ prefix: "/search" }).get(
   "/",
-  async ({ query }) => {
+  async ({ query, request, set }) => {
+    const ip = clientIp(request);
+    if (!allowRateLimit(`search:${ip}`, { limit: 60, windowMs: 60_000 })) {
+      set.status = 429;
+      return { message: "Too many search requests" };
+    }
+
     const {
       page = 0,
       limit = 100,
@@ -24,11 +40,17 @@ export const searchRoutes = new Elysia({ prefix: "/search" }).get(
     // Cache HIT (fresh or stale)
     // -----------------------------------------------------------------------
     if (row) {
-      if (status === "hit-stale") {
-        // Return current cache immediately, kick off background refresh
-        refreshCache(row.id).catch((err) =>
-          console.error("[search] Background refresh failed:", err)
-        );
+      if (status === "hit-stale" && !refreshing.has(row.id)) {
+        // Cap live upstream work: one refresh per cache id at a time, and
+        // a coarse IP budget for background refreshes.
+        if (allowRateLimit(`search-refresh:${ip}`, { limit: 10, windowMs: 60_000 })) {
+          refreshing.add(row.id);
+          refreshCache(row.id)
+            .catch((err) =>
+              console.error("[search] Background refresh failed:", err),
+            )
+            .finally(() => refreshing.delete(row.id));
+        }
       }
 
       const { ids, total } = sliceIds(row.beatmapsetIds, page, limit);
@@ -46,8 +68,13 @@ export const searchRoutes = new Elysia({ prefix: "/search" }).get(
     }
 
     // -----------------------------------------------------------------------
-    // Cache MISS — live forward to hinamizawa
+    // Cache MISS — live forward to hinamizawa (stricter budget)
     // -----------------------------------------------------------------------
+    if (!allowRateLimit(`search-live:${ip}`, { limit: 20, windowMs: 60_000 })) {
+      set.status = 429;
+      return { message: "Too many uncached search requests" };
+    }
+
     try {
       const live = await searchPage(params, page, limit);
       return {

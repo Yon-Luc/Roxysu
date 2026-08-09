@@ -29,6 +29,13 @@ import {
   type CollectionPlayStats,
 } from "../services/collectionStats";
 import { parseHubSearchQuery } from "../services/hubSearchQuery";
+import { allowRateLimit } from "../services/rateLimit";
+
+function clientIp(request: Request): string {
+  const forwarded = request.headers.get("x-forwarded-for");
+  if (forwarded) return forwarded.split(",")[0]!.trim() || "unknown";
+  return request.headers.get("x-real-ip")?.trim() || "unknown";
+}
 
 function parseTagFilters(raw: {
   tag?: string;
@@ -318,7 +325,13 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
   // -------------------------------------------------------------------------
   .get(
     "/:id/export",
-    async ({ params }) => {
+    async ({ params, request, set }) => {
+      const ip = clientIp(request);
+      if (!allowRateLimit(`export:${ip}`, { limit: 30, windowMs: 60_000 })) {
+        set.status = 429;
+        return { message: "Too many export requests" };
+      }
+
       const col = await db
         .select()
         .from(collections)
@@ -485,9 +498,14 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
       body: t.Object({
         name: t.String({ minLength: 1, maxLength: 100 }),
         description: t.Optional(t.String({ maxLength: 500 })),
-        beatmapsetIds: t.Array(t.Number(), { minItems: 1 }),
-        mapNames: t.Optional(t.Array(t.String())),
-        tags: t.Array(t.String()),
+        beatmapsetIds: t.Array(t.Number(), {
+          minItems: 1,
+          maxItems: 2000,
+        }),
+        mapNames: t.Optional(
+          t.Array(t.String({ maxLength: 200 }), { maxItems: 2000 }),
+        ),
+        tags: t.Array(t.String(), { maxItems: 32 }),
         stats: t.Optional(
           t.Object({
             starsMin: t.Nullable(t.Number()),
@@ -586,9 +604,13 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
       body: t.Object({
         name: t.Optional(t.String({ minLength: 1, maxLength: 100 })),
         description: t.Optional(t.String({ maxLength: 500 })),
-        tags: t.Optional(t.Array(t.String())),
-        beatmapsetIds: t.Optional(t.Array(t.Number(), { minItems: 1 })),
-        mapNames: t.Optional(t.Array(t.String())),
+        tags: t.Optional(t.Array(t.String(), { maxItems: 32 })),
+        beatmapsetIds: t.Optional(
+          t.Array(t.Number(), { minItems: 1, maxItems: 2000 }),
+        ),
+        mapNames: t.Optional(
+          t.Array(t.String({ maxLength: 200 }), { maxItems: 2000 }),
+        ),
         stats: t.Optional(
           t.Object({
             starsMin: t.Nullable(t.Number()),

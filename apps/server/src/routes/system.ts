@@ -8,8 +8,10 @@ import {
 } from "@roxysu/db/settings-keys";
 import { dbPlugin } from "../db-runtime";
 import {
-  setPendingHubOAuthToken,
-  takePendingHubOAuthToken,
+  beginHubOAuthHandoff,
+  clearHubOAuthHandoff,
+  markHubOAuthHandoffReady,
+  peekHubOAuthHandoffReady,
 } from "../hubOAuthPending";
 import { toIso } from "../shared/serialize";
 
@@ -39,24 +41,38 @@ const HUB_OAUTH_DONE_HTML = `<!DOCTYPE html>
 </head>
 <body>
   <main>
-    <h1>Signed in to Roxysu Hub</h1>
+    <h1>Signed in to Roxysu Workshop</h1>
     <p>You can close this tab and return to the app.</p>
   </main>
 </body>
 </html>`;
 
+function hubBaseUrl(): string {
+  return (process.env.HUB_URL?.trim() || "http://localhost:4322").replace(
+    /\/$/,
+    "",
+  );
+}
+
 export const systemRoutes = new Elysia({ prefix: "/system" })
   .get("/healthz", () => ({ ok: true }))
   // -------------------------------------------------------------------------
   // Hub OAuth handoff (Electron system-browser flow)
-  // Browser lands on /complete; the desktop UI polls /pending for the JWT.
+  // 1) POST /begin → handoff id
+  // 2) Open hub /auth/login?client=desktop&handoff=…
+  // 3) Browser lands on /complete?h=… (no JWT in URL)
+  // 4) UI polls /pending?h=… → server redeems JWT from hub once
   // -------------------------------------------------------------------------
+  .post("/hub-oauth/begin", ({ set }) => {
+    set.headers["cache-control"] = "no-store";
+    return { handoff: beginHubOAuthHandoff() };
+  })
   .get(
     "/hub-oauth/complete",
     ({ query }) => {
-      const token = query.token?.trim();
-      if (!token) {
-        return new Response("Missing token", {
+      const handoff = query.h?.trim();
+      if (!handoff) {
+        return new Response("Missing handoff id", {
           status: 400,
           headers: {
             "Content-Type": "text/plain;charset=utf-8",
@@ -64,8 +80,15 @@ export const systemRoutes = new Elysia({ prefix: "/system" })
           },
         });
       }
-      setPendingHubOAuthToken(token);
-      // Explicit Response — Node/@elysiajs/node can drop charset on string bodies.
+      if (!markHubOAuthHandoffReady(handoff)) {
+        return new Response("Unknown or expired handoff", {
+          status: 400,
+          headers: {
+            "Content-Type": "text/plain;charset=utf-8",
+            "Cache-Control": "no-store",
+          },
+        });
+      }
       return new Response(HUB_OAUTH_DONE_HTML, {
         status: 200,
         headers: {
@@ -76,14 +99,51 @@ export const systemRoutes = new Elysia({ prefix: "/system" })
     },
     {
       query: t.Object({
-        token: t.Optional(t.String()),
+        h: t.Optional(t.String({ minLength: 16, maxLength: 128 })),
       }),
     },
   )
-  .get("/hub-oauth/pending", ({ set }) => {
-    set.headers["cache-control"] = "no-store";
-    return { token: takePendingHubOAuthToken() };
-  })
+  .get(
+    "/hub-oauth/pending",
+    async ({ query, set }) => {
+      set.headers["cache-control"] = "no-store";
+      const handoff = query.h?.trim();
+      if (!handoff) {
+        set.status = 400;
+        return { error: "Missing handoff id", token: null };
+      }
+      if (!peekHubOAuthHandoffReady(handoff)) {
+        return { token: null };
+      }
+
+      try {
+        const res = await fetch(
+          `${hubBaseUrl()}/auth/handoff/${encodeURIComponent(handoff)}`,
+          {
+            headers: { accept: "application/json" },
+            cache: "no-store",
+          },
+        );
+        const data = (await res.json().catch(() => ({}))) as {
+          token?: string;
+          message?: string;
+        };
+        if (!res.ok || !data.token) {
+          if (res.status === 404) clearHubOAuthHandoff(handoff);
+          return { token: null };
+        }
+        clearHubOAuthHandoff(handoff);
+        return { token: data.token };
+      } catch {
+        return { token: null };
+      }
+    },
+    {
+      query: t.Object({
+        h: t.Optional(t.String({ minLength: 16, maxLength: 128 })),
+      }),
+    },
+  )
   .use(dbPlugin)
   .get("/status", async ({ db }) => {
     const [beatmapCount] = await db.select({ n: count() }).from(beatmaps);

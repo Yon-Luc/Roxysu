@@ -1,6 +1,10 @@
 import Elysia, { status } from "elysia";
 import { jwt } from "@elysiajs/jwt";
 import { bearer } from "@elysiajs/bearer";
+import { eq } from "drizzle-orm";
+import { hubUsers } from "@roxysu/db/hub";
+import { db } from "../db";
+import { resolveJwtSecret } from "../services/jwtSecret";
 
 export interface JwtPayload {
   sub: number; // hub user id
@@ -38,14 +42,14 @@ export async function optionalViewerUserId(
 export const jwtPlugin = new Elysia({ name: "jwt" }).use(
   jwt({
     name: "jwt",
-    secret: process.env.JWT_SECRET ?? "dev-secret-change-me",
+    secret: resolveJwtSecret(),
     exp: "30d",
   }),
 );
 
 /**
  * Requires a valid JWT Bearer token.
- * Adds `user: JwtPayload` to the context.
+ * Adds `user: JwtPayload` to the context — role is always re-read from DB.
  */
 export const requireAuth = new Elysia({ name: "requireAuth" })
   .use(jwtPlugin)
@@ -60,16 +64,39 @@ export const requireAuth = new Elysia({ name: "requireAuth" })
       throw status(401, { message: "Invalid or expired token" });
     }
 
-    const user = asJwtPayload(payload as Record<string, unknown>);
-    if (!user) {
+    const claims = asJwtPayload(payload as Record<string, unknown>);
+    if (!claims) {
       throw status(401, { message: "Invalid or expired token" });
     }
+
+    const row = await db
+      .select({
+        id: hubUsers.id,
+        osuId: hubUsers.osuId,
+        username: hubUsers.username,
+        role: hubUsers.role,
+      })
+      .from(hubUsers)
+      .where(eq(hubUsers.id, claims.sub))
+      .get();
+
+    if (!row) {
+      throw status(401, { message: "Invalid or expired token" });
+    }
+
+    const role = row.role === "admin" ? "admin" : "user";
+    const user: JwtPayload = {
+      sub: row.id,
+      osuId: row.osuId,
+      username: row.username,
+      role,
+    };
 
     return { user };
   });
 
 /**
- * Requires a valid JWT Bearer token AND admin role.
+ * Requires a valid JWT Bearer token AND admin role (from DB via requireAuth).
  */
 export const requireAdmin = new Elysia({ name: "requireAdmin" })
   .use(requireAuth)

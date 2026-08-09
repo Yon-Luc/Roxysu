@@ -7,28 +7,49 @@ import {
   exchangeCode,
   fetchOsuMe,
 } from "../services/osu-oauth";
+import {
+  consumeHandoff,
+  consumeOAuthState,
+  createHandoff,
+  createOAuthState,
+} from "../services/oauthState";
+import { allowRateLimit } from "../services/rateLimit";
 import { jwtPlugin, requireAuth } from "../middleware/auth";
 
 const DEFAULT_CLIENT_REDIRECT = "http://127.0.0.1:4321/#/hub-callback";
 const DEFAULT_DESKTOP_REDIRECT =
   "http://127.0.0.1:4321/api/system/hub-oauth/complete";
-const DESKTOP_OAUTH_STATE = "desktop";
 
-function appendToken(base: string, token: string): string {
+/** Append a one-time handoff id (never the JWT) to the post-login redirect. */
+function appendHandoffParam(base: string, handoffId: string): string {
+  const param = `h=${encodeURIComponent(handoffId)}`;
+  const hashIdx = base.indexOf("#");
+  if (hashIdx >= 0) {
+    const before = base.slice(0, hashIdx);
+    const hash = base.slice(hashIdx + 1);
+    const sep = hash.includes("?") ? "&" : "?";
+    return `${before}#${hash}${sep}${param}`;
+  }
   const sep = base.includes("?") ? "&" : "?";
-  return `${base}${sep}token=${encodeURIComponent(token)}`;
+  return `${base}${sep}${param}`;
 }
 
-function buildClientRedirect(token: string): string {
+function buildClientRedirect(handoffId: string): string {
   const base =
     process.env.HUB_CLIENT_REDIRECT_URI?.trim() || DEFAULT_CLIENT_REDIRECT;
-  return appendToken(base, token);
+  return appendHandoffParam(base, handoffId);
 }
 
-function buildDesktopRedirect(token: string): string {
+function buildDesktopRedirect(handoffId: string): string {
   const base =
     process.env.HUB_DESKTOP_REDIRECT_URI?.trim() || DEFAULT_DESKTOP_REDIRECT;
-  return appendToken(base, token);
+  return appendHandoffParam(base, handoffId);
+}
+
+function clientIp(request: Request): string {
+  const forwarded = request.headers.get("x-forwarded-for");
+  if (forwarded) return forwarded.split(",")[0]!.trim() || "unknown";
+  return request.headers.get("x-real-ip")?.trim() || "unknown";
 }
 
 export const authRoutes = new Elysia({ prefix: "/auth" })
@@ -36,28 +57,45 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
 
   // -------------------------------------------------------------------------
   // GET /auth/login — redirect to osu! OAuth (public)
-  // ?client=desktop → state=desktop so callback uses the localhost handoff URL
+  // ?client=desktop&handoff=… → CSRF state bound to desktop handoff id
   // -------------------------------------------------------------------------
   .get(
     "/login",
     ({ query, redirect }) => {
-      const state =
-        query.client === "desktop" ? DESKTOP_OAUTH_STATE : undefined;
+      const client = query.client === "desktop" ? "desktop" : "web";
+      const handoffId = query.handoff?.trim() || null;
+      if (client === "desktop" && !handoffId) {
+        return status(400, {
+          message: "Desktop login requires a handoff id from Roxysu",
+        });
+      }
+      const state = createOAuthState(client, handoffId);
       return redirect(buildAuthorizationUrl(state));
     },
     {
       query: t.Object({
         client: t.Optional(t.String()),
+        /** Desktop: opaque id from POST /api/system/hub-oauth/begin */
+        handoff: t.Optional(t.String({ minLength: 16, maxLength: 128 })),
       }),
     },
   )
 
   // -------------------------------------------------------------------------
-  // GET /auth/callback — exchange code, upsert user, redirect with JWT
+  // GET /auth/callback — exchange code, upsert user, redirect with handoff id
   // -------------------------------------------------------------------------
   .get(
     "/callback",
     async ({ query, jwt, redirect }) => {
+      if (query.error) {
+        return status(400, { message: `OAuth error: ${query.error}` });
+      }
+
+      const stateEntry = consumeOAuthState(query.state);
+      if (!stateEntry) {
+        return status(400, { message: "Invalid or expired OAuth state" });
+      }
+
       const { code } = query;
       if (!code) return status(400, { message: "Missing code parameter" });
 
@@ -124,10 +162,12 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
         return status(500, { message: "Failed to issue session token" });
       }
 
-      if (query.state === DESKTOP_OAUTH_STATE) {
-        return redirect(buildDesktopRedirect(token));
+      const handoffId = createHandoff(token, stateEntry.handoffId);
+
+      if (stateEntry.client === "desktop") {
+        return redirect(buildDesktopRedirect(handoffId));
       }
-      return redirect(buildClientRedirect(token));
+      return redirect(buildClientRedirect(handoffId));
     },
     {
       query: t.Object({
@@ -136,6 +176,34 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
         // osu! may send ?error=access_denied — keep as oauthError to avoid
         // clashing with response helpers named `error`/`status`.
         error: t.Optional(t.String()),
+      }),
+    },
+  )
+
+  // -------------------------------------------------------------------------
+  // GET /auth/handoff/:id — one-time JWT redeem (short TTL; rate limited)
+  // -------------------------------------------------------------------------
+  .get(
+    "/handoff/:id",
+    ({ params, request, set }) => {
+      const ip = clientIp(request);
+      if (!allowRateLimit(`handoff:${ip}`, { limit: 30, windowMs: 60_000 })) {
+        set.status = 429;
+        return { message: "Too many handoff attempts" };
+      }
+
+      const token = consumeHandoff(params.id);
+      if (!token) {
+        set.status = 404;
+        return { message: "Handoff expired or already used" };
+      }
+
+      set.headers["cache-control"] = "no-store";
+      return { token };
+    },
+    {
+      params: t.Object({
+        id: t.String({ minLength: 16, maxLength: 128 }),
       }),
     },
   )

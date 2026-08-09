@@ -1,10 +1,14 @@
 import { Elysia } from "elysia";
 import { cors } from "@elysiajs/cors";
 import { runMigrations } from "./db";
+import { resolveJwtSecret } from "./services/jwtSecret";
 import { authRoutes } from "./routes/auth";
 import { collectionRoutes } from "./routes/collections";
 import { searchRoutes } from "./routes/search";
 import { adminRoutes } from "./routes/admin";
+
+// Fail closed on missing/weak JWT secret before binding the port.
+resolveJwtSecret();
 
 // Run DB migrations before the server starts
 runMigrations();

@@ -52,13 +52,14 @@ export function useHubUrl(): string {
 
 export function hubLoginUrl(
   hubUrl: string,
-  opts?: { client?: "desktop" },
+  opts?: { client?: "desktop"; handoff?: string },
 ): string {
   const base = `${hubUrl.replace(/\/$/, "")}/auth/login`;
-  if (opts?.client === "desktop") {
-    return `${base}?client=desktop`;
-  }
-  return base;
+  const q = new URLSearchParams();
+  if (opts?.client === "desktop") q.set("client", "desktop");
+  if (opts?.handoff) q.set("handoff", opts.handoff);
+  const qs = q.toString();
+  return qs ? `${base}?${qs}` : base;
 }
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
@@ -79,20 +80,36 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
+/** Start a desktop OAuth handoff; returns opaque id for login URL + poll. */
+export async function beginHubOAuthHandoff(): Promise<string> {
+  const res = await fetch("/api/system/hub-oauth/begin", {
+    method: "POST",
+    headers: { accept: "application/json" },
+    cache: "no-store",
+  });
+  const data = (await res.json()) as { handoff?: string; error?: string };
+  if (!res.ok || !data.handoff) {
+    throw new Error(data.error ?? `Hub OAuth begin failed: HTTP ${res.status}`);
+  }
+  return data.handoff;
+}
+
 /**
- * Poll the local Roxysu server for a JWT deposited by the system-browser
- * OAuth complete page (Electron only).
+ * Poll the local Roxysu server until it redeems the hub handoff JWT
+ * (Electron only).
  */
 export async function pollHubOAuthPending(
+  handoff: string,
   signal?: AbortSignal,
   opts?: { intervalMs?: number; timeoutMs?: number },
 ): Promise<string> {
   const intervalMs = opts?.intervalMs ?? 1000;
   const timeoutMs = opts?.timeoutMs ?? 10 * 60 * 1000;
   const started = Date.now();
+  const q = new URLSearchParams({ h: handoff });
 
   while (!signal?.aborted) {
-    const res = await fetch("/api/system/hub-oauth/pending", {
+    const res = await fetch(`/api/system/hub-oauth/pending?${q}`, {
       signal,
       headers: { accept: "application/json" },
       cache: "no-store",
@@ -109,6 +126,28 @@ export async function pollHubOAuthPending(
   }
 
   throw new DOMException("Aborted", "AbortError");
+}
+
+/** Redeem a one-time web OAuth handoff id for a JWT (hash callback). */
+export async function redeemHubHandoff(
+  hubUrl: string,
+  handoffId: string,
+): Promise<string> {
+  const res = await fetch(
+    `${hubUrl.replace(/\/$/, "")}/auth/handoff/${encodeURIComponent(handoffId)}`,
+    {
+      headers: { accept: "application/json" },
+      cache: "no-store",
+    },
+  );
+  const data = (await res.json().catch(() => ({}))) as {
+    token?: string;
+    message?: string;
+  };
+  if (!res.ok || !data.token) {
+    throw new Error(data.message ?? `Handoff failed: HTTP ${res.status}`);
+  }
+  return data.token;
 }
 
 export const HUB_MODE_TAGS = ["mania", "std", "ctb", "taiko"] as const;

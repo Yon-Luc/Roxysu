@@ -192,12 +192,25 @@ export function fetchHubMe(hubUrl: string, token: string) {
 
 export function fetchHubCollections(
   hubUrl: string,
-  opts: { page?: number; limit?: number; tag?: string; token?: string | null },
+  opts: {
+    page?: number;
+    limit?: number;
+    /** @deprecated Prefer `tags`. */
+    tag?: string;
+    tags?: string[];
+    token?: string | null;
+  },
 ) {
   const q = new URLSearchParams();
   q.set("page", String(opts.page ?? 0));
   q.set("limit", String(opts.limit ?? 20));
-  if (opts.tag) q.set("tag", opts.tag);
+  const tags = [
+    ...new Set([
+      ...(opts.tags ?? []),
+      ...(opts.tag ? [opts.tag] : []),
+    ].filter(Boolean)),
+  ];
+  if (tags.length > 0) q.set("tags", tags.join(","));
   return hubFetch<{
     data: HubCollectionListItem[];
     total: number;

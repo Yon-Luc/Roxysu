@@ -11,13 +11,14 @@ import {
   fetchHubMe,
   useHubJwt,
   useHubUrl,
+  type HubTag,
 } from "../../lib/hub";
 import { HubLoginButton } from "./HubLoginButton";
 
 export function HubBrowsePage() {
   const hubUrl = useHubUrl();
   const queryClient = useQueryClient();
-  const [tag, setTag] = useState<string>("");
+  const [tags, setTags] = useState<HubTag[]>([]);
   const [page, setPage] = useState(0);
   const jwt = useHubJwt();
 
@@ -29,12 +30,12 @@ export function HubBrowsePage() {
   });
 
   const listQuery = useQuery({
-    queryKey: ["hub-collections", hubUrl, tag, page, jwt],
+    queryKey: ["hub-collections", hubUrl, tags, page, jwt],
     queryFn: () =>
       fetchHubCollections(hubUrl, {
         page,
         limit: 20,
-        tag: tag || undefined,
+        tags: tags.length > 0 ? tags : undefined,
         token: jwt,
       }),
   });
@@ -54,6 +55,18 @@ export function HubBrowsePage() {
     const limit = listQuery.data?.limit ?? 20;
     return Math.max(1, Math.ceil(total / limit));
   }, [listQuery.data]);
+
+  function toggleTag(tag: HubTag) {
+    setPage(0);
+    setTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
+    );
+  }
+
+  function clearTags() {
+    setPage(0);
+    setTags([]);
+  }
 
   return (
     <div className="space-y-6">
@@ -97,11 +110,8 @@ export function HubBrowsePage() {
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          className={`rx-btn text-xs ${tag === "" ? "rx-btn-primary" : ""}`}
-          onClick={() => {
-            setTag("");
-            setPage(0);
-          }}
+          className={`rx-btn text-xs ${tags.length === 0 ? "rx-btn-primary" : ""}`}
+          onClick={clearTags}
         >
           All
         </button>
@@ -109,11 +119,8 @@ export function HubBrowsePage() {
           <button
             key={t}
             type="button"
-            className={`rx-btn text-xs ${tag === t ? "rx-btn-primary" : ""}`}
-            onClick={() => {
-              setTag(t);
-              setPage(0);
-            }}
+            className={`rx-btn text-xs ${tags.includes(t) ? "rx-btn-primary" : ""}`}
+            onClick={() => toggleTag(t)}
           >
             {t}
           </button>

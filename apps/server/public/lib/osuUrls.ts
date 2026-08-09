@@ -18,6 +18,14 @@ export function osuWebBeatmapUrl(
   return `https://osu.ppy.sh/b/${onlineId}`;
 }
 
+/** Open a user profile on the osu! website. */
+export function osuWebUserUrl(
+  osuId: number | null | undefined,
+): string | null {
+  if (osuId == null || !Number.isSafeInteger(osuId) || osuId <= 0) return null;
+  return `https://osu.ppy.sh/users/${osuId}`;
+}
+
 /**
  * Download a beatmapset `.osz` via Roxysu's mirror redirect (browser download).
  * Prefer `saveMirrorBeatmapset` so archives land in the shared beatmaps folder.

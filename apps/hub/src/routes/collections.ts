@@ -1,5 +1,5 @@
 import Elysia, { status, t } from "elysia";
-import { and, count, desc, eq, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
   collections,
@@ -12,6 +12,55 @@ import {
 } from "@roxysu/db/hub";
 import { requireAuth, jwtPlugin, optionalViewerUserId } from "../middleware/auth";
 import { bearer } from "@elysiajs/bearer";
+
+function parseTagFilters(raw: {
+  tag?: string;
+  tags?: string | string[];
+}): Tag[] {
+  const parts: string[] = [];
+  if (typeof raw.tags === "string") {
+    parts.push(...raw.tags.split(","));
+  } else if (Array.isArray(raw.tags)) {
+    for (const entry of raw.tags) {
+      parts.push(...String(entry).split(","));
+    }
+  }
+  if (raw.tag) parts.push(raw.tag);
+
+  const out: Tag[] = [];
+  const seen = new Set<string>();
+  for (const part of parts) {
+    const tag = part.trim();
+    if (!tag || seen.has(tag)) continue;
+    if (!VALID_TAGS.includes(tag as Tag)) continue;
+    seen.add(tag);
+    out.push(tag as Tag);
+  }
+  return out;
+}
+
+/** Collection IDs that include every selected tag (AND). */
+async function collectionIdsMatchingAllTags(tags: Tag[]): Promise<number[]> {
+  if (tags.length === 0) return [];
+
+  let matched: Set<number> | null = null;
+  for (const tag of tags) {
+    const rows = await db
+      .select({ collectionId: collectionTags.collectionId })
+      .from(collectionTags)
+      .where(eq(collectionTags.tag, tag));
+    const ids = new Set(rows.map((r) => r.collectionId));
+    if (matched == null) {
+      matched = ids;
+    } else {
+      for (const id of [...matched]) {
+        if (!ids.has(id)) matched.delete(id);
+      }
+    }
+    if (matched.size === 0) return [];
+  }
+  return [...(matched ?? [])];
+}
 
 // ---------------------------------------------------------------------------
 // Helper — build the collection list item shape
@@ -112,43 +161,49 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
   .get(
     "/",
     async ({ query, jwt, bearer }) => {
-      const { page = 0, limit = 20, tag } = query;
+      const { page = 0, limit = 20 } = query;
+      const selectedTags = parseTagFilters(query);
 
       const viewerUserId = await optionalViewerUserId(jwt, bearer);
 
-      let collectionIds: number[];
+      let rows: Array<{ id: number }>;
+      let total: number;
 
-      if (tag) {
-        const rows = await db
-          .select({ collectionId: collectionTags.collectionId })
-          .from(collectionTags)
-          .where(eq(collectionTags.tag, tag))
-          .innerJoin(collections, eq(collectionTags.collectionId, collections.id));
+      if (selectedTags.length > 0) {
+        const matchedIds = await collectionIdsMatchingAllTags(selectedTags);
+        total = matchedIds.length;
+        if (matchedIds.length === 0) {
+          return { data: [], total: 0, page, limit };
+        }
 
-        collectionIds = rows.map((r) => r.collectionId);
-        if (collectionIds.length === 0) return { data: [], total: 0, page, limit };
-      } else {
-        const rows = await db
+        rows = await db
           .select({ id: collections.id })
           .from(collections)
+          .where(inArray(collections.id, matchedIds))
           .orderBy(desc(collections.createdAt))
           .limit(limit)
           .offset(page * limit);
-        collectionIds = rows.map((r) => r.id);
+      } else {
+        const [pageRows, totalRow] = await Promise.all([
+          db
+            .select({ id: collections.id })
+            .from(collections)
+            .orderBy(desc(collections.createdAt))
+            .limit(limit)
+            .offset(page * limit),
+          db.select({ count: count() }).from(collections).get(),
+        ]);
+        rows = pageRows;
+        total = totalRow?.count ?? 0;
       }
 
       const items = await Promise.all(
-        collectionIds.map((id) => buildCollectionItem(id, viewerUserId))
+        rows.map((row) => buildCollectionItem(row.id, viewerUserId)),
       );
-
-      const totalRow = await db
-        .select({ count: count() })
-        .from(collections)
-        .get();
 
       return {
         data: items.filter(Boolean),
-        total: totalRow?.count ?? 0,
+        total,
         page,
         limit,
       };
@@ -157,9 +212,11 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
       query: t.Object({
         page: t.Optional(t.Numeric({ minimum: 0 })),
         limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100 })),
+        /** @deprecated Prefer `tags` (comma-separated or repeated). */
         tag: t.Optional(t.String()),
+        tags: t.Optional(t.Union([t.String(), t.Array(t.String())])),
       }),
-    }
+    },
   )
 
   // -------------------------------------------------------------------------

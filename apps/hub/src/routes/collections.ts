@@ -39,37 +39,45 @@ async function buildCollectionItem(
 
   if (!col) return null;
 
-  const [tags, maps, favoriteCount, favoritedByMe] = await Promise.all([
-    db
-      .select({ tag: collectionTags.tag })
-      .from(collectionTags)
-      .where(eq(collectionTags.collectionId, collectionId)),
+  const [tags, maps, favoriteCount, favoritedByMe, previewMaps] =
+    await Promise.all([
+      db
+        .select({ tag: collectionTags.tag })
+        .from(collectionTags)
+        .where(eq(collectionTags.collectionId, collectionId)),
 
-    db
-      .select({ count: count() })
-      .from(collectionMaps)
-      .where(eq(collectionMaps.collectionId, collectionId))
-      .get(),
+      db
+        .select({ count: count() })
+        .from(collectionMaps)
+        .where(eq(collectionMaps.collectionId, collectionId))
+        .get(),
 
-    db
-      .select({ count: count() })
-      .from(collectionFavorites)
-      .where(eq(collectionFavorites.collectionId, collectionId))
-      .get(),
+      db
+        .select({ count: count() })
+        .from(collectionFavorites)
+        .where(eq(collectionFavorites.collectionId, collectionId))
+        .get(),
 
-    viewerUserId
-      ? db
-          .select()
-          .from(collectionFavorites)
-          .where(
-            and(
-              eq(collectionFavorites.collectionId, collectionId),
-              eq(collectionFavorites.userId, viewerUserId)
+      viewerUserId
+        ? db
+            .select()
+            .from(collectionFavorites)
+            .where(
+              and(
+                eq(collectionFavorites.collectionId, collectionId),
+                eq(collectionFavorites.userId, viewerUserId),
+              ),
             )
-          )
-          .get()
-      : Promise.resolve(null),
-  ]);
+            .get()
+        : Promise.resolve(null),
+
+      db
+        .select({ beatmapsetId: collectionMaps.beatmapsetId })
+        .from(collectionMaps)
+        .where(eq(collectionMaps.collectionId, collectionId))
+        .orderBy(collectionMaps.id)
+        .limit(4),
+    ]);
 
   return {
     id: col.id,
@@ -87,6 +95,7 @@ async function buildCollectionItem(
     mapCount: maps?.count ?? 0,
     favoriteCount: favoriteCount?.count ?? 0,
     favoritedByMe: !!favoritedByMe,
+    previewBeatmapsetIds: previewMaps.map((m) => m.beatmapsetId),
   };
 }
 

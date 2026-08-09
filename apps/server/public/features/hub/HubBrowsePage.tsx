@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { HubCollectionCard } from "../../components/HubCollectionCard";
 import { PageTitle } from "../../components/PageTitle";
-import { ListSkeleton } from "../../components/LoadingSkeleton";
+import { CardGridSkeleton } from "../../components/LoadingSkeleton";
 import {
   HUB_TAGS,
   clearHubJwt,
@@ -71,7 +72,7 @@ export function HubBrowsePage() {
                   <img
                     src={meQuery.data.avatarUrl}
                     alt=""
-                    className="h-7 w-7 rounded-full"
+                    className="h-7 w-7 rounded-full object-cover"
                   />
                 ) : null}
                 <span className="text-ink">{meQuery.data.username}</span>
@@ -120,45 +121,21 @@ export function HubBrowsePage() {
       </div>
 
       {listQuery.isLoading ? (
-        <ListSkeleton count={6} showThumbnail={false} />
+        <CardGridSkeleton count={6} />
       ) : listQuery.error ? (
         <p className="text-sm text-rose-300">{listQuery.error.message}</p>
       ) : !listQuery.data || listQuery.data.data.length === 0 ? (
         <p className="text-sm text-muted">No collections yet.</p>
       ) : (
-        <ul className="space-y-2">
+        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {listQuery.data.data.map((c) => (
             <li key={c.id}>
-              <Link
-                to="/hub/$id"
-                params={{ id: String(c.id) }}
-                className="rx-row block justify-between transition hover:bg-surface/80"
-              >
-                <div className="min-w-0">
-                  <div className="font-bold text-ink">{c.name}</div>
-                  <div className="mt-0.5 truncate text-xs text-muted">
-                    by {c.owner.username}
-                    {c.description ? ` · ${c.description}` : ""}
-                  </div>
-                  {c.tags.length > 0 ? (
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      {c.tags.map((tagName) => (
-                        <span
-                          key={tagName}
-                          className="rounded bg-surface px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-subtle"
-                        >
-                          {tagName}
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-                <div className="shrink-0 text-right text-xs text-subtle">
-                  <div>{c.mapCount.toLocaleString()} maps</div>
-                  <div>{c.downloadCount.toLocaleString()} downloads</div>
-                  <div>{c.favoriteCount.toLocaleString()} favorites</div>
-                </div>
-              </Link>
+              <HubCollectionCard
+                collection={{
+                  ...c,
+                  previewBeatmapsetIds: c.previewBeatmapsetIds ?? [],
+                }}
+              />
             </li>
           ))}
         </ul>

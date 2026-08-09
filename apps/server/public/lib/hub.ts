@@ -173,6 +173,8 @@ export type HubCollectionListItem = {
   favoriteCount: number;
   favoritedByMe: boolean;
   tags: string[];
+  /** First few set IDs for cover mosaics on browse cards. */
+  previewBeatmapsetIds: number[];
   owner: {
     username: string;
     avatarUrl: string | null;

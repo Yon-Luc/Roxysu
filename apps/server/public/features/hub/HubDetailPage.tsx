@@ -12,12 +12,12 @@ import {
   exportHubCollection,
   favoriteHubCollection,
   fetchHubCollection,
-  getHubJwt,
-  hubLoginUrl,
+  useHubJwt,
   useHubUrl,
 } from "../../lib/hub";
 import { pushToast } from "../../lib/toasts";
 import { MIRROR_BATCH_QUERY_KEY } from "../download/useMirrorBatchJob";
+import { HubLoginButton } from "./HubLoginButton";
 
 const INFO_BATCH = 100;
 
@@ -76,7 +76,7 @@ function PlaceholderSetCard({
 export function HubDetailPage({ id }: { id: string }) {
   const collectionId = Number(id);
   const hubUrl = useHubUrl();
-  const jwt = getHubJwt();
+  const jwt = useHubJwt();
   const queryClient = useQueryClient();
 
   const detailQuery = useQuery({
@@ -179,9 +179,7 @@ export function HubDetailPage({ id }: { id: string }) {
               {c?.favoritedByMe ? "Unfavorite" : "Favorite"}
             </button>
           ) : (
-            <a href={hubLoginUrl(hubUrl)} className="rx-btn">
-              Log in to favorite
-            </a>
+            <HubLoginButton className="rx-btn">Log in to favorite</HubLoginButton>
           )}
           <button
             type="button"

@@ -12,12 +12,12 @@ import {
 import {
   HUB_TAGS,
   createHubCollection,
-  getHubJwt,
-  hubLoginUrl,
+  useHubJwt,
   useHubUrl,
   type HubTag,
 } from "../../lib/hub";
 import { pushToast } from "../../lib/toasts";
+import { HubLoginButton } from "./HubLoginButton";
 
 type SourceKey =
   | { kind: "smart"; id: number }
@@ -26,7 +26,7 @@ type SourceKey =
 
 export function HubSharePage() {
   const hubUrl = useHubUrl();
-  const jwt = getHubJwt();
+  const jwt = useHubJwt();
   const navigate = useNavigate();
   const [source, setSource] = useState<SourceKey>(null);
   const [name, setName] = useState("");
@@ -136,9 +136,7 @@ export function HubSharePage() {
           <p className="text-sm text-muted">
             Sign in with osu! to share collections.
           </p>
-          <a href={hubLoginUrl(hubUrl)} className="rx-btn-primary mt-3 inline-flex">
-            Log in with osu!
-          </a>
+          <HubLoginButton className="rx-btn-primary mt-3 inline-flex" />
         </div>
       ) : null}
 

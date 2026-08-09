@@ -7,12 +7,74 @@ import {
   SYNC_UI_FOCUSED_KEY,
 } from "@roxysu/db/settings-keys";
 import { dbPlugin } from "../db-runtime";
+import {
+  setPendingHubOAuthToken,
+  takePendingHubOAuthToken,
+} from "../hubOAuthPending";
 import { toIso } from "../shared/serialize";
 
 export { SYNC_PAUSE_WHEN_UNFOCUSED_KEY, SYNC_UI_FOCUSED_KEY };
 
+const HUB_OAUTH_DONE_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Signed in — Roxysu</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      background: #12141a;
+      color: #e8eaef;
+    }
+    main { text-align: center; padding: 2rem; max-width: 28rem; }
+    h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 0.5rem; }
+    p { margin: 0; color: #9aa3b5; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Signed in to Roxysu Hub</h1>
+    <p>You can close this tab and return to the app.</p>
+  </main>
+</body>
+</html>`;
+
 export const systemRoutes = new Elysia({ prefix: "/system" })
   .get("/healthz", () => ({ ok: true }))
+  // -------------------------------------------------------------------------
+  // Hub OAuth handoff (Electron system-browser flow)
+  // Browser lands on /complete; the desktop UI polls /pending for the JWT.
+  // -------------------------------------------------------------------------
+  .get(
+    "/hub-oauth/complete",
+    ({ query, set }) => {
+      const token = query.token?.trim();
+      if (!token) {
+        set.status = 400;
+        set.headers["content-type"] = "text/plain; charset=utf-8";
+        return "Missing token";
+      }
+      setPendingHubOAuthToken(token);
+      set.headers["content-type"] = "text/html; charset=utf-8";
+      set.headers["cache-control"] = "no-store";
+      return HUB_OAUTH_DONE_HTML;
+    },
+    {
+      query: t.Object({
+        token: t.Optional(t.String()),
+      }),
+    },
+  )
+  .get("/hub-oauth/pending", ({ set }) => {
+    set.headers["cache-control"] = "no-store";
+    return { token: takePendingHubOAuthToken() };
+  })
   .use(dbPlugin)
   .get("/status", async ({ db }) => {
     const [beatmapCount] = await db.select({ n: count() }).from(beatmaps);

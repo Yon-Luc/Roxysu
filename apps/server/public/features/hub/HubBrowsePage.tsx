@@ -8,17 +8,17 @@ import {
   clearHubJwt,
   fetchHubCollections,
   fetchHubMe,
-  getHubJwt,
-  hubLoginUrl,
+  useHubJwt,
   useHubUrl,
 } from "../../lib/hub";
+import { HubLoginButton } from "./HubLoginButton";
 
 export function HubBrowsePage() {
   const hubUrl = useHubUrl();
   const queryClient = useQueryClient();
   const [tag, setTag] = useState<string>("");
   const [page, setPage] = useState(0);
-  const jwt = getHubJwt();
+  const jwt = useHubJwt();
 
   const meQuery = useQuery({
     queryKey: ["hub-me", hubUrl, jwt],
@@ -85,9 +85,7 @@ export function HubBrowsePage() {
               </button>
             </>
           ) : (
-            <a href={hubLoginUrl(hubUrl)} className="rx-btn-primary">
-              Log in with osu!
-            </a>
+            <HubLoginButton />
           )}
           <Link to="/hub/share" className="rx-btn">
             Share collection

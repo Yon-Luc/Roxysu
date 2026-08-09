@@ -54,13 +54,15 @@ export async function fetchOsuMe(accessToken: string): Promise<OsuUser> {
 
 /**
  * Build the osu! OAuth authorization URL to redirect users to.
+ * `state` is echoed back on `/auth/callback` (used for desktop vs web handoff).
  */
-export function buildAuthorizationUrl(): string {
+export function buildAuthorizationUrl(state?: string): string {
   const params = new URLSearchParams({
     client_id: process.env.OSU_CLIENT_ID!,
     redirect_uri: process.env.OSU_REDIRECT_URI!,
     response_type: "code",
     scope: "identify",
   });
+  if (state) params.set("state", state);
   return `https://osu.ppy.sh/oauth/authorize?${params.toString()}`;
 }

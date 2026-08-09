@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu } = require("electron");
+const { app, BrowserWindow, Menu, ipcMain, shell } = require("electron");
 const { spawn } = require("node:child_process");
 const path = require("node:path");
 const http = require("node:http");
@@ -401,6 +401,23 @@ async function shutdown() {
   serverChild = null;
   closeChildLogs();
 }
+
+ipcMain.handle("roxysu:open-external", async (_event, url) => {
+  if (typeof url !== "string" || !url.trim()) {
+    throw new Error("Invalid URL");
+  }
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error("Invalid URL");
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error("Only http(s) URLs are allowed");
+  }
+  desktopLog(`openExternal ${parsed.origin}${parsed.pathname}`);
+  await shell.openExternal(parsed.toString());
+});
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {

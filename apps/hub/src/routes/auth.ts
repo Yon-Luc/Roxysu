@@ -10,12 +10,25 @@ import {
 import { jwtPlugin, requireAuth } from "../middleware/auth";
 
 const DEFAULT_CLIENT_REDIRECT = "http://127.0.0.1:4321/#/hub-callback";
+const DEFAULT_DESKTOP_REDIRECT =
+  "http://127.0.0.1:4321/api/system/hub-oauth/complete";
+const DESKTOP_OAUTH_STATE = "desktop";
+
+function appendToken(base: string, token: string): string {
+  const sep = base.includes("?") ? "&" : "?";
+  return `${base}${sep}token=${encodeURIComponent(token)}`;
+}
 
 function buildClientRedirect(token: string): string {
   const base =
     process.env.HUB_CLIENT_REDIRECT_URI?.trim() || DEFAULT_CLIENT_REDIRECT;
-  const sep = base.includes("?") ? "&" : "?";
-  return `${base}${sep}token=${encodeURIComponent(token)}`;
+  return appendToken(base, token);
+}
+
+function buildDesktopRedirect(token: string): string {
+  const base =
+    process.env.HUB_DESKTOP_REDIRECT_URI?.trim() || DEFAULT_DESKTOP_REDIRECT;
+  return appendToken(base, token);
 }
 
 export const authRoutes = new Elysia({ prefix: "/auth" })
@@ -23,10 +36,21 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
 
   // -------------------------------------------------------------------------
   // GET /auth/login — redirect to osu! OAuth (public)
+  // ?client=desktop → state=desktop so callback uses the localhost handoff URL
   // -------------------------------------------------------------------------
-  .get("/login", ({ redirect }) => {
-    return redirect(buildAuthorizationUrl());
-  })
+  .get(
+    "/login",
+    ({ query, redirect }) => {
+      const state =
+        query.client === "desktop" ? DESKTOP_OAUTH_STATE : undefined;
+      return redirect(buildAuthorizationUrl(state));
+    },
+    {
+      query: t.Object({
+        client: t.Optional(t.String()),
+      }),
+    },
+  )
 
   // -------------------------------------------------------------------------
   // GET /auth/callback — exchange code, upsert user, redirect with JWT
@@ -100,11 +124,15 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
         return status(500, { message: "Failed to issue session token" });
       }
 
+      if (query.state === DESKTOP_OAUTH_STATE) {
+        return redirect(buildDesktopRedirect(token));
+      }
       return redirect(buildClientRedirect(token));
     },
     {
       query: t.Object({
         code: t.Optional(t.String()),
+        state: t.Optional(t.String()),
         // osu! may send ?error=access_denied — keep as oauthError to avoid
         // clashing with response helpers named `error`/`status`.
         error: t.Optional(t.String()),

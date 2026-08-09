@@ -3,7 +3,10 @@ import { desc, eq } from "drizzle-orm";
 import { db } from "../db";
 import { searchCache } from "@roxysu/db/hub";
 import { requireAdmin } from "../middleware/auth";
-import { fetchAllBeatmapsetIds, type HinamizawaSearchParams } from "../services/hinamizawa";
+import {
+  fetchAllBeatmapsetIds,
+  type HinamizawaSearchParams,
+} from "../services/hinamizawa";
 import { hashQueryParams, refreshCache } from "../services/cache";
 
 const TTL_MS = parseInt(process.env.HUB_CACHE_TTL_MS ?? "86400000", 10);
@@ -111,10 +114,10 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
             creator: t.Optional(t.String()),
             sort: t.Optional(t.String()),
           },
-          { additionalProperties: true }
+          { additionalProperties: true },
         ),
       }),
-    }
+    },
   )
 
   // -------------------------------------------------------------------------
@@ -135,7 +138,9 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
         await refreshCache(params.id);
       } catch (err) {
         console.error("[admin] Refresh failed:", err);
-        return status(502, { message: "Hinamizawa search failed during refresh" });
+        return status(502, {
+          message: "Hinamizawa search failed during refresh",
+        });
       }
 
       const updated = await db
@@ -151,7 +156,7 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
         message: "Cache refreshed",
       };
     },
-    { params: t.Object({ id: t.Numeric() }) }
+    { params: t.Object({ id: t.Numeric() }) },
   )
 
   // -------------------------------------------------------------------------
@@ -171,5 +176,5 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
       await db.delete(searchCache).where(eq(searchCache.id, params.id));
       return { message: "Cache entry deleted" };
     },
-    { params: t.Object({ id: t.Numeric() }) }
+    { params: t.Object({ id: t.Numeric() }) },
   );

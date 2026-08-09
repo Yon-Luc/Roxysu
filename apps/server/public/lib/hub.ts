@@ -1,7 +1,14 @@
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchSystemStatus } from "./api";
 
 const HUB_JWT_KEY = "roxysu:hub-jwt";
+
+const jwtListeners = new Set<() => void>();
+
+function notifyHubJwtListeners(): void {
+  for (const listener of jwtListeners) listener();
+}
 
 export function getHubJwt(): string | null {
   try {
@@ -13,10 +20,25 @@ export function getHubJwt(): string | null {
 
 export function setHubJwt(token: string): void {
   localStorage.setItem(HUB_JWT_KEY, token);
+  notifyHubJwtListeners();
 }
 
 export function clearHubJwt(): void {
   localStorage.removeItem(HUB_JWT_KEY);
+  notifyHubJwtListeners();
+}
+
+/** Reactive hub JWT for UI that must update after Electron browser handoff. */
+export function useHubJwt(): string | null {
+  const [jwt, setJwt] = useState(getHubJwt);
+  useEffect(() => {
+    const sync = () => setJwt(getHubJwt());
+    jwtListeners.add(sync);
+    return () => {
+      jwtListeners.delete(sync);
+    };
+  }, []);
+  return jwt;
 }
 
 export function useHubUrl(): string {
@@ -28,8 +50,65 @@ export function useHubUrl(): string {
   return data?.hubUrl ?? "http://localhost:4322";
 }
 
-export function hubLoginUrl(hubUrl: string): string {
-  return `${hubUrl.replace(/\/$/, "")}/auth/login`;
+export function hubLoginUrl(
+  hubUrl: string,
+  opts?: { client?: "desktop" },
+): string {
+  const base = `${hubUrl.replace(/\/$/, "")}/auth/login`;
+  if (opts?.client === "desktop") {
+    return `${base}?client=desktop`;
+  }
+  return base;
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException("Aborted", "AbortError"));
+      return;
+    }
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        reject(new DOMException("Aborted", "AbortError"));
+      },
+      { once: true },
+    );
+  });
+}
+
+/**
+ * Poll the local Roxysu server for a JWT deposited by the system-browser
+ * OAuth complete page (Electron only).
+ */
+export async function pollHubOAuthPending(
+  signal?: AbortSignal,
+  opts?: { intervalMs?: number; timeoutMs?: number },
+): Promise<string> {
+  const intervalMs = opts?.intervalMs ?? 1000;
+  const timeoutMs = opts?.timeoutMs ?? 10 * 60 * 1000;
+  const started = Date.now();
+
+  while (!signal?.aborted) {
+    const res = await fetch("/api/system/hub-oauth/pending", {
+      signal,
+      headers: { accept: "application/json" },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      throw new Error(`Hub OAuth pending failed: HTTP ${res.status}`);
+    }
+    const data = (await res.json()) as { token: string | null };
+    if (data.token) return data.token;
+    if (Date.now() - started > timeoutMs) {
+      throw new Error("Login timed out — try again");
+    }
+    await sleep(intervalMs, signal);
+  }
+
+  throw new DOMException("Aborted", "AbortError");
 }
 
 export const HUB_TAGS = [

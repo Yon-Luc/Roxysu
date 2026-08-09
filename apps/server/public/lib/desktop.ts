@@ -6,6 +6,8 @@ export type RoxysuDesktopBridge = {
     chrome: string;
     node: string;
   };
+  /** Open an http(s) URL in the system default browser. */
+  openExternal?: (url: string) => Promise<void>;
 };
 
 declare global {

@@ -214,6 +214,27 @@ export const collections = sqliteTable("collections", {
     .default(sql`(unixepoch() * 1000)`),
 });
 
+/**
+ * Hub collections the user saved into the local game (`!Roxysu …` in lazer).
+ * Tracks hub `updatedAt` so we can offer an Update when the creator changes it.
+ */
+export const hubAddedCollections = sqliteTable("hub_added_collections", {
+  hubCollectionId: integer("hub_collection_id").primaryKey(),
+  name: text("name").notNull(),
+  /** JSON number[] of beatmapset online IDs from the hub export. */
+  beatmapsetIdsJson: text("beatmapset_ids_json").notNull().default("[]"),
+  /** Hub collection `updatedAt` at last save/update (ms). */
+  hubUpdatedAt: integer("hub_updated_at", { mode: "timestamp_ms" }).notNull(),
+  lazerCollectionId: text("lazer_collection_id"),
+  lazerSyncedAt: integer("lazer_synced_at", { mode: "timestamp_ms" }),
+  addedAt: integer("added_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch() * 1000)`),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch() * 1000)`),
+});
+
 /** Mirrored from lazer BeatmapCollection (realm-reader owned). */
 export const realmCollections = sqliteTable("realm_collections", {
   id: text("id").primaryKey(),

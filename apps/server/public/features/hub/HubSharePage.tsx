@@ -14,16 +14,17 @@ import {
   type SmartCollectionItem,
 } from "../../lib/api";
 import {
-  HUB_TAGS,
   createHubCollection,
   fetchHubMe,
   useHubJwt,
   useHubUrl,
+  type HubModeTag,
   type HubTag,
 } from "../../lib/hub";
 import { computeHubCollectionStats } from "../../lib/hubStats";
 import { pushToast } from "../../lib/toasts";
 import { HubLoginButton } from "./HubLoginButton";
+import { HubTagFilters } from "./HubTagFilters";
 
 const INFO_BATCH = 100;
 
@@ -147,6 +148,7 @@ export function HubSharePage() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState<HubTag[]>([]);
+  const [tagMode, setTagMode] = useState<HubModeTag | "all">("all");
 
   const meQuery = useQuery({
     queryKey: ["hub-me", hubUrl, jwt],
@@ -236,12 +238,6 @@ export function HubSharePage() {
   function selectRealm(c: RealmCollectionItem) {
     setSource({ kind: "realm", id: c.id });
     if (!name.trim()) setName(c.name);
-  }
-
-  function toggleTag(tag: HubTag) {
-    setTags((prev) =>
-      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
-    );
   }
 
   const selectedLabel =
@@ -415,24 +411,16 @@ export function HubSharePage() {
           <div>
             <span className="rx-label">Tags</span>
             <p className="mt-0.5 text-xs text-muted">
-              Select one or more tags (required).
+              Pick a gamemode, then add pattern tags (required).
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {HUB_TAGS.map((tag) => {
-              const on = tags.includes(tag);
-              return (
-                <button
-                  key={tag}
-                  type="button"
-                  className={`rx-btn text-xs ${on ? "rx-btn-primary" : ""}`}
-                  onClick={() => toggleTag(tag)}
-                >
-                  {tag}
-                </button>
-              );
-            })}
-          </div>
+          <HubTagFilters
+            mode={tagMode}
+            tags={tags}
+            onModeChange={setTagMode}
+            onTagsChange={setTags}
+            selectModeAsTag
+          />
         </div>
       </section>
 

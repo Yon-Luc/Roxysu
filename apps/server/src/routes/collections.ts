@@ -1,6 +1,7 @@
 import {
   beatmapSets,
   collections,
+  hubAddedCollections,
   realmCollectionHashes,
   realmCollections,
 } from "@roxysu/db/schema";
@@ -13,6 +14,7 @@ import type { Db } from "../db-runtime";
 import { toIso } from "../shared/serialize";
 import { publish } from "../shared/events";
 import { syncCollectionsToLazer } from "../shared/syncCollections";
+import { diffAgainstLibrary } from "../mirrors";
 import {
   countMatches,
   listDistinctSetIds,
@@ -51,6 +53,38 @@ async function resolveSmartSetOnlineIds(
   return {
     beatmapsetIds: [...new Set(beatmapsetIds)],
     unresolvedInternalSets,
+  };
+}
+
+function parseBeatmapsetIdsJson(raw: string): number[] {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return [
+      ...new Set(
+        parsed.filter(
+          (id): id is number =>
+            typeof id === "number" && Number.isSafeInteger(id) && id > 0,
+        ),
+      ),
+    ];
+  } catch {
+    return [];
+  }
+}
+
+function serializeHubAdded(row: typeof hubAddedCollections.$inferSelect) {
+  const beatmapsetIds = parseBeatmapsetIdsJson(row.beatmapsetIdsJson);
+  return {
+    hubCollectionId: row.hubCollectionId,
+    name: row.name,
+    beatmapsetIds,
+    mapCount: beatmapsetIds.length,
+    hubUpdatedAt: toIso(row.hubUpdatedAt),
+    lazerCollectionId: row.lazerCollectionId,
+    lazerSyncedAt: toIso(row.lazerSyncedAt),
+    addedAt: toIso(row.addedAt),
+    updatedAt: toIso(row.updatedAt),
   };
 }
 
@@ -99,6 +133,132 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
 
     return { items: [...smartItems, ...realmItems] };
   })
+  .get("/hub-added", async ({ db }) => {
+    const rows = await db
+      .select()
+      .from(hubAddedCollections)
+      .orderBy(desc(hubAddedCollections.updatedAt));
+    return { items: rows.map(serializeHubAdded) };
+  })
+  .post(
+    "/hub-added",
+    async ({ db, body, set }) => {
+      const beatmapsetIds = [
+        ...new Set(
+          body.beatmapsetIds.filter(
+            (id) => Number.isSafeInteger(id) && id > 0,
+          ),
+        ),
+      ];
+      if (beatmapsetIds.length === 0) {
+        set.status = 400;
+        return { error: "beatmapsetIds is required" };
+      }
+
+      const hubUpdatedAt = new Date(body.hubUpdatedAt);
+      if (Number.isNaN(hubUpdatedAt.getTime())) {
+        set.status = 400;
+        return { error: "Invalid hubUpdatedAt" };
+      }
+
+      const now = new Date();
+      await db
+        .insert(hubAddedCollections)
+        .values({
+          hubCollectionId: body.hubCollectionId,
+          name: body.name.trim(),
+          beatmapsetIdsJson: JSON.stringify(beatmapsetIds),
+          hubUpdatedAt,
+          addedAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: hubAddedCollections.hubCollectionId,
+          set: {
+            name: body.name.trim(),
+            beatmapsetIdsJson: JSON.stringify(beatmapsetIds),
+            hubUpdatedAt,
+            updatedAt: now,
+          },
+        });
+
+      const ownership = await diffAgainstLibrary(db, beatmapsetIds);
+
+      let sync:
+        | Awaited<ReturnType<typeof syncCollectionsToLazer>>
+        | undefined;
+      if (body.syncLazer !== false) {
+        sync = await syncCollectionsToLazer(db);
+        if (!sync.ok) {
+          if (sync.error.code === "locked") set.status = 423;
+          else if (sync.error.code === "schema_mismatch") set.status = 409;
+          else set.status = 500;
+          return {
+            error: sync.error.error,
+            code: sync.error.code,
+            ownership,
+          };
+        }
+        publish({ type: "collection.updated" });
+      }
+
+      const [row] = await db
+        .select()
+        .from(hubAddedCollections)
+        .where(eq(hubAddedCollections.hubCollectionId, body.hubCollectionId))
+        .limit(1);
+
+      return {
+        item: row ? serializeHubAdded(row) : null,
+        ownership: {
+          owned: ownership.owned,
+          missing: ownership.missing,
+          ownedCount: ownership.owned.length,
+          missingCount: ownership.missing.length,
+          total: ownership.owned.length + ownership.missing.length,
+        },
+        sync: sync?.ok ? sync.result : null,
+      };
+    },
+    {
+      body: t.Object({
+        hubCollectionId: t.Number(),
+        name: t.String({ minLength: 1, maxLength: 100 }),
+        beatmapsetIds: t.Array(t.Number(), { minItems: 1 }),
+        hubUpdatedAt: t.String(),
+        syncLazer: t.Optional(t.Boolean()),
+      }),
+    },
+  )
+  .delete(
+    "/hub-added/:hubCollectionId",
+    async ({ db, params, set }) => {
+      const id = Number(params.hubCollectionId);
+      const [existing] = await db
+        .select()
+        .from(hubAddedCollections)
+        .where(eq(hubAddedCollections.hubCollectionId, id))
+        .limit(1);
+      if (!existing) {
+        set.status = 404;
+        return { error: "Hub-added collection not found" };
+      }
+      await db
+        .delete(hubAddedCollections)
+        .where(eq(hubAddedCollections.hubCollectionId, id));
+      // Re-sync so the managed lazer collection is removed.
+      const outcome = await syncCollectionsToLazer(db);
+      if (!outcome.ok) {
+        if (outcome.error.code === "locked") set.status = 423;
+        else if (outcome.error.code === "schema_mismatch") set.status = 409;
+        else set.status = 500;
+        return { error: outcome.error.error, code: outcome.error.code };
+      }
+      publish({ type: "collection.updated" });
+      return { ok: true, sync: outcome.result };
+    },
+    { params: t.Object({ hubCollectionId: t.String() }) },
+  )
   .get(
     "/realm/:id/set-ids",
     async ({ db, params, set }) => {

@@ -550,6 +550,112 @@ export async function fetchBeatmapsetInfo(setIds: number[]) {
   return data;
 }
 
+export async function fetchOwnedSetIds(): Promise<number[]> {
+  const res = await fetch("/api/mirrors/owned-set-ids", {
+    headers: { accept: "application/json" },
+  });
+  const data = (await res.json()) as { error?: string; setIds?: number[] };
+  if (!res.ok) {
+    throw new Error(
+      `/api/mirrors/owned-set-ids failed: ${data.error ?? res.status}`,
+    );
+  }
+  return data.setIds ?? [];
+}
+
+export async function diffSetOwnership(setIds: number[]) {
+  const res = await fetch("/api/mirrors/ownership/diff", {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify({ setIds }),
+  });
+  const data = (await res.json()) as {
+    error?: string;
+    owned: number[];
+    missing: number[];
+    ownedCount: number;
+    missingCount: number;
+    total: number;
+  };
+  if (!res.ok) {
+    throw new Error(
+      `/api/mirrors/ownership/diff failed: ${data.error ?? res.status}`,
+    );
+  }
+  return data;
+}
+
+export type HubAddedCollectionItem = {
+  hubCollectionId: number;
+  name: string;
+  beatmapsetIds: number[];
+  mapCount: number;
+  hubUpdatedAt: string | null;
+  lazerCollectionId: string | null;
+  lazerSyncedAt: string | null;
+  addedAt: string | null;
+  updatedAt: string | null;
+};
+
+export async function fetchHubAddedCollections() {
+  const res = await fetch("/api/collections/hub-added", {
+    headers: { accept: "application/json" },
+  });
+  const data = (await res.json()) as {
+    error?: string;
+    items: HubAddedCollectionItem[];
+  };
+  if (!res.ok) {
+    throw new Error(
+      `/api/collections/hub-added failed: ${data.error ?? res.status}`,
+    );
+  }
+  return data;
+}
+
+export async function saveHubAddedCollection(body: {
+  hubCollectionId: number;
+  name: string;
+  beatmapsetIds: number[];
+  hubUpdatedAt: string;
+  syncLazer?: boolean;
+}) {
+  const res = await fetch("/api/collections/hub-added", {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = (await res.json()) as {
+    error?: string;
+    code?: string;
+    item: HubAddedCollectionItem | null;
+    ownership: {
+      owned: number[];
+      missing: number[];
+      ownedCount: number;
+      missingCount: number;
+      total: number;
+    };
+    sync: LazerCollectionSyncResult | null;
+  };
+  if (!res.ok) {
+    throw new Error(data.error ?? `Save failed: HTTP ${res.status}`);
+  }
+  return data;
+}
+
+export async function removeHubAddedCollection(hubCollectionId: number) {
+  const res = await fetch(`/api/collections/hub-added/${hubCollectionId}`, {
+    method: "DELETE",
+    headers: { accept: "application/json" },
+  });
+  const data = (await res.json()) as { error?: string; ok?: boolean };
+  if (!res.ok) {
+    throw new Error(data.error ?? `Remove failed: HTTP ${res.status}`);
+  }
+  return data;
+}
+
 
 export async function patchSettings(body: {
   masteryFormulaId?: string;

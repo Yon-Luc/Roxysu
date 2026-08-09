@@ -111,23 +111,66 @@ export async function pollHubOAuthPending(
   throw new DOMException("Aborted", "AbortError");
 }
 
+export const HUB_MODE_TAGS = ["mania", "std", "ctb", "taiko"] as const;
+export type HubModeTag = (typeof HUB_MODE_TAGS)[number];
+
+export const HUB_TAGS_BY_MODE = {
+  mania: [
+    "4k",
+    "7k",
+    "ln",
+    "rice",
+    "hybrid",
+    "sv",
+    "dan",
+    "jump",
+    "stream",
+    "tech",
+    "beginner",
+  ],
+  std: ["jump", "stream", "tech", "aim", "beginner"],
+  ctb: ["jump", "stream", "tech", "hyperdash", "beginner"],
+  taiko: ["stream", "tech", "beginner"],
+} as const satisfies Record<HubModeTag, readonly string[]>;
+
+/** Flat list of every selectable hub tag (modes + secondary). */
 export const HUB_TAGS = [
-  "mania",
-  "4k",
-  "7k",
+  ...HUB_MODE_TAGS,
   "multi-mode",
-  "jump",
-  "stream",
-  "tech",
-  "ln",
-  "rice",
-  "hybrid",
-  "sv",
-  "beginner",
-  "dan",
+  ...new Set([
+    ...HUB_TAGS_BY_MODE.mania,
+    ...HUB_TAGS_BY_MODE.std,
+    ...HUB_TAGS_BY_MODE.ctb,
+    ...HUB_TAGS_BY_MODE.taiko,
+  ]),
 ] as const;
 
 export type HubTag = (typeof HUB_TAGS)[number];
+
+export function hubSecondaryTagsForMode(
+  mode: HubModeTag | "all",
+): readonly string[] {
+  if (mode === "all") {
+    return [
+      "multi-mode",
+      ...new Set([
+        ...HUB_TAGS_BY_MODE.mania,
+        ...HUB_TAGS_BY_MODE.std,
+        ...HUB_TAGS_BY_MODE.ctb,
+        ...HUB_TAGS_BY_MODE.taiko,
+      ]),
+    ];
+  }
+  return [...HUB_TAGS_BY_MODE[mode]];
+}
+
+export const HUB_MODE_LABELS: Record<HubModeTag | "all", string> = {
+  all: "All",
+  mania: "Mania",
+  std: "Std",
+  ctb: "CTB",
+  taiko: "Taiko",
+};
 
 async function hubFetch<T>(
   hubUrl: string,
@@ -175,10 +218,14 @@ export type HubCollectionListItem = {
   tags: string[];
   /** First few set IDs for cover mosaics on browse cards. */
   previewBeatmapsetIds: number[];
+  /** Full beatmapset ID list (for local ownership diffs). */
+  beatmapsetIds: number[];
   starsMin: number | null;
   starsMax: number | null;
   dominantMode: "osu" | "taiko" | "fruits" | "mania" | null;
   dominantKeys: number | null;
+  createdAt: string;
+  updatedAt: string;
   owner: {
     username: string;
     avatarUrl: string | null;
@@ -281,4 +328,37 @@ export function createHubCollection(
     token,
     body: JSON.stringify(body),
   });
+}
+
+export function updateHubCollection(
+  hubUrl: string,
+  token: string,
+  id: number,
+  body: {
+    name?: string;
+    description?: string;
+    tags?: string[];
+    beatmapsetIds?: number[];
+    mapNames?: string[];
+    stats?: {
+      starsMin: number | null;
+      starsMax: number | null;
+      dominantMode: "osu" | "taiko" | "fruits" | "mania" | null;
+      dominantKeys: number | null;
+    };
+  },
+) {
+  return hubFetch<{ message: string }>(hubUrl, `/collections/${id}`, {
+    method: "PUT",
+    token,
+    body: JSON.stringify(body),
+  });
+}
+
+export function fetchHubFavorites(hubUrl: string, token: string) {
+  return hubFetch<{ data: HubCollectionListItem[] }>(
+    hubUrl,
+    "/collections/me/favorites",
+    { token },
+  );
 }

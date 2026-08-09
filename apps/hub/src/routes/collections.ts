@@ -137,6 +137,7 @@ async function buildCollectionItem(
       description: collections.description,
       downloadCount: collections.downloadCount,
       createdAt: collections.createdAt,
+      updatedAt: collections.updatedAt,
       starsMin: collections.starsMin,
       starsMax: collections.starsMax,
       dominantMode: collections.dominantMode,
@@ -153,7 +154,7 @@ async function buildCollectionItem(
 
   if (!col) return null;
 
-  const [tags, maps, favoriteCount, favoritedByMe, previewMaps] =
+  const [tags, maps, favoriteCount, favoritedByMe, allSetIds] =
     await Promise.all([
       db
         .select({ tag: collectionTags.tag })
@@ -189,8 +190,7 @@ async function buildCollectionItem(
         .select({ beatmapsetId: collectionMaps.beatmapsetId })
         .from(collectionMaps)
         .where(eq(collectionMaps.collectionId, collectionId))
-        .orderBy(collectionMaps.id)
-        .limit(4),
+        .orderBy(collectionMaps.id),
     ]);
 
   return {
@@ -198,7 +198,14 @@ async function buildCollectionItem(
     name: col.name,
     description: col.description,
     downloadCount: col.downloadCount,
-    createdAt: col.createdAt,
+    createdAt:
+      col.createdAt instanceof Date
+        ? col.createdAt.toISOString()
+        : new Date(col.createdAt as number).toISOString(),
+    updatedAt:
+      col.updatedAt instanceof Date
+        ? col.updatedAt.toISOString()
+        : new Date(col.updatedAt as number).toISOString(),
     starsMin: col.starsMin,
     starsMax: col.starsMax,
     dominantMode:
@@ -216,7 +223,8 @@ async function buildCollectionItem(
     mapCount: maps?.count ?? 0,
     favoriteCount: favoriteCount?.count ?? 0,
     favoritedByMe: !!favoritedByMe,
-    previewBeatmapsetIds: previewMaps.map((m) => m.beatmapsetId),
+    previewBeatmapsetIds: allSetIds.slice(0, 4).map((m) => m.beatmapsetId),
+    beatmapsetIds: allSetIds.map((m) => m.beatmapsetId),
   };
 }
 
@@ -522,11 +530,25 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
         }
       }
 
+      const stats =
+        body.beatmapsetIds != null
+          ? normalizeIncomingStats(body.stats) ??
+            (await computeCollectionStatsFromSetIds(body.beatmapsetIds))
+          : null;
+
       await db
         .update(collections)
         .set({
           ...(body.name && { name: body.name }),
           ...(body.description !== undefined && { description: body.description }),
+          ...(stats
+            ? {
+                starsMin: stats.starsMin,
+                starsMax: stats.starsMax,
+                dominantMode: stats.dominantMode,
+                dominantKeys: stats.dominantKeys,
+              }
+            : {}),
           updatedAt: new Date(),
         })
         .where(eq(collections.id, params.id));
@@ -542,6 +564,21 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
         }
       }
 
+      if (body.beatmapsetIds) {
+        await db
+          .delete(collectionMaps)
+          .where(eq(collectionMaps.collectionId, params.id));
+        if (body.beatmapsetIds.length > 0) {
+          await db.insert(collectionMaps).values(
+            body.beatmapsetIds.map((id, i) => ({
+              collectionId: params.id,
+              beatmapsetId: id,
+              mapName: body.mapNames?.[i] ?? "",
+            })),
+          );
+        }
+      }
+
       return { message: "Collection updated" };
     },
     {
@@ -550,6 +587,23 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
         name: t.Optional(t.String({ minLength: 1, maxLength: 100 })),
         description: t.Optional(t.String({ maxLength: 500 })),
         tags: t.Optional(t.Array(t.String())),
+        beatmapsetIds: t.Optional(t.Array(t.Number(), { minItems: 1 })),
+        mapNames: t.Optional(t.Array(t.String())),
+        stats: t.Optional(
+          t.Object({
+            starsMin: t.Nullable(t.Number()),
+            starsMax: t.Nullable(t.Number()),
+            dominantMode: t.Nullable(
+              t.Union([
+                t.Literal("osu"),
+                t.Literal("taiko"),
+                t.Literal("fruits"),
+                t.Literal("mania"),
+              ]),
+            ),
+            dominantKeys: t.Nullable(t.Number()),
+          }),
+        ),
       }),
     }
   )

@@ -85,6 +85,13 @@
       "when": 1784481600000,
       "tag": "0011_realm_collections",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1784485200000,
+      "tag": "0012_hub_added_collections",
+      "breakpoints": true
     }
   ]
 }

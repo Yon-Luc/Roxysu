@@ -41,9 +41,11 @@ export type OnlineSetCardProps = {
   set: OnlineBeatmapSet;
   /** Extra action buttons (e.g. Download). Website link is always shown. */
   actions?: ReactNode;
+  /** When true, show a downloaded badge on the cover. */
+  owned?: boolean;
 };
 
-export function OnlineSetCard({ set, actions }: OnlineSetCardProps) {
+export function OnlineSetCard({ set, actions, owned }: OnlineSetCardProps) {
   const firstDiff = set.beatmaps[0];
   const webUrl =
     (firstDiff ? osuWebBeatmapUrl(firstDiff.id, set.id) : null) ??
@@ -62,6 +64,26 @@ export function OnlineSetCard({ set, actions }: OnlineSetCardProps) {
           className="aspect-[2.2/1] w-full"
           alt=""
         />
+        {owned ? (
+          <span
+            className="absolute left-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-emerald-600/90 text-ink shadow-sm backdrop-blur-sm"
+            title="Already owned"
+            aria-label="Already owned"
+          >
+            <svg
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              className="h-4 w-4"
+              aria-hidden
+            >
+              <path
+                fillRule="evenodd"
+                d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </span>
+        ) : null}
         {set.hasVideo ? (
           <span className="absolute right-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-xs font-medium text-ink backdrop-blur-sm">
             video

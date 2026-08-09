@@ -4,7 +4,13 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
 import type { Db } from "@roxysu/db/types";
-import { collections, settings } from "@roxysu/db/schema";
+import {
+  beatmaps,
+  beatmapSets,
+  collections,
+  hubAddedCollections,
+  settings,
+} from "@roxysu/db/schema";
 import { SYNC_REALM_READER_PAUSED_KEY } from "@roxysu/db/settings-keys";
 import { defaultDbPath } from "@roxysu/db/path";
 import type {
@@ -13,6 +19,8 @@ import type {
   LazerCollectionSyncError,
   LazerCollectionSyncSuccess,
 } from "@roxysu/collection-sync";
+import { hubSyncId } from "@roxysu/collection-sync";
+import { and, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import {
   listCollectionMd5Hashes,
   parseQuery,
@@ -131,6 +139,70 @@ async function setSetting(db: Db, key: string, value: string): Promise<void> {
     });
 }
 
+/** Distinct MD5 hashes for beatmaps in the given beatmapset online IDs. */
+export async function md5HashesForSetOnlineIds(
+  db: Db,
+  setOnlineIds: number[],
+): Promise<{ hashes: string[]; skippedNoMd5: number }> {
+  const unique = [
+    ...new Set(setOnlineIds.filter((id) => Number.isSafeInteger(id) && id > 0)),
+  ];
+  if (unique.length === 0) return { hashes: [], skippedNoMd5: 0 };
+
+  const rows = await db
+    .selectDistinct({ md5: beatmaps.md5Hash })
+    .from(beatmaps)
+    .innerJoin(beatmapSets, eq(beatmaps.setId, beatmapSets.id))
+    .where(
+      and(
+        inArray(beatmapSets.onlineId, unique),
+        eq(beatmapSets.deletePending, false),
+        isNotNull(beatmaps.md5Hash),
+        ne(beatmaps.md5Hash, ""),
+        sql`trim(${beatmaps.md5Hash}) != ''`,
+      ),
+    );
+
+  const hashes = rows
+    .map((r) => r.md5)
+    .filter((h): h is string => typeof h === "string" && h.length > 0);
+
+  // Approximate: sets with no resolvable hash count as skipped.
+  const setsWithHash = await db
+    .selectDistinct({ onlineId: beatmapSets.onlineId })
+    .from(beatmapSets)
+    .innerJoin(beatmaps, eq(beatmaps.setId, beatmapSets.id))
+    .where(
+      and(
+        inArray(beatmapSets.onlineId, unique),
+        eq(beatmapSets.deletePending, false),
+        isNotNull(beatmaps.md5Hash),
+        ne(beatmaps.md5Hash, ""),
+      ),
+    );
+  const resolved = new Set(setsWithHash.map((r) => r.onlineId));
+  const skippedNoMd5 = unique.filter((id) => !resolved.has(id)).length;
+
+  return { hashes, skippedNoMd5 };
+}
+
+function parseBeatmapsetIdsJson(raw: string): number[] {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return [
+      ...new Set(
+        parsed.filter(
+          (id): id is number =>
+            typeof id === "number" && Number.isSafeInteger(id) && id > 0,
+        ),
+      ),
+    ];
+  } catch {
+    return [];
+  }
+}
+
 export async function syncCollectionsToLazer(
   db: Db,
 ): Promise<
@@ -168,6 +240,23 @@ export async function syncCollectionsToLazer(
       name: col.name,
       lazerCollectionId: col.lazerCollectionId ?? null,
       md5Hashes: hashes,
+    });
+  }
+
+  const hubRows = await db.select().from(hubAddedCollections);
+  for (const col of hubRows) {
+    const setIds = parseBeatmapsetIdsJson(col.beatmapsetIdsJson);
+    const { hashes, skippedNoMd5: skipped } = await md5HashesForSetOnlineIds(
+      db,
+      setIds,
+    );
+    skippedNoMd5 += skipped;
+    payloadCollections.push({
+      id: hubSyncId(col.hubCollectionId),
+      name: col.name,
+      lazerCollectionId: col.lazerCollectionId ?? null,
+      md5Hashes: hashes,
+      hubCollectionId: col.hubCollectionId,
     });
   }
 

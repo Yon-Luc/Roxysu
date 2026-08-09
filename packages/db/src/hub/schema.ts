@@ -68,20 +68,49 @@ export type NewCollectionMap = typeof collectionMaps.$inferInsert;
 // ---------------------------------------------------------------------------
 // Collection tags
 // ---------------------------------------------------------------------------
+/** Primary gamemode tags shown in the hub filter row. */
+export const HUB_MODE_TAGS = ["mania", "std", "ctb", "taiko"] as const;
+export type HubModeTag = (typeof HUB_MODE_TAGS)[number];
+
+/**
+ * Secondary tags available per primary mode (plus shared patterns under each).
+ * Mode tags themselves are also valid collection tags.
+ */
+export const HUB_TAGS_BY_MODE = {
+  mania: [
+    "4k",
+    "7k",
+    "ln",
+    "rice",
+    "hybrid",
+    "sv",
+    "dan",
+    "jump",
+    "stream",
+    "tech",
+    "beginner",
+  ],
+  std: ["jump", "stream", "tech", "aim", "beginner"],
+  ctb: ["jump", "stream", "tech", "hyperdash", "beginner"],
+  taiko: ["stream", "tech", "beginner"],
+} as const satisfies Record<HubModeTag, readonly string[]>;
+
 export const VALID_TAGS = [
-  "mania",
+  ...HUB_MODE_TAGS,
+  "multi-mode",
   "4k",
   "7k",
-  "multi-mode",
-  "jump",
-  "stream",
-  "tech",
   "ln",
   "rice",
   "hybrid",
   "sv",
-  "beginner",
   "dan",
+  "jump",
+  "stream",
+  "tech",
+  "aim",
+  "hyperdash",
+  "beginner",
 ] as const;
 
 export type Tag = (typeof VALID_TAGS)[number];

@@ -5,14 +5,27 @@ import {
   formatHubDominantMode,
   formatHubStarsRange,
 } from "../lib/hubStats";
+import {
+  formatOwnedMapsLabel,
+  ownedCountForSets,
+} from "../lib/hubOwnership";
 import { osuWebUserUrl } from "../lib/osuUrls";
 
 const PREVIEW_SLOTS = 4;
 
 export function HubCollectionCard({
   collection,
+  ownedSetIds,
+  updateAvailable,
+  onRemove,
+  removing,
 }: {
   collection: HubCollectionListItem;
+  ownedSetIds?: ReadonlySet<number>;
+  updateAvailable?: boolean;
+  /** Shown on the Collections added tab — removes the local/lazer save. */
+  onRemove?: () => void;
+  removing?: boolean;
 }) {
   const previews = Array.from(
     { length: PREVIEW_SLOTS },
@@ -26,6 +39,12 @@ export function HubCollectionCard({
   const modeLabel = formatHubDominantMode(
     collection.dominantMode,
     collection.dominantKeys,
+  );
+  const ownership = ownedCountForSets(
+    collection.beatmapsetIds?.length
+      ? collection.beatmapsetIds
+      : collection.previewBeatmapsetIds,
+    ownedSetIds,
   );
 
   return (
@@ -59,7 +78,14 @@ export function HubCollectionCard({
         </div>
 
         <div className="flex flex-1 flex-col p-4">
-          <div className="truncate font-bold text-ink">{collection.name}</div>
+          <div className="flex items-start justify-between gap-2">
+            <div className="truncate font-bold text-ink">{collection.name}</div>
+            {updateAvailable ? (
+              <span className="shrink-0 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-200">
+                Update
+              </span>
+            ) : null}
+          </div>
           {collection.description ? (
             <div className="mt-1 line-clamp-2 text-xs text-muted">
               {collection.description}
@@ -117,7 +143,13 @@ export function HubCollectionCard({
           </div>
 
           <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-faint">
-            <span>{collection.mapCount.toLocaleString()} maps</span>
+            {ownership ? (
+              <span>
+                {formatOwnedMapsLabel(ownership.owned, ownership.total)}
+              </span>
+            ) : (
+              <span>{collection.mapCount.toLocaleString()} maps</span>
+            )}
             <span>{collection.downloadCount.toLocaleString()} downloads</span>
             <span>{collection.favoriteCount.toLocaleString()} favorites</span>
           </div>
@@ -132,6 +164,23 @@ export function HubCollectionCard({
                   {tagName}
                 </span>
               ))}
+            </div>
+          ) : null}
+
+          {onRemove ? (
+            <div className="mt-3">
+              <button
+                type="button"
+                className="pointer-events-auto relative z-20 rx-btn text-xs text-rose-200 hover:bg-rose-500/15"
+                disabled={removing}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onRemove();
+                }}
+              >
+                {removing ? "Removing…" : "Remove from collection"}
+              </button>
             </div>
           ) : null}
         </div>

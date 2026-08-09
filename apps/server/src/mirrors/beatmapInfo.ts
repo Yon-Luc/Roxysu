@@ -112,9 +112,10 @@ export async function loadLocalBeatmapsetInfo(
     const beatmapRows: OnlineBeatmapDifficulty[] = diffs
       .map((d) => {
         const { mode, modeInt } = rulesetToMode(d.rulesetShortName);
-        const length =
-          d.length != null && Number.isFinite(d.length)
-            ? Math.round(d.length)
+        // Local DB stores lazer Length in milliseconds; OnlineBeatmapSet uses seconds.
+        const lengthSeconds =
+          d.length != null && Number.isFinite(d.length) && d.length > 0
+            ? Math.max(1, Math.round(d.length / 1000))
             : null;
         return {
           id: d.beatmapOnlineId,
@@ -126,7 +127,7 @@ export async function loadLocalBeatmapsetInfo(
             modeInt === 3 && d.circleSize != null
               ? Math.round(d.circleSize)
               : null,
-          totalLength: length,
+          totalLength: lengthSeconds,
         };
       })
       .sort((a, b) => a.stars - b.stars);

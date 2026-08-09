@@ -2,11 +2,24 @@
 export const LAZER_COLLECTION_PREFIX = "!Roxysu ";
 
 export type CollectionSyncInput = {
+  /**
+   * Local smart-collection id, or a synthetic id for hub-added rows
+   * (`HUB_SYNC_ID_BASE + hubCollectionId`).
+   */
   id: number;
   name: string;
   lazerCollectionId: string | null;
   md5Hashes: string[];
+  /** When set, lazer UUID is written back to `hub_added_collections`. */
+  hubCollectionId?: number;
 };
+
+/** Offset so hub-added sync ids never collide with smart collection ids. */
+export const HUB_SYNC_ID_BASE = 1_000_000_000;
+
+export function hubSyncId(hubCollectionId: number): number {
+  return HUB_SYNC_ID_BASE + hubCollectionId;
+}
 
 export type CollectionSyncPayload = {
   collections: CollectionSyncInput[];

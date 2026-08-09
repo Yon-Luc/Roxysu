@@ -3,8 +3,10 @@ import { dbPlugin } from "../db-runtime";
 import {
   OnlineQueryError,
   countMatchingOnlineBeatmapsets,
+  diffAgainstLibrary,
   getActiveBeatmapMirrorProvider,
   getMirrorBatchJobState,
+  loadOwnedSetOnlineIds,
   openLastBatchArchivesInOsu,
   parsePositiveSetId,
   probeBeatmapsDownloadDir,
@@ -105,6 +107,28 @@ export const mirrorRoutes = new Elysia({ prefix: "/mirrors" })
     },
   )
   .get("/batch", () => getMirrorBatchJobState())
+  .get("/owned-set-ids", async ({ db }) => {
+    const owned = await loadOwnedSetOnlineIds(db);
+    return { setIds: [...owned] };
+  })
+  .post(
+    "/ownership/diff",
+    async ({ db, body }) => {
+      const diff = await diffAgainstLibrary(db, body.setIds);
+      return {
+        owned: diff.owned,
+        missing: diff.missing,
+        ownedCount: diff.owned.length,
+        missingCount: diff.missing.length,
+        total: diff.owned.length + diff.missing.length,
+      };
+    },
+    {
+      body: t.Object({
+        setIds: t.Array(t.Number(), { maxItems: 20_000 }),
+      }),
+    },
+  )
   .post("/batch/stop", () => stopMirrorBatchJob())
   .post("/batch/open-in-osu", async ({ set }) => {
     try {

@@ -10,19 +10,32 @@ import { HubCollectionCard } from "../../components/HubCollectionCard";
 import { PageTitle } from "../../components/PageTitle";
 import { CardGridSkeleton } from "../../components/LoadingSkeleton";
 import {
-  HUB_TAGS,
-  clearHubJwt,
+  fetchHubAddedCollections,
+  fetchOwnedSetIds,
+  removeHubAddedCollection,
+} from "../../lib/api";
+import {
+  fetchHubCollection,
   fetchHubCollections,
   fetchHubMe,
+  clearHubJwt,
   useHubJwt,
   useHubUrl,
+  type HubCollectionListItem,
+  type HubModeTag,
   type HubTag,
 } from "../../lib/hub";
+import { pushToast } from "../../lib/toasts";
 import { HubLoginButton } from "./HubLoginButton";
+import { HubTagFilters } from "./HubTagFilters";
+
+type HubTab = "browse" | "added";
 
 export function HubBrowsePage() {
   const hubUrl = useHubUrl();
   const queryClient = useQueryClient();
+  const [tab, setTab] = useState<HubTab>("browse");
+  const [mode, setMode] = useState<HubModeTag | "all">("all");
   const [tags, setTags] = useState<HubTag[]>([]);
   const [q, setQ] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
@@ -38,7 +51,7 @@ export function HubBrowsePage() {
 
   useEffect(() => {
     setPage(0);
-  }, [debouncedQ]);
+  }, [debouncedQ, tags, mode, tab]);
 
   const meQuery = useQuery({
     queryKey: ["hub-me", hubUrl, jwt],
@@ -47,17 +60,95 @@ export function HubBrowsePage() {
     retry: false,
   });
 
+  const ownedQuery = useQuery({
+    queryKey: ["owned-set-ids"],
+    queryFn: fetchOwnedSetIds,
+    staleTime: 60_000,
+  });
+  const ownedSetIds = useMemo(
+    () => new Set(ownedQuery.data ?? []),
+    [ownedQuery.data],
+  );
+
+  const addedQuery = useQuery({
+    queryKey: ["hub-added-collections"],
+    queryFn: fetchHubAddedCollections,
+  });
+
   const listQuery = useQuery({
-    queryKey: ["hub-collections", hubUrl, tags, debouncedQ, page, jwt],
-    queryFn: () =>
-      fetchHubCollections(hubUrl, {
+    queryKey: ["hub-collections", hubUrl, tags, debouncedQ, mode, page, jwt],
+    enabled: tab === "browse",
+    queryFn: () => {
+      const modeToken =
+        mode === "mania"
+          ? "mode=m"
+          : mode === "std"
+            ? "mode=o"
+            : mode === "ctb"
+              ? "mode=f"
+              : mode === "taiko"
+                ? "mode=t"
+                : "";
+      const qParts = [debouncedQ, modeToken].filter(Boolean);
+      return fetchHubCollections(hubUrl, {
         page,
         limit: 20,
-        q: debouncedQ || undefined,
+        q: qParts.length > 0 ? qParts.join(" ") : undefined,
         tags: tags.length > 0 ? tags : undefined,
         token: jwt,
-      }),
+      });
+    },
     placeholderData: keepPreviousData,
+  });
+
+  const addedDetailsQuery = useQuery({
+    queryKey: [
+      "hub-added-details",
+      hubUrl,
+      addedQuery.dataUpdatedAt,
+      debouncedQ,
+    ],
+    enabled: tab === "added" && !!addedQuery.data,
+    queryFn: async () => {
+      const items = addedQuery.data?.items ?? [];
+      const needle = debouncedQ.toLowerCase();
+      const filtered = needle
+        ? items.filter((i) => i.name.toLowerCase().includes(needle))
+        : items;
+      const details: HubCollectionListItem[] = [];
+      for (const item of filtered) {
+        try {
+          const detail = await fetchHubCollection(
+            hubUrl,
+            item.hubCollectionId,
+            jwt,
+          );
+          details.push(detail);
+        } catch {
+          // Collection may have been deleted on the hub — keep a stub card.
+          details.push({
+            id: item.hubCollectionId,
+            name: item.name,
+            description: "",
+            downloadCount: 0,
+            mapCount: item.mapCount,
+            favoriteCount: 0,
+            favoritedByMe: false,
+            tags: [],
+            previewBeatmapsetIds: item.beatmapsetIds.slice(0, 4),
+            beatmapsetIds: item.beatmapsetIds,
+            starsMin: null,
+            starsMax: null,
+            dominantMode: null,
+            dominantKeys: null,
+            createdAt: item.addedAt ?? new Date(0).toISOString(),
+            updatedAt: item.hubUpdatedAt ?? new Date(0).toISOString(),
+            owner: { username: "?", avatarUrl: null, osuId: 0 },
+          });
+        }
+      }
+      return details;
+    },
   });
 
   const logout = useMutation({
@@ -70,26 +161,59 @@ export function HubBrowsePage() {
     },
   });
 
+  const removeMut = useMutation({
+    mutationFn: (hubCollectionId: number) =>
+      removeHubAddedCollection(hubCollectionId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["hub-added-collections"] });
+      void queryClient.invalidateQueries({ queryKey: ["collections"] });
+      pushToast({
+        title: "Removed from collection",
+        detail: "Unlinked from Roxysu and removed the !Roxysu pack from lazer.",
+        tone: "success",
+      });
+    },
+    onError: (err) =>
+      pushToast({
+        title: "Remove failed",
+        detail: err.message,
+        tone: "error",
+      }),
+  });
+
   const totalPages = useMemo(() => {
     const total = listQuery.data?.total ?? 0;
     const limit = listQuery.data?.limit ?? 20;
     return Math.max(1, Math.ceil(total / limit));
   }, [listQuery.data]);
 
-  function toggleTag(tag: HubTag) {
-    setPage(0);
-    setTags((prev) =>
-      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
-    );
+  const addedById = useMemo(() => {
+    const map = new Map<
+      number,
+      { hubUpdatedAt: string | null }
+    >();
+    for (const item of addedQuery.data?.items ?? []) {
+      map.set(item.hubCollectionId, { hubUpdatedAt: item.hubUpdatedAt });
+    }
+    return map;
+  }, [addedQuery.data]);
+
+  function isUpdateAvailable(c: HubCollectionListItem): boolean {
+    const local = addedById.get(c.id);
+    if (!local?.hubUpdatedAt || !c.updatedAt) return false;
+    return Date.parse(c.updatedAt) > Date.parse(local.hubUpdatedAt);
   }
 
-  function clearTags() {
-    setPage(0);
-    setTags([]);
-  }
+  const browseHasFilters = tags.length > 0 || debouncedQ.length > 0;
+  const showBrowseSkeleton =
+    tab === "browse" && listQuery.isPending && !listQuery.isPlaceholderData;
+  const showAddedSkeleton =
+    tab === "added" &&
+    (addedQuery.isPending ||
+      (addedDetailsQuery.isPending && !addedDetailsQuery.data));
 
-  const hasFilters = tags.length > 0 || debouncedQ.length > 0;
-  const showSkeleton = listQuery.isPending && !listQuery.isPlaceholderData;
+  const browseItems = listQuery.data?.data ?? [];
+  const addedItems = addedDetailsQuery.data ?? [];
 
   return (
     <div className="space-y-6">
@@ -130,70 +254,116 @@ export function HubBrowsePage() {
         </div>
       </div>
 
+      <div className="flex flex-wrap gap-2 border-b border-highlight/40 pb-3">
+        <button
+          type="button"
+          className={`rx-btn text-sm ${tab === "browse" ? "rx-btn-primary" : ""}`}
+          onClick={() => setTab("browse")}
+        >
+          Search collections
+        </button>
+        <button
+          type="button"
+          className={`rx-btn text-sm ${tab === "added" ? "rx-btn-primary" : ""}`}
+          onClick={() => setTab("added")}
+        >
+          Collections added
+          {addedQuery.data && addedQuery.data.items.length > 0
+            ? ` (${addedQuery.data.items.length})`
+            : ""}
+        </button>
+      </div>
+
       <div className="flex flex-col gap-3">
         <input
           type="search"
           className="rx-input w-full max-w-xl"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search name, player, mode=m key=7 stars>=5…"
+          placeholder={
+            tab === "added"
+              ? "Search added collections…"
+              : "Search name, player, mode=m key=7 stars>=5…"
+          }
           aria-label="Search collections"
         />
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            className={`rx-btn text-xs ${tags.length === 0 ? "rx-btn-primary" : ""}`}
-            onClick={clearTags}
-          >
-            All
-          </button>
-          {HUB_TAGS.map((t) => (
-            <button
-              key={t}
-              type="button"
-              className={`rx-btn text-xs ${tags.includes(t) ? "rx-btn-primary" : ""}`}
-              onClick={() => toggleTag(t)}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
+        {tab === "browse" ? (
+          <HubTagFilters
+            mode={mode}
+            tags={tags}
+            onModeChange={setMode}
+            onTagsChange={setTags}
+          />
+        ) : null}
       </div>
 
-      {showSkeleton ? (
+      {tab === "browse" ? (
+        showBrowseSkeleton ? (
+          <CardGridSkeleton count={6} />
+        ) : listQuery.error && !listQuery.data ? (
+          <p className="text-sm text-rose-300">{listQuery.error.message}</p>
+        ) : browseItems.length === 0 ? (
+          <p className="text-sm text-muted">
+            {browseHasFilters
+              ? "No collections match your search."
+              : "No collections yet."}
+          </p>
+        ) : (
+          <ul
+            className={`grid gap-4 transition-opacity duration-150 sm:grid-cols-2 lg:grid-cols-3 ${
+              listQuery.isFetching ? "opacity-70" : ""
+            }`}
+          >
+            {browseItems.map((c) => (
+              <li key={c.id}>
+                <HubCollectionCard
+                  collection={{
+                    ...c,
+                    previewBeatmapsetIds: c.previewBeatmapsetIds ?? [],
+                    beatmapsetIds: c.beatmapsetIds ?? [],
+                    starsMin: c.starsMin ?? null,
+                    starsMax: c.starsMax ?? null,
+                    dominantMode: c.dominantMode ?? null,
+                    dominantKeys: c.dominantKeys ?? null,
+                  }}
+                  ownedSetIds={ownedSetIds}
+                  updateAvailable={isUpdateAvailable(c)}
+                />
+              </li>
+            ))}
+          </ul>
+        )
+      ) : showAddedSkeleton ? (
         <CardGridSkeleton count={6} />
-      ) : listQuery.error && !listQuery.data ? (
-        <p className="text-sm text-rose-300">{listQuery.error.message}</p>
-      ) : !listQuery.data || listQuery.data.data.length === 0 ? (
+      ) : addedQuery.error ? (
+        <p className="text-sm text-rose-300">{addedQuery.error.message}</p>
+      ) : addedItems.length === 0 ? (
         <p className="text-sm text-muted">
-          {hasFilters
-            ? "No collections match your search."
-            : "No collections yet."}
+          {debouncedQ
+            ? "No added collections match your search."
+            : "No collections saved from the hub yet. Open a collection and tap Save collection."}
         </p>
       ) : (
-        <ul
-          className={`grid gap-4 transition-opacity duration-150 sm:grid-cols-2 lg:grid-cols-3 ${
-            listQuery.isFetching ? "opacity-70" : ""
-          }`}
-        >
-          {listQuery.data.data.map((c) => (
+        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {addedItems.map((c) => (
             <li key={c.id}>
               <HubCollectionCard
-                collection={{
-                  ...c,
-                  previewBeatmapsetIds: c.previewBeatmapsetIds ?? [],
-                  starsMin: c.starsMin ?? null,
-                  starsMax: c.starsMax ?? null,
-                  dominantMode: c.dominantMode ?? null,
-                  dominantKeys: c.dominantKeys ?? null,
-                }}
+                collection={c}
+                ownedSetIds={ownedSetIds}
+                updateAvailable={isUpdateAvailable(c)}
+                removing={
+                  removeMut.isPending && removeMut.variables === c.id
+                }
+                onRemove={() => removeMut.mutate(c.id)}
               />
             </li>
           ))}
         </ul>
       )}
 
-      {listQuery.data && listQuery.data.total > (listQuery.data.limit ?? 20) ? (
+      {tab === "browse" &&
+      listQuery.data &&
+      listQuery.data.total > (listQuery.data.limit ?? 20) ? (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <button
             type="button"

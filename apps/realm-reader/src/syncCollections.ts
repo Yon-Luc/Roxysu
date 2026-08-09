@@ -1,4 +1,4 @@
-import { collections, eq, type Db } from "@roxysu/db/client.node";
+import { collections, eq, hubAddedCollections, type Db } from "@roxysu/db/client.node";
 import {
   type CollectionSyncPayload,
   type CollectionSyncResult,
@@ -165,13 +165,25 @@ export function runCollectionSync(
 
     for (const col of payload.collections) {
       const newId = newLazerIds.get(col.id);
-      db.update(collections)
-        .set({
-          lazerCollectionId: newId ?? col.lazerCollectionId,
-          lazerSyncedAt: syncedAt,
-        })
-        .where(eq(collections.id, col.id))
-        .run();
+      const lazerCollectionId = newId ?? col.lazerCollectionId;
+      if (col.hubCollectionId != null) {
+        db.update(hubAddedCollections)
+          .set({
+            lazerCollectionId,
+            lazerSyncedAt: syncedAt,
+            updatedAt: syncedAt,
+          })
+          .where(eq(hubAddedCollections.hubCollectionId, col.hubCollectionId))
+          .run();
+      } else {
+        db.update(collections)
+          .set({
+            lazerCollectionId,
+            lazerSyncedAt: syncedAt,
+          })
+          .where(eq(collections.id, col.id))
+          .run();
+      }
     }
 
     const verify = openRealmReadOnly(realmPath);

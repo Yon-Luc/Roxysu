@@ -53,17 +53,26 @@ export const systemRoutes = new Elysia({ prefix: "/system" })
   // -------------------------------------------------------------------------
   .get(
     "/hub-oauth/complete",
-    ({ query, set }) => {
+    ({ query }) => {
       const token = query.token?.trim();
       if (!token) {
-        set.status = 400;
-        set.headers["content-type"] = "text/plain; charset=utf-8";
-        return "Missing token";
+        return new Response("Missing token", {
+          status: 400,
+          headers: {
+            "Content-Type": "text/plain;charset=utf-8",
+            "Cache-Control": "no-store",
+          },
+        });
       }
       setPendingHubOAuthToken(token);
-      set.headers["content-type"] = "text/html; charset=utf-8";
-      set.headers["cache-control"] = "no-store";
-      return HUB_OAUTH_DONE_HTML;
+      // Explicit Response — Node/@elysiajs/node can drop charset on string bodies.
+      return new Response(HUB_OAUTH_DONE_HTML, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/html;charset=utf-8",
+          "Cache-Control": "no-store",
+        },
+      });
     },
     {
       query: t.Object({

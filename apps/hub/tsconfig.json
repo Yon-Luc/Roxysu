@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "outDir": "dist",
+    "rootDir": "../..",
+    "paths": {
+      "@roxysu/db": ["../../packages/db/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*", "../../packages/db/src/hub/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

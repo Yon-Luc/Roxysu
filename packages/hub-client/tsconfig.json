@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "paths": {
+      "@roxysu/hub": ["../../apps/hub/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*"]
+}

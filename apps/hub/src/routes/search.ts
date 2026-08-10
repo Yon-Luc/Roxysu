@@ -1,6 +1,13 @@
 import Elysia, { t } from "elysia";
-import { hashQueryParams, lookupCache, refreshCache, sliceIds } from "../services/cache";
-import { searchPage, type HinamizawaSearchParams } from "../services/hinamizawa";
+import {
+  hashQueryParams,
+  lookupCache,
+  refreshCache,
+  sliceIds,
+  stripRoxysuCacheParams,
+  type CacheQueryParams,
+} from "../services/cache";
+import { searchPage } from "../services/hinamizawa";
 import { allowRateLimit } from "../services/rateLimit";
 
 function clientIp(request: Request): string {
@@ -9,7 +16,6 @@ function clientIp(request: Request): string {
   return request.headers.get("x-real-ip")?.trim() || "unknown";
 }
 
-/** In-flight background refreshes — at most one per cache row at a time. */
 const refreshing = new Set<number>();
 
 export const searchRoutes = new Elysia({ prefix: "/search" }).get(
@@ -24,26 +30,28 @@ export const searchRoutes = new Elysia({ prefix: "/search" }).get(
     const {
       page = 0,
       limit = 100,
-      // pull search params from query, rest forwarded to hinamizawa
       ...rest
     } = query;
 
-    const params: HinamizawaSearchParams = {};
+    const params: CacheQueryParams = {};
     for (const [k, v] of Object.entries(rest)) {
-      if (v !== undefined && v !== "") params[k] = v;
+      if (v !== undefined && v !== "") params[k] = v as string | number;
+    }
+
+    // Normalize keys → key for stable hashing
+    if (params.keys != null && params.key == null) {
+      params.key = Number(params.keys);
+      delete params.keys;
     }
 
     const queryHash = hashQueryParams(params);
     const { status, row } = await lookupCache(queryHash);
 
-    // -----------------------------------------------------------------------
-    // Cache HIT (fresh or stale)
-    // -----------------------------------------------------------------------
     if (row) {
       if (status === "hit-stale" && !refreshing.has(row.id)) {
-        // Cap live upstream work: one refresh per cache id at a time, and
-        // a coarse IP budget for background refreshes.
-        if (allowRateLimit(`search-refresh:${ip}`, { limit: 10, windowMs: 60_000 })) {
+        if (
+          allowRateLimit(`search-refresh:${ip}`, { limit: 10, windowMs: 60_000 })
+        ) {
           refreshing.add(row.id);
           refreshCache(row.id)
             .catch((err) =>
@@ -67,16 +75,15 @@ export const searchRoutes = new Elysia({ prefix: "/search" }).get(
       };
     }
 
-    // -----------------------------------------------------------------------
-    // Cache MISS — live forward to hinamizawa (stricter budget)
-    // -----------------------------------------------------------------------
     if (!allowRateLimit(`search-live:${ip}`, { limit: 20, windowMs: 60_000 })) {
       set.status = 429;
       return { message: "Too many uncached search requests" };
     }
 
+    const hinaiParams = stripRoxysuCacheParams(params);
+
     try {
-      const live = await searchPage(params, page, limit);
+      const live = await searchPage(hinaiParams, page, limit);
       return {
         cached: false,
         stale: false,
@@ -85,7 +92,7 @@ export const searchRoutes = new Elysia({ prefix: "/search" }).get(
         total: live.total_count,
         page,
         limit,
-        beatmapsetIds: live.results.map((r: any) => r.SetID),
+        beatmapsetIds: live.results.map((r: { SetID: number }) => r.SetID),
       };
     } catch (err) {
       console.error("[search] Live hinamizawa search failed:", err);
@@ -97,7 +104,6 @@ export const searchRoutes = new Elysia({ prefix: "/search" }).get(
       {
         page: t.Optional(t.Numeric({ minimum: 0 })),
         limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100 })),
-        // hinamizawa params — all optional strings/numbers passed through
         query: t.Optional(t.String()),
         mode: t.Optional(t.Numeric()),
         status: t.Optional(t.String()),
@@ -109,8 +115,10 @@ export const searchRoutes = new Elysia({ prefix: "/search" }).get(
         max_length: t.Optional(t.Numeric()),
         creator: t.Optional(t.String()),
         sort: t.Optional(t.String()),
+        key: t.Optional(t.Numeric()),
+        keys: t.Optional(t.Numeric()),
       },
-      { additionalProperties: true }
+      { additionalProperties: true },
     ),
-  }
+  },
 );

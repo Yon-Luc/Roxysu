@@ -206,6 +206,30 @@ export function setMatchesOnlinePostFilters(
   });
 }
 
+/**
+ * When post-filters are exactly one equality on mania keys (e.g. key=7),
+ * return that key count so callers can hit a keymode-aware hub cache.
+ */
+export function exactKeymodeFromPostFilters(
+  filters: OnlinePostFilter[],
+): number | null {
+  if (filters.length !== 1) return null;
+  const f = filters[0]!;
+  if (f.field !== "keys") return null;
+  if (f.op === "=" && f.value != null && Number.isSafeInteger(f.value)) {
+    return f.value;
+  }
+  if (
+    f.min != null &&
+    f.max != null &&
+    f.min === f.max &&
+    Number.isSafeInteger(f.min)
+  ) {
+    return f.min;
+  }
+  return null;
+}
+
 export type ParseOnlineMirrorQueryOpts = {
   /** Defaults when the QL omits mode/status/sort. */
   defaultMode?: MirrorSearchParams["mode"];

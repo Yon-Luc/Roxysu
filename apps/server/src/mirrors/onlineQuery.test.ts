@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   OnlineQueryError,
+  exactKeymodeFromPostFilters,
   parseOnlineMirrorQuery,
   setMatchesOnlinePostFilters,
 } from "./onlineQuery";
@@ -129,5 +130,21 @@ describe("setMatchesOnlinePostFilters", () => {
         { field: "stars", op: ">=", value: 5 },
       ]),
     ).toBe(true);
+  });
+});
+
+describe("exactKeymodeFromPostFilters", () => {
+  test("returns key for single equality filter from key=7", () => {
+    const q = parseOnlineMirrorQuery("key=7 status=r");
+    expect(exactKeymodeFromPostFilters(q.postFilters)).toBe(7);
+  });
+
+  test("returns null when stars also present", () => {
+    const q = parseOnlineMirrorQuery("key=7 stars>=5 status=r");
+    expect(exactKeymodeFromPostFilters(q.postFilters)).toBeNull();
+  });
+
+  test("returns null for empty post-filters", () => {
+    expect(exactKeymodeFromPostFilters([])).toBeNull();
   });
 });

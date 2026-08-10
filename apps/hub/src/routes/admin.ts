@@ -4,50 +4,80 @@ import { db } from "../db";
 import { searchCache } from "@roxysu/db/hub";
 import { requireAdmin } from "../middleware/auth";
 import {
-  fetchAllBeatmapsetIds,
-  type HinamizawaSearchParams,
-} from "../services/hinamizawa";
-import { hashQueryParams, refreshCache } from "../services/cache";
+  hashQueryParams,
+  normalizeRefreshIntervalMinutes,
+  refreshCache,
+  type CacheQueryParams,
+} from "../services/cache";
 
 const TTL_MS = parseInt(process.env.HUB_CACHE_TTL_MS ?? "86400000", 10);
+
+const queryParamsSchema = t.Object(
+  {
+    status: t.Optional(t.String()),
+    mode: t.Optional(t.Numeric()),
+    query: t.Optional(t.String()),
+    min_stars: t.Optional(t.Numeric()),
+    max_stars: t.Optional(t.Numeric()),
+    min_bpm: t.Optional(t.Numeric()),
+    max_bpm: t.Optional(t.Numeric()),
+    min_length: t.Optional(t.Numeric()),
+    max_length: t.Optional(t.Numeric()),
+    creator: t.Optional(t.String()),
+    sort: t.Optional(t.String()),
+    /** Roxysu-only mania keymode filter (not sent to Hinamizawa). */
+    key: t.Optional(t.Numeric({ minimum: 1, maximum: 18 })),
+  },
+  { additionalProperties: true },
+);
+
+function serializeCacheRow(row: typeof searchCache.$inferSelect) {
+  const ageMs = Date.now() - new Date(row.cachedAt).getTime();
+  const interval = row.refreshIntervalMinutes;
+  const lastRefresh = row.lastRefreshAt
+    ? new Date(row.lastRefreshAt).getTime()
+    : null;
+  const nextRefreshAt =
+    interval != null && interval > 0 && lastRefresh != null
+      ? new Date(lastRefresh + interval * 60_000).toISOString()
+      : null;
+
+  return {
+    id: row.id,
+    label: row.label,
+    queryHash: row.queryHash,
+    queryParams: JSON.parse(row.queryParams) as CacheQueryParams,
+    totalCount: row.totalCount,
+    cachedAt: row.cachedAt,
+    stale: ageMs > TTL_MS,
+    ageMs,
+    refreshIntervalMinutes: row.refreshIntervalMinutes,
+    lastRefreshAt: row.lastRefreshAt,
+    nextRefreshAt,
+    refreshError: row.refreshError,
+  };
+}
 
 export const adminRoutes = new Elysia({ prefix: "/admin" })
   .use(requireAdmin)
 
-  // -------------------------------------------------------------------------
-  // GET /admin/cache — list all entries with staleness info
-  // -------------------------------------------------------------------------
   .get("/cache", async () => {
     const rows = await db
       .select()
       .from(searchCache)
       .orderBy(desc(searchCache.cachedAt));
-
-    return rows.map((row) => {
-      const ageMs = Date.now() - new Date(row.cachedAt).getTime();
-      return {
-        id: row.id,
-        label: row.label,
-        queryHash: row.queryHash,
-        queryParams: JSON.parse(row.queryParams),
-        totalCount: row.totalCount,
-        cachedAt: row.cachedAt,
-        stale: ageMs > TTL_MS,
-        ageMs,
-      };
-    });
+    return rows.map(serializeCacheRow);
   })
 
-  // -------------------------------------------------------------------------
-  // POST /admin/cache — create + immediately prime a cache entry
-  // -------------------------------------------------------------------------
   .post(
     "/cache",
     async ({ body }) => {
-      const params = body.query_params as HinamizawaSearchParams;
+      const params = body.query_params as CacheQueryParams;
       const queryHash = hashQueryParams(params);
+      const refreshIntervalMinutes = normalizeRefreshIntervalMinutes(
+        body.refreshIntervalMinutes,
+      );
 
-      // Check if already exists
       const existing = await db
         .select()
         .from(searchCache)
@@ -61,7 +91,6 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
         });
       }
 
-      // Insert placeholder row first
       const inserted = await db
         .insert(searchCache)
         .values({
@@ -70,17 +99,14 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
           beatmapsetIds: "[]",
           totalCount: 0,
           label: body.label ?? "",
+          refreshIntervalMinutes,
         })
         .returning({ id: searchCache.id })
         .get();
 
-      // Prime synchronously so the caller gets confirmation
-      // (This may take a while for large result sets — typical ranked mania query
-      //  is ~5K sets across ~50 pages, ~30s total at 100/page)
       try {
         await refreshCache(inserted.id);
       } catch (err) {
-        // Clean up placeholder on failure
         await db.delete(searchCache).where(eq(searchCache.id, inserted.id));
         console.error("[admin] Cache prime failed:", err);
         return status(502, { message: "Failed to fetch from Hinamizawa" });
@@ -96,33 +122,66 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
         id: inserted.id,
         queryHash,
         totalCount: row?.totalCount ?? 0,
+        refreshIntervalMinutes,
         message: "Cache entry created and primed",
       };
     },
     {
       body: t.Object({
         label: t.Optional(t.String({ maxLength: 100 })),
-        query_params: t.Object(
-          {
-            status: t.Optional(t.String()),
-            mode: t.Optional(t.Numeric()),
-            query: t.Optional(t.String()),
-            min_stars: t.Optional(t.Numeric()),
-            max_stars: t.Optional(t.Numeric()),
-            min_bpm: t.Optional(t.Numeric()),
-            max_bpm: t.Optional(t.Numeric()),
-            creator: t.Optional(t.String()),
-            sort: t.Optional(t.String()),
-          },
-          { additionalProperties: true },
+        refreshIntervalMinutes: t.Optional(
+          t.Nullable(t.Numeric({ minimum: 0 })),
+        ),
+        query_params: queryParamsSchema,
+      }),
+    },
+  )
+
+  .patch(
+    "/cache/:id",
+    async ({ params, body }) => {
+      const row = await db
+        .select()
+        .from(searchCache)
+        .where(eq(searchCache.id, params.id))
+        .get();
+      if (!row) return status(404, { message: "Cache entry not found" });
+
+      const patch: Partial<typeof searchCache.$inferInsert> = {};
+      if (body.label !== undefined) patch.label = body.label;
+      if (body.refreshIntervalMinutes !== undefined) {
+        patch.refreshIntervalMinutes = normalizeRefreshIntervalMinutes(
+          body.refreshIntervalMinutes,
+        );
+      }
+
+      if (Object.keys(patch).length === 0) {
+        return serializeCacheRow(row);
+      }
+
+      await db
+        .update(searchCache)
+        .set(patch)
+        .where(eq(searchCache.id, params.id));
+
+      const updated = await db
+        .select()
+        .from(searchCache)
+        .where(eq(searchCache.id, params.id))
+        .get();
+      return serializeCacheRow(updated!);
+    },
+    {
+      params: t.Object({ id: t.Numeric() }),
+      body: t.Object({
+        label: t.Optional(t.String({ maxLength: 100 })),
+        refreshIntervalMinutes: t.Optional(
+          t.Nullable(t.Numeric({ minimum: 0 })),
         ),
       }),
     },
   )
 
-  // -------------------------------------------------------------------------
-  // POST /admin/cache/:id/refresh — re-run search, update stored IDs
-  // -------------------------------------------------------------------------
   .post(
     "/cache/:id/refresh",
     async ({ params }) => {
@@ -137,6 +196,14 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
       try {
         await refreshCache(params.id);
       } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        await db
+          .update(searchCache)
+          .set({
+            refreshError: message.slice(0, 500),
+            refreshBackoffUntil: new Date(Date.now() + 15 * 60_000),
+          })
+          .where(eq(searchCache.id, params.id));
         console.error("[admin] Refresh failed:", err);
         return status(502, {
           message: "Hinamizawa search failed during refresh",
@@ -153,15 +220,13 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
         id: params.id,
         totalCount: updated?.totalCount ?? 0,
         cachedAt: updated?.cachedAt,
+        lastRefreshAt: updated?.lastRefreshAt,
         message: "Cache refreshed",
       };
     },
     { params: t.Object({ id: t.Numeric() }) },
   )
 
-  // -------------------------------------------------------------------------
-  // DELETE /admin/cache/:id — drop a cache entry
-  // -------------------------------------------------------------------------
   .delete(
     "/cache/:id",
     async ({ params }) => {

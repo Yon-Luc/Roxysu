@@ -1,6 +1,7 @@
 import type { Db } from "../db-runtime";
 import {
   OnlineQueryError,
+  exactKeymodeFromPostFilters,
   parseOnlineMirrorQuery,
   setMatchesOnlinePostFilters,
   type OnlineMirrorQuery,
@@ -185,6 +186,8 @@ export async function searchOnlineBeatmapsets(
       };
 
   const postFilters = onlineQuery?.postFilters ?? [];
+  const hubKeymode = exactKeymodeFromPostFilters(postFilters);
+  /** Exact key=N can hit a keymode-aware hub cache; other post-filters need overfetch. */
   const needsOverfetch = postFilters.length > 0;
 
   const { owned, pending, hide } = excludeOwned
@@ -203,18 +206,13 @@ export async function searchOnlineBeatmapsets(
   let mirrorHasMore = true;
   let pagesScanned = 0;
 
-  // With post-filters we walk from mirror page 0 and skip the first
-  // `page * CAPACITY` matches so UI page N is still a full page of matches.
-  // Without post-filters we jump straight to mirror page `page`.
-  const skipMatches = needsOverfetch ? page * MIRROR_PAGE_CAPACITY : 0;
-  let matchIndex = 0;
-  let mirrorPage = needsOverfetch ? 0 : page;
-
-  if (!needsOverfetch) {
-    // Prefer hub cache when HUB_URL is set and the entry is primed.
+  // Prefer hub cache when HUB_URL is set and the entry is primed.
+  // Exact keymode equality is included in the hub query identity.
+  if (postFilters.length === 0 || hubKeymode != null) {
     const hubHit = await tryHubCachedSearch({
       ...mirrorBase,
-      page: mirrorPage,
+      ...(hubKeymode != null ? { key: hubKeymode } : {}),
+      page,
       limit: MIRROR_PAGE_CAPACITY,
     });
     if (hubHit) {
@@ -250,7 +248,16 @@ export async function searchOnlineBeatmapsets(
           : `Served from hub cache${hubHit.stale ? " (refreshing in background)" : ""}.`,
       };
     }
+  }
 
+  // With post-filters we walk from mirror page 0 and skip the first
+  // `page * CAPACITY` matches so UI page N is still a full page of matches.
+  // Without post-filters we jump straight to mirror page `page`.
+  const skipMatches = needsOverfetch ? page * MIRROR_PAGE_CAPACITY : 0;
+  let matchIndex = 0;
+  let mirrorPage = needsOverfetch ? 0 : page;
+
+  if (!needsOverfetch) {
     // Fast path: no post-filters — fetch exactly the requested mirror page.
     const { rawCount, sets } = await fetchMirrorPage(provider.id, {
       ...mirrorBase,

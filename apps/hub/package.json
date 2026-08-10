@@ -17,6 +17,7 @@
   "dependencies": {
     "@elysiajs/bearer": "^1.4.4",
     "@elysiajs/cors": "^1.4.2",
+    "@elysiajs/cron": "^1.4.2",
     "@elysiajs/jwt": "^1.4.2",
     "@roxysu/db": "workspace:*",
     "drizzle-orm": "0.36.4",

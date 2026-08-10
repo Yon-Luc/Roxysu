@@ -97,12 +97,17 @@ export const requireAuth = new Elysia({ name: "requireAuth" })
 
 /**
  * Requires a valid JWT Bearer token AND admin role (from DB via requireAuth).
+ *
+ * `.as("scoped")` after `.use(requireAuth)` re-applies auth when this plugin is
+ * mounted alongside other routes that already used the named `requireAuth`
+ * singleton. Without the scope lift, Elysia skips re-running auth and the
+ * admin check sees `user === undefined` → 403 even for real admins.
  */
 export const requireAdmin = new Elysia({ name: "requireAdmin" })
   .use(requireAuth)
-  .derive({ as: "scoped" }, ({ user }) => {
+  .as("scoped")
+  .onBeforeHandle({ as: "scoped" }, ({ user }) => {
     if (!user || user.role !== "admin") {
-      throw status(403, { message: "Admin access required" });
+      return status(403, { message: "Admin access required" });
     }
-    return {};
   });

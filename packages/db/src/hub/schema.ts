@@ -159,6 +159,14 @@ export const searchCache = sqliteTable("search_cache", {
   beatmapsetIds: text("beatmapset_ids").notNull().default("[]"), // JSON number[]
   totalCount: integer("total_count").notNull().default(0),
   label: text("label").notNull().default(""),
+  /** Minutes between automatic cron refreshes; null/0 = manual only. */
+  refreshIntervalMinutes: integer("refresh_interval_minutes"),
+  /** Last successful prime/refresh. */
+  lastRefreshAt: integer("last_refresh_at", { mode: "timestamp" }),
+  /** Last refresh failure message (cleared on success). */
+  refreshError: text("refresh_error"),
+  /** Soft backoff after failure — cron skips until this time. */
+  refreshBackoffUntil: integer("refresh_backoff_until", { mode: "timestamp" }),
   cachedAt: integer("cached_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),

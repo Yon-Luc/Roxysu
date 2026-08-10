@@ -1,7 +1,9 @@
 import { Elysia } from "elysia";
 import { cors } from "@elysiajs/cors";
+import { cron } from "@elysiajs/cron";
 import { runMigrations } from "./db";
 import { resolveJwtSecret } from "./services/jwtSecret";
+import { tickSearchCacheRefreshes } from "./services/cacheRefreshCron";
 import { authRoutes } from "./routes/auth";
 import { collectionRoutes } from "./routes/collections";
 import { searchRoutes } from "./routes/search";
@@ -19,9 +21,18 @@ const app = new Elysia()
   .use(
     cors({
       origin: process.env.CORS_ORIGIN ?? "*",
-      methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       allowedHeaders: ["Content-Type", "Authorization"],
-    })
+    }),
+  )
+  .use(
+    cron({
+      name: "search-cache-refresh",
+      pattern: "*/1 * * * *",
+      run() {
+        void tickSearchCacheRefreshes();
+      },
+    }),
   )
   .get("/health", () => ({ status: "ok", ts: Date.now() }))
   .use(authRoutes)

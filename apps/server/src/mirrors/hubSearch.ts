@@ -21,7 +21,7 @@ function hubBaseUrl(): string | null {
 
 /** Map local mirror search params to hub/hinamizawa query string fields. */
 export function mirrorParamsToHubQuery(
-  params: MirrorSearchParams,
+  params: MirrorSearchParams & { key?: number },
 ): Record<string, string | number> {
   const out: Record<string, string | number> = {};
   if (params.q?.trim()) out.query = params.q.trim();
@@ -45,6 +45,9 @@ export function mirrorParamsToHubQuery(
   if (params.maxLength != null) out.max_length = params.maxLength;
   if (params.creator?.trim()) out.creator = params.creator.trim();
   if (params.sort) out.sort = params.sort;
+  if (params.key != null && Number.isSafeInteger(params.key) && params.key > 0) {
+    out.key = params.key;
+  }
   return out;
 }
 
@@ -54,7 +57,7 @@ export function mirrorParamsToHubQuery(
  * to the live mirror.
  */
 export async function tryHubCachedSearch(
-  params: MirrorSearchParams & { page?: number; limit?: number },
+  params: MirrorSearchParams & { page?: number; limit?: number; key?: number },
 ): Promise<HubSearchCacheResult | null> {
   const base = hubBaseUrl();
   if (!base) return null;

@@ -401,3 +401,97 @@ export function fetchHubFavorites(hubUrl: string, token: string) {
     { token },
   );
 }
+
+export type HubSearchCacheEntry = {
+  id: number;
+  label: string;
+  queryHash: string;
+  queryParams: Record<string, string | number>;
+  totalCount: number;
+  cachedAt: string;
+  stale: boolean;
+  ageMs: number;
+  refreshIntervalMinutes: number | null;
+  lastRefreshAt: string | null;
+  nextRefreshAt: string | null;
+  refreshError: string | null;
+};
+
+export function fetchHubAdminCache(hubUrl: string, token: string) {
+  return hubFetch<HubSearchCacheEntry[]>(hubUrl, "/admin/cache", { token });
+}
+
+export function createHubAdminCache(
+  hubUrl: string,
+  token: string,
+  body: {
+    label?: string;
+    refreshIntervalMinutes?: number | null;
+    query_params: {
+      mode?: number;
+      status?: string;
+      query?: string;
+      key?: number;
+      sort?: string;
+      min_stars?: number;
+      max_stars?: number;
+      creator?: string;
+    };
+  },
+) {
+  return hubFetch<{
+    id: number;
+    queryHash: string;
+    totalCount: number;
+    refreshIntervalMinutes: number | null;
+    message: string;
+  }>(hubUrl, "/admin/cache", {
+    method: "POST",
+    token,
+    body: JSON.stringify(body),
+  });
+}
+
+export function patchHubAdminCache(
+  hubUrl: string,
+  token: string,
+  id: number,
+  body: {
+    label?: string;
+    refreshIntervalMinutes?: number | null;
+  },
+) {
+  return hubFetch<HubSearchCacheEntry>(hubUrl, `/admin/cache/${id}`, {
+    method: "PATCH",
+    token,
+    body: JSON.stringify(body),
+  });
+}
+
+export function refreshHubAdminCache(
+  hubUrl: string,
+  token: string,
+  id: number,
+) {
+  return hubFetch<{
+    id: number;
+    totalCount: number;
+    cachedAt: string;
+    lastRefreshAt: string | null;
+    message: string;
+  }>(hubUrl, `/admin/cache/${id}/refresh`, {
+    method: "POST",
+    token,
+  });
+}
+
+export function deleteHubAdminCache(
+  hubUrl: string,
+  token: string,
+  id: number,
+) {
+  return hubFetch<{ message: string }>(hubUrl, `/admin/cache/${id}`, {
+    method: "DELETE",
+    token,
+  });
+}

@@ -248,6 +248,11 @@ export function HubBrowsePage() {
           ) : (
             <HubLoginButton />
           )}
+          {meQuery.data?.role === "admin" ? (
+            <Link to="/hub/admin/cache" className="rx-btn">
+              Search cache
+            </Link>
+          ) : null}
           <Link to="/hub/share" className="rx-btn">
             Share collection
           </Link>

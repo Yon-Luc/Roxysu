@@ -1,9 +1,24 @@
 import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { searchCache } from "@roxysu/db/hub";
-import { fetchAllBeatmapsetIds, type HinamizawaSearchParams } from "./hinamizawa";
+import {
+  fetchAllBeatmapsetIds,
+  type HinamizawaSearchParams,
+} from "./hinamizawa";
 
 const TTL_MS = parseInt(process.env.HUB_CACHE_TTL_MS ?? "86400000", 10);
+const KEY_FILTER_CONCURRENCY = 8;
+const UA = "roxysu-hub/0.1 (+https://github.com/Yon-Luc/Roxysu)";
+const INFO_TIMEOUT_MS = 12_000;
+
+/** Roxysu-only cache identity fields — never forwarded to Hinamizawa. */
+const ROXYSU_ONLY_KEYS = new Set(["key", "keys"]);
+
+export type CacheQueryParams = HinamizawaSearchParams & {
+  /** Mania keymode filter applied after fetching SetIDs. */
+  key?: number;
+  keys?: number;
+};
 
 /**
  * Deterministic hash of query params:
@@ -12,20 +27,41 @@ const TTL_MS = parseInt(process.env.HUB_CACHE_TTL_MS ?? "86400000", 10);
  * - skip undefined/empty
  * Returns a short hex string safe to use as a DB key.
  */
-export function hashQueryParams(params: HinamizawaSearchParams): string {
+export function hashQueryParams(params: CacheQueryParams): string {
   const normalized = Object.entries(params)
     .filter(([, v]) => v !== undefined && v !== null && v !== "")
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([k, v]) => `${k}=${String(v).toLowerCase()}`)
     .join("&");
 
-  // FNV-1a 32-bit — tiny, no deps, deterministic
   let h = 0x811c9dc5;
   for (let i = 0; i < normalized.length; i++) {
     h ^= normalized.charCodeAt(i);
     h = (h * 0x01000193) >>> 0;
   }
   return h.toString(16).padStart(8, "0");
+}
+
+/** Params safe to send to Hinamizawa (no Roxysu-only key filter). */
+export function stripRoxysuCacheParams(
+  params: CacheQueryParams,
+): HinamizawaSearchParams {
+  const out: HinamizawaSearchParams = {};
+  for (const [k, v] of Object.entries(params)) {
+    if (ROXYSU_ONLY_KEYS.has(k)) continue;
+    if (v === undefined || v === null || v === "") continue;
+    out[k] = v;
+  }
+  return out;
+}
+
+/** Exact mania keymode from cache params, if any. */
+export function cacheKeymode(params: CacheQueryParams): number | null {
+  const raw = params.key ?? params.keys;
+  if (raw == null) return null;
+  const n = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isSafeInteger(n) || n <= 0 || n > 18) return null;
+  return n;
 }
 
 export type CacheStatus = "hit-fresh" | "hit-stale" | "miss";
@@ -50,9 +86,83 @@ export async function lookupCache(queryHash: string): Promise<CacheLookupResult>
   return { status: stale ? "hit-stale" : "hit-fresh", row };
 }
 
+async function setHasKeymode(setId: number, keys: number): Promise<boolean> {
+  try {
+    const res = await fetch(
+      `https://mirror.hinamizawa.ai/v3/osu/beatmaps/s/${setId}`,
+      {
+        headers: { accept: "application/json", "user-agent": UA },
+        signal: AbortSignal.timeout(INFO_TIMEOUT_MS),
+      },
+    );
+    if (!res.ok) return false;
+    const payload = (await res.json()) as {
+      beatmaps?: Array<Record<string, unknown>>;
+    };
+    const beatmaps = Array.isArray(payload.beatmaps) ? payload.beatmaps : [];
+    for (const row of beatmaps) {
+      const modeInt =
+        typeof row.mode_int === "number"
+          ? row.mode_int
+          : Number(row.mode_int);
+      const modeName =
+        typeof row.mode === "string" ? row.mode.toLowerCase() : "";
+      const isMania = modeInt === 3 || modeName === "mania";
+      if (!isMania) continue;
+      const cs =
+        typeof row.cs === "number"
+          ? row.cs
+          : typeof row.cs === "string"
+            ? Number(row.cs)
+            : NaN;
+      if (!Number.isFinite(cs)) continue;
+      if (Math.round(cs) === keys) return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/** Keep set IDs that have at least one mania diff with the given key count. */
+export async function filterSetIdsByKeymode(
+  setIds: number[],
+  keys: number,
+  onProgress?: (checked: number, total: number) => void,
+): Promise<number[]> {
+  const unique = [
+    ...new Set(setIds.filter((id) => Number.isSafeInteger(id) && id > 0)),
+  ];
+  const kept: number[] = [];
+  let checked = 0;
+  let next = 0;
+
+  async function worker() {
+    while (next < unique.length) {
+      const i = next;
+      next += 1;
+      const id = unique[i]!;
+      if (await setHasKeymode(id, keys)) kept.push(id);
+      checked += 1;
+      onProgress?.(checked, unique.length);
+    }
+  }
+
+  await Promise.all(
+    Array.from(
+      { length: Math.min(KEY_FILTER_CONCURRENCY, Math.max(1, unique.length)) },
+      () => worker(),
+    ),
+  );
+
+  // Preserve discovery order from the search crawl.
+  const keptSet = new Set(kept);
+  return unique.filter((id) => keptSet.has(id));
+}
+
 /**
  * Run the hinamizawa search for a cache entry and upsert the result.
- * Called by both POST /admin/cache (create) and POST /admin/cache/:id/refresh.
+ * Applies Roxysu keymode filter when `key`/`keys` is present in query_params.
  */
 export async function refreshCache(cacheId: number): Promise<void> {
   const entry = await db
@@ -63,25 +173,43 @@ export async function refreshCache(cacheId: number): Promise<void> {
 
   if (!entry) throw new Error(`Cache entry ${cacheId} not found`);
 
-  const params = JSON.parse(entry.queryParams) as HinamizawaSearchParams;
+  const params = JSON.parse(entry.queryParams) as CacheQueryParams;
+  const hinaiParams = stripRoxysuCacheParams(params);
+  const keymode = cacheKeymode(params);
 
-  console.log(`[cache] Refreshing cache ${cacheId} (${entry.label || entry.queryHash})`);
+  console.log(
+    `[cache] Refreshing cache ${cacheId} (${entry.label || entry.queryHash})${
+      keymode != null ? ` key=${keymode}` : ""
+    }`,
+  );
 
-  const result = await fetchAllBeatmapsetIds(params, (fetched, total) => {
+  const result = await fetchAllBeatmapsetIds(hinaiParams, (fetched, total) => {
     process.stdout.write(`\r[cache] ${fetched}/${total} beatmapsets fetched`);
   });
-  console.log(); // newline after progress
+  console.log();
 
+  let ids = result.beatmapsetIds;
+  if (keymode != null) {
+    ids = await filterSetIdsByKeymode(ids, keymode, (checked, total) => {
+      process.stdout.write(`\r[cache] key filter ${checked}/${total}`);
+    });
+    console.log();
+  }
+
+  const now = new Date();
   await db
     .update(searchCache)
     .set({
-      beatmapsetIds: JSON.stringify(result.beatmapsetIds),
-      totalCount: result.totalCount,
-      cachedAt: new Date(),
+      beatmapsetIds: JSON.stringify(ids),
+      totalCount: ids.length,
+      cachedAt: now,
+      lastRefreshAt: now,
+      refreshError: null,
+      refreshBackoffUntil: null,
     })
     .where(eq(searchCache.id, cacheId));
 
-  console.log(`[cache] Done — ${result.beatmapsetIds.length} IDs stored`);
+  console.log(`[cache] Done — ${ids.length} IDs stored`);
 }
 
 /**
@@ -90,7 +218,7 @@ export async function refreshCache(cacheId: number): Promise<void> {
 export function sliceIds(
   raw: string,
   page: number,
-  limit: number
+  limit: number,
 ): { ids: number[]; total: number } {
   const all: number[] = JSON.parse(raw);
   const start = page * limit;
@@ -98,4 +226,12 @@ export function sliceIds(
     ids: all.slice(start, start + limit),
     total: all.length,
   };
+}
+
+export function normalizeRefreshIntervalMinutes(
+  value: number | null | undefined,
+): number | null {
+  if (value == null || value === 0) return null;
+  if (!Number.isSafeInteger(value) || value < 0) return null;
+  return value;
 }

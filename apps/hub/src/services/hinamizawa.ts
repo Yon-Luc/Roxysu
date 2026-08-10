@@ -3,8 +3,8 @@ const UA = "roxysu-hub/0.1 (+https://github.com/Yon-Luc/Roxysu)";
 
 export interface HinamizawaSearchParams {
   query?: string;
-  mode?: number;       // 0 osu, 1 taiko, 2 catch, 3 mania
-  status?: string;     // ranked, loved, pending, graveyard
+  mode?: number; // 0 osu, 1 taiko, 2 catch, 3 mania
+  status?: string; // ranked, loved, pending, graveyard
   min_stars?: number;
   max_stars?: number;
   min_bpm?: number;
@@ -16,18 +16,72 @@ export interface HinamizawaSearchParams {
   [key: string]: string | number | undefined;
 }
 
-interface SearchV2Result {
-  SetID: number;
-  Title: string;
-  Artist: string;
-  Creator: string;
-  RankedStatus: number;
-}
-
-interface SearchV2Response {
-  results: SearchV2Result[];
+/** Normalized page from hinai `/v3/osu/beatmaps/search/v2`. */
+export interface SearchV2Response {
+  results: Array<{ SetID: number }>;
   total_count: number;
   total_pages: number;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function asFiniteNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+/**
+ * Parse hinai v2 search JSON into a stable hub shape.
+ * Live API returns `{ beatmapsets: [{ id }], total_count, total_pages }`
+ * (osu!-style), not CheeseGull `{ results: [{ SetID }] }`.
+ */
+export function parseSearchV2Response(payload: unknown): SearchV2Response {
+  const row = asRecord(payload);
+  if (!row) {
+    throw new Error("Hinamizawa search returned a non-object payload");
+  }
+
+  const rawSets =
+    (Array.isArray(row.beatmapsets) && row.beatmapsets) ||
+    (Array.isArray(row.results) && row.results) ||
+    (Array.isArray(row.data) && row.data) ||
+    null;
+
+  if (!rawSets) {
+    throw new Error(
+      `Hinamizawa search missing beatmapsets (keys: ${Object.keys(row).join(", ")})`,
+    );
+  }
+
+  const results: Array<{ SetID: number }> = [];
+  for (const item of rawSets) {
+    const set = asRecord(item);
+    if (!set) continue;
+    const id = asFiniteNumber(set.id) ?? asFiniteNumber(set.SetID);
+    if (id == null || id <= 0) continue;
+    results.push({ SetID: id });
+  }
+
+  const total_count =
+    asFiniteNumber(row.total_count) ??
+    asFiniteNumber(row.total) ??
+    results.length;
+  const total_pages =
+    asFiniteNumber(row.total_pages) ??
+    Math.max(1, Math.ceil(total_count / Math.max(1, results.length || 100)));
+
+  return {
+    results,
+    total_count,
+    total_pages,
+  };
 }
 
 /**
@@ -38,7 +92,7 @@ interface SearchV2Response {
 async function fetchPage(
   params: HinamizawaSearchParams,
   page: number,
-  limit = 100
+  limit = 100,
 ): Promise<SearchV2Response> {
   const qs = new URLSearchParams();
 
@@ -62,7 +116,8 @@ async function fetchPage(
     throw new Error(`Hinamizawa search failed: ${res.status} ${body}`);
   }
 
-  return res.json() as Promise<SearchV2Response>;
+  const json: unknown = await res.json();
+  return parseSearchV2Response(json);
 }
 
 export interface PaginatedSearchResult {
@@ -80,7 +135,7 @@ export interface PaginatedSearchResult {
  */
 export async function fetchAllBeatmapsetIds(
   params: HinamizawaSearchParams,
-  onProgress?: (fetched: number, total: number) => void
+  onProgress?: (fetched: number, total: number) => void,
 ): Promise<PaginatedSearchResult> {
   const LIMIT = 100;
   const ids: number[] = [];
@@ -113,7 +168,7 @@ export async function fetchAllBeatmapsetIds(
 export async function searchPage(
   params: HinamizawaSearchParams,
   page: number,
-  limit: number
+  limit: number,
 ): Promise<SearchV2Response> {
   return fetchPage(params, page, limit);
 }

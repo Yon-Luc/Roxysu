@@ -17,6 +17,7 @@ import { HubBrowsePage } from "./features/hub/HubBrowsePage";
 import { HubCallbackPage } from "./features/hub/HubCallbackPage";
 import { HubDetailPage } from "./features/hub/HubDetailPage";
 import { HubSharePage } from "./features/hub/HubSharePage";
+import { HubAdminCachePage } from "./features/hub/HubAdminCachePage";
 import { SettingsPage } from "./features/settings/SettingsPage";
 import { SkinPage } from "./features/settings/SkinPage";
 import { OverlayPage } from "./features/overlay/OverlayPage";
@@ -191,6 +192,12 @@ const hubShareRoute = createRoute({
   component: HubSharePage,
 });
 
+const hubAdminCacheRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/hub/admin/cache",
+  component: HubAdminCachePage,
+});
+
 const hubDetailRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/hub/$id",
@@ -262,6 +269,7 @@ const routeTree = rootRoute.addChildren([
     hubRoute,
     hubCallbackRoute,
     hubShareRoute,
+    hubAdminCacheRoute,
     hubDetailRoute,
     ...(isDesktopShell() ? [] : [ratingLabRoute]),
     skinRoute,

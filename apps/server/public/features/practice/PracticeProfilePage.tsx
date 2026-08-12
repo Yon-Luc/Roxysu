@@ -12,6 +12,7 @@ import {
 import { BeatmapCover } from "../../components/BeatmapCover";
 import { BeatmapPreviewButton } from "../../components/BeatmapPreviewButton";
 import { CopyBeatmapSearchButton } from "../../components/CopyBeatmapSearchButton";
+import { GoBackLink } from "../../components/GoBackLink";
 import {
   HeroSkeleton,
   ListSkeleton,
@@ -57,9 +58,9 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
     return (
       <div className="space-y-8">
         <div>
-          <Link to="/practice" className="rx-back">
+          <GoBackLink to="/practice">
             {dict?.practice.detail.backToPractice}
-          </Link>
+          </GoBackLink>
           <HeroSkeleton />
         </div>
         <StatGridSkeleton />
@@ -81,9 +82,9 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
   if (error || !data || !("beatmap" in data) || !data.beatmap) {
     return (
       <div className="space-y-3">
-        <Link to="/practice" className="rx-back">
+        <GoBackLink to="/practice">
           {dict?.practice.detail.backToPractice}
-        </Link>
+        </GoBackLink>
         <p className="text-rose-300">
           {error?.message ?? dict?.practice.detail.notFound}
         </p>
@@ -184,9 +185,9 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
   return (
     <div className="space-y-8">
       <div>
-        <Link to="/practice" className="rx-back">
-          ← Practice
-        </Link>
+        <GoBackLink to="/practice">
+          {dict?.practice.detail.backToPractice ?? "Practice"}
+        </GoBackLink>
         <div className="relative mt-4 overflow-hidden rounded-xl">
           <BeatmapCover
             backgroundFileHash={beatmap.backgroundFileHash}

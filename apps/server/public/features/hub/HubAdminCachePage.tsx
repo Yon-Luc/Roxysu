@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { GoBackLink } from "../../components/GoBackLink";
 import { ListSkeleton } from "../../components/LoadingSkeleton";
 import { PageTitle } from "../../components/PageTitle";
 import { formatRelativeTime } from "../../lib/format";
@@ -191,29 +191,23 @@ export function HubAdminCachePage() {
     return (
       <div className="flex flex-col gap-4">
         <div>
-          <PageTitle>Search cache</PageTitle>
+          <GoBackLink to="/hub">Workshop</GoBackLink>
+          <PageTitle className="mt-3">Search cache</PageTitle>
           <p className="rx-subtitle">Admin</p>
         </div>
         <p className="text-sm text-rose-300">Admin access required.</p>
-        <Link to="/hub" className="rx-btn w-fit">
-          Back to Workshop
-        </Link>
       </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <PageTitle>Search cache</PageTitle>
-          <p className="rx-subtitle">
-            Prime Download quick-search indexes (keymode-aware)
-          </p>
-        </div>
-        <Link to="/hub" className="rx-btn text-sm">
-          Back to Workshop
-        </Link>
+      <div>
+        <GoBackLink to="/hub">Workshop</GoBackLink>
+        <PageTitle className="mt-3">Search cache</PageTitle>
+        <p className="rx-subtitle">
+          Prime Download quick-search indexes (keymode-aware)
+        </p>
       </div>
 
       <form

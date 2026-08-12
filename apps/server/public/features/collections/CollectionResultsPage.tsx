@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { BeatmapCover } from "../../components/BeatmapCover";
+import { GoBackLink } from "../../components/GoBackLink";
 import {
   CardGridSkeleton,
   SkeletonBlock,
@@ -58,9 +59,9 @@ export function CollectionResultsPage({
     return (
       <div className="space-y-8">
         <div>
-          <Link to="/collections" className="rx-back">
+          <GoBackLink to="/collections">
             {dict?.collection.backToCollections}
-          </Link>
+          </GoBackLink>
           <div className="mt-3">
             <SkeletonBlock className="h-10 w-56 max-w-full rounded-xl" />
             <SkeletonBlock className="mt-3 h-4 w-full max-w-[28rem]" />
@@ -78,9 +79,9 @@ export function CollectionResultsPage({
   if (error || !payload) {
     return (
       <div className="space-y-3">
-        <Link to="/collections" className="rx-back">
+        <GoBackLink to="/collections">
           {dict?.collection.backToCollections}
-        </Link>
+        </GoBackLink>
         <p className="text-rose-300">
           {error?.message ?? dict?.collection.notFound}
         </p>
@@ -93,9 +94,9 @@ export function CollectionResultsPage({
   return (
     <div className="space-y-8">
       <div>
-        <Link to="/collections" className="rx-back">
+        <GoBackLink to="/collections">
           {dict?.collection.backToCollections}
-        </Link>
+        </GoBackLink>
         <PageTitle className="mt-3">{collection.name}</PageTitle>
         <p className="mt-2 font-mono text-sm text-muted">{collection.query}</p>
         <div className="mt-2 flex flex-wrap items-center gap-3">

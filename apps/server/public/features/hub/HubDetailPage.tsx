@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ConfirmModal } from "../../components/ConfirmModal";
+import { GoBackLink } from "../../components/GoBackLink";
 import { OnlineSetCard } from "../../components/OnlineSetCard";
 import { PageTitle } from "../../components/PageTitle";
 import { CardGridSkeleton, ListSkeleton } from "../../components/LoadingSkeleton";
@@ -22,6 +22,7 @@ import {
   useHubUrl,
   type HubModeTag,
   type HubTag,
+  HUB_MODE_LABELS,
   HUB_MODE_TAGS,
   HUB_TAGS,
 } from "../../lib/hub";
@@ -35,8 +36,32 @@ import {
 } from "../../lib/hubOwnership";
 import { pushToast } from "../../lib/toasts";
 import { MIRROR_BATCH_QUERY_KEY } from "../download/useMirrorBatchJob";
+import {
+  collectPackKeys,
+  DEFAULT_MAP_FILTERS,
+  filterAndSortCollectionMaps,
+  hasAdvancedMapFilters,
+  type HubCollectionMapFilterState,
+  type MapOwnershipFilter,
+  type MapSort,
+} from "./hubCollectionMapFilters";
 import { HubLoginButton } from "./HubLoginButton";
 import { HubTagFilters } from "./HubTagFilters";
+
+const OWNERSHIP_OPTIONS: Array<{ value: MapOwnershipFilter; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "missing", label: "Not owned" },
+  { value: "owned", label: "Owned" },
+];
+
+const SORT_OPTIONS: Array<{ value: MapSort; label: string }> = [
+  { value: "stars_desc", label: "Highest stars" },
+  { value: "stars_asc", label: "Lowest stars" },
+  { value: "name_asc", label: "Name A–Z" },
+  { value: "name_desc", label: "Name Z–A" },
+  { value: "ranked_desc", label: "Newest ranked" },
+  { value: "collection", label: "Collection order" },
+];
 
 const INFO_BATCH = 100;
 
@@ -130,6 +155,13 @@ export function HubDetailPage({ id }: { id: string }) {
   const [editDescription, setEditDescription] = useState("");
   const [editTags, setEditTags] = useState<HubTag[]>([]);
   const [editMode, setEditMode] = useState<HubModeTag | "all">("all");
+  const [mapFilters, setMapFilters] =
+    useState<HubCollectionMapFilterState>(DEFAULT_MAP_FILTERS);
+  const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
+
+  function patchMapFilters(patch: Partial<HubCollectionMapFilterState>) {
+    setMapFilters((prev) => ({ ...prev, ...patch }));
+  }
 
   const detailQuery = useQuery({
     queryKey: ["hub-collection", hubUrl, collectionId, jwt],
@@ -159,9 +191,16 @@ export function HubDetailPage({ id }: { id: string }) {
     queryFn: fetchHubAddedCollections,
   });
 
-  const setIds = detailQuery.data?.maps.map((m) => m.beatmapsetId) ?? [];
-  const nameById = new Map(
-    (detailQuery.data?.maps ?? []).map((m) => [m.beatmapsetId, m.mapName]),
+  const setIds = useMemo(
+    () => detailQuery.data?.maps.map((m) => m.beatmapsetId) ?? [],
+    [detailQuery.data?.maps],
+  );
+  const nameById = useMemo(
+    () =>
+      new Map(
+        (detailQuery.data?.maps ?? []).map((m) => [m.beatmapsetId, m.mapName]),
+      ),
+    [detailQuery.data?.maps],
   );
 
   const cardsQuery = useQuery({
@@ -311,17 +350,36 @@ export function HubDetailPage({ id }: { id: string }) {
   });
 
   const c = detailQuery.data;
-  const byId = new Map(
-    (cardsQuery.data?.items ?? []).map((set) => [set.id, set]),
+  const byId = useMemo(
+    () => new Map((cardsQuery.data?.items ?? []).map((set) => [set.id, set])),
+    [cardsQuery.data?.items],
   );
+
+  const packKeys = useMemo(
+    () => collectPackKeys(cardsQuery.data?.items ?? []),
+    [cardsQuery.data?.items],
+  );
+  const showKeysFilter =
+    (mapFilters.mode === "all" || mapFilters.mode === "mania") &&
+    (packKeys.length > 0 || mapFilters.keys != null);
+  const advancedFiltersActive = hasAdvancedMapFilters(mapFilters);
+
+  const filteredMaps = useMemo(() => {
+    const rows = setIds.map((setId, collectionIndex) => ({
+      setId,
+      mapName: nameById.get(setId) ?? "",
+      set: byId.get(setId),
+      owned: ownedSetIds.has(setId),
+      collectionIndex,
+    }));
+    return filterAndSortCollectionMaps(rows, mapFilters);
+  }, [setIds, nameById, byId, ownedSetIds, mapFilters]);
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <Link to="/hub" className="text-xs text-muted hover:text-ink">
-            ← Workshop
-          </Link>
+          <GoBackLink to="/hub">Workshop</GoBackLink>
           <PageTitle>{c?.name ?? "Collection"}</PageTitle>
           {c ? (
             <p className="rx-subtitle">
@@ -474,25 +532,213 @@ export function HubDetailPage({ id }: { id: string }) {
           ) : cardsQuery.error && !cardsQuery.data ? (
             <p className="text-sm text-rose-300">{cardsQuery.error.message}</p>
           ) : (
-            <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {setIds.map((setId) => {
-                const set = byId.get(setId);
-                const owned = ownedSetIds.has(setId);
-                return (
-                  <li key={setId}>
-                    {set ? (
-                      <OnlineSetCard set={set} owned={owned} />
-                    ) : (
-                      <PlaceholderSetCard
-                        setId={setId}
-                        mapName={nameById.get(setId) ?? ""}
-                        owned={owned}
-                      />
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+            <div className="space-y-4">
+              <section className="rx-panel space-y-3 p-4 sm:p-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                  <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm text-muted">
+                    Search maps
+                    <input
+                      className="rx-input w-full"
+                      value={mapFilters.q}
+                      onChange={(e) => patchMapFilters({ q: e.target.value })}
+                      placeholder="Title, artist, mapper, or set id"
+                      aria-label="Search maps in collection"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-sm text-muted">
+                    Sort
+                    <select
+                      className="rx-select"
+                      value={mapFilters.sort}
+                      onChange={(e) =>
+                        patchMapFilters({ sort: e.target.value as MapSort })
+                      }
+                      aria-label="Sort maps"
+                    >
+                      {SORT_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    className={`rx-btn shrink-0 text-xs ${
+                      moreFiltersOpen || advancedFiltersActive
+                        ? "rx-btn-primary"
+                        : ""
+                    }`}
+                    aria-expanded={moreFiltersOpen}
+                    onClick={() => setMoreFiltersOpen((v) => !v)}
+                  >
+                    {moreFiltersOpen ? "Fewer filters" : "More filters"}
+                    {advancedFiltersActive && !moreFiltersOpen ? " · on" : ""}
+                  </button>
+                </div>
+
+                {moreFiltersOpen ? (
+                  <div className="space-y-3 border-t border-white/10 pt-3">
+                    <div className="space-y-1.5">
+                      <span className="rx-label">Ownership</span>
+                      <div className="flex flex-wrap gap-2">
+                        {OWNERSHIP_OPTIONS.map((o) => (
+                          <button
+                            key={o.value}
+                            type="button"
+                            className={`rx-btn text-xs ${
+                              mapFilters.ownership === o.value
+                                ? "rx-btn-primary"
+                                : ""
+                            }`}
+                            onClick={() =>
+                              patchMapFilters({ ownership: o.value })
+                            }
+                          >
+                            {o.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <span className="rx-label">Mode</span>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className={`rx-btn text-xs ${
+                            mapFilters.mode === "all" ? "rx-btn-primary" : ""
+                          }`}
+                          onClick={() =>
+                            patchMapFilters({ mode: "all" })
+                          }
+                        >
+                          {HUB_MODE_LABELS.all}
+                        </button>
+                        {HUB_MODE_TAGS.map((m) => (
+                          <button
+                            key={m}
+                            type="button"
+                            className={`rx-btn text-xs ${
+                              mapFilters.mode === m ? "rx-btn-primary" : ""
+                            }`}
+                            onClick={() =>
+                              patchMapFilters({
+                                mode: m,
+                                keys: m === "mania" ? mapFilters.keys : null,
+                              })
+                            }
+                          >
+                            {HUB_MODE_LABELS[m]}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {showKeysFilter ? (
+                      <div className="space-y-1.5">
+                        <span className="rx-label">Keys</span>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            className={`rx-btn text-xs ${
+                              mapFilters.keys == null ? "rx-btn-primary" : ""
+                            }`}
+                            onClick={() => patchMapFilters({ keys: null })}
+                          >
+                            All
+                          </button>
+                          {packKeys.map((k) => (
+                            <button
+                              key={k}
+                              type="button"
+                              className={`rx-btn text-xs ${
+                                mapFilters.keys === k ? "rx-btn-primary" : ""
+                              }`}
+                              onClick={() => patchMapFilters({ keys: k })}
+                            >
+                              {k}K
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="flex flex-wrap items-end gap-3">
+                      <label className="flex flex-col gap-1 text-sm text-muted">
+                        Min ★
+                        <input
+                          className="rx-input w-24"
+                          type="number"
+                          inputMode="decimal"
+                          min={0}
+                          step={0.1}
+                          value={mapFilters.minStars}
+                          onChange={(e) =>
+                            patchMapFilters({ minStars: e.target.value })
+                          }
+                          aria-label="Minimum star rating"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1 text-sm text-muted">
+                        Max ★
+                        <input
+                          className="rx-input w-24"
+                          type="number"
+                          inputMode="decimal"
+                          min={0}
+                          step={0.1}
+                          value={mapFilters.maxStars}
+                          onChange={(e) =>
+                            patchMapFilters({ maxStars: e.target.value })
+                          }
+                          aria-label="Maximum star rating"
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className="rx-btn text-xs"
+                        onClick={() => setMapFilters(DEFAULT_MAP_FILTERS)}
+                      >
+                        Reset filters
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+
+                <p className="text-sm text-muted">
+                  Showing {filteredMaps.length.toLocaleString()} of{" "}
+                  {setIds.length.toLocaleString()}
+                  {mapFilters.ownership === "missing"
+                    ? " · not owned"
+                    : mapFilters.ownership === "owned"
+                      ? " · owned"
+                      : ""}
+                </p>
+              </section>
+
+              {filteredMaps.length === 0 ? (
+                <p className="text-muted">
+                  No maps match these filters. Try clearing search or ownership.
+                </p>
+              ) : (
+                <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {filteredMaps.map(({ setId, set, owned, mapName }) => (
+                    <li key={setId}>
+                      {set ? (
+                        <OnlineSetCard set={set} owned={owned} />
+                      ) : (
+                        <PlaceholderSetCard
+                          setId={setId}
+                          mapName={mapName}
+                          owned={owned}
+                        />
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
         </>
       ) : null}

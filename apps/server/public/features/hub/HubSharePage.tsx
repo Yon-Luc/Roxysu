@@ -1,7 +1,8 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { BeatmapCover } from "../../components/BeatmapCover";
+import { GoBackLink } from "../../components/GoBackLink";
 import { ListSkeleton } from "../../components/LoadingSkeleton";
 import { PageTitle } from "../../components/PageTitle";
 import {
@@ -251,9 +252,7 @@ export function HubSharePage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <Link to="/hub" className="text-xs text-muted hover:text-ink">
-            ← Workshop
-          </Link>
+          <GoBackLink to="/hub">Workshop</GoBackLink>
           <PageTitle>Share collection</PageTitle>
           <p className="rx-subtitle">
             Upload a local smart or lazer collection to the Workshop.

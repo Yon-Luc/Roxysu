@@ -308,14 +308,24 @@ a {
 }
 
 .rx-back {
-  font-size: 0.875rem;
-  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 1.125rem;
+  line-height: 1.25;
+  font-weight: 600;
   color: var(--color-muted);
   transition: color 0.15s ease;
 }
 
 .rx-back:hover {
   color: var(--color-ink);
+}
+
+.rx-back-icon {
+  width: 1.5rem;
+  height: 1.5rem;
+  flex-shrink: 0;
 }
 
 .rx-chip {

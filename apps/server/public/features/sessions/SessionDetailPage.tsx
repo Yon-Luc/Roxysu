@@ -2,6 +2,8 @@ import { Link } from "@tanstack/react-router";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { BeatmapCover } from "../../components/BeatmapCover";
+import { BeatmapPreviewButton } from "../../components/BeatmapPreviewButton";
+import { GoBackLink } from "../../components/GoBackLink";
 import {
   ListSkeleton,
   PageHeaderSkeleton,
@@ -11,7 +13,6 @@ import {
 } from "../../components/LoadingSkeleton";
 import { ModBadges } from "../../components/ModBadges";
 import { PageTitle } from "../../components/PageTitle";
-import { BeatmapPreviewButton } from "../../components/BeatmapPreviewButton";
 import { ScoreReplayButton } from "../../components/ScoreReplayButton";
 import { fetchSession } from "../../lib/api";
 import {
@@ -78,9 +79,9 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
     return (
       <div className="space-y-8">
         <div>
-          <Link to="/sessions" className="rx-back">
+          <GoBackLink to="/sessions">
             {dict?.session.backToSessions}
-          </Link>
+          </GoBackLink>
           <div className="mt-3">
             <PageHeaderSkeleton
               subtitleWidth="w-72"
@@ -101,9 +102,9 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
   if (error || !data || !("session" in data)) {
     return (
       <div className="space-y-3">
-        <Link to="/sessions" className="rx-back">
+        <GoBackLink to="/sessions">
           {dict?.session.backToSessions}
-        </Link>
+        </GoBackLink>
         <p className="text-rose-300">
           {error?.message ?? dict?.session.notFound}
         </p>
@@ -114,9 +115,9 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
   if ("error" in data) {
     return (
       <div className="space-y-3">
-        <Link to="/sessions" className="rx-back">
+        <GoBackLink to="/sessions">
           {dict?.session.backToSessions}
-        </Link>
+        </GoBackLink>
         <p className="text-rose-300">{data.error}</p>
       </div>
     );
@@ -131,9 +132,9 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
     return (
       <div className="space-y-8">
         <div>
-          <Link to="/sessions" className="rx-back">
+          <GoBackLink to="/sessions">
             {dict?.session.backToSessions}
-          </Link>
+          </GoBackLink>
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <PageTitle>{dict?.session.startASession}</PageTitle>
           </div>
@@ -153,9 +154,9 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
   if (!session) {
     return (
       <div className="space-y-3">
-        <Link to="/sessions" className="rx-back">
+        <GoBackLink to="/sessions">
           {dict?.session.backToSessions}
-        </Link>
+        </GoBackLink>
         <p className="text-rose-300">{dict?.session.notFound}</p>
       </div>
     );
@@ -172,9 +173,9 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
   return (
     <div className="space-y-8">
       <div>
-        <Link to="/sessions" className="rx-back">
+        <GoBackLink to="/sessions">
           {dict?.session.backToSessions}
-        </Link>
+        </GoBackLink>
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <PageTitle>
             {isLive

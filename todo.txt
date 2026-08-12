@@ -1,0 +1,12 @@
+- edit a collection online 
+- In the hub a tap "collections added" the current one find " search collections"
+- if a collection was updated by the creator we can update it to the game ( add a button logic)
+- all  collection  added from the hub will have the prefix !Roxysu
+- on the hub list and on a specific collection show how many map are missing like X/Y owned maps
+- on the list of maps in the collection show a button downloaded icons if the map is already owned
+- add a button " Save collection " + a pop up which said X missing maps will be downloaded
+- split tags per gamemode  -> so a primary tag at the top all / mania / ctb / std / taiko
+which then show tag linked to those gamemode like 4k /  7k / LN for mania ( patterns name ect...)
+- find a better name and icon for hub
+- fix settings icon which is really ugly
+- for the admin create a pages "users" which display all users which did connect to the app ( osu username + profile picture)

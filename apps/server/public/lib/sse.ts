@@ -50,18 +50,40 @@ export function connectLiveUpdates(queryClient: QueryClient): () => void {
   };
 
   // collection.updated: only collections page cares.
-  const onCollectionUpdated = () => {
+  const onCollectionUpdated = (event?: Event) => {
     inv(["collections"]);
+    if (!event) return;
+    try {
+      const detail = JSON.parse((event as MessageEvent).data) as {
+        collectionId?: number;
+      };
+      if (detail.collectionId != null) {
+        void queryClient.invalidateQueries({
+          queryKey: ["collections", detail.collectionId, "results"],
+        });
+      }
+    } catch {
+      // ignore malformed payload
+    }
   };
 
   /** sync.finished: full resync done — refresh everything + preview/replay hashes. */
   const onSyncFinished = () => {
     inv(["dashboard"]);
     inv(["system", "status"]);
-    inv(["practice"]);
-    inv(["beatmap"]);
+    void queryClient.invalidateQueries({
+      queryKey: ["practice"],
+      refetchType: "none",
+    });
+    void queryClient.invalidateQueries({
+      queryKey: ["beatmap"],
+      refetchType: "none",
+    });
     inv(["sessions"]);
-    inv(["collections"]);
+    void queryClient.invalidateQueries({
+      queryKey: ["collections"],
+      refetchType: "none",
+    });
     inv(["settings"]);
     inv(["beatmap-preview"]);
     inv(["score-replay"]);
@@ -77,7 +99,6 @@ export function connectLiveUpdates(queryClient: QueryClient): () => void {
     "mastery.updated": onMasteryUpdated,
     "session.started": onSessionEvent,
     "session.finished": onSessionEvent,
-    "collection.updated": onCollectionUpdated,
     "sync.finished": onSyncFinished,
     "tosu.updated": onTosu,
   };
@@ -85,6 +106,7 @@ export function connectLiveUpdates(queryClient: QueryClient): () => void {
   for (const [name, handler] of Object.entries(HANDLERS)) {
     source.addEventListener(name, handler);
   }
+  source.addEventListener("collection.updated", onCollectionUpdated);
 
   source.onerror = () => {
     // Browser auto-reconnects EventSource
@@ -94,6 +116,7 @@ export function connectLiveUpdates(queryClient: QueryClient): () => void {
     for (const [name, handler] of Object.entries(HANDLERS)) {
       source.removeEventListener(name, handler);
     }
+    source.removeEventListener("collection.updated", onCollectionUpdated);
     source.close();
   };
 }

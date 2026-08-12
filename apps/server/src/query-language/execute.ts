@@ -18,11 +18,26 @@ import {
 import {
   resolveScoresGamemodeSync,
   scoresGamemodeSqlLiteral,
+  type ScoreGamemodeId,
 } from "../analytics/scoreGamemode";
 import {
   resolveScoresUsernamesSync,
   scoresUsernameSqlLiteral,
 } from "../analytics/scoreUsername";
+
+/** Resolved settings shared across one logical request. */
+export type QueryContext = {
+  usernames: string[] | null;
+  gamemode: ScoreGamemodeId | null;
+};
+
+/** Build a QueryContext once per request / batch. */
+export function buildQueryContext(db: Db): QueryContext {
+  return {
+    usernames: resolveScoresUsernamesSync(db),
+    gamemode: resolveScoresGamemodeSync(db),
+  };
+}
 
 /** Max maps to compute per dan/sunny query so first filter stays responsive. */
 const DAN_QUERY_BACKFILL_LIMIT = 120;
@@ -79,13 +94,11 @@ export type DistributionBin = {
 
 type SqlBinding = string | number | bigint | boolean | null;
 
-function baseFrom(db: Db): string {
-  const usernames = resolveScoresUsernamesSync(db);
-  const gamemode = resolveScoresGamemodeSync(db);
-  const userFilter = scoresUsernameSqlLiteral(usernames, "user_username");
-  const userFilterS = scoresUsernameSqlLiteral(usernames, "s.user_username");
-  const modeFilter = scoresGamemodeSqlLiteral(gamemode, "ruleset_short_name");
-  const modeFilterS = scoresGamemodeSqlLiteral(gamemode, "s.ruleset_short_name");
+function baseFrom(ctx: QueryContext): string {
+  const userFilter = scoresUsernameSqlLiteral(ctx.usernames, "user_username");
+  const userFilterS = scoresUsernameSqlLiteral(ctx.usernames, "s.user_username");
+  const modeFilter = scoresGamemodeSqlLiteral(ctx.gamemode, "ruleset_short_name");
+  const modeFilterS = scoresGamemodeSqlLiteral(ctx.gamemode, "s.ruleset_short_name");
   return `
   FROM beatmaps b
   LEFT JOIN mastery m ON m.beatmap_id = b.id
@@ -154,9 +167,9 @@ const SELECT_COLS = `
   dr_d.sunny_star AS danielStar
 `;
 
-function baseWhere(db: Db, extra: string): string {
+function baseWhere(ctx: QueryContext, extra: string): string {
   const modeFilter = scoresGamemodeSqlLiteral(
-    resolveScoresGamemodeSync(db),
+    ctx.gamemode,
     "b.ruleset_short_name",
   );
   return `WHERE b.hidden = 0 AND COALESCE(bs.delete_pending, 0) = 0${modeFilter} AND (${extra})`;
@@ -257,6 +270,7 @@ function formatAccLabel(fromPct: number, toPct: number): string {
 function resolveFilter(
   db: Db,
   query: string | undefined,
+  ctx: QueryContext,
 ): {
   sql: string;
   params: unknown[];
@@ -274,8 +288,8 @@ function resolveFilter(
   }
   const ast = parseQuery(q);
   const compiled = compileQuery(ast, {
-    username: resolveScoresUsernamesSync(db),
-    gamemode: resolveScoresGamemodeSync(db),
+    username: ctx.usernames,
+    gamemode: ctx.gamemode,
   });
   return {
     sql: compiled.sql,
@@ -380,37 +394,46 @@ export function executeAst(
   if (astUsesPatternAnalysis(ast)) {
     backfillPatternAnalysisSync(db, { limit: PATTERN_QUERY_BACKFILL_LIMIT });
   }
+  const ctx = buildQueryContext(db);
   const compiled = compileQuery(ast, {
-    username: resolveScoresUsernamesSync(db),
-    gamemode: resolveScoresGamemodeSync(db),
+    username: ctx.usernames,
+    gamemode: ctx.gamemode,
   });
-  return executeFilter(db, compiled.sql, compiled.params, opts);
+  return executeFilter(db, compiled.sql, compiled.params, ctx, opts);
 }
 
 function executeFilter(
   db: Db,
   filterSql: string,
   params: unknown[],
+  ctx: QueryContext,
   opts: {
     limit: number;
     offset: number;
     sortBy?: PracticeSortBy;
     sortDir?: PracticeSortDir;
+    knownTotal?: number;
   },
 ): { items: PracticeCardRow[]; total: number } {
-  const where = baseWhere(db, filterSql);
+  const where = baseWhere(ctx, filterSql);
   const bindings = asBindings(params);
   const sortBy = opts.sortBy ?? "lastPlayed";
   const sortDir = opts.sortDir ?? "desc";
 
-  const countSql = `SELECT COUNT(*) AS n ${baseFrom(db)} ${where}`;
-  const countRow = db.$client
-    .query(countSql)
-    .get(...bindings) as { n: number } | null;
+  let total: number;
+  if (opts.knownTotal != null) {
+    total = opts.knownTotal;
+  } else {
+    const countSql = `SELECT COUNT(*) AS n ${baseFrom(ctx)} ${where}`;
+    const countRow = db.$client
+      .query(countSql)
+      .get(...bindings) as { n: number } | null;
+    total = Number(countRow?.n ?? 0);
+  }
 
   const listSql = `
     SELECT ${SELECT_COLS}
-    ${baseFrom(db)}
+    ${baseFrom(ctx)}
     ${where}
     ORDER BY ${orderBySql(sortBy, sortDir)}
     LIMIT ? OFFSET ?
@@ -421,7 +444,7 @@ function executeFilter(
 
   return {
     items: enrichSunnyLabels(db, items),
-    total: Number(countRow?.n ?? 0),
+    total,
   };
 }
 
@@ -433,6 +456,7 @@ export function searchBeatmaps(
     pageSize: number;
     sortBy?: PracticeSortBy;
     sortDir?: PracticeSortDir;
+    knownTotal?: number;
   },
 ): {
   items: PracticeCardRow[];
@@ -440,15 +464,17 @@ export function searchBeatmaps(
   page: number;
   pageSize: number;
 } {
-  const filter = resolveFilter(db, query);
+  const ctx = buildQueryContext(db);
+  const filter = resolveFilter(db, query, ctx);
   maybeBackfillDan(db, filter.needsDanBackfill);
   maybeBackfillPattern(db, filter.needsPatternBackfill);
   const offset = (opts.page - 1) * opts.pageSize;
-  const result = executeFilter(db, filter.sql, filter.params, {
+  const result = executeFilter(db, filter.sql, filter.params, ctx, {
     limit: opts.pageSize,
     offset,
     sortBy: opts.sortBy,
     sortDir: opts.sortDir,
+    knownTotal: opts.knownTotal,
   });
   return {
     ...result,
@@ -466,7 +492,8 @@ export function sampleBeatmaps(
     excludeIds?: string[];
   },
 ): { items: PracticeCardRow[]; total: number } {
-  const filter = resolveFilter(db, query);
+  const ctx = buildQueryContext(db);
+  const filter = resolveFilter(db, query, ctx);
   maybeBackfillDan(db, filter.needsDanBackfill);
   maybeBackfillPattern(db, filter.needsPatternBackfill);
   let filterSql = filter.sql;
@@ -479,18 +506,18 @@ export function sampleBeatmaps(
     params.push(...exclude);
   }
 
-  const where = baseWhere(db, filterSql);
+  const where = baseWhere(ctx, filterSql);
   const bindings = asBindings(params);
   const count = Math.max(1, Math.min(20, Math.floor(opts.count)));
 
-  const countSql = `SELECT COUNT(*) AS n ${baseFrom(db)} ${where}`;
+  const countSql = `SELECT COUNT(*) AS n ${baseFrom(ctx)} ${where}`;
   const countRow = db.$client
     .query(countSql)
     .get(...bindings) as { n: number } | null;
 
   const listSql = `
     SELECT ${SELECT_COLS}
-    ${baseFrom(db)}
+    ${baseFrom(ctx)}
     ${where}
     ORDER BY RANDOM()
     LIMIT ?
@@ -505,16 +532,27 @@ export function sampleBeatmaps(
   };
 }
 
-export function countMatches(db: Db, query: string): number {
-  const filter = resolveFilter(db, query);
-  maybeBackfillDan(db, filter.needsDanBackfill);
-  maybeBackfillPattern(db, filter.needsPatternBackfill);
-  const where = baseWhere(db, filter.sql);
-  const countSql = `SELECT COUNT(*) AS n ${baseFrom(db)} ${where}`;
+/**
+ * countMatches without backfill side-effects. Used by the cached match-count
+ * refresh path — backfill is not wanted there.
+ */
+export function countMatchesPure(
+  db: Db,
+  query: string,
+  ctx: QueryContext,
+): number {
+  const filter = resolveFilter(db, query, ctx);
+  const where = baseWhere(ctx, filter.sql);
+  const countSql = `SELECT COUNT(*) AS n ${baseFrom(ctx)} ${where}`;
   const countRow = db.$client
     .query(countSql)
     .get(...asBindings(filter.params)) as { n: number } | null;
   return Number(countRow?.n ?? 0);
+}
+
+export function countMatches(db: Db, query: string): number {
+  const ctx = buildQueryContext(db);
+  return countMatchesPure(db, query, ctx);
 }
 
 /** Distinct beatmap MD5 hashes matching a collection query (for lazer sync). */
@@ -522,12 +560,13 @@ export function listCollectionMd5Hashes(
   db: Db,
   query: string,
 ): { hashes: string[]; skippedNoMd5: number } {
-  const filter = resolveFilter(db, query);
+  const ctx = buildQueryContext(db);
+  const filter = resolveFilter(db, query, ctx);
   maybeBackfillDan(db, filter.needsDanBackfill);
   maybeBackfillPattern(db, filter.needsPatternBackfill);
-  const where = baseWhere(db, filter.sql);
+  const where = baseWhere(ctx, filter.sql);
 
-  const totalSql = `SELECT COUNT(*) AS n ${baseFrom(db)} ${where}`;
+  const totalSql = `SELECT COUNT(*) AS n ${baseFrom(ctx)} ${where}`;
   const totalRow = db.$client
     .query(totalSql)
     .get(...asBindings(filter.params)) as { n: number } | null;
@@ -535,7 +574,7 @@ export function listCollectionMd5Hashes(
 
   const hashSql = `
     SELECT DISTINCT b.md5_hash AS md5_hash
-    ${baseFrom(db)}
+    ${baseFrom(ctx)}
     ${where}
     AND b.md5_hash IS NOT NULL
     AND TRIM(b.md5_hash) != ''
@@ -553,14 +592,15 @@ export function listDistinctSetIds(
   db: Db,
   query: string,
 ): { setIds: string[] } {
-  const filter = resolveFilter(db, query);
+  const ctx = buildQueryContext(db);
+  const filter = resolveFilter(db, query, ctx);
   maybeBackfillDan(db, filter.needsDanBackfill);
   maybeBackfillPattern(db, filter.needsPatternBackfill);
-  const where = baseWhere(db, filter.sql);
+  const where = baseWhere(ctx, filter.sql);
 
   const sql = `
     SELECT DISTINCT b.set_id AS set_id
-    ${baseFrom(db)}
+    ${baseFrom(ctx)}
     ${where}
   `;
   const rows = db.$client
@@ -574,10 +614,11 @@ function distributionMisses(
   db: Db,
   where: string,
   params: unknown[],
+  ctx: QueryContext,
 ): DistributionBin[] {
   const distSql = `
     SELECT (${missesBucketExpr()}) AS bucket, COUNT(*) AS count
-    ${baseFrom(db)}
+    ${baseFrom(ctx)}
     ${where}
     GROUP BY bucket
   `;
@@ -595,6 +636,7 @@ function distributionAccuracy(
   db: Db,
   where: string,
   params: unknown[],
+  ctx: QueryContext,
 ): DistributionBin[] {
   const rangeSql = `
     SELECT
@@ -602,7 +644,7 @@ function distributionAccuracy(
       MAX(ps.best_accuracy) AS max_acc,
       SUM(CASE WHEN ps.best_accuracy IS NULL THEN 1 ELSE 0 END) AS unplayed,
       SUM(CASE WHEN ps.best_accuracy IS NOT NULL THEN 1 ELSE 0 END) AS played
-    ${baseFrom(db)}
+    ${baseFrom(ctx)}
     ${where}
   `;
   const range = db.$client.query(rangeSql).get(...asBindings(params)) as {
@@ -631,7 +673,7 @@ function distributionAccuracy(
     .query(
       `
       SELECT ps.best_accuracy AS acc
-      ${baseFrom(db)}
+      ${baseFrom(ctx)}
       ${where}
         AND ps.best_accuracy IS NOT NULL
       ORDER BY ps.best_accuracy ASC
@@ -648,7 +690,7 @@ function distributionAccuracy(
     SELECT
       CAST(FLOOR(ps.best_accuracy * 1000.0 / ?) * ? AS INTEGER) AS bucket_tenths,
       COUNT(*) AS count
-    ${baseFrom(db)}
+    ${baseFrom(ctx)}
     ${where}
       AND ps.best_accuracy IS NOT NULL
     GROUP BY bucket_tenths
@@ -689,6 +731,7 @@ function distributionScore(
   db: Db,
   where: string,
   params: unknown[],
+  ctx: QueryContext,
 ): DistributionBin[] {
   const rangeSql = `
     SELECT
@@ -696,7 +739,7 @@ function distributionScore(
       MAX(ps.best_score) AS max_score,
       SUM(CASE WHEN ps.best_score IS NULL THEN 1 ELSE 0 END) AS unplayed,
       SUM(CASE WHEN ps.best_score IS NOT NULL THEN 1 ELSE 0 END) AS played
-    ${baseFrom(db)}
+    ${baseFrom(ctx)}
     ${where}
   `;
   const range = db.$client.query(rangeSql).get(...asBindings(params)) as {
@@ -723,7 +766,7 @@ function distributionScore(
     .query(
       `
       SELECT ps.best_score AS score
-      ${baseFrom(db)}
+      ${baseFrom(ctx)}
       ${where}
         AND ps.best_score IS NOT NULL
       ORDER BY ps.best_score ASC
@@ -738,7 +781,7 @@ function distributionScore(
     SELECT
       CAST(FLOOR(ps.best_score * 1.0 / ?) * ? AS INTEGER) AS bucket_start,
       COUNT(*) AS count
-    ${baseFrom(db)}
+    ${baseFrom(ctx)}
     ${where}
       AND ps.best_score IS NOT NULL
     GROUP BY bucket_start
@@ -775,18 +818,19 @@ export function practiceDistribution(
   total: number;
   bins: DistributionBin[];
 } {
-  const filter = resolveFilter(db, query);
+  const ctx = buildQueryContext(db);
+  const filter = resolveFilter(db, query, ctx);
   maybeBackfillDan(db, filter.needsDanBackfill);
   maybeBackfillPattern(db, filter.needsPatternBackfill);
-  const where = baseWhere(db, filter.sql);
+  const where = baseWhere(ctx, filter.sql);
   const params = filter.params;
 
   const bins =
     metric === "misses"
-      ? distributionMisses(db, where, params)
+      ? distributionMisses(db, where, params, ctx)
       : metric === "score"
-        ? distributionScore(db, where, params)
-        : distributionAccuracy(db, where, params);
+        ? distributionScore(db, where, params, ctx)
+        : distributionAccuracy(db, where, params, ctx);
 
   const total = bins.reduce((sum, b) => sum + b.count, 0);
   return { metric, total, bins };

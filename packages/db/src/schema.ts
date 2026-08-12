@@ -212,6 +212,11 @@ export const collections = sqliteTable("collections", {
   updatedAt: integer("updated_at", { mode: "timestamp_ms" })
     .notNull()
     .default(sql`(unixepoch() * 1000)`),
+  /**
+   * Cached result of countMatches(query). NULL means "not yet computed".
+   * Updated lazily whenever the collection is saved or after a sync event.
+   */
+  cachedMatchCount: integer("cached_match_count"),
 });
 
 /**

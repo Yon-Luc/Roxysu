@@ -3,6 +3,7 @@ import { app } from "./app";
 import { db } from "./db";
 import { startPollLoop } from "./sse";
 import { startAnalyticsPipeline } from "./analytics/pipeline";
+import { startCollectionMatchCache } from "./shared/collectionMatchCache";
 import { startTosuAdapter, stopTosuAdapter } from "./tosu";
 
 if (clearStuckRealmReaderPause(db)) {
@@ -14,6 +15,7 @@ if (clearStuckRealmReaderPause(db)) {
 app.listen(4321);
 const stopPoll = startPollLoop(db);
 const stopAnalytics = startAnalyticsPipeline(db);
+startCollectionMatchCache(db);
 void startTosuAdapter(db);
 
 console.log(

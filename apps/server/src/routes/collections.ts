@@ -16,12 +16,15 @@ import { publish } from "../shared/events";
 import { syncCollectionsToLazer } from "../shared/syncCollections";
 import { diffAgainstLibrary } from "../mirrors";
 import {
-  countMatches,
   listDistinctSetIds,
   parseQuery,
   QueryParseError,
   searchBeatmaps,
 } from "../query-language";
+import {
+  readCachedMatchCount,
+  refreshCollectionMatchCount,
+} from "../shared/collectionMatchCache";
 import {
   buildCollectionExportZip,
   isOszBuildError,
@@ -96,24 +99,16 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
       .from(collections)
       .orderBy(desc(collections.updatedAt));
 
-    const smartItems = rows.map((c) => {
-      let matchCount: number | null = null;
-      try {
-        matchCount = countMatches(db, c.query);
-      } catch {
-        matchCount = null;
-      }
-      return {
-        kind: "smart" as const,
-        id: c.id,
-        name: c.name,
-        query: c.query,
-        matchCount,
-        lazerSyncedAt: toIso(c.lazerSyncedAt),
-        createdAt: toIso(c.createdAt),
-        updatedAt: toIso(c.updatedAt),
-      };
-    });
+    const smartItems = rows.map((c) => ({
+      kind: "smart" as const,
+      id: c.id,
+      name: c.name,
+      query: c.query,
+      matchCount: c.cachedMatchCount ?? null,
+      lazerSyncedAt: toIso(c.lazerSyncedAt),
+      createdAt: toIso(c.createdAt),
+      updatedAt: toIso(c.updatedAt),
+    }));
 
     const realmRows = await db
       .select()
@@ -331,6 +326,8 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
         })
         .returning();
 
+      refreshCollectionMatchCount(db, row!.id);
+
       publish({ type: "collection.updated", collectionId: row!.id });
 
       return {
@@ -338,6 +335,7 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
         id: row!.id,
         name: row!.name,
         query: row!.query,
+        matchCount: readCachedMatchCount(db, row!.id),
         createdAt: toIso(row!.createdAt),
         updatedAt: toIso(row!.updatedAt),
       };
@@ -420,12 +418,15 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
             .where(eq(collections.id, id))
             .returning();
 
+          refreshCollectionMatchCount(db, id);
+
           publish({ type: "collection.updated", collectionId: id });
 
           return {
             id: row!.id,
             name: row!.name,
             query: row!.query,
+            matchCount: readCachedMatchCount(db, id),
             createdAt: toIso(row!.createdAt),
             updatedAt: toIso(row!.updatedAt),
           };
@@ -515,7 +516,11 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
           const pageSize = Math.min(100, Math.max(1, query.pageSize ?? 24));
 
           try {
-            const result = searchBeatmaps(db, col.query, { page, pageSize });
+            const result = searchBeatmaps(db, col.query, {
+              page,
+              pageSize,
+              knownTotal: col.cachedMatchCount ?? undefined,
+            });
             return {
               collection: {
                 id: col.id,

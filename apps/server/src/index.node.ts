@@ -6,6 +6,7 @@ import { db } from "./db.node";
 import { createApp } from "./createApp";
 import { startPollLoop } from "./sse";
 import { startAnalyticsPipeline } from "./analytics/pipeline";
+import { startCollectionMatchCache } from "./shared/collectionMatchCache";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -31,6 +32,7 @@ async function main() {
   app.listen({ port, hostname });
   const stopPoll = startPollLoop(db);
   const stopAnalytics = startAnalyticsPipeline(db);
+  startCollectionMatchCache(db);
 
   console.log(`🦊 Roxysu (node) running at http://${hostname}:${port}`);
   console.log(`[static] ${staticAssetsDir}`);

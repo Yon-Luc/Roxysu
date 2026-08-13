@@ -11,6 +11,6 @@ touches:
 
 ## Business rules
 
-1. Lazer data / `client.realm` path precedence: **environment → Settings → platform default**.
+1. Lazer files / `client.realm` path precedence: **environment → Settings → platform default**.
 
 **Status:** verified

@@ -6,17 +6,17 @@ touches:
   - README.md
 ---
 
-# Local API has no auth
+# Client app API has no auth
 
 ## Business rules
 
-1. The local product HTTP API (`apps/server`) does not implement user authentication or multi-user permissions.
-2. Assume a single trusted operator on localhost / desktop.
+1. The client app HTTP API (`apps/server`) does not implement user authentication or multi-user permissions.
+2. Assume a single trusted operator on the client machine.
 
 ## Security rules
 
-1. Do not add networked exposure of the local API without introducing explicit auth.
+1. Do not expose the client app API on a network without introducing explicit auth.
    **Enforced by:** product design / deployment assumption — status: verified
-   **Unauthorized result:** N/A today (local-only)
+   **Unauthorized result:** N/A today (offline-capable client app)
 
-**Status:** verified (absence of auth middleware + local-first docs)
+**Status:** verified (absence of auth middleware + offline-first docs)

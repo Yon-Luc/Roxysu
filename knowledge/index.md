@@ -1,12 +1,13 @@
 # Roxysu Knowledge Map
 
-Local-first practice analytics for osu!lazer. Source of truth for **how** is the code; this tree answers **what, why, and where**.
+Offline-first practice analytics for osu!lazer. Source of truth for **how** is the code; this tree answers **what, why, and where**.
 
 ## Navigate
 
 | Area | Path | Answers |
 |---|---|---|
-| Architecture | [architecture/](architecture/index.md) | Process model, stack, data ownership |
+| **Vocabulary** | [vocabulary.md](vocabulary.md) | Canonical terms — read before writing |
+| Architecture | [architecture/](architecture/index.md) | Process model, stack, table ownership |
 | Features | [features/](features/index.md) | What product surfaces exist |
 | Business rules | [business/](business/index.md) | Cross-cutting constraints |
 | Flows | [flows/](flows/index.md) | End-to-end user/system paths |
@@ -16,13 +17,13 @@ Local-first practice analytics for osu!lazer. Source of truth for **how** is the
 
 | Path | Role |
 |---|---|
-| `apps/server` | Bun + Elysia API, analytics, SSE, React UI (`:4321`) |
-| `apps/realm-reader` | Node + Realm JS → SQLite mirror; collection write-back |
-| `apps/hub` | Online hub API (`:4322`) — share collections, search cache |
+| `apps/server` | Client app API, analytics, SSE, React UI (`:4321`) |
+| `apps/realm-reader` | Node + Realm JS → local mirror; collection write-back |
+| `apps/hub` | Hub API (`:4322`) — share collections, hub search index |
 | `apps/desktop` | Electron shell spawning server + realm-reader |
 | `packages/db` | Shared Drizzle schema + dual SQLite clients |
 | `packages/osu-paths` | Lazer path resolution |
-| `packages/collection-sync` | `!Roxysu` prefix + sync wire types |
+| `packages/collection-sync` | `!Roxysu` prefix + write-back wire types |
 | `packages/realm-backup` | `client.realm` backup helpers |
 | `packages/sunny-dan` | Mania Sunny/Daniel difficulty estimates |
 | `packages/osu-chart`, `mania-judge`, `mania-pattern-analysis`, `pattern-7k`, `timing-analysis` | Chart/analysis libraries |
@@ -30,4 +31,4 @@ Local-first practice analytics for osu!lazer. Source of truth for **how** is the
 
 ## Bootstrap note
 
-Initial knowledge seeded 2026-08 from README, `docs/architecture.md`, and source. Grow incrementally; prefer `unknown` over guesses.
+Initial knowledge seeded 2026-08 from README, `docs/architecture.md`, and source. Grow incrementally; prefer `unknown` over guesses. Use [vocabulary.md](vocabulary.md) for all domain terms.

@@ -14,10 +14,10 @@ touches:
 1. JWT required for authenticated Hub routes.
    **Enforced by:** `apps/hub/src/middleware/auth.ts` — status: verified
 
-2. Update collection: owner only — status: verified
+2. Edit collection: owner only — status: verified
 
 3. Delete collection: owner or admin — status: verified
 
-4. Search-cache admin APIs: admin role — status: verified
+4. Hub search index admin APIs: admin role — status: verified
 
 **Unauthorized result:** request rejected / forbidden before mutation.

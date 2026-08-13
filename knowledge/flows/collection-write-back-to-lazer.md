@@ -7,11 +7,11 @@ touches:
   - apps/realm-reader/src/syncCollections.ts
 ---
 
-# Flow: Sync collections to lazer
+# Flow: Collection write-back to lazer
 
 ## User intent
 
-Push Roxysu smart collections into osu!lazer for in-game use.
+Push Roxysu collections into osu!lazer for in-game use.
 
 ## Flow
 
@@ -20,18 +20,18 @@ POST /api/collections/sync-lazer
     ↓
 resolve each collection query → MD5 hashes
     ↓
-set realm-reader pause
+pause Realm extraction (sync.realm_reader_paused)
     ↓
 backup client.realm + lock/schema gates
     ↓
 realm.write() only !Roxysu collections
     ↓
-store lazer_collection_id; clear pause
+persist lazer_collection_id; clear pause
 ```
 
 ## Business guarantee
 
-Non-`!Roxysu` lazer collections are untouched; a backup exists before write; sync fails safely if lazer is open.
+Non-`!Roxysu` lazer collections are untouched; a backup exists before write; write-back fails safely if lazer is open.
 
 ## Implementation references
 

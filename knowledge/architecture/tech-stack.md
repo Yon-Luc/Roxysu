@@ -18,10 +18,10 @@ Record the intentional dual-runtime stack and UI/API choices.
 
 | Layer | Choice |
 |---|---|
-| Local API | Bun + Elysia (`apps/server`, port 4321) |
+| Client app API | Bun + Elysia (`apps/server`, port 4321) |
 | UI | React 19, TanStack Router/Query, Recharts, Tailwind 4 |
-| Realm import | Node + Realm JS + `better-sqlite3` (`apps/realm-reader`) |
-| Shared DB | Drizzle schema in `packages/db`; `client.bun` vs `client.node` |
+| Realm extraction | Node + Realm JS + `better-sqlite3` (`apps/realm-reader`) |
+| Local mirror | Drizzle schema in `packages/db`; `client.bun` vs `client.node` |
 | Hub | Separate Elysia app (`apps/hub`, port 4322) |
 | Desktop | Electron (`apps/desktop`) |
 | Dev env | Nix flake / direnv for native modules on NixOS |

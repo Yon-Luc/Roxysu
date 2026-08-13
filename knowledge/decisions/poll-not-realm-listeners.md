@@ -10,15 +10,15 @@ touches:
 
 ## Decision
 
-Prefer watermark/reconcile polling over Realm `addListener` change notifications for import sync.
+Prefer watermark/reconcile polling over Realm `addListener` change notifications for Realm extraction.
 
 ## Reason
 
-Lazer may exclusive-lock the Realm file; listener-based sync is a poor fit for that model and latency needs.
+Lazer may exclusive-lock the Realm file; listener-based extraction is a poor fit for that model and latency needs.
 
 ## Consequences
 
-- Live updates are seconds-scale, not sub-second push from Realm.
+- Live UI refresh is seconds-scale, not sub-second push from Realm.
 - Full remap is reserved for first import / `REALM_FULL_SYNC`.
 
 ## Relevant implementation

@@ -11,12 +11,12 @@ touches:
 
 ## Purpose
 
-Group scores into practice sessions by inactivity gaps; browse past sessions and the live current session (SSE). Suggest maps via Up Next (QL) or 7K Sunny recommendations.
+Group scores into practice sessions by inactivity gaps; browse past sessions and the live current session (SSE). Suggest maps via Up Next (query language) or 7K Sunny recommendations.
 
 ## Business rules
 
 1. A new session starts when the gap between scores exceeds **30 minutes** (`SESSION_GAP_MS`).
-2. Current session hub updates as new plays land via SSE.
+2. Current session hub refreshes as new plays land via SSE.
 
 ## Important symbols
 
@@ -26,8 +26,8 @@ Group scores into practice sessions by inactivity gaps; browse past sessions and
 
 ## Dependencies
 
-- `features/live-sync/` — new scores
-- `features/practice-library/` — Up Next QL
+- `features/live-sync/` — new scores from Realm extraction
+- `features/practice-library/` — Up Next query language
 - `features/sunny-dan-recommendations/` — 7K recommend
 
 ## Depended on by

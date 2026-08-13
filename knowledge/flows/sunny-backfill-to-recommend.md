@@ -22,14 +22,14 @@ job reads .osu from lazer files
     ↓
 @roxysu/sunny-dan estimate
     ↓
-cache beatmap_dan_ratings
+persist Sunny dan ratings store (beatmap_dan_ratings)
     ↓
-QL fields + GET /api/practice/recommend + Session Suggest UI
+query language fields + GET /api/practice/recommend + Session Suggest UI
 ```
 
 ## Business guarantee
 
-Recommendations use cached estimates; without backfill, 7K suggest quality is limited.
+Recommendations use persisted estimates; without backfill, 7K suggest quality is limited.
 
 ## Implementation references
 

@@ -8,7 +8,7 @@ touches:
   - apps/server/public/lib/sse.ts
 ---
 
-# Flow: Realm sync to UI
+# Flow: Realm extraction to UI
 
 ## User intent
 
@@ -17,9 +17,9 @@ Keep the practice UI current as new plays appear in lazer.
 ## Flow
 
 ```
-realm-reader poll/watermark sync
+realm-reader poll/watermark extraction
     ↓
-write raw tables + imports row
+persist raw import tables + imports row
     ↓
 server startPollLoop (sse.ts) sees new imports
     ↓

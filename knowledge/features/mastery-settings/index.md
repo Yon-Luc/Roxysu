@@ -11,7 +11,7 @@ touches:
 
 ## Purpose
 
-Choose mastery formula (`simple` or `practice`), rating display preference (osu! stars / Sunny dan / Sunny rework stars), paths, and background jobs (Sunny/Daniel backfill). Recompute mastery across the library when formula changes.
+Choose mastery formula (`simple` or `practice`), rating display preference (osu! stars / Sunny dan / Sunny rework stars), paths, and background jobs (Sunny/Daniel backfill). Recompute mastery across the practice library when formula changes.
 
 ## Business rules
 
@@ -26,7 +26,7 @@ Choose mastery formula (`simple` or `practice`), rating display preference (osu!
 
 ## Dependencies
 
-- `features/live-sync/` — library content for recompute
+- `features/live-sync/` — practice library content for recompute
 
 ## Depended on by
 

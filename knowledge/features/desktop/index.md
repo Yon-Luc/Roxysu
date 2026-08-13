@@ -10,11 +10,11 @@ touches:
 
 ## Purpose
 
-Electron packaging shell that spawns server + realm-reader; same data model as browser `bun run dev`.
+Electron packaging shell that spawns server + realm-reader; same architecture as browser `bun run dev`.
 
 ## Business meaning
 
-Distribute Roxysu as a desktop app without changing the SQLite-centric architecture.
+Distribute Roxysu as a desktop app without changing the local-mirror-centric architecture.
 
 ## Important symbols
 

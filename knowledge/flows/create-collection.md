@@ -6,7 +6,7 @@ touches:
   - apps/server/public/features/collections
 ---
 
-# Flow: Create smart collection
+# Flow: Create collection
 
 ## User intent
 
@@ -19,16 +19,16 @@ Collections UI
     ↓
 POST /api/collections (query text)
     ↓
-row in collections
+persist row in collections
     ↓
-optional match-count cache / QL execute for results
+optional collection match count store refresh / query language execute for results
 ```
 
 ## Business guarantee
 
-Collection definition is the query string; membership stays dynamic as the library changes.
+Collection definition is the query string; membership stays dynamic as the practice library grows.
 
 ## Implementation references
 
 - `apps/server/src/routes/collections.ts`
-- match cache helpers under server collections code
+- `collectionMatchCache.ts`

@@ -2,7 +2,7 @@
 last_verified: 2026-08
 confidence: verified
 touches:
-  - apps/hub
+  - apps/hub/src/index.ts
   - roxysu-hub-plan.md
   - knowledge/architecture/hub-vs-local.md
 ---
@@ -11,16 +11,16 @@ touches:
 
 ## Decision
 
-Hub is a separate networked Elysia process and database; local practice remains offline-capable.
+Hub is a separate networked Elysia process and Hub store; client app practice remains offline-capable.
 
 ## Reason
 
-Different trust model (OAuth, multi-user) and lifecycle from local-first analytics.
+Different trust model (OAuth, multi-user) and lifecycle from offline-first analytics.
 
 ## Consequences
 
-- Do not merge Hub auth into the local product API casually.
-- Do not make local practice features require Hub availability.
+- Do not merge Hub auth into the client app API casually.
+- Do not make core practice features require Hub availability.
 
 ## Relevant implementation
 

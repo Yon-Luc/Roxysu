@@ -19,14 +19,14 @@ import success (changedScoreIds or full)
     ↓
 analytics pipeline incremental or full rebuild
     ↓
-sessions / mastery / statistics updated
+sessions / mastery / statistics refreshed in derived tables
     ↓
 SSE consumers refresh
 ```
 
 ## Business guarantee
 
-Soft deletes and orphan cleanup feed session/mastery refresh; large/full syncs may force full rebuild.
+Soft deletes and orphan cleanup feed session/mastery refresh; large/full imports may force full rebuild.
 
 ## Implementation references
 

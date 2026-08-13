@@ -86,23 +86,21 @@ One sentence defining what it is in business/domain terms.
 ### Example entries
 
 ### Collection
-A user's osu! beatmap collection, represented locally and optionally synchronized
-with the hub.
+A user's osu! beatmap collection, represented in the client app and optionally shared via the Hub or written back to Realm.
 **Not:** "playlist", "set", "library"
-**See:** `knowledge/features/collections/`
+**See:** `knowledge/features/smart-collections/`, `knowledge/vocabulary.md`
 
 ### Realm
-osu!lazer's `client.realm` database. Roxysu reads it but must treat it as
-osu!'s data source — never write to it, never assume its schema is stable.
+osu!lazer's `client.realm` file. Roxysu reads it but must treat it as
+osu's store — never write to it except collection write-back, never assume its schema is stable.
 **Not:** "the database", "osu db", "lazer db"
-**See:** `knowledge/architecture/realm-access.md`
+**See:** `knowledge/architecture/realm-access.md`, `knowledge/vocabulary.md`
 
 ### Local mirror
-The SQLite representation of data extracted from `client.realm`. Roxysu's own
-persistent store — writable, owned, schema-controlled.
-**Not:** "cache", "local db", "copy"
-**In code:** `MirrorRepository`
-**See:** `knowledge/architecture/local-mirror.md`
+The SQLite representation of beatmaps and scores extracted from Realm, plus derived analytics and user-authored rows. Roxysu's own persistent store — writable, owned, schema-controlled.
+**Not:** "cache", "local db", "copy", "database"
+**In code:** `@roxysu/db`, `apps/server/data.sqlite`
+**See:** `knowledge/architecture/local-mirror.md`, `knowledge/vocabulary.md`
 
 ---
 
@@ -462,7 +460,8 @@ Create `knowledge/AGENTS.md` with:
 # Agent Instructions
 
 1. Read knowledge/.state — bootstrap or incremental mode?
-2. Start at knowledge/index.md.
+2. Read knowledge/vocabulary.md — canonical terms only.
+3. Start at knowledge/index.md.
 3. For feature tasks, read the relevant feature index before touching code.
 4. For architectural changes, read knowledge/decisions/ first.
 5. For end-to-end behavior, consult knowledge/flows/.

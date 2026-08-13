@@ -10,15 +10,15 @@ touches:
 
 ## Purpose
 
-At-a-glance library overview: indexed counts, sync status, current session, weekly activity, PP/accuracy trends, recent scores.
+At-a-glance practice library overview: indexed score/beatmap counts, Realm extraction status, current session, weekly activity, PP/accuracy trends, recent scores.
 
 ## Business meaning
 
-Landing surface for “is my library healthy and what have I been playing?”
+Landing surface for “is my practice library healthy and what have I been playing?”
 
 ## Main flows
 
-- Open app → dashboard loads summary APIs + SSE sync status.
+- Open app → dashboard loads summary APIs + SSE extraction status.
 
 ## Important symbols
 
@@ -27,7 +27,7 @@ Landing surface for “is my library healthy and what have I been playing?”
 
 ## Dependencies
 
-- `features/live-sync/` — sync status
+- `features/live-sync/` — extraction status
 - `features/sessions/` — current session summary
 
 ## Depended on by
@@ -36,4 +36,6 @@ Landing surface for “is my library healthy and what have I been playing?”
 
 ## Related knowledge
 
-- [flows/realm-sync-to-ui.md](../../flows/realm-sync-to-ui.md)
+- [flows/realm-extraction-to-ui.md](../../flows/realm-extraction-to-ui.md)
+
+**In UI:** extraction status labels use "Live sync".

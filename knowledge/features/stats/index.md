@@ -21,7 +21,7 @@ Player skill bands / axes and related aggregate practice statistics beyond the d
 
 ## Dependencies
 
-- `features/live-sync/`
+- `features/live-sync/` — Realm extraction
 - analytics pipeline (`apps/server/src/analytics/pipeline.ts`)
 
 ## Depended on by

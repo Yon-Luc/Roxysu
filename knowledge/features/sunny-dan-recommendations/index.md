@@ -11,11 +11,11 @@ touches:
 
 ## Purpose
 
-Parse `.osu` charts from lazer storage, run Sunny Rework–style estimates, cache dan labels / Sunny stars, expose them in the query language, and power 7K smart recommendations (Push / Consistency / Deficit / Skillset).
+Parse `.osu` charts from lazer storage, run Sunny Rework–style estimates, persist to the Sunny dan ratings store, expose them in the query language, and power 7K smart recommendations (Push / Consistency / Deficit / Skillset).
 
 ## Business rules
 
-1. Estimates are cached (e.g. `beatmap_dan_ratings`); recommendations degrade without backfill.
+1. Estimates live in the Sunny dan ratings store (`beatmap_dan_ratings`); recommendations degrade without backfill.
 2. Backfill is a Settings-started background job.
 
 ## Important symbols
@@ -28,7 +28,7 @@ Parse `.osu` charts from lazer storage, run Sunny Rework–style estimates, cach
 ## Dependencies
 
 - `features/mastery-settings/` — job controls
-- `features/practice-library/` — `dan:` / `sunny:` QL fields
+- `features/practice-library/` — `dan:` / `sunny:` query language fields
 - `packages/osu-chart`
 
 ## Depended on by
@@ -38,4 +38,5 @@ Parse `.osu` charts from lazer storage, run Sunny Rework–style estimates, cach
 
 ## Related knowledge
 
+- [vocabulary.md](../../vocabulary.md) — Sunny dan ratings store
 - [flows/sunny-backfill-to-recommend.md](../../flows/sunny-backfill-to-recommend.md)

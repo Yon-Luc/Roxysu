@@ -10,11 +10,11 @@ touches:
 
 ## Purpose
 
-Protect osu!lazer user data.
+Protect osu!lazer user beatmaps and scores.
 
 ## Business rules
 
-1. `client.realm` is the immutable source of truth for scores and beatmaps; SQLite is a mirror plus derived/user data.
-2. The only intentional Realm write is manual smart-collection sync to `!Roxysu `-prefixed collections.
+1. Realm is the immutable source of truth for scores and beatmaps; the local mirror holds extracted copies plus derived/user rows.
+2. The only intentional Realm write is manual **collection write-back** to `!Roxysu `-prefixed collections.
 
-**Status:** verified (README + architecture + collection sync code)
+**Status:** verified (README + architecture + collection write-back code)

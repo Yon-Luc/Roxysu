@@ -10,7 +10,7 @@ touches:
 
 ## Decision
 
-Run realm-reader on Node and the API on Bun; share one Drizzle schema and one SQLite file with dual clients.
+Run realm-reader on Node and the client app API on Bun; share one Drizzle schema and one local mirror file with dual clients.
 
 ## Reason
 

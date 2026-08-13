@@ -13,7 +13,7 @@ Optional WebSocket integration with **tosu** for live in-progress map state (ove
 
 ## Business rules
 
-1. tosu is **not** the score source of truth — Realm → SQLite remains authoritative for plays.
+1. tosu is **not** the score source of truth — Realm extraction → local mirror remains authoritative for plays.
 
 ## Important symbols
 

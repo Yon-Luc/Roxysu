@@ -9,3 +9,4 @@ End-to-end paths. Prefer these when changing behavior that spans modules. Terms:
 | Collection write-back to lazer | [collection-write-back-to-lazer.md](collection-write-back-to-lazer.md) |
 | Score indexing / analytics | [score-indexing-analytics.md](score-indexing-analytics.md) |
 | Sunny backfill → recommend | [sunny-backfill-to-recommend.md](sunny-backfill-to-recommend.md) |
+| Export score rewatch as video | [export-replay-video.md](export-replay-video.md) |

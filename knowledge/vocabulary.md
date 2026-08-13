@@ -213,6 +213,32 @@ Shared DSL for practice search, collections, and global search. One parser/compi
 
 ---
 
+### Score rewatch
+
+Client-app playback of a stored score's replay frames and judgments against the
+beatmap chart and audio (mania notefield or standard playfield).
+
+**Not:** "replay preview" alone, "video export", live **Play** mode in the modal
+
+**In code:** `ScoreReplayModal`, `GET /api/scores/:id/replay`
+
+**See:** [features/preview-replay/](features/preview-replay/index.md)
+
+---
+
+### Replay video export
+
+Browser-side encode of a score rewatch into an MP4 (playfield + beatmap audio)
+using mediabunny / WebCodecs. Runs offline in the client app; does not upload.
+
+**Not:** "screen record", "replay render" on the server, "export" alone
+
+**In code:** `apps/server/public/lib/replayVideoExport.ts`
+
+**See:** [features/replay-video-export/](features/replay-video-export/index.md)
+
+---
+
 ## Forbidden terms (quick reference)
 
 | Avoid alone | Use instead |

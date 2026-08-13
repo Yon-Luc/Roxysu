@@ -5,6 +5,9 @@ touches:
   - apps/server/public/components/BeatmapPreviewModal.tsx
   - apps/server/public/components/ScoreReplayModal.tsx
   - apps/server/public/components/StdPlayfield.tsx
+  - apps/server/public/lib/paintStdPlayfield.ts
+  - apps/server/public/components/ManiaNotefield.tsx
+  - apps/server/public/lib/paintManiaNotefield.ts
   - apps/server/public/lib/stdSkin.ts
   - apps/server/public/features/settings/sections/StandardSkinEditor.tsx
   - apps/server/src/routes/scores.ts
@@ -103,9 +106,11 @@ Score rewatch:
 
 ## Implementation
 
-- `StdPlayfield.tsx` — canvas renderer (combo numbers, slider ticks, follow circle,
-  bouncing slider ball, tail flash, hit popups, HD fade, cursor+trail). Exports
-  `StdHitObject`, `StdPlayfieldFrame`, `StdPlayfieldJudgment`, `StdReplayHitObjects`.
+- `paintStdPlayfield.ts` — pure standard playfield paint (circles, sliders, spinners,
+  cursor trail, judgments). `StdPlayfield.tsx` is the thin React rAF wrapper.
+- `paintManiaNotefield.ts` — pure mania notefield paint. `ManiaNotefield.tsx` is the
+  thin React wrapper; re-exports judgment types, scroll prefs, and `JUDGMENT_COLORS`
+  for existing importers.
 - `stdSkin.ts` — standard skin store: defaults, `useStdSkin`, `comboColorFor`.
 - `StandardSkinEditor.tsx` — settings section with demo chart + color swatches +
   element toggles + reset.
@@ -122,8 +127,11 @@ Score rewatch:
 
 - `apps/server/public/lib/stdSkin.ts` store is consumed by `StdPlayfield.tsx`,
   `ScoreReplayModal.tsx`, `BeatmapPreviewModal.tsx`, and `StandardSkinEditor.tsx`.
+- [replay-video-export/](../replay-video-export/index.md) — paints the same
+  playfield frames offline via `paintStdPlayfield` / `paintManiaNotefield`.
 
 ## Related knowledge
 
 - [vocabulary.md](../vocabulary.md)
 - [features/index.md](index.md)
+- [replay-video-export/](../replay-video-export/index.md)

@@ -12,6 +12,7 @@ import { fetchScoreReplay, type ScoreReplay } from "../lib/api";
 import { AudioClock, sampleAudioClock } from "../lib/audioClock";
 import { clamp, formatAccuracy, formatClock } from "../lib/format";
 import { useStdSkin } from "../lib/stdSkin";
+import { usePreviewSkin } from "../lib/previewSkin";
 import { ModBadges } from "./ModBadges";
 import {
   codeToColumn,
@@ -52,6 +53,11 @@ import {
   SKIP_MS,
   type PreviewPrefs,
 } from "./previewPrefs";
+import {
+  downloadBlob,
+  exportReplayVideo,
+  type ReplayVideoExportProgress,
+} from "../lib/replayVideoExport";
 
 /** Mania accuracy contribution — Perfect is 305 (matches lazer/stable display). */
 const MANIA_RESULT_WEIGHT: Record<ReplayJudgmentResult, number> = {
@@ -187,6 +193,7 @@ export function ScoreReplayModal({
   const [prefs, setPrefs] = useState<PreviewPrefs>(() => loadPrefs());
   const prefsRef = useRef(prefs);
   const skin = useStdSkin();
+  const previewSkin = usePreviewSkin();
   const [mode, setMode] = useState<ModalMode>("rewatch");
   const [playing, setPlaying] = useState(false);
   const [currentMs, setCurrentMs] = useState(0);
@@ -202,6 +209,11 @@ export function ScoreReplayModal({
   const [liveJudgments, setLiveJudgments] = useState<NotefieldJudgment[]>([]);
   const [liveSummary, setLiveSummary] =
     useState<JudgmentSummary>(EMPTY_SUMMARY);
+  const [exporting, setExporting] = useState(false);
+  const [exportProgress, setExportProgress] =
+    useState<ReplayVideoExportProgress | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const exportAbortRef = useRef<AbortController | null>(null);
 
   const { data, error, isLoading } = useQuery({
     queryKey: ["score-replay", scoreId],
@@ -423,6 +435,56 @@ export function ScoreReplayModal({
     audio.pause();
     seekTo(0);
     setPlaying(false);
+  }
+
+  function cancelExport() {
+    exportAbortRef.current?.abort();
+    exportAbortRef.current = null;
+    setExporting(false);
+    setExportProgress(null);
+  }
+
+  async function startExport() {
+    if (!replayData || exporting || isPlay) return;
+    if (
+      replayData.beatmap.rulesetShortName !== "mania" &&
+      replayData.beatmap.rulesetShortName !== "osu"
+    ) {
+      setExportError("Export supports mania and standard only");
+      return;
+    }
+    setExportError(null);
+    setExporting(true);
+    setExportProgress({ phase: "audio" });
+    const ac = new AbortController();
+    exportAbortRef.current = ac;
+    // Pause live playback so the encoder can use CPU freely.
+    audioRef.current?.pause();
+    try {
+      const result = await exportReplayVideo({
+        replay: replayData,
+        scrollSpeed: prefsRef.current.scroll,
+        fieldWidth: prefsRef.current.fieldWidth,
+        fullscreen: prefsRef.current.fullscreen,
+        stdSkin: skin,
+        previewSkin,
+        signal: ac.signal,
+        onProgress: setExportProgress,
+      });
+      downloadBlob(result.blob, result.filename);
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        // cancelled
+      } else {
+        setExportError(
+          err instanceof Error ? err.message : "Failed to export video",
+        );
+      }
+    } finally {
+      exportAbortRef.current = null;
+      setExporting(false);
+      setExportProgress(null);
+    }
   }
 
   // Recreate live judge when chart / OD changes.
@@ -655,7 +717,15 @@ export function ScoreReplayModal({
     setLiveSummary(EMPTY_SUMMARY);
     setHud({ combo: 0, accuracy: 1, last: null });
     setActiveMissTMs(null);
+    cancelExport();
+    setExportError(null);
   }, [scoreId, audioUrl]);
+
+  useEffect(() => {
+    return () => {
+      exportAbortRef.current?.abort();
+    };
+  }, []);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -896,6 +966,39 @@ export function ScoreReplayModal({
         }
         onClick={(e) => e.stopPropagation()}
       >
+        {exporting ? (
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-black/75 px-6 backdrop-blur-sm">
+            <p className="font-display text-lg font-bold text-ink">
+              Exporting video…
+            </p>
+            <p className="text-sm text-muted">
+              {exportProgress?.phase === "audio"
+                ? "Decoding audio…"
+                : exportProgress?.phase === "finalize"
+                  ? "Finalizing MP4…"
+                  : exportProgress?.phase === "encode" &&
+                      exportProgress.fraction != null
+                    ? `Encoding ${Math.round(exportProgress.fraction * 100)}%`
+                    : "Preparing…"}
+            </p>
+            <div className="h-1.5 w-full max-w-xs overflow-hidden rounded bg-white/10">
+              <div
+                className="h-full bg-accent-glow transition-[width] duration-150"
+                style={{
+                  width: `${Math.round((exportProgress?.fraction ?? 0) * 100)}%`,
+                }}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={cancelExport}
+              className="mt-2 rounded-full px-4 py-1.5 text-sm text-muted ring-1 ring-white/15 transition hover:bg-highlight hover:text-ink"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : null}
+
         <div
           className="pointer-events-none absolute inset-0 bg-cover bg-center"
           style={bgUrl ? { backgroundImage: `url(${bgUrl})` } : undefined}
@@ -950,6 +1053,17 @@ export function ScoreReplayModal({
                   Play
                 </button>
               </div>
+            ) : null}
+            {!isPlay && (isManiaReplay || isStdReplay) ? (
+              <button
+                type="button"
+                onClick={() => void startExport()}
+                disabled={exporting || !replayData}
+                className="rounded-full px-3 py-1 text-sm text-muted transition hover:bg-highlight hover:text-ink disabled:opacity-40"
+                title="Export playfield + audio as MP4"
+              >
+                {exporting ? "Exporting…" : "Export"}
+              </button>
             ) : null}
             <button
               type="button"
@@ -1163,6 +1277,9 @@ export function ScoreReplayModal({
                       {audioError ??
                         "Audio not available locally — re-sync after updating Roxysu."}
                     </p>
+                  ) : null}
+                  {exportError ? (
+                    <p className="mb-3 text-sm text-rose-300">{exportError}</p>
                   ) : null}
 
                   {!isPlay ? (

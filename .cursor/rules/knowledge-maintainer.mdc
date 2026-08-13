@@ -1,0 +1,405 @@
+---
+description: Maintain a semantic knowledge base alongside the codebase. Apply when reading, writing, or modifying any file under knowledge/, or when making code changes that affect business behavior, flows, permissions, or architecture.
+globs:
+  - "knowledge/**"
+  - "src/**"
+alwaysApply: false
+---
+
+# Codebase Knowledge Maintainer
+
+Source code says **how**. The knowledge base says **what, why, and where**.
+
+The knowledge base at `knowledge/` is a structured semantic map of the repository — not documentation, not a copy of source code. The source code is always the implementation authority.
+
+---
+
+## On Entry — Read State First
+
+Before any task, read `knowledge/.state`:
+
+```yaml
+# knowledge/.state
+bootstrap_complete: false
+last_full_review: null
+```
+
+- `bootstrap_complete: false` → run bootstrapping phases before task work
+- `bootstrap_complete: true` → proceed with targeted navigation and incremental updates
+
+---
+
+## Directory Structure
+
+```
+knowledge/
+├── AGENTS.md        ← agent entry instructions
+├── .state           ← bootstrap status
+├── index.md         ← root map (start here)
+├── architecture/    ← system structure, tech choices
+├── features/        ← one subdirectory per feature
+├── business/        ← cross-cutting business rules
+├── flows/           ← end-to-end user flows
+└── decisions/       ← architectural constraints not to violate
+```
+
+Navigate top-down from `knowledge/index.md`. Every directory with multiple concepts has an `index.md`.
+
+---
+
+## Three Levels
+
+| Level | Examples | Answers |
+|---|---|---|
+| **Map** | `index.md`, `features/index.md` | What exists? Where do I look? |
+| **Concept** | `features/chat/index.md`, `business/permissions.md` | What does this mean? What are the rules? |
+| **Implementation** | `features/chat/realtime/implementation.md` | How exactly does this work? |
+
+---
+
+## Document Metadata Header
+
+Every concept and implementation document must begin with:
+
+```yaml
+---
+last_verified: YYYY-MM
+confidence: verified        # verified | inferred | unknown | deprecated
+touches:
+  - src/path/to/file.ts
+---
+```
+
+Treat documents older than 3 months with `inferred` or `unknown` confidence as potentially stale — re-verify before trusting.
+
+---
+
+## Document Section Order
+
+Use these sections in order, omitting those that don't apply:
+
+```
+## Purpose
+## Business meaning
+## Business rules
+## Security rules
+## Important states
+## Main flows
+## Implementation
+## Important symbols
+## Dependencies
+## Depended on by
+## Side effects
+## Failure behavior
+## Related knowledge
+```
+
+Business meaning always precedes implementation details.
+
+---
+
+## Security Rules Are Mandatory
+
+Any feature with access control **must** have a `## Security rules` section. Security rules must always be `verified` — never `inferred` or `unknown`.
+
+```markdown
+## Security rules
+
+1. Only conversation members can send messages.
+   **Enforced by:** `ConversationAccessService.canSend()` — status: verified
+   **Unauthorized result:** throws `ForbiddenException`, aborted before persistence
+
+2. Blocked users cannot send messages.
+   **Enforced by:** `ConversationAccessService.isBlocked()` — status: verified
+   **Unauthorized result:** same as above
+```
+
+If security rules cannot be fully verified from source, mark the section `unknown` and flag for review. Never omit the section.
+
+---
+
+## Cross-feature Dependency Tracking
+
+Every feature document must maintain both directions of the dependency graph.
+
+`## Dependencies` — what this feature needs:
+```markdown
+- `features/authentication/` — user identity required before access checks
+- `business/permissions.md` — conversation membership rules
+```
+
+`## Depended on by` — what breaks if this feature changes:
+```markdown
+- `features/notifications/` — subscribes to MessageCreated event
+- `features/search/` — indexes message content on creation
+```
+
+**Always read `## Depended on by` before making any change.** When creating a feature, add it to the `## Depended on by` sections of everything it depends on.
+
+---
+
+## Confidence States
+
+| State | Meaning |
+|---|---|
+| `verified` | Confirmed by source, tests, or DB constraints |
+| `inferred` | Reasonable conclusion from evidence |
+| `unknown` | Implementation exists but intent is unclear |
+| `deprecated` | No longer accurate; kept for history |
+
+`unknown` is always better than a hallucinated explanation. Security rules: `verified` only.
+
+---
+
+## Never Infer From These Alone
+
+| Source | Risk |
+|---|---|
+| Variable or function names | `canSend` ≠ users can always send |
+| Code comments | May be outdated |
+| Test file names without reading assertions | Name alone is not evidence |
+| Absence of a guard | Missing check ≠ intentional open access |
+| Partial reads of a function | Conditions may exist further in the body |
+
+Always read the full relevant implementation before documenting a rule.
+
+---
+
+## Evidence Sources
+
+Infer business rules from:
+- validation logic and conditionals
+- permission checks
+- test names **and** their assertions
+- database constraints (`UNIQUE`, `NOT NULL`, foreign keys)
+- event handlers and domain services
+
+Always reference the evidence:
+```markdown
+UNIQUE(user_id, conversation_id) → a user can only have one membership per conversation.
+**Status:** verified
+```
+
+---
+
+## Writing Rules
+
+**Do:**
+- Describe what a feature means and why it exists
+- List business rules explicitly, numbered
+- Use pseudo-code for flows — never copy source
+- Reference symbols precisely: `src/chat/chat.service.ts:ChatService.sendMessage()`
+
+**Do not:**
+- Copy source code into knowledge documents
+- Write exhaustive lists of every function
+- Create speculative explanations
+- Turn index files into encyclopedias
+
+### Pseudo-code (good)
+```
+sendMessage(userId, conversationId, content)
+    ↓
+verifyConversationMembership()
+    ↓
+validateContent()
+    ↓
+createMessage()
+    ↓
+publish(MessageCreated)
+    ├──→ RealtimeGateway
+    └──→ NotificationService
+```
+
+### Symbol reference (good)
+```markdown
+## Important symbols
+- `src/chat/chat.service.ts:ChatService.sendMessage()`
+- `src/chat/conversation-access.service.ts:ConversationAccessService.canSend()`
+```
+
+---
+
+## Pre-change Impact Checklist
+
+Before modifying any symbol, answer:
+
+1. Which knowledge documents reference this symbol?
+2. Which flows pass through it?
+3. Which decisions constrain it?
+4. What does the feature's `## Depended on by` list?
+5. Could this silently break a security rule in a dependent feature?
+
+If any answer is non-trivial, read those documents before writing code.
+
+---
+
+## Auto-triggers for Knowledge Review
+
+After every code change, check:
+
+| File touched | Review |
+|---|---|
+| `*.service.ts`, `*.controller.ts`, `*.resolver.ts` | Relevant feature in `features/` |
+| `*.repository.ts`, migration files | `business/` and `decisions/` |
+| Event names or handlers | `flows/` passing through that event |
+| Guards, policies, permission checks | `business/permissions.md` + feature security rules |
+| Config or env variables | `architecture/` |
+| Shared utilities | `## Depended on by` of the changed module |
+
+This check is mandatory — do not skip it because a change "seems small."
+
+---
+
+## Maintenance Workflow
+
+```
+1.  Read knowledge/.state → bootstrap or incremental?
+2.  Read knowledge/index.md
+3.  Navigate to relevant feature/concept
+4.  Read security rules and business rules
+5.  Read relevant flows and decisions
+6.  Run pre-change impact checklist
+7.  Inspect source implementation
+8.  Make the code change
+9.  Run auto-triggers check
+10. Update affected knowledge only
+11. Validate all source references still exist
+12. Update last_verified in touched documents
+13. Review the knowledge diff
+```
+
+Use the knowledge base **before** modifying code, not only after.
+
+### After refactoring (behavior unchanged)
+Update implementation references and `touches` metadata only. Do not rewrite business documentation.
+
+### Detecting stale knowledge
+- deleted or renamed files, functions, classes
+- changed event names, routes, database models
+- contradictory business rules
+- broken internal links
+- `last_verified` older than 3 months with `inferred` or `unknown` confidence
+
+Never silently leave stale references.
+
+---
+
+## Flows
+
+Use `knowledge/flows/` for end-to-end user actions. Required sections:
+
+- **User intent** — what the user is trying to do
+- **Flow** — arrow diagram through services/functions
+- **Business guarantee** — what the system promises
+- **Implementation references** — precise file/symbol links
+
+---
+
+## Architectural Decisions
+
+Use `knowledge/decisions/` for constraints agents could accidentally violate. Required sections:
+
+- **Decision** — what was decided
+- **Reason** — why
+- **Consequences** — implications for future changes
+- **Relevant implementation** — where it is enforced
+
+Always consult `decisions/` before making architectural changes.
+
+---
+
+## Update Report Format
+
+Every knowledge update must be reported as:
+
+```
+Knowledge updated:
+- knowledge/features/chat/realtime/index.md
+- knowledge/flows/send-message.md
+
+Reason: Realtime delivery behavior changed.
+Business behavior: Unchanged.
+Implementation: Changed from direct gateway invocation to EventBus publication.
+Security rules affected: None.
+Depended-on features reviewed: notifications/, search/
+```
+
+---
+
+## Creating Knowledge for a New Feature
+
+1. Identify business purpose, concepts, flows, and rules
+2. Identify source entry points, key symbols, dependencies, side effects
+3. Verify access control and security rules directly from source
+4. Create `features/<feature>/index.md` with metadata header
+5. Add `## Security rules` if the feature has access control
+6. Add child documents only when complexity justifies them
+7. Update parent index files
+8. Add this feature to `## Depended on by` sections of its dependencies
+9. Mark uncertain information as `unknown`
+
+Do not pre-create empty documents.
+
+---
+
+## Bootstrapping an Existing Codebase
+
+| Phase | Goal | Creates |
+|---|---|---|
+| 1 | Understand repo structure | `index.md`, `architecture/` |
+| 2 | Identify major features | `features/*/index.md` |
+| 3 | Extract business rules | `business/` |
+| 4 | Document major flows | `flows/` |
+| 5 | Record critical decisions | `decisions/` |
+| 6 | Map security rules | `## Security rules` in each relevant feature |
+| 7 | Build dependency graph | `## Dependencies` and `## Depended on by` in each feature |
+
+After all phases: set `knowledge/.state` → `bootstrap_complete: true`.
+Grow incrementally — do not aim for perfection in one pass.
+
+---
+
+## AGENTS.md Template
+
+Create `knowledge/AGENTS.md` with:
+
+```markdown
+# Agent Instructions
+
+1. Read knowledge/.state — bootstrap or incremental mode?
+2. Start at knowledge/index.md.
+3. For feature tasks, read the relevant feature index before touching code.
+4. For architectural changes, read knowledge/decisions/ first.
+5. For end-to-end behavior, consult knowledge/flows/.
+6. For features with access control, read ## Security rules before making changes.
+7. Always run the pre-change impact checklist.
+8. Business rules: authoritative when `verified` or `inferred`.
+9. Security rules: authoritative only when `verified`.
+10. Update last_verified in any document you confirm is still accurate.
+```
+
+Customize with repo-specific conventions and entry points.
+
+---
+
+## Minimum Document Checklist
+
+A knowledge document earns its place when it answers:
+
+- What is this and why does it exist?
+- What are its business rules?
+- Who can use it and what enforces that?
+- What happens during the main user action?
+- Which components and functions are involved?
+- What other features depend on it?
+
+---
+
+## Golden Rule
+
+**Before changing code:**
+> "What would I need to know about this system if I had never seen this repository?"
+
+**After changing code:**
+> "Did I change what this system means, its security model, or what depends on it? If so, did I update the knowledge?"

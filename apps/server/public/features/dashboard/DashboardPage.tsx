@@ -114,9 +114,11 @@ export function DashboardPage() {
               {dict?.dashboard.currentSession ?? "Current session"}
             </div>
             <div className="mt-2 text-2xl font-bold tabular-nums text-ink">
-              {session.scoreCount} {dict?.dashboard.plays ?? "plays"}
+              {session.name}
             </div>
             <div className="mt-1 text-xs text-muted">
+              {session.scoreCount} {dict?.dashboard.plays ?? "plays"}
+              {" · "}
               {formatRelativeTime(session.startedAt)}
             </div>
           </Link>

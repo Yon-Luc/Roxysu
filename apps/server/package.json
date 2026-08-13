@@ -25,6 +25,7 @@
     "@roxysu/mania-pattern-analysis": "workspace:*",
     "@roxysu/pattern-7k": "workspace:*",
     "@roxysu/realm-backup": "workspace:*",
+    "@roxysu/session-names": "workspace:*",
     "@roxysu/sunny-dan": "workspace:*",
     "@roxysu/timing-analysis": "workspace:*",
     "@tanstack/react-query": "^5.101.2",

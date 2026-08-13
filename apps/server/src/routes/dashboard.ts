@@ -162,6 +162,7 @@ export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
       currentSession: current
         ? {
             id: current.id,
+            name: current.name,
             startedAt: toIso(current.startedAt),
             endedAt: toIso(current.endedAt),
             scoreCount: current.scoreCount,

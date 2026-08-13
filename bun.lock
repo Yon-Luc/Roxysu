@@ -76,6 +76,7 @@
         "@roxysu/osu-paths": "workspace:*",
         "@roxysu/pattern-7k": "workspace:*",
         "@roxysu/realm-backup": "workspace:*",
+        "@roxysu/session-names": "workspace:*",
         "@roxysu/sunny-dan": "workspace:*",
         "@roxysu/timing-analysis": "workspace:*",
         "@tanstack/react-query": "^5.101.2",
@@ -192,6 +193,13 @@
       "version": "0.0.1",
       "devDependencies": {
         "@types/node": "^24.0.0",
+        "bun-types": "^1.3.14",
+      },
+    },
+    "packages/session-names": {
+      "name": "@roxysu/session-names",
+      "version": "0.0.1",
+      "devDependencies": {
         "bun-types": "^1.3.14",
       },
     },
@@ -444,6 +452,8 @@
     "@roxysu/realm-backup": ["@roxysu/realm-backup@workspace:packages/realm-backup"],
 
     "@roxysu/realm-reader": ["@roxysu/realm-reader@workspace:apps/realm-reader"],
+
+    "@roxysu/session-names": ["@roxysu/session-names@workspace:packages/session-names"],
 
     "@roxysu/sunny-dan": ["@roxysu/sunny-dan@workspace:packages/sunny-dan"],
 

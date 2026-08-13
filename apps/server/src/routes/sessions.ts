@@ -14,6 +14,7 @@ import {
 
 function serializeSession(s: {
   id: number;
+  name: string | null;
   startedAt: Date;
   endedAt: Date | null;
   scoreCount: number;
@@ -21,6 +22,7 @@ function serializeSession(s: {
 }) {
   return {
     id: s.id,
+    name: s.name!,
     startedAt: toIso(s.startedAt)!,
     endedAt: toIso(s.endedAt),
     scoreCount: s.scoreCount,

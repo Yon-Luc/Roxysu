@@ -334,9 +334,10 @@ export function CommandPalette({
         const label =
           session.endedAt == null
             ? dict?.command.currentSession ?? "Current session"
-            : t(dict?.command.sessionLabel, { id: session.id });
+            : session.name;
         const haystack = [
           label,
+          session.name,
           session.rulesetShortName ?? "",
           String(session.scoreCount),
         ].join(" ");

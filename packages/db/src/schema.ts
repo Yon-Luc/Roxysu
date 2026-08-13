@@ -181,6 +181,7 @@ export const imports = sqliteTable("imports", {
 
 export const sessions = sqliteTable("sessions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name"),
   startedAt: integer("started_at", { mode: "timestamp_ms" }).notNull(),
   endedAt: integer("ended_at", { mode: "timestamp_ms" }),
   scoreCount: integer("score_count").notNull().default(0),

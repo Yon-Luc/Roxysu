@@ -167,6 +167,30 @@ The searchable catalog of played beatmaps (practice cards). Filtered via the que
 
 ---
 
+### Session
+
+A contiguous group of scores in the local mirror, split when inactivity exceeds 30 minutes. Has a persisted **display name** for UI (not the numeric row id).
+
+**Not:** "play group", "session id" when meaning the display label
+
+**In code:** `sessions` table, `apps/server/src/analytics/session.ts`
+
+**See:** [features/sessions/](features/sessions/index.md)
+
+---
+
+### Session display name
+
+A stable, generated label for a session row (Mushoku Tensei–themed word combinations). Assigned from `session.id` via `@roxysu/session-names` and stored in `sessions.name`. Always starts with a capital letter.
+
+**Not:** "session title" (unless user-authored rename is added later)
+
+**In code:** `generateSessionName()`, `packages/session-names/src/terms.json`
+
+**See:** [features/sessions/](features/sessions/index.md)
+
+---
+
 ### Query language
 
 Shared DSL for practice search, collections, and global search. One parser/compiler/SQL path.

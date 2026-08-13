@@ -178,9 +178,7 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
         </GoBackLink>
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <PageTitle>
-            {isLive
-              ? dict?.session.currentSession
-              : t(dict?.session.sessionLabel, { id: session.id })}
+            {isLive ? dict?.session.currentSession : session.name}
           </PageTitle>
           {isLive ? (
             <span className="rx-chip bg-accent-glow text-accent">
@@ -198,6 +196,7 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
           ) : null}
         </div>
         <p className="rx-subtitle">
+          {isLive ? `${session.name} · ` : ""}
           {t(dict?.session.started, {
             time: formatRelativeTime(session.startedAt),
           })}

@@ -60,11 +60,13 @@ export function SessionsPage() {
                 {dict?.session.nowPlaying}
               </div>
               <div className="mt-2 font-display text-2xl font-bold text-ink">
+                {data.current.name}
+              </div>
+              <div className="mt-1 text-sm text-muted">
                 {t(dict?.session.playsCount, {
                   count: data.current.scoreCount,
                 })}
-              </div>
-              <div className="mt-1 text-sm text-muted">
+                {" · "}
                 {t(dict?.session.started, {
                   time: formatRelativeTime(data.current.startedAt),
                 })}
@@ -120,9 +122,7 @@ export function SessionsPage() {
                 >
                   <div className="min-w-0">
                     <div className="font-semibold text-ink">
-                      {isOpen
-                        ? dict?.session.currentSession
-                        : t(dict?.session.sessionLabel, { id: s.id })}
+                      {isOpen ? dict?.session.currentSession : s.name}
                       {isOpen ? (
                         <span className="ml-2 text-xs font-bold text-accent">
                           {dict?.session.live}
@@ -130,6 +130,7 @@ export function SessionsPage() {
                       ) : null}
                     </div>
                     <div className="mt-0.5 text-sm text-muted">
+                      {isOpen ? `${s.name} · ` : ""}
                       {formatRelativeTime(s.startedAt)}
                       {s.endedAt
                         ? ` → ${formatRelativeTime(s.endedAt)}`

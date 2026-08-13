@@ -1,6 +1,10 @@
 
 import type { Db } from "@roxysu/db/types";
 import { beatmapDanRatings, beatmapSets, beatmaps, scoreMetrics, scores, sessions } from "@roxysu/db/schema";
+import {
+  capitalizeSessionName,
+  generateSessionName,
+} from "@roxysu/session-names";
 import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import { publish } from "../shared/events";
 import { SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
@@ -19,6 +23,23 @@ import {
 
 const SESSION_GAP_MS = 30 * 60 * 1000;
 
+async function backfillSessionNames(db: Db): Promise<void> {
+  const rows = await db.select({ id: sessions.id, name: sessions.name }).from(sessions);
+
+  for (const row of rows) {
+    const next = sessionDisplayName(row);
+    if (row.name === next) continue;
+    await db
+      .update(sessions)
+      .set({ name: next })
+      .where(eq(sessions.id, row.id));
+  }
+}
+
+function sessionDisplayName(session: { id: number; name: string | null }): string {
+  return capitalizeSessionName(session.name ?? generateSessionName(session.id));
+}
+
 function toMs(value: Date | number): number {
   return value instanceof Date ? value.getTime() : value;
 }
@@ -34,6 +55,8 @@ export type SessionEngineResult = {
  * so IDs stay stable across sync/analytics rebuilds.
  */
 export async function runSessionEngine(db: Db): Promise<SessionEngineResult> {
+  await backfillSessionNames(db);
+
   const [usernames, gamemode] = await Promise.all([
     resolveScoresUsernames(db),
     resolveScoresGamemode(db),
@@ -140,6 +163,8 @@ export async function runSessionEngine(db: Db): Promise<SessionEngineResult> {
 
     if (sessionId != null) {
       claimedSessionIds.add(sessionId);
+      const namePatch =
+        prevRow?.name == null ? { name: generateSessionName(sessionId) } : {};
       await db
         .update(sessions)
         .set({
@@ -147,6 +172,7 @@ export async function runSessionEngine(db: Db): Promise<SessionEngineResult> {
           endedAt: isOpen ? null : bucket.endedAt,
           scoreCount: bucket.scoreIds.length,
           rulesetShortName: bucket.rulesetShortName,
+          ...namePatch,
         })
         .where(eq(sessions.id, sessionId));
 
@@ -165,6 +191,10 @@ export async function runSessionEngine(db: Db): Promise<SessionEngineResult> {
 
       sessionId = inserted[0]!.id;
       claimedSessionIds.add(sessionId);
+      await db
+        .update(sessions)
+        .set({ name: generateSessionName(sessionId) })
+        .where(eq(sessions.id, sessionId));
       if (isOpen) started.push(sessionId);
     }
 
@@ -216,7 +246,11 @@ export async function getCurrentSession(db: Db) {
     .where(isNull(sessions.endedAt))
     .orderBy(desc(sessions.startedAt))
     .limit(1);
-  return current ?? null;
+  if (!current) return null;
+  return {
+    ...current,
+    name: sessionDisplayName(current),
+  };
 }
 
 export async function getSessionById(db: Db, id: number) {
@@ -225,7 +259,11 @@ export async function getSessionById(db: Db, id: number) {
     .from(sessions)
     .where(eq(sessions.id, id))
     .limit(1);
-  return row ?? null;
+  if (!row) return null;
+  return {
+    ...row,
+    name: sessionDisplayName(row),
+  };
 }
 
 export async function listSessionScores(db: Db, sessionId: number) {
@@ -283,11 +321,15 @@ export async function listSessionScores(db: Db, sessionId: number) {
 }
 
 export async function listSessions(db: Db, limit = 50) {
-  return db
+  const rows = await db
     .select()
     .from(sessions)
     .orderBy(desc(sessions.startedAt))
     .limit(limit);
+  return rows.map((row) => ({
+    ...row,
+    name: sessionDisplayName(row),
+  }));
 }
 
 export async function listSessionsForBeatmap(db: Db, beatmapId: string) {
@@ -323,5 +365,11 @@ export async function listSessionsForBeatmap(db: Db, beatmapId: string) {
     .select()
     .from(sessions)
     .where(inArray(sessions.id, ids))
-    .orderBy(desc(sessions.startedAt));
+    .orderBy(desc(sessions.startedAt))
+    .then((rows) =>
+      rows.map((row) => ({
+        ...row,
+        name: sessionDisplayName(row),
+      })),
+    );
 }

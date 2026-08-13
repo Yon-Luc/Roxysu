@@ -71,6 +71,98 @@ Start with `index.md` files. Create child documents only when complexity justifi
 
 ---
 
+---
+
+## Domain Vocabulary
+
+Define the canonical terms for this codebase here. Agents must use these exact
+terms in all knowledge documents, code comments, and reasoning. Never use synonyms
+or informal alternatives — consistency is what makes cross-document search reliable.
+
+### Format
+
+```markdown
+### TermName
+One sentence defining what it is in business/domain terms.
+**Not:** common misuse or synonym to avoid.
+**See:** `knowledge/features/relevant-feature/` or `src/path/to/canonical-file.ts`
+```
+
+### Rules
+
+- If a concept doesn't have an entry here, add it before using it in a knowledge document
+- If two documents use different words for the same thing, reconcile here first
+- Terms defined here take precedence over variable names, class names, or comments in source
+- When source code uses a different name than the canonical term, note it explicitly:
+  `**In code:** RealmRepository (canonical term: Local mirror)`
+
+### Example entries
+
+### Collection
+A user's osu! beatmap collection, represented locally and optionally synchronized
+with the hub.
+**Not:** "playlist", "set", "library"
+**See:** `knowledge/features/collections/`
+
+### Realm
+osu!lazer's `client.realm` database. Roxysu reads it but must treat it as
+osu!'s data source — never write to it, never assume its schema is stable.
+**Not:** "the database", "osu db", "lazer db"
+**See:** `knowledge/architecture/realm-access.md`
+
+### Local mirror
+The SQLite representation of data extracted from `client.realm`. Roxysu's own
+persistent store — writable, owned, schema-controlled.
+**Not:** "cache", "local db", "copy"
+**In code:** `MirrorRepository`
+**See:** `knowledge/architecture/local-mirror.md`
+
+---
+
+### Forbidden terms
+
+These words are too vague to use alone in any knowledge document. If you find
+yourself reaching for one, stop and use or define a canonical term instead.
+
+| Forbidden | Why | Use instead |
+|---|---|---|
+| "database" | Ambiguous between Realm, local mirror, or any future store | `Realm`, `local mirror`, or the specific store name |
+| "service" | Means different things at the HTTP, domain, and infrastructure layers | The specific layer: `domain service`, `HTTP handler`, `repository` |
+| "sync" | Ambiguous between Realm→mirror extraction, mirror→hub upload, and hub→client download | `extract`, `upload`, `pull`, or the specific direction |
+| "data" | Carries no meaning on its own | The specific entity: `beatmap`, `collection`, `score` |
+| "update" | Ambiguous between user action, DB write, and background refresh | `edit` (user), `persist` (DB), `refresh` (background) |
+| "cache" | Implies temporary storage; misrepresents the local mirror's role | `local mirror` if persistent, or name the specific cache explicitly |
+| "local" | Ambiguous between local mirror, client machine, and offline state | `local mirror`, `client`, or `offline` depending on meaning |
+
+If a new forbidden term keeps appearing in documents or agent output, add it here
+rather than correcting it repeatedly at the document level.
+
+
+### When a term is unknown or ambiguous
+
+If you encounter a term that is not in this vocabulary and you cannot confidently
+infer its meaning from source code and context, **stop and ask** before using it
+in any knowledge document or reasoning.
+
+Do not:
+- Invent a definition and proceed
+- Use a synonym that "seems close enough"
+- Document it as `unknown` and move on silently
+
+Do:
+- Ask: *"I encountered the term X — is it equivalent to [nearest canonical term],
+  or is it a distinct concept that needs its own entry?"*
+- Wait for confirmation before writing any knowledge that depends on it
+- Once confirmed, add the term to this vocabulary section before continuing
+
+The same applies when two canonical terms seem to overlap in a specific context.
+If you are not sure whether something is a `Collection` or a `Local mirror`,
+ask — do not guess. Ambiguous vocabulary in knowledge documents silently
+corrupts every agent that reads them afterward.
+
+---
+
+
 ## Document Metadata Header
 
 Every concept and implementation document must begin with a YAML front-matter block:

@@ -2,8 +2,9 @@
 description: Maintain a semantic knowledge base alongside the codebase. Apply when reading, writing, or modifying any file under knowledge/, or when making code changes that affect business behavior, flows, permissions, or architecture.
 globs:
   - "knowledge/**"
-  - "src/**"
-alwaysApply: false
+  - "apps/**"
+  - "packages/**"
+alwaysApply: true
 ---
 
 # Codebase Knowledge Maintainer
@@ -240,12 +241,13 @@ After every code change, check:
 
 | File touched | Review |
 |---|---|
-| `*.service.ts`, `*.controller.ts`, `*.resolver.ts` | Relevant feature in `features/` |
-| `*.repository.ts`, migration files | `business/` and `decisions/` |
-| Event names or handlers | `flows/` passing through that event |
-| Guards, policies, permission checks | `business/permissions.md` + feature security rules |
-| Config or env variables | `architecture/` |
-| Shared utilities | `## Depended on by` of the changed module |
+| `apps/server/src/routes/*.ts`, `apps/server/public/features/**` | Relevant feature in `features/` |
+| `apps/server/src/analytics/**`, `apps/server/src/query-language/**` | `features/` + `business/` + related `flows/` |
+| `apps/realm-reader/**`, `packages/db/**`, migrations | `business/` and `decisions/` |
+| SSE / import / event pipeline | `flows/` passing through that path |
+| Auth, hub middleware, collection sync gates | `business/` security rules + feature security sections |
+| Config, env, `packages/osu-paths/**` | `architecture/` |
+| Shared packages (`packages/*`) | `## Depended on by` of consumers |
 
 This check is mandatory — do not skip it because a change "seems small."
 

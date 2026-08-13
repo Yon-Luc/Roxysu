@@ -68,8 +68,8 @@ export const REPLAY_VIDEO_WIDTH = 1920;
 export const REPLAY_VIDEO_HEIGHT = 1080;
 export const REPLAY_VIDEO_FPS = 60;
 
-/** Discord's common free-tier upload ceiling (bytes). Used for UI hints only. */
-export const DISCORD_UPLOAD_LIMIT_BYTES = 10 * 1024 * 1024;
+/** Discord's common free-tier upload ceiling (bytes). Used for UI hints + bitrate caps. */
+export const DISCORD_UPLOAD_LIMIT_BYTES = 20 * 1024 * 1024;
 
 export type ReplayVideoQualityLevel = "low" | "medium" | "high" | "veryHigh";
 
@@ -105,7 +105,7 @@ export type ReplayVideoExportPreset = {
   hudPlacement?: ReplayVideoHudPlacement;
   /** Skip idle lead-in / outro around the chart. */
   trimIdle?: boolean;
-  /** Cap encode bitrate to aim under this many bytes (e.g. Discord 10 MB). */
+  /** Cap encode bitrate to aim under this many bytes (e.g. Discord 20 MB). */
   fitUnderBytes?: number;
 };
 
@@ -114,14 +114,14 @@ export const REPLAY_VIDEO_EXPORT_PRESETS: ReplayVideoExportPreset[] = [
     id: "discord",
     label: "Discord",
     description:
-      "Tight crop, HUD below, trimmed idle, bitrate capped for ~10 MB",
+      "Tight crop, HUD below, trimmed idle, bitrate capped for ~20 MB",
     width: 1280,
     height: 720,
     fps: 30,
-    quality: "medium",
+    quality: "high",
     hideBackgroundDefault: true,
-    estimateVideoMbps: 2.5,
-    estimateAudioKbps: 96,
+    estimateVideoMbps: 4,
+    estimateAudioKbps: 128,
     tightCrop: true,
     hudPlacement: "below",
     trimIdle: true,
@@ -131,7 +131,7 @@ export const REPLAY_VIDEO_EXPORT_PRESETS: ReplayVideoExportPreset[] = [
     id: "tiktok",
     label: "TikTok / HQ",
     description:
-      "Same tight crop as Discord, higher quality @ 60fps (no 10 MB cap)",
+      "Same tight crop as Discord, higher quality @ 60fps (no 20 MB cap)",
     width: 1440,
     height: 1080,
     fps: 60,
@@ -214,8 +214,9 @@ function qualityFromLevel(level: ReplayVideoQualityLevel): Quality {
 }
 
 /**
- * Rough MP4 size estimate from duration + preset (+ optional solid background).
- * When `fitUnderBytes` is set, the estimate is capped (bitrate targeting).
+ * Size estimate for a clip.
+ * Discord/Compact (`fitUnderBytes`) use the same bitrate math as the encoder so
+ * the UI matches the target file size.
  */
 export function estimateReplayVideoBytes(
   durationSec: number,
@@ -223,17 +224,20 @@ export function estimateReplayVideoBytes(
   hideBackground: boolean,
 ): number {
   const sec = Math.max(1, durationSec);
+  if (preset.fitUnderBytes != null) {
+    const { videoBps, audioBps } = computeFitBitrates(
+      sec,
+      preset.fitUnderBytes,
+      preset.estimateAudioKbps,
+    );
+    return Math.round(((videoBps + audioBps) * sec) / 8);
+  }
   const bgFactor = hideBackground ? 0.72 : 1;
   const cropFactor = preset.tightCrop ? 0.55 : 1;
   const videoBits =
     preset.estimateVideoMbps * 1e6 * bgFactor * cropFactor * sec;
   const audioBits = preset.estimateAudioKbps * 1e3 * sec;
-  let bytes = Math.round(((videoBits + audioBits) / 8) * 1.03);
-  if (preset.fitUnderBytes != null) {
-    // Bitrate capping aims just under the limit; short maps stay smaller.
-    bytes = Math.min(bytes, Math.round(preset.fitUnderBytes * 0.95));
-  }
-  return bytes;
+  return Math.round(((videoBits + audioBits) / 8) * 1.03);
 }
 
 export function formatExportByteSize(bytes: number): string {
@@ -246,18 +250,22 @@ export function formatExportByteSize(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-/** Encode bitrates aimed under `limitBytes` for a known duration. */
+/**
+ * Encode bitrates aimed under `limitBytes` for a known duration.
+ * Uses most of the Discord budget so short maps get higher quality.
+ */
 export function computeFitBitrates(
   durationSec: number,
   limitBytes: number,
   audioKbps: number,
 ): { videoBps: number; audioBps: number } {
   const sec = Math.max(1, durationSec);
-  const budgetBits = limitBytes * 8 * 0.9; // 10% headroom for mux / overhead
-  const audioBps = Math.max(48_000, Math.round(audioKbps * 1000));
+  // ~4% headroom for mux/container; CBR should land close to this.
+  const budgetBits = limitBytes * 8 * 0.96;
+  const audioBps = Math.max(64_000, Math.round(audioKbps * 1000));
   const audioBits = audioBps * sec;
-  const videoBits = Math.max(200_000 * sec, budgetBits - audioBits);
-  const videoBps = Math.max(200_000, Math.floor(videoBits / sec));
+  const videoBits = Math.max(400_000 * sec, budgetBits - audioBits);
+  const videoBps = Math.max(400_000, Math.floor(videoBits / sec));
   return { videoBps, audioBps };
 }
 
@@ -1120,7 +1128,9 @@ export async function exportReplayVideo(
           preset.fitUnderBytes,
           preset.estimateAudioKbps,
         );
-        return new Quality({ bitrate: videoBps });
+        // Constant bitrate so we actually spend the Discord size budget
+        // (VBR undershoots hard on solid-background playfield footage).
+        return new Quality({ bitrate: videoBps, bitrateMode: "constant" });
       })()
     : qualityFromLevel(preset.quality);
   const audioEncodeQuality = preset.fitUnderBytes
@@ -1130,7 +1140,7 @@ export async function exportReplayVideo(
           preset.fitUnderBytes,
           preset.estimateAudioKbps,
         );
-        return new Quality({ bitrate: audioBps });
+        return new Quality({ bitrate: audioBps, bitrateMode: "constant" });
       })()
     : qualityFromLevel(preset.quality);
 

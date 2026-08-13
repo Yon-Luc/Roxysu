@@ -43,7 +43,7 @@ and not a live screen capture.
    (Rewatch / Play / Export / Window / Esc) are omitted.
    **Status:** verified — `paintComposedFrame` in `replayVideoExport.ts`.
 
-4. Export presets: Discord (tight crop, HUD below, trimmed, ~10 MB cap),
+4. Export presets: Discord (tight crop, HUD below, trimmed, ~20 MB cap),
    TikTok/HQ (same tight crop at 60fps very-high quality, no size cap), 720p,
    1080p, Compact. User can toggle hide-background; size estimate updates.
    **Status:** verified — `REPLAY_VIDEO_EXPORT_PRESETS`,

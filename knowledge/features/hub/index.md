@@ -4,7 +4,10 @@ confidence: verified
 touches:
   - apps/hub/src/routes/auth.ts
   - apps/hub/src/middleware/auth.ts
+  - apps/hub/src/services/hubSearchQuery.ts
   - apps/server/public/features/hub
+  - apps/server/public/lib/hub.ts
+  - packages/db/src/hub/schema.ts
   - packages/hub-client
 ---
 
@@ -41,6 +44,26 @@ Networked collaboration / discovery — not required for offline practice analyt
 - `apps/hub/src/*`
 - `apps/server/src/routes/system.ts` — client app OAuth handoff helpers
 - `packages/hub-client`
+
+## Tag taxonomy
+
+Hub collections carry canonical lowercase tags (`VALID_TAGS` in
+`packages/db/src/hub/schema.ts`, mirrored in `apps/server/public/lib/hub.ts`).
+Tags are **gamemode-scoped**: each secondary tag belongs to exactly one primary
+mode (`mania` / `std` / `ctb` / `taiko`) and is grouped under a category label
+(Keys / Pattern / Style / Difficulty) for the picker UI.
+
+- Mania pattern tags reuse Roxysu's own pattern vocabulary from
+  `packages/mania-pattern-analysis` (`jack`, `minijack`, `longjack`, `chordjack`,
+  `jumpstream`, `handstream`, `chordstream`, `stream`, `delay`, `bracket`).
+- Mania key tags: `4k` `5k` `6k` `7k` `8k`.
+- Tags are stored as free text in `collection_tags`; the whitelist is app-level
+  validation (`VALID_TAGS`), not a DB constraint, so adding tags needs no migration.
+- The picker shows grouped chips for a selected mode (`hubTagGroupsForMode`) and
+  a flat union for "all".
+
+**Enforced by:** `apps/hub/src/routes/collections.ts` `parseTagFilters` / create /
+update tag validation — status: verified
 
 ## Dependencies
 

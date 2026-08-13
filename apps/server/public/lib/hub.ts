@@ -153,23 +153,60 @@ export async function redeemHubHandoff(
 export const HUB_MODE_TAGS = ["mania", "std", "ctb", "taiko"] as const;
 export type HubModeTag = (typeof HUB_MODE_TAGS)[number];
 
-export const HUB_TAGS_BY_MODE = {
+/** Secondary tags per mode, grouped under category labels for the picker UI. */
+export const HUB_TAG_GROUPS_BY_MODE = {
   mania: [
-    "4k",
-    "7k",
-    "ln",
-    "rice",
-    "hybrid",
-    "sv",
-    "dan",
-    "jump",
-    "stream",
-    "tech",
-    "beginner",
+    { label: "Keys", tags: ["4k", "5k", "6k", "7k", "8k"] },
+    {
+      label: "Pattern",
+      tags: [
+        "jack",
+        "minijack",
+        "longjack",
+        "chordjack",
+        "jumpstream",
+        "handstream",
+        "chordstream",
+        "stream",
+        "delay",
+        "bracket",
+      ],
+    },
+    { label: "Style", tags: ["ln", "rice", "hybrid", "sv", "tech"] },
+    { label: "Difficulty", tags: ["stamina", "speed", "dan", "beginner"] },
   ],
-  std: ["jump", "stream", "tech", "aim", "beginner"],
-  ctb: ["jump", "stream", "tech", "hyperdash", "beginner"],
-  taiko: ["stream", "tech", "beginner"],
+  std: [
+    {
+      label: "Pattern",
+      tags: ["aim", "jump", "stream", "alt", "burst", "speed", "stamina"],
+    },
+    { label: "Style", tags: ["tech", "reading"] },
+    { label: "Level", tags: ["beginner"] },
+  ],
+  ctb: [
+    {
+      label: "Pattern",
+      tags: ["jump", "stream", "hyperdash", "stamina", "speed"],
+    },
+    { label: "Style", tags: ["tech", "anti-flow"] },
+    { label: "Level", tags: ["beginner"] },
+  ],
+  taiko: [
+    { label: "Pattern", tags: ["stream", "stamina", "speed"] },
+    { label: "Style", tags: ["tech", "gimmick"] },
+    { label: "Level", tags: ["beginner"] },
+  ],
+} as const satisfies Record<
+  HubModeTag,
+  readonly { label: string; tags: readonly string[] }[]
+>;
+
+/** Flat secondary tags per mode (derived from the grouped structure). */
+export const HUB_TAGS_BY_MODE = {
+  mania: HUB_TAG_GROUPS_BY_MODE.mania.flatMap((g) => g.tags),
+  std: HUB_TAG_GROUPS_BY_MODE.std.flatMap((g) => g.tags),
+  ctb: HUB_TAG_GROUPS_BY_MODE.ctb.flatMap((g) => g.tags),
+  taiko: HUB_TAG_GROUPS_BY_MODE.taiko.flatMap((g) => g.tags),
 } as const satisfies Record<HubModeTag, readonly string[]>;
 
 /** Flat list of every selectable hub tag (modes + secondary). */
@@ -186,19 +223,33 @@ export const HUB_TAGS = [
 
 export type HubTag = (typeof HUB_TAGS)[number];
 
+export function hubTagGroupsForMode(
+  mode: HubModeTag | "all",
+): readonly { label: string; tags: readonly string[] }[] {
+  if (mode === "all") {
+    return [
+      {
+        label: "All modes",
+        tags: [
+          "multi-mode",
+          ...new Set([
+            ...HUB_TAGS_BY_MODE.mania,
+            ...HUB_TAGS_BY_MODE.std,
+            ...HUB_TAGS_BY_MODE.ctb,
+            ...HUB_TAGS_BY_MODE.taiko,
+          ]),
+        ],
+      },
+    ];
+  }
+  return HUB_TAG_GROUPS_BY_MODE[mode];
+}
+
 export function hubSecondaryTagsForMode(
   mode: HubModeTag | "all",
 ): readonly string[] {
   if (mode === "all") {
-    return [
-      "multi-mode",
-      ...new Set([
-        ...HUB_TAGS_BY_MODE.mania,
-        ...HUB_TAGS_BY_MODE.std,
-        ...HUB_TAGS_BY_MODE.ctb,
-        ...HUB_TAGS_BY_MODE.taiko,
-      ]),
-    ];
+    return hubTagGroupsForMode("all")[0]!.tags;
   }
   return [...HUB_TAGS_BY_MODE[mode]];
 }

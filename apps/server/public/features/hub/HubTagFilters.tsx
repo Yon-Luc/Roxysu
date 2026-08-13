@@ -2,6 +2,7 @@ import {
   HUB_MODE_LABELS,
   HUB_MODE_TAGS,
   hubSecondaryTagsForMode,
+  hubTagGroupsForMode,
   type HubModeTag,
   type HubTag,
 } from "../../lib/hub";
@@ -22,7 +23,7 @@ export function HubTagFilters({
   onTagsChange,
   selectModeAsTag = false,
 }: HubTagFiltersProps) {
-  const secondary = hubSecondaryTagsForMode(mode);
+  const groups = hubTagGroupsForMode(mode);
   const modeSet = new Set<string>(HUB_MODE_TAGS);
 
   function setMode(next: HubModeTag | "all") {
@@ -76,20 +77,29 @@ export function HubTagFilters({
           </button>
         ))}
       </div>
-      <div className="flex flex-wrap gap-2">
-        {secondary.map((tag) => {
-          const on = tags.includes(tag as HubTag);
-          return (
-            <button
-              key={tag}
-              type="button"
-              className={`rx-btn text-xs ${on ? "rx-btn-primary" : ""}`}
-              onClick={() => toggleSecondary(tag)}
-            >
-              {tag}
-            </button>
-          );
-        })}
+      <div className="flex flex-col gap-3">
+        {groups.map((group) => (
+          <div key={group.label} className="space-y-1.5">
+            <span className="text-[10px] font-medium uppercase tracking-wide text-subtle">
+              {group.label}
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {group.tags.map((tag) => {
+                const on = tags.includes(tag as HubTag);
+                return (
+                  <button
+                    key={tag}
+                    type="button"
+                    className={`rx-btn text-xs ${on ? "rx-btn-primary" : ""}`}
+                    onClick={() => toggleSecondary(tag)}
+                  >
+                    {tag}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

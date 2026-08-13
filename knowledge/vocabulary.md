@@ -133,6 +133,18 @@ Admin-managed pre-warmed beatmapset results in the Hub store (`search_cache` tab
 
 ---
 
+### Hub tag
+
+One canonical lowercase label from `HUB_TAGS_BY_MODE` / `VALID_TAGS` that a shared collection carries. Every tag belongs to a primary gamemode and is grouped under a category (Keys / Pattern / Style / Difficulty) for the picker. Mania pattern tags reuse Roxysu's pattern vocabulary (`jack`, `jumpstream`, `handstream`, `chordjack`, `bracket`, `chordstream`, `stream`, `delay`).
+
+**Not:** "label", "category", "pattern name" when meaning a tag
+
+**In code:** `packages/db/src/hub/schema.ts:HUB_TAG_GROUPS_BY_MODE`, `apps/server/public/lib/hub.ts:HUB_TAG_GROUPS_BY_MODE`
+
+**See:** [features/hub/](features/hub/index.md)
+
+---
+
 ### Collection match count store
 
 Derived count of how many beatmaps match each collection query. Refreshed when collections or the library change.

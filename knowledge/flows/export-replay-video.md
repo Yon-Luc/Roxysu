@@ -17,9 +17,11 @@ Download the current score rewatch as an MP4 to share or archive.
 ```text
 ScoreReplayModal (rewatch)
   → Export
+  → ReplayVideoExportOptionsModal (preset + hide background + size estimate)
   → exportReplayVideo()
        ├── decodeAudioData(localBeatmapAudioUrl)
-       ├── paint playfield frames (paintStd / paintMania) @ 60fps
+       ├── optional background (unless Discord / hide-bg)
+       ├── paint composed frames @ preset fps
        ├── mediabunny CanvasSource + AudioBufferSource → Mp4OutputFormat
        └── downloadBlob(filename)
 ```

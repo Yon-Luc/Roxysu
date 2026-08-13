@@ -58,6 +58,10 @@ import {
   exportReplayVideo,
   type ReplayVideoExportProgress,
 } from "../lib/replayVideoExport";
+import {
+  ReplayVideoExportOptionsModal,
+  type ReplayVideoExportChoices,
+} from "./ReplayVideoExportOptionsModal";
 
 /** Mania accuracy contribution — Perfect is 305 (matches lazer/stable display). */
 const MANIA_RESULT_WEIGHT: Record<ReplayJudgmentResult, number> = {
@@ -210,6 +214,8 @@ export function ScoreReplayModal({
   const [liveSummary, setLiveSummary] =
     useState<JudgmentSummary>(EMPTY_SUMMARY);
   const [exporting, setExporting] = useState(false);
+  const [exportOptionsOpen, setExportOptionsOpen] = useState(false);
+  const exportOptionsOpenRef = useRef(false);
   const [exportProgress, setExportProgress] =
     useState<ReplayVideoExportProgress | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -243,6 +249,7 @@ export function ScoreReplayModal({
   audioUrlRef.current = audioUrl;
   onCloseRef.current = onClose;
   modeRef.current = mode;
+  exportOptionsOpenRef.current = exportOptionsOpen;
   dataRef.current = data;
   {
     let chartEnd = 0;
@@ -444,7 +451,7 @@ export function ScoreReplayModal({
     setExportProgress(null);
   }
 
-  async function startExport() {
+  function openExportOptions() {
     if (!replayData || exporting || isPlay) return;
     if (
       replayData.beatmap.rulesetShortName !== "mania" &&
@@ -453,6 +460,13 @@ export function ScoreReplayModal({
       setExportError("Export supports mania and standard only");
       return;
     }
+    setExportError(null);
+    setExportOptionsOpen(true);
+  }
+
+  async function startExport(choices: ReplayVideoExportChoices) {
+    if (!replayData || exporting || isPlay) return;
+    setExportOptionsOpen(false);
     setExportError(null);
     setExporting(true);
     setExportProgress({ phase: "audio" });
@@ -468,6 +482,8 @@ export function ScoreReplayModal({
         fullscreen: prefsRef.current.fullscreen,
         stdSkin: skin,
         previewSkin,
+        presetId: choices.presetId,
+        hideBackground: choices.hideBackground,
         signal: ac.signal,
         onProgress: setExportProgress,
       });
@@ -561,6 +577,10 @@ export function ScoreReplayModal({
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.preventDefault();
+        if (exportOptionsOpenRef.current) {
+          setExportOptionsOpen(false);
+          return;
+        }
         if (modeRef.current === "play") {
           enterRewatchMode();
           return;
@@ -568,6 +588,9 @@ export function ScoreReplayModal({
         onCloseRef.current();
         return;
       }
+
+      // Don't steal keys while the export options dialog is open.
+      if (exportOptionsOpenRef.current) return;
 
       // Space always play/pause in rewatch (even when seek/volume sliders are focused).
       if (modeRef.current !== "play") {
@@ -719,6 +742,7 @@ export function ScoreReplayModal({
     setActiveMissTMs(null);
     cancelExport();
     setExportError(null);
+    setExportOptionsOpen(false);
   }, [scoreId, audioUrl]);
 
   useEffect(() => {
@@ -1057,7 +1081,7 @@ export function ScoreReplayModal({
             {!isPlay && (isManiaReplay || isStdReplay) ? (
               <button
                 type="button"
-                onClick={() => void startExport()}
+                onClick={openExportOptions}
                 disabled={exporting || !replayData}
                 className="rounded-full px-3 py-1 text-sm text-muted transition hover:bg-highlight hover:text-ink disabled:opacity-40"
                 title="Export playfield + audio as MP4"
@@ -1517,6 +1541,14 @@ export function ScoreReplayModal({
           ) : null}
         </div>
       </div>
+
+      <ReplayVideoExportOptionsModal
+        open={exportOptionsOpen}
+        replay={replayData}
+        busy={exporting}
+        onClose={() => setExportOptionsOpen(false)}
+        onConfirm={(choices) => void startExport(choices)}
+      />
     </div>
   );
 }

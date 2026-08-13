@@ -6,6 +6,7 @@ touches:
   - apps/server/public/lib/paintStdPlayfield.ts
   - apps/server/public/lib/paintManiaNotefield.ts
   - apps/server/public/components/ScoreReplayModal.tsx
+  - apps/server/public/components/ReplayVideoExportOptionsModal.tsx
   - apps/server/package.json
 ---
 
@@ -42,14 +43,21 @@ and not a live screen capture.
    (Rewatch / Play / Export / Window / Esc) are omitted.
    **Status:** verified — `paintComposedFrame` in `replayVideoExport.ts`.
 
-4. Default encode is 1920×1080 @ 60fps, MP4 via WebCodecs (`avc`/`aac` when
-   available). Encoding requires a browser that can encode those codecs.
+4. Export presets: Discord (tight crop, HUD below, trimmed, ~10 MB cap),
+   TikTok/HQ (same tight crop at 60fps very-high quality, no size cap), 720p,
+   1080p, Compact. User can toggle hide-background; size estimate updates.
+   **Status:** verified — `REPLAY_VIDEO_EXPORT_PRESETS`,
+   `ReplayVideoExportOptionsModal`, `computeFitBitrates`, `layoutTightCanvas`,
+   `exportTimeWindow`.
+
+5. Default encode uses the chosen preset’s resolution / fps / mediabunny Quality
+   via WebCodecs. Encoding requires a browser that can encode those codecs.
    **Status:** verified — constants + `getFirstEncodable*Codec`.
 
-5. Export is cancelable; closing the modal or changing score aborts the job.
+6. Export is cancelable; closing the modal or changing score aborts the job.
    **Status:** verified — `AbortSignal` in `ScoreReplayModal`.
 
-6. Output filename: `{artist} - {title} [{diff}] ({userUsername}).mp4`.
+7. Output filename: `{artist} - {title} [{diff}] ({userUsername}).mp4`.
    **Status:** verified — `buildReplayVideoFilename`.
 
 ## Security rules
@@ -60,6 +68,8 @@ no auth gate).
 ## Important states
 
 - **Idle** — Export button available in rewatch for mania/standard.
+- **Options** — quality preset modal (Discord / 720p / 1080p / Compact) with
+  size estimate and hide-background toggle.
 - **Encoding** — overlay with progress; live audio paused.
 - **Done** — browser download of the MP4 blob.
 - **Failed / cancelled** — error text or silent cancel; button re-enabled.
@@ -68,7 +78,8 @@ no auth gate).
 
 ```text
 user opens score rewatch → clicks Export
-  → decode beatmap audio + load background
+  → ReplayVideoExportOptionsModal (preset + hide background + size estimate)
+  → decode beatmap audio (+ background unless hidden)
   → for each frame at fixed FPS:
         compose background + header + paintStd/paintMania (sized) + HUD + stats
         CanvasSource.add(t, 1/fps)
@@ -78,8 +89,8 @@ user opens score rewatch → clicks Export
 
 ## Implementation
 
-- `lib/replayVideoExport.ts` — mediabunny `Output` + `CanvasSource` +
-  `AudioBufferSource` + `BufferTarget` / `Mp4OutputFormat`.
+- `lib/replayVideoExport.ts` — presets, size estimate, mediabunny encode + compose.
+- `ReplayVideoExportOptionsModal.tsx` — quality / hide-background chooser.
 - Pure paint modules drive frames (no rAF during encode).
 - UI entry: Export control + progress overlay in `ScoreReplayModal.tsx`.
 

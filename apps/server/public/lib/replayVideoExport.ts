@@ -12,6 +12,10 @@ import {
   Mp4OutputFormat,
   Output,
   QUALITY_HIGH,
+  QUALITY_LOW,
+  QUALITY_MEDIUM,
+  QUALITY_VERY_HIGH,
+  Quality,
   getFirstEncodableAudioCodec,
   getFirstEncodableVideoCodec,
 } from "mediabunny";
@@ -64,6 +68,199 @@ export const REPLAY_VIDEO_WIDTH = 1920;
 export const REPLAY_VIDEO_HEIGHT = 1080;
 export const REPLAY_VIDEO_FPS = 60;
 
+/** Discord's common free-tier upload ceiling (bytes). Used for UI hints only. */
+export const DISCORD_UPLOAD_LIMIT_BYTES = 10 * 1024 * 1024;
+
+export type ReplayVideoQualityLevel = "low" | "medium" | "high" | "veryHigh";
+
+export type ReplayVideoExportPresetId =
+  | "discord"
+  | "tiktok"
+  | "720"
+  | "1080"
+  | "compact";
+
+export type ReplayVideoHudPlacement = "overlay" | "below";
+
+export type ReplayVideoExportPreset = {
+  id: ReplayVideoExportPresetId;
+  label: string;
+  /** Short blurb under the preset name. */
+  description: string;
+  /** Max canvas width (tight-crop presets use this as an upper bound). */
+  width: number;
+  /** Max canvas height (tight-crop presets use this as an upper bound). */
+  height: number;
+  fps: number;
+  quality: ReplayVideoQualityLevel;
+  /** Default for the hide-background toggle when this preset is selected. */
+  hideBackgroundDefault: boolean;
+  /** Nominal video bitrate used only for size estimates (Mbps). */
+  estimateVideoMbps: number;
+  /** Nominal audio bitrate used only for size estimates (kbps). */
+  estimateAudioKbps: number;
+  /** Crop canvas to header + playfield + footer (no empty sidebars). */
+  tightCrop?: boolean;
+  /** Where combo/accuracy sit relative to the playfield. */
+  hudPlacement?: ReplayVideoHudPlacement;
+  /** Skip idle lead-in / outro around the chart. */
+  trimIdle?: boolean;
+  /** Cap encode bitrate to aim under this many bytes (e.g. Discord 10 MB). */
+  fitUnderBytes?: number;
+};
+
+export const REPLAY_VIDEO_EXPORT_PRESETS: ReplayVideoExportPreset[] = [
+  {
+    id: "discord",
+    label: "Discord",
+    description:
+      "Tight crop, HUD below, trimmed idle, bitrate capped for ~10 MB",
+    width: 1280,
+    height: 720,
+    fps: 30,
+    quality: "medium",
+    hideBackgroundDefault: true,
+    estimateVideoMbps: 2.5,
+    estimateAudioKbps: 96,
+    tightCrop: true,
+    hudPlacement: "below",
+    trimIdle: true,
+    fitUnderBytes: DISCORD_UPLOAD_LIMIT_BYTES,
+  },
+  {
+    id: "tiktok",
+    label: "TikTok / HQ",
+    description:
+      "Same tight crop as Discord, higher quality @ 60fps (no 10 MB cap)",
+    width: 1440,
+    height: 1080,
+    fps: 60,
+    quality: "veryHigh",
+    hideBackgroundDefault: true,
+    estimateVideoMbps: 6,
+    estimateAudioKbps: 128,
+    tightCrop: true,
+    hudPlacement: "below",
+    trimIdle: true,
+  },
+  {
+    id: "720",
+    label: "720p",
+    description: "1280×720 @ 60fps with beatmap background",
+    width: 1280,
+    height: 720,
+    fps: 60,
+    quality: "high",
+    hideBackgroundDefault: false,
+    estimateVideoMbps: 5,
+    estimateAudioKbps: 128,
+    hudPlacement: "overlay",
+    trimIdle: true,
+  },
+  {
+    id: "1080",
+    label: "1080p",
+    description: "1920×1080 @ 60fps — closest to the rewatch page",
+    width: 1920,
+    height: 1080,
+    fps: 60,
+    quality: "high",
+    hideBackgroundDefault: false,
+    estimateVideoMbps: 10,
+    estimateAudioKbps: 160,
+    hudPlacement: "overlay",
+    trimIdle: true,
+  },
+  {
+    id: "compact",
+    label: "Compact",
+    description: "Tight 480p30 crop, HUD below, trimmed idle",
+    width: 854,
+    height: 480,
+    fps: 30,
+    quality: "low",
+    hideBackgroundDefault: true,
+    estimateVideoMbps: 1.2,
+    estimateAudioKbps: 96,
+    tightCrop: true,
+    hudPlacement: "below",
+    trimIdle: true,
+    fitUnderBytes: DISCORD_UPLOAD_LIMIT_BYTES,
+  },
+];
+
+export function getReplayVideoExportPreset(
+  id: ReplayVideoExportPresetId,
+): ReplayVideoExportPreset {
+  return (
+    REPLAY_VIDEO_EXPORT_PRESETS.find((p) => p.id === id) ??
+    REPLAY_VIDEO_EXPORT_PRESETS.find((p) => p.id === "1080") ??
+    REPLAY_VIDEO_EXPORT_PRESETS[0]!
+  );
+}
+
+function qualityFromLevel(level: ReplayVideoQualityLevel): Quality {
+  switch (level) {
+    case "low":
+      return QUALITY_LOW;
+    case "medium":
+      return QUALITY_MEDIUM;
+    case "veryHigh":
+      return QUALITY_VERY_HIGH;
+    case "high":
+    default:
+      return QUALITY_HIGH;
+  }
+}
+
+/**
+ * Rough MP4 size estimate from duration + preset (+ optional solid background).
+ * When `fitUnderBytes` is set, the estimate is capped (bitrate targeting).
+ */
+export function estimateReplayVideoBytes(
+  durationSec: number,
+  preset: ReplayVideoExportPreset,
+  hideBackground: boolean,
+): number {
+  const sec = Math.max(1, durationSec);
+  const bgFactor = hideBackground ? 0.72 : 1;
+  const cropFactor = preset.tightCrop ? 0.55 : 1;
+  const videoBits =
+    preset.estimateVideoMbps * 1e6 * bgFactor * cropFactor * sec;
+  const audioBits = preset.estimateAudioKbps * 1e3 * sec;
+  let bytes = Math.round(((videoBits + audioBits) / 8) * 1.03);
+  if (preset.fitUnderBytes != null) {
+    // Bitrate capping aims just under the limit; short maps stay smaller.
+    bytes = Math.min(bytes, Math.round(preset.fitUnderBytes * 0.95));
+  }
+  return bytes;
+}
+
+export function formatExportByteSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  if (bytes < 1024 * 1024 * 1024) {
+    const mb = bytes / (1024 * 1024);
+    return mb >= 10 ? `${mb.toFixed(0)} MB` : `${mb.toFixed(1)} MB`;
+  }
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+/** Encode bitrates aimed under `limitBytes` for a known duration. */
+export function computeFitBitrates(
+  durationSec: number,
+  limitBytes: number,
+  audioKbps: number,
+): { videoBps: number; audioBps: number } {
+  const sec = Math.max(1, durationSec);
+  const budgetBits = limitBytes * 8 * 0.9; // 10% headroom for mux / overhead
+  const audioBps = Math.max(48_000, Math.round(audioKbps * 1000));
+  const audioBits = audioBps * sec;
+  const videoBits = Math.max(200_000 * sec, budgetBits - audioBits);
+  const videoBps = Math.max(200_000, Math.floor(videoBits / sec));
+  return { videoBps, audioBps };
+}
+
 /** Mania accuracy contribution — Perfect is 305. */
 const MANIA_RESULT_WEIGHT: Record<ReplayJudgmentResult, number> = {
   perfect: 305,
@@ -88,6 +285,8 @@ const STD_ACC_SCALE = 300;
 
 const HEADER_H = 88;
 const FOOTER_H = 64;
+/** Strip under the playfield for combo/accuracy when hudPlacement is `below`. */
+const HUD_BELOW_H = 88;
 const CONTENT_PAD = 24;
 
 export type ReplayVideoExportProgress = {
@@ -106,8 +305,13 @@ export type ReplayVideoExportOptions = {
   /** Explicit skins (falls back to localStorage stores). */
   stdSkin?: StdSkin;
   previewSkin?: PreviewSkin;
+  /** Resolution / fps / encode quality preset. */
+  presetId?: ReplayVideoExportPresetId;
+  /** Solid dark background instead of beatmap cover (smaller files). */
+  hideBackground?: boolean;
   signal?: AbortSignal;
   onProgress?: (p: ReplayVideoExportProgress) => void;
+  /** Override preset width (advanced). */
   width?: number;
   height?: number;
   fps?: number;
@@ -160,6 +364,49 @@ function chartEndMs(replay: LoadedScoreReplay): number {
   return Math.max(0, end);
 }
 
+const TRIM_PAD_START_MS = 800;
+const TRIM_PAD_END_MS = 1200;
+
+/**
+ * Active chart window for export (optionally trimmed idle lead-in/outro).
+ */
+export function exportTimeWindow(
+  replay: Parameters<typeof chartEndMs>[0],
+  trimIdle: boolean,
+): { startMs: number; endMs: number } {
+  const rawEnd = chartEndMs(replay as LoadedScoreReplay);
+  if (!trimIdle) {
+    return { startMs: 0, endMs: Math.max(1000, rawEnd) };
+  }
+
+  let start = Number.POSITIVE_INFINITY;
+  for (const n of replay.beatmap.notes ?? []) {
+    start = Math.min(start, n.startMs);
+  }
+  for (const o of replay.beatmap.hitObjects ?? []) {
+    if ("timeMs" in o && typeof o.timeMs === "number") {
+      start = Math.min(start, o.timeMs);
+    }
+  }
+  for (const j of replay.judgments ?? []) {
+    start = Math.min(start, j.tMs);
+  }
+  if (!Number.isFinite(start)) start = 0;
+
+  const startMs = Math.max(0, start - TRIM_PAD_START_MS);
+  const endMs = Math.max(startMs + 1000, rawEnd + TRIM_PAD_END_MS);
+  return { startMs, endMs };
+}
+
+/** Exported clip duration (ms), respecting preset trim when provided. */
+export function estimateReplayDurationMs(
+  replay: Parameters<typeof chartEndMs>[0],
+  opts?: { trimIdle?: boolean },
+): number {
+  const { startMs, endMs } = exportTimeWindow(replay, opts?.trimIdle ?? true);
+  return Math.max(0, endMs - startMs);
+}
+
 function sanitizeFilenamePart(s: string): string {
   return s
     .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "")
@@ -199,16 +446,26 @@ async function decodeBeatmapAudio(
   }
 }
 
-function sliceAudioBuffer(source: AudioBuffer, endSec: number): AudioBuffer {
-  const end = Math.min(source.duration, Math.max(0, endSec));
-  const frames = Math.max(1, Math.floor(end * source.sampleRate));
+function sliceAudioBuffer(
+  source: AudioBuffer,
+  startSec: number,
+  endSec: number,
+): AudioBuffer {
+  const start = Math.min(source.duration, Math.max(0, startSec));
+  const end = Math.min(source.duration, Math.max(start, endSec));
+  const startFrame = Math.floor(start * source.sampleRate);
+  const endFrame = Math.max(startFrame + 1, Math.floor(end * source.sampleRate));
+  const frames = endFrame - startFrame;
   const out = new AudioBuffer({
     length: frames,
     numberOfChannels: source.numberOfChannels,
     sampleRate: source.sampleRate,
   });
   for (let c = 0; c < source.numberOfChannels; c += 1) {
-    out.copyToChannel(source.getChannelData(c).subarray(0, frames), c);
+    out.copyToChannel(
+      source.getChannelData(c).subarray(startFrame, endFrame),
+      c,
+    );
   }
   return out;
 }
@@ -282,6 +539,10 @@ function computeHud(
   };
 }
 
+function evenDim(n: number): number {
+  return Math.max(2, Math.floor(n / 2) * 2);
+}
+
 function layoutPlayfield(
   canvasW: number,
   canvasH: number,
@@ -323,24 +584,81 @@ function layoutPlayfield(
   };
 }
 
+/**
+ * Size the canvas tightly around header + playfield + optional HUD + footer.
+ * `maxW`/`maxH` come from the preset as upper bounds.
+ */
+function layoutTightCanvas(
+  std: boolean,
+  maxW: number,
+  maxH: number,
+  fieldWidthPct: number,
+  fullscreen: boolean,
+  hudBelow: boolean,
+): { width: number; height: number; rect: PlayfieldRect } {
+  const padX = 20;
+  const padY = 12;
+  const hudH = hudBelow ? HUD_BELOW_H : 0;
+  const chromeH = HEADER_H + FOOTER_H + hudH;
+
+  if (std) {
+    const availW = maxW - padX * 2;
+    const availH = maxH - chromeH - padY * 2;
+    const scale = Math.min(availW / 4, availH / 3);
+    const pfW = evenDim(scale * 4);
+    const pfH = evenDim(scale * 3);
+    const width = evenDim(pfW + padX * 2);
+    const height = evenDim(chromeH + pfH + padY * 2);
+    return {
+      width,
+      height,
+      rect: { x: (width - pfW) / 2, y: HEADER_H + padY, w: pfW, h: pfH },
+    };
+  }
+
+  const targetW = fullscreen
+    ? Math.min(
+        maxW - padX * 2,
+        maxW * (clamp(fieldWidthPct, FIELD_WIDTH_MIN, FIELD_WIDTH_MAX) / 100),
+      )
+    : // Discord-sized presets stay ~720 wide; HQ presets can go wider.
+      Math.min(maxW - padX * 2, maxW > 1280 ? 960 : 720);
+  const pfW = evenDim(targetW);
+  const availH = maxH - chromeH - padY * 2;
+  const pfH = evenDim(Math.min(availH, Math.round(pfW * 1.2)));
+  const width = evenDim(pfW + padX * 2);
+  const height = evenDim(chromeH + pfH + padY * 2);
+  return {
+    width,
+    height,
+    rect: { x: (width - pfW) / 2, y: HEADER_H + padY, w: pfW, h: pfH },
+  };
+}
+
 function drawCoverBackground(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
   bg: HTMLImageElement | null,
+  hideBackground: boolean,
 ): void {
   ctx.fillStyle = "#0a0a0c";
   ctx.fillRect(0, 0, width, height);
-  if (bg && bg.naturalWidth > 0) {
+  if (!hideBackground && bg && bg.naturalWidth > 0) {
     const scale = Math.max(width / bg.naturalWidth, height / bg.naturalHeight);
     const bw = bg.naturalWidth * scale;
     const bh = bg.naturalHeight * scale;
     ctx.drawImage(bg, (width - bw) / 2, (height - bh) / 2, bw, bh);
   }
   const grad = ctx.createLinearGradient(0, 0, 0, height);
-  grad.addColorStop(0, "rgba(0,0,0,0.70)");
-  grad.addColorStop(0.45, "rgba(0,0,0,0.80)");
-  grad.addColorStop(1, "rgba(0,0,0,0.92)");
+  if (hideBackground) {
+    grad.addColorStop(0, "rgba(0,0,0,0.35)");
+    grad.addColorStop(1, "rgba(0,0,0,0.55)");
+  } else {
+    grad.addColorStop(0, "rgba(0,0,0,0.70)");
+    grad.addColorStop(0.45, "rgba(0,0,0,0.80)");
+    grad.addColorStop(1, "rgba(0,0,0,0.92)");
+  }
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, width, height);
 }
@@ -433,10 +751,64 @@ function drawHud(
   ctx: CanvasRenderingContext2D,
   rect: PlayfieldRect,
   hud: HudState,
+  placement: ReplayVideoHudPlacement,
 ): void {
-  const pad = 16;
   const boxH = 72;
   const boxW = 140;
+  const gap = 12;
+
+  if (placement === "below") {
+    const y = rect.y + rect.h + Math.max(8, (HUD_BELOW_H - boxH) / 2);
+    const leftX = rect.x;
+    const rightX = rect.x + rect.w - boxW;
+
+    // Combo — under playfield, left
+    {
+      const x = leftX;
+      ctx.fillStyle = "rgba(0,0,0,0.55)";
+      roundRect(ctx, x, y, boxW, boxH, 10);
+      ctx.fill();
+      ctx.fillStyle = "rgba(113,113,122,1)";
+      ctx.font = '700 11px Figtree, ui-sans-serif, system-ui, sans-serif';
+      ctx.textAlign = "left";
+      ctx.textBaseline = "alphabetic";
+      ctx.fillText("COMBO", x + 14, y + 22);
+      ctx.fillStyle = "#f4f4f5";
+      ctx.font =
+        '700 32px Outfit, Figtree, ui-sans-serif, system-ui, sans-serif';
+      ctx.fillText(`${hud.combo}`, x + 14, y + 54);
+      const comboW = ctx.measureText(`${hud.combo}`).width;
+      ctx.fillStyle = "rgba(161,161,170,1)";
+      ctx.font =
+        '700 16px Outfit, Figtree, ui-sans-serif, system-ui, sans-serif';
+      ctx.fillText("x", x + 14 + comboW + 2, y + 54);
+    }
+
+    // Accuracy — under playfield, right
+    {
+      const x = Math.max(leftX + boxW + gap, rightX);
+      ctx.fillStyle = "rgba(0,0,0,0.55)";
+      roundRect(ctx, x, y, boxW, boxH, 10);
+      ctx.fill();
+      ctx.fillStyle = "rgba(113,113,122,1)";
+      ctx.font = '700 11px Figtree, ui-sans-serif, system-ui, sans-serif';
+      ctx.textAlign = "right";
+      ctx.textBaseline = "alphabetic";
+      ctx.fillText("ACCURACY", x + boxW - 14, y + 22);
+      ctx.fillStyle = "#f4f4f5";
+      ctx.font =
+        '700 28px Outfit, Figtree, ui-sans-serif, system-ui, sans-serif';
+      ctx.fillText(formatAccuracy(hud.accuracy), x + boxW - 14, y + 52);
+      if (hud.last) {
+        ctx.fillStyle = JUDGMENT_COLORS[hud.last];
+        ctx.font = '700 12px Figtree, ui-sans-serif, system-ui, sans-serif';
+        ctx.fillText(hud.last.toUpperCase(), x + boxW - 14, y + 66);
+      }
+    }
+    return;
+  }
+
+  const pad = 16;
 
   // Combo — top left of playfield
   {
@@ -574,6 +946,8 @@ function paintComposedFrame(args: {
   std: boolean;
   bg: HTMLImageElement | null;
   logo: HTMLImageElement | null;
+  hideBackground: boolean;
+  hudPlacement: ReplayVideoHudPlacement;
   playfield: HTMLCanvasElement;
   playfieldCtx: CanvasRenderingContext2D;
   rect: PlayfieldRect;
@@ -602,12 +976,14 @@ function paintComposedFrame(args: {
     std,
     bg,
     logo,
+    hideBackground,
+    hudPlacement,
     playfield,
     playfieldCtx,
     rect,
   } = args;
 
-  drawCoverBackground(ctx, width, height, bg);
+  drawCoverBackground(ctx, width, height, bg, hideBackground);
   drawHeader(ctx, replay, width);
 
   // Paint playfield into its own canvas at the on-screen size.
@@ -654,7 +1030,7 @@ function paintComposedFrame(args: {
     tMs,
     std,
   );
-  drawHud(ctx, rect, hud);
+  drawHud(ctx, rect, hud, hudPlacement);
   drawFooterStats(ctx, replay, width, height, logo);
 }
 
@@ -668,10 +1044,17 @@ export async function exportReplayVideo(
     replay,
     signal,
     onProgress,
-    width = REPLAY_VIDEO_WIDTH,
-    height = REPLAY_VIDEO_HEIGHT,
-    fps = REPLAY_VIDEO_FPS,
   } = opts;
+
+  const preset = getReplayVideoExportPreset(opts.presetId ?? "1080");
+  const fps = opts.fps ?? preset.fps;
+  const hideBackground =
+    opts.hideBackground ?? preset.hideBackgroundDefault;
+  const trimIdle = preset.trimIdle ?? false;
+  const tightCrop = preset.tightCrop ?? false;
+  const hudPlacement: ReplayVideoHudPlacement =
+    preset.hudPlacement ?? "overlay";
+  const hudBelow = hudPlacement === "below";
 
   const ruleset = replay.beatmap.rulesetShortName;
   const std = isStdRuleset(ruleset);
@@ -690,12 +1073,66 @@ export async function exportReplayVideo(
 
   const [fullAudio, bg, logo] = await Promise.all([
     decodeBeatmapAudio(audioUrl, signal),
-    loadBackgroundImage(replay, signal),
+    hideBackground ? Promise.resolve(null) : loadBackgroundImage(replay, signal),
     loadRoxysuLogo(signal),
   ]);
-  const endMs = Math.max(chartEndMs(replay), fullAudio.duration * 1000);
-  const durationSec = endMs / 1000;
-  const audio = sliceAudioBuffer(fullAudio, durationSec);
+
+  const { startMs, endMs } = exportTimeWindow(replay, trimIdle);
+  const clipEndMs = Math.min(
+    endMs,
+    Math.max(startMs + 1000, fullAudio.duration * 1000),
+  );
+  const durationSec = Math.max(0.5, (clipEndMs - startMs) / 1000);
+  const audio = sliceAudioBuffer(
+    fullAudio,
+    startMs / 1000,
+    clipEndMs / 1000,
+  );
+
+  const fieldWidth = opts.fieldWidth ?? FIELD_WIDTH_DEFAULT;
+  const fullscreen = opts.fullscreen ?? false;
+
+  let width: number;
+  let height: number;
+  let rect: PlayfieldRect;
+  if (tightCrop) {
+    const tight = layoutTightCanvas(
+      std,
+      opts.width ?? preset.width,
+      opts.height ?? preset.height,
+      fieldWidth,
+      fullscreen,
+      hudBelow,
+    );
+    width = tight.width;
+    height = tight.height;
+    rect = tight.rect;
+  } else {
+    width = opts.width ?? preset.width;
+    height = opts.height ?? preset.height;
+    rect = layoutPlayfield(width, height, std, fieldWidth, fullscreen);
+  }
+
+  const encodeQuality = preset.fitUnderBytes
+    ? (() => {
+        const { videoBps } = computeFitBitrates(
+          durationSec,
+          preset.fitUnderBytes,
+          preset.estimateAudioKbps,
+        );
+        return new Quality({ bitrate: videoBps });
+      })()
+    : qualityFromLevel(preset.quality);
+  const audioEncodeQuality = preset.fitUnderBytes
+    ? (() => {
+        const { audioBps } = computeFitBitrates(
+          durationSec,
+          preset.fitUnderBytes,
+          preset.estimateAudioKbps,
+        );
+        return new Quality({ bitrate: audioBps });
+      })()
+    : qualityFromLevel(preset.quality);
 
   const mp4 = new Mp4OutputFormat();
   const videoCodec = await getFirstEncodableVideoCodec(
@@ -710,10 +1147,6 @@ export async function exportReplayVideo(
       "This browser cannot encode MP4 video/audio (WebCodecs required)",
     );
   }
-
-  const fieldWidth = opts.fieldWidth ?? FIELD_WIDTH_DEFAULT;
-  const fullscreen = opts.fullscreen ?? false;
-  const rect = layoutPlayfield(width, height, std, fieldWidth, fullscreen);
 
   const canvas = document.createElement("canvas");
   canvas.width = width;
@@ -732,11 +1165,11 @@ export async function exportReplayVideo(
 
   const videoSource = new CanvasSource(canvas, {
     codec: videoCodec,
-    quality: QUALITY_HIGH,
+    quality: encodeQuality,
   });
   const audioSource = new AudioBufferSource({
     codec: audioCodec,
-    quality: QUALITY_HIGH,
+    quality: audioEncodeQuality,
   });
 
   output.addVideoTrack(videoSource, { frameRate: fps });
@@ -806,7 +1239,7 @@ export async function exportReplayVideo(
   for (let i = 0; i < totalFrames; i += 1) {
     throwIfAborted(signal);
     const tSec = i * frameDuration;
-    const tMs = tSec * 1000;
+    const tMs = startMs + tSec * 1000;
     paintComposedFrame({
       ctx,
       width,
@@ -816,6 +1249,8 @@ export async function exportReplayVideo(
       std,
       bg,
       logo,
+      hideBackground,
+      hudPlacement,
       playfield,
       playfieldCtx,
       rect,

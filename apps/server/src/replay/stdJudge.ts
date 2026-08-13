@@ -1,7 +1,7 @@
-import { circleRadius, type StdHitObject } from "@roxysu/osu-chart";
+import { circleRadius, type StdHitObject, type StdPoint } from "@roxysu/osu-chart";
 import {
-  accuracyFromCounts,
   emptyJudgmentCounts,
+  type JudgmentCounts,
   type JudgmentResult,
   type JudgmentSummary,
 } from "@roxysu/mania-judge";
@@ -17,6 +17,10 @@ export type StdReplayJudgment = {
   result: JudgmentResult;
   errorMs: number | null;
   isTail: boolean;
+  /** Slider sub-part this entry describes. */
+  kind: "head" | "tick" | "tail";
+  /** Path fraction for tick entries (0 = head, 1 = tail). */
+  frac?: number;
 };
 
 /** Stable-style osu! hit windows (half-widths) from OD. */
@@ -41,7 +45,7 @@ export function stdHitWindows(od: number): {
   };
 }
 
-function judgeAbsError(
+function judgementResult(
   absError: number,
   windows: ReturnType<typeof stdHitWindows>,
 ): JudgmentResult {
@@ -53,11 +57,32 @@ function judgeAbsError(
   return "miss";
 }
 
-function adjustCs(cs: number, mods: ModAcronyms): number {
-  let next = cs;
-  if (mods.hardRock) next = Math.min(10, next * 1.3);
-  if (mods.easy) next = next * 0.5;
-  return next;
+/** Standard (osu!) accuracy weights — 300/100/50 on a 300 scale. */
+const STD_RESULT_WEIGHT: Record<JudgmentResult, number> = {
+  perfect: 300,
+  great: 300,
+  good: 100,
+  ok: 50,
+  meh: 50,
+  miss: 0,
+};
+const STD_ACC_SCALE = 300;
+
+function stdAccuracyFromCounts(counts: JudgmentCounts): number {
+  const totalWeight =
+    counts.perfect * STD_RESULT_WEIGHT.perfect +
+    counts.great * STD_RESULT_WEIGHT.great +
+    counts.good * STD_RESULT_WEIGHT.good +
+    counts.ok * STD_RESULT_WEIGHT.ok +
+    counts.meh * STD_RESULT_WEIGHT.meh;
+  const judged =
+    counts.perfect +
+    counts.great +
+    counts.good +
+    counts.ok +
+    counts.meh +
+    counts.miss;
+  return judged > 0 ? totalWeight / (judged * STD_ACC_SCALE) : 1;
 }
 
 function adjustAr(ar: number, mods: ModAcronyms): number {
@@ -72,7 +97,9 @@ export function adjustStdDifficulty(
   mods: ModAcronyms,
 ): { cs: number; ar: number; od: number } {
   return {
-    cs: adjustCs(args.cs, mods),
+    // Hard Rock flips the playfield and raises AR/OD but leaves the on-screen
+    // circle size (and its hitbox) unchanged — do not scale CS here.
+    cs: args.cs,
     ar: adjustAr(args.ar, mods),
     od: adjustOverallDifficulty(args.od, mods),
   };
@@ -153,11 +180,34 @@ function dist(ax: number, ay: number, bx: number, by: number): number {
   return Math.hypot(ax - bx, ay - by);
 }
 
+function pathPointAt(path: StdPoint[], frac: number): StdPoint {
+  if (path.length === 0) return { x: 0, y: 0 };
+  if (path.length === 1) return path[0]!;
+  const f = Math.min(1, Math.max(0, frac)) * (path.length - 1);
+  const i0 = Math.floor(f);
+  const i1 = Math.min(path.length - 1, i0 + 1);
+  const t = f - i0;
+  const a = path[i0]!;
+  const b = path[i1]!;
+  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+}
+
+/** Ball path fraction at time fraction `u` of the whole slider (bounces on repeats). */
+function bounceFracAt(u: number, repeats: number): number {
+  const prog = Math.min(repeats, Math.max(0, u * repeats));
+  const seg = Math.floor(prog);
+  let local = prog - seg;
+  if (seg % 2 === 1) local = 1 - local;
+  return Math.min(1, Math.max(0, local));
+}
+
 /**
  * Lightweight Standard judgment sim for rewatch visuals.
  * Circles: OD window + CS radius on click edge.
- * Sliders: head like circle; body/tail pass if cursor near path.
- * Spinners: complete if any click held for most of the duration.
+ * Sliders: head like circle; ticks sampled on the path; tail by follow.
+ * Spinners: held for most of the duration.
+ * Ticks and tails are emitted as separate entries so combo/accuracy match
+ * real osu! semantics (approximations, documented in knowledge/).
  */
 export function simulateStdJudgments(args: {
   hitObjects: StdHitObject[];
@@ -219,30 +269,30 @@ export function simulateStdJudgments(args: {
     const obj = args.hitObjects[i]!;
 
     if (obj.type === "spinner") {
-      const mid = (obj.timeMs + obj.endMs) / 2;
-      const cur = cursorAt(frames, mid);
-      const held =
-        cur != null &&
-        (cur.buttons & 3) !== 0 &&
-        obj.endMs - obj.timeMs > 100;
-      // Coarse: any held click during spinner → ok, else miss.
-      let anyHold = held;
-      if (!anyHold) {
-        for (const f of frames) {
-          if (f.tMs < obj.timeMs) continue;
-          if (f.tMs > obj.endMs) break;
-          if ((f.buttons & 3) !== 0) {
-            anyHold = true;
-            break;
-          }
-        }
+      const start = obj.timeMs;
+      const end = obj.endMs;
+      const dur = end - start;
+      // Held fraction over the spinner lifetime (rotation itself is not
+      // recorded in replays — click-hold coverage is the approximation).
+      let heldSamples = 0;
+      let samples = 0;
+      for (const f of frames) {
+        if (f.tMs < start) continue;
+        if (f.tMs > end) break;
+        samples += 1;
+        if ((f.buttons & 3) !== 0) heldSamples += 1;
       }
+      const holdRatio = samples > 0 ? heldSamples / samples : 0;
+      let result: JudgmentResult = "miss";
+      if (samples > 0 && dur > 100 && holdRatio >= 0.5) result = "great";
+      else if (samples > 0 && holdRatio > 0) result = "ok";
       push({
         noteIndex: i,
-        tMs: obj.endMs,
-        result: anyHold ? "great" : "miss",
+        tMs: end,
+        result,
         errorMs: null,
         isTail: false,
+        kind: "head",
       });
       continue;
     }
@@ -281,21 +331,23 @@ export function simulateStdJudgments(args: {
           result: "miss",
           errorMs: null,
           isTail: false,
+          kind: "head",
         });
       } else {
-        const result = judgeAbsError(best.err, w);
+        const result = judgementResult(best.err, w);
         push({
           noteIndex: i,
           tMs: best.tMs,
           result,
           errorMs: best.err,
           isTail: false,
+          kind: "head",
         });
       }
       continue;
     }
 
-    // Slider: head judgment + simplified body pass.
+    // Slider: head judgment, then ticks and tail on the hit path.
     if (best == null) {
       push({
         noteIndex: i,
@@ -303,55 +355,77 @@ export function simulateStdJudgments(args: {
         result: "miss",
         errorMs: null,
         isTail: false,
+        kind: "head",
       });
       continue;
     }
+    const headResult = judgementResult(best.err, w);
+    push({
+      noteIndex: i,
+      tMs: best.tMs,
+      result: headResult,
+      errorMs: best.err,
+      isTail: false,
+      kind: "head",
+    });
+    if (headResult === "miss") continue;
 
-    const headResult = judgeAbsError(best.err, w);
-    if (headResult === "miss") {
+    const path = obj.path;
+    // Tail rests at the path end for odd repeat counts, the head otherwise.
+    const tailPoint = pathPointAt(path, obj.repeats % 2 === 1 ? 1 : 0);
+
+    // Ticks: cursor next to the tick point with a button held.
+    for (const tick of obj.ticks ?? []) {
+      const cur = cursorAt(frames, tick.tMs);
+      const pt = pathPointAt(path, tick.frac);
+      const held = cur != null && (cur.buttons & 3) !== 0;
+      const near = cur != null && dist(cur.x, cur.y, pt.x, pt.y) <= radius * 2.5;
       push({
         noteIndex: i,
-        tMs: best.tMs,
-        result: "miss",
-        errorMs: best.err,
+        tMs: tick.tMs,
+        result: held && near ? "great" : "miss",
+        errorMs: null,
         isTail: false,
+        kind: "tick",
+        frac: tick.frac,
       });
-      continue;
     }
 
-    // Sample a few points along the slider lifetime for cursor proximity.
-    let near = 0;
-    let samples = 0;
-    const path = obj.path;
+    // Tail: ball-precise follow sampling, then final position + hold.
+    let nearCount = 0;
+    let sampleCount = 0;
     for (let s = 0; s <= 8; s += 1) {
       const u = s / 8;
       const tMs = obj.timeMs + (obj.endMs - obj.timeMs) * u;
       const cur = cursorAt(frames, tMs);
-      samples += 1;
+      sampleCount += 1;
       if (!cur || path.length === 0) continue;
-      // Distance to nearest path point (coarse).
-      let minD = Infinity;
-      const step = Math.max(1, Math.floor(path.length / 16));
-      for (let p = 0; p < path.length; p += step) {
-        const pt = path[p]!;
-        minD = Math.min(minD, dist(cur.x, cur.y, pt.x, pt.y));
-      }
-      if (minD <= radius * 2.5) near += 1;
+      const pt = pathPointAt(path, bounceFracAt(u, obj.repeats));
+      if (dist(cur.x, cur.y, pt.x, pt.y) <= radius * 2.5) nearCount += 1;
     }
-    const bodyOk = samples === 0 || near / samples >= 0.4;
+    const bodyOk = sampleCount === 0 || nearCount / sampleCount >= 0.4;
+    const curEnd = cursorAt(frames, obj.endMs);
+    const heldEnd = curEnd != null && (curEnd.buttons & 3) !== 0;
+    const nearEnd =
+      curEnd != null &&
+      dist(curEnd.x, curEnd.y, tailPoint.x, tailPoint.y) <= radius * 2.5;
     push({
       noteIndex: i,
-      tMs: best.tMs,
-      result: bodyOk ? headResult : "ok",
-      errorMs: best.err,
-      isTail: false,
+      tMs: obj.endMs,
+      result: nearEnd && heldEnd ? "great" : bodyOk ? "ok" : "miss",
+      errorMs: null,
+      isTail: true,
+      kind: "tail",
     });
   }
+
+  // Time order keeps client combo/accuracy accumulation incremental.
+  judgments.sort((a, b) => a.tMs - b.tMs || a.noteIndex - b.noteIndex);
 
   return {
     judgments,
     summary: {
-      accuracy: accuracyFromCounts(counts),
+      accuracy: stdAccuracyFromCounts(counts),
       combo,
       maxCombo,
       counts,

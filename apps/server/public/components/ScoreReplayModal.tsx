@@ -11,6 +11,7 @@ import {
 import { fetchScoreReplay, type ScoreReplay } from "../lib/api";
 import { AudioClock, sampleAudioClock } from "../lib/audioClock";
 import { clamp, formatAccuracy, formatClock } from "../lib/format";
+import { useStdSkin } from "../lib/stdSkin";
 import { ModBadges } from "./ModBadges";
 import {
   codeToColumn,
@@ -53,7 +54,7 @@ import {
 } from "./previewPrefs";
 
 /** Mania accuracy contribution — Perfect is 305 (matches lazer/stable display). */
-const RESULT_WEIGHT: Record<ReplayJudgmentResult, number> = {
+const MANIA_RESULT_WEIGHT: Record<ReplayJudgmentResult, number> = {
   perfect: 305,
   great: 300,
   good: 200,
@@ -61,7 +62,18 @@ const RESULT_WEIGHT: Record<ReplayJudgmentResult, number> = {
   meh: 50,
   miss: 0,
 };
-const ACC_SCALE = 305;
+const MANIA_ACC_SCALE = 305;
+
+/** Standard (osu!) accuracy contribution — 300/100/50 on a 300 scale. */
+const STD_RESULT_WEIGHT: Record<ReplayJudgmentResult, number> = {
+  perfect: 300,
+  great: 300,
+  good: 100,
+  ok: 50,
+  meh: 50,
+  miss: 0,
+};
+const STD_ACC_SCALE = 300;
 
 type ModalMode = "rewatch" | "play";
 type LoadedScoreReplay = ScoreReplay & {
@@ -174,6 +186,7 @@ export function ScoreReplayModal({
 
   const [prefs, setPrefs] = useState<PreviewPrefs>(() => loadPrefs());
   const prefsRef = useRef(prefs);
+  const skin = useStdSkin();
   const [mode, setMode] = useState<ModalMode>("rewatch");
   const [playing, setPlaying] = useState(false);
   const [currentMs, setCurrentMs] = useState(0);
@@ -756,7 +769,10 @@ export function ScoreReplayModal({
   // Live HUD from stored replay judgments (rewatch mode only).
   useEffect(() => {
     if (mode !== "rewatch" || !replayData) return;
-    const judgments = replayData.judgments;
+    const { judgments } = replayData;
+    const isStd = replayData.beatmap.rulesetShortName === "osu";
+    const weight = isStd ? STD_RESULT_WEIGHT : MANIA_RESULT_WEIGHT;
+    const scale = isStd ? STD_ACC_SCALE : MANIA_ACC_SCALE;
     let raf = 0;
     let running = true;
 
@@ -765,21 +781,21 @@ export function ScoreReplayModal({
       const t = mapTimeMs();
       let combo = 0;
       let last: ReplayJudgmentResult | null = null;
-      let weight = 0;
+      let accWeight = 0;
       let judged = 0;
       for (const j of judgments) {
         if (j.tMs > t) break;
         last = j.result;
-        // Mania: only miss breaks combo (50/100/200/300 all continue it).
+        // Only miss breaks the combo (50/100/200/300 in mania, 50/100/300 in standard).
         if (j.result === "miss") combo = 0;
         else combo += 1;
-        weight += RESULT_WEIGHT[j.result];
+        accWeight += weight[j.result];
         judged += 1;
       }
       setHud({
         combo,
-        // No notes judged yet → 100%. Then Σ(weight) / (305 × notes played).
-        accuracy: judged > 0 ? weight / (judged * ACC_SCALE) : 1,
+        // No notes judged yet → 100%. Then Σ(weight) / (scale × notes played).
+        accuracy: judged > 0 ? accWeight / (judged * scale) : 1,
         last,
       });
       raf = requestAnimationFrame(tick);
@@ -1109,6 +1125,8 @@ export function ScoreReplayModal({
                           frames={replayData.stdFrames ?? []}
                           judgments={replayData.judgments}
                           getCurrentTimeMs={mapTimeMs}
+                          hidden={replayData.playback.acronyms.includes("HD")}
+                          skin={skin}
                         />
                       </div>
                     </div>

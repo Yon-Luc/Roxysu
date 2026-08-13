@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PageTitle } from "../../components/PageTitle";
 import { ManiaNotefield } from "../../components/ManiaNotefield";
+import { StandardSkinEditor } from "./sections/StandardSkinEditor";
 import {
   KEYMODES,
   LN_TAIL_SHAPES,
@@ -187,6 +188,9 @@ export function SkinPage({ section }: { section?: string } = {}) {
   const [keys, setKeys] = useState<Keymode>(7);
   const [previewTimeMs, setPreviewTimeMs] = useState(800);
   const [playing, setPlaying] = useState(true);
+  const [tab, setTab] = useState<"mania" | "std">(
+    section === "std-skin" ? "std" : "mania",
+  );
   const timeRef = useRef(previewTimeMs);
   timeRef.current = previewTimeMs;
 
@@ -344,6 +348,29 @@ export function SkinPage({ section }: { section?: string } = {}) {
         </div>
       </div>
 
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Ruleset">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "mania"}
+          className={tab === "mania" ? "rx-btn-primary" : "rx-btn"}
+          onClick={() => setTab("mania")}
+        >
+          {dict?.skin.tabMania ?? "Mania"}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "std"}
+          className={tab === "std" ? "rx-btn-primary" : "rx-btn"}
+          onClick={() => setTab("std")}
+        >
+          {dict?.skin.tabStandard ?? "osu!standard"}
+        </button>
+      </div>
+
+      {tab === "mania" ? (
+        <>
       <div className="flex flex-wrap gap-2">
         {KEYMODES.map((k) => (
           <button
@@ -761,6 +788,10 @@ export function SkinPage({ section }: { section?: string } = {}) {
           <p className="text-xs text-faint">{dict?.skin.saveNote}</p>
         </div>
       </section>
+        </>
+      ) : null}
+
+      {tab === "std" ? <StandardSkinEditor /> : null}
     </div>
   );
 }

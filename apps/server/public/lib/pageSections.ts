@@ -166,6 +166,13 @@ export const PAGE_SECTIONS: PageSectionDef[] = [
     label: "Live preview",
     keywords: ["skin", "preview", "notefield"],
   },
+  {
+    id: "std-skin",
+    to: "/skin",
+    pageLabel: "Skin",
+    label: "osu!standard skin",
+    keywords: ["skin", "std", "osu", "circles", "sliders", "spinners", "combo"],
+  },
 ];
 
 export function pageSectionDomId(sectionId: string): string {

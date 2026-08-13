@@ -17,6 +17,7 @@ type Difficulty = {
   overallDifficulty: number;
   stackLeniency: number;
   sliderMultiplier: number;
+  sliderTickRate: number;
 };
 
 function clamp(n: number, lo: number, hi: number): number {
@@ -47,6 +48,7 @@ function parseDifficulty(lines: string[]): Difficulty {
     overallDifficulty: 5,
     stackLeniency: 0.7,
     sliderMultiplier: 1.4,
+    sliderTickRate: 1,
   };
   let inDiff = false;
   let inGeneral = false;
@@ -71,6 +73,7 @@ function parseDifficulty(lines: string[]): Difficulty {
     else if (key === "ApproachRate") d.approachRate = num;
     else if (key === "OverallDifficulty") d.overallDifficulty = num;
     else if (key === "SliderMultiplier") d.sliderMultiplier = num;
+    else if (key === "SliderTickRate" && num > 0) d.sliderTickRate = num;
   }
   // Older maps omit AR — fall back to OD.
   if (!lines.some((l) => l.includes("ApproachRate:"))) {
@@ -445,10 +448,43 @@ function applyStacking(
   }
 }
 
+/**
+ * Timing-accurate slider ticks. Spacing is one `beatLength / tickRate` per
+ * tick at the local timing point; ticks are emitted per span, mirroring the
+ * real game (a tick that would land exactly on the tail is dropped).
+ */
+function computeSliderTicks(
+  startMs: number,
+  spanDurationMs: number,
+  beatLengthMs: number,
+  tickRate: number,
+  repeats: number,
+): { frac: number; tMs: number }[] {
+  if (!Number.isFinite(spanDurationMs) || spanDurationMs <= 0) return [];
+  const interval = (beatLengthMs > 0 ? beatLengthMs : 500) / (tickRate > 0 ? tickRate : 1);
+  if (!Number.isFinite(interval) || interval <= 0) return [];
+  const count = Math.floor((spanDurationMs - 1) / interval);
+  if (count <= 0) return [];
+
+  const ticks: { frac: number; tMs: number }[] = [];
+  for (let s = 0; s < repeats; s += 1) {
+    const spanStart = startMs + s * spanDurationMs;
+    for (let k = 1; k <= count; k += 1) {
+      const tickOffset = k * interval;
+      ticks.push({
+        frac: tickOffset / spanDurationMs,
+        tMs: spanStart + tickOffset,
+      });
+    }
+  }
+  return ticks;
+}
+
 function parseHitObjects(
   lines: string[],
   timing: RawTiming[],
   sliderMultiplier: number,
+  sliderTickRate: number,
 ): StdHitObject[] {
   const objects: StdHitObject[] = [];
   let inHit = false;
@@ -507,6 +543,13 @@ function parseHitObjects(
         pixelLength,
         stackX: x,
         stackY: y,
+        ticks: computeSliderTicks(
+          timeMs,
+          spanDuration,
+          beatLength,
+          sliderTickRate,
+          repeats,
+        ),
       });
       continue;
     }
@@ -539,6 +582,7 @@ export function parseStdChart(osuText: string): ParsedStdChart {
     overallDifficulty: 5,
     stackLeniency: 0.7,
     sliderMultiplier: 1.4,
+    sliderTickRate: 1,
     hitObjects: [],
     timingPoints: [],
     breaks: [],
@@ -551,7 +595,12 @@ export function parseStdChart(osuText: string): ParsedStdChart {
 
   const diff = parseDifficulty(lines);
   const timing = parseTimingPoints(lines);
-  const hitObjects = parseHitObjects(lines, timing, diff.sliderMultiplier);
+  const hitObjects = parseHitObjects(
+    lines,
+    timing,
+    diff.sliderMultiplier,
+    diff.sliderTickRate,
+  );
   applyStacking(hitObjects, diff.stackLeniency, diff.approachRate);
 
   const uninherited: Array<[number, number]> = timing
@@ -566,6 +615,7 @@ export function parseStdChart(osuText: string): ParsedStdChart {
     overallDifficulty: diff.overallDifficulty,
     stackLeniency: diff.stackLeniency,
     sliderMultiplier: diff.sliderMultiplier,
+    sliderTickRate: diff.sliderTickRate,
     hitObjects,
     timingPoints: uninherited.length ? uninherited : [[0, 500]],
     breaks: parseBreaks(lines),

@@ -399,7 +399,8 @@
     "classified": "+{{count}} classifiés",
     "calculateMissingPatterns": "Calculer les patterns manquants",
     "recalculateAllPatterns": "Recalculer tous les patterns",
-    "recalculatingPatterns": "Recalcul en cours…"
+    "recalculatingPatterns": "Recalcul en cours…",
+    "openStdSkinEditor": "Modifier le skin standard"
   },
   "skin": {
     "pageTitle": "Aperçu du skin",
@@ -455,7 +456,26 @@
     "copy": "Copier",
     "copyTitle": "Copier {{hex}}",
     "colorPickerAria": "Sélecteur de couleur {{label}}",
-    "hexValueAria": "Valeur hexadécimale {{label}}"
+    "hexValueAria": "Valeur hexadécimale {{label}}",
+    "stdTitle": "Skin osu!standard",
+    "stdDesc": "Visuels du playfield standard : couleurs de combo, ticks de slider, cercle de suivi et popups de hits.",
+    "resetStd": "Réinitialiser le skin standard",
+    "stdComboColors": "Couleurs de combo",
+    "stdSliderTrack": "Piste de slider",
+    "stdSliderFill": "Remplissage du slider",
+    "stdSliderBall": "Boule du slider",
+    "stdSpinner": "Spinner",
+    "stdApproach": "Approche",
+    "stdCursor": "Curseur",
+    "stdTrail": "Traînée du curseur",
+    "stdElements": "Éléments",
+    "stdComboNumbers": "Numéros de combo",
+    "stdSliderTicks": "Ticks de slider",
+    "stdFollowCircle": "Cercle de suivi",
+    "stdHitPopups": "Popups de hits",
+    "stdHitCircleScale": "Taille des cercles / sliders",
+    "tabMania": "Mania",
+    "tabStandard": "osu!standard"
   },
   "command": {
     "placeholder": "Rechercher pages, sections, maps…",

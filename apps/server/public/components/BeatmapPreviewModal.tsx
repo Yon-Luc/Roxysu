@@ -10,6 +10,7 @@ import {
 import { fetchBeatmapPreview, type BeatmapPreview } from "../lib/api";
 import { AudioClock, sampleAudioClock } from "../lib/audioClock";
 import { clamp, formatAccuracy, formatClock } from "../lib/format";
+import { useStdSkin } from "../lib/stdSkin";
 import {
   localBeatmapAudioUrl,
   localBeatmapCoverUrl,
@@ -94,6 +95,7 @@ export function BeatmapPreviewModal({
   const keybindsAll = useKeybinds();
   const bindsRef = useRef<string[]>([]);
   const skin = usePreviewSkin();
+  const stdSkin = useStdSkin();
 
   const [prefs, setPrefs] = useState<PreviewPrefs>(() => loadPrefs());
   const prefsRef = useRef(prefs);
@@ -989,6 +991,7 @@ export function BeatmapPreviewModal({
                         circleSize={data.circleSize ?? 5}
                         approachRate={data.approachRate ?? 5}
                         getCurrentTimeMs={mapTimeMs}
+                        skin={stdSkin}
                       />
                     </div>
                   </div>

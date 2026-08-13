@@ -55,6 +55,41 @@ describe("parseStdChart", () => {
     const chart = parseStdChart(MINIMAL_STD.replace("Mode: 0", "Mode: 3"));
     expect(chart.status).toBe("NotStd");
   });
+
+  test("computes timing-accurate slider ticks", () => {
+    const chart = parseStdChart(`osu file format v14
+
+[General]
+StackLeniency: 0.7
+Mode: 0
+
+[Difficulty]
+CircleSize:4
+OverallDifficulty:6
+ApproachRate:7
+SliderMultiplier:1.4
+SliderTickRate:2
+
+[TimingPoints]
+0,500,4,2,0,100,1,0
+
+[HitObjects]
+128,96,1500,2,0,L|256:96,1,300`);
+
+    const slider = chart.hitObjects.find((o) => o.type === "slider");
+    expect(slider).toBeDefined();
+    if (slider && slider.type === "slider") {
+      // spanDuration = (300 / (1.4*100*1)) * 500 ≈ 1071ms; interval = 500/2.
+      expect(slider.ticks.length).toBe(4);
+      expect(slider.ticks.map((t) => t.tMs)).toEqual([
+        1750, 2000, 2250, 2500,
+      ]);
+      expect(slider.ticks[0]!.frac).toBeCloseTo(0.2333, 2);
+      expect(slider.ticks[3]!.frac).toBeCloseTo(0.9333, 2);
+      // Ticks never land on the tail.
+      expect(slider.ticks[3]!.tMs).toBeLessThan(slider.endMs);
+    }
+  });
 });
 
 describe("std helpers", () => {
@@ -151,6 +186,79 @@ describe("simulateStdJudgments", () => {
       mods: parseScoreMods("[]"),
     });
     expect(judgments[0]!.result).not.toBe("miss");
+    expect(summary.counts.miss).toBe(0);
+  });
+
+  test("scores ticks and tail on a held slider, spinner hold resolves", () => {
+    const frames = [
+      { tMs: 0, x: 100, y: 100, buttons: 0 },
+      { tMs: 990, x: 100, y: 100, buttons: 1 },
+      { tMs: 1250, x: 125, y: 100, buttons: 1 },
+      { tMs: 1500, x: 150, y: 100, buttons: 1 },
+      { tMs: 1750, x: 175, y: 100, buttons: 1 },
+      { tMs: 2000, x: 200, y: 100, buttons: 1 },
+      { tMs: 2050, x: 200, y: 100, buttons: 0 },
+      { tMs: 2500, x: 256, y: 192, buttons: 1 },
+      { tMs: 2750, x: 256, y: 192, buttons: 1 },
+      { tMs: 3000, x: 256, y: 192, buttons: 0 },
+    ];
+    const { judgments, summary } = simulateStdJudgments({
+      hitObjects: [
+        {
+          type: "slider",
+          x: 100,
+          y: 100,
+          timeMs: 1000,
+          endMs: 2000,
+          repeats: 1,
+          pixelLength: 100,
+          stackX: 100,
+          stackY: 100,
+          path: [
+            { x: 100, y: 100 },
+            { x: 125, y: 100 },
+            { x: 150, y: 100 },
+            { x: 175, y: 100 },
+            { x: 200, y: 100 },
+          ],
+          ticks: [
+            { frac: 0.25, tMs: 1250 },
+            { frac: 0.5, tMs: 1500 },
+            { frac: 0.75, tMs: 1750 },
+          ],
+        },
+        {
+          type: "spinner",
+          timeMs: 2500,
+          endMs: 3000,
+        },
+      ],
+      frames,
+      circleSize: 4,
+      overallDifficulty: 5,
+      mods: parseScoreMods("[]"),
+    });
+    const head = judgments.find(
+      (j) => j.kind === "head" && j.noteIndex === 0,
+    );
+    expect(head).toBeDefined();
+    expect(head!.result).not.toBe("miss");
+    const ticks = judgments.filter(
+      (j) => j.kind === "tick" && j.noteIndex === 0,
+    );
+    expect(ticks).toHaveLength(3);
+    expect(ticks.every((t) => t.result === "great")).toBe(true);
+    const tail = judgments.find(
+      (j) => j.kind === "tail" && j.noteIndex === 0,
+    );
+    expect(tail).toBeDefined();
+    expect(tail!.result).toBe("great");
+    const spin = judgments.find(
+      (j) => j.noteIndex === 1,
+    );
+    expect(spin).toBeDefined();
+    expect(spin!.result).not.toBe("miss");
+    expect(spin!.kind).toBe("head");
     expect(summary.counts.miss).toBe(0);
   });
 });

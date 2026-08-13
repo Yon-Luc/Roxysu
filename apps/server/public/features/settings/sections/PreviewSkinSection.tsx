@@ -16,9 +16,18 @@ export function PreviewSkinSection() {
       <p className="mt-1 text-sm text-muted">
         {dict?.settings.previewSkinDesc}
       </p>
-      <Link to="/skin" className="rx-btn-primary mt-4 inline-flex">
-        {dict?.settings.openSkinEditor}
-      </Link>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Link to="/skin" className="rx-btn-primary inline-flex">
+          {dict?.settings.openSkinEditor}
+        </Link>
+        <Link
+          to="/skin"
+          search={{ section: "std-skin" }}
+          className="rx-btn inline-flex"
+        >
+          {dict?.settings.openStdSkinEditor}
+        </Link>
+      </div>
     </section>
   );
 }

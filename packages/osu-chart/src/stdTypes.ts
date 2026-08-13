@@ -22,6 +22,12 @@ export type StdHitObject =
       pixelLength: number;
       stackX: number;
       stackY: number;
+      /**
+       * Slider ticks. `frac` is the position along the path (0 = head, 1 =
+       * tail) — identical across spans; `tMs` is the absolute tick time.
+       * Timing-accurate (beatLength / SliderTickRate spacing, per timing point).
+       */
+      ticks: { frac: number; tMs: number }[];
     }
   | {
       type: "spinner";
@@ -37,6 +43,7 @@ export type ParsedStdChart = {
   overallDifficulty: number;
   stackLeniency: number;
   sliderMultiplier: number;
+  sliderTickRate: number;
   hitObjects: StdHitObject[];
   timingPoints: Array<[timeMs: number, beatLengthMs: number]>;
   breaks: Array<[startMs: number, endMs: number]>;

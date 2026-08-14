@@ -238,6 +238,10 @@ export function NowSelectedPage({
           autoPlay={layout.autoPlayPreview}
           muted={layout.mutePreview}
           playingAllowed={playingAllowed}
+          heightRem={layout.previewHeightRem}
+          onHeightRemChange={(previewHeightRem) =>
+            setLayout((prev) => ({ ...prev, previewHeightRem }))
+          }
         />
       ) : hasMap ? (
         <p className="text-sm text-faint">

@@ -1,3 +1,10 @@
+import {
+  clampPreviewEmbedHeightRem,
+  PREVIEW_EMBED_HEIGHT_DEFAULT,
+  PREVIEW_EMBED_HEIGHT_MAX,
+  PREVIEW_EMBED_HEIGHT_MIN,
+} from "../../components/BeatmapPreviewEmbed";
+
 export const NOW_SELECTED_WIDGETS = [
   "identity",
   "preview",
@@ -17,6 +24,8 @@ export type NowSelectedLayout = {
   autoPlayPreview: boolean;
   mutePreview: boolean;
   pauseWhilePlaying: boolean;
+  /** Playfield stage height in rem (clamped). */
+  previewHeightRem: number;
 };
 
 const STORAGE_KEY = "roxysu:now-selected-layout";
@@ -38,6 +47,7 @@ export const DEFAULT_NOW_SELECTED_LAYOUT: NowSelectedLayout = {
   autoPlayPreview: true,
   mutePreview: false,
   pauseWhilePlaying: true,
+  previewHeightRem: PREVIEW_EMBED_HEIGHT_DEFAULT,
 };
 
 function isWidgetId(value: unknown): value is NowSelectedWidgetId {
@@ -85,6 +95,11 @@ export function loadNowSelectedLayout(): NowSelectedLayout {
         typeof parsed.pauseWhilePlaying === "boolean"
           ? parsed.pauseWhilePlaying
           : DEFAULT_NOW_SELECTED_LAYOUT.pauseWhilePlaying,
+      previewHeightRem: clampPreviewEmbedHeightRem(
+        typeof parsed.previewHeightRem === "number"
+          ? parsed.previewHeightRem
+          : DEFAULT_NOW_SELECTED_LAYOUT.previewHeightRem,
+      ),
     };
   } catch {
     return DEFAULT_NOW_SELECTED_LAYOUT;
@@ -113,3 +128,9 @@ export function moveWidget(
   copy.splice(next, 0, item!);
   return copy;
 }
+
+export {
+  clampPreviewEmbedHeightRem as clampPreviewHeightRem,
+  PREVIEW_EMBED_HEIGHT_MAX as PREVIEW_HEIGHT_MAX,
+  PREVIEW_EMBED_HEIGHT_MIN as PREVIEW_HEIGHT_MIN,
+};

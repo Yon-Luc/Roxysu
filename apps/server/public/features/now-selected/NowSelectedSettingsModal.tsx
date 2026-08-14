@@ -4,6 +4,9 @@ import {
   DEFAULT_NOW_SELECTED_LAYOUT,
   moveWidget,
   NOW_SELECTED_WIDGETS,
+  clampPreviewHeightRem,
+  PREVIEW_HEIGHT_MAX,
+  PREVIEW_HEIGHT_MIN,
   type NowSelectedLayout,
   type NowSelectedWidgetId,
 } from "./nowSelectedLayout";
@@ -144,6 +147,31 @@ export function NowSelectedSettingsModal({
                 className="accent-[var(--color-accent)]"
               />
               {ns?.pauseWhilePlaying ?? "Pause preview while playing in-game"}
+            </label>
+            <label className="block pt-1">
+              <span className="mb-1.5 flex items-center justify-between text-sm text-ink">
+                <span>{ns?.height ?? "Playfield height"}</span>
+                <span className="tabular-nums text-muted">
+                  {layout.previewHeightRem}
+                </span>
+              </span>
+              <input
+                type="range"
+                min={PREVIEW_HEIGHT_MIN}
+                max={PREVIEW_HEIGHT_MAX}
+                step={1}
+                value={layout.previewHeightRem}
+                onInput={(e) =>
+                  onChange({
+                    ...layout,
+                    previewHeightRem: clampPreviewHeightRem(
+                      Number(e.currentTarget.value),
+                    ),
+                  })
+                }
+                className="w-full accent-[var(--color-accent)]"
+                aria-label={ns?.height ?? "Playfield height"}
+              />
             </label>
           </div>
 

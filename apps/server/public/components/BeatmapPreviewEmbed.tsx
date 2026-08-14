@@ -9,7 +9,7 @@ import {
 import { fetchBeatmapPreview, type BeatmapPreview } from "../lib/api";
 import { AudioClock, sampleAudioClock } from "../lib/audioClock";
 import { clamp, formatClock } from "../lib/format";
-import { localBeatmapAudioUrl } from "../lib/osuUrls";
+import { localBeatmapAudioUrl, localBeatmapCoverUrl, osuBeatmapCoverUrl } from "../lib/osuUrls";
 import { useStdSkin } from "../lib/stdSkin";
 import { usePreviewSkin } from "../lib/previewSkin";
 import { NotefieldStage } from "./NotefieldStage";
@@ -22,17 +22,34 @@ import {
 import { loadPrefs, SKIP_MS } from "./previewPrefs";
 import { useAppDict } from "../lib/i18n";
 
+export const PREVIEW_EMBED_HEIGHT_MIN = 18;
+export const PREVIEW_EMBED_HEIGHT_MAX = 52;
+export const PREVIEW_EMBED_HEIGHT_DEFAULT = 24;
+
+export function clampPreviewEmbedHeightRem(value: number): number {
+  if (!Number.isFinite(value)) return PREVIEW_EMBED_HEIGHT_DEFAULT;
+  return Math.min(
+    PREVIEW_EMBED_HEIGHT_MAX,
+    Math.max(PREVIEW_EMBED_HEIGHT_MIN, Math.round(value)),
+  );
+}
+
 export function BeatmapPreviewEmbed({
   beatmapId,
   autoPlay,
   muted,
   playingAllowed,
+  heightRem,
+  onHeightRemChange,
 }: {
   beatmapId: string;
   autoPlay: boolean;
   muted: boolean;
   /** When false (in-game play), pause so game audio is not doubled. */
   playingAllowed: boolean;
+  /** Playfield stage height in rem. */
+  heightRem: number;
+  onHeightRemChange?: (next: number) => void;
 }) {
   const { dict } = useAppDict();
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -76,6 +93,10 @@ export function BeatmapPreviewEmbed({
   });
 
   const audioUrl = localBeatmapAudioUrl(data?.audioFileHash);
+  const bgUrl =
+    localBeatmapCoverUrl(data?.backgroundFileHash) ??
+    osuBeatmapCoverUrl(data?.setOnlineId, "cover") ??
+    null;
   const previewTime =
     data?.previewTime != null && data.previewTime > 0 ? data.previewTime : null;
 
@@ -303,9 +324,28 @@ export function BeatmapPreviewEmbed({
     data.rulesetShortName === "osu" &&
     (data.hitObjects?.length ?? 0) > 0;
   const maxDuration = Math.max(durationMs, lengthMsRef.current);
+  const stageHeightRem = clampPreviewEmbedHeightRem(heightRem);
+  const stageHeightStyle = {
+    height: `min(80vh, ${stageHeightRem}rem)`,
+  } as const;
+
+  // Match BeatmapPreviewModal windowed layout: mania max-w-2xl / sm:max-w-3xl.
+  const stageShellClass = isStd
+    ? "relative mx-auto w-full max-w-3xl px-2 py-2 sm:px-3"
+    : "relative mx-auto w-full max-w-2xl px-3 py-2 sm:max-w-3xl sm:px-6 sm:py-3";
 
   return (
-    <div className="flex min-h-[22rem] flex-col overflow-hidden rounded-xl border border-white/8 bg-black/40">
+    <div className="relative flex flex-col overflow-hidden rounded-xl border border-white/8 bg-black/40">
+      <div
+        className="pointer-events-none absolute inset-0 bg-cover bg-center"
+        style={bgUrl ? { backgroundImage: `url(${bgUrl})` } : undefined}
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/55 via-black/70 to-black/88"
+        aria-hidden
+      />
+
       {audioUrl ? (
         <audio
           ref={bindAudioRef}
@@ -316,19 +356,25 @@ export function BeatmapPreviewEmbed({
         />
       ) : null}
 
-      <div className="relative min-h-0 flex-1">
+      <div className="relative z-10">
         {isLoading ? (
-          <p className="flex h-full min-h-[16rem] items-center justify-center px-4 text-sm text-muted">
+          <p
+            className="flex items-center justify-center px-4 text-sm text-muted"
+            style={stageHeightStyle}
+          >
             {dict?.nowSelected.loadingPreview ?? "Loading preview…"}
           </p>
         ) : error ? (
-          <p className="flex h-full min-h-[16rem] items-center justify-center px-4 text-center text-sm text-rose-300">
+          <p
+            className="flex items-center justify-center px-4 text-center text-sm text-rose-300"
+            style={stageHeightStyle}
+          >
             {error instanceof Error
               ? error.message
               : (dict?.nowSelected.previewFailed ?? "Failed to load preview")}
           </p>
         ) : data ? (
-          <div className="h-full min-h-[16rem] px-2 py-2 sm:px-3">
+          <div className={stageShellClass} style={stageHeightStyle}>
             {isMania ? (
               <NotefieldStage
                 columnCount={data.columnCount}
@@ -354,7 +400,7 @@ export function BeatmapPreviewEmbed({
                 />
               </div>
             ) : (
-              <div className="flex h-full min-h-[16rem] items-center justify-center px-4 text-center text-sm text-muted">
+              <div className="flex h-full items-center justify-center px-4 text-center text-sm text-muted">
                 {dict?.nowSelected.previewUnsupported ??
                   "Playfield preview supports mania and standard."}
               </div>
@@ -363,7 +409,7 @@ export function BeatmapPreviewEmbed({
         ) : null}
       </div>
 
-      <div className="border-t border-white/10 bg-black/50 px-3 py-2">
+      <div className="relative z-10 border-t border-white/10 bg-black/40 px-3 py-2 backdrop-blur-[2px]">
         {audioError || (!isLoading && data && !audioUrl) ? (
           <p className="mb-2 text-xs text-amber-200/90">
             {audioError ??
@@ -455,6 +501,27 @@ export function BeatmapPreviewEmbed({
               />
             </label>
           )}
+          {onHeightRemChange ? (
+            <label className="flex min-w-[8rem] items-center gap-2 text-[11px] text-muted">
+              <span className="shrink-0">
+                {dict?.nowSelected.height ?? "Height"} {stageHeightRem}
+              </span>
+              <input
+                type="range"
+                min={PREVIEW_EMBED_HEIGHT_MIN}
+                max={PREVIEW_EMBED_HEIGHT_MAX}
+                step={1}
+                value={stageHeightRem}
+                onInput={(e) =>
+                  onHeightRemChange(
+                    clampPreviewEmbedHeightRem(Number(e.currentTarget.value)),
+                  )
+                }
+                className="min-w-[4rem] flex-1 accent-[var(--accent)]"
+                aria-label={dict?.nowSelected.height ?? "Height"}
+              />
+            </label>
+          ) : null}
         </div>
       </div>
     </div>

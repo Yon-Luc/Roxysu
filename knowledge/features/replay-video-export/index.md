@@ -50,9 +50,11 @@ and not a live screen capture.
    `ReplayVideoExportOptionsModal`, `computeFitBitrates`, `layoutTightCanvas`,
    `exportTimeWindow`.
 
-5. Default encode uses the chosen preset’s resolution / fps / mediabunny Quality
-   via WebCodecs. Encoding requires a browser that can encode those codecs.
-   **Status:** verified — constants + `getFirstEncodable*Codec`.
+5. Encode strategy follows mediabunny guidance: Discord/Compact use CBR toward
+   the 20 MB budget plus a 5s keyframe interval; uncapped presets (TikTok/HQ,
+   720p, 1080p) use quantizer VBR with a resolution-scaled bitrate fallback.
+   **Status:** verified — `buildVideoEncodeQuality`, `suggestedVideoBitrateBps`,
+   `videoKeyFrameIntervalSec`, `computeFitBitrates`.
 
 6. Export is cancelable; closing the modal or changing score aborts the job.
    **Status:** verified — `AbortSignal` in `ScoreReplayModal`.

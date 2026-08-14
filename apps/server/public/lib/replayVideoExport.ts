@@ -213,6 +213,94 @@ function qualityFromLevel(level: ReplayVideoQualityLevel): Quality {
   }
 }
 
+/** CRF-style quantizer per preset quality (H.264/AVC — lower is better). */
+function quantizerForQuality(level: ReplayVideoQualityLevel): number {
+  switch (level) {
+    case "low":
+      return 30;
+    case "medium":
+      return 28;
+    case "veryHigh":
+      return 23;
+    case "high":
+    default:
+      return 26;
+  }
+}
+
+/**
+ * VBR fallback bitrate from canvas size and fps.
+ * Used as quantizer fallback and for non-capped size estimates.
+ */
+export function suggestedVideoBitrateBps(
+  width: number,
+  height: number,
+  fps: number,
+  quality: ReplayVideoQualityLevel,
+  hideBackground: boolean,
+): number {
+  const megapixels = (width * height) / 1_000_000;
+  const fpsScale = fps / 30;
+  const mbpsPerMp: Record<ReplayVideoQualityLevel, number> = {
+    low: 1.2,
+    medium: 2.0,
+    high: 3.5,
+    veryHigh: 5.5,
+  };
+  let mbps = megapixels * mbpsPerMp[quality] * fpsScale;
+  if (hideBackground) mbps *= 0.82;
+  return Math.max(400_000, Math.round(mbps * 1e6));
+}
+
+function buildVideoEncodeQuality(
+  preset: ReplayVideoExportPreset,
+  durationSec: number,
+  width: number,
+  height: number,
+  fps: number,
+  hideBackground: boolean,
+): Quality {
+  if (preset.fitUnderBytes != null) {
+    const { videoBps } = computeFitBitrates(
+      durationSec,
+      preset.fitUnderBytes,
+      preset.estimateAudioKbps,
+    );
+    return new Quality({ bitrate: videoBps, bitrateMode: "constant" });
+  }
+  return new Quality({
+    quantizer: quantizerForQuality(preset.quality),
+    bitrate: suggestedVideoBitrateBps(
+      width,
+      height,
+      fps,
+      preset.quality,
+      hideBackground,
+    ),
+    bitrateMode: "variable",
+  });
+}
+
+function buildAudioEncodeQuality(
+  preset: ReplayVideoExportPreset,
+  durationSec: number,
+): Quality {
+  if (preset.fitUnderBytes != null) {
+    const { audioBps } = computeFitBitrates(
+      durationSec,
+      preset.fitUnderBytes,
+      preset.estimateAudioKbps,
+    );
+    return new Quality({ bitrate: audioBps, bitrateMode: "constant" });
+  }
+  return qualityFromLevel(preset.quality);
+}
+
+/** Longer GOP for size-capped exports — chat clips rarely need fine seeking. */
+function videoKeyFrameIntervalSec(preset: ReplayVideoExportPreset): number {
+  return preset.fitUnderBytes != null ? 5 : 2;
+}
+
 /**
  * Size estimate for a clip.
  * Discord/Compact (`fitUnderBytes`) use the same bitrate math as the encoder so
@@ -232,12 +320,18 @@ export function estimateReplayVideoBytes(
     );
     return Math.round(((videoBps + audioBps) * sec) / 8);
   }
-  const bgFactor = hideBackground ? 0.72 : 1;
   const cropFactor = preset.tightCrop ? 0.55 : 1;
-  const videoBits =
-    preset.estimateVideoMbps * 1e6 * bgFactor * cropFactor * sec;
+  const videoBps = suggestedVideoBitrateBps(
+    preset.width,
+    preset.height,
+    preset.fps,
+    preset.quality,
+    hideBackground,
+  );
+  const videoBits = videoBps * cropFactor * sec;
   const audioBits = preset.estimateAudioKbps * 1e3 * sec;
-  return Math.round(((videoBits + audioBits) / 8) * 1.03);
+  // Quantizer VBR undershoots on simple playfield footage; ~5% headroom.
+  return Math.round(((videoBits + audioBits) / 8) * 1.05);
 }
 
 export function formatExportByteSize(bytes: number): string {
@@ -1121,28 +1215,15 @@ export async function exportReplayVideo(
     rect = layoutPlayfield(width, height, std, fieldWidth, fullscreen);
   }
 
-  const encodeQuality = preset.fitUnderBytes
-    ? (() => {
-        const { videoBps } = computeFitBitrates(
-          durationSec,
-          preset.fitUnderBytes,
-          preset.estimateAudioKbps,
-        );
-        // Constant bitrate so we actually spend the Discord size budget
-        // (VBR undershoots hard on solid-background playfield footage).
-        return new Quality({ bitrate: videoBps, bitrateMode: "constant" });
-      })()
-    : qualityFromLevel(preset.quality);
-  const audioEncodeQuality = preset.fitUnderBytes
-    ? (() => {
-        const { audioBps } = computeFitBitrates(
-          durationSec,
-          preset.fitUnderBytes,
-          preset.estimateAudioKbps,
-        );
-        return new Quality({ bitrate: audioBps, bitrateMode: "constant" });
-      })()
-    : qualityFromLevel(preset.quality);
+  const encodeQuality = buildVideoEncodeQuality(
+    preset,
+    durationSec,
+    width,
+    height,
+    fps,
+    hideBackground,
+  );
+  const audioEncodeQuality = buildAudioEncodeQuality(preset, durationSec);
 
   const mp4 = new Mp4OutputFormat();
   const videoCodec = await getFirstEncodableVideoCodec(
@@ -1176,6 +1257,7 @@ export async function exportReplayVideo(
   const videoSource = new CanvasSource(canvas, {
     codec: videoCodec,
     quality: encodeQuality,
+    keyFrameInterval: videoKeyFrameIntervalSec(preset),
   });
   const audioSource = new AudioBufferSource({
     codec: audioCodec,

@@ -14,7 +14,7 @@ touches:
 
 ## Purpose
 
-Group scores into practice sessions by inactivity gaps; browse past sessions and the live current session (SSE). Suggest maps via Up Next (query language) or 7K Sunny recommendations.
+Group scores into practice sessions by inactivity gaps; browse past sessions and the live current session (SSE). Suggest maps via Up Next (query language) or 4K/7K Sunny recommendations.
 
 Each session has a **display name** — a stable, generated label (Mushoku Tensei–themed) used in the UI instead of numeric ids.
 
@@ -40,6 +40,8 @@ Live sessions keep the **Current session** label in headings; the generated name
 - `packages/session-names/src/generate.ts` — `generateSessionName(sessionId, taken)`, `capitalizeSessionName()`
 - `packages/session-names/src/terms.json` — character, region, activity, modifier, style word lists
 - `apps/server/public/features/sessions/*`
+- `apps/server/public/features/sessions/SessionSuggest.tsx` — Up Next / 4K / 7K tabs
+- `apps/server/public/features/sessions/SessionSevenKRecommend.tsx` — Sunny recommend panel (`keyCount` 4 or 7)
 
 ## Implementation
 
@@ -63,7 +65,7 @@ On new session insert, `runSessionEngine()` sets `name` immediately after alloca
 
 - `features/live-sync/` — new scores from Realm extraction
 - `features/practice-library/` — Up Next query language
-- `features/sunny-dan-recommendations/` — 7K recommend
+- `features/sunny-dan-recommendations/` — 4K/7K recommend
 - `@roxysu/session-names` — display name vocabulary and generator
 
 ## Depended on by

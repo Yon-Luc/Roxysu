@@ -42,6 +42,7 @@ function toItem(
     bestMisses: row.bestMisses,
     masteryLevel: row.masteryLevel,
     sunnyEstDiff: row.sunnyEstDiff,
+    keyCount: row.keyCount,
   };
 }
 
@@ -75,6 +76,7 @@ export function recommendPush(
   overlay: { sql: string | null; params: unknown[] },
   excludeIds: string[],
   axisFilter: MapAxis | null = null,
+  keyCount: number,
 ): RecommendItem[] {
   // Push baseline = average Sunny of 90–95% clears per axis (dan-style).
   // Target slightly above that clear level so suggestions sit in neighboring dans.
@@ -89,6 +91,7 @@ export function recommendPush(
       overlayParams: overlay.params,
       excludeIds,
       pool: perAxis * 3,
+      keyCount,
       skillMode: "peak",
     }),
   );
@@ -125,6 +128,7 @@ export function recommendAccuracy(
   overlay: { sql: string | null; params: unknown[] },
   excludeIds: string[],
   axisFilter: MapAxis | null = null,
+  keyCount: number,
 ): RecommendItem[] {
   // Accuracy baseline = average Sunny of 99%+ scores per axis.
   // Suggest maps in that difficulty range to push toward / hold 99%+.
@@ -139,6 +143,7 @@ export function recommendAccuracy(
       overlayParams: overlay.params,
       excludeIds,
       pool: perAxis * 3,
+      keyCount,
       skillMode: "accuracy",
     }),
   );
@@ -209,6 +214,7 @@ export function recommendConsistency(
   overlay: { sql: string | null; params: unknown[] },
   excludeIds: string[],
   axisFilter: MapAxis | null = null,
+  keyCount: number,
 ): RecommendItem[] {
   // Consistency baseline = average Sunny of 96–99% scores per axis.
   const axes = axesForFilter(axisFilter);
@@ -222,6 +228,7 @@ export function recommendConsistency(
       overlayParams: overlay.params,
       excludeIds,
       pool: perAxis * 3,
+      keyCount,
       skillMode: "consistency",
     }),
   );
@@ -293,6 +300,7 @@ export function recommendSkillset(
   count: number,
   overlay: { sql: string | null; params: unknown[] },
   excludeIds: string[],
+  keyCount: number,
 ): RecommendItem[] {
   const axes = axesForFilter(axisFilter);
   const perAxis = Math.max(count, Math.ceil(count * 1.5));
@@ -305,6 +313,7 @@ export function recommendSkillset(
       overlayParams: overlay.params,
       excludeIds,
       pool: perAxis * 3,
+      keyCount,
     }),
   );
 
@@ -333,6 +342,7 @@ export function recommendDeficit(
   count: number,
   overlay: { sql: string | null; params: unknown[] },
   excludeIds: string[],
+  keyCount: number,
 ): RecommendItem[] {
   const weak = weakestAxis(skill);
   const weakSkill = skillForAxis(skill, weak);
@@ -348,6 +358,7 @@ export function recommendDeficit(
     overlayParams: overlay.params,
     excludeIds,
     pool: count * 3,
+    keyCount,
   });
 
   const label = axisLabel(weak);

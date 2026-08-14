@@ -11,7 +11,7 @@ touches:
 
 ## User intent
 
-Populate mania difficulty estimates so 7K recommendations and `dan:`/`sunny:` filters work well.
+Populate mania difficulty estimates so 4K/7K recommendations and `dan:`/`sunny:` filters work well.
 
 ## Flow
 
@@ -29,7 +29,7 @@ query language fields + GET /api/practice/recommend + Session Suggest UI
 
 ## Business guarantee
 
-Recommendations use persisted estimates; without backfill, 7K suggest quality is limited.
+Recommendations use persisted estimates; without backfill, 4K/7K suggest quality is limited.
 
 ## Implementation references
 

@@ -159,7 +159,7 @@ Derived count of how many beatmaps match each collection query. Refreshed when c
 
 ### Sunny dan ratings store
 
-Persisted mania difficulty estimates from the Sunny dan backfill job (`beatmap_dan_ratings` table). Powers `dan:` / `sunny:` query fields and 7K recommendations.
+Persisted mania difficulty estimates from the Sunny dan backfill job (`beatmap_dan_ratings` table). Powers `dan:` / `sunny:` query fields and 4K/7K recommendations.
 
 **Not:** "dan cache", "cache" alone
 

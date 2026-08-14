@@ -4,7 +4,7 @@ import { ensureSunnyDanForIdsSync } from "../../map-analysis/computeSunnyDan";
 import { skillForAxis } from "./sevenKSkill";
 import { calculateMapMatch, mapMatchesAxis } from "./mapMatch";
 import {
-  buildBaseSevenKFilter,
+  buildBaseKeymodeFilter,
   loadCandidates,
   type CandidateRow,
 } from "./candidates";
@@ -21,6 +21,7 @@ export function pickCandidatesInRange(
     overlayParams: unknown[];
     excludeIds: string[];
     pool: number;
+    keyCount: number;
     skillMode?: "comfort" | "peak" | "consistency" | "accuracy";
   },
 ): { rows: CandidateRow[]; matches: ReturnType<typeof calculateMapMatch>[] } {
@@ -36,12 +37,13 @@ export function pickCandidatesInRange(
   const minSunny = Math.max(0, targetSunny * (1 - opts.tolerance));
   const maxSunny = targetSunny * (1 + opts.tolerance);
 
-  const filter = buildBaseSevenKFilter(
+  const filter = buildBaseKeymodeFilter(
     minSunny,
     maxSunny,
     opts.axis,
     opts.overlaySql,
     opts.overlayParams,
+    opts.keyCount,
   );
 
   let rows = loadCandidates(

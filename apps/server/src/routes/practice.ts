@@ -14,7 +14,10 @@ import {
   type PracticeMetric,
 } from "../query-language";
 import { recommendSevenK } from "../analytics/recommend";
-import { parseSkillTopPlays } from "../analytics/recommend/sevenKSkill";
+import {
+  parseSkillKeyCount,
+  parseSkillTopPlays,
+} from "../analytics/recommend/sevenKSkill";
 
 const SORT_BY = [
   "lastPlayed",
@@ -254,6 +257,7 @@ export const practiceRoutes = new Elysia({ prefix: "/practice" })
         .filter(Boolean);
 
       try {
+        const keyCount = parseSkillKeyCount(query.keyCount);
         const batch = recommendSevenK(db, {
           focus: query.focus,
           skillset: query.skillset,
@@ -261,6 +265,7 @@ export const practiceRoutes = new Elysia({ prefix: "/practice" })
           excludeIds: exclude,
           q: query.q?.trim() || undefined,
           topPlays: parseSkillTopPlays(query.topPlays),
+          keyCount,
         });
 
         return {
@@ -293,6 +298,7 @@ export const practiceRoutes = new Elysia({ prefix: "/practice" })
               masteryLevel: r.masteryLevel,
               sunnyEstDiff: r.sunnyEstDiff,
               sunnyStar: r.sunnyStar,
+              keyCount: r.keyCount ?? keyCount,
             }),
             relativeDifficulty: r.relativeDifficulty,
             confidence: r.confidence,
@@ -319,6 +325,7 @@ export const practiceRoutes = new Elysia({ prefix: "/practice" })
         exclude: t.Optional(t.String()),
         q: t.Optional(t.String()),
         topPlays: t.Optional(t.Union([t.Number(), t.String()])),
+        keyCount: t.Optional(t.Union([t.Number(), t.String()])),
       }),
     },
   );

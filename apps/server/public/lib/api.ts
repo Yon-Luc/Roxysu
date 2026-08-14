@@ -190,6 +190,7 @@ export async function fetchPracticeRecommend(params: {
   exclude?: string[];
   q?: string;
   topPlays?: number;
+  keyCount?: number;
 }) {
   return unwrap(
     await api.api.practice.recommend.get({
@@ -203,6 +204,7 @@ export async function fetchPracticeRecommend(params: {
             : undefined,
         q: params.q,
         topPlays: params.topPlays,
+        keyCount: params.keyCount,
       },
     }),
     "/api/practice/recommend",

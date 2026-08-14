@@ -7,23 +7,25 @@ touches:
   - apps/server/src/analytics/recommend
 ---
 
-# Sunny dan & 7K recommendations
+# Sunny dan & 4K/7K recommendations
 
 ## Purpose
 
-Parse `.osu` charts from lazer storage, run Sunny Rework–style estimates, persist to the Sunny dan ratings store, expose them in the query language, and power 7K smart recommendations (Push / Consistency / Deficit / Skillset).
+Parse `.osu` charts from lazer storage, run Sunny Rework–style estimates, persist to the Sunny dan ratings store, expose them in the query language, and power 4K and 7K smart recommendations (Push / Accuracy / Consistency / Deficit / Skillset).
 
 ## Business rules
 
 1. Estimates live in the Sunny dan ratings store (`beatmap_dan_ratings`); recommendations degrade without backfill.
 2. Backfill is a Settings-started background job.
+3. Recommendations and skill estimates are for a single mania keymode (`keyCount`, default 7). 4K and 7K pools are never mixed.
+4. Matching uses Sunny stars for both 4K and 7K. Daniel remains a 4K profile / query-language label.
 
 ## Important symbols
 
 - `packages/sunny-dan`
 - `apps/server/src/map-analysis/sunnyDanJob.ts`
 - `apps/server/src/analytics/recommend/*`
-- `GET /api/practice/recommend`
+- `GET /api/practice/recommend` — optional `keyCount` (default 7)
 
 ## Dependencies
 
@@ -33,7 +35,7 @@ Parse `.osu` charts from lazer storage, run Sunny Rework–style estimates, pers
 
 ## Depended on by
 
-- `features/sessions/` — 7K suggest
+- `features/sessions/` — 4K/7K suggest
 - `features/practice-profiles/` — mania estimates
 
 ## Related knowledge

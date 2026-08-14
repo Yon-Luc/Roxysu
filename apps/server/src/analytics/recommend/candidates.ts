@@ -36,9 +36,16 @@ export type CandidateRow = {
   sunnyEstDiff: string | null;
   sunnyStar: number | null;
   lnRatio: number | null;
+  keyCount: number | null;
 };
 
-export function countMissingSunnyDan(db: Db): number {
+export function countMissingSunnyDan(db: Db, keyCount?: number): number {
+  const params: Array<string | number> = [SUNNY_ALGORITHM];
+  let keySql = "";
+  if (keyCount != null) {
+    keySql = `AND b.circle_size = ?`;
+    params.push(keyCount);
+  }
   const row = db.$client
     .query(
       `
@@ -48,6 +55,7 @@ export function countMissingSunnyDan(db: Db): number {
         ON dr.beatmap_id = b.id AND dr.algorithm = ?
       WHERE b.hidden = 0
         AND lower(COALESCE(b.ruleset_short_name, '')) = 'mania'
+        ${keySql}
         AND (
           dr.beatmap_id IS NULL
           OR (
@@ -58,16 +66,17 @@ export function countMissingSunnyDan(db: Db): number {
         )
     `,
     )
-    .get(SUNNY_ALGORITHM) as { n: number } | null;
+    .get(...params) as { n: number } | null;
   return Number(row?.n ?? 0);
 }
 
-export function buildBaseSevenKFilter(
+export function buildBaseKeymodeFilter(
   minSunny: number,
   maxSunny: number,
   axis: "rc" | "ln" | "fln" | null,
   overlaySql: string | null,
   overlayParams: unknown[],
+  keyCount: number,
 ): { sql: string; params: unknown[] } {
   const params: unknown[] = [];
   const push = (v: unknown) => {
@@ -77,7 +86,7 @@ export function buildBaseSevenKFilter(
 
   const parts = [
     `LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'`,
-    `b.circle_size = 7`,
+    `b.circle_size = ${push(keyCount)}`,
     `dr.sunny_star IS NOT NULL`,
     `dr.sunny_star BETWEEN ${push(minSunny)} AND ${push(maxSunny)}`,
   ];
@@ -150,7 +159,8 @@ export function loadCandidates(
       m.level AS masteryLevel,
       dr.est_diff AS sunnyEstDiff,
       dr.sunny_star AS sunnyStar,
-      dr.ln_ratio AS lnRatio
+      dr.ln_ratio AS lnRatio,
+      CAST(b.circle_size AS INTEGER) AS keyCount
     FROM beatmaps b
     LEFT JOIN mastery m ON m.beatmap_id = b.id
     LEFT JOIN (
@@ -199,10 +209,11 @@ export function loadCandidates(
     masteryLevel: r.masteryLevel != null ? Number(r.masteryLevel) : null,
     sunnyStar: r.sunnyStar != null ? Number(r.sunnyStar) : null,
     lnRatio: r.lnRatio != null ? Number(r.lnRatio) : null,
+    keyCount: r.keyCount != null ? Number(r.keyCount) : null,
   }));
 }
 
-export function countSevenKWithSunny(db: Db): number {
+export function countKeymodeWithSunny(db: Db, keyCount: number): number {
   const row = db.$client
     .query(
       `
@@ -214,10 +225,10 @@ export function countSevenKWithSunny(db: Db): number {
       WHERE b.hidden = 0
         AND COALESCE(bs.delete_pending, 0) = 0
         AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
-        AND b.circle_size = 7
+        AND b.circle_size = ?
         AND dr.sunny_star IS NOT NULL
     `,
     )
-    .get(SUNNY_ALGORITHM) as { n: number } | null;
+    .get(SUNNY_ALGORITHM, keyCount) as { n: number } | null;
   return Number(row?.n ?? 0);
 }

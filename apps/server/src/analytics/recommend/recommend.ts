@@ -8,11 +8,12 @@ import {
 import { backfillSunnyDanSync } from "../../map-analysis/computeSunnyDan";
 import {
   estimateSevenKSkill,
+  parseSkillKeyCount,
   parseSkillTopPlays,
   strongestAxis,
   weakestAxis,
 } from "./sevenKSkill";
-import { countMissingSunnyDan, countSevenKWithSunny } from "./candidates";
+import { countMissingSunnyDan, countKeymodeWithSunny } from "./candidates";
 import {
   recommendAccuracy,
   recommendConsistency,
@@ -45,6 +46,8 @@ export type RecommendOptions = {
   q?: string;
   /** Top maps per band for skill estimate (default 30). */
   topPlays?: number;
+  /** Mania key count — never mixed (default 7). */
+  keyCount?: number;
 };
 
 function parseFocus(value: string | undefined): RecommendFocus {
@@ -82,7 +85,7 @@ function toAxisFilter(skillset: AxisFilter): MapAxis | null {
 }
 
 /**
- * Companella-style ranked recommendations for local 7K mania maps.
+ * Companella-style ranked recommendations for local mania maps of one keymode.
  */
 export function recommendSevenK(
   db: Db,
@@ -92,14 +95,15 @@ export function recommendSevenK(
   const count = clampCount(opts.count);
   const excludeIds = (opts.excludeIds ?? []).filter(Boolean);
   const topPlays = parseSkillTopPlays(opts.topPlays);
+  const keyCount = parseSkillKeyCount(opts.keyCount);
   let skillset = parseSkillset(opts.skillset);
 
   // Ensure a pool of Sunny ratings exists before searching.
   backfillSunnyDanSync(db, { limit: DAN_BACKFILL_LIMIT });
-  const missingSunny = countMissingSunnyDan(db);
+  const missingSunny = countMissingSunnyDan(db, keyCount);
   const needsSunnyBackfill = missingSunny > 0;
 
-  const skill = estimateSevenKSkill(db, { topPlays });
+  const skill = estimateSevenKSkill(db, { topPlays, keyCount });
 
   let overlaySql: string | null = null;
   let overlayParams: unknown[] = [];
@@ -112,7 +116,7 @@ export function recommendSevenK(
   }
 
   const overlay = { sql: overlaySql, params: overlayParams };
-  const totalMapsConsidered = countSevenKWithSunny(db);
+  const totalMapsConsidered = countKeymodeWithSunny(db, keyCount);
 
   // Companella defaults skillset focus to the player's strongest axis when unset.
   if (focus === "skillset" && skillset === null) {
@@ -148,6 +152,7 @@ export function recommendSevenK(
         overlay,
         excludeIds,
         axisFilter,
+        keyCount,
       );
       break;
     case "accuracy":
@@ -158,6 +163,7 @@ export function recommendSevenK(
         overlay,
         excludeIds,
         axisFilter,
+        keyCount,
       );
       break;
     case "deficit": {
@@ -169,6 +175,7 @@ export function recommendSevenK(
         count,
         overlay,
         excludeIds,
+        keyCount,
       );
       break;
     }
@@ -181,6 +188,7 @@ export function recommendSevenK(
         count,
         overlay,
         excludeIds,
+        keyCount,
       );
       break;
     case "push":
@@ -192,6 +200,7 @@ export function recommendSevenK(
         overlay,
         excludeIds,
         axisFilter,
+        keyCount,
       );
       break;
   }

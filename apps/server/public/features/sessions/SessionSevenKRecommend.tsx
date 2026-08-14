@@ -16,7 +16,11 @@ import { useAppDict, t } from "../../lib/i18n";
 import type { Dictionary } from "@roxysu/i18n";
 import { SessionSuggestMapRow } from "./SessionSuggestMapRow";
 
-const PREFS_KEY = "rx-session-7k-recommend";
+type RecommendKeyCount = 4 | 7;
+
+function prefsKey(keyCount: RecommendKeyCount): string {
+  return `rx-session-${keyCount}k-recommend`;
+}
 
 type RecPrefs = {
   focus: RecommendFocus;
@@ -63,9 +67,9 @@ const AXIS_OPTIONS: { id: RecommendSkillset; label: string }[] = [
   { id: "fln", label: "FLN" },
 ];
 
-function loadPrefs(): RecPrefs {
+function loadPrefs(keyCount: RecommendKeyCount): RecPrefs {
   try {
-    const raw = localStorage.getItem(PREFS_KEY);
+    const raw = localStorage.getItem(prefsKey(keyCount));
     if (!raw) return DEFAULT_PREFS;
     const parsed = JSON.parse(raw) as Partial<RecPrefs>;
     return {
@@ -90,26 +94,28 @@ function loadPrefs(): RecPrefs {
   }
 }
 
-function savePrefs(prefs: RecPrefs) {
-  localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+function savePrefs(keyCount: RecommendKeyCount, prefs: RecPrefs) {
+  localStorage.setItem(prefsKey(keyCount), JSON.stringify(prefs));
 }
 
 export function SessionSevenKRecommend({
+  keyCount = 7,
   excludeBeatmapIds,
 }: {
+  keyCount?: RecommendKeyCount;
   excludeBeatmapIds: string[];
 }) {
   const { dict } = useAppDict();
   const ratingMode = useRatingDisplayMode();
-  const [prefs, setPrefs] = useState<RecPrefs>(() => loadPrefs());
+  const [prefs, setPrefs] = useState<RecPrefs>(() => loadPrefs(keyCount));
   const [shuffleKey, setShuffleKey] = useState(0);
   const [skillTopPlays, setSkillTopPlays] = useState(() => readSkillTopPlays());
   const excludeRef = useRef(excludeBeatmapIds);
   excludeRef.current = excludeBeatmapIds;
 
   useEffect(() => {
-    savePrefs(prefs);
-  }, [prefs]);
+    savePrefs(keyCount, prefs);
+  }, [keyCount, prefs]);
 
   useEffect(() => {
     const syncTopPlays = () => setSkillTopPlays(readSkillTopPlays());
@@ -126,7 +132,8 @@ export function SessionSevenKRecommend({
 
   const { data, isLoading, error, isFetching, refetch } = useQuery({
     queryKey: [
-      "practice-recommend-7k",
+      "practice-recommend",
+      keyCount,
       prefs.focus,
       prefs.skillset,
       skillTopPlays,
@@ -139,6 +146,7 @@ export function SessionSevenKRecommend({
         count: 8,
         exclude: excludeRef.current,
         topPlays: skillTopPlays,
+        keyCount,
       }),
   });
 
@@ -247,7 +255,7 @@ export function SessionSevenKRecommend({
                         range: 30,
                         skillTopPlays,
                         skillAxis: "all",
-                        keyCount: 7,
+                        keyCount,
                       }}
                       className="underline hover:text-accent"
                     >
@@ -373,8 +381,11 @@ export function SessionSevenKRecommend({
           <p className="text-xs text-amber-200/90">
             {(() => {
               const parts = (
-                t(dict?.session.needsSunnyBackfill) ||
-                "Some mania maps still need Sunny dan ratings. Run backfill in ⟦SETTINGS⟧ for better 7K recommendations."
+                t(dict?.session.needsSunnyBackfill, { keymode: keyCount }) ||
+                t(
+                  "Some mania maps still need Sunny dan ratings. Run backfill in ⟦SETTINGS⟧ for better {{keymode}}K recommendations.",
+                  { keymode: keyCount },
+                )
               ).split("⟦SETTINGS⟧");
               return (
                 <>
@@ -401,8 +412,11 @@ export function SessionSevenKRecommend({
       ) : items.length === 0 ? (
         <p className="text-sm text-muted">
           {batch?.summary ??
-            dict?.session.noRecommendations ??
-            "No recommendations yet. Play more 7K maps or backfill Sunny ratings."}
+            (t(dict?.session.noRecommendations, { keymode: keyCount }) ||
+              t(
+                "No recommendations yet. Play more {{keymode}}K maps or backfill Sunny ratings.",
+                { keymode: keyCount },
+              ))}
         </p>
       ) : (
         <div className="space-y-2">
@@ -410,10 +424,11 @@ export function SessionSevenKRecommend({
             {batch?.summary}
             {batch
               ? ` · ${
-                  t(dict?.session.maps7kWithSunny, {
+                  t(dict?.session.mapsWithSunny, {
                     count: batch.totalMapsConsidered.toLocaleString(),
+                    keymode: keyCount,
                   }) ||
-                  `${batch.totalMapsConsidered.toLocaleString()} 7K maps with Sunny`
+                  `${batch.totalMapsConsidered.toLocaleString()} ${keyCount}K maps with Sunny`
                 }`
               : ""}
           </p>

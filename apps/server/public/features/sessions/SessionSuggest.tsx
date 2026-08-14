@@ -5,23 +5,14 @@ import { useAppDict } from "../../lib/i18n";
 
 const PREFS_KEY = "rx-session-suggest-tab";
 
-type SuggestTab = "up-next" | "7k";
+type SuggestTab = "up-next" | "7k" | "4k";
 
-const TABS: { id: SuggestTab; hint: string }[] = [
-  {
-    id: "up-next",
-    hint: "Query-language filters for accuracy bands, staleness, and stars.",
-  },
-  {
-    id: "7k",
-    hint: "Ranked picks from your Sunny skill estimate (Push, Accuracy, Consistency, Deficit, Skillset).",
-  },
-];
+const TABS: SuggestTab[] = ["up-next", "7k", "4k"];
 
 function loadTab(): SuggestTab {
   try {
     const raw = localStorage.getItem(PREFS_KEY);
-    if (raw === "7k" || raw === "up-next") return raw;
+    if (raw === "7k" || raw === "4k" || raw === "up-next") return raw;
   } catch {
     /* ignore */
   }
@@ -42,11 +33,12 @@ export function SessionSuggest({
     localStorage.setItem(PREFS_KEY, tab);
   }, [tab]);
 
-  const active = TABS.find((t) => t.id === tab) ?? TABS[0]!;
   const activeHint =
     tab === "up-next"
       ? dict?.session.suggestTabs.upNextHint
-      : dict?.session.suggestTabs.sevenKHint;
+      : tab === "4k"
+        ? dict?.session.suggestTabs.fourKHint
+        : dict?.session.suggestTabs.sevenKHint;
 
   return (
     <section className="space-y-4">
@@ -62,22 +54,24 @@ export function SessionSuggest({
         role="tablist"
         aria-label={dict?.session.suggestionModeAria}
       >
-        {TABS.map((t) => (
+        {TABS.map((id) => (
           <button
-            key={t.id}
+            key={id}
             type="button"
             role="tab"
-            aria-selected={tab === t.id}
+            aria-selected={tab === id}
             className={
-              tab === t.id
+              tab === id
                 ? "rx-chip bg-accent-glow text-accent"
                 : "rx-chip bg-elevated text-muted hover:text-ink"
             }
-            onClick={() => setTab(t.id)}
+            onClick={() => setTab(id)}
           >
-            {t.id === "up-next"
+            {id === "up-next"
               ? dict?.session.suggestTabs.upNext
-              : dict?.session.suggestTabs.sevenK}
+              : id === "4k"
+                ? dict?.session.suggestTabs.fourK
+                : dict?.session.suggestTabs.sevenK}
           </button>
         ))}
       </div>
@@ -89,7 +83,11 @@ export function SessionSuggest({
             excludeBeatmapIds={excludeBeatmapIds}
           />
         ) : (
-          <SessionSevenKRecommend excludeBeatmapIds={excludeBeatmapIds} />
+          <SessionSevenKRecommend
+            key={tab === "4k" ? 4 : 7}
+            keyCount={tab === "4k" ? 4 : 7}
+            excludeBeatmapIds={excludeBeatmapIds}
+          />
         )}
       </div>
     </section>

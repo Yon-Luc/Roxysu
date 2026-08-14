@@ -100,6 +100,7 @@ export type RecommendItem = MapMatchResult & {
   bestMisses: number | null;
   masteryLevel: number | null;
   sunnyEstDiff: string | null;
+  keyCount: number | null;
 };
 
 export type RecommendBatch = {

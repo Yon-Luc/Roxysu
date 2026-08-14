@@ -1,6 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -98,6 +98,12 @@ export function StatsPage({
     isPreset ? (skillTopPlays as TopPlaysTab) : "custom",
   );
   const [expandedBand, setExpandedBand] = useState<SkillBandKind | null>(null);
+  const [belowFoldReady, setBelowFoldReady] = useState(false);
+
+  useEffect(() => {
+    const id = window.setTimeout(() => setBelowFoldReady(true), 0);
+    return () => window.clearTimeout(id);
+  }, []);
 
   useEffect(() => {
     setCustomTopPlays(String(skillTopPlays));
@@ -117,6 +123,7 @@ export function StatsPage({
     // Stats only change after a sync completes; SSE sync.finished invalidates
     // this. Explicit staleTime prevents unnecessary refetches on tab focus.
     staleTime: 5 * 60_000,
+    placeholderData: keepPreviousData,
   });
 
   if (isLoading) {
@@ -207,12 +214,25 @@ export function StatsPage({
     },
   ];
 
-  const chartHistory = history.map((point) => ({
-    at: point.at,
-    push: historyBandValue(point, "push", skillAxis),
-    accuracy: historyBandValue(point, "accuracy", skillAxis),
-    consistency: historyBandValue(point, "consistency", skillAxis),
-  }));
+  const chartHistory = useMemo(
+    () =>
+      history.map((point) => ({
+        at: point.at,
+        push: historyBandValue(point, "push", skillAxis),
+        accuracy: historyBandValue(point, "accuracy", skillAxis),
+        consistency: historyBandValue(point, "consistency", skillAxis),
+      })),
+    [history, skillAxis],
+  );
+  const ppAccChart = useMemo(
+    () =>
+      ppTrend.map((p, i) => ({
+        day: p.day,
+        totalPp: p.totalPp,
+        avgAccuracy: (accTrend[i]?.avgAccuracy ?? 0) * 100,
+      })),
+    [ppTrend, accTrend],
+  );
 
   const axisFilterActive = skillAxis !== "all";
   const notEnoughData = dict?.stats.notEnoughData ?? "Not enough data yet.";
@@ -517,6 +537,8 @@ export function StatsPage({
         </ChartCard>
       </section>
 
+      {belowFoldReady ? (
+        <>
       <section>
         <h2 className="mb-4 font-display text-2xl font-bold tracking-tight text-ink">
           {dict?.stats.progression ?? "Progression"}
@@ -566,13 +588,7 @@ export function StatsPage({
               <EmptyChart message={notEnoughData} />
             ) : (
               <ResponsiveContainer width="100%" height={200}>
-                <LineChart
-                  data={ppTrend.map((p, i) => ({
-                    day: p.day,
-                    totalPp: p.totalPp,
-                    avgAccuracy: (accTrend[i]?.avgAccuracy ?? 0) * 100,
-                  }))}
-                >
+                <LineChart data={ppAccChart}>
                   <CartesianGrid
                     stroke={charts.grid}
                     vertical={false}
@@ -888,6 +904,10 @@ export function StatsPage({
           </p>
         ) : null}
       </section>
+        </>
+      ) : (
+        <PanelSkeleton lines={4} className="min-h-[22rem]" />
+      )}
     </div>
   );
 }

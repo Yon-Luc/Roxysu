@@ -75,6 +75,8 @@ Networked collaboration / discovery — not required for offline practice analyt
 - Workshop detail: owner or admin can edit/delete; Save calls `GET /collections/:id/export` so `downloadCount` increments
 - Browse mode chip (`q=mode=m`) matches `dominantMode` **or** the corresponding Hub tag (`mania` / `std` / `ctb` / `taiko`)
 - Workshop Favorites tab uses `GET /collections/me/favorites`
+- List and favorites DTOs omit full `beatmapsetIds` (preview IDs + `mapCount` only). Detail uses `maps[]`; export still returns the full ID list.
+- Workshop Added tab renders from local hub-added rows; ownership uses `POST /api/mirrors/ownership/diff` rather than shipping every owned set ID.
 - OAuth callback accepts only `h=` (handoff id), never a JWT in the URL
 - `apps/hub/src/db.ts` — `bun run db:migrate` and Hub boot both apply Hub store migrations
 

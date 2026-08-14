@@ -10,6 +10,7 @@ import { collections } from "@roxysu/db/schema";
 import { eq, isNull } from "drizzle-orm";
 import { buildQueryContext, countMatchesPure } from "../query-language/execute";
 import { subscribe } from "./events";
+import { invalidateCollectionMd5Cache } from "./syncCollections";
 
 export function refreshCollectionMatchCount(db: Db, id: number): void {
   const [col] = db
@@ -81,7 +82,12 @@ function hasUncachedCollections(db: Db): boolean {
 /** Wire event listeners and backfill any missing cached counts on startup. */
 export function startCollectionMatchCache(db: Db): void {
   subscribe((event) => {
-    if (event.type === "sync.finished" || event.type === "mastery.updated") {
+    if (event.type === "sync.finished") {
+      invalidateCollectionMd5Cache();
+      scheduleRefreshAllMatchCounts(db);
+      return;
+    }
+    if (event.type === "mastery.updated") {
       scheduleRefreshAllMatchCounts(db);
     }
   });

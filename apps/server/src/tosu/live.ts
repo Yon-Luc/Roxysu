@@ -60,11 +60,19 @@ function roundRate(rate: number): number {
 
 function emit(force = false): void {
   const now = Date.now();
-  if (!force && play?.active) {
+  if (!force) {
     if (now - lastPlayPublishAt < PLAY_PUBLISH_MS) return;
+    lastPlayPublishAt = now;
+    publish({
+      type: "tosu.updated",
+      reason: "play",
+      play,
+      beatmapState: beatmap?.state ?? null,
+    });
+    return;
   }
   lastPlayPublishAt = now;
-  publish({ type: "tosu.updated" });
+  publish({ type: "tosu.updated", reason: "full" });
 }
 
 export function getTosuLiveSnapshot(): TosuLiveSnapshot {

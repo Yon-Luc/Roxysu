@@ -11,11 +11,10 @@ import { PageTitle } from "../../components/PageTitle";
 import { CardGridSkeleton } from "../../components/LoadingSkeleton";
 import {
   fetchHubAddedCollections,
-  fetchOwnedSetIds,
+  diffSetOwnership,
   removeHubAddedCollection,
 } from "../../lib/api";
 import {
-  fetchHubCollection,
   fetchHubCollections,
   fetchHubFavorites,
   fetchHubMe,
@@ -61,24 +60,35 @@ export function HubBrowsePage() {
     retry: false,
   });
 
-  const ownedQuery = useQuery({
-    queryKey: ["owned-set-ids"],
-    queryFn: fetchOwnedSetIds,
-    staleTime: 60_000,
-  });
-  const ownedSetIds = useMemo(
-    () => new Set(ownedQuery.data ?? []),
-    [ownedQuery.data],
-  );
-
   const addedQuery = useQuery({
     queryKey: ["hub-added-collections"],
     queryFn: fetchHubAddedCollections,
   });
 
+  const addedSetIds = useMemo(() => {
+    const ids = new Set<number>();
+    for (const item of addedQuery.data?.items ?? []) {
+      for (const id of item.beatmapsetIds) {
+        if (id > 0) ids.add(id);
+      }
+    }
+    return [...ids];
+  }, [addedQuery.data]);
+
+  const addedOwnedQuery = useQuery({
+    queryKey: ["hub-added-owned", addedSetIds],
+    enabled: tab === "added" && addedSetIds.length > 0,
+    queryFn: () => diffSetOwnership(addedSetIds),
+    staleTime: 60_000,
+  });
+  const ownedSetIds = useMemo(
+    () => new Set(addedOwnedQuery.data?.owned ?? []),
+    [addedOwnedQuery.data],
+  );
+
   const favoritesQuery = useQuery({
     queryKey: ["hub-favorites", hubUrl, jwt],
-    enabled: !!jwt,
+    enabled: tab === "favorites" && !!jwt,
     queryFn: () => fetchHubFavorites(hubUrl, jwt!),
   });
 
@@ -106,56 +116,6 @@ export function HubBrowsePage() {
       });
     },
     placeholderData: keepPreviousData,
-  });
-
-  const addedDetailsQuery = useQuery({
-    queryKey: [
-      "hub-added-details",
-      hubUrl,
-      addedQuery.dataUpdatedAt,
-      debouncedQ,
-    ],
-    enabled: tab === "added" && !!addedQuery.data,
-    queryFn: async () => {
-      const items = addedQuery.data?.items ?? [];
-      const needle = debouncedQ.toLowerCase();
-      const filtered = needle
-        ? items.filter((i) => i.name.toLowerCase().includes(needle))
-        : items;
-      const details: HubCollectionListItem[] = [];
-      for (const item of filtered) {
-        try {
-          const detail = await fetchHubCollection(
-            hubUrl,
-            item.hubCollectionId,
-            jwt,
-          );
-          details.push(detail);
-        } catch {
-          // Collection may have been deleted on the hub — keep a stub card.
-          details.push({
-            id: item.hubCollectionId,
-            name: item.name,
-            description: "",
-            downloadCount: 0,
-            mapCount: item.mapCount,
-            favoriteCount: 0,
-            favoritedByMe: false,
-            tags: [],
-            previewBeatmapsetIds: item.beatmapsetIds.slice(0, 4),
-            beatmapsetIds: item.beatmapsetIds,
-            starsMin: null,
-            starsMax: null,
-            dominantMode: null,
-            dominantKeys: null,
-            createdAt: item.addedAt ?? new Date(0).toISOString(),
-            updatedAt: item.hubUpdatedAt ?? new Date(0).toISOString(),
-            owner: { username: "?", avatarUrl: null, osuId: 0 },
-          });
-        }
-      }
-      return details;
-    },
   });
 
   const logout = useMutation({
@@ -216,13 +176,35 @@ export function HubBrowsePage() {
     tags.length > 0 || debouncedQ.length > 0 || mode !== "all";
   const showBrowseSkeleton =
     tab === "browse" && listQuery.isPending && !listQuery.isPlaceholderData;
-  const showAddedSkeleton =
-    tab === "added" &&
-    (addedQuery.isPending ||
-      (addedDetailsQuery.isPending && !addedDetailsQuery.data));
+  const showAddedSkeleton = tab === "added" && addedQuery.isPending;
 
   const browseItems = listQuery.data?.data ?? [];
-  const addedItems = addedDetailsQuery.data ?? [];
+  const addedItems = useMemo((): HubCollectionListItem[] => {
+    const items = addedQuery.data?.items ?? [];
+    const needle = debouncedQ.toLowerCase();
+    const filtered = needle
+      ? items.filter((i) => i.name.toLowerCase().includes(needle))
+      : items;
+    return filtered.map((item) => ({
+      id: item.hubCollectionId,
+      name: item.name,
+      description: "",
+      downloadCount: 0,
+      mapCount: item.mapCount,
+      favoriteCount: 0,
+      favoritedByMe: false,
+      tags: [],
+      previewBeatmapsetIds: item.beatmapsetIds.slice(0, 4),
+      beatmapsetIds: item.beatmapsetIds,
+      starsMin: null,
+      starsMax: null,
+      dominantMode: null,
+      dominantKeys: null,
+      createdAt: item.addedAt ?? new Date(0).toISOString(),
+      updatedAt: item.hubUpdatedAt ?? new Date(0).toISOString(),
+      owner: { username: "?", avatarUrl: null, osuId: 0 },
+    }));
+  }, [addedQuery.data, debouncedQ]);
   const favoriteItems = useMemo(() => {
     const items = favoritesQuery.data?.data ?? [];
     const needle = debouncedQ.toLowerCase();
@@ -356,13 +338,11 @@ export function HubBrowsePage() {
                   collection={{
                     ...c,
                     previewBeatmapsetIds: c.previewBeatmapsetIds ?? [],
-                    beatmapsetIds: c.beatmapsetIds ?? [],
                     starsMin: c.starsMin ?? null,
                     starsMax: c.starsMax ?? null,
                     dominantMode: c.dominantMode ?? null,
                     dominantKeys: c.dominantKeys ?? null,
                   }}
-                  ownedSetIds={ownedSetIds}
                   updateAvailable={isUpdateAvailable(c)}
                 />
               </li>
@@ -388,7 +368,6 @@ export function HubBrowsePage() {
               <li key={c.id}>
                 <HubCollectionCard
                   collection={c}
-                  ownedSetIds={ownedSetIds}
                   updateAvailable={isUpdateAvailable(c)}
                 />
               </li>

@@ -5,7 +5,6 @@ import {
   compileQuery,
   toStructuredQuery,
 } from "../../query-language";
-import { backfillSunnyDanSync } from "../../map-analysis/computeSunnyDan";
 import {
   estimateSevenKSkill,
   parseSkillKeyCount,
@@ -32,7 +31,6 @@ import type {
 } from "./types";
 
 const DEFAULT_COUNT = 10;
-const DAN_BACKFILL_LIMIT = 120;
 
 function clampCount(n: number | undefined): number {
   return Math.max(1, Math.min(20, Math.floor(n ?? DEFAULT_COUNT)));
@@ -98,8 +96,6 @@ export function recommendSevenK(
   const keyCount = parseSkillKeyCount(opts.keyCount);
   let skillset = parseSkillset(opts.skillset);
 
-  // Ensure a pool of Sunny ratings exists before searching.
-  backfillSunnyDanSync(db, { limit: DAN_BACKFILL_LIMIT });
   const missingSunny = countMissingSunnyDan(db, keyCount);
   const needsSunnyBackfill = missingSunny > 0;
 

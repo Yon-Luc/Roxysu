@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react";
 import {
   Area,
   AreaChart,
@@ -13,7 +14,7 @@ import { useAppDict, t } from "../../lib/i18n";
 import { formatPatternLabel } from "./formatPatternLabel";
 import type { ManiaDensitySampleView } from "./types";
 
-export function DensityOverTimeChart({
+export const DensityOverTimeChart = memo(function DensityOverTimeChart({
   samples,
   height = 320,
   gradientId = "mania-density-fill",
@@ -25,17 +26,21 @@ export function DensityOverTimeChart({
   const { dict } = useAppDict();
   const detail = dict?.practice.detail;
   const charts = useChartStyles();
-  const chartData = samples.map((sample) => ({
-    ...sample,
-    timeLabel: formatClock(sample.startMs),
-    displayPattern: formatPatternLabel(
-      sample.dominantPattern ?? "mixed",
-      detail?.patterns,
-    ),
-    displaySecondary: sample.secondaryPattern
-      ? formatPatternLabel(sample.secondaryPattern, detail?.patterns)
-      : null,
-  }));
+  const chartData = useMemo(
+    () =>
+      samples.map((sample) => ({
+        ...sample,
+        timeLabel: formatClock(sample.startMs),
+        displayPattern: formatPatternLabel(
+          sample.dominantPattern ?? "mixed",
+          detail?.patterns,
+        ),
+        displaySecondary: sample.secondaryPattern
+          ? formatPatternLabel(sample.secondaryPattern, detail?.patterns)
+          : null,
+      })),
+    [samples, detail?.patterns],
+  );
 
   return (
     <div className="rounded-xl border border-white/8 bg-black/10 p-3 sm:p-4">
@@ -125,4 +130,4 @@ export function DensityOverTimeChart({
       </ResponsiveContainer>
     </div>
   );
-}
+});

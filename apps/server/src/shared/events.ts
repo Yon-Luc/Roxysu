@@ -1,3 +1,5 @@
+import type { TosuLivePlay } from "../tosu/types";
+
 export type AppEvent =
   | { type: "sync.finished"; importId: number }
   | { type: "score.imported"; scoreCount: number }
@@ -7,7 +9,12 @@ export type AppEvent =
   | { type: "mastery.updated" }
   | { type: "collection.updated"; collectionId?: number }
   | { type: "dashboard.updated" }
-  | { type: "tosu.updated" };
+  | {
+      type: "tosu.updated";
+      reason: "play" | "full";
+      play?: TosuLivePlay | null;
+      beatmapState?: string | null;
+    };
 
 type Listener = (event: AppEvent) => void;
 

@@ -41,9 +41,7 @@ export function HubCollectionCard({
     collection.dominantKeys,
   );
   const ownership = ownedCountForSets(
-    collection.beatmapsetIds?.length
-      ? collection.beatmapsetIds
-      : collection.previewBeatmapsetIds,
+    collection.beatmapsetIds,
     ownedSetIds,
   );
 

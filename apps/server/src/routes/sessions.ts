@@ -2,6 +2,7 @@ import { Elysia, t } from "elysia";
 import { dbPlugin } from "../db-runtime";
 import { toIso } from "../shared/serialize";
 import {
+  countSessionPbs,
   getCurrentSession,
   getSessionById,
   listSessionScores,
@@ -31,22 +32,38 @@ function serializeSession(s: {
   };
 }
 
+export const DEFAULT_SESSION_SCORE_LIMIT = 50;
+export const MAX_SESSION_SCORE_LIMIT = 500;
+
+export function clampSessionScoreLimit(raw: unknown): number {
+  const n = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isFinite(n) || n < 1) return DEFAULT_SESSION_SCORE_LIMIT;
+  return Math.min(Math.floor(n), MAX_SESSION_SCORE_LIMIT);
+}
+
 async function sessionDetailPayload(
   db: Parameters<typeof listSessionScores>[0],
   session: NonNullable<Awaited<ReturnType<typeof getSessionById>>>,
+  limit = DEFAULT_SESSION_SCORE_LIMIT,
 ) {
-  const scoreRows = await listSessionScores(db, session.id);
+  const fetchLimit = Math.min(limit + 1, MAX_SESSION_SCORE_LIMIT + 1);
+  const [scoreRowsRaw, pbCount] = await Promise.all([
+    listSessionScores(db, session.id, { limit: fetchLimit }),
+    countSessionPbs(db, session.id),
+  ]);
+  const hasMore = scoreRowsRaw.length > limit;
+  const scoreRows = hasMore ? scoreRowsRaw.slice(0, limit) : scoreRowsRaw;
   const curves = await loadManiaPpCurves(
     db,
     scoreRows
       .map((score) => score.beatmapId)
       .filter((beatmapId): beatmapId is string => beatmapId != null),
   );
-  const pbCount = scoreRows.filter((s) => s.isPb).length;
 
   return {
     session: serializeSession(session),
     pbCount,
+    hasMore,
     scores: scoreRows.map((s) => ({
       id: s.id,
       beatmapId: s.beatmapId,
@@ -95,7 +112,7 @@ export const sessionRoutes = new Elysia({ prefix: "/sessions" })
   })
   .get(
     "/:id",
-    async ({ db, params, set }) => {
+    async ({ db, params, query, set }) => {
       if (params.id !== "current" && Number.isNaN(Number(params.id))) {
         set.status = 404;
         return { error: "Session not found" };
@@ -112,6 +129,7 @@ export const sessionRoutes = new Elysia({ prefix: "/sessions" })
             session: null,
             scores: [],
             pbCount: 0,
+            hasMore: false,
             idle: true as const,
           };
         }
@@ -119,11 +137,18 @@ export const sessionRoutes = new Elysia({ prefix: "/sessions" })
         return { error: "Session not found" };
       }
 
-      return sessionDetailPayload(db, session);
+      return sessionDetailPayload(
+        db,
+        session,
+        clampSessionScoreLimit(query.limit),
+      );
     },
     {
       params: t.Object({
         id: t.String(),
+      }),
+      query: t.Object({
+        limit: t.Optional(t.Numeric()),
       }),
     },
   );

@@ -215,6 +215,13 @@ describe("buildSampleKeys", () => {
     expect(keys[6]).toBe("2024-06-15");
   });
 
+  test("day granularity caps around 60 points for long ranges", () => {
+    const now = Date.UTC(2024, 5, 15, 18);
+    const keys = buildSampleKeys("day", 180, now);
+    expect(keys.length).toBeGreaterThan(1);
+    expect(keys.length).toBeLessThanOrEqual(60);
+  });
+
   test("week granularity yields Monday week starts", () => {
     const now = Date.UTC(2024, 5, 15, 18); // Sat
     const keys = buildSampleKeys("week", 21, now); // ~3 weeks

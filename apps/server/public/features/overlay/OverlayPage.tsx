@@ -2,7 +2,7 @@ import { focusManager, useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { BeatmapCover } from "../../components/BeatmapCover";
 import { ModBadges } from "../../components/ModBadges";
-import { fetchDashboard, fetchSession } from "../../lib/api";
+import { fetchOverlay } from "../../lib/api";
 import {
   formatAccuracy,
   formatPp,
@@ -12,36 +12,16 @@ import {
 const DEFAULT_LIMIT = 8;
 const OVERLAY_CLASS = "overlay-mode";
 /** OBS Browser Sources often background the page; poll instead of relying on SSE alone. */
-const OVERLAY_POLL_MS = 2_000;
+const LIVE_POLL_MS = 2_000;
+const IDLE_POLL_MS = 8_000;
 
 type OverlayBg = "solid" | "clear";
-
-type OverlayScore = {
-  id: string;
-  title: string | null;
-  artist: string | null;
-  difficultyName: string | null;
-  accuracy: number | null;
-  pp: number | null;
-  mods: string | null;
-  playedAt: string | null;
-  isPb?: boolean;
-  setOnlineId?: number | null;
-  backgroundFileHash?: string | null;
-};
 
 function clampLimit(raw: unknown): number {
   const n = typeof raw === "number" ? raw : Number(raw);
   if (!Number.isFinite(n) || n < 1) return DEFAULT_LIMIT;
   return Math.min(Math.floor(n), 25);
 }
-
-const overlayQueryOpts = {
-  staleTime: 0,
-  refetchInterval: OVERLAY_POLL_MS,
-  refetchIntervalInBackground: true,
-  networkMode: "always" as const,
-};
 
 export function OverlayPage({
   limit: limitProp,
@@ -63,51 +43,20 @@ export function OverlayPage({
     };
   }, []);
 
-  const sessionQuery = useQuery({
-    queryKey: ["sessions", "current"],
-    queryFn: () => fetchSession("current"),
-    ...overlayQueryOpts,
+  const overlayQuery = useQuery({
+    queryKey: ["overlay", limit],
+    queryFn: () => fetchOverlay(limit),
+    staleTime: 0,
+    refetchInterval: (query) =>
+      query.state.data?.mode === "live" ? LIVE_POLL_MS : IDLE_POLL_MS,
+    refetchIntervalInBackground: true,
+    networkMode: "always",
   });
 
-  const idle =
-    sessionQuery.data != null &&
-    "idle" in sessionQuery.data &&
-    sessionQuery.data.idle === true &&
-    sessionQuery.data.session == null;
-
-  const liveSession =
-    sessionQuery.data &&
-    "session" in sessionQuery.data &&
-    sessionQuery.data.session != null &&
-    !("error" in sessionQuery.data)
-      ? sessionQuery.data.session
-      : null;
-
-  const dashboardQuery = useQuery({
-    queryKey: ["dashboard"],
-    queryFn: fetchDashboard,
-    enabled: idle,
-    ...overlayQueryOpts,
-  });
-
-  const liveScores: OverlayScore[] =
-    liveSession && sessionQuery.data && "scores" in sessionQuery.data
-      ? (sessionQuery.data.scores ?? []).slice(0, limit)
-      : [];
-
-  const recentScores: OverlayScore[] =
-    idle && dashboardQuery.data
-      ? dashboardQuery.data.recentScores.slice(0, limit)
-      : [];
-
-  const scores = liveSession ? liveScores : recentScores;
-  const mode: "live" | "recent" | "empty" = liveSession
-    ? "live"
-    : idle
-      ? recentScores.length > 0
-        ? "recent"
-        : "empty"
-      : "empty";
+  const payload = overlayQuery.data;
+  const mode = payload?.mode ?? "empty";
+  const liveSession = payload?.session ?? null;
+  const scores = payload?.scores ?? [];
 
   const knownIds = useRef<Set<string>>(new Set());
   const [freshIds, setFreshIds] = useState<Set<string>>(new Set());
@@ -115,7 +64,7 @@ export function OverlayPage({
   const scoreIdsKey = scores.map((s) => s.id).join(",");
 
   useEffect(() => {
-    const incoming = scores.map((s) => s.id);
+    const incoming = scoreIdsKey.length > 0 ? scoreIdsKey.split(",") : [];
     if (!seeded.current) {
       knownIds.current = new Set(incoming);
       seeded.current = true;
@@ -132,7 +81,7 @@ export function OverlayPage({
       const timer = window.setTimeout(() => setFreshIds(new Set()), 4_000);
       return () => window.clearTimeout(timer);
     }
-  }, [scoreIdsKey, scores]);
+  }, [scoreIdsKey]);
 
   useEffect(() => {
     seeded.current = false;
@@ -140,7 +89,7 @@ export function OverlayPage({
     setFreshIds(new Set());
   }, [mode]);
 
-  if (sessionQuery.isLoading && !sessionQuery.data) {
+  if (overlayQuery.isLoading && !overlayQuery.data) {
     return null;
   }
 

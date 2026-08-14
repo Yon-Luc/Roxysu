@@ -157,13 +157,17 @@ export function HubSharePage() {
     queryFn: async () => {
       if (!source) return null;
       if (source.kind === "smart") {
-        return fetchSmartCollectionSetIds(source.id);
+        return fetchSmartCollectionSetIds(source.id, { limit: 4 });
       }
-      return fetchRealmCollectionSetIds(source.id);
+      return fetchRealmCollectionSetIds(source.id, { limit: 4 });
     },
   });
 
   const beatmapsetIds = previewQuery.data?.beatmapsetIds ?? [];
+  const previewTotal =
+    previewQuery.data && "total" in previewQuery.data
+      ? previewQuery.data.total
+      : beatmapsetIds.length;
   const unresolved =
     previewQuery.data && "unresolvedHashCount" in previewQuery.data
       ? previewQuery.data.unresolvedHashCount
@@ -175,21 +179,26 @@ export function HubSharePage() {
     () =>
       !!jwt &&
       !!name.trim() &&
-      beatmapsetIds.length > 0 &&
+      previewTotal > 0 &&
       tags.length > 0,
-    [jwt, name, beatmapsetIds.length, tags.length],
+    [jwt, name, previewTotal, tags.length],
   );
 
   const shareMut = useMutation({
     mutationFn: async () => {
       if (!jwt) throw new Error("Log in with osu! first");
       if (!name.trim()) throw new Error("Name is required");
-      if (beatmapsetIds.length === 0) throw new Error("No maps to share");
+      if (!source) throw new Error("Pick a collection");
       if (tags.length === 0) throw new Error("Pick at least one tag");
+      const full =
+        source.kind === "smart"
+          ? await fetchSmartCollectionSetIds(source.id)
+          : await fetchRealmCollectionSetIds(source.id);
+      if (full.beatmapsetIds.length === 0) throw new Error("No maps to share");
       return createHubCollection(hubUrl, jwt, {
         name: name.trim(),
         description: description.trim() || undefined,
-        beatmapsetIds,
+        beatmapsetIds: full.beatmapsetIds,
         tags,
       });
     },
@@ -332,7 +341,7 @@ export function HubSharePage() {
                 ? "Resolving maps…"
                 : previewQuery.error
                   ? previewQuery.error.message
-                  : `${beatmapsetIds.length.toLocaleString()} beatmapsets ready${
+                  : `${previewTotal.toLocaleString()} beatmapsets ready${
                       unresolved > 0
                         ? ` · ${unresolved.toLocaleString()} unresolved locally`
                         : ""

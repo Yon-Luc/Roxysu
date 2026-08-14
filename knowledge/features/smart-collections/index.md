@@ -25,6 +25,7 @@ Dynamic practice playlists that stay current as the practice library grows; opti
 3. Only collections named with prefix `!Roxysu ` are managed in Realm.
 4. Managed lazer collections absent from the write-back payload are **deleted**.
 5. Write-back requires: pause Realm extraction, lock probe (lazer closed), schema guard, backup (keep last 5), single `realm.write()`.
+6. MD5 lists for smart-collection queries and hub-added set IDs are cached in-process during write-back and cleared on `sync.finished` (new hashes in the local mirror).
 
 ## Security rules
 
@@ -41,7 +42,7 @@ Client app API has no auth. Collection write-back is still gated by process-safe
 ## Important symbols
 
 - `apps/server/src/routes/collections.ts`
-- `apps/server/src/shared/syncCollections.ts`
+- `apps/server/src/shared/syncCollections.ts` — `invalidateCollectionMd5Cache()`
 - `apps/realm-reader/src/syncCollections.ts`
 - `packages/collection-sync/src/index.ts` — `LAZER_COLLECTION_PREFIX`, `HUB_SYNC_ID_BASE`
 

@@ -34,10 +34,15 @@ import {
 async function resolveSmartSetOnlineIds(
   db: Db,
   query: string,
-): Promise<{ beatmapsetIds: number[]; unresolvedInternalSets: number }> {
-  const { setIds } = listDistinctSetIds(db, query);
+  opts?: { limit?: number },
+): Promise<{
+  beatmapsetIds: number[];
+  unresolvedInternalSets: number;
+  total: number;
+}> {
+  const { setIds, total } = listDistinctSetIds(db, query, opts);
   if (setIds.length === 0) {
-    return { beatmapsetIds: [], unresolvedInternalSets: 0 };
+    return { beatmapsetIds: [], unresolvedInternalSets: 0, total };
   }
 
   const rows = await db
@@ -56,6 +61,7 @@ async function resolveSmartSetOnlineIds(
   return {
     beatmapsetIds: [...new Set(beatmapsetIds)],
     unresolvedInternalSets,
+    total,
   };
 }
 
@@ -256,7 +262,7 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
   )
   .get(
     "/realm/:id/set-ids",
-    async ({ db, params, set }) => {
+    async ({ db, params, query, set }) => {
       const [col] = await db
         .select()
         .from(realmCollections)
@@ -281,18 +287,29 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
             .filter((id): id is number => id != null && id > 0),
         ),
       ];
+      const total = beatmapsetIds.length;
+      const limit =
+        query.limit != null && Number.isFinite(query.limit) && query.limit > 0
+          ? Math.floor(query.limit)
+          : null;
 
       return {
         kind: "realm" as const,
         id: col.id,
         name: col.name,
-        beatmapsetIds,
+        beatmapsetIds: limit != null ? beatmapsetIds.slice(0, limit) : beatmapsetIds,
         hashCount: col.hashCount,
         resolvedSetCount: beatmapsetIds.length,
         unresolvedHashCount: Math.max(0, col.hashCount - beatmapsetIds.length),
+        total,
       };
     },
-    { params: t.Object({ id: t.String({ minLength: 1 }) }) },
+    {
+      params: t.Object({ id: t.String({ minLength: 1 }) }),
+      query: t.Object({
+        limit: t.Optional(t.Numeric()),
+      }),
+    },
   )
   .post("/sync-lazer", async ({ db, set }) => {
     const outcome = await syncCollectionsToLazer(db);
@@ -351,7 +368,7 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
     app
       .get(
         "/set-ids",
-        async ({ db, params, set }) => {
+        async ({ db, params, query, set }) => {
           const id = Number(params.id);
           const [col] = await db
             .select()
@@ -364,13 +381,16 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
           }
 
           try {
-            const resolved = await resolveSmartSetOnlineIds(db, col.query);
+            const resolved = await resolveSmartSetOnlineIds(db, col.query, {
+              limit: query.limit,
+            });
             return {
               kind: "smart" as const,
               id: col.id,
               name: col.name,
               beatmapsetIds: resolved.beatmapsetIds,
               unresolvedInternalSets: resolved.unresolvedInternalSets,
+              total: resolved.total,
             };
           } catch (err) {
             if (err instanceof QueryParseError) {
@@ -380,7 +400,12 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
             throw err;
           }
         },
-        { params: t.Object({ id: t.String() }) },
+        {
+          params: t.Object({ id: t.String() }),
+          query: t.Object({
+            limit: t.Optional(t.Numeric()),
+          }),
+        },
       )
       .patch(
         "/",

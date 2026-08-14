@@ -101,6 +101,7 @@ export function SkillBandPlaysPanel({
         topPlays,
         keyCount,
       }),
+    staleTime: 5 * 60_000,
   });
 
   if (isLoading) {

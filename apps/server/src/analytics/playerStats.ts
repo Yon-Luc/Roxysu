@@ -1,7 +1,7 @@
 
 
 import type { Db } from "@roxysu/db/types";
-import { beatmaps, scoreMetrics, scores, sessions } from "@roxysu/db/schema";
+import { beatmaps, scoreMetrics, sessions } from "@roxysu/db/schema";
 import { and, count, eq, sql } from "drizzle-orm";
 import { SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
 import { isNomodOrMirrorOnly } from "../replay/mods";
@@ -9,7 +9,7 @@ import { classifyMapAxis } from "./recommend/axis";
 import { classifyScoreGrade, PERFECT_TOTAL_SCORE } from "../query-language/scoreGrade";
 import {
   DEFAULT_SKILL_KEY_COUNT,
-  estimateSevenKSkillWithHistory,
+  estimateSevenKSkillWithHistoryFromPlays,
   parseSkillKeyCount,
   parseSkillTopPlays,
 } from "./recommend/sevenKSkill";
@@ -138,32 +138,61 @@ function listPlayedKeyCounts(db: Db): number[] {
  * Rank distribution with SH→S. SS = X/XH grade (Perfect/Marvelous). X = 1,000,000 only.
  * Fails (rank F / -1) are excluded. Each score is counted once.
  */
-async function getRankDistribution(db: Db, keyCount: number) {
+type ManiaAnalyticsRow = {
+  beatmapId: string | null;
+  playedAt: number;
+  mods: string | null;
+  accuracy: number;
+  pp: number | null;
+  totalScore: number;
+  rank: number;
+  rulesetShortName: string | null;
+  lnRatio: number | null;
+  sunnyStar: number | null;
+  mapperOnlineId: number | null;
+  mapperUsername: string | null;
+  hidden: number;
+};
+
+function loadManiaAnalyticsRows(db: Db, keyCount: number): ManiaAnalyticsRow[] {
   const user = scoreScopeFilter(db);
-  const rows = db.$client
+  return db.$client
     .query(
       `
       SELECT
+        s.beatmap_id AS beatmapId,
+        s.played_at AS playedAt,
+        s.mods AS mods,
+        s.accuracy AS accuracy,
+        s.pp AS pp,
         s.total_score AS totalScore,
         s.rank AS rank,
-        s.mods AS mods
+        s.ruleset_short_name AS rulesetShortName,
+        dr.ln_ratio AS lnRatio,
+        dr.sunny_star AS sunnyStar,
+        b.mapper_online_id AS mapperOnlineId,
+        b.mapper_username AS mapperUsername,
+        b.hidden AS hidden
       FROM scores s
       JOIN beatmaps b ON b.id = s.beatmap_id
+      LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
+      LEFT JOIN beatmap_dan_ratings dr
+        ON dr.beatmap_id = b.id AND dr.algorithm = ?
       WHERE s.delete_pending = 0
         ${user.sql}
-        AND s.rank != -1
+        AND COALESCE(bs.delete_pending, 0) = 0
         AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
         AND b.circle_size = ?
     `,
     )
-    .all(...user.params, keyCount) as Array<{
-    totalScore: number;
-    rank: number;
-    mods: string | null;
-  }>;
+    .all(SUNNY_ALGORITHM, ...user.params, keyCount) as ManiaAnalyticsRow[];
+}
+
+async function getRankDistribution(rows: ManiaAnalyticsRow[]) {
 
   const byLabel = new Map<string, number>();
   for (const row of rows) {
+    if (row.rank === -1) continue;
     if (!isNomodOrMirrorOnly(row.mods)) continue;
     const label = classifyScoreGrade(Number(row.totalScore), row.rank);
     if (!label) continue;
@@ -177,34 +206,12 @@ async function getRankDistribution(db: Db, keyCount: number) {
   }));
 }
 
-async function getSkillsetMix(db: Db, keyCount: number) {
-  const user = scoreScopeFilter(db);
-  const rows = db.$client
-    .query(
-      `
-      SELECT dr.ln_ratio AS lnRatio, s.mods AS mods
-      FROM scores s
-      JOIN beatmaps b ON b.id = s.beatmap_id
-      LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
-      LEFT JOIN beatmap_dan_ratings dr
-        ON dr.beatmap_id = b.id AND dr.algorithm = ?
-      WHERE s.delete_pending = 0
-        ${user.sql}
-        AND b.hidden = 0
-        AND COALESCE(bs.delete_pending, 0) = 0
-        AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
-        AND b.circle_size = ?
-    `,
-    )
-    .all(SUNNY_ALGORITHM, ...user.params, keyCount) as Array<{
-    lnRatio: number | null;
-    mods: string | null;
-  }>;
-
+async function getSkillsetMix(rows: ManiaAnalyticsRow[]) {
   let rc = 0;
   let ln = 0;
   let fln = 0;
   for (const row of rows) {
+    if (row.hidden) continue;
     if (!isNomodOrMirrorOnly(row.mods)) continue;
     const axis = classifyMapAxis(
       row.lnRatio != null ? Number(row.lnRatio) : null,
@@ -226,21 +233,7 @@ async function getSkillsetMix(db: Db, keyCount: number) {
   };
 }
 
-async function getPlayTimePatterns(db: Db, keyCount: number) {
-  const user = scoreScopeFilter(db);
-  const rows = db.$client
-    .query(
-      `
-      SELECT s.played_at AS playedAt, s.mods AS mods
-      FROM scores s
-      JOIN beatmaps b ON b.id = s.beatmap_id
-      WHERE s.delete_pending = 0
-        ${user.sql}
-        AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
-        AND b.circle_size = ?
-    `,
-    )
-    .all(...user.params, keyCount) as Array<{ playedAt: number; mods: string | null }>;
+async function getPlayTimePatterns(rows: ManiaAnalyticsRow[]) {
 
   const byHour = Array.from({ length: 24 }, () => 0);
   const byDayOfWeek = Array.from({ length: 7 }, () => 0); // 0 = Sunday UTC
@@ -312,45 +305,10 @@ async function getSessionStats(db: Db) {
 }
 
 async function getTopMappers(
-  db: Db,
-  keyCount: number,
+  rows: ManiaAnalyticsRow[],
   curves: Map<string, ManiaPpCurve>,
   limit = 10,
 ) {
-  const user = scoreScopeFilter(db);
-  const rows = db.$client
-    .query(
-      `
-      SELECT
-        b.mapper_online_id AS mapperOnlineId,
-        b.mapper_username AS mapperUsername,
-        s.accuracy AS accuracy,
-        s.pp AS pp,
-        s.mods AS mods,
-        s.beatmap_id AS beatmapId,
-        s.ruleset_short_name AS rulesetShortName
-      FROM scores s
-      JOIN beatmaps b ON b.id = s.beatmap_id
-      WHERE s.delete_pending = 0
-        ${user.sql}
-        AND (
-          b.mapper_online_id > 0
-          OR (b.mapper_username IS NOT NULL AND TRIM(b.mapper_username) != '')
-        )
-        AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
-        AND b.circle_size = ?
-    `,
-    )
-    .all(...user.params, keyCount) as Array<{
-    mapperOnlineId: number | null;
-    mapperUsername: string | null;
-    accuracy: number;
-    pp: number | null;
-    mods: string | null;
-    beatmapId: string | null;
-    rulesetShortName: string | null;
-  }>;
-
   const byMapper = new Map<string, MapperAgg>();
   for (const row of rows) {
     if (!isNomodOrMirrorOnly(row.mods)) continue;
@@ -385,40 +343,11 @@ async function getTopMappers(
 }
 
 async function getKeymodeProgression(
-  db: Db,
-  keyCount: number,
+  rows: ManiaAnalyticsRow[],
   days: number,
   weeks: number,
   curves: Map<string, ManiaPpCurve>,
 ) {
-  const user = scoreScopeFilter(db);
-  const rows = db.$client
-    .query(
-      `
-      SELECT
-        s.played_at AS playedAt,
-        s.accuracy AS accuracy,
-        s.pp AS pp,
-        s.mods AS mods,
-        s.beatmap_id AS beatmapId,
-        s.ruleset_short_name AS rulesetShortName
-      FROM scores s
-      JOIN beatmaps b ON b.id = s.beatmap_id
-      WHERE s.delete_pending = 0
-        ${user.sql}
-        AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
-        AND b.circle_size = ?
-    `,
-    )
-    .all(...user.params, keyCount) as Array<{
-    playedAt: number;
-    accuracy: number;
-    pp: number | null;
-    mods: string | null;
-    beatmapId: string | null;
-    rulesetShortName: string | null;
-  }>;
-
   type Bucket = { playCount: number; totalPp: number; accSum: number };
   const daily = new Map<string, Bucket>();
   const weekly = new Map<string, Bucket>();
@@ -480,29 +409,7 @@ async function getKeymodeProgression(
   return { ppTrend, accuracyTrend, weeklyActivity };
 }
 
-async function getSummary(db: Db, keyCount: number) {
-  const user = scoreScopeFilter(db);
-  const rows = db.$client
-    .query(
-      `
-      SELECT
-        s.beatmap_id AS beatmapId,
-        s.played_at AS playedAt,
-        s.mods AS mods
-      FROM scores s
-      JOIN beatmaps b ON b.id = s.beatmap_id
-      WHERE s.delete_pending = 0
-        ${user.sql}
-        AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
-        AND b.circle_size = ?
-    `,
-    )
-    .all(...user.params, keyCount) as Array<{
-    beatmapId: string | null;
-    playedAt: number;
-    mods: string | null;
-  }>;
-
+function getSummaryFromRows(rows: ManiaAnalyticsRow[]) {
   const maps = new Set<string>();
   let scoreCount = 0;
   let firstAt: number | null = null;
@@ -516,21 +423,8 @@ async function getSummary(db: Db, keyCount: number) {
     if (firstAt == null || ms < firstAt) firstAt = ms;
     if (lastAt == null || ms > lastAt) lastAt = ms;
   }
-
-  const [beatmapCount] = await db
-    .select({ n: count() })
-    .from(beatmaps)
-    .where(
-      and(
-        eq(beatmaps.hidden, false),
-        sql`lower(coalesce(${beatmaps.rulesetShortName}, '')) = 'mania'`,
-        eq(beatmaps.circleSize, keyCount),
-      ),
-    );
-
   return {
     scoreCount,
-    beatmapCount: beatmapCount?.n ?? 0,
     distinctMapsPlayed: maps.size,
     firstPlayedAt: firstAt,
     lastPlayedAt: lastAt,
@@ -547,19 +441,10 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
   const weekCount = Math.max(12, Math.ceil(range / 7));
   const availableKeyCounts = listPlayedKeyCounts(db);
   const curves = loadManiaPpCurvesSync(db);
-
-  // Defer sync skill work so other DB queries can start in the same tick.
-  const skillBundlePromise = Promise.resolve().then(() =>
-    estimateSevenKSkillWithHistory(db, {
-      granularity,
-      rangeDays: range,
-      topPlays: skillTopPlays,
-      keyCount,
-    }),
-  );
+  const rows = loadManiaAnalyticsRows(db, keyCount);
 
   const [
-    summary,
+    beatmapCountRow,
     skillBundle,
     progression,
     rankDistribution,
@@ -568,15 +453,51 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
     sessionStats,
     topMappers,
   ] = await Promise.all([
-    getSummary(db, keyCount),
-    skillBundlePromise,
-    getKeymodeProgression(db, keyCount, trendDays, weekCount, curves),
-    getRankDistribution(db, keyCount),
-    getSkillsetMix(db, keyCount),
-    getPlayTimePatterns(db, keyCount),
+    db
+      .select({ n: count() })
+      .from(beatmaps)
+      .where(
+        and(
+          eq(beatmaps.hidden, false),
+          sql`lower(coalesce(${beatmaps.rulesetShortName}, '')) = 'mania'`,
+          eq(beatmaps.circleSize, keyCount),
+        ),
+      )
+      .then((rows) => rows[0]),
+    Promise.resolve().then(() => {
+      const plays = rows
+        .filter(
+          (row) =>
+            !row.hidden &&
+            isNomodOrMirrorOnly(row.mods) &&
+            row.beatmapId != null,
+        )
+        .map((row) => ({
+          beatmapId: row.beatmapId!,
+          accuracy: Number(row.accuracy ?? 0),
+          playedAt: Number(row.playedAt ?? 0),
+          sunnyStar: row.sunnyStar != null ? Number(row.sunnyStar) : null,
+          lnRatio: row.lnRatio != null ? Number(row.lnRatio) : null,
+        }));
+      return estimateSevenKSkillWithHistoryFromPlays(plays, {
+        granularity,
+        rangeDays: range,
+        topPlays: skillTopPlays,
+        keyCount,
+      });
+    }),
+    getKeymodeProgression(rows, trendDays, weekCount, curves),
+    getRankDistribution(rows),
+    getSkillsetMix(rows),
+    getPlayTimePatterns(rows),
     getSessionStats(db),
-    getTopMappers(db, keyCount, curves, 10),
+    getTopMappers(rows, curves, 10),
   ]);
+
+  const summary = {
+    ...getSummaryFromRows(rows),
+    beatmapCount: beatmapCountRow?.n ?? 0,
+  };
 
   return {
     granularity,

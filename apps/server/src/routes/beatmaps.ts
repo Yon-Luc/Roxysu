@@ -18,9 +18,14 @@ import { getOrComputeSunnyDan } from "../map-analysis/computeSunnyDan";
 import { getOrComputeDanielDan } from "../map-analysis/computeDanielDan";
 import {
   getOrComputePatternAnalysis,
+  analyzeManiaPatternDetail,
   getManiaPatternDetail,
 } from "../map-analysis/computePatternAnalysis";
-import { getChartTimingAnalysis } from "../map-analysis/computeTimingAnalysis";
+import {
+  loadBeatmapOsu,
+  chartTimingFromOsuText,
+  getChartTimingAnalysis,
+} from "../map-analysis/computeTimingAnalysis";
 import { OsuFileParser, parseStdChart } from "@roxysu/osu-chart";
 import {
   getOsuDataPath,
@@ -53,6 +58,73 @@ function oszResponse(pack: {
 export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
   .use(dbPlugin)
   .get(
+    "/:id/stats",
+    async ({ db, params, set }) => {
+      const [row] = await db
+        .select({ id: beatmaps.id })
+        .from(beatmaps)
+        .where(eq(beatmaps.id, params.id))
+        .limit(1);
+      if (!row) {
+        set.status = 404;
+        return { error: "Beatmap not found" };
+      }
+
+      const [usernames, gamemode] = await Promise.all([
+        resolveScoresUsernames(db),
+        resolveScoresGamemode(db),
+      ]);
+      const usernameCond = scoresUsernameCondition(usernames);
+      const gamemodeCond = scoresGamemodeCondition(gamemode);
+      const scoreScope = and(
+        eq(scores.beatmapId, params.id),
+        eq(scores.deletePending, false),
+        usernameCond,
+        gamemodeCond,
+      );
+
+      const [stats] = await db
+        .select({
+          playCount: count(scores.id),
+          bestAccuracy: max(scores.accuracy),
+          lastPlayedAt: max(scores.playedAt),
+        })
+        .from(scores)
+        .where(scoreScope);
+
+      const scorePpRows = await db
+        .select({
+          pp: scores.pp,
+          accuracy: scores.accuracy,
+          mods: scores.mods,
+          rulesetShortName: scores.rulesetShortName,
+        })
+        .from(scores)
+        .where(scoreScope);
+      const curves = await loadManiaPpCurves(db, [params.id]);
+      const curve = curves.get(params.id);
+      const bestPp = scorePpRows.reduce<number | null>((best, score) => {
+        const pp = resolveScorePp({
+          ...score,
+          curve,
+        });
+        return pp != null && (best == null || pp > best) ? pp : best;
+      }, null);
+
+      return {
+        playCount: Number(stats?.playCount ?? 0),
+        bestAccuracy: stats?.bestAccuracy ?? null,
+        bestPp,
+        lastPlayedAt: toIso(stats?.lastPlayedAt),
+      };
+    },
+    {
+      params: t.Object({
+        id: t.String(),
+      }),
+    },
+  )
+  .get(
     "/:id",
     async ({ db, params, set }) => {
       const [row] = await db
@@ -84,31 +156,77 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
         gamemodeCond,
       );
 
-      const recentScores = await db
-        .select()
-        .from(scores)
-        .where(scoreScope)
-        .orderBy(desc(scores.playedAt))
-        .limit(50);
+      const isMania = beatmap.rulesetShortName === "mania";
+      const is4kMania =
+        isMania &&
+        beatmap.circleSize != null &&
+        Math.round(beatmap.circleSize) === 4;
 
-      const [stats] = await db
-        .select({
-          playCount: count(scores.id),
-          bestAccuracy: max(scores.accuracy),
-          lastPlayedAt: max(scores.playedAt),
-        })
-        .from(scores)
-        .where(scoreScope);
-      const scorePpRows = await db
-        .select({
-          pp: scores.pp,
-          accuracy: scores.accuracy,
-          mods: scores.mods,
-          rulesetShortName: scores.rulesetShortName,
-        })
-        .from(scores)
-        .where(scoreScope);
-      const curves = await loadManiaPpCurves(db, [params.id]);
+      const [
+        recentScores,
+        statsRows,
+        scorePpRows,
+        curves,
+        masteryRows,
+        sessionRows,
+        sunnyDan,
+        danielDan,
+        patternAnalysis,
+        osuLoaded,
+      ] = await Promise.all([
+        db
+          .select({
+            id: scores.id,
+            accuracy: scores.accuracy,
+            pp: scores.pp,
+            maxCombo: scores.maxCombo,
+            mods: scores.mods,
+            rank: scores.rank,
+            totalScore: scores.totalScore,
+            rulesetShortName: scores.rulesetShortName,
+            replayFileHash: scores.replayFileHash,
+            playedAt: scores.playedAt,
+          })
+          .from(scores)
+          .where(scoreScope)
+          .orderBy(desc(scores.playedAt))
+          .limit(50),
+        db
+          .select({
+            playCount: count(scores.id),
+            bestAccuracy: max(scores.accuracy),
+            lastPlayedAt: max(scores.playedAt),
+          })
+          .from(scores)
+          .where(scoreScope),
+        db
+          .select({
+            pp: scores.pp,
+            accuracy: scores.accuracy,
+            mods: scores.mods,
+            rulesetShortName: scores.rulesetShortName,
+          })
+          .from(scores)
+          .where(scoreScope),
+        loadManiaPpCurves(db, [params.id]),
+        db
+          .select()
+          .from(mastery)
+          .where(eq(mastery.beatmapId, params.id))
+          .limit(1),
+        listSessionsForBeatmap(db, params.id, 24),
+        isMania ? getOrComputeSunnyDan(db, params.id) : Promise.resolve(null),
+        is4kMania
+          ? getOrComputeDanielDan(db, params.id)
+          : Promise.resolve(null),
+        isMania
+          ? getOrComputePatternAnalysis(db, params.id)
+          : Promise.resolve(null),
+        isMania ? loadBeatmapOsu(db, params.id) : Promise.resolve(null),
+      ]);
+
+      const [stats] = statsRows;
+      const [masteryRow] = masteryRows;
       const curve = curves.get(params.id);
       const resolvePp = (score: {
         pp: number | null;
@@ -125,40 +243,23 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
         return pp != null && (best == null || pp > best) ? pp : best;
       }, null);
 
-      const [masteryRow] = await db
-        .select()
-        .from(mastery)
-        .where(eq(mastery.beatmapId, params.id))
-        .limit(1);
-
-      const sessionRows = await listSessionsForBeatmap(db, params.id);
-      const sunnyDan =
-        beatmap.rulesetShortName === "mania"
-          ? await getOrComputeSunnyDan(db, params.id)
-          : null;
-
-      const is4kMania =
-        beatmap.rulesetShortName === "mania" &&
-        beatmap.circleSize != null &&
-        Math.round(beatmap.circleSize) === 4;
-      const danielDan = is4kMania
-        ? await getOrComputeDanielDan(db, params.id)
-        : null;
-
-      const isMania =
-        beatmap.rulesetShortName === "mania";
-      const patternAnalysis = isMania
-        ? await getOrComputePatternAnalysis(db, params.id)
-        : null;
-      const sevenKAnalysis =
-        beatmap.rulesetShortName === "mania"
-          ? await getManiaPatternDetail(db, params.id)
-          : null;
-
-      const timingAnalysis =
-        beatmap.rulesetShortName === "mania"
-          ? await getChartTimingAnalysis(db, params.id)
-          : null;
+      let sevenKAnalysis = null;
+      let timingAnalysis = null;
+      if (osuLoaded?.ok) {
+        try {
+          sevenKAnalysis = analyzeManiaPatternDetail(osuLoaded.osuText);
+        } catch {
+          sevenKAnalysis = await getManiaPatternDetail(db, params.id);
+        }
+        try {
+          timingAnalysis = chartTimingFromOsuText(osuLoaded.osuText);
+        } catch {
+          timingAnalysis = await getChartTimingAnalysis(db, params.id);
+        }
+      } else if (isMania) {
+        sevenKAnalysis = await getManiaPatternDetail(db, params.id);
+        timingAnalysis = await getChartTimingAnalysis(db, params.id);
+      }
 
       return {
         beatmap: {

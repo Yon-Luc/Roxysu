@@ -315,8 +315,8 @@ export type HubCollectionListItem = {
   tags: string[];
   /** First few set IDs for cover mosaics on browse cards. */
   previewBeatmapsetIds: number[];
-  /** Full beatmapset ID list (for local ownership diffs). */
-  beatmapsetIds: number[];
+  /** Full beatmapset ID list when the caller requested it (detail/export). */
+  beatmapsetIds?: number[];
   starsMin: number | null;
   starsMax: number | null;
   dominantMode: "osu" | "taiko" | "fruits" | "mania" | null;

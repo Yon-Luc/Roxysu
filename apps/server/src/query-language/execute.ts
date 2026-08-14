@@ -591,23 +591,43 @@ export function listCollectionMd5Hashes(
 export function listDistinctSetIds(
   db: Db,
   query: string,
-): { setIds: string[] } {
+  opts?: { limit?: number },
+): { setIds: string[]; total: number } {
   const ctx = buildQueryContext(db);
   const filter = resolveFilter(db, query, ctx);
   maybeBackfillDan(db, filter.needsDanBackfill);
   maybeBackfillPattern(db, filter.needsPatternBackfill);
   const where = baseWhere(ctx, filter.sql);
 
+  const countSql = `
+    SELECT COUNT(DISTINCT b.set_id) AS n
+    ${baseFrom(ctx)}
+    ${where}
+    AND b.set_id IS NOT NULL
+  `;
+  const countRow = db.$client
+    .query(countSql)
+    .get(...asBindings(filter.params)) as { n: number } | null;
+  const total = Number(countRow?.n ?? 0);
+
+  const limit =
+    opts?.limit != null && Number.isFinite(opts.limit) && opts.limit > 0
+      ? Math.floor(opts.limit)
+      : null;
   const sql = `
     SELECT DISTINCT b.set_id AS set_id
     ${baseFrom(ctx)}
     ${where}
+    AND b.set_id IS NOT NULL
+    ${limit != null ? "LIMIT ?" : ""}
   `;
   const rows = db.$client
     .query(sql)
-    .all(...asBindings(filter.params)) as { set_id: string }[];
+    .all(
+      ...asBindings(limit != null ? [...filter.params, limit] : filter.params),
+    ) as { set_id: string }[];
 
-  return { setIds: rows.map((r) => r.set_id).filter(Boolean) };
+  return { setIds: rows.map((r) => r.set_id).filter(Boolean), total };
 }
 
 function distributionMisses(

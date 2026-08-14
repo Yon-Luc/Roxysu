@@ -47,6 +47,13 @@ export async function fetchDashboard() {
   return unwrap(await api.api.dashboard.get(), "/api/dashboard");
 }
 
+export async function fetchOverlay(limit?: number) {
+  return unwrap(
+    await api.api.overlay.get({ query: { limit } }),
+    "/api/overlay",
+  );
+}
+
 export type StatsGranularity = "day" | "week";
 export type StatsRange = 30 | 90 | 180;
 export type StatsSkillAxis = "all" | "rc" | "ln" | "fln";
@@ -215,6 +222,13 @@ export async function fetchBeatmap(id: string) {
   return unwrap(await api.api.beatmaps({ id }).get(), `/api/beatmaps/${id}`);
 }
 
+export async function fetchBeatmapStats(id: string) {
+  return unwrap(
+    await api.api.beatmaps({ id }).stats.get(),
+    `/api/beatmaps/${id}/stats`,
+  );
+}
+
 export async function fetchBeatmapPreview(id: string) {
   return unwrap(
     await api.api.beatmaps({ id }).preview.get(),
@@ -233,9 +247,14 @@ export async function fetchSessions() {
   return unwrap(await api.api.sessions.get(), "/api/sessions");
 }
 
-export async function fetchSession(id: string | number) {
+export async function fetchSession(
+  id: string | number,
+  opts?: { limit?: number },
+) {
   return unwrap(
-    await api.api.sessions({ id: String(id) }).get(),
+    await api.api.sessions({ id: String(id) }).get({
+      query: { limit: opts?.limit },
+    }),
     `/api/sessions/${id}`,
   );
 }
@@ -270,9 +289,14 @@ export type RealmCollectionItem = {
 
 export type CollectionListItem = SmartCollectionItem | RealmCollectionItem;
 
-export async function fetchSmartCollectionSetIds(id: number) {
+export async function fetchSmartCollectionSetIds(
+  id: number,
+  opts?: { limit?: number },
+) {
   return unwrap(
-    await api.api.collections({ id: String(id) })["set-ids"].get(),
+    await api.api.collections({ id: String(id) })["set-ids"].get({
+      query: { limit: opts?.limit },
+    }),
     `/api/collections/${id}/set-ids`,
   ) as {
     kind: "smart";
@@ -280,12 +304,18 @@ export async function fetchSmartCollectionSetIds(id: number) {
     name: string;
     beatmapsetIds: number[];
     unresolvedInternalSets: number;
+    total: number;
   };
 }
 
-export async function fetchRealmCollectionSetIds(id: string) {
+export async function fetchRealmCollectionSetIds(
+  id: string,
+  opts?: { limit?: number },
+) {
+  const q =
+    opts?.limit != null ? `?limit=${encodeURIComponent(String(opts.limit))}` : "";
   const res = await fetch(
-    `/api/collections/realm/${encodeURIComponent(id)}/set-ids`,
+    `/api/collections/realm/${encodeURIComponent(id)}/set-ids${q}`,
   );
   const data = (await res.json()) as {
     error?: string;
@@ -296,6 +326,7 @@ export async function fetchRealmCollectionSetIds(id: string) {
     hashCount: number;
     resolvedSetCount: number;
     unresolvedHashCount: number;
+    total: number;
   };
   if (!res.ok) {
     throw new Error(

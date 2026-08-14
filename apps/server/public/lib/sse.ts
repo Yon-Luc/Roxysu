@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import type { QueryClient } from "@tanstack/react-query";
+import type { TosuLive } from "./api";
 
 /**
  * Scoped SSE → cache invalidation map.
@@ -7,6 +9,33 @@ import type { QueryClient } from "@tanstack/react-query";
  * Previously a single `onLive` handler blasted all 7 keys on every event,
  * causing 5–6 redundant refetches per score import / session event.
  */
+
+let liveSseOpen = false;
+const sseStatusListeners = new Set<() => void>();
+
+export function isLiveSseOpen(): boolean {
+  return liveSseOpen;
+}
+
+export function subscribeLiveSseStatus(listener: () => void): () => void {
+  sseStatusListeners.add(listener);
+  return () => sseStatusListeners.delete(listener);
+}
+
+function setLiveSseOpen(next: boolean): void {
+  if (liveSseOpen === next) return;
+  liveSseOpen = next;
+  for (const listener of sseStatusListeners) listener();
+}
+
+export function useLiveSseOpen(): boolean {
+  const [open, setOpen] = useState(isLiveSseOpen);
+  useEffect(
+    () => subscribeLiveSseStatus(() => setOpen(isLiveSseOpen())),
+    [],
+  );
+  return open;
+}
 
 /** Subscribe to server SSE and invalidate React Query caches on live events. */
 export function connectLiveUpdates(queryClient: QueryClient): () => void {
@@ -21,6 +50,7 @@ export function connectLiveUpdates(queryClient: QueryClient): () => void {
   const onScoreImported = () => {
     inv(["dashboard"]);
     inv(["sessions"]);
+    inv(["overlay"]);
     void queryClient.invalidateQueries({
       queryKey: ["practice"],
       refetchType: "none",
@@ -29,11 +59,19 @@ export function connectLiveUpdates(queryClient: QueryClient): () => void {
       queryKey: ["beatmap"],
       refetchType: "none",
     });
+    void queryClient.invalidateQueries({
+      queryKey: ["beatmap-stats"],
+      refetchType: "none",
+    });
   };
 
   // dashboard.updated: aggregate stats changed (sync pipeline ran analytics).
   const onDashboardUpdated = () => {
     inv(["dashboard"]);
+    void queryClient.invalidateQueries({
+      queryKey: ["stats"],
+      refetchType: "active",
+    });
   };
 
   // mastery.updated: recompute finished — practice cards + beatmap detail change.
@@ -47,12 +85,12 @@ export function connectLiveUpdates(queryClient: QueryClient): () => void {
   const onSessionEvent = () => {
     inv(["sessions"]);
     inv(["dashboard"]);
+    inv(["overlay"]);
   };
 
   // collection.updated: only collections page cares.
-  const onCollectionUpdated = (event?: Event) => {
+  const onCollectionUpdated = (event: Event) => {
     inv(["collections"]);
-    if (!event) return;
     try {
       const detail = JSON.parse((event as MessageEvent).data) as {
         collectionId?: number;
@@ -79,6 +117,10 @@ export function connectLiveUpdates(queryClient: QueryClient): () => void {
       queryKey: ["beatmap"],
       refetchType: "none",
     });
+    void queryClient.invalidateQueries({
+      queryKey: ["beatmap-stats"],
+      refetchType: "none",
+    });
     inv(["sessions"]);
     void queryClient.invalidateQueries({
       queryKey: ["collections"],
@@ -87,13 +129,43 @@ export function connectLiveUpdates(queryClient: QueryClient): () => void {
     inv(["settings"]);
     inv(["beatmap-preview"]);
     inv(["score-replay"]);
+    inv(["overlay"]);
+    inv(["owned-set-ids"]);
+    void queryClient.invalidateQueries({
+      queryKey: ["stats"],
+      refetchType: "active",
+    });
   };
 
-  const onTosu = () => {
+  const onTosu = (event: Event) => {
+    try {
+      const detail = JSON.parse((event as MessageEvent).data) as {
+        reason?: "play" | "full";
+        play?: TosuLive["play"];
+        beatmapState?: string | null;
+      };
+      if (detail.reason === "play") {
+        queryClient.setQueryData<TosuLive>(["tosu", "live"], (prev) => {
+          if (!prev) return prev;
+          const beatmap =
+            prev.beatmap && detail.beatmapState !== undefined
+              ? { ...prev.beatmap, state: detail.beatmapState }
+              : prev.beatmap;
+          return {
+            ...prev,
+            play: detail.play ?? prev.play,
+            beatmap,
+          };
+        });
+        return;
+      }
+    } catch {
+      // fall through to a full refetch
+    }
     inv(["tosu", "live"]);
   };
 
-  const HANDLERS: Record<string, () => void> = {
+  const HANDLERS: Record<string, (event: Event) => void> = {
     "score.imported": onScoreImported,
     "dashboard.updated": onDashboardUpdated,
     "mastery.updated": onMasteryUpdated,
@@ -103,16 +175,19 @@ export function connectLiveUpdates(queryClient: QueryClient): () => void {
     "tosu.updated": onTosu,
   };
 
+  source.onopen = () => setLiveSseOpen(true);
+  source.onerror = () => {
+    setLiveSseOpen(false);
+    // Browser auto-reconnects EventSource
+  };
+
   for (const [name, handler] of Object.entries(HANDLERS)) {
     source.addEventListener(name, handler);
   }
   source.addEventListener("collection.updated", onCollectionUpdated);
 
-  source.onerror = () => {
-    // Browser auto-reconnects EventSource
-  };
-
   return () => {
+    setLiveSseOpen(false);
     for (const [name, handler] of Object.entries(HANDLERS)) {
       source.removeEventListener(name, handler);
     }

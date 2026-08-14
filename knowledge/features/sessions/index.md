@@ -4,7 +4,9 @@ confidence: verified
 touches:
   - apps/server/src/analytics/session.ts
   - apps/server/src/routes/sessions.ts
+  - apps/server/src/routes/overlay.ts
   - apps/server/public/features/sessions
+  - apps/server/public/features/overlay
   - packages/session-names/src/generate.ts
   - packages/session-names/src/terms.json
   - packages/db/src/schema.ts
@@ -32,11 +34,15 @@ Live sessions keep the **Current session** label in headings; the generated name
 4. Display names are persisted in `sessions.name` at creation; existing rows without a name are backfilled on the next session-engine run. Already-named rows are not regenerated.
 5. The UI shows the display name for closed sessions; open sessions use **Current session** as the primary label and show the name as secondary text. Numeric `#id` is not shown.
 6. A session display name always starts with a capital letter (`capitalizeSessionName()`).
+7. Session detail windows the newest scores (`GET /api/sessions/:id?limit=`, default 50, max 500) with Load more. PB count is for the whole session, not the window.
+8. OBS overlay uses `GET /api/overlay?limit=` (header + last N scores, no PP curves for the rest of the session) and must not poll `["dashboard"]` or full current-session detail.
+9. Up Next samples debounce the query string; recommend/Up Next query keys include excluded beatmap IDs. Shuffle bumps a key instead of double-fetching.
 
 ## Important symbols
 
 - `apps/server/src/analytics/session.ts` — `SESSION_GAP_MS`, `runSessionEngine()`, `backfillSessionNames()`
-- `apps/server/src/routes/sessions.ts` — `serializeSession()` includes `name`
+- `apps/server/src/routes/sessions.ts` — `serializeSession()` includes `name`; score window via `limit`
+- `apps/server/src/routes/overlay.ts` — slim OBS payload
 - `packages/session-names/src/generate.ts` — `generateSessionName(sessionId, taken)`, `capitalizeSessionName()`
 - `packages/session-names/src/terms.json` — character, region, activity, modifier, style word lists
 - `apps/server/public/features/sessions/*`

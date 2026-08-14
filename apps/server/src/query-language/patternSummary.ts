@@ -1,12 +1,8 @@
 
 import type { Db } from "@roxysu/db/types";
 import { LN_DAN_RATIO_THRESHOLD } from "../map-analysis/estDiff";
-import { backfillSunnyDanSync, SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
+import { SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
 import { PATTERN_ALGORITHM } from "@roxysu/mania-pattern-analysis";
-import {
-  backfillPatternAnalysisSync,
-  PATTERN_QUERY_BACKFILL_LIMIT,
-} from "../map-analysis/computePatternAnalysis";
 import {
   resolveScoresGamemodeSync,
   scoresGamemodeSqlLiteral,
@@ -293,11 +289,6 @@ export function practicePatternSummary(
   const axis = parseAxis(opts.axis);
   const keymode = parseKeymode(opts.keymode);
   const scopeWhere = maniaKeymodeWhere(keymode);
-
-  backfillPatternAnalysisSync(db, { limit: PATTERN_QUERY_BACKFILL_LIMIT });
-  if (axis !== "all") {
-    backfillSunnyDanSync(db, { limit: PATTERN_QUERY_BACKFILL_LIMIT });
-  }
 
   const samplesPerPattern = Math.max(
     1,

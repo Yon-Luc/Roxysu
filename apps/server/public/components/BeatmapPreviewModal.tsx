@@ -112,8 +112,8 @@ export function BeatmapPreviewModal({
     queryKey: ["beatmap-preview", beatmapId],
     queryFn: () => fetchBeatmapPreview(beatmapId) as Promise<BeatmapPreview>,
     // Fresh chart/audio hashes after sync; avoid stale cached preview without audio.
-    staleTime: 0,
-    refetchOnMount: "always",
+    staleTime: 5 * 60_000,
+    refetchOnMount: true,
   });
 
   const audioUrl = localBeatmapAudioUrl(data?.audioFileHash);

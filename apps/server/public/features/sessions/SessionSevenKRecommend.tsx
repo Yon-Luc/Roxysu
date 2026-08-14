@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   fetchPracticeRecommend,
   type PracticeRecommend,
@@ -110,8 +110,10 @@ export function SessionSevenKRecommend({
   const [prefs, setPrefs] = useState<RecPrefs>(() => loadPrefs(keyCount));
   const [shuffleKey, setShuffleKey] = useState(0);
   const [skillTopPlays, setSkillTopPlays] = useState(() => readSkillTopPlays());
-  const excludeRef = useRef(excludeBeatmapIds);
-  excludeRef.current = excludeBeatmapIds;
+  const excludeKey = useMemo(
+    () => [...excludeBeatmapIds].sort().join(","),
+    [excludeBeatmapIds],
+  );
 
   useEffect(() => {
     savePrefs(keyCount, prefs);
@@ -130,7 +132,7 @@ export function SessionSevenKRecommend({
     };
   }, []);
 
-  const { data, isLoading, error, isFetching, refetch } = useQuery({
+  const { data, isLoading, error, isFetching } = useQuery({
     queryKey: [
       "practice-recommend",
       keyCount,
@@ -138,13 +140,14 @@ export function SessionSevenKRecommend({
       prefs.skillset,
       skillTopPlays,
       shuffleKey,
+      excludeKey,
     ],
     queryFn: () =>
       fetchPracticeRecommend({
         focus: prefs.focus,
         skillset: prefs.focus === "deficit" ? undefined : prefs.skillset,
         count: 8,
-        exclude: excludeRef.current,
+        exclude: excludeBeatmapIds,
         topPlays: skillTopPlays,
         keyCount,
       }),
@@ -168,7 +171,6 @@ export function SessionSevenKRecommend({
           className="rx-btn"
           onClick={() => {
             setShuffleKey((k) => k + 1);
-            void refetch();
           }}
           disabled={isFetching}
         >

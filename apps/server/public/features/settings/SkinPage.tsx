@@ -191,8 +191,7 @@ export function SkinPage({ section }: { section?: string } = {}) {
   const [tab, setTab] = useState<"mania" | "std">(
     section === "std-skin" ? "std" : "mania",
   );
-  const timeRef = useRef(previewTimeMs);
-  timeRef.current = previewTimeMs;
+  const timeRef = useRef(800);
 
   const keySkin = skin.keymodes[keys];
   const sampleNotes = useMemo(() => buildSampleNotes(keys), [keys]);
@@ -202,12 +201,16 @@ export function SkinPage({ section }: { section?: string } = {}) {
     if (!playing) return;
     let raf = 0;
     let last = performance.now();
+    let lastUi = last;
     function tick(now: number) {
       const dt = now - last;
       last = now;
       const next = (timeRef.current + dt) % 7200;
       timeRef.current = next;
-      setPreviewTimeMs(next);
+      if (now - lastUi >= 150) {
+        lastUi = now;
+        setPreviewTimeMs(next);
+      }
       raf = requestAnimationFrame(tick);
     }
     raf = requestAnimationFrame(tick);
@@ -757,7 +760,12 @@ export function SkinPage({ section }: { section?: string } = {}) {
               <button
                 type="button"
                 className="rx-btn text-xs"
-                onClick={() => setPlaying((p) => !p)}
+                onClick={() => {
+                  setPlaying((p) => {
+                    if (p) setPreviewTimeMs(timeRef.current);
+                    return !p;
+                  });
+                }}
               >
                 {playing ? dict?.skin.pause : dict?.skin.play}
               </button>

@@ -9,7 +9,7 @@ import { CardGridSkeleton, ListSkeleton } from "../../components/LoadingSkeleton
 import {
   fetchBeatmapsetInfo,
   fetchHubAddedCollections,
-  fetchOwnedSetIds,
+  diffSetOwnership,
   saveHubAddedCollection,
   startMirrorBatchJob,
   type OnlineBeatmapSet,
@@ -67,6 +67,13 @@ const SORT_OPTIONS: Array<{ value: MapSort; label: string }> = [
 ];
 
 const INFO_BATCH = 100;
+const MAP_PAGE_SIZE = 48;
+
+function hashSetIds(ids: number[]): string {
+  let h = ids.length;
+  for (const id of ids) h = Math.imul(h, 31) + id;
+  return `${ids.length}:${h >>> 0}`;
+}
 
 async function loadCollectionSetCards(setIds: number[]): Promise<{
   items: OnlineBeatmapSet[];
@@ -75,14 +82,19 @@ async function loadCollectionSetCards(setIds: number[]): Promise<{
   const unique = [...new Set(setIds.filter((id) => id > 0))];
   const byId = new Map<number, OnlineBeatmapSet>();
   const missing: number[] = [];
+  const chunks: number[][] = [];
 
   for (let i = 0; i < unique.length; i += INFO_BATCH) {
-    const chunk = unique.slice(i, i + INFO_BATCH);
-    if (chunk.length === 0) continue;
-    const res = await fetchBeatmapsetInfo(chunk);
-    for (const set of res.items) byId.set(set.id, set);
-    missing.push(...res.missing);
+    chunks.push(unique.slice(i, i + INFO_BATCH));
   }
+  await Promise.all(
+    chunks.map(async (chunk) => {
+      if (chunk.length === 0) return;
+      const res = await fetchBeatmapsetInfo(chunk);
+      for (const set of res.items) byId.set(set.id, set);
+      missing.push(...res.missing);
+    }),
+  );
 
   return {
     items: unique
@@ -162,7 +174,16 @@ export function HubDetailPage({ id }: { id: string }) {
   const [editMode, setEditMode] = useState<HubModeTag | "all">("all");
   const [mapFilters, setMapFilters] =
     useState<HubCollectionMapFilterState>(DEFAULT_MAP_FILTERS);
+  const [debouncedMapQ, setDebouncedMapQ] = useState("");
+  const [mapPage, setMapPage] = useState(1);
   const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setDebouncedMapQ(mapFilters.q);
+    }, 200);
+    return () => window.clearTimeout(handle);
+  }, [mapFilters.q]);
 
   function patchMapFilters(patch: Partial<HubCollectionMapFilterState>) {
     setMapFilters((prev) => ({ ...prev, ...patch }));
@@ -181,16 +202,6 @@ export function HubDetailPage({ id }: { id: string }) {
     retry: false,
   });
 
-  const ownedQuery = useQuery({
-    queryKey: ["owned-set-ids"],
-    queryFn: fetchOwnedSetIds,
-    staleTime: 60_000,
-  });
-  const ownedSetIds = useMemo(
-    () => new Set(ownedQuery.data ?? []),
-    [ownedQuery.data],
-  );
-
   const addedQuery = useQuery({
     queryKey: ["hub-added-collections"],
     queryFn: fetchHubAddedCollections,
@@ -208,24 +219,31 @@ export function HubDetailPage({ id }: { id: string }) {
     [detailQuery.data?.maps],
   );
 
+  const setIdsKey = useMemo(() => hashSetIds(setIds), [setIds]);
+
+  const ownedQuery = useQuery({
+    queryKey: ["hub-collection-owned", collectionId, setIdsKey],
+    enabled: setIds.length > 0,
+    queryFn: () => diffSetOwnership(setIds),
+    staleTime: 60_000,
+  });
+  const ownedSetIds = useMemo(
+    () => new Set(ownedQuery.data?.owned ?? []),
+    [ownedQuery.data],
+  );
+
   const cardsQuery = useQuery({
     queryKey: [
       "hub-collection-cards",
       collectionId,
-      detailQuery.dataUpdatedAt,
-      setIds.length,
+      setIdsKey,
     ],
     enabled: detailQuery.isSuccess && setIds.length > 0,
     staleTime: 5 * 60_000,
     queryFn: () => loadCollectionSetCards(setIds),
   });
 
-  const ownership = ownedCountForSets(
-    detailQuery.data?.beatmapsetIds?.length
-      ? detailQuery.data.beatmapsetIds
-      : setIds,
-    ownedSetIds,
-  );
+  const ownership = ownedCountForSets(setIds, ownedSetIds);
   const missingCount = ownership
     ? Math.max(0, ownership.total - ownership.owned)
     : 0;
@@ -413,8 +431,17 @@ export function HubDetailPage({ id }: { id: string }) {
       owned: ownedSetIds.has(setId),
       collectionIndex,
     }));
-    return filterAndSortCollectionMaps(rows, mapFilters);
-  }, [setIds, nameById, byId, ownedSetIds, mapFilters]);
+    return filterAndSortCollectionMaps(rows, {
+      ...mapFilters,
+      q: debouncedMapQ,
+    });
+  }, [setIds, nameById, byId, ownedSetIds, mapFilters, debouncedMapQ]);
+
+  useEffect(() => {
+    setMapPage(1);
+  }, [debouncedMapQ, mapFilters.ownership, mapFilters.sort, mapFilters.mode, mapFilters.keys, collectionId]);
+
+  const visibleMaps = filteredMaps.slice(0, mapPage * MAP_PAGE_SIZE);
 
   return (
     <div className="space-y-6">
@@ -773,8 +800,9 @@ export function HubDetailPage({ id }: { id: string }) {
                   No maps match these filters. Try clearing search or ownership.
                 </p>
               ) : (
+                <>
                 <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {filteredMaps.map(({ setId, set, owned, mapName }) => (
+                  {visibleMaps.map(({ setId, set, owned, mapName }) => (
                     <li key={setId}>
                       {set ? (
                         <OnlineSetCard set={set} owned={owned} />
@@ -788,6 +816,16 @@ export function HubDetailPage({ id }: { id: string }) {
                     </li>
                   ))}
                 </ul>
+                {visibleMaps.length < filteredMaps.length ? (
+                  <button
+                    type="button"
+                    className="rx-btn mt-4"
+                    onClick={() => setMapPage((p) => p + 1)}
+                  >
+                    Load more maps
+                  </button>
+                ) : null}
+                </>
               )}
             </div>
           )}

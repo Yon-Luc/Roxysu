@@ -32,10 +32,11 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
   const ratingMode = useRatingDisplayMode();
   const { dict } = useAppDict();
   const isCurrentHub = sessionId === "current";
+  const [scoreLimit, setScoreLimit] = useState(50);
 
   const { data, isLoading, error, isFetching } = useQuery({
-    queryKey: ["sessions", sessionId],
-    queryFn: () => fetchSession(sessionId),
+    queryKey: ["sessions", sessionId, scoreLimit],
+    queryFn: () => fetchSession(sessionId, { limit: scoreLimit }),
     enabled: Boolean(sessionId),
     placeholderData: keepPreviousData,
     // Historical sessions are immutable once closed; only the live "current"
@@ -73,6 +74,7 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
     seeded.current = false;
     knownIds.current = new Set();
     setFreshIds(new Set());
+    setScoreLimit(50);
   }, [sessionId]);
 
   if (isLoading) {
@@ -353,6 +355,16 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
             })}
           </ul>
         )}
+        {"hasMore" in data && data.hasMore ? (
+          <button
+            type="button"
+            className="rx-btn mt-3 text-sm"
+            disabled={isFetching}
+            onClick={() => setScoreLimit((n) => n + 50)}
+          >
+            {dict?.session.loadMore ?? "Load more"}
+          </button>
+        ) : null}
       </section>
     </div>
   );

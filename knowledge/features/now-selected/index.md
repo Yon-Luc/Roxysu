@@ -8,6 +8,8 @@ touches:
   - apps/server/src/tosu/live.ts
   - apps/server/src/tosu/analyze.ts
   - apps/server/src/routes/tosu.ts
+  - apps/server/src/routes/beatmaps.ts
+  - apps/server/public/lib/useTosuLiveQuery.ts
   - apps/server/public/router.tsx
   - apps/server/public/components/AppShell.tsx
 ---
@@ -31,6 +33,8 @@ While song-selecting or playing, open **Now selected** (optionally `#/now-select
 5. Maps not in the local mirror still show identity + ephemeral mania analysis from tosu `.osu` text; preview is skipped.
 6. Widget visibility and order are page-local (`localStorage` key `roxysu:now-selected-layout`), not the Settings HTTP store.
 7. Focus layout (`?focus=1`) hides AppShell chrome (sidebar, mobile nav) for a second monitor.
+8. Personal play count / best accuracy / best PP use `GET /api/beatmaps/:id/stats`, not the full practice-profile payload.
+9. Live play ticks patch the tosu live query cache (`tosu.updated` `reason: play`). HTTP poll of `GET /api/tosu/live` runs only when SSE is down.
 
 ## Security rules
 
@@ -43,8 +47,9 @@ tosu WS frame
   ↓
 tosu live adapter (lean snapshot + cached ManiaPatternDetail on checksum change)
   ↓
-GET /api/tosu/live  →  NowSelectedPage (SSE tosu.updated)
+GET /api/tosu/live  →  NowSelectedPage (SSE tosu.updated; poll only if SSE down)
 GET /api/tosu/live/analysis  →  pattern weights / density (when checksum stable)
+matchedBeatmapId  →  GET /api/beatmaps/:id/stats (play count / best acc / best PP)
 matchedBeatmapId  →  BeatmapPreviewEmbed → GET /api/beatmaps/:id/preview
 ```
 
@@ -52,9 +57,11 @@ matchedBeatmapId  →  BeatmapPreviewEmbed → GET /api/beatmaps/:id/preview
 
 - `apps/server/public/features/now-selected/NowSelectedPage.tsx`
 - `apps/server/public/features/now-selected/nowSelectedLayout.ts`
+- `apps/server/public/lib/useTosuLiveQuery.ts`
 - `apps/server/public/components/BeatmapPreviewEmbed.tsx`
 - `apps/server/public/components/mania-analysis/*`
 - `apps/server/src/tosu/live.ts` — `getTosuLiveSnapshot()`, `getTosuLiveAnalysis()`
+- `apps/server/src/routes/beatmaps.ts` — `GET /:id/stats`
 - `apps/server/src/map-analysis/computePatternAnalysis.ts` — `analyzeManiaPatternDetail()`
 
 ## Dependencies

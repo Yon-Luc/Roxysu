@@ -808,8 +808,11 @@ function buildSampleKeys(
   nowMs: number,
 ): string[] {
   const keys: string[] = [];
+  const maxPoints = 60;
   if (granularity === "day") {
-    for (let i = rangeDays - 1; i >= 0; i--) {
+    const step =
+      rangeDays > maxPoints ? Math.ceil(rangeDays / maxPoints) : 1;
+    for (let i = rangeDays - 1; i >= 0; i -= step) {
       const ms = nowMs - i * 86_400_000;
       keys.push(utcDayKey(ms));
     }
@@ -878,6 +881,24 @@ export function estimateSevenKSkillHistory(
   return skillHistoryFromPlays(loadSevenKPlays(db, keyCount), opts, nowMs);
 }
 
+export function estimateSevenKSkillWithHistoryFromPlays(
+  plays: SkillPlayRow[],
+  opts: SkillHistoryOptions,
+  nowMs: number = Date.now(),
+  coldStartFallback?: () => SevenKSkillProfile,
+): {
+  skill: SevenKSkillProfile;
+  skillHistory: SkillHistoryPoint[];
+} {
+  return {
+    skill: estimateSevenKSkillFromPlays(plays, {
+      topPlays: opts.topPlays,
+      coldStartFallback,
+    }),
+    skillHistory: skillHistoryFromPlays(plays, opts, nowMs),
+  };
+}
+
 /**
  * Current skill + history from one keymode play load (no Sunny backfill).
  */
@@ -891,13 +912,9 @@ export function estimateSevenKSkillWithHistory(
 } {
   const keyCount = parseSkillKeyCount(opts.keyCount);
   const plays = loadSevenKPlays(db, keyCount);
-  return {
-    skill: estimateSevenKSkillFromPlays(plays, {
-      topPlays: opts.topPlays,
-      coldStartFallback: () => coldStartFromMastery(db, keyCount),
-    }),
-    skillHistory: skillHistoryFromPlays(plays, opts, nowMs),
-  };
+  return estimateSevenKSkillWithHistoryFromPlays(plays, opts, nowMs, () =>
+    coldStartFromMastery(db, keyCount),
+  );
 }
 
 /** Exposed for unit tests. */

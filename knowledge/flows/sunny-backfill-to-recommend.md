@@ -29,7 +29,7 @@ query language fields + GET /api/practice/recommend + Session Suggest UI
 
 ## Business guarantee
 
-Recommendations use persisted estimates; without backfill, 4K/7K suggest quality is limited.
+Recommendations use persisted estimates; without backfill, 4K/7K suggest quality is limited. `GET /api/practice/recommend` does not start Sunny backfill.
 
 ## Implementation references
 

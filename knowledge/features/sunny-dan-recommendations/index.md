@@ -16,7 +16,7 @@ Parse `.osu` charts from lazer storage, run Sunny Rework–style estimates, pers
 ## Business rules
 
 1. Estimates live in the Sunny dan ratings store (`beatmap_dan_ratings`); recommendations degrade without backfill.
-2. Backfill is a Settings-started background job.
+2. Backfill is a Settings-started background job. Recommend HTTP handlers do not run Sunny backfill on the request path.
 3. Recommendations and skill estimates are for a single mania keymode (`keyCount`, default 7). 4K and 7K pools are never mixed.
 4. Matching uses Sunny stars for both 4K and 7K. Daniel remains a 4K profile / query-language label.
 

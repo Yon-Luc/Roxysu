@@ -9,8 +9,7 @@ import {
 } from "../../components/mania-analysis";
 import { ModBadges } from "../../components/ModBadges";
 import {
-  fetchBeatmap,
-  fetchTosuLive,
+  fetchBeatmapStats,
   fetchTosuLiveAnalysis,
   startTosu,
   type TosuLive,
@@ -28,6 +27,7 @@ import {
   primaryRatingDisplayTitle,
   useRatingDisplayMode,
 } from "../../lib/ratingDisplay";
+import { useTosuLiveQuery } from "../../lib/useTosuLiveQuery";
 import { NowSelectedSettingsModal } from "./NowSelectedSettingsModal";
 import {
   loadNowSelectedLayout,
@@ -117,17 +117,10 @@ export function NowSelectedPage({
     saveNowSelectedLayout(layout);
   }, [layout]);
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["tosu", "live"],
-    queryFn: fetchTosuLive,
-    refetchInterval: (query) => {
-      const snap = query.state.data;
-      if (!snap?.enabled) return false;
-      if (snap.status === "connected" && snap.play?.active) return 1_000;
-      if (snap.status === "connecting" || snap.status === "disconnected") {
-        return 3_000;
-      }
-      return 5_000;
+  const { data, isLoading, error } = useTosuLiveQuery({
+    select: (snap) => {
+      const { play: _play, ...rest } = snap;
+      return rest;
     },
   });
 
@@ -144,9 +137,10 @@ export function NowSelectedPage({
 
   const matchedBeatmapId = data?.matchedBeatmapId ?? null;
   const beatmapQuery = useQuery({
-    queryKey: ["beatmap", matchedBeatmapId],
-    queryFn: () => fetchBeatmap(matchedBeatmapId!),
+    queryKey: ["beatmap-stats", matchedBeatmapId],
+    queryFn: () => fetchBeatmapStats(matchedBeatmapId!),
     enabled: Boolean(matchedBeatmapId) && layout.visible.personalStats,
+    staleTime: 5 * 60_000,
   });
 
   const startMut = useMutation({
@@ -157,7 +151,6 @@ export function NowSelectedPage({
   });
 
   const beatmap = data?.beatmap;
-  const play = data?.play;
   const sunny = data?.analysis.sunny;
   const hasMap = Boolean(beatmap?.title || beatmap?.checksum);
   const showMania = isManiaBeatmap(beatmap);
@@ -205,7 +198,11 @@ export function NowSelectedPage({
     return bgSources[idx + 1] ?? null;
   })();
 
-  const playingAllowed = !(layout.pauseWhilePlaying && play?.active);
+  const ns = dict?.nowSelected;
+  const personal =
+    beatmapQuery.data && !("error" in beatmapQuery.data)
+      ? beatmapQuery.data
+      : null;
 
   function setFocus(next: boolean) {
     void navigate({
@@ -213,12 +210,6 @@ export function NowSelectedPage({
       search: { focus: next || undefined },
     });
   }
-
-  const ns = dict?.nowSelected;
-  const personal =
-    beatmapQuery.data && "stats" in beatmapQuery.data
-      ? beatmapQuery.data
-      : null;
 
   const widgets: Record<NowSelectedWidgetId, ReactNode> = {
     identity: hasMap && beatmap ? (
@@ -232,12 +223,11 @@ export function NowSelectedPage({
     ) : null,
     preview:
       hasMap && matchedBeatmapId ? (
-        <BeatmapPreviewEmbed
-          key={matchedBeatmapId}
+        <NowSelectedPreview
           beatmapId={matchedBeatmapId}
           autoPlay={layout.autoPlayPreview}
           muted={layout.mutePreview}
-          playingAllowed={playingAllowed}
+          pauseWhilePlaying={layout.pauseWhilePlaying}
           heightRem={layout.previewHeightRem}
           onHeightRemChange={(previewHeightRem) =>
             setLayout((prev) => ({ ...prev, previewHeightRem }))
@@ -265,30 +255,7 @@ export function NowSelectedPage({
           gradientId="now-selected-density-fill"
         />
       ) : null,
-    livePlay: hasMap ? (
-      play?.active ? (
-        <p className="text-sm text-muted">
-          {t(dict?.session.tosu.liveCombo, {
-            combo: play.combo ?? 0,
-          }) || `Live · combo ${play.combo ?? 0}`}
-          {play.maxCombo != null ? ` / ${play.maxCombo}` : ""}
-          {" · "}
-          {play.accuracy != null ? formatAccuracy(play.accuracy) : "—"}
-          {" · "}
-          {t(dict?.session.tosu.misses, {
-            count: play.misses ?? 0,
-          }) || `${play.misses ?? 0} miss`}
-          {play.pp != null ? ` · ${Math.round(play.pp)}pp` : ""}
-        </p>
-      ) : (
-        <p className="text-sm text-faint">
-          {beatmap?.state
-            ? t(dict?.session.tosu.state, { state: beatmap.state }) ||
-              `State: ${beatmap.state}`
-            : dict?.session.tosu.songSelect ?? "Song select"}
-        </p>
-      )
-    ) : null,
+    livePlay: hasMap ? <NowSelectedLivePlay /> : null,
     rating: showMania ? (
       <div>
         <div className="text-xs font-semibold uppercase tracking-wide text-faint">
@@ -311,19 +278,19 @@ export function NowSelectedPage({
         <HotspotsList hotspots={patternDetail.hotspots} />
       ) : null,
     personalStats:
-      matchedBeatmapId && personal && "stats" in personal ? (
+      matchedBeatmapId && personal ? (
         <div className="grid gap-3 sm:grid-cols-3">
           <MiniStat
             label={ns?.plays ?? "Plays"}
-            value={String(personal.stats?.playCount ?? 0)}
+            value={String(personal.playCount ?? 0)}
           />
           <MiniStat
             label={ns?.bestAcc ?? "Best acc"}
-            value={formatAccuracy(personal.stats?.bestAccuracy)}
+            value={formatAccuracy(personal.bestAccuracy)}
           />
           <MiniStat
             label={ns?.bestPp ?? "Best PP"}
-            value={formatPp(personal.stats?.bestPp ?? null)}
+            value={formatPp(personal.bestPp ?? null)}
           />
         </div>
       ) : null,
@@ -540,6 +507,73 @@ function IdentityWidget({
         </div>
       </div>
     </div>
+  );
+}
+
+function NowSelectedPreview({
+  beatmapId,
+  autoPlay,
+  muted,
+  pauseWhilePlaying,
+  heightRem,
+  onHeightRemChange,
+}: {
+  beatmapId: string;
+  autoPlay: boolean;
+  muted: boolean;
+  pauseWhilePlaying: boolean;
+  heightRem: number;
+  onHeightRemChange: (next: number) => void;
+}) {
+  const { data: playActive } = useTosuLiveQuery({
+    select: (snap) => Boolean(snap.play?.active),
+  });
+  return (
+    <BeatmapPreviewEmbed
+      key={beatmapId}
+      beatmapId={beatmapId}
+      autoPlay={autoPlay}
+      muted={muted}
+      playingAllowed={!(pauseWhilePlaying && playActive)}
+      heightRem={heightRem}
+      onHeightRemChange={onHeightRemChange}
+    />
+  );
+}
+
+function NowSelectedLivePlay() {
+  const { dict } = useAppDict();
+  const { data } = useTosuLiveQuery({
+    select: (snap) => ({
+      play: snap.play,
+      state: snap.beatmap?.state ?? null,
+    }),
+  });
+  const play = data?.play;
+  if (play?.active) {
+    return (
+      <p className="text-sm text-muted">
+        {t(dict?.session.tosu.liveCombo, {
+          combo: play.combo ?? 0,
+        }) || `Live · combo ${play.combo ?? 0}`}
+        {play.maxCombo != null ? ` / ${play.maxCombo}` : ""}
+        {" · "}
+        {play.accuracy != null ? formatAccuracy(play.accuracy) : "—"}
+        {" · "}
+        {t(dict?.session.tosu.misses, {
+          count: play.misses ?? 0,
+        }) || `${play.misses ?? 0} miss`}
+        {play.pp != null ? ` · ${Math.round(play.pp)}pp` : ""}
+      </p>
+    );
+  }
+  return (
+    <p className="text-sm text-faint">
+      {data?.state
+        ? t(dict?.session.tosu.state, { state: data.state }) ||
+          `State: ${data.state}`
+        : dict?.session.tosu.songSelect ?? "Song select"}
+    </p>
   );
 }
 

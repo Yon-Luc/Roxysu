@@ -145,6 +145,19 @@ function emptyManiaPatternDetail(error: string): ManiaPatternDetail {
   };
 }
 
+function downsampleDensitySamples(
+  samples: SevenKDensitySample[],
+  maxPoints = 120,
+): SevenKDensitySample[] {
+  if (samples.length <= maxPoints) return samples;
+  const step = samples.length / maxPoints;
+  const out: SevenKDensitySample[] = [];
+  for (let i = 0; i < maxPoints; i += 1) {
+    out.push(samples[Math.min(samples.length - 1, Math.floor(i * step))]!);
+  }
+  return out;
+}
+
 function buildDensitySamples(notes: ChartNote[], sections: Array<{
   startMs: number;
   endMs: number;
@@ -152,18 +165,21 @@ function buildDensitySamples(notes: ChartNote[], sections: Array<{
 }>): SevenKDensitySample[] {
   if (notes.length === 0) return [];
 
+  const sorted = [...notes].sort((a, b) => a.startMs - b.startMs);
   const startMs =
-    Math.floor(notes[0]!.startMs / DENSITY_SAMPLE_MS) * DENSITY_SAMPLE_MS;
+    Math.floor(sorted[0]!.startMs / DENSITY_SAMPLE_MS) * DENSITY_SAMPLE_MS;
   const endMs =
-    Math.ceil(notes[notes.length - 1]!.startMs / DENSITY_SAMPLE_MS) *
+    Math.ceil(sorted[sorted.length - 1]!.startMs / DENSITY_SAMPLE_MS) *
     DENSITY_SAMPLE_MS;
   const samples: SevenKDensitySample[] = [];
+  let i = 0;
 
   for (let t = startMs; t <= endMs; t += DENSITY_SAMPLE_MS) {
     const windowEnd = t + DENSITY_SAMPLE_MS;
-    const windowNotes = notes.filter(
-      (note) => note.startMs >= t && note.startMs < windowEnd,
-    );
+    while (i < sorted.length && sorted[i]!.startMs < t) i += 1;
+    let j = i;
+    while (j < sorted.length && sorted[j]!.startMs < windowEnd) j += 1;
+    const windowNotes = sorted.slice(i, j);
     let peakChordSize = 0;
     for (let i = 0; i < windowNotes.length; i += 1) {
       const anchor = windowNotes[i]!;
@@ -240,7 +256,9 @@ export function analyzeManiaPatternDetail(osuText: string): ManiaPatternDetail {
 
   const result = analyzeManiaStructuralNotes(chart.notes, chart.columnCount);
   const holdCount = chart.notes.filter((note) => note.endMs > note.startMs).length;
-  const samples = buildDensitySamples(chart.notes, result.sections);
+  const samples = downsampleDensitySamples(
+    buildDensitySamples(chart.notes, result.sections),
+  );
   const durationMs =
     chart.notes.length > 1
       ? chart.notes[chart.notes.length - 1]!.startMs - chart.notes[0]!.startMs

@@ -37,6 +37,13 @@ export type { LazerCollectionSyncSuccess, LazerCollectionSyncError };
 
 const PAUSE_SETTLE_MS = 2_000;
 
+type Md5List = { hashes: string[]; skippedNoMd5: number };
+const md5ListCache = new Map<string, Md5List>();
+
+export function invalidateCollectionMd5Cache(): void {
+  md5ListCache.clear();
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -148,6 +155,9 @@ export async function md5HashesForSetOnlineIds(
     ...new Set(setOnlineIds.filter((id) => Number.isSafeInteger(id) && id > 0)),
   ];
   if (unique.length === 0) return { hashes: [], skippedNoMd5: 0 };
+  const cacheKey = `hub:${unique.slice().sort((a, b) => a - b).join(",")}`;
+  const cached = md5ListCache.get(cacheKey);
+  if (cached) return cached;
 
   const rows = await db
     .selectDistinct({ md5: beatmaps.md5Hash })
@@ -183,7 +193,9 @@ export async function md5HashesForSetOnlineIds(
   const resolved = new Set(setsWithHash.map((r) => r.onlineId));
   const skippedNoMd5 = unique.filter((id) => !resolved.has(id)).length;
 
-  return { hashes, skippedNoMd5 };
+  const result = { hashes, skippedNoMd5 };
+  md5ListCache.set(cacheKey, result);
+  return result;
 }
 
 function parseBeatmapsetIdsJson(raw: string): number[] {
@@ -230,10 +242,15 @@ export async function syncCollectionsToLazer(
       throw err;
     }
 
-    const { hashes, skippedNoMd5: skipped } = listCollectionMd5Hashes(
-      db,
-      col.query,
-    );
+    const cacheKey = `smart:${col.query}`;
+    const cached = md5ListCache.get(cacheKey);
+    const { hashes, skippedNoMd5: skipped } = cached
+      ? cached
+      : (() => {
+          const computed = listCollectionMd5Hashes(db, col.query);
+          md5ListCache.set(cacheKey, computed);
+          return computed;
+        })();
     skippedNoMd5 += skipped;
     payloadCollections.push({
       id: col.id,

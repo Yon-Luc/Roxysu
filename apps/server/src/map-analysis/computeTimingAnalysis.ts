@@ -46,7 +46,7 @@ function prioritizeIssues(issues: TimingIssue[]): TimingIssue[] {
     .slice(0, MAX_ISSUES);
 }
 
-async function loadBeatmapOsu(
+export async function loadBeatmapOsu(
   db: Db,
   beatmapId: string,
 ): Promise<
@@ -76,6 +76,18 @@ async function loadBeatmapOsu(
   }
 }
 
+export function chartTimingFromOsuText(osuText: string): ChartTimingRating {
+  const chart = parseOsuChart(osuText);
+  const result = analyzeChartTiming(chart);
+  return {
+    algorithm: result.algorithm,
+    metrics: result.metrics,
+    issues: prioritizeIssues(result.issues),
+    issueCounts: countIssues(result.issues),
+    error: null,
+  };
+}
+
 /** Analyze snap/BPM consistency from the on-disk `.osu` file. */
 export async function getChartTimingAnalysis(
   db: Db,
@@ -100,15 +112,7 @@ export async function getChartTimingAnalysis(
   }
 
   try {
-    const chart = parseOsuChart(loaded.osuText);
-    const result = analyzeChartTiming(chart);
-    return {
-      algorithm: result.algorithm,
-      metrics: result.metrics,
-      issues: prioritizeIssues(result.issues),
-      issueCounts: countIssues(result.issues),
-      error: null,
-    };
+    return chartTimingFromOsuText(loaded.osuText);
   } catch (err) {
     return {
       algorithm: "timing-v1",

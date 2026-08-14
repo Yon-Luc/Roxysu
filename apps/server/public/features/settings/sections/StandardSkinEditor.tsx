@@ -185,10 +185,8 @@ function Toggle({ label, checked, onChange }: {
 export function StandardSkinEditor() {
   const { dict } = useAppDict();
   const [skin, setSkin] = useState(() => getStdSkin());
-  const [timeMs, setTimeMs] = useState(0);
   const [playing, setPlaying] = useState(true);
-  const timeRef = useRef(timeMs);
-  timeRef.current = timeMs;
+  const timeRef = useRef(0);
 
   function update(patch: Partial<StdSkin>) {
     const next = { ...skin, ...patch };
@@ -203,9 +201,7 @@ export function StandardSkinEditor() {
     function tick(now: number) {
       const dt = now - last;
       last = now;
-      const next = (timeRef.current + dt) % LOOP_MS;
-      timeRef.current = next;
-      setTimeMs(next);
+      timeRef.current = (timeRef.current + dt) % LOOP_MS;
       raf = requestAnimationFrame(tick);
     }
     raf = requestAnimationFrame(tick);

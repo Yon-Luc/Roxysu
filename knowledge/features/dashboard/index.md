@@ -4,6 +4,7 @@ confidence: verified
 touches:
   - apps/server/public/features/dashboard/DashboardPage.tsx
   - apps/server/src/routes/dashboard.ts
+  - apps/server/src/routes/overlay.ts
 ---
 
 # Dashboard
@@ -15,6 +16,8 @@ At-a-glance practice library overview: indexed score/beatmap counts, Realm extra
 ## Business meaning
 
 Landing surface for “is my practice library healthy and what have I been playing?”
+
+The OBS overlay must not poll this dashboard payload. Overlay idle recent scores come from `GET /api/overlay`.
 
 ## Main flows
 

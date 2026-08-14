@@ -1,9 +1,10 @@
 import { Link } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { BeatmapPreviewButton } from "../../components/BeatmapPreviewButton";
 import { ModBadges } from "../../components/ModBadges";
-import { fetchTosuLive, startTosu, type TosuLive } from "../../lib/api";
+import { startTosu, type TosuLive } from "../../lib/api";
+import { useTosuLiveQuery } from "../../lib/useTosuLiveQuery";
 import { formatAccuracy } from "../../lib/format";
 import { useAppDict, t } from "../../lib/i18n";
 import type { Dictionary } from "@roxysu/i18n";
@@ -110,18 +111,8 @@ export function SessionTosuLivePanel() {
     localStorage.setItem(PREFS_KEY, visible ? "1" : "0");
   }, [visible]);
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["tosu", "live"],
-    queryFn: fetchTosuLive,
-    refetchInterval: (query) => {
-      const snap = query.state.data;
-      if (!snap?.enabled) return false;
-      if (snap.status === "connected" && snap.play?.active) return 1_000;
-      if (snap.status === "connecting" || snap.status === "disconnected") {
-        return 3_000;
-      }
-      return 5_000;
-    },
+  const { data, isLoading, error } = useTosuLiveQuery({
+    enabled: visible,
   });
 
   const startMut = useMutation({

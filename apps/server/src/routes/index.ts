@@ -5,6 +5,7 @@ import { beatmapRoutes } from "./beatmaps";
 import { collectionRoutes } from "./collections";
 import { coverRoutes } from "./covers";
 import { dashboardRoutes } from "./dashboard";
+import { overlayRoutes } from "./overlay";
 import { practiceRoutes } from "./practice";
 import { scoreRoutes } from "./scores";
 import { searchRoutes } from "./search";
@@ -21,6 +22,7 @@ const productApi = () =>
     .use(i18nRoutes)
     .use(systemRoutes)
     .use(dashboardRoutes)
+    .use(overlayRoutes)
     .use(statsRoutes)
     .use(practiceRoutes)
     .use(beatmapRoutes)

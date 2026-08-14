@@ -73,5 +73,5 @@ export {
   stopPatternAnalysisBackfill,
   countPatternAnalysisMissing,
 } from "./patternAnalysisJob";
-export { getChartTimingAnalysis } from "./computeTimingAnalysis";
+export { getChartTimingAnalysis, loadBeatmapOsu, chartTimingFromOsuText } from "./computeTimingAnalysis";
 export type { ChartTimingRating } from "./computeTimingAnalysis";

@@ -98,7 +98,8 @@ function textSearchFilter(text: string): SQL | undefined {
 // ---------------------------------------------------------------------------
 async function buildCollectionItem(
   collectionId: number,
-  viewerUserId?: number
+  viewerUserId?: number,
+  opts?: { includeAllSetIds?: boolean },
 ) {
   const col = await db
     .select({
@@ -124,7 +125,14 @@ async function buildCollectionItem(
 
   if (!col) return null;
 
-  const [tags, maps, favoriteCount, favoritedByMe, allSetIds] =
+  const includeAllSetIds = opts?.includeAllSetIds === true;
+  const previewQuery = db
+    .select({ beatmapsetId: collectionMaps.beatmapsetId })
+    .from(collectionMaps)
+    .where(eq(collectionMaps.collectionId, collectionId))
+    .orderBy(collectionMaps.id);
+
+  const [tags, maps, favoriteCount, favoritedByMe, previewSetIds] =
     await Promise.all([
       db
         .select({ tag: collectionTags.tag })
@@ -156,11 +164,7 @@ async function buildCollectionItem(
             .get()
         : Promise.resolve(null),
 
-      db
-        .select({ beatmapsetId: collectionMaps.beatmapsetId })
-        .from(collectionMaps)
-        .where(eq(collectionMaps.collectionId, collectionId))
-        .orderBy(collectionMaps.id),
+      includeAllSetIds ? previewQuery : previewQuery.limit(4),
     ]);
 
   return {
@@ -193,8 +197,10 @@ async function buildCollectionItem(
     mapCount: maps?.count ?? 0,
     favoriteCount: favoriteCount?.count ?? 0,
     favoritedByMe: !!favoritedByMe,
-    previewBeatmapsetIds: allSetIds.slice(0, 4).map((m) => m.beatmapsetId),
-    beatmapsetIds: allSetIds.map((m) => m.beatmapsetId),
+    previewBeatmapsetIds: previewSetIds.slice(0, 4).map((m) => m.beatmapsetId),
+    ...(includeAllSetIds
+      ? { beatmapsetIds: previewSetIds.map((m) => m.beatmapsetId) }
+      : {}),
   };
 }
 

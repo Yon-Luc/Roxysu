@@ -17,6 +17,10 @@ Per-beatmap deep dive: cover, stats, mastery, recent scores, sessions on that ma
 
 “How am I doing on this specific map?”
 
+## Implementation
+
+Mania `GET /api/beatmaps/:id` reads the `.osu` file once and derives pattern detail plus timing from that text. Density samples are two-pointer windows downsampled to about 120 points. Recent scores are a slim 50-row select; sessions on the map are capped.
+
 ## Important symbols
 
 - `apps/server/public/features/practice/PracticeProfilePage.tsx`

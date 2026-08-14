@@ -5,7 +5,7 @@ import {
   capitalizeSessionName,
   generateSessionName,
 } from "@roxysu/session-names";
-import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull } from "drizzle-orm";
 import { publish } from "../shared/events";
 import { SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
 import {
@@ -294,12 +294,16 @@ export async function getSessionById(db: Db, id: number) {
   };
 }
 
-export async function listSessionScores(db: Db, sessionId: number) {
+export async function listSessionScores(
+  db: Db,
+  sessionId: number,
+  opts?: { limit?: number },
+) {
   const [usernames, gamemode] = await Promise.all([
     resolveScoresUsernames(db),
     resolveScoresGamemode(db),
   ]);
-  return db
+  const q = db
     .select({
       id: scores.id,
       beatmapId: scores.beatmapId,
@@ -346,6 +350,28 @@ export async function listSessionScores(db: Db, sessionId: number) {
       ),
     )
     .orderBy(desc(scores.playedAt), desc(scores.id));
+  return opts?.limit != null ? q.limit(opts.limit) : q;
+}
+
+export async function countSessionPbs(db: Db, sessionId: number): Promise<number> {
+  const [usernames, gamemode] = await Promise.all([
+    resolveScoresUsernames(db),
+    resolveScoresGamemode(db),
+  ]);
+  const [row] = await db
+    .select({ n: count() })
+    .from(scoreMetrics)
+    .innerJoin(scores, eq(scoreMetrics.scoreId, scores.id))
+    .where(
+      and(
+        eq(scoreMetrics.sessionId, sessionId),
+        eq(scoreMetrics.isPb, true),
+        eq(scores.deletePending, false),
+        scoresUsernameCondition(usernames),
+        scoresGamemodeCondition(gamemode),
+      ),
+    );
+  return Number(row?.n ?? 0);
 }
 
 export async function listSessions(db: Db, limit = 50) {
@@ -360,7 +386,11 @@ export async function listSessions(db: Db, limit = 50) {
   }));
 }
 
-export async function listSessionsForBeatmap(db: Db, beatmapId: string) {
+export async function listSessionsForBeatmap(
+  db: Db,
+  beatmapId: string,
+  limit = 24,
+) {
   const [usernames, gamemode] = await Promise.all([
     resolveScoresUsernames(db),
     resolveScoresGamemode(db),
@@ -378,7 +408,9 @@ export async function listSessionsForBeatmap(db: Db, beatmapId: string) {
         scoresUsernameCondition(usernames),
         scoresGamemodeCondition(gamemode),
       ),
-    );
+    )
+    .orderBy(desc(scores.playedAt))
+    .limit(Math.max(limit * 10, 80));
 
   const ids = [
     ...new Set(
@@ -394,6 +426,7 @@ export async function listSessionsForBeatmap(db: Db, beatmapId: string) {
     .from(sessions)
     .where(inArray(sessions.id, ids))
     .orderBy(desc(sessions.startedAt))
+    .limit(limit)
     .then((rows) =>
       rows.map((row) => ({
         ...row,

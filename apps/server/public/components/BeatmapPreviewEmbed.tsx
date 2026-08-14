@@ -88,8 +88,8 @@ export function BeatmapPreviewEmbed({
   const { data, error, isLoading } = useQuery({
     queryKey: ["beatmap-preview", beatmapId],
     queryFn: () => fetchBeatmapPreview(beatmapId) as Promise<BeatmapPreview>,
-    staleTime: 0,
-    refetchOnMount: "always",
+    staleTime: 5 * 60_000,
+    refetchOnMount: true,
   });
 
   const audioUrl = localBeatmapAudioUrl(data?.audioFileHash);

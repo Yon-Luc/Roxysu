@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { QueryLanguageHelpButton } from "../../components/QueryLanguageHelpModal";
 import { useAppDict, t } from "../../lib/i18n";
 import {
@@ -175,8 +175,20 @@ export function SessionUpNext({
   const [prefs, setPrefs] = useState<UpNextPrefs>(() => loadPrefs());
   const [shuffleKey, setShuffleKey] = useState(0);
   const [queryDirty, setQueryDirty] = useState(false);
-  const excludeRef = useRef(excludeBeatmapIds);
-  excludeRef.current = excludeBeatmapIds;
+  const [debouncedQuery, setDebouncedQuery] = useState(() =>
+    loadPrefs().query.trim(),
+  );
+  const excludeKey = useMemo(
+    () => [...excludeBeatmapIds].sort().join(","),
+    [excludeBeatmapIds],
+  );
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setDebouncedQuery(prefs.query.trim());
+    }, 400);
+    return () => window.clearTimeout(handle);
+  }, [prefs.query]);
 
   useEffect(() => {
     savePrefs(prefs);
@@ -218,15 +230,15 @@ export function SessionUpNext({
     }));
   }
 
-  const sampleQuery = prefs.query.trim();
+  const sampleQuery = debouncedQuery;
 
-  const { data, isLoading, error, isFetching, refetch } = useQuery({
-    queryKey: ["practice-sample", sampleQuery, shuffleKey],
+  const { data, isLoading, error, isFetching } = useQuery({
+    queryKey: ["practice-sample", sampleQuery, shuffleKey, excludeKey],
     queryFn: () =>
       fetchPracticeSample({
         q: sampleQuery || undefined,
         count: 3,
-        exclude: excludeRef.current,
+        exclude: excludeBeatmapIds,
       }),
     enabled: sampleQuery.length > 0,
   });
@@ -243,9 +255,8 @@ export function SessionUpNext({
           className="rx-btn"
           onClick={() => {
             setShuffleKey((k) => k + 1);
-            void refetch();
           }}
-          disabled={isFetching || !sampleQuery}
+          disabled={isFetching || !prefs.query.trim()}
         >
           {isFetching
             ? t(dict?.session.shuffling) || "Shuffling…"
@@ -254,7 +265,7 @@ export function SessionUpNext({
         <Link
           to="/practice"
           className="rx-btn"
-          onClick={() => openInPractice(sampleQuery)}
+          onClick={() => openInPractice(prefs.query.trim())}
         >
           {t(dict?.session.openInPractice) || "Open in Practice"}
         </Link>

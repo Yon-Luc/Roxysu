@@ -112,3 +112,19 @@ export function parseHubSearchQuery(raw: string | undefined): HubSearchFilters {
   filters.text = leftovers.join(" ").trim();
   return filters;
 }
+
+/** Workshop mode chip / share tag for a computed ruleset. */
+export function hubModeTagForRuleset(
+  mode: HubRuleset,
+): "mania" | "std" | "ctb" | "taiko" {
+  switch (mode) {
+    case "osu":
+      return "std";
+    case "fruits":
+      return "ctb";
+    case "taiko":
+      return "taiko";
+    case "mania":
+      return "mania";
+  }
+}

@@ -64,4 +64,10 @@ describe("hub tag taxonomy", () => {
     expect(all.length).toBe(1);
     expect(all[0]!.tags).toContain("multi-mode");
   });
+
+  test("Workshop picker groups match the Hub store canonical copy", async () => {
+    const canonical = await import("@roxysu/db/hub");
+    expect([...HUB_MODE_TAGS]).toEqual([...canonical.HUB_MODE_TAGS]);
+    expect(HUB_TAG_GROUPS_BY_MODE).toEqual(canonical.HUB_TAG_GROUPS_BY_MODE);
+  });
 });

@@ -1,4 +1,4 @@
-import { integer, primaryKey, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { integer, index, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
 // ---------------------------------------------------------------------------
@@ -23,7 +23,9 @@ export type NewHubUser = typeof hubUsers.$inferInsert;
 // ---------------------------------------------------------------------------
 // Collections
 // ---------------------------------------------------------------------------
-export const collections = sqliteTable("collections", {
+export const collections = sqliteTable(
+  "collections",
+  {
   id: integer("id").primaryKey({ autoIncrement: true }),
   ownerId: integer("owner_id")
     .notNull()
@@ -45,7 +47,12 @@ export const collections = sqliteTable("collections", {
   updatedAt: integer("updated_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),
-});
+  },
+  (t) => ({
+    ownerIdIdx: index("collections_owner_id_idx").on(t.ownerId),
+    createdAtIdx: index("collections_created_at_idx").on(t.createdAt),
+  }),
+);
 
 export type Collection = typeof collections.$inferSelect;
 export type NewCollection = typeof collections.$inferInsert;
@@ -53,14 +60,26 @@ export type NewCollection = typeof collections.$inferInsert;
 // ---------------------------------------------------------------------------
 // Collection beatmapset entries
 // ---------------------------------------------------------------------------
-export const collectionMaps = sqliteTable("collection_maps", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  collectionId: integer("collection_id")
-    .notNull()
-    .references(() => collections.id, { onDelete: "cascade" }),
-  beatmapsetId: integer("beatmapset_id").notNull(),
-  mapName: text("map_name").notNull().default(""),
-});
+export const collectionMaps = sqliteTable(
+  "collection_maps",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    collectionId: integer("collection_id")
+      .notNull()
+      .references(() => collections.id, { onDelete: "cascade" }),
+    beatmapsetId: integer("beatmapset_id").notNull(),
+    mapName: text("map_name").notNull().default(""),
+  },
+  (t) => ({
+    collectionIdIdx: index("collection_maps_collection_id_idx").on(
+      t.collectionId,
+    ),
+    collectionSetUnique: uniqueIndex("collection_maps_collection_set_unique").on(
+      t.collectionId,
+      t.beatmapsetId,
+    ),
+  }),
+);
 
 export type CollectionMap = typeof collectionMaps.$inferSelect;
 export type NewCollectionMap = typeof collectionMaps.$inferInsert;
@@ -152,6 +171,7 @@ export const collectionTags = sqliteTable(
   },
   (t) => ({
     pk: primaryKey({ columns: [t.collectionId, t.tag] }),
+    tagIdx: index("collection_tags_tag_idx").on(t.tag),
   })
 );
 
@@ -173,6 +193,9 @@ export const collectionFavorites = sqliteTable(
   },
   (t) => ({
     pk: primaryKey({ columns: [t.userId, t.collectionId] }),
+    collectionIdIdx: index("collection_favorites_collection_id_idx").on(
+      t.collectionId,
+    ),
   })
 );
 

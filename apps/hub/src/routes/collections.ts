@@ -25,7 +25,7 @@ import { requireAuth, jwtPlugin, optionalViewerUserId } from "../middleware/auth
 import { bearer } from "@elysiajs/bearer";
 import { computeCollectionStatsFromSetIds, isHubRuleset } from "../services/collectionStats";
 import { uniqueBeatmapsetIds, uniqueTags } from "../services/collectionWrite";
-import { parseHubSearchQuery } from "../services/hubSearchQuery";
+import { hubModeTagForRuleset, parseHubSearchQuery } from "../services/hubSearchQuery";
 import { allowRateLimit } from "../services/rateLimit";
 import { clientIp } from "../services/clientIp";
 
@@ -228,7 +228,14 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
       }
       if (textFilter) filters.push(textFilter);
       if (search.mode) {
-        filters.push(eq(collections.dominantMode, search.mode));
+        const modeTag = hubModeTagForRuleset(search.mode);
+        const taggedIds = await collectionIdsMatchingAllTags([modeTag]);
+        const modeMatch = eq(collections.dominantMode, search.mode);
+        filters.push(
+          taggedIds.length > 0
+            ? or(modeMatch, inArray(collections.id, taggedIds))!
+            : modeMatch,
+        );
       }
       if (search.keys != null) {
         filters.push(eq(collections.dominantKeys, search.keys));

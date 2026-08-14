@@ -17,6 +17,7 @@ import {
 import {
   fetchHubCollection,
   fetchHubCollections,
+  fetchHubFavorites,
   fetchHubMe,
   clearHubJwt,
   useHubJwt,
@@ -29,7 +30,7 @@ import { pushToast } from "../../lib/toasts";
 import { HubLoginButton } from "./HubLoginButton";
 import { HubTagFilters } from "./HubTagFilters";
 
-type HubTab = "browse" | "added";
+type HubTab = "browse" | "favorites" | "added";
 
 export function HubBrowsePage() {
   const hubUrl = useHubUrl();
@@ -73,6 +74,12 @@ export function HubBrowsePage() {
   const addedQuery = useQuery({
     queryKey: ["hub-added-collections"],
     queryFn: fetchHubAddedCollections,
+  });
+
+  const favoritesQuery = useQuery({
+    queryKey: ["hub-favorites", hubUrl, jwt],
+    enabled: !!jwt,
+    queryFn: () => fetchHubFavorites(hubUrl, jwt!),
   });
 
   const listQuery = useQuery({
@@ -158,6 +165,7 @@ export function HubBrowsePage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["hub-me"] });
       void queryClient.invalidateQueries({ queryKey: ["hub-collections"] });
+      void queryClient.invalidateQueries({ queryKey: ["hub-favorites"] });
     },
   });
 
@@ -204,7 +212,8 @@ export function HubBrowsePage() {
     return Date.parse(c.updatedAt) > Date.parse(local.hubUpdatedAt);
   }
 
-  const browseHasFilters = tags.length > 0 || debouncedQ.length > 0;
+  const browseHasFilters =
+    tags.length > 0 || debouncedQ.length > 0 || mode !== "all";
   const showBrowseSkeleton =
     tab === "browse" && listQuery.isPending && !listQuery.isPlaceholderData;
   const showAddedSkeleton =
@@ -214,6 +223,16 @@ export function HubBrowsePage() {
 
   const browseItems = listQuery.data?.data ?? [];
   const addedItems = addedDetailsQuery.data ?? [];
+  const favoriteItems = useMemo(() => {
+    const items = favoritesQuery.data?.data ?? [];
+    const needle = debouncedQ.toLowerCase();
+    if (!needle) return items;
+    return items.filter(
+      (c) =>
+        c.name.toLowerCase().includes(needle) ||
+        c.owner.username.toLowerCase().includes(needle),
+    );
+  }, [favoritesQuery.data, debouncedQ]);
 
   return (
     <div className="space-y-6">
@@ -269,6 +288,16 @@ export function HubBrowsePage() {
         </button>
         <button
           type="button"
+          className={`rx-btn text-sm ${tab === "favorites" ? "rx-btn-primary" : ""}`}
+          onClick={() => setTab("favorites")}
+        >
+          Favorites
+          {favoritesQuery.data && favoritesQuery.data.data.length > 0
+            ? ` (${favoritesQuery.data.data.length})`
+            : ""}
+        </button>
+        <button
+          type="button"
           className={`rx-btn text-sm ${tab === "added" ? "rx-btn-primary" : ""}`}
           onClick={() => setTab("added")}
         >
@@ -288,7 +317,9 @@ export function HubBrowsePage() {
           placeholder={
             tab === "added"
               ? "Search added collections…"
-              : "Search name, player, mode=m key=7 stars>=5…"
+              : tab === "favorites"
+                ? "Search favorites…"
+                : "Search name, player, mode=m key=7 stars>=5…"
           }
           aria-label="Search collections"
         />
@@ -331,6 +362,32 @@ export function HubBrowsePage() {
                     dominantMode: c.dominantMode ?? null,
                     dominantKeys: c.dominantKeys ?? null,
                   }}
+                  ownedSetIds={ownedSetIds}
+                  updateAvailable={isUpdateAvailable(c)}
+                />
+              </li>
+            ))}
+          </ul>
+        )
+      ) : tab === "favorites" ? (
+        !jwt ? (
+          <p className="text-sm text-muted">Log in to see collections you favorited.</p>
+        ) : favoritesQuery.isPending ? (
+          <CardGridSkeleton count={6} />
+        ) : favoritesQuery.error ? (
+          <p className="text-sm text-rose-300">{favoritesQuery.error.message}</p>
+        ) : favoriteItems.length === 0 ? (
+          <p className="text-sm text-muted">
+            {debouncedQ
+              ? "No favorites match your search."
+              : "No favorites yet. Open a collection and tap Favorite."}
+          </p>
+        ) : (
+          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {favoriteItems.map((c) => (
+              <li key={c.id}>
+                <HubCollectionCard
+                  collection={c}
                   ownedSetIds={ownedSetIds}
                   updateAvailable={isUpdateAvailable(c)}
                 />

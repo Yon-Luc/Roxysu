@@ -33,3 +33,7 @@ touches:
    **Enforced by:** `apps/hub/src/services/hubEnv.ts:resolveCorsOrigin()` — status: verified
 
 **Unauthorized result:** request rejected / forbidden before mutation; Hub does not start if production CORS is unset/`*`.
+
+## Failure behavior
+
+Workshop logout is local-only (clears `localStorage`). Hub does not revoke JWTs server-side. OAuth callback redeems `h=` only; a JWT in the URL is ignored.

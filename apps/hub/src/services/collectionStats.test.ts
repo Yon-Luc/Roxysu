@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { aggregateCollectionStats } from "./collectionStats";
-import { parseHubSearchQuery } from "./hubSearchQuery";
+import { hubModeTagForRuleset, parseHubSearchQuery } from "./hubSearchQuery";
 
 describe("aggregateCollectionStats", () => {
   test("picks mania + dominant keys and star range", () => {
@@ -30,5 +30,14 @@ describe("parseHubSearchQuery", () => {
     const q = parseHubSearchQuery("keys=4");
     expect(q.mode).toBe("mania");
     expect(q.keys).toBe(4);
+  });
+});
+
+describe("hubModeTagForRuleset", () => {
+  test("maps osu/fruits to std/ctb tags", () => {
+    expect(hubModeTagForRuleset("osu")).toBe("std");
+    expect(hubModeTagForRuleset("fruits")).toBe("ctb");
+    expect(hubModeTagForRuleset("taiko")).toBe("taiko");
+    expect(hubModeTagForRuleset("mania")).toBe("mania");
   });
 });

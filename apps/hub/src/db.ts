@@ -28,3 +28,7 @@ export function runMigrations() {
     process.exit(1);
   }
 }
+
+if (import.meta.main) {
+  runMigrations();
+}

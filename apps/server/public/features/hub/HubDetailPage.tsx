@@ -269,6 +269,7 @@ export function HubDetailPage({ id }: { id: string }) {
         queryKey: ["hub-collection", hubUrl, collectionId],
       });
       void queryClient.invalidateQueries({ queryKey: ["hub-collections"] });
+      void queryClient.invalidateQueries({ queryKey: ["hub-favorites"] });
     },
     onError: (err) =>
       pushToast({
@@ -293,6 +294,7 @@ export function HubDetailPage({ id }: { id: string }) {
         queryKey: ["hub-collection", hubUrl, collectionId],
       });
       void queryClient.invalidateQueries({ queryKey: ["hub-collections"] });
+      void queryClient.invalidateQueries({ queryKey: ["hub-favorites"] });
       pushToast({ title: "Collection updated", tone: "success" });
     },
     onError: (err) =>
@@ -372,6 +374,7 @@ export function HubDetailPage({ id }: { id: string }) {
     onSuccess: () => {
       setDeleteOpen(false);
       void queryClient.invalidateQueries({ queryKey: ["hub-collections"] });
+      void queryClient.invalidateQueries({ queryKey: ["hub-favorites"] });
       pushToast({
         title: "Collection deleted",
         detail: "Removed from Workshop. Your local copy is unchanged.",

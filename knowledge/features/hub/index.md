@@ -15,7 +15,8 @@ touches:
   - apps/server/public/lib/hub.ts
   - apps/server/src/hubUrl.ts
   - apps/server/src/mirrors/hubSearch.ts
-  - packages/db/src/hub/schema.ts
+  - apps/hub/src/db.ts
+  - apps/hub/drizzle/0003_collection_indexes.sql
   - packages/hub-client
 ---
 
@@ -72,6 +73,10 @@ Networked collaboration / discovery — not required for offline practice analyt
 - `apps/server/public/lib/hub.ts` — runtime Workshop client (clears JWT on Hub 401; delete + export). `packages/hub-client` is the Node Eden client and is not used in the browser
 - `apps/server/src/routes/system.ts` — client app OAuth handoff helpers
 - Workshop detail: owner or admin can edit/delete; Save calls `GET /collections/:id/export` so `downloadCount` increments
+- Browse mode chip (`q=mode=m`) matches `dominantMode` **or** the corresponding Hub tag (`mania` / `std` / `ctb` / `taiko`)
+- Workshop Favorites tab uses `GET /collections/me/favorites`
+- OAuth callback accepts only `h=` (handoff id), never a JWT in the URL
+- `apps/hub/src/db.ts` — `bun run db:migrate` and Hub boot both apply Hub store migrations
 
 ## Tag taxonomy
 
@@ -87,8 +92,13 @@ mode (`mania` / `std` / `ctb` / `taiko`) and is grouped under a category label
 - Mania key tags: `4k` `5k` `6k` `7k` `8k`.
 - Tags are stored as free text in `collection_tags`; the whitelist is app-level
   validation (`VALID_TAGS`), not a DB constraint, so adding tags needs no migration.
+- Hub store indexes: `collections(owner_id)`, `collections(created_at)`,
+  `collection_maps(collection_id)`, unique `(collection_id, beatmapset_id)`,
+  `collection_tags(tag)`, `collection_favorites(collection_id)`.
 - The picker shows grouped chips for a selected mode (`hubTagGroupsForMode`) and
   a flat union for "all".
+- Picker copy in `apps/server/public/lib/hub.ts` must stay equal to
+  `packages/db/src/hub/schema.ts` (parity test: `hubTags.test.ts`).
 
 **Enforced by:** `apps/hub/src/routes/collections.ts` `parseTagFilters` / create /
 update tag validation — status: verified
@@ -101,6 +111,11 @@ update tag validation — status: verified
 ## Depended on by
 
 - Hub UI pages under `apps/server/public/features/hub`
+
+## Failure behavior
+
+1. Workshop Log out removes the JWT from `localStorage` only. Hub does not keep a revoke list; a copied JWT stays valid until expiry (30 days). Hub 401 still clears the stored JWT.
+2. OAuth pending codes live in Hub process memory and are lost on restart.
 
 ## Related knowledge
 

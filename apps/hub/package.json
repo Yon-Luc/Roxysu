@@ -13,7 +13,7 @@
     "start": "bun run src/index.ts",
     "build": "bun build src/index.ts --outdir dist --target bun",
     "db:generate": "drizzle-kit generate --config drizzle.config.ts",
-    "db:migrate": "bun run src/db.ts migrate"
+    "db:migrate": "bun run src/db.ts"
   },
   "dependencies": {
     "@elysiajs/bearer": "^1.4.4",

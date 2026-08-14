@@ -7,6 +7,7 @@ import { createApp } from "./createApp";
 import { startPollLoop } from "./sse";
 import { startAnalyticsPipeline } from "./analytics/pipeline";
 import { startCollectionMatchCache } from "./shared/collectionMatchCache";
+import { clearStuckMirrorBatchLocks } from "./mirrors";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -22,6 +23,11 @@ async function main() {
   if (clearStuckRealmReaderPause(db)) {
     console.log(
       "[sync] cleared stuck sync.realm_reader_paused — realm-reader can resume",
+    );
+  }
+  if (clearStuckMirrorBatchLocks()) {
+    console.log(
+      "[mirrors] cleared stuck download / open-in-osu lock — batches can start again",
     );
   }
 

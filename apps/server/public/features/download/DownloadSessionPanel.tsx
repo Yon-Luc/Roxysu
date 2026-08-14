@@ -51,10 +51,19 @@ export function DownloadSessionPanel({
         <button
           type="button"
           className="rx-btn shrink-0"
-          disabled={stopping || batch.status === "stopping"}
+          disabled={stopping}
           onClick={onStop}
+          title={
+            batch.status === "stopping"
+              ? "Force-clear a stuck download lock"
+              : "Stop the current batch"
+          }
         >
-          {batch.status === "stopping" || stopping ? "Stopping…" : "Stop"}
+          {batch.status === "stopping" || stopping
+            ? stopping
+              ? "Stopping…"
+              : "Force stop"
+            : "Stop"}
         </button>
       </div>
 

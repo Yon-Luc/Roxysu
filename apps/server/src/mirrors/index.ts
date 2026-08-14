@@ -68,6 +68,7 @@ export {
   getMirrorBatchJobState,
   startMirrorBatchJob,
   stopMirrorBatchJob,
+  clearStuckMirrorBatchLocks,
   openLastBatchArchivesInOsu,
   saveBeatmapsetArchive,
   type MirrorBatchJobState,

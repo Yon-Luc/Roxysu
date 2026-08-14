@@ -152,13 +152,54 @@ type JobInternal = {
   recentErrors: Array<{ setId: number; error: string }>;
   stopRequested: boolean;
   running: boolean;
+  /** Bumped to abandon in-flight work after force-unlock / new start. */
+  generation: number;
 };
 
 let openingInProgress = false;
+/** Monotonic id so abandoned async batches stop mutating `job`. */
+let jobGeneration = 0;
+
+/**
+ * Clear in-memory download locks left behind by a hung batch or Open-in-osu!
+ * call. Safe on process start (nothing can still be running in *this* process).
+ * Also used as a force-unlock when Stop is pressed while already stopping.
+ *
+ * Preserves idle import bookkeeping (savedPaths / scripts) so leftover .osz
+ * files remain openable after unlock.
+ *
+ * @returns true when a lock was actually held
+ */
+export function clearStuckMirrorBatchLocks(): boolean {
+  const wasLocked =
+    job.running ||
+    openingInProgress ||
+    job.status === "running" ||
+    job.status === "stopping";
+  openingInProgress = false;
+  // Abandon any in-flight runBatch / download slots still awaiting I/O.
+  jobGeneration += 1;
+  job.generation = jobGeneration;
+  if (!wasLocked) return false;
+
+  job.running = false;
+  job.stopRequested = true;
+  job.phase = "idle";
+  job.currentSetId = null;
+  job.currentTitle = null;
+  if (job.status === "running" || job.status === "stopping") {
+    job.status = "error";
+    job.error =
+      job.error ??
+      "Download lock was cleared (stuck batch / process restart). You can start a new batch.";
+    job.finishedAt = new Date();
+  }
+  return true;
+}
 
 /** Reset in-memory batch state (tests / process-start equivalent). */
 export function resetMirrorBatchJobForTests(): void {
-  openingInProgress = false;
+  clearStuckMirrorBatchLocks();
   job = {
     status: "idle",
     phase: "idle",
@@ -189,7 +230,21 @@ export function resetMirrorBatchJobForTests(): void {
     recentErrors: [],
     stopRequested: false,
     running: false,
+    generation: jobGeneration,
   };
+}
+
+/** Test-only: leave the job looking like a hung batch (no async worker). */
+export function simulateStuckMirrorBatchForTests(
+  status: "running" | "stopping" = "stopping",
+): void {
+  job.running = true;
+  job.stopRequested = status === "stopping";
+  job.status = status;
+  job.phase = "downloading";
+  job.startedAt = new Date();
+  job.finishedAt = null;
+  job.error = null;
 }
 
 function pathsReadyToOpen(downloadDir: string = job.downloadDir): string[] {
@@ -268,6 +323,7 @@ let job: JobInternal = {
   recentErrors: [],
   stopRequested: false,
   running: false,
+  generation: 0,
 };
 
 function sleep(ms: number): Promise<void> {
@@ -323,6 +379,12 @@ export function getMirrorBatchJobState(): MirrorBatchJobState {
 }
 
 export function stopMirrorBatchJob(): MirrorBatchJobState {
+  // Second Stop while already stopping / hung: force-clear the lock so the UI
+  // cannot stay stuck forever if a download slot ignored cancellation.
+  if (job.status === "stopping" || (job.running === false && job.status === "running")) {
+    clearStuckMirrorBatchLocks();
+    return getMirrorBatchJobState();
+  }
   if (job.running) {
     job.stopRequested = true;
     job.status = "stopping";
@@ -333,6 +395,7 @@ export function stopMirrorBatchJob(): MirrorBatchJobState {
 function resetJob(
   partial: Partial<JobInternal> & { mode: MirrorBatchMode },
 ): void {
+  jobGeneration += 1;
   job = {
     status: "running",
     phase: "scanning",
@@ -366,6 +429,7 @@ function resetJob(
     recentErrors: [],
     stopRequested: false,
     running: true,
+    generation: jobGeneration,
   };
 }
 
@@ -383,6 +447,7 @@ function archivePathForSet(
 async function collectSetsPages(
   db: Db,
   params: MirrorBatchPagesRequest,
+  generation: number,
 ): Promise<{ sets: OnlineBeatmapSet[]; ownedSkipped: number }> {
   const sets: OnlineBeatmapSet[] = [];
   const seen = new Set<number>();
@@ -390,7 +455,7 @@ async function collectSetsPages(
   const useQl = params.query != null;
 
   for (let i = 0; i < params.pageCount; i += 1) {
-    if (job.stopRequested) break;
+    if (job.stopRequested || generation !== job.generation) break;
     const page = params.startPage + i;
     const result: MirrorSearchResult = await searchOnlineBeatmapsets(db, {
       ...(useQl
@@ -404,6 +469,7 @@ async function collectSetsPages(
       page,
       excludeOwned: params.excludeOwned,
     });
+    if (generation !== job.generation) break;
     job.pagesScanned += 1;
     ownedSkipped += result.ownedSkipped;
     for (const set of result.items) {
@@ -423,6 +489,7 @@ async function collectSetsQuery(
   db: Db,
   onlineQuery: OnlineMirrorQuery,
   opts: { excludeOwned: boolean; maxPages: number; maxSets: number },
+  generation: number,
 ): Promise<{
   sets: OnlineBeatmapSet[];
   ownedSkipped: number;
@@ -433,8 +500,10 @@ async function collectSetsQuery(
     excludeOwned: opts.excludeOwned,
     maxPages: opts.maxPages,
     maxSets: opts.maxSets,
-    shouldStop: () => job.stopRequested,
+    shouldStop: () =>
+      job.stopRequested || generation !== job.generation,
     onPage: (info) => {
+      if (generation !== job.generation) return;
       job.pagesScanned = info.mirrorPage + 1;
       job.matched = info.matchedSoFar;
       job.skippedOwned = info.ownedSkipped;
@@ -493,8 +562,10 @@ async function downloadQueue(
   >,
   noVideo: boolean,
   concurrency: number,
+  generation: number,
 ): Promise<void> {
   const downloadDir = ensureBeatmapsDownloadDir();
+  if (generation !== job.generation) return;
   job.downloadDir = downloadDir;
   mkdirSync(downloadDir, { recursive: true });
   job.phase = "downloading";
@@ -506,24 +577,28 @@ async function downloadQueue(
 
   async function runSlot(): Promise<void> {
     while (index < sets.length) {
-      if (job.stopRequested) break;
+      if (job.stopRequested || generation !== job.generation) break;
       const set = sets[index++];
-      job.currentSetId = set.id;
-      job.currentTitle =
-        "artist" in set && set.artist && set.title
-          ? `${set.artist} - ${set.title}`
-          : `#${set.id}`;
+      if (generation === job.generation) {
+        job.currentSetId = set.id;
+        job.currentTitle =
+          "artist" in set && set.artist && set.title
+            ? `${set.artist} - ${set.title}`
+            : `#${set.id}`;
+      }
       try {
         const { result, path: destPath } = await downloadSetToDisk(
           set,
           downloadDir,
           noVideo,
         );
+        if (generation !== job.generation) break;
         if (result === "exists") job.skippedExisting += 1;
         else job.downloaded += 1;
         job.savedPaths.push(destPath);
         downloadedIds.push(set.id);
       } catch (err) {
+        if (generation !== job.generation) break;
         job.failed += 1;
         const message = err instanceof Error ? err.message : String(err);
         job.recentErrors = [
@@ -542,6 +617,8 @@ async function downloadQueue(
     Array.from({ length: concurrency }, () => runSlot()),
   );
 
+  if (generation !== job.generation) return;
+
   if (downloadedIds.length > 0) {
     recordPendingDownloads(downloadedIds, downloadDir);
   }
@@ -557,6 +634,7 @@ async function runBatch(
   db: Db,
   request: MirrorBatchStartRequest,
 ): Promise<void> {
+  const generation = job.generation;
   try {
     const mode: MirrorBatchMode = request.mode ?? "pages";
     let sets: Array<OnlineBeatmapSet | { id: number }> = [];
@@ -570,6 +648,7 @@ async function runBatch(
       ];
       if (job.excludeOwned) {
         const diff = await diffAgainstLibrary(db, unique);
+        if (generation !== job.generation) return;
         job.skippedOwned = diff.owned.length;
         sets = diff.missing.map((id) => ({ id }));
       } else {
@@ -590,7 +669,8 @@ async function runBatch(
           MAX_QUERY_SETS,
           Math.max(1, request.maxSets ?? MAX_QUERY_SETS),
         ),
-      });
+      }, generation);
+      if (generation !== job.generation) return;
       job.skippedOwned = collected.ownedSkipped;
       job.matched = collected.sets.length;
       job.hitCap = collected.hitCap;
@@ -608,13 +688,15 @@ async function runBatch(
         startPage,
         pageCount,
         excludeOwned: job.excludeOwned,
-      });
+      }, generation);
+      if (generation !== job.generation) return;
       job.skippedOwned = collected.ownedSkipped;
       job.matched = collected.sets.length;
       sets = collected.sets;
     }
 
-    await downloadQueue(sets, job.noVideo, job.downloadConcurrency);
+    await downloadQueue(sets, job.noVideo, job.downloadConcurrency, generation);
+    if (generation !== job.generation) return;
 
     job.currentSetId = null;
     job.currentTitle = null;
@@ -622,13 +704,16 @@ async function runBatch(
     job.phase = "idle";
     job.status = "completed";
   } catch (err) {
+    if (generation !== job.generation) return;
     job.error = err instanceof Error ? err.message : String(err);
     job.phase = "idle";
     job.status = "error";
     job.finishedAt = new Date();
   } finally {
-    job.running = false;
-    job.stopRequested = false;
+    if (generation === job.generation) {
+      job.running = false;
+      job.stopRequested = false;
+    }
   }
 }
 
@@ -802,6 +887,12 @@ export async function openLastBatchArchivesInOsu(): Promise<
   }
 
   openingInProgress = true;
+  // Safety net: never leave the open-lock stuck if the OS open path hangs.
+  const openLockWatchdog = setTimeout(() => {
+    if (openingInProgress) {
+      openingInProgress = false;
+    }
+  }, 10 * 60_000);
   try {
     const trackedBefore = job.savedPaths.length;
     const existingBefore = job.savedPaths.filter((p) => existsSync(p)).length;
@@ -879,6 +970,7 @@ export async function openLastBatchArchivesInOsu(): Promise<
           : null,
     };
   } finally {
+    clearTimeout(openLockWatchdog);
     openingInProgress = false;
   }
 }

@@ -394,6 +394,13 @@ export function DownloadMapsPage() {
     !batchBusy &&
     !query.isLoading &&
     !countMissing.isPending;
+  const missingActionsDisabledReason = !submitted.excludeOwned
+    ? "Enable “Hide maps I already own” to count or download missing maps"
+    : batchBusy
+      ? "Wait for the current batch to finish or stop it"
+      : query.isLoading
+        ? "Wait for search to finish"
+        : null;
   const showDevTools = isDevUi();
 
   useEffect(() => {
@@ -499,14 +506,14 @@ export function DownloadMapsPage() {
               onChange={(e) => {
                 const next = e.target.checked;
                 setExcludeOwned(next);
-                persist({
-                  q,
-                  sort,
+                // Count/Download-all-missing gate on submitted.excludeOwned —
+                // commit immediately so the buttons don't stay stuck disabled
+                // until the user remembers to click Search.
+                commit({
+                  q: submitted.q,
+                  sort: submitted.sort,
                   excludeOwned: next,
-                  page,
-                  noVideo,
-                  pageCount,
-                  downloadConcurrency,
+                  page: submitted.page,
                 });
               }}
             />
@@ -570,7 +577,10 @@ export function DownloadMapsPage() {
               className="rx-btn"
               disabled={!canCountMissing}
               onClick={() => countMissing.mutate()}
-              title="Crawl the mirror to count how many missing sets match (same caps as download all)"
+              title={
+                missingActionsDisabledReason ??
+                "Crawl the mirror to count how many missing sets match (same caps as download all)"
+              }
             >
               {countMissing.isPending ? "Counting…" : "Count all missing"}
             </button>
@@ -579,7 +589,12 @@ export function DownloadMapsPage() {
               className="rx-btn-primary"
               disabled={!canDownloadAllMissing || startQueryBatch.isPending}
               onClick={() => startQueryBatch.mutate()}
-              title="Crawl the mirror for every missing set matching this query"
+              title={
+                missingActionsDisabledReason ??
+                (!canDownloadAllMissing && submitted.excludeOwned
+                  ? "No missing maps on this page — try another query or Count all missing"
+                  : "Crawl the mirror for every missing set matching this query")
+              }
             >
               {missingCount
                 ? `Download all missing (${missingCount.matched.toLocaleString()}${missingCount.hitCap ? "+" : ""})`

@@ -47,12 +47,19 @@ export function DownloadBatchChrome() {
           <button
             type="button"
             className="rx-btn shrink-0 px-2 py-1 text-xs"
-            disabled={stopBatch.isPending || batch.status === "stopping"}
+            disabled={stopBatch.isPending}
+            title={
+              batch.status === "stopping"
+                ? "Force-clear a stuck download lock"
+                : "Stop the current batch"
+            }
             onClick={() => stopBatch.mutate()}
           >
-            {batch.status === "stopping" || stopBatch.isPending
+            {stopBatch.isPending
               ? "…"
-              : "Stop"}
+              : batch.status === "stopping"
+                ? "Force"
+                : "Stop"}
           </button>
         </div>
         <div className="mt-2 h-1.5 overflow-hidden rounded bg-canvas">

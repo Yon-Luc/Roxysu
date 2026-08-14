@@ -5,10 +5,16 @@ import { startPollLoop } from "./sse";
 import { startAnalyticsPipeline } from "./analytics/pipeline";
 import { startCollectionMatchCache } from "./shared/collectionMatchCache";
 import { startTosuAdapter, stopTosuAdapter } from "./tosu";
+import { clearStuckMirrorBatchLocks } from "./mirrors";
 
 if (clearStuckRealmReaderPause(db)) {
   console.log(
     "[sync] cleared stuck sync.realm_reader_paused — realm-reader can resume",
+  );
+}
+if (clearStuckMirrorBatchLocks()) {
+  console.log(
+    "[mirrors] cleared stuck download / open-in-osu lock — batches can start again",
   );
 }
 

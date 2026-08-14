@@ -6,6 +6,8 @@ touches:
   - apps/server/src/hubUrl.ts
   - roxysu-hub-plan.md
   - packages/db/src/hub
+  - apps/hub/Dockerfile
+  - apps/hub/docker-compose.yml
 ---
 
 # Hub vs client app

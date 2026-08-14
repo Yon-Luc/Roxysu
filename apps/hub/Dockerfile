@@ -5,13 +5,19 @@
 FROM oven/bun:1 AS base
 WORKDIR /app
 
-# Copy workspace manifests for dependency resolution
+# Copy workspace manifests for dependency resolution.
+# bun.lock records every member of apps/* — omitting any of them makes
+# `bun install --frozen-lockfile` fail with "lockfile had changes".
 COPY package.json bun.lock ./
 COPY packages/ ./packages/
 COPY apps/hub/ ./apps/hub/
+COPY apps/desktop/package.json ./apps/desktop/
+COPY apps/docs/package.json ./apps/docs/
+COPY apps/realm-reader/package.json ./apps/realm-reader/
+COPY apps/server/package.json ./apps/server/
 
-# Install all workspace dependencies
-RUN bun install --frozen-lockfile
+# Hub only: skip native install scripts (realm / better-sqlite3).
+RUN bun install --frozen-lockfile --ignore-scripts --filter @roxysu/hub
 
 # Build the hub app
 WORKDIR /app/apps/hub

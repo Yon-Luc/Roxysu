@@ -18,6 +18,8 @@ touches:
   - apps/hub/src/db.ts
   - apps/hub/drizzle/0003_collection_indexes.sql
   - packages/hub-client
+  - apps/hub/Dockerfile
+  - apps/hub/docker-compose.yml
 ---
 
 # Hub
@@ -79,6 +81,8 @@ Networked collaboration / discovery — not required for offline practice analyt
 - Workshop Added tab renders from local hub-added rows; ownership uses `POST /api/mirrors/ownership/diff` rather than shipping every owned set ID.
 - OAuth callback accepts only `h=` (handoff id), never a JWT in the URL
 - `apps/hub/src/db.ts` — `bun run db:migrate` and Hub boot both apply Hub store migrations
+- `apps/hub/Dockerfile` — build context is repo root. Copy every `apps/*/package.json` so `bun.lock`'s workspace graph stays valid under `--frozen-lockfile`.
+- `apps/hub/docker-compose.yml` — Coolify run config: pull prebuilt image, named volume at `/app/data`, `expose` 4322 (no host `ports`), `HUB_TRUST_PROXY=1`, production CORS allowlist for local Workshop.
 
 ## Tag taxonomy
 

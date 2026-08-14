@@ -126,9 +126,12 @@ Score rewatch:
 ## Depended on by
 
 - `apps/server/public/lib/stdSkin.ts` store is consumed by `StdPlayfield.tsx`,
-  `ScoreReplayModal.tsx`, `BeatmapPreviewModal.tsx`, and `StandardSkinEditor.tsx`.
+  `ScoreReplayModal.tsx`, `BeatmapPreviewModal.tsx`, `BeatmapPreviewEmbed.tsx`,
+  and `StandardSkinEditor.tsx`.
 - [replay-video-export/](../replay-video-export/index.md) — paints the same
   playfield frames offline via `paintStdPlayfield` / `paintManiaNotefield`.
+- [now-selected/](../now-selected/index.md) — embedded beatmap preview on the
+  Now selected page.
 
 ## Related knowledge
 

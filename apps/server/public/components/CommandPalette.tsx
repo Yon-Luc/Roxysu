@@ -31,6 +31,7 @@ const PAGE_LABEL_KEYS: Record<string, keyof Dictionary["app"]["nav"]> = {
   "/stats": "stats",
   "/practice": "practice",
   "/sessions": "sessions",
+  "/now-selected": "nowSelected",
   "/collections": "collections",
   "/hub": "hub",
   "/download-maps": "download",
@@ -114,6 +115,11 @@ const ALL_PAGE_ITEMS: {
   { to: "/stats", label: "Stats", keywords: ["statistics", "analytics"] },
   { to: "/practice", label: "Practice", keywords: ["maps", "library", "beatmaps"] },
   { to: "/sessions", label: "Sessions", keywords: ["plays", "live"] },
+  {
+    to: "/now-selected",
+    label: "Now selected",
+    keywords: ["tosu", "live", "selected", "preview", "second monitor"],
+  },
   { to: "/collections", label: "Collections", keywords: ["queries"] },
   { to: "/hub", label: "Workshop", keywords: ["hub", "share", "osu", "oauth", "packs", "collections"] },
   {

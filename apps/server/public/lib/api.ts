@@ -677,6 +677,13 @@ export async function fetchTosuLive() {
   return unwrap(await api.api.tosu.live.get(), "/api/tosu/live");
 }
 
+export async function fetchTosuLiveAnalysis() {
+  return unwrap(
+    await api.api.tosu.live.analysis.get(),
+    "/api/tosu/live/analysis",
+  );
+}
+
 export async function startTosu() {
   return unwrap(await api.api.tosu.start.post(), "/api/tosu/start");
 }
@@ -865,3 +872,6 @@ export type RatingLabSummary = Exclude<
 >;
 export type SettingsPayload = Awaited<ReturnType<typeof fetchSettings>>;
 export type TosuLive = Awaited<ReturnType<typeof fetchTosuLive>>;
+export type TosuLiveAnalysisPayload = Awaited<
+  ReturnType<typeof fetchTosuLiveAnalysis>
+>;

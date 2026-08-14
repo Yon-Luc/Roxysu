@@ -24,6 +24,7 @@ import { OverlayPage } from "./features/overlay/OverlayPage";
 import { RatingLabPage } from "./features/rating-lab/RatingLabPage";
 import { DownloadMapsPage } from "./features/download/DownloadMapsPage";
 import { StatsPage } from "./features/stats/StatsPage";
+import { NowSelectedPage } from "./features/now-selected/NowSelectedPage";
 import { isDesktopShell } from "./lib/desktop";
 import type { StatsGranularity, StatsRange, StatsSkillAxis } from "./lib/api";
 import {
@@ -147,6 +148,25 @@ const sessionDetailRoute = createRoute({
   },
 });
 
+const nowSelectedRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/now-selected",
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { focus?: boolean } => ({
+    focus:
+      search.focus === true ||
+      search.focus === "1" ||
+      search.focus === "true"
+        ? true
+        : undefined,
+  }),
+  component: function NowSelectedRoute() {
+    const { focus } = nowSelectedRoute.useSearch();
+    return <NowSelectedPage focus={Boolean(focus)} />;
+  },
+});
+
 const collectionsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/collections",
@@ -263,6 +283,7 @@ const routeTree = rootRoute.addChildren([
     practiceProfileRoute,
     sessionsRoute,
     sessionDetailRoute,
+    nowSelectedRoute,
     collectionsRoute,
     collectionResultsRoute,
     downloadMapsRoute,

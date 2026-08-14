@@ -1,10 +1,12 @@
 export {
+  getTosuLiveAnalysis,
   getTosuLiveSnapshot,
   requestTosuStart,
   restartTosuAdapter,
   startTosuAdapter,
   stopTosuAdapter,
 } from "./live";
+export type { TosuLiveAnalysisPayload } from "./live";
 export type { TosuLiveSnapshot } from "./types";
 export {
   DEFAULT_TOSU_HOST,

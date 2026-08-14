@@ -4,7 +4,12 @@ import { and, eq } from "drizzle-orm";
 import { readFileSync } from "node:fs";
 
 import { analyzeManiaFromOsuText } from "@roxysu/mania-pattern-analysis";
-import { getOrComputePatternAnalysis } from "../map-analysis";
+import {
+  analyzeManiaPatternDetail,
+  getOrComputePatternAnalysis,
+  PATTERN_ALGORITHM,
+  type ManiaPatternDetail,
+} from "../map-analysis";
 import { runDanielEstimatorFromText } from "../map-analysis/danielEstimator";
 import {
   getOsuDataPath,
@@ -145,6 +150,8 @@ export type AnalyzeLiveMapResult = {
   matchedBeatmapId: string | null;
   backgroundFileHash: string | null;
   analysis: Omit<TosuLiveAnalysis, "analyzing">;
+  /** Full mania pattern detail (composition + density samples); null for non-mania. */
+  patternDetail: ManiaPatternDetail | null;
 };
 
 export type AnalyzeLiveMapOptions = {
@@ -154,7 +161,44 @@ export type AnalyzeLiveMapOptions = {
   sunnyOnly?: boolean;
   /** Previous pattern to keep when sunnyOnly. */
   previousPattern?: TosuLivePattern | null;
+  /** Previous full pattern detail to keep when sunnyOnly. */
+  previousPatternDetail?: ManiaPatternDetail | null;
 };
+
+function patternDetailFromText(osuText: string): ManiaPatternDetail | null {
+  try {
+    return analyzeManiaPatternDetail(osuText);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (/not mania/i.test(message)) return null;
+    return {
+      algorithm: PATTERN_ALGORITHM,
+      columnCount: null,
+      noteCount: 0,
+      holdCount: 0,
+      durationMs: 0,
+      averageNps: 0,
+      peakNps: 0,
+      peakChordSize: 0,
+      dominantPattern: null,
+      secondaryPattern: null,
+      confidence: null,
+      composition: {
+        jack: 0,
+        chordjack: 0,
+        delay: 0,
+        chordstream: 0,
+        bracket: 0,
+        jumpstream: 0,
+        handstream: 0,
+        stream: 0,
+      },
+      samples: [],
+      hotspots: [],
+      error: message,
+    };
+  }
+}
 
 /** Resolve the live tosu map to Roxysu analysis (ephemeral; rate-aware Sunny). */
 export async function analyzeLiveMap(
@@ -170,6 +214,7 @@ export async function analyzeLiveMap(
       TosuLiveAnalysis,
       "analyzing"
     >,
+    patternDetail: null as ManiaPatternDetail | null,
     osuText: null as string | null,
   };
 
@@ -187,6 +232,7 @@ export async function analyzeLiveMap(
       matchedBeatmapId,
       backgroundFileHash,
       analysis: { sunny: null, pattern: null },
+      patternDetail: null,
       osuText: options.osuTextCache ?? null,
     };
   }
@@ -212,26 +258,43 @@ export async function analyzeLiveMap(
   const sunny = sunnyFromText(osuText, speedRate);
 
   let pattern: TosuLivePattern | null;
+  let patternDetail: ManiaPatternDetail | null;
   if (options.sunnyOnly) {
     pattern = options.previousPattern ?? null;
-  } else if (matchedBeatmapId) {
-    const fromDb = await getOrComputePatternAnalysis(db, matchedBeatmapId).catch(
-      () => null,
-    );
-    pattern = patternFromDb(fromDb);
-    if (!pattern) {
+    patternDetail = options.previousPatternDetail ?? null;
+  } else {
+    patternDetail = patternDetailFromText(osuText);
+    if (matchedBeatmapId) {
+      const fromDb = await getOrComputePatternAnalysis(db, matchedBeatmapId).catch(
+        () => null,
+      );
+      pattern = patternFromDb(fromDb);
+      if (!pattern) {
+        const keys = sunny.columnCount ?? beatmap.keys;
+        pattern = keys === 7 ? patternFromText(osuText) : null;
+      }
+    } else {
       const keys = sunny.columnCount ?? beatmap.keys;
       pattern = keys === 7 ? patternFromText(osuText) : null;
     }
-  } else {
-    const keys = sunny.columnCount ?? beatmap.keys;
-    pattern = keys === 7 ? patternFromText(osuText) : null;
+    // Prefer labels from the full structural detail when available.
+    if (patternDetail && !patternDetail.error) {
+      pattern = {
+        dominantPattern: patternDetail.dominantPattern,
+        secondaryPattern: patternDetail.secondaryPattern,
+        confidence: patternDetail.confidence,
+        columnCount: patternDetail.columnCount,
+        error: null,
+        source: matchedBeatmapId ? "db" : "osu-text",
+      };
+    }
   }
 
   return {
     matchedBeatmapId,
     backgroundFileHash,
     analysis: { sunny, pattern },
+    patternDetail,
     osuText,
   };
 }

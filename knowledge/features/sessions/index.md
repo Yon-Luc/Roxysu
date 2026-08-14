@@ -71,6 +71,7 @@ On new session insert, `runSessionEngine()` sets `name` immediately after alloca
 ## Depended on by
 
 - `features/dashboard/` — current session summary (shows name)
+- `features/now-selected/` — shares tosu live snapshot with Current session panel
 
 ## Related knowledge
 

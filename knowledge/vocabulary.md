@@ -239,6 +239,18 @@ using mediabunny / WebCodecs. Runs offline in the client app; does not upload.
 
 ---
 
+### Now selected
+
+Client-app page that displays the in-game selected beatmap from **tosu live**, with optional embedded beatmap preview and mania pattern detail (pattern weights, density over time). Supports a Focus layout for a second monitor.
+
+**Not:** Current session compact panel alone, OBS `/overlay`, score rewatch
+
+**In code:** `apps/server/public/features/now-selected/`, `GET /api/tosu/live`, `GET /api/tosu/live/analysis`
+
+**See:** [features/now-selected/](features/now-selected/index.md), [features/tosu-live/](features/tosu-live/index.md)
+
+---
+
 ## Forbidden terms (quick reference)
 
 | Avoid alone | Use instead |

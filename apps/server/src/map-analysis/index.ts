@@ -24,11 +24,14 @@ export {
 export { estDiff, LN_DAN_RATIO_THRESHOLD } from "./estDiff";
 export {
   getOrComputePatternAnalysis,
+  getManiaPatternDetail,
+  analyzeManiaPatternDetail,
   backfillPatternAnalysisSync,
   ensurePatternAnalysisForIdsSync,
   PATTERN_ALGORITHM,
   PATTERN_QUERY_BACKFILL_LIMIT,
 } from "./computePatternAnalysis";
+export type { ManiaPatternDetail } from "./computePatternAnalysis";
 export {
   analyzeManiaFromOsuText,
   analyzeManiaNotes,

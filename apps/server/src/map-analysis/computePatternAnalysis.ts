@@ -229,7 +229,7 @@ function buildHotspots(samples: SevenKDensitySample[]): SevenKPatternHotspot[] {
     .slice(0, 5);
 }
 
-function analyzeManiaPatternDetail(osuText: string): ManiaPatternDetail {
+export function analyzeManiaPatternDetail(osuText: string): ManiaPatternDetail {
   const chart = parseOsuChart(osuText);
   if (chart.status === "NotMania" || chart.gameMode !== "3") {
     throw new Error("Beatmap mode is not mania");

@@ -1,5 +1,6 @@
 
 import type { Db } from "@roxysu/db/types";
+import type { ManiaPatternDetail } from "../map-analysis";
 import { publish } from "../shared/events";
 import { analyzeLiveMap } from "./analyze";
 import { connectTosuWs, type TosuWsClient } from "./client";
@@ -29,6 +30,9 @@ let backgroundFileHash: string | null = null;
 let analyzing = false;
 let sunny: TosuLiveSnapshot["analysis"]["sunny"] = null;
 let pattern: TosuLiveSnapshot["analysis"]["pattern"] = null;
+/** Full mania pattern detail for the current checksum (not on the lean snapshot). */
+let patternDetail: ManiaPatternDetail | null = null;
+let patternDetailChecksum: string | null = null;
 let lastChecksum: string | null = null;
 /** Rate we last finished analyzing at. */
 let lastAnalyzedRate: number | null = null;
@@ -85,6 +89,20 @@ export function getTosuLiveSnapshot(): TosuLiveSnapshot {
   };
 }
 
+export type TosuLiveAnalysisPayload = {
+  checksum: string | null;
+  matchedBeatmapId: string | null;
+  detail: ManiaPatternDetail | null;
+};
+
+export function getTosuLiveAnalysis(): TosuLiveAnalysisPayload {
+  return {
+    checksum: patternDetailChecksum,
+    matchedBeatmapId,
+    detail: patternDetail,
+  };
+}
+
 async function refreshProbeAndMaybeSpawn(opts: {
   allowSpawn: boolean;
 }): Promise<void> {
@@ -131,12 +149,17 @@ async function runAnalysisForBeatmap(
       osuTextCache: cache,
       sunnyOnly: opts.sunnyOnly,
       previousPattern: opts.sunnyOnly ? pattern : null,
+      previousPatternDetail: opts.sunnyOnly ? patternDetail : null,
     });
     if (token !== analysisToken) return;
     matchedBeatmapId = result.matchedBeatmapId;
     backgroundFileHash = result.backgroundFileHash;
     sunny = result.analysis.sunny;
     pattern = result.analysis.pattern;
+    if (!opts.sunnyOnly) {
+      patternDetail = result.patternDetail;
+      patternDetailChecksum = next.checksum;
+    }
     if (result.osuText && next.checksum) {
       osuTextCache = result.osuText;
       osuTextChecksum = next.checksum;
@@ -155,6 +178,8 @@ async function runAnalysisForBeatmap(
     };
     if (!opts.sunnyOnly) {
       pattern = null;
+      patternDetail = null;
+      patternDetailChecksum = next.checksum;
       matchedBeatmapId = null;
       backgroundFileHash = null;
     }
@@ -219,6 +244,8 @@ function onFrame(frame: {
     osuTextChecksum = null;
     sunny = null;
     pattern = null;
+    patternDetail = null;
+    patternDetailChecksum = null;
     matchedBeatmapId = null;
     backgroundFileHash = null;
     if (frame.beatmap.checksum || frame.beatmap.title) {
@@ -311,6 +338,8 @@ export async function startTosuAdapter(db: Db): Promise<void> {
     backgroundFileHash = null;
     sunny = null;
     pattern = null;
+    patternDetail = null;
+    patternDetailChecksum = null;
     analyzing = false;
     lastChecksum = null;
     lastAnalyzedRate = null;

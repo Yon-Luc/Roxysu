@@ -23,6 +23,7 @@ const ALL_NAV = [
   { to: "/stats", label: "Stats", labelKey: "stats", icon: StatsIcon },
   { to: "/practice", label: "Practice", labelKey: "practice", icon: PracticeIcon },
   { to: "/sessions", label: "Sessions", labelKey: "sessions", icon: SessionsIcon },
+  { to: "/now-selected", label: "Now selected", labelKey: "nowSelected", icon: NowSelectedIcon },
   { to: "/collections", label: "Collections", labelKey: "collections", icon: CollectionsIcon },
   { to: "/hub", label: "Workshop", labelKey: "hub", icon: WorkshopIcon },
   { to: "/download-maps", label: "Download", labelKey: "download", icon: DownloadMapsIcon },
@@ -66,6 +67,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 
   useCommandPaletteShortcut(toggleCommandPalette);
+
+  const focusLayout = useRouterState({
+    select: (s) => {
+      if (s.location.pathname !== "/now-selected") return false;
+      const search = s.location.search as { focus?: boolean };
+      return Boolean(search.focus);
+    },
+  });
 
   function toggleSidebar() {
     setSidebarOpen((open) => {
@@ -130,6 +139,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <DownloadBatchChrome />
       <ToastHost offsetBottomClass={toastOffset} />
       {/* Desktop sidebar */}
+      {!focusLayout ? (
       <aside
         className={`fixed inset-y-0 left-0 z-30 hidden w-60 flex-col bg-sidebar p-3 transition-transform duration-200 ease-out md:flex ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
@@ -254,8 +264,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           ) : null}
         </div>
       </aside>
+      ) : null}
 
       {/* Reopen control when sidebar is hidden (desktop) */}
+      {!focusLayout ? (
       <button
         type="button"
         onClick={toggleSidebar}
@@ -270,8 +282,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       >
         <PanelLeftOpenIcon className="size-4" />
       </button>
+      ) : null}
 
       {/* Mobile top brand bar */}
+      {!focusLayout ? (
       <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-line bg-canvas/90 px-4 py-3 backdrop-blur-md md:hidden">
         <Link to="/" className="flex items-center gap-2">
           <img
@@ -313,10 +327,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           {syncLabel}
         </span>
       </header>
+      ) : null}
 
       <main
-        className={`relative min-h-screen p-0 pb-24 transition-[margin] duration-200 ease-out md:p-2 md:pb-2 ${
-          sidebarOpen ? "md:ml-60" : "md:ml-0"
+        className={`relative min-h-screen p-0 transition-[margin] duration-200 ease-out md:p-2 ${
+          focusLayout
+            ? "pb-4 md:ml-0 md:pb-2"
+            : `pb-24 md:pb-2 ${sidebarOpen ? "md:ml-60" : "md:ml-0"}`
         }`}
       >
         <div className="relative min-h-[calc(100vh-0.5rem)] overflow-hidden rounded-none bg-canvas md:min-h-[calc(100vh-1rem)] md:rounded-xl">
@@ -328,13 +345,18 @@ export function AppShell({ children }: { children: ReactNode }) {
             aria-hidden
             className="pointer-events-none absolute right-0 top-0 h-64 w-96 rounded-full bg-chart-alt/5 blur-3xl"
           />
-          <div className="page-enter relative mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
+          <div
+            className={`page-enter relative mx-auto px-4 py-6 sm:px-6 sm:py-8 ${
+              focusLayout ? "max-w-7xl" : "max-w-6xl"
+            }`}
+          >
             {children}
           </div>
         </div>
       </main>
 
       {/* Mobile bottom nav */}
+      {!focusLayout ? (
       <nav className="fixed inset-x-0 bottom-0 z-30 flex border-t border-line bg-sidebar/95 px-1 pb-[env(safe-area-inset-bottom)] backdrop-blur-lg md:hidden">
         {nav.map((item) => {
           const Icon = item.icon;
@@ -353,6 +375,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           );
         })}
       </nav>
+      ) : null}
     </div>
   );
 }
@@ -414,6 +437,15 @@ function SessionsIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
       <path d="M4.5 4.75A.75.75 0 0 1 5.25 4h13.5a.75.75 0 0 1 0 1.5H5.25a.75.75 0 0 1-.75-.75ZM4 9.25c0-.41.34-.75.75-.75h14.5a.75.75 0 0 1 0 1.5H4.75A.75.75 0 0 1 4 9.25Zm.75 3.5a.75.75 0 0 0 0 1.5h9.5a.75.75 0 0 0 0-1.5h-9.5ZM4 17.75c0-.41.34-.75.75-.75h6.5a.75.75 0 0 1 0 1.5h-6.5a.75.75 0 0 1-.75-.75Z" />
+    </svg>
+  );
+}
+
+function NowSelectedIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M12 3.25a.75.75 0 0 1 .75.75v1.69l1.72-.99a.75.75 0 1 1 .76 1.31L13.5 7.01v1.48l1.73 1a.75.75 0 1 1-.76 1.31l-1.72-.99v1.94l1.72-.99a.75.75 0 1 1 .76 1.31L13.5 13.5v1.48l1.73 1a.75.75 0 1 1-.76 1.31l-1.72-.99V18a.75.75 0 0 1-1.5 0v-1.69l-1.72.99a.75.75 0 1 1-.76-1.31l1.73-1V13.5l-1.73 1a.75.75 0 1 1-.76-1.31l1.72.99v-1.94l-1.72.99a.75.75 0 1 1-.76-1.31l1.73-1V7.01l-1.73 1a.75.75 0 1 1-.76-1.31l1.72.99V4a.75.75 0 0 1 .75-.75Z" />
+      <path d="M4.75 4A.75.75 0 0 0 4 4.75v14.5c0 .41.34.75.75.75h2a.75.75 0 0 0 0-1.5h-1.25v-13h1.25a.75.75 0 0 0 0-1.5h-2Zm14.5 0a.75.75 0 0 0 0 1.5h1.25v13h-1.25a.75.75 0 0 0 0 1.5h2a.75.75 0 0 0 .75-.75V4.75a.75.75 0 0 0-.75-.75h-2Z" />
     </svg>
   );
 }

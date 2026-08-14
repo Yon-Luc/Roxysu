@@ -3,6 +3,7 @@ last_verified: 2026-08
 confidence: verified
 touches:
   - apps/hub/src/index.ts
+  - apps/server/src/hubUrl.ts
   - roxysu-hub-plan.md
   - packages/db/src/hub
 ---
@@ -23,6 +24,7 @@ Separate the offline practice product from the optional online sharing service.
 1. Hub is not the client app's practice source of truth.
 2. Core practice features must remain usable offline.
 3. Hub-added collections written back to Realm use synthetic ids `HUB_SYNC_ID_BASE + hubId` (`packages/collection-sync`).
+4. Client app Workshop, OAuth redeem, and Download Maps hub-search-index lookup share one Hub URL via `resolveHubBaseUrl()` (env `HUB_URL`, default `http://localhost:4322`). Hub down still falls back to live mirrors for downloads.
 
 ## Related knowledge
 

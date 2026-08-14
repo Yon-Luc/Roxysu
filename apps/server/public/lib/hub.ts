@@ -262,6 +262,10 @@ export const HUB_MODE_LABELS: Record<HubModeTag | "all", string> = {
   taiko: "Taiko",
 };
 
+export function hubStatusClearsJwt(httpStatus: number, sentToken: boolean): boolean {
+  return sentToken && httpStatus === 401;
+}
+
 async function hubFetch<T>(
   hubUrl: string,
   path: string,
@@ -283,6 +287,9 @@ async function hubFetch<T>(
     message?: string;
     error?: string;
   };
+  if (hubStatusClearsJwt(res.status, Boolean(init?.token))) {
+    clearHubJwt();
+  }
   if (!res.ok) {
     throw new Error(data.message ?? data.error ?? `HTTP ${res.status}`);
   }

@@ -206,7 +206,7 @@ export async function searchOnlineBeatmapsets(
   let mirrorHasMore = true;
   let pagesScanned = 0;
 
-  // Prefer hub cache when HUB_URL is set and the entry is primed.
+  // Prefer hub search index when the entry is primed (same HUB_URL default as Workshop).
   // Exact keymode equality is included in the hub query identity.
   if (postFilters.length === 0 || hubKeymode != null) {
     const hubHit = await tryHubCachedSearch({

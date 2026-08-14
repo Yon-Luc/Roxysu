@@ -85,4 +85,19 @@ describe("tryHubCachedSearch", () => {
     });
     expect(hit).toBeNull();
   });
+
+  test("uses localhost:4322 when HUB_URL is unset", async () => {
+    delete process.env.HUB_URL;
+    let requested: string | null = null;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      requested = String(input);
+      return new Response(JSON.stringify({ cached: false }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    await tryHubCachedSearch({ mode: "mania", status: "ranked" });
+    expect(requested!).toContain("http://localhost:4322/search");
+  });
 });

@@ -3,6 +3,7 @@ import { cors } from "@elysiajs/cors";
 import { cron } from "@elysiajs/cron";
 import { runMigrations } from "./db";
 import { resolveJwtSecret } from "./services/jwtSecret";
+import { rehashSearchCacheKeys } from "./services/cache";
 import { tickSearchCacheRefreshes } from "./services/cacheRefreshCron";
 import { authRoutes } from "./routes/auth";
 import { collectionRoutes } from "./routes/collections";
@@ -14,6 +15,7 @@ resolveJwtSecret();
 
 // Run DB migrations before the server starts
 runMigrations();
+await rehashSearchCacheKeys();
 
 const PORT = parseInt(process.env.PORT ?? "4322", 10);
 

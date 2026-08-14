@@ -4,9 +4,14 @@ confidence: verified
 touches:
   - apps/hub/src/routes/auth.ts
   - apps/hub/src/middleware/auth.ts
+  - apps/hub/src/services/hubRole.ts
+  - apps/hub/src/services/clientIp.ts
+  - apps/hub/src/services/cache.ts
   - apps/hub/src/services/hubSearchQuery.ts
   - apps/server/public/features/hub
   - apps/server/public/lib/hub.ts
+  - apps/server/src/hubUrl.ts
+  - apps/server/src/mirrors/hubSearch.ts
   - packages/db/src/hub/schema.ts
   - packages/hub-client
 ---
@@ -27,23 +32,32 @@ Networked collaboration / discovery — not required for offline practice analyt
    **Enforced by:** `apps/hub/src/middleware/auth.ts` — status: verified
    **Unauthorized result:** request rejected before mutation
 
-2. Edit collection: owner only.
-   **Enforced by:** hub route authorization checks — status: verified
+2. Edit collection: owner or admin.
+   **Enforced by:** `apps/hub/src/routes/collections.ts` PUT `/:id` — status: verified
    **Unauthorized result:** forbidden
 
 3. Delete collection: owner or admin.
-   **Enforced by:** hub route authorization checks — status: verified
+   **Enforced by:** `apps/hub/src/routes/collections.ts` DELETE `/:id` — status: verified
    **Unauthorized result:** forbidden
 
 4. Hub search index admin operations require admin role.
    **Enforced by:** hub admin checks — status: verified
    **Unauthorized result:** forbidden
 
+5. Login may promote `ADMIN_OSU_ID` to admin but never demotes a stored admin.
+   **Enforced by:** `apps/hub/src/services/hubRole.ts:resolveHubLoginRole()` — status: verified
+   **Unauthorized result:** N/A (role is not taken from the JWT claim)
+
+6. Rate-limit identity ignores `X-Forwarded-For` / `X-Real-Ip` unless `HUB_TRUST_PROXY=1`.
+   **Enforced by:** `apps/hub/src/services/clientIp.ts` — status: verified
+
 ## Important symbols
 
 - `apps/hub/src/*`
+- `apps/hub/src/services/cache.ts:hashQueryParams()` — SHA-256 (32 hex) hub search index identity; boot rehashes legacy keys
+- `apps/server/src/hubUrl.ts:resolveHubBaseUrl()` — shared Hub URL (default `http://localhost:4322`) for Workshop, OAuth redeem, and Download Maps
+- `apps/server/public/lib/hub.ts` — runtime Workshop client (clears JWT on Hub 401). `packages/hub-client` is unused
 - `apps/server/src/routes/system.ts` — client app OAuth handoff helpers
-- `packages/hub-client`
 
 ## Tag taxonomy
 

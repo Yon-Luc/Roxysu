@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { searchCache } from "@roxysu/db/hub";
@@ -20,26 +21,83 @@ export type CacheQueryParams = HinamizawaSearchParams & {
   keys?: number;
 };
 
+/** 128-bit prefix of SHA-256; hex length of the Hub store query_hash key. */
+export const QUERY_HASH_HEX_LENGTH = 32;
+
+function paramsForHash(params: CacheQueryParams): Record<string, unknown> {
+  const copy: Record<string, unknown> = { ...params };
+  if (copy.keys != null && (copy.key == null || copy.key === "")) {
+    copy.key = Number(copy.keys);
+  }
+  delete copy.keys;
+  return copy;
+}
+
 /**
  * Deterministic hash of query params:
+ * - normalize keys → key
  * - sort keys alphabetically
  * - lowercase string values
  * - skip undefined/empty
- * Returns a short hex string safe to use as a DB key.
+ * SHA-256 truncated to 32 hex chars (128 bits).
  */
 export function hashQueryParams(params: CacheQueryParams): string {
-  const normalized = Object.entries(params)
+  const normalized = Object.entries(paramsForHash(params))
     .filter(([, v]) => v !== undefined && v !== null && v !== "")
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([k, v]) => `${k}=${String(v).toLowerCase()}`)
     .join("&");
 
-  let h = 0x811c9dc5;
-  for (let i = 0; i < normalized.length; i++) {
-    h ^= normalized.charCodeAt(i);
-    h = (h * 0x01000193) >>> 0;
+  return createHash("sha256")
+    .update(normalized)
+    .digest("hex")
+    .slice(0, QUERY_HASH_HEX_LENGTH);
+}
+
+/**
+ * Rewrite legacy FNV (or any other) query_hash values to the current SHA-256
+ * identity so primed hub search index rows keep matching GET /search.
+ */
+export async function rehashSearchCacheKeys(): Promise<number> {
+  const rows = await db
+    .select({
+      id: searchCache.id,
+      queryHash: searchCache.queryHash,
+      queryParams: searchCache.queryParams,
+    })
+    .from(searchCache);
+
+  let updated = 0;
+  for (const row of rows) {
+    let params: CacheQueryParams;
+    try {
+      params = JSON.parse(row.queryParams) as CacheQueryParams;
+    } catch {
+      continue;
+    }
+    const next = hashQueryParams(params);
+    if (next === row.queryHash) continue;
+    const clash = await db
+      .select({ id: searchCache.id })
+      .from(searchCache)
+      .where(eq(searchCache.queryHash, next))
+      .get();
+    if (clash && clash.id !== row.id) {
+      console.warn(
+        `[cache] skip rehash ${row.id}: new hash collides with ${clash.id}`,
+      );
+      continue;
+    }
+    await db
+      .update(searchCache)
+      .set({ queryHash: next })
+      .where(eq(searchCache.id, row.id));
+    updated += 1;
   }
-  return h.toString(16).padStart(8, "0");
+  if (updated > 0) {
+    console.log(`[cache] Rehashed ${updated} search_cache keys to SHA-256`);
+  }
+  return updated;
 }
 
 /** Params safe to send to Hinamizawa (no Roxysu-only key filter). */

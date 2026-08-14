@@ -14,6 +14,8 @@ import {
   createOAuthState,
 } from "../services/oauthState";
 import { allowRateLimit } from "../services/rateLimit";
+import { clientIp } from "../services/clientIp";
+import { parseAdminOsuId, resolveHubLoginRole } from "../services/hubRole";
 import { jwtPlugin, requireAuth } from "../middleware/auth";
 
 const DEFAULT_CLIENT_REDIRECT = "http://127.0.0.1:4321/#/hub-callback";
@@ -44,12 +46,6 @@ function buildDesktopRedirect(handoffId: string): string {
   const base =
     process.env.HUB_DESKTOP_REDIRECT_URI?.trim() || DEFAULT_DESKTOP_REDIRECT;
   return appendHandoffParam(base, handoffId);
-}
-
-function clientIp(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0]!.trim() || "unknown";
-  return request.headers.get("x-real-ip")?.trim() || "unknown";
 }
 
 export const authRoutes = new Elysia({ prefix: "/auth" })
@@ -113,16 +109,17 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
         return status(502, { message: "Failed to fetch osu! profile" });
       }
 
-      const adminOsuId = process.env.ADMIN_OSU_ID
-        ? parseInt(process.env.ADMIN_OSU_ID, 10)
-        : null;
-      const role = adminOsuId && osuUser.id === adminOsuId ? "admin" : "user";
-
       const existing = await db
         .select()
         .from(hubUsers)
         .where(eq(hubUsers.osuId, osuUser.id))
         .get();
+
+      const role = resolveHubLoginRole({
+        osuId: osuUser.id,
+        existingRole: existing?.role,
+        adminOsuId: parseAdminOsuId(process.env.ADMIN_OSU_ID),
+      });
 
       let userId: number;
 
@@ -185,8 +182,8 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
   // -------------------------------------------------------------------------
   .get(
     "/handoff/:id",
-    ({ params, request, set }) => {
-      const ip = clientIp(request);
+    ({ params, request, server, set }) => {
+      const ip = clientIp(request, server);
       if (!allowRateLimit(`handoff:${ip}`, { limit: 30, windowMs: 60_000 })) {
         set.status = 429;
         return { message: "Too many handoff attempts" };

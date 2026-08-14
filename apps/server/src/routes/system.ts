@@ -13,7 +13,7 @@ import {
   markHubOAuthHandoffReady,
   peekHubOAuthHandoffReady,
 } from "../hubOAuthPending";
-import { toIso } from "../shared/serialize";
+import { resolveHubBaseUrl } from "../hubUrl";
 
 export { SYNC_PAUSE_WHEN_UNFOCUSED_KEY, SYNC_UI_FOCUSED_KEY };
 
@@ -48,10 +48,7 @@ const HUB_OAUTH_DONE_HTML = `<!DOCTYPE html>
 </html>`;
 
 function hubBaseUrl(): string {
-  return (process.env.HUB_URL?.trim() || "http://localhost:4322").replace(
-    /\/$/,
-    "",
-  );
+  return resolveHubBaseUrl();
 }
 
 export const systemRoutes = new Elysia({ prefix: "/system" })
@@ -168,7 +165,7 @@ export const systemRoutes = new Elysia({ prefix: "/system" })
       beatmapCount: beatmapCount?.n ?? 0,
       scoreCount: scoreCount?.n ?? 0,
       /** Public hub base URL for collection sharing / search cache. */
-      hubUrl: process.env.HUB_URL?.trim() || "http://localhost:4322",
+      hubUrl: resolveHubBaseUrl(),
       /** True only when pause-when-unfocused is enabled and the web UI reported unfocused. */
       syncPaused:
         pauseWhenUnfocusedRow?.value === "1" && focusRow?.value === "0",

@@ -9,19 +9,14 @@ import {
 } from "../services/cache";
 import { searchPage } from "../services/hinamizawa";
 import { allowRateLimit } from "../services/rateLimit";
-
-function clientIp(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0]!.trim() || "unknown";
-  return request.headers.get("x-real-ip")?.trim() || "unknown";
-}
+import { clientIp } from "../services/clientIp";
 
 const refreshing = new Set<number>();
 
 export const searchRoutes = new Elysia({ prefix: "/search" }).get(
   "/",
-  async ({ query, request, set }) => {
-    const ip = clientIp(request);
+  async ({ query, request, server, set }) => {
+    const ip = clientIp(request, server);
     if (!allowRateLimit(`search:${ip}`, { limit: 60, windowMs: 60_000 })) {
       set.status = 429;
       return { message: "Too many search requests" };

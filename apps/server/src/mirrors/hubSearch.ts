@@ -1,3 +1,4 @@
+import { resolveHubBaseUrl } from "../hubUrl";
 import type { MirrorSearchParams, OnlineBeatmapSet } from "./search";
 import { MIRROR_USER_AGENT } from "./userAgent";
 
@@ -12,12 +13,6 @@ export type HubSearchCacheResult = {
   beatmapsetIds: number[];
   label: string | null;
 };
-
-function hubBaseUrl(): string | null {
-  const raw = process.env.HUB_URL?.trim();
-  if (!raw) return null;
-  return raw.replace(/\/$/, "");
-}
 
 /** Map local mirror search params to hub/hinamizawa query string fields. */
 export function mirrorParamsToHubQuery(
@@ -59,8 +54,7 @@ export function mirrorParamsToHubQuery(
 export async function tryHubCachedSearch(
   params: MirrorSearchParams & { page?: number; limit?: number; key?: number },
 ): Promise<HubSearchCacheResult | null> {
-  const base = hubBaseUrl();
-  if (!base) return null;
+  const base = resolveHubBaseUrl();
 
   const query = mirrorParamsToHubQuery(params);
   const url = new URL(`${base}/search`);

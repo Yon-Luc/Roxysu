@@ -16,11 +16,16 @@ describe("hashQueryParams / key stripping", () => {
     expect(ranked7).not.toBe(ranked4);
   });
 
-  test("keys alias hashes same as key when normalized by caller", () => {
-    // Callers normalize keys→key before hashing; raw keys vs key differ if both present differently
-    expect(hashQueryParams({ mode: 3, key: 7 })).toBe(
+  test("keys alias hashes the same as key", () => {
+    expect(hashQueryParams({ mode: 3, keys: 7 })).toBe(
       hashQueryParams({ mode: 3, key: 7 }),
     );
+  });
+
+  test("uses a 32-char SHA-256 prefix, not 8-char FNV", () => {
+    const h = hashQueryParams({ mode: 3, status: "ranked" });
+    expect(h).toMatch(/^[0-9a-f]{32}$/);
+    expect(h).not.toHaveLength(8);
   });
 
   test("stripRoxysuCacheParams removes key/keys for Hinamizawa", () => {

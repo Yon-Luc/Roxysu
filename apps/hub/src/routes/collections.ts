@@ -30,12 +30,7 @@ import {
 } from "../services/collectionStats";
 import { parseHubSearchQuery } from "../services/hubSearchQuery";
 import { allowRateLimit } from "../services/rateLimit";
-
-function clientIp(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0]!.trim() || "unknown";
-  return request.headers.get("x-real-ip")?.trim() || "unknown";
-}
+import { clientIp } from "../services/clientIp";
 
 function parseTagFilters(raw: {
   tag?: string;
@@ -325,8 +320,8 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
   // -------------------------------------------------------------------------
   .get(
     "/:id/export",
-    async ({ params, request, set }) => {
-      const ip = clientIp(request);
+    async ({ params, request, server, set }) => {
+      const ip = clientIp(request, server);
       if (!allowRateLimit(`export:${ip}`, { limit: 30, windowMs: 60_000 })) {
         set.status = 429;
         return { message: "Too many export requests" };

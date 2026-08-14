@@ -3,6 +3,8 @@ last_verified: 2026-08
 confidence: verified
 touches:
   - apps/desktop/main.js
+  - nix/prebuilt.nix
+  - nix/package.nix
   - docs/electron-plan.md
 ---
 
@@ -18,7 +20,8 @@ Distribute Roxysu as a desktop app without changing the local-mirror-centric arc
 
 ## Important symbols
 
-- `apps/desktop/main.js`
+- `apps/desktop/main.js` — spawns client app + realm-reader; sets `ROXYSU_DESKTOP=1` and `HUB_URL` (`https://roxysu-api.yonx.app` unless overridden)
+- `nix/prebuilt.nix` / `nix/package.nix` — `--set-default HUB_URL https://roxysu-api.yonx.app`
 
 ## Dependencies
 

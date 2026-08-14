@@ -82,6 +82,7 @@ in
         --add-flags "$appdir" \
         --set ELECTRON_SKIP_BINARY_DOWNLOAD "1" \
         --set ROXYSU_RESOURCES "$resources" \
+        --set-default HUB_URL "https://roxysu-api.yonx.app" \
         --prefix LD_LIBRARY_PATH : "${lib.makeLibraryPath nativeLibs}"
 
       runHook postInstall

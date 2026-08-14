@@ -71,7 +71,7 @@ Networked collaboration / discovery — not required for offline practice analyt
 
 - `apps/hub/src/*`
 - `apps/hub/src/services/cache.ts:hashQueryParams()` — SHA-256 (32 hex) hub search index identity; boot rehashes legacy keys
-- `apps/server/src/hubUrl.ts:resolveHubBaseUrl()` — shared Hub URL (default `http://localhost:4322`) for Workshop, OAuth redeem, and Download Maps
+- `apps/server/src/hubUrl.ts:resolveHubBaseUrl()` — shared Hub URL for Workshop, OAuth redeem, and Download Maps (`HUB_URL`; localhost in `bun run dev`, `https://roxysu-api.yonx.app` when `ROXYSU_DESKTOP=1`)
 - `apps/server/public/lib/hub.ts` — runtime Workshop client (clears JWT on Hub 401; delete + export). `packages/hub-client` is the Node Eden client and is not used in the browser
 - `apps/server/src/routes/system.ts` — client app OAuth handoff helpers
 - Workshop detail: owner or admin can edit/delete; Save calls `GET /collections/:id/export` so `downloadCount` increments

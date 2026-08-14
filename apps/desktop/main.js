@@ -474,6 +474,9 @@ if (!gotLock) {
       ROXYSU_REALM_SCHEMA: paths.realmSchema,
       ROXYSU_REALM_READER_DIR: paths.realmDir,
       ROXYSU_MIGRATIONS_FOLDER: paths.migrationsFolder,
+      // Packaged client talks to the public Hub. Override with HUB_URL.
+      HUB_URL:
+        process.env.HUB_URL?.trim() || "https://roxysu-api.yonx.app",
     };
 
     desktopLog("spawn server");

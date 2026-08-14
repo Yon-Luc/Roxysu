@@ -26,7 +26,7 @@ Separate the offline practice product from the optional online sharing service.
 1. Hub is not the client app's practice source of truth.
 2. Core practice features must remain usable offline.
 3. Hub-added collections written back to Realm use synthetic ids `HUB_SYNC_ID_BASE + hubId` (`packages/collection-sync`).
-4. Client app Workshop, OAuth redeem, and Download Maps hub-search-index lookup share one Hub URL via `resolveHubBaseUrl()` (env `HUB_URL`, default `http://localhost:4322`). Hub down still falls back to live mirrors for downloads.
+4. Client app Workshop, OAuth redeem, and Download Maps hub-search-index lookup share one Hub URL via `resolveHubBaseUrl()` (`HUB_URL`). `bun run dev` defaults to `http://localhost:4322`. Electron / NixOS (`ROXYSU_DESKTOP=1`) default to `https://roxysu-api.yonx.app`. Hub down still falls back to live mirrors for downloads.
 5. Production Hub CORS allowlists Workshop origins (typically `http://127.0.0.1:4321`); it does not use `*`.
 
 ## Related knowledge

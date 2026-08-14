@@ -28,8 +28,8 @@ Live sessions keep the **Current session** label in headings; the generated name
 
 1. A new session starts when the gap between scores exceeds **30 minutes** (`SESSION_GAP_MS`).
 2. Current session hub refreshes as new plays land via SSE.
-3. Every session row has a **display name** generated deterministically from its `id` via `@roxysu/session-names`.
-4. Display names are persisted in `sessions.name` at creation; existing rows without a name are backfilled on the next session-engine run.
+3. Every session row has a **display name** generated from its `id` via `@roxysu/session-names`. New names skip any display name already used in the local mirror (case-insensitive).
+4. Display names are persisted in `sessions.name` at creation; existing rows without a name are backfilled on the next session-engine run. Already-named rows are not regenerated.
 5. The UI shows the display name for closed sessions; open sessions use **Current session** as the primary label and show the name as secondary text. Numeric `#id` is not shown.
 6. A session display name always starts with a capital letter (`capitalizeSessionName()`).
 
@@ -37,23 +37,27 @@ Live sessions keep the **Current session** label in headings; the generated name
 
 - `apps/server/src/analytics/session.ts` — `SESSION_GAP_MS`, `runSessionEngine()`, `backfillSessionNames()`
 - `apps/server/src/routes/sessions.ts` — `serializeSession()` includes `name`
-- `packages/session-names/src/generate.ts` — `generateSessionName(sessionId)`, `capitalizeSessionName()`
-- `packages/session-names/src/terms.json` — character, region, activity, modifier word lists
+- `packages/session-names/src/generate.ts` — `generateSessionName(sessionId, taken)`, `capitalizeSessionName()`
+- `packages/session-names/src/terms.json` — character, region, activity, modifier, style word lists
 - `apps/server/public/features/sessions/*`
 
 ## Implementation
 
-Name generation uses a seeded PRNG (`session.id`) and random template picks from `terms.json`:
+Name generation uses a seeded PRNG mixed from `session.id` + retry attempt, and three-slot templates from `terms.json`:
 
-- `{character}'s {activity}`
-- `{character} · {region}`
-- `{modifier} {activity} in {region}`
-- `{character} at {region}`
 - `{character}'s {modifier} {activity}`
-- `{region} {activity}`
+- `{modifier} {activity} in {region}`
 - `{modifier} {region} · {character}`
+- `{character}'s {activity} in {region}`
+- `{character} at {region} · {activity}`
+- `{character}'s {style} {activity}`
+- `{modifier} {style} in {region}`
+- `{character} · {modifier} {style}`
+- `{region} {modifier} {activity}`
 
-On new session insert, `runSessionEngine()` sets `name` immediately after allocating the id. `sessionDisplayName()` falls back to `generateSessionName(id)` if `name` is still null, and always capitalizes the first letter. Existing lowercase names are recapitalized on the next session-engine run.
+If the first pick is already taken, the generator retries with a different seed (up to 64 times), then extra distinguisher suffixes (`encore`, `returns`, …). Existing persisted names are left as-is.
+
+On new session insert, `runSessionEngine()` sets `name` immediately after allocating the id, passing every current display name as `taken`. `sessionDisplayName()` falls back to `generateSessionName(id)` if `name` is still null, and always capitalizes the first letter.
 
 ## Dependencies
 

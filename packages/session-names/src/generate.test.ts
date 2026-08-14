@@ -8,7 +8,9 @@ describe("generateSessionName", () => {
   });
 
   it("produces different names for different ids", () => {
-    const names = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(generateSessionName));
+    const names = new Set(
+      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((id) => generateSessionName(id)),
+    );
     expect(names.size).toBeGreaterThan(1);
   });
 
@@ -26,5 +28,22 @@ describe("generateSessionName", () => {
       const first = name[0]!;
       expect(first).toBe(first.toUpperCase());
     }
+  });
+
+  it("avoids names already in the taken set", () => {
+    const first = generateSessionName(7);
+    const second = generateSessionName(7, [first]);
+    expect(second).not.toBe(first);
+    expect(generateSessionName(7, [first])).toBe(second);
+  });
+
+  it("assigns unique names when accumulating taken names", () => {
+    const taken: string[] = [];
+    for (let id = 1; id <= 2000; id++) {
+      const name = generateSessionName(id, taken);
+      expect(taken.map((n) => n.toLowerCase())).not.toContain(name.toLowerCase());
+      taken.push(name);
+    }
+    expect(new Set(taken.map((n) => n.toLowerCase())).size).toBe(2000);
   });
 });

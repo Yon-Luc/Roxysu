@@ -23,12 +23,33 @@ import {
 
 const SESSION_GAP_MS = 30 * 60 * 1000;
 
+function collectTakenNames(rows: { name: string | null }[]): Set<string> {
+  const taken = new Set<string>();
+  for (const row of rows) {
+    if (row.name) taken.add(capitalizeSessionName(row.name));
+  }
+  return taken;
+}
+
 async function backfillSessionNames(db: Db): Promise<void> {
-  const rows = await db.select({ id: sessions.id, name: sessions.name }).from(sessions);
+  const rows = await db
+    .select({ id: sessions.id, name: sessions.name })
+    .from(sessions);
+  const taken = collectTakenNames(rows);
 
   for (const row of rows) {
-    const next = sessionDisplayName(row);
-    if (row.name === next) continue;
+    if (row.name != null) {
+      const next = capitalizeSessionName(row.name);
+      if (row.name !== next) {
+        await db
+          .update(sessions)
+          .set({ name: next })
+          .where(eq(sessions.id, row.id));
+      }
+      continue;
+    }
+    const next = generateSessionName(row.id, taken);
+    taken.add(next);
     await db
       .update(sessions)
       .set({ name: next })
@@ -82,6 +103,13 @@ export async function runSessionEngine(db: Db): Promise<SessionEngineResult> {
 
   const existingSessions = await db.select().from(sessions);
   const existingById = new Map(existingSessions.map((s) => [s.id, s]));
+  const takenNames = collectTakenNames(existingSessions);
+
+  const assignName = (sessionId: number): string => {
+    const name = generateSessionName(sessionId, takenNames);
+    takenNames.add(name);
+    return name;
+  };
 
   const allMetrics = await db.select().from(scoreMetrics);
   const metricsByScore = new Map(allMetrics.map((m) => [m.scoreId, m]));
@@ -164,7 +192,7 @@ export async function runSessionEngine(db: Db): Promise<SessionEngineResult> {
     if (sessionId != null) {
       claimedSessionIds.add(sessionId);
       const namePatch =
-        prevRow?.name == null ? { name: generateSessionName(sessionId) } : {};
+        prevRow?.name == null ? { name: assignName(sessionId) } : {};
       await db
         .update(sessions)
         .set({
@@ -193,7 +221,7 @@ export async function runSessionEngine(db: Db): Promise<SessionEngineResult> {
       claimedSessionIds.add(sessionId);
       await db
         .update(sessions)
-        .set({ name: generateSessionName(sessionId) })
+        .set({ name: assignName(sessionId) })
         .where(eq(sessions.id, sessionId));
       if (isOpen) started.push(sessionId);
     }

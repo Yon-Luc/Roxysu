@@ -193,7 +193,7 @@ A contiguous group of scores in the local mirror, split when inactivity exceeds 
 
 ### Session display name
 
-A stable, generated label for a session row (Mushoku Tensei–themed word combinations). Assigned from `session.id` via `@roxysu/session-names` and stored in `sessions.name`. Always starts with a capital letter.
+A stable, generated label for a session row (Mushoku Tensei–themed word combinations). Assigned from `session.id` via `@roxysu/session-names`, unique among other session display names in the local mirror, and stored in `sessions.name`. Always starts with a capital letter.
 
 **Not:** "session title" (unless user-authored rename is added later)
 

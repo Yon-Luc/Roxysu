@@ -45,7 +45,7 @@ export function LiveSyncSection({ data }: { data: SettingsPayload }) {
         </div>
       </label>
       {syncMut.error ? (
-        <p className="mt-3 text-sm text-rose-300">{syncMut.error.message}</p>
+        <p className="mt-3 text-sm text-danger">{syncMut.error.message}</p>
       ) : null}
     </section>
   );

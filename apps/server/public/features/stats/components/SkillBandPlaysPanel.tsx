@@ -118,7 +118,7 @@ export function SkillBandPlaysPanel({
   if (error || !data) {
     return (
       <div id={`skill-band-${band}`} className="rx-panel p-4">
-        <p className="text-sm text-rose-300">
+        <p className="text-sm text-danger">
           {error?.message ?? dict?.stats.failedToLoadPlays ?? "Failed to load plays"}
         </p>
       </div>

@@ -992,10 +992,10 @@ export function ScoreReplayModal({
       >
         {exporting ? (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-black/75 px-6 backdrop-blur-sm">
-            <p className="font-display text-lg font-bold text-ink">
+            <p className="font-display text-lg font-bold text-on-media">
               Exporting video…
             </p>
-            <p className="text-sm text-muted">
+            <p className="text-sm text-on-media-muted">
               {exportProgress?.phase === "audio"
                 ? "Decoding audio…"
                 : exportProgress?.phase === "finalize"
@@ -1016,7 +1016,7 @@ export function ScoreReplayModal({
             <button
               type="button"
               onClick={cancelExport}
-              className="mt-2 rounded-full px-4 py-1.5 text-sm text-muted ring-1 ring-white/15 transition hover:bg-highlight hover:text-ink"
+              className="mt-2 rounded-full px-4 py-1.5 text-sm text-on-media-muted ring-1 ring-white/15 transition hover:bg-white/10 hover:text-on-media"
             >
               Cancel
             </button>
@@ -1037,12 +1037,12 @@ export function ScoreReplayModal({
           <div className="min-w-0">
             <h2
               id={titleId}
-              className="truncate font-display text-xl font-bold text-ink sm:text-2xl"
+              className="truncate font-display text-xl font-bold text-on-media sm:text-2xl"
             >
               {title}
             </h2>
             {subtitleParts.length > 0 || replayData?.score.mods ? (
-              <p className="mt-0.5 flex min-w-0 items-center gap-1.5 truncate text-sm text-muted">
+              <p className="mt-0.5 flex min-w-0 items-center gap-1.5 truncate text-sm text-on-media-muted">
                 {subtitleParts.length > 0 ? (
                   <span className="truncate">{subtitleParts.join(" · ")}</span>
                 ) : null}
@@ -1057,8 +1057,8 @@ export function ScoreReplayModal({
                   type="button"
                   className={`rounded-full px-3 py-1 text-sm transition ${
                     !isPlay
-                      ? "bg-accent-glow text-ink"
-                      : "text-muted hover:text-ink"
+                      ? "bg-accent-glow text-on-media"
+                      : "text-on-media-muted hover:text-on-media"
                   }`}
                   onClick={enterRewatchMode}
                 >
@@ -1068,8 +1068,8 @@ export function ScoreReplayModal({
                   type="button"
                   className={`rounded-full px-3 py-1 text-sm transition ${
                     isPlay
-                      ? "bg-accent-glow text-ink"
-                      : "text-muted hover:text-ink"
+                      ? "bg-accent-glow text-on-media"
+                      : "text-on-media-muted hover:text-on-media"
                   }`}
                   onClick={enterPlayMode}
                   title="Play from start (Enter)"
@@ -1083,7 +1083,7 @@ export function ScoreReplayModal({
                 type="button"
                 onClick={openExportOptions}
                 disabled={exporting || !replayData}
-                className="rounded-full px-3 py-1 text-sm text-muted transition hover:bg-highlight hover:text-ink disabled:opacity-40"
+                className="rounded-full px-3 py-1 text-sm text-on-media-muted transition hover:bg-white/10 hover:text-on-media disabled:opacity-40"
                 title="Export playfield + audio as MP4"
               >
                 {exporting ? "Exporting…" : "Export"}
@@ -1094,7 +1094,7 @@ export function ScoreReplayModal({
               onClick={() =>
                 setPrefs((p) => ({ ...p, fullscreen: !p.fullscreen }))
               }
-              className="rounded-full px-3 py-1 text-sm text-muted transition hover:bg-highlight hover:text-ink"
+              className="rounded-full px-3 py-1 text-sm text-on-media-muted transition hover:bg-white/10 hover:text-on-media"
               aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
               aria-pressed={fullscreen}
               title="F"
@@ -1110,7 +1110,7 @@ export function ScoreReplayModal({
                 }
                 onClose();
               }}
-              className="rounded-full px-3 py-1 text-sm text-muted transition hover:bg-highlight hover:text-ink"
+              className="rounded-full px-3 py-1 text-sm text-on-media-muted transition hover:bg-white/10 hover:text-on-media"
               aria-label={isPlay ? "Back to rewatch" : "Close"}
               title={isPlay ? "Back to rewatch (Esc)" : "Close (Esc)"}
             >
@@ -1121,7 +1121,7 @@ export function ScoreReplayModal({
 
         <div className="relative flex min-h-0 flex-1 flex-col">
           {isLoading ? (
-            <p className="px-5 py-10 text-center text-sm text-muted">
+            <p className="px-5 py-10 text-center text-sm text-on-media-muted">
               Loading replay…
             </p>
           ) : error ? (
@@ -1132,16 +1132,16 @@ export function ScoreReplayModal({
             <>
               {isPlay ? (
                 <div className="relative flex flex-wrap items-center justify-center gap-x-4 gap-y-1 border-b border-white/10 bg-black/40 px-4 py-2 text-sm tabular-nums backdrop-blur">
-                  <span className="font-bold text-ink">
+                  <span className="font-bold text-on-media">
                     {liveSummary.combo}x
                   </span>
-                  <span className="text-muted">
+                  <span className="text-on-media-muted">
                     {formatAccuracy(liveSummary.accuracy)}
                   </span>
-                  <span className="text-faint">
+                  <span className="text-on-media-muted">
                     max {liveSummary.maxCombo}x
                   </span>
-                  <span className="hidden text-xs text-subtle sm:inline">
+                  <span className="hidden text-xs text-on-media-muted sm:inline">
                     <span className="text-[#ffe566]">
                       {liveSummary.counts.perfect}
                     </span>
@@ -1203,19 +1203,19 @@ export function ScoreReplayModal({
                   {!isPlay ? (
                     <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex justify-between gap-3 sm:inset-x-6 sm:top-5">
                       <div className="rounded-lg bg-black/55 px-3 py-2 backdrop-blur">
-                        <div className="text-[10px] font-semibold uppercase tracking-wide text-faint">
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-on-media-muted">
                           Combo
                         </div>
-                        <div className="font-display text-2xl font-bold tabular-nums text-ink">
+                        <div className="font-display text-2xl font-bold tabular-nums text-on-media">
                           {hud.combo}
-                          <span className="text-base text-muted">x</span>
+                          <span className="text-base text-on-media-muted">x</span>
                         </div>
                       </div>
                       <div className="rounded-lg bg-black/55 px-3 py-2 text-right backdrop-blur">
-                        <div className="text-[10px] font-semibold uppercase tracking-wide text-faint">
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-on-media-muted">
                           Accuracy
                         </div>
-                        <div className="font-display text-2xl font-bold tabular-nums text-ink">
+                        <div className="font-display text-2xl font-bold tabular-nums text-on-media">
                           {formatAccuracy(hud.accuracy)}
                         </div>
                         {hud.last ? (
@@ -1269,7 +1269,7 @@ export function ScoreReplayModal({
                       </div>
                     </div>
                   ) : (
-                    <div className="flex h-full min-h-[16rem] items-center justify-center rounded-xl bg-black/40 px-6 text-center text-sm text-muted">
+                    <div className="flex h-full min-h-[16rem] items-center justify-center rounded-xl bg-black/40 px-6 text-center text-sm text-on-media-muted">
                       Could not load playfield for this score.
                     </div>
                   )}
@@ -1313,7 +1313,7 @@ export function ScoreReplayModal({
                   ) : null}
 
                   <div className="relative mb-3 flex items-center gap-3">
-                    <span className="w-16 shrink-0 tabular-nums text-xs text-muted sm:w-20">
+                    <span className="w-16 shrink-0 tabular-nums text-xs text-on-media-muted sm:w-20">
                       {formatClock(currentMs)}
                     </span>
                     <div className="relative min-w-0 flex-1">
@@ -1336,7 +1336,7 @@ export function ScoreReplayModal({
                         aria-label="Seek"
                       />
                     </div>
-                    <span className="w-16 shrink-0 text-right tabular-nums text-xs text-muted sm:w-20">
+                    <span className="w-16 shrink-0 text-right tabular-nums text-xs text-on-media-muted sm:w-20">
                       {formatClock(maxDuration)}
                     </span>
                   </div>
@@ -1417,7 +1417,7 @@ export function ScoreReplayModal({
 
                     <div className="mx-1 hidden h-6 w-px bg-white/10 sm:block" />
 
-                    <label className="flex min-w-[8rem] flex-1 items-center gap-2 text-xs text-muted sm:flex-none">
+                    <label className="flex min-w-[8rem] flex-1 items-center gap-2 text-xs text-on-media-muted sm:flex-none">
                       <span className="shrink-0">Vol</span>
                       <input
                         type="range"
@@ -1434,7 +1434,7 @@ export function ScoreReplayModal({
                       />
                     </label>
 
-                    <label className="flex items-center gap-2 text-xs text-muted">
+                    <label className="flex items-center gap-2 text-xs text-on-media-muted">
                       <span className="shrink-0">Rate</span>
                       <select
                         className="rx-select py-1.5 text-xs"
@@ -1456,7 +1456,7 @@ export function ScoreReplayModal({
                     </label>
 
                     {isManiaReplay ? (
-                    <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-muted sm:max-w-xs">
+                    <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-on-media-muted sm:max-w-xs">
                       <span className="shrink-0">Scroll {scrollLabel}</span>
                       <input
                         type="range"
@@ -1475,7 +1475,7 @@ export function ScoreReplayModal({
                     ) : null}
 
                     {fullscreen && !isStdReplay ? (
-                      <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-muted sm:max-w-xs">
+                      <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-on-media-muted sm:max-w-xs">
                         <span className="shrink-0">
                           Size {Math.round(prefs.fieldWidth)}%
                         </span>
@@ -1496,7 +1496,7 @@ export function ScoreReplayModal({
                     ) : null}
 
                     {!isPlay && isManiaReplay ? (
-                      <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
+                      <label className="flex cursor-pointer items-center gap-2 text-xs text-on-media-muted">
                         <input
                           type="checkbox"
                           checked={prefs.analysis}
@@ -1514,7 +1514,7 @@ export function ScoreReplayModal({
                     ) : null}
                   </div>
 
-                  <p className="mt-2 hidden text-[11px] text-faint sm:block">
+                  <p className="mt-2 hidden text-[11px] text-on-media-muted sm:block">
                     {isPlay ? (
                       <>
                         Keys {binds.map((c) => formatKeyCode(c)).join(" ")} · R
@@ -1522,7 +1522,7 @@ export function ScoreReplayModal({
                         {" · "}
                         <a
                           href="#/settings"
-                          className="text-subtle underline-offset-2 hover:underline"
+                          className="text-on-media-muted underline-offset-2 hover:underline"
                         >
                           Edit keybinds
                         </a>
@@ -1556,7 +1556,7 @@ export function ScoreReplayModal({
 function ReplayStatsBar({ data }: { data: LoadedScoreReplay }) {
   const sim = data.simulated;
   return (
-    <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+    <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-on-media-muted">
       <span>
         Stored {formatAccuracy(data.score.accuracy)} · {data.score.maxCombo}x
       </span>

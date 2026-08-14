@@ -89,7 +89,7 @@ export function DownloadSessionPanel({
         <p className="truncate text-xs text-faint">Query: {batch.query}</p>
       ) : null}
       {batch.error ? (
-        <p className="text-sm text-rose-400">{batch.error}</p>
+        <p className="text-sm text-danger">{batch.error}</p>
       ) : null}
       {batch.recentErrors.length > 0 ? (
         <ul className="text-xs text-faint">

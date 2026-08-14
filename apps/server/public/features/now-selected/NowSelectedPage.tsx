@@ -82,12 +82,12 @@ function statusLabel(
     case "connecting":
       return {
         text: dict?.session.tosu.connecting ?? "Connecting…",
-        className: "bg-amber-400/15 text-amber-200",
+        className: "bg-warning/15 text-warning",
       };
     case "disconnected":
       return {
         text: dict?.session.tosu.tosuDown ?? "Tosu down",
-        className: "bg-rose-400/15 text-rose-300",
+        className: "bg-danger/15 text-danger",
       };
     default:
       return {
@@ -302,7 +302,7 @@ export function NowSelectedPage({
           {sunny?.sunnyStar != null ? ` · ${sunny.sunnyStar.toFixed(2)}★` : ""}
         </p>
         {sunny?.error ? (
-          <p className="mt-0.5 text-xs text-rose-300">{sunny.error}</p>
+          <p className="mt-0.5 text-xs text-danger">{sunny.error}</p>
         ) : null}
       </div>
     ) : null,
@@ -378,7 +378,7 @@ export function NowSelectedPage({
       ) : null}
 
       {error ? (
-        <p className="text-sm text-rose-300">{error.message}</p>
+        <p className="text-sm text-danger">{error.message}</p>
       ) : null}
 
       {data && !data.enabled ? (
@@ -402,7 +402,7 @@ export function NowSelectedPage({
       ) : null}
 
       {data?.warnings?.length ? (
-        <ul className="space-y-1 text-sm text-amber-200/90">
+        <ul className="space-y-1 text-sm text-warning/90">
           {data.warnings.map((w) => (
             <li key={w}>{w}</li>
           ))}

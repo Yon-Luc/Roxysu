@@ -38,3 +38,4 @@ Choose mastery formula (`simple` or `practice`), rating display preference (osu!
 
 - [business/mastery-formulas.md](../../business/mastery-formulas.md)
 - [business/path-resolution.md](../../business/path-resolution.md)
+- [architecture/client-theme.md](../../architecture/client-theme.md) — Appearance section

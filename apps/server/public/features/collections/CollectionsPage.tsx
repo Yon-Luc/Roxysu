@@ -156,8 +156,8 @@ export function CollectionsPage() {
         <p
           className={
             syncMut.isError
-              ? "text-sm text-rose-300"
-              : "text-sm text-emerald-300/90"
+              ? "text-sm text-danger"
+              : "text-sm text-success/90"
           }
         >
           {syncMessage}
@@ -196,7 +196,7 @@ export function CollectionsPage() {
             : dict?.collection.save}
         </button>
         {createMut.error ? (
-          <p className="sm:col-span-3 text-sm text-rose-300">
+          <p className="sm:col-span-3 text-sm text-danger">
             {createMut.error.message}
           </p>
         ) : null}
@@ -212,7 +212,7 @@ export function CollectionsPage() {
           <ListSkeleton count={5} showThumbnail={false} />
         </div>
       ) : error ? (
-        <p className="text-rose-300">{error.message}</p>
+        <p className="text-danger">{error.message}</p>
       ) : (
         <div className="space-y-8">
           <section className="space-y-2">
@@ -289,7 +289,7 @@ export function CollectionsPage() {
                             </button>
                           </div>
                           {updateMut.error ? (
-                            <p className="text-sm text-rose-300 sm:col-span-3">
+                            <p className="text-sm text-danger sm:col-span-3">
                               {updateMut.error.message}
                             </p>
                           ) : null}
@@ -353,7 +353,7 @@ export function CollectionsPage() {
                             type="button"
                             onClick={() => deleteMut.mutate(c.id)}
                             disabled={isDeleting || deleteMut.isPending}
-                            className="text-xs font-medium text-rose-300/80 transition hover:text-rose-300 disabled:opacity-60"
+                            className="text-xs font-medium text-danger/80 transition hover:text-danger disabled:opacity-60"
                           >
                             {isDeleting
                               ? dict?.collection.deleting

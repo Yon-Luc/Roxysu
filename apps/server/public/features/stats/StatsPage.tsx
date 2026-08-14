@@ -168,7 +168,7 @@ export function StatsPage({
 
   if (error || !data) {
     return (
-      <p className="text-rose-300">
+      <p className="text-danger">
         {t(dict?.stats.failedToLoadStats, {
           error: error?.message ?? "unknown error",
         })}

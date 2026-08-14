@@ -12,6 +12,7 @@ System structure and tech choices for Roxysu.
 | [realm-access.md](realm-access.md) | How Roxysu reads/writes Realm |
 | [data-ownership.md](data-ownership.md) | Which process writes which tables |
 | [hub-vs-local.md](hub-vs-local.md) | Client app vs Hub |
+| [client-theme.md](client-theme.md) | Light/dark tokens; page vs media chrome |
 
 ## Guiding principles
 

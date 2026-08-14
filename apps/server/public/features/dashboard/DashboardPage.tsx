@@ -65,7 +65,7 @@ export function DashboardPage() {
 
   if (error || !data) {
     return (
-      <p className="text-rose-300">
+      <p className="text-danger">
         Failed to load dashboard: {error?.message ?? "unknown error"}
       </p>
     );

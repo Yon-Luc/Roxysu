@@ -487,7 +487,7 @@ export function HubDetailPage({ id }: { id: string }) {
       {detailQuery.isLoading ? (
         <ListSkeleton count={4} showThumbnail={false} />
       ) : detailQuery.error ? (
-        <p className="text-sm text-rose-300">{detailQuery.error.message}</p>
+        <p className="text-sm text-danger">{detailQuery.error.message}</p>
       ) : c ? (
         <>
           {editing ? (
@@ -557,10 +557,10 @@ export function HubDetailPage({ id }: { id: string }) {
               </span>
             ) : null}
             {isAdded ? (
-              <span className="text-emerald-300/90">Saved to game</span>
+              <span className="text-success/90">Saved to game</span>
             ) : null}
             {updateAvailable ? (
-              <span className="text-amber-200">Creator updated this pack</span>
+              <span className="text-warning">Creator updated this pack</span>
             ) : null}
           </div>
           {c.tags.length > 0 ? (
@@ -581,7 +581,7 @@ export function HubDetailPage({ id }: { id: string }) {
           ) : cardsQuery.isPending && !cardsQuery.data ? (
             <CardGridSkeleton count={6} />
           ) : cardsQuery.error && !cardsQuery.data ? (
-            <p className="text-sm text-rose-300">{cardsQuery.error.message}</p>
+            <p className="text-sm text-danger">{cardsQuery.error.message}</p>
           ) : (
             <div className="space-y-4">
               <section className="rx-panel space-y-3 p-4 sm:p-5">
@@ -814,7 +814,7 @@ export function HubDetailPage({ id }: { id: string }) {
             : "You already own every map in this collection."}
         </p>
         {updateAvailable ? (
-          <p className="text-amber-200/90">
+          <p className="text-warning/90">
             The creator changed this collection since you last saved it.
           </p>
         ) : null}

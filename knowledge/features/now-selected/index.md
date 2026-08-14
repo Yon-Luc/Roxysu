@@ -74,3 +74,4 @@ matchedBeatmapId  →  BeatmapPreviewEmbed → GET /api/beatmaps/:id/preview
 - [features/tosu-live/](../tosu-live/index.md)
 - [features/preview-replay/](../preview-replay/index.md)
 - [features/practice-profiles/](../practice-profiles/index.md)
+- [architecture/client-theme.md](../../architecture/client-theme.md) — embedded preview uses `on-media` text

@@ -191,7 +191,7 @@ export function ManiaRatingLabSection({ data }: { data: SettingsPayload }) {
               })}
             </span>
             {maniaCoverage.failed > 0 ? (
-              <span className="text-rose-300/90">
+              <span className="text-danger/90">
                 {t(dict?.settings.failed, {
                   count: maniaCoverage.failed.toLocaleString(),
                 })}
@@ -246,12 +246,12 @@ export function ManiaRatingLabSection({ data }: { data: SettingsPayload }) {
       </div>
 
       {maniaRatingMut.error ? (
-        <p className="mt-3 text-sm text-rose-300">
+        <p className="mt-3 text-sm text-danger">
           {maniaRatingMut.error.message}
         </p>
       ) : null}
       {maniaJob?.error ? (
-        <p className="mt-3 text-sm text-rose-300">{maniaJob.error}</p>
+        <p className="mt-3 text-sm text-danger">{maniaJob.error}</p>
       ) : null}
     </section>
   );

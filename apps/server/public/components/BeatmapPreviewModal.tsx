@@ -832,12 +832,12 @@ export function BeatmapPreviewModal({
           <div className="min-w-0">
             <h2
               id={titleId}
-              className="truncate font-display text-xl font-bold text-ink sm:text-2xl"
+              className="truncate font-display text-xl font-bold text-on-media sm:text-2xl"
             >
               {title}
             </h2>
             {subtitle ? (
-              <p className="mt-0.5 truncate text-sm text-muted">{subtitle}</p>
+              <p className="mt-0.5 truncate text-sm text-on-media-muted">{subtitle}</p>
             ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-1">
@@ -847,8 +847,8 @@ export function BeatmapPreviewModal({
                   type="button"
                   className={`rounded-full px-3 py-1 text-sm transition ${
                     !isPlay
-                      ? "bg-accent-glow text-ink"
-                      : "text-muted hover:text-ink"
+                      ? "bg-accent-glow text-on-media"
+                      : "text-on-media-muted hover:text-on-media"
                   }`}
                   onClick={enterPreviewMode}
                 >
@@ -858,8 +858,8 @@ export function BeatmapPreviewModal({
                   type="button"
                   className={`rounded-full px-3 py-1 text-sm transition ${
                     isPlay
-                      ? "bg-accent-glow text-ink"
-                      : "text-muted hover:text-ink"
+                      ? "bg-accent-glow text-on-media"
+                      : "text-on-media-muted hover:text-on-media"
                   }`}
                   onClick={enterPlayMode}
                   title="Play from start (Enter)"
@@ -873,7 +873,7 @@ export function BeatmapPreviewModal({
               onClick={() =>
                 setPrefs((p) => ({ ...p, fullscreen: !p.fullscreen }))
               }
-              className="rounded-full px-3 py-1 text-sm text-muted transition hover:bg-highlight hover:text-ink"
+              className="rounded-full px-3 py-1 text-sm text-on-media-muted transition hover:bg-white/10 hover:text-on-media"
               aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
               aria-pressed={fullscreen}
               title="F"
@@ -889,7 +889,7 @@ export function BeatmapPreviewModal({
                 }
                 onClose();
               }}
-              className="rounded-full px-3 py-1 text-sm text-muted transition hover:bg-highlight hover:text-ink"
+              className="rounded-full px-3 py-1 text-sm text-on-media-muted transition hover:bg-white/10 hover:text-on-media"
               aria-label={isPlay ? "Back to preview" : "Close"}
               title={isPlay ? "Back to preview (Esc)" : "Close (Esc)"}
             >
@@ -900,7 +900,7 @@ export function BeatmapPreviewModal({
 
         <div className="relative flex min-h-0 flex-1 flex-col">
           {isLoading ? (
-            <p className="flex flex-1 items-center justify-center px-5 py-10 text-center text-sm text-muted">
+            <p className="flex flex-1 items-center justify-center px-5 py-10 text-center text-sm text-on-media-muted">
               Loading preview…
             </p>
           ) : error ? (
@@ -913,16 +913,16 @@ export function BeatmapPreviewModal({
             <>
               {isPlay ? (
                 <div className="relative flex flex-wrap items-center justify-center gap-x-4 gap-y-1 border-b border-white/10 bg-black/40 px-4 py-2 text-sm tabular-nums backdrop-blur">
-                  <span className="font-bold text-ink">
+                  <span className="font-bold text-on-media">
                     {liveSummary.combo}x
                   </span>
-                  <span className="text-muted">
+                  <span className="text-on-media-muted">
                     {formatAccuracy(liveSummary.accuracy)}
                   </span>
-                  <span className="text-faint">
+                  <span className="text-on-media-muted">
                     max {liveSummary.maxCombo}x
                   </span>
-                  <span className="hidden text-xs text-subtle sm:inline">
+                  <span className="hidden text-xs text-on-media-muted sm:inline">
                     <span className="text-[#ffe566]">
                       {liveSummary.counts.perfect}
                     </span>
@@ -996,7 +996,7 @@ export function BeatmapPreviewModal({
                     </div>
                   </div>
                 ) : (
-                  <div className="flex h-full min-h-[16rem] items-center justify-center rounded-xl bg-black/40 px-6 text-center text-sm text-muted">
+                  <div className="flex h-full min-h-[16rem] items-center justify-center rounded-xl bg-black/40 px-6 text-center text-sm text-on-media-muted">
                     {data.rulesetShortName === "mania" ||
                     data.rulesetShortName === "osu"
                       ? "Could not load playfield for this map."
@@ -1020,7 +1020,7 @@ export function BeatmapPreviewModal({
                 ) : null}
 
                 <div className="mb-3 flex items-center gap-3">
-                  <span className="w-16 shrink-0 tabular-nums text-xs text-muted sm:w-20">
+                  <span className="w-16 shrink-0 tabular-nums text-xs text-on-media-muted sm:w-20">
                     {formatClock(currentMs)}
                   </span>
                   <input
@@ -1034,7 +1034,7 @@ export function BeatmapPreviewModal({
                     className="min-w-0 flex-1 accent-[var(--accent)] disabled:opacity-40"
                     aria-label="Seek"
                   />
-                  <span className="w-16 shrink-0 text-right tabular-nums text-xs text-muted sm:w-20">
+                  <span className="w-16 shrink-0 text-right tabular-nums text-xs text-on-media-muted sm:w-20">
                     {formatClock(maxDuration)}
                   </span>
                 </div>
@@ -1124,7 +1124,7 @@ export function BeatmapPreviewModal({
 
                   <div className="mx-1 hidden h-6 w-px bg-white/10 sm:block" />
 
-                  <label className="flex min-w-[8rem] flex-1 items-center gap-2 text-xs text-muted sm:flex-none">
+                  <label className="flex min-w-[8rem] flex-1 items-center gap-2 text-xs text-on-media-muted sm:flex-none">
                     <span className="shrink-0">Vol</span>
                     <input
                       type="range"
@@ -1141,7 +1141,7 @@ export function BeatmapPreviewModal({
                     />
                   </label>
 
-                  <label className="flex items-center gap-2 text-xs text-muted">
+                  <label className="flex items-center gap-2 text-xs text-on-media-muted">
                     <span className="shrink-0">Rate</span>
                     <select
                       className="rx-select py-1.5 text-xs"
@@ -1163,7 +1163,7 @@ export function BeatmapPreviewModal({
                   </label>
 
                   {isMania ? (
-                  <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-muted sm:max-w-xs">
+                  <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-on-media-muted sm:max-w-xs">
                     <span className="shrink-0">Scroll {scrollLabel}</span>
                     <input
                       type="range"
@@ -1183,7 +1183,7 @@ export function BeatmapPreviewModal({
 
                   {isMania ? (
                     <>
-                  <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-muted sm:max-w-xs">
+                  <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-on-media-muted sm:max-w-xs">
                     <span className="shrink-0">
                       Hit {Math.round(skin.hitPosition * 100)}%
                     </span>
@@ -1202,7 +1202,7 @@ export function BeatmapPreviewModal({
                     />
                   </label>
 
-                  <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-muted sm:max-w-xs">
+                  <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-on-media-muted sm:max-w-xs">
                     <span className="shrink-0">
                       Cover {Math.round(skin.laneCover * 100)}%
                     </span>
@@ -1224,7 +1224,7 @@ export function BeatmapPreviewModal({
                   ) : null}
 
                   {fullscreen && !isStd ? (
-                    <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-muted sm:max-w-xs">
+                    <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-on-media-muted sm:max-w-xs">
                       <span className="shrink-0">
                         Size {Math.round(prefs.fieldWidth)}%
                       </span>
@@ -1244,7 +1244,7 @@ export function BeatmapPreviewModal({
                     </label>
                   ) : null}
 
-                  <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
+                  <label className="flex cursor-pointer items-center gap-2 text-xs text-on-media-muted">
                     <input
                       type="checkbox"
                       checked={prefs.blackBg}
@@ -1261,7 +1261,7 @@ export function BeatmapPreviewModal({
                   </label>
                 </div>
 
-                <p className="mt-2 hidden text-[11px] text-faint sm:block">
+                <p className="mt-2 hidden text-[11px] text-on-media-muted sm:block">
                   {isPlay ? (
                     <>
                       Keys{" "}
@@ -1270,7 +1270,7 @@ export function BeatmapPreviewModal({
                       {" · "}
                       <a
                         href="#/settings"
-                        className="text-subtle underline-offset-2 hover:underline"
+                        className="text-on-media-muted underline-offset-2 hover:underline"
                       >
                         Edit keybinds
                       </a>
@@ -1282,7 +1282,7 @@ export function BeatmapPreviewModal({
                       {" · "}
                       <a
                         href="#/skin"
-                        className="text-subtle underline-offset-2 hover:underline"
+                        className="text-on-media-muted underline-offset-2 hover:underline"
                       >
                         Edit skin
                       </a>

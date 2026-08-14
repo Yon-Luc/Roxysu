@@ -138,3 +138,4 @@ Score rewatch:
 - [vocabulary.md](../vocabulary.md)
 - [features/index.md](index.md)
 - [replay-video-export/](../replay-video-export/index.md)
+- [architecture/client-theme.md](../../architecture/client-theme.md) — preview/rewatch chrome uses `on-media` text

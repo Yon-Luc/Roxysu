@@ -17,6 +17,7 @@
 | Concern | Start here |
 |---|---|
 | Client app API + UI | `apps/server/` |
+| Client app colors | [architecture/client-theme.md](architecture/client-theme.md) |
 | Realm extraction | `apps/realm-reader/` |
 | Shared schema | `packages/db/` |
 | Hub | `apps/hub/` |

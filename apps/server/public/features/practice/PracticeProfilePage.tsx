@@ -78,7 +78,7 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
         <GoBackLink to="/practice">
           {dict?.practice.detail.backToPractice}
         </GoBackLink>
-        <p className="text-rose-300">
+        <p className="text-danger">
           {error?.message ?? dict?.practice.detail.notFound}
         </p>
       </div>
@@ -633,9 +633,9 @@ function formatIssueKind(
 function severityClass(severity: string): string {
   switch (severity) {
     case "error":
-      return "text-rose-300";
+      return "text-danger";
     case "warn":
-      return "text-amber-200/90";
+      return "text-warning/90";
     default:
       return "text-muted";
   }

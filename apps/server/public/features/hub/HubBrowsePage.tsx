@@ -337,7 +337,7 @@ export function HubBrowsePage() {
         showBrowseSkeleton ? (
           <CardGridSkeleton count={6} />
         ) : listQuery.error && !listQuery.data ? (
-          <p className="text-sm text-rose-300">{listQuery.error.message}</p>
+          <p className="text-sm text-danger">{listQuery.error.message}</p>
         ) : browseItems.length === 0 ? (
           <p className="text-sm text-muted">
             {browseHasFilters
@@ -375,7 +375,7 @@ export function HubBrowsePage() {
         ) : favoritesQuery.isPending ? (
           <CardGridSkeleton count={6} />
         ) : favoritesQuery.error ? (
-          <p className="text-sm text-rose-300">{favoritesQuery.error.message}</p>
+          <p className="text-sm text-danger">{favoritesQuery.error.message}</p>
         ) : favoriteItems.length === 0 ? (
           <p className="text-sm text-muted">
             {debouncedQ
@@ -398,7 +398,7 @@ export function HubBrowsePage() {
       ) : showAddedSkeleton ? (
         <CardGridSkeleton count={6} />
       ) : addedQuery.error ? (
-        <p className="text-sm text-rose-300">{addedQuery.error.message}</p>
+        <p className="text-sm text-danger">{addedQuery.error.message}</p>
       ) : addedItems.length === 0 ? (
         <p className="text-sm text-muted">
           {debouncedQ

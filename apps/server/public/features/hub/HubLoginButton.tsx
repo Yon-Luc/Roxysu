@@ -91,7 +91,7 @@ export function HubLoginButton({
       >
         {waiting ? "Waiting for browser…" : children}
       </button>
-      {error ? <span className="text-xs text-rose-300">{error}</span> : null}
+      {error ? <span className="text-xs text-danger">{error}</span> : null}
     </span>
   );
 }

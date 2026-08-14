@@ -32,4 +32,5 @@ Realm JS does not run on Bun; `better-sqlite3` also does not. Each process uses 
 
 ## Related knowledge
 
+- [client-theme.md](client-theme.md) — page vs media chrome color tokens
 - [decisions/dual-runtime-sqlite-bus.md](../decisions/dual-runtime-sqlite-bus.md)

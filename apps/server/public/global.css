@@ -26,6 +26,12 @@
   --color-chart-tooltip-bg: #242424;
   --color-chart-cons: #5ec4a8;
   --color-chart-fln: #c9a227;
+  --color-danger: #fda4af;
+  --color-warning: #fde68a;
+  --color-success: #6ee7b7;
+  --color-info: #7dd3fc;
+  --color-on-media: #ffffff;
+  --color-on-media-muted: rgb(255 255 255 / 0.75);
 }
 
 html.light {
@@ -37,7 +43,7 @@ html.light {
   --color-ink: #121212;
   --color-subtle: #555555;
   --color-muted: #6a6a6a;
-  --color-faint: #9a9a9a;
+  --color-faint: #6e6e6e;
   --color-accent: #5a6fd6;
   --color-accent-dim: #4a5fc4;
   --color-accent-glow: rgba(90, 111, 214, 0.14);
@@ -49,6 +55,10 @@ html.light {
   --color-card-shadow: rgb(0 0 0 / 0.1);
   --color-chart-tick: #6a6a6a;
   --color-chart-tooltip-bg: #ffffff;
+  --color-danger: #be123c;
+  --color-warning: #b45309;
+  --color-success: #047857;
+  --color-info: #0369a1;
 }
 
 html,

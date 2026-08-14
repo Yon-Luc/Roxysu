@@ -189,7 +189,7 @@ function KeybindModalInner({
                   key={i}
                   className={`flex items-center gap-3 rounded-xl px-3 py-2 ${
                     conflict
-                      ? "bg-rose-500/10 ring-1 ring-rose-400/40"
+                      ? "bg-danger/10 ring-1 ring-danger/40"
                       : "bg-elevated/50"
                   }`}
                 >
@@ -220,7 +220,7 @@ function KeybindModalInner({
           </ul>
 
           {conflicts.length > 0 ? (
-            <p className="mt-3 text-sm text-rose-300/90">
+            <p className="mt-3 text-sm text-danger/90">
               {t(dict?.settings.keybindsModal.duplicateKeys, {
                 cols: conflicts
                   .map((cols) => cols.map((c) => c + 1).join(" & "))

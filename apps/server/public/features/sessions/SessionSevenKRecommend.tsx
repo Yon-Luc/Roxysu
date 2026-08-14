@@ -378,7 +378,7 @@ export function SessionSevenKRecommend({
         ) : null}
 
         {batch?.needsSunnyBackfill ? (
-          <p className="text-xs text-amber-200/90">
+          <p className="text-xs text-warning/90">
             {(() => {
               const parts = (
                 t(dict?.session.needsSunnyBackfill, { keymode: keyCount }) ||
@@ -402,7 +402,7 @@ export function SessionSevenKRecommend({
       </div>
 
       {error ? (
-        <p className="text-sm text-rose-300">{error.message}</p>
+        <p className="text-sm text-danger">{error.message}</p>
       ) : null}
 
       {isLoading && items.length === 0 ? (

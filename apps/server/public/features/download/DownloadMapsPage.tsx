@@ -671,7 +671,7 @@ export function DownloadMapsPage() {
           </p>
 
           {countError ? (
-            <p className="text-sm text-rose-400">{countError}</p>
+            <p className="text-sm text-danger">{countError}</p>
           ) : null}
           {missingCount ? (
             <p className="text-sm text-muted">
@@ -701,7 +701,7 @@ export function DownloadMapsPage() {
           ) : null}
 
           {batchError ? (
-            <p className="text-sm text-rose-400">{batchError}</p>
+            <p className="text-sm text-danger">{batchError}</p>
           ) : null}
           {saveMessage ? (
             <p className="text-sm text-muted">{saveMessage}</p>
@@ -740,7 +740,7 @@ export function DownloadMapsPage() {
                 <p className="truncate text-faint">Query: {batch.query}</p>
               ) : null}
               {batch.error ? (
-                <p className="text-rose-400">{batch.error}</p>
+                <p className="text-danger">{batch.error}</p>
               ) : null}
               {batch.importScriptSh || batch.importScriptBat ? (
                 <p className="truncate text-faint">
@@ -769,7 +769,7 @@ export function DownloadMapsPage() {
       )}
 
       {showDevTools ? (
-        <section className="rx-panel space-y-3 border border-dashed border-amber-500/40 p-4">
+        <section className="rx-panel space-y-3 border border-dashed border-warning/40 p-4">
           <div>
             <h2 className="font-semibold text-ink">Dev · download UI</h2>
             <p className="text-sm text-muted">
@@ -829,13 +829,13 @@ export function DownloadMapsPage() {
           <CardGridSkeleton count={6} />
         </div>
       ) : query.isError ? (
-        <p className="text-rose-400">
+        <p className="text-danger">
           {query.error instanceof Error
             ? query.error.message
             : "Search failed"}
         </p>
       ) : query.data && "error" in query.data ? (
-        <p className="text-rose-400">{String(query.data.error)}</p>
+        <p className="text-danger">{String(query.data.error)}</p>
       ) : (
         <div className="space-y-4">
           <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm text-muted">

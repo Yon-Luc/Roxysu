@@ -195,7 +195,7 @@ export function HubAdminCachePage() {
           <PageTitle className="mt-3">Search cache</PageTitle>
           <p className="rx-subtitle">Admin</p>
         </div>
-        <p className="text-sm text-rose-300">Admin access required.</p>
+        <p className="text-sm text-danger">Admin access required.</p>
       </div>
     );
   }
@@ -300,7 +300,7 @@ export function HubAdminCachePage() {
       {listQuery.isLoading ? (
         <ListSkeleton count={4} showThumbnail={false} />
       ) : listQuery.error ? (
-        <p className="text-sm text-rose-300">{listQuery.error.message}</p>
+        <p className="text-sm text-danger">{listQuery.error.message}</p>
       ) : entries.length === 0 ? (
         <p className="text-sm text-muted">No cache entries yet.</p>
       ) : (
@@ -318,16 +318,16 @@ export function HubAdminCachePage() {
                 </div>
                 <div className="flex flex-wrap gap-2 text-xs">
                   {entry.stale ? (
-                    <span className="rounded bg-amber-500/20 px-2 py-0.5 text-amber-200">
+                    <span className="rounded bg-warning/20 px-2 py-0.5 text-warning">
                       Stale
                     </span>
                   ) : (
-                    <span className="rounded bg-emerald-500/15 px-2 py-0.5 text-emerald-200">
+                    <span className="rounded bg-success/15 px-2 py-0.5 text-success">
                       Fresh
                     </span>
                   )}
                   {entry.refreshError ? (
-                    <span className="rounded bg-rose-500/20 px-2 py-0.5 text-rose-200">
+                    <span className="rounded bg-danger/20 px-2 py-0.5 text-danger">
                       Error
                     </span>
                   ) : null}
@@ -348,7 +348,7 @@ export function HubAdminCachePage() {
                     : ""}
                 </span>
                 {entry.refreshError ? (
-                  <span className="text-rose-300 sm:col-span-2">
+                  <span className="text-danger sm:col-span-2">
                     {entry.refreshError}
                   </span>
                 ) : null}
@@ -393,7 +393,7 @@ export function HubAdminCachePage() {
                 </button>
                 <button
                   type="button"
-                  className="rx-btn text-sm text-rose-200"
+                  className="rx-btn text-sm text-danger"
                   disabled={deleteMut.isPending}
                   onClick={() => {
                     if (

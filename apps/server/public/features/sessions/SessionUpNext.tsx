@@ -448,7 +448,7 @@ export function SessionUpNext({
       </div>
 
       {error ? (
-        <p className="text-sm text-rose-300">{error.message}</p>
+        <p className="text-sm text-danger">{error.message}</p>
       ) : null}
 
       {isLoading && items.length === 0 ? (

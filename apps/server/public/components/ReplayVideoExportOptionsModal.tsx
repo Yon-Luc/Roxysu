@@ -214,7 +214,7 @@ export function ReplayVideoExportOptionsModal({
             {presetId === "discord" || hideBackground ? (
               <p
                 className={`mt-2 text-xs ${
-                  underDiscordLimit ? "text-emerald-300/90" : "text-amber-200/90"
+                  underDiscordLimit ? "text-success/90" : "text-warning/90"
                 }`}
               >
                 {underDiscordLimit

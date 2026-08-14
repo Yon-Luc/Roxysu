@@ -131,7 +131,7 @@ export function TosuLiveMapSection({ data }: { data: SettingsPayload }) {
       </div>
 
       {tosuMut.error ? (
-        <p className="mt-3 text-sm text-rose-300">{tosuMut.error.message}</p>
+        <p className="mt-3 text-sm text-danger">{tosuMut.error.message}</p>
       ) : null}
     </section>
   );

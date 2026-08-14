@@ -71,7 +71,7 @@ export function SettingsPage({ section }: { section?: string } = {}) {
 
   if (error || !data) {
     return (
-      <p className="text-rose-300">
+      <p className="text-danger">
         {t(dict?.settings.failedToLoad, {
           error: error?.message ?? "unknown",
         })}

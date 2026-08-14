@@ -82,7 +82,7 @@ export function JobRunnerSection({
               })}
             </span>
             {coverage.failed > 0 ? (
-              <span className="text-rose-300/90">
+              <span className="text-danger/90">
                 {t(dict?.settings.failed, {
                   count: coverage.failed.toLocaleString(),
                 })}
@@ -128,13 +128,13 @@ export function JobRunnerSection({
       </div>
 
       {startError ? (
-        <p className="mt-3 text-sm text-rose-300">{startError}</p>
+        <p className="mt-3 text-sm text-danger">{startError}</p>
       ) : null}
       {stopError ? (
-        <p className="mt-3 text-sm text-rose-300">{stopError}</p>
+        <p className="mt-3 text-sm text-danger">{stopError}</p>
       ) : null}
       {jobError ? (
-        <p className="mt-3 text-sm text-rose-300">{jobError}</p>
+        <p className="mt-3 text-sm text-danger">{jobError}</p>
       ) : null}
     </section>
   );

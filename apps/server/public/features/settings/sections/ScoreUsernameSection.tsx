@@ -176,7 +176,7 @@ export function ScoreUsernameSection({ data }: { data: SettingsPayload }) {
         </p>
       ) : null}
       {scoresUsernameMut.error ? (
-        <p className="mt-3 text-sm text-rose-300">
+        <p className="mt-3 text-sm text-danger">
           {scoresUsernameMut.error.message}
         </p>
       ) : null}

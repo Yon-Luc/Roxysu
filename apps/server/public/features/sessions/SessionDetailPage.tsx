@@ -105,7 +105,7 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
         <GoBackLink to="/sessions">
           {dict?.session.backToSessions}
         </GoBackLink>
-        <p className="text-rose-300">
+        <p className="text-danger">
           {error?.message ?? dict?.session.notFound}
         </p>
       </div>
@@ -118,7 +118,7 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
         <GoBackLink to="/sessions">
           {dict?.session.backToSessions}
         </GoBackLink>
-        <p className="text-rose-300">{data.error}</p>
+        <p className="text-danger">{data.error}</p>
       </div>
     );
   }
@@ -157,7 +157,7 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
         <GoBackLink to="/sessions">
           {dict?.session.backToSessions}
         </GoBackLink>
-        <p className="text-rose-300">{dict?.session.notFound}</p>
+        <p className="text-danger">{dict?.session.notFound}</p>
       </div>
     );
   }
@@ -268,7 +268,7 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
                         {score.title ?? dict?.session.untitled}
                       </span>
                       {score.isPb ? (
-                        <span className="shrink-0 rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-300">
+                        <span className="shrink-0 rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-warning">
                           {dict?.session.pb}
                         </span>
                       ) : null}

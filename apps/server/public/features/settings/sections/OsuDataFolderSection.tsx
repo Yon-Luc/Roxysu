@@ -88,7 +88,7 @@ export function OsuDataFolderSection({ data }: { data: SettingsPayload }) {
         </p>
         <p className="text-xs">{pathStatusLabel(dict, paths.status)}</p>
         {paths.source === "env" ? (
-          <p className="text-xs text-amber-200/90">
+          <p className="text-xs text-warning/90">
             <span className="font-mono">OSU_DATA_PATH</span> or{" "}
             <span className="font-mono">REALM_PATH</span> —{" "}
             {dict?.settings.envWins}
@@ -125,7 +125,7 @@ export function OsuDataFolderSection({ data }: { data: SettingsPayload }) {
       </div>
 
       {pathMut.error ? (
-        <p className="mt-3 text-sm text-rose-300">{pathMut.error.message}</p>
+        <p className="mt-3 text-sm text-danger">{pathMut.error.message}</p>
       ) : null}
     </section>
   );

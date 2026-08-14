@@ -45,6 +45,7 @@ import {
   primaryRatingDisplayTitle,
   useRatingDisplayMode,
 } from "../../lib/ratingDisplay";
+import { useChartStyles } from "../../lib/chartStyles";
 import { useAppDict, t } from "../../lib/i18n";
 import type { Dictionary } from "@roxysu/i18n";
 import {
@@ -167,6 +168,7 @@ function mergeRangeIntoQuery(
 export function PracticeListPage() {
   const ratingMode = useRatingDisplayMode();
   const { dict } = useAppDict();
+  const charts = useChartStyles();
   const ratingListLabels = {
     danielDan: dict?.practice.detail.danielDan ?? "Daniel dan",
     sunnyDan: dict?.practice.detail.sunnyDan ?? "Sunny dan",
@@ -369,7 +371,7 @@ export function PracticeListPage() {
             <SkeletonBlock className="h-[220px] w-full" />
           </div>
         ) : distError || !bins ? (
-          <p className="py-10 text-center text-sm text-rose-300">
+          <p className="py-10 text-center text-sm text-danger">
             {distError?.message ??
               dict?.practice.failedToLoadDistribution ??
               "Failed to load distribution"}
@@ -377,10 +379,10 @@ export function PracticeListPage() {
         ) : (
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={bins} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
+              <CartesianGrid stroke={charts.grid} vertical={false} />
               <XAxis
                 dataKey="label"
-                tick={{ fill: "#a7a7a7", fontSize: 10 }}
+                tick={{ ...charts.tick, fontSize: 10 }}
                 interval={0}
                 angle={-25}
                 textAnchor="end"
@@ -390,21 +392,14 @@ export function PracticeListPage() {
               />
               <YAxis
                 allowDecimals={false}
-                tick={{ fill: "#a7a7a7", fontSize: 11 }}
+                tick={charts.tick}
                 width={40}
                 axisLine={false}
                 tickLine={false}
               />
               <Tooltip
-                cursor={{ fill: "rgba(255,255,255,0.04)" }}
-                contentStyle={{
-                  background: "#242424",
-                  border: "none",
-                  borderRadius: 8,
-                  boxShadow: "0 8px 24px rgba(0,0,0,0.45)",
-                }}
-                labelStyle={{ color: "#b3b3b3" }}
-                itemStyle={{ color: "#fff" }}
+                cursor={{ fill: "var(--color-highlight)" }}
+                contentStyle={charts.tooltip}
                 formatter={(value) => [
                   Number(value).toLocaleString(),
                   dict?.practice.maps ?? "maps",
@@ -427,8 +422,8 @@ export function PracticeListPage() {
                     key={bin.key}
                     fill={
                       bin.key === "unplayed"
-                        ? "rgba(167, 167, 167, 0.45)"
-                        : "#7c8fe0"
+                        ? "var(--color-faint)"
+                        : charts.chart
                     }
                   />
                 ))}
@@ -521,7 +516,7 @@ export function PracticeListPage() {
           <CardGridSkeleton count={6} />
         </>
       ) : error ? (
-        <p className="text-rose-300">
+        <p className="text-danger">
           {t(dict?.practice.failedToLoad, { error: error.message })}
         </p>
       ) : !list || list.items.length === 0 ? (

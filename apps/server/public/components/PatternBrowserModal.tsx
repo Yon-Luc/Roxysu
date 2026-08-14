@@ -196,7 +196,7 @@ function PatternBrowserModal({
               Analyzing {keymode}K charts…
             </p>
           ) : error ? (
-            <p className="py-8 text-center text-sm text-rose-300">
+            <p className="py-8 text-center text-sm text-danger">
               {error.message}
             </p>
           ) : !data || data.patterns.length === 0 ? (

@@ -108,7 +108,7 @@ function formatDelta(value: number | null, digits = 2): string {
 
 function deltaClass(value: number | null): string {
   if (value == null || Math.abs(value) < 0.05) return "text-muted";
-  return value > 0 ? "text-amber-300" : "text-sky-300";
+  return value > 0 ? "text-warning" : "text-info";
 }
 
 function SortHeader({
@@ -637,7 +637,7 @@ export function RatingLabPage() {
         {compareQuery.isLoading ? (
           <p className="mt-4 text-sm text-muted">Loading comparison…</p>
         ) : compareQuery.error ? (
-          <p className="mt-4 text-sm text-rose-300">
+          <p className="mt-4 text-sm text-danger">
             {compareQuery.error.message}
           </p>
         ) : !compareData || compareData.items.length === 0 ? (
@@ -750,7 +750,7 @@ export function RatingLabPage() {
                                 : ""}
                             </div>
                             {item.baseline.error || item.experiment.error ? (
-                              <div className="truncate text-xs text-rose-300">
+                              <div className="truncate text-xs text-danger">
                                 {item.experiment.error ?? item.baseline.error}
                               </div>
                             ) : null}

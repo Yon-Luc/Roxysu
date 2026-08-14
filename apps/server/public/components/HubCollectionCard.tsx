@@ -81,7 +81,7 @@ export function HubCollectionCard({
           <div className="flex items-start justify-between gap-2">
             <div className="truncate font-bold text-ink">{collection.name}</div>
             {updateAvailable ? (
-              <span className="shrink-0 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-200">
+              <span className="shrink-0 rounded bg-warning/20 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-warning">
                 Update
               </span>
             ) : null}
@@ -171,7 +171,7 @@ export function HubCollectionCard({
             <div className="mt-3">
               <button
                 type="button"
-                className="pointer-events-auto relative z-20 rx-btn text-xs text-rose-200 hover:bg-rose-500/15"
+                className="pointer-events-auto relative z-20 rx-btn text-xs text-danger hover:bg-danger/15"
                 disabled={removing}
                 onClick={(e) => {
                   e.preventDefault();

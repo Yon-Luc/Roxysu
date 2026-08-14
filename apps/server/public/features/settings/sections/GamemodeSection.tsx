@@ -164,7 +164,7 @@ export function GamemodeSection({ data }: { data: SettingsPayload }) {
         </p>
       ) : null}
       {scoresGamemodeMut.error ? (
-        <p className="mt-3 text-sm text-rose-300">
+        <p className="mt-3 text-sm text-danger">
           {scoresGamemodeMut.error.message}
         </p>
       ) : null}

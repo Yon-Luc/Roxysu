@@ -61,7 +61,7 @@ export function MasteryFormulaSection({ data }: { data: SettingsPayload }) {
         </p>
       ) : null}
       {mut.error ? (
-        <p className="mt-3 text-sm text-rose-300">{mut.error.message}</p>
+        <p className="mt-3 text-sm text-danger">{mut.error.message}</p>
       ) : null}
     </section>
   );

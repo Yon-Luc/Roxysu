@@ -82,7 +82,7 @@ export function CollectionResultsPage({
         <GoBackLink to="/collections">
           {dict?.collection.backToCollections}
         </GoBackLink>
-        <p className="text-rose-300">
+        <p className="text-danger">
           {error?.message ?? dict?.collection.notFound}
         </p>
       </div>

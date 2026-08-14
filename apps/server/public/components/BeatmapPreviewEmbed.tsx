@@ -359,7 +359,7 @@ export function BeatmapPreviewEmbed({
       <div className="relative z-10">
         {isLoading ? (
           <p
-            className="flex items-center justify-center px-4 text-sm text-muted"
+            className="flex items-center justify-center px-4 text-sm text-on-media-muted"
             style={stageHeightStyle}
           >
             {dict?.nowSelected.loadingPreview ?? "Loading preview…"}
@@ -400,7 +400,7 @@ export function BeatmapPreviewEmbed({
                 />
               </div>
             ) : (
-              <div className="flex h-full items-center justify-center px-4 text-center text-sm text-muted">
+              <div className="flex h-full items-center justify-center px-4 text-center text-sm text-on-media-muted">
                 {dict?.nowSelected.previewUnsupported ??
                   "Playfield preview supports mania and standard."}
               </div>
@@ -418,7 +418,7 @@ export function BeatmapPreviewEmbed({
           </p>
         ) : null}
         <div className="mb-2 flex items-center gap-2">
-          <span className="w-12 shrink-0 tabular-nums text-[11px] text-muted">
+          <span className="w-12 shrink-0 tabular-nums text-[11px] text-on-media-muted">
             {formatClock(currentMs)}
           </span>
           <input
@@ -432,7 +432,7 @@ export function BeatmapPreviewEmbed({
             className="min-w-0 flex-1 accent-[var(--accent)] disabled:opacity-40"
             aria-label={dict?.nowSelected.seek ?? "Seek"}
           />
-          <span className="w-12 shrink-0 text-right tabular-nums text-[11px] text-muted">
+          <span className="w-12 shrink-0 text-right tabular-nums text-[11px] text-on-media-muted">
             {formatClock(maxDuration)}
           </span>
         </div>
@@ -472,7 +472,7 @@ export function BeatmapPreviewEmbed({
             +5s
           </button>
           {isMania ? (
-            <label className="ml-auto flex min-w-[8rem] items-center gap-2 text-[11px] text-muted">
+            <label className="ml-auto flex min-w-[8rem] items-center gap-2 text-[11px] text-on-media-muted">
               <span className="shrink-0">
                 {dict?.nowSelected.scroll ?? "Scroll"} {scroll}
               </span>
@@ -487,7 +487,7 @@ export function BeatmapPreviewEmbed({
               />
             </label>
           ) : (
-            <label className="ml-auto flex min-w-[8rem] items-center gap-2 text-[11px] text-muted">
+            <label className="ml-auto flex min-w-[8rem] items-center gap-2 text-[11px] text-on-media-muted">
               <span className="shrink-0">{dict?.nowSelected.vol ?? "Vol"}</span>
               <input
                 type="range"
@@ -502,7 +502,7 @@ export function BeatmapPreviewEmbed({
             </label>
           )}
           {onHeightRemChange ? (
-            <label className="flex min-w-[8rem] items-center gap-2 text-[11px] text-muted">
+            <label className="flex min-w-[8rem] items-center gap-2 text-[11px] text-on-media-muted">
               <span className="shrink-0">
                 {dict?.nowSelected.height ?? "Height"} {stageHeightRem}
               </span>

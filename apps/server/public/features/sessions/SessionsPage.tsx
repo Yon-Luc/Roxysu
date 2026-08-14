@@ -29,7 +29,7 @@ export function SessionsPage() {
 
   if (error || !data) {
     return (
-      <p className="text-rose-300">
+      <p className="text-danger">
         {t(dict?.session.failedToLoad, {
           error: error?.message ?? "unknown",
         })}

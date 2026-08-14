@@ -84,10 +84,10 @@ export function ReplayAnalysisPanel({
   return (
     <aside className="flex h-full min-h-0 w-full flex-col gap-3 overflow-y-auto border-t border-white/10 bg-black/55 p-3 backdrop-blur sm:border-l sm:border-t-0 sm:p-4">
       <div>
-        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-faint">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-on-media-muted">
           Analysis
         </h3>
-        <p className="mt-0.5 text-xs text-muted">
+        <p className="mt-0.5 text-xs text-on-media-muted">
           Approximate judge — practice signal only.
         </p>
       </div>
@@ -104,10 +104,10 @@ export function ReplayAnalysisPanel({
 
       {timing && timing.count > 0 ? (
         <section>
-          <h4 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-faint">
+          <h4 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-on-media-muted">
             Timing
           </h4>
-          <div className="mb-2 flex flex-wrap gap-x-3 gap-y-1 text-xs tabular-nums text-muted">
+          <div className="mb-2 flex flex-wrap gap-x-3 gap-y-1 text-xs tabular-nums text-on-media-muted">
             <span>
               μ {timing.mean >= 0 ? "+" : ""}
               {timing.mean.toFixed(1)}ms
@@ -119,12 +119,12 @@ export function ReplayAnalysisPanel({
           <TimingHistogram timing={timing} />
         </section>
       ) : (
-        <p className="text-xs text-muted">No timing samples (all miss / empty).</p>
+        <p className="text-xs text-on-media-muted">No timing samples (all miss / empty).</p>
       )}
 
       {columnHeat.length > 0 ? (
         <section>
-          <h4 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-faint">
+          <h4 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-on-media-muted">
             Columns
           </h4>
           <div className="flex gap-1">
@@ -147,7 +147,7 @@ export function ReplayAnalysisPanel({
                         : "rgba(255, 255, 255, 0.08)",
                   }}
                 />
-                <div className="text-[10px] tabular-nums text-muted">
+                <div className="text-[10px] tabular-nums text-on-media-muted">
                   {c.column + 1}
                 </div>
                 <div className="text-[10px] tabular-nums text-rose-300/90">
@@ -161,7 +161,7 @@ export function ReplayAnalysisPanel({
 
       {tagCounts ? (
         <section>
-          <h4 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-faint">
+          <h4 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-on-media-muted">
             Miss patterns
           </h4>
           <div className="flex flex-wrap gap-1.5">
@@ -171,25 +171,25 @@ export function ReplayAnalysisPanel({
               return (
                 <span
                   key={tag}
-                  className="rounded-md bg-white/10 px-2 py-0.5 text-[11px] text-ink"
+                  className="rounded-md bg-white/10 px-2 py-0.5 text-[11px] text-on-media"
                 >
                   {PATTERN_TAG_LABEL[tag]} {n}
                 </span>
               );
             })}
             {misses.length === 0 ? (
-              <span className="text-xs text-muted">No misses</span>
+              <span className="text-xs text-on-media-muted">No misses</span>
             ) : null}
           </div>
         </section>
       ) : null}
 
       <section className="min-h-0 flex-1">
-        <h4 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-faint">
+        <h4 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-on-media-muted">
           Misses ({misses.length})
         </h4>
         {misses.length === 0 ? (
-          <p className="text-xs text-muted">Clean — no simulated misses.</p>
+          <p className="text-xs text-on-media-muted">Clean — no simulated misses.</p>
         ) : (
           <ul className="flex max-h-48 flex-col gap-1 overflow-y-auto sm:max-h-none">
             {misses.map((m) => {
@@ -207,10 +207,10 @@ export function ReplayAnalysisPanel({
                     }
                   >
                     <div className="flex items-center justify-between gap-2 text-xs">
-                      <span className="font-medium tabular-nums text-ink">
+                      <span className="font-medium tabular-nums text-on-media">
                         {formatClockFrac(m.tMs)}
                       </span>
-                      <span className="tabular-nums text-muted">
+                      <span className="tabular-nums text-on-media-muted">
                         col {m.column + 1}
                         {m.isTail ? " · tail" : ""}
                       </span>
@@ -219,18 +219,18 @@ export function ReplayAnalysisPanel({
                       {m.tags.map((tag) => (
                         <span
                           key={tag}
-                          className="rounded bg-black/40 px-1.5 py-px text-[10px] text-muted"
+                          className="rounded bg-black/40 px-1.5 py-px text-[10px] text-on-media-muted"
                         >
                           {PATTERN_TAG_LABEL[tag]}
                         </span>
                       ))}
                       {m.jackGapMs != null && m.tags.includes("jack") ? (
-                        <span className="rounded bg-black/40 px-1.5 py-px text-[10px] tabular-nums text-muted">
+                        <span className="rounded bg-black/40 px-1.5 py-px text-[10px] tabular-nums text-on-media-muted">
                           Δ{m.jackGapMs}ms
                         </span>
                       ) : null}
                       {m.chordSize >= 2 ? (
-                        <span className="rounded bg-black/40 px-1.5 py-px text-[10px] tabular-nums text-muted">
+                        <span className="rounded bg-black/40 px-1.5 py-px text-[10px] tabular-nums text-on-media-muted">
                           ×{m.chordSize}
                         </span>
                       ) : null}

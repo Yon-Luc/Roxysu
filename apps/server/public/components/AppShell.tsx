@@ -233,22 +233,22 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div
             className={`rx-chip ${
               syncTone === "sky"
-                ? "bg-sky-500/15 text-sky-300"
+                ? "bg-info/15 text-info"
                 : syncTone === "amber"
-                  ? "bg-amber-500/15 text-amber-300"
+                  ? "bg-warning/15 text-warning"
                   : syncTone === "rose"
-                    ? "bg-rose-500/15 text-rose-300"
+                    ? "bg-danger/15 text-danger"
                     : "bg-accent-glow text-accent"
             }`}
           >
             <span
               className={`size-1.5 rounded-full ${
                 syncTone === "sky"
-                  ? "bg-sky-400"
+                  ? "bg-info"
                   : syncTone === "amber"
-                    ? "animate-pulse bg-amber-400"
+                    ? "animate-pulse bg-warning"
                     : syncTone === "rose"
-                      ? "bg-rose-400"
+                      ? "bg-danger"
                       : "bg-accent"
               }`}
             />
@@ -305,22 +305,22 @@ export function AppShell({ children }: { children: ReactNode }) {
         <span
           className={`rx-chip ${
             syncTone === "sky"
-              ? "bg-sky-500/15 text-sky-300"
+              ? "bg-info/15 text-info"
               : syncTone === "amber"
-                ? "bg-amber-500/15 text-amber-300"
+                ? "bg-warning/15 text-warning"
                 : syncTone === "rose"
-                  ? "bg-rose-500/15 text-rose-300"
+                  ? "bg-danger/15 text-danger"
                   : "bg-accent-glow text-accent"
           }`}
         >
           <span
             className={`size-1.5 rounded-full ${
               syncTone === "sky"
-                ? "bg-sky-400"
+                ? "bg-info"
                 : syncTone === "amber"
-                  ? "animate-pulse bg-amber-400"
+                  ? "animate-pulse bg-warning"
                   : syncTone === "rose"
-                    ? "bg-rose-400"
+                    ? "bg-danger"
                     : "bg-accent"
             }`}
           />

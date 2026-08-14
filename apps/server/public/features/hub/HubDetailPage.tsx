@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { GoBackLink } from "../../components/GoBackLink";
@@ -18,6 +19,8 @@ import {
   fetchHubCollection,
   fetchHubMe,
   updateHubCollection,
+  deleteHubCollection,
+  exportHubCollection,
   useHubJwt,
   useHubUrl,
   type HubModeTag,
@@ -148,8 +151,10 @@ export function HubDetailPage({ id }: { id: string }) {
   const hubUrl = useHubUrl();
   const jwt = useHubJwt();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const [saveOpen, setSaveOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
@@ -239,6 +244,7 @@ export function HubDetailPage({ id }: { id: string }) {
     !!meQuery.data &&
     !!detailQuery.data &&
     meQuery.data.osuId === detailQuery.data.owner.osuId;
+  const canManage = isOwner || meQuery.data?.role === "admin";
 
   useEffect(() => {
     const c = detailQuery.data;
@@ -307,6 +313,12 @@ export function HubDetailPage({ id }: { id: string }) {
           : c.maps.map((m) => m.beatmapsetId);
       if (!beatmapsetIds.length) throw new Error("Collection has no maps");
 
+      try {
+        await exportHubCollection(hubUrl, collectionId);
+      } catch {
+        // Export increments downloadCount; a 429 must not block local save.
+      }
+
       const saved = await saveHubAddedCollection({
         hubCollectionId: collectionId,
         name: c.name,
@@ -332,6 +344,9 @@ export function HubDetailPage({ id }: { id: string }) {
       void queryClient.invalidateQueries({ queryKey: ["owned-set-ids"] });
       void queryClient.invalidateQueries({ queryKey: MIRROR_BATCH_QUERY_KEY });
       void queryClient.invalidateQueries({ queryKey: ["collections"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["hub-collection", hubUrl, collectionId],
+      });
       pushToast({
         title: updateAvailable ? "Collection updated in game" : "Collection saved",
         detail:
@@ -344,6 +359,29 @@ export function HubDetailPage({ id }: { id: string }) {
     onError: (err) =>
       pushToast({
         title: "Save failed",
+        detail: err.message,
+        tone: "error",
+      }),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: async () => {
+      if (!jwt) throw new Error("Log in to delete");
+      await deleteHubCollection(hubUrl, jwt, collectionId);
+    },
+    onSuccess: () => {
+      setDeleteOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ["hub-collections"] });
+      pushToast({
+        title: "Collection deleted",
+        detail: "Removed from Workshop. Your local copy is unchanged.",
+        tone: "success",
+      });
+      void navigate({ to: "/hub" });
+    },
+    onError: (err) =>
+      pushToast({
+        title: "Delete failed",
         detail: err.message,
         tone: "error",
       }),
@@ -401,7 +439,7 @@ export function HubDetailPage({ id }: { id: string }) {
           ) : (
             <HubLoginButton className="rx-btn">Log in to favorite</HubLoginButton>
           )}
-          {isOwner ? (
+          {canManage ? (
             <button
               type="button"
               className="rx-btn"
@@ -409,6 +447,16 @@ export function HubDetailPage({ id }: { id: string }) {
               onClick={() => setEditing((v) => !v)}
             >
               {editing ? "Cancel edit" : "Edit"}
+            </button>
+          ) : null}
+          {canManage ? (
+            <button
+              type="button"
+              className="rx-btn"
+              disabled={!c || deleteMut.isPending}
+              onClick={() => setDeleteOpen(true)}
+            >
+              Delete
             </button>
           ) : null}
           {updateAvailable ? (
@@ -767,6 +815,23 @@ export function HubDetailPage({ id }: { id: string }) {
             The creator changed this collection since you last saved it.
           </p>
         ) : null}
+      </ConfirmModal>
+      <ConfirmModal
+        open={deleteOpen}
+        title="Delete from Workshop"
+        confirmLabel="Delete"
+        busy={deleteMut.isPending}
+        onClose={() => {
+          if (!deleteMut.isPending) setDeleteOpen(false);
+        }}
+        onConfirm={() => deleteMut.mutate()}
+      >
+        <p>
+          This removes{" "}
+          <span className="text-ink">{c?.name ?? "this collection"}</span> from
+          Workshop. Anyone else will lose the public pack.
+        </p>
+        <p>A copy already saved to your game is not deleted.</p>
       </ConfirmModal>
     </div>
   );

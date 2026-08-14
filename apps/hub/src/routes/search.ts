@@ -4,10 +4,8 @@ import {
   lookupCache,
   refreshCache,
   sliceIds,
-  stripRoxysuCacheParams,
   type CacheQueryParams,
 } from "../services/cache";
-import { searchPage } from "../services/hinamizawa";
 import { allowRateLimit } from "../services/rateLimit";
 import { clientIp } from "../services/clientIp";
 
@@ -70,50 +68,34 @@ export const searchRoutes = new Elysia({ prefix: "/search" }).get(
       };
     }
 
-    if (!allowRateLimit(`search-live:${ip}`, { limit: 20, windowMs: 60_000 })) {
-      set.status = 429;
-      return { message: "Too many uncached search requests" };
-    }
-
-    const hinaiParams = stripRoxysuCacheParams(params);
-
-    try {
-      const live = await searchPage(hinaiParams, page, limit);
-      return {
-        cached: false,
-        stale: false,
-        cachedAt: null,
-        label: null,
-        total: live.total_count,
-        page,
-        limit,
-        beatmapsetIds: live.results.map((r: { SetID: number }) => r.SetID),
-      };
-    } catch (err) {
-      console.error("[search] Live hinamizawa search failed:", err);
-      throw err;
-    }
+    return {
+      cached: false,
+      stale: false,
+      cachedAt: null,
+      label: null,
+      total: 0,
+      page,
+      limit,
+      beatmapsetIds: [] as number[],
+    };
   },
   {
-    query: t.Object(
-      {
-        page: t.Optional(t.Numeric({ minimum: 0 })),
-        limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100 })),
-        query: t.Optional(t.String()),
-        mode: t.Optional(t.Numeric()),
-        status: t.Optional(t.String()),
-        min_stars: t.Optional(t.Numeric()),
-        max_stars: t.Optional(t.Numeric()),
-        min_bpm: t.Optional(t.Numeric()),
-        max_bpm: t.Optional(t.Numeric()),
-        min_length: t.Optional(t.Numeric()),
-        max_length: t.Optional(t.Numeric()),
-        creator: t.Optional(t.String()),
-        sort: t.Optional(t.String()),
-        key: t.Optional(t.Numeric()),
-        keys: t.Optional(t.Numeric()),
-      },
-      { additionalProperties: true },
-    ),
+    query: t.Object({
+      page: t.Optional(t.Numeric({ minimum: 0 })),
+      limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100 })),
+      query: t.Optional(t.String({ maxLength: 200 })),
+      mode: t.Optional(t.Numeric()),
+      status: t.Optional(t.String({ maxLength: 32 })),
+      min_stars: t.Optional(t.Numeric()),
+      max_stars: t.Optional(t.Numeric()),
+      min_bpm: t.Optional(t.Numeric()),
+      max_bpm: t.Optional(t.Numeric()),
+      min_length: t.Optional(t.Numeric()),
+      max_length: t.Optional(t.Numeric()),
+      creator: t.Optional(t.String({ maxLength: 100 })),
+      sort: t.Optional(t.String({ maxLength: 32 })),
+      key: t.Optional(t.Numeric()),
+      keys: t.Optional(t.Numeric()),
+    }),
   },
 );

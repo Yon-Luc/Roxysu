@@ -6,7 +6,10 @@ touches:
   - apps/hub/src/middleware/auth.ts
   - apps/hub/src/services/hubRole.ts
   - apps/hub/src/services/clientIp.ts
-  - apps/hub/src/services/cache.ts
+  - apps/hub/src/services/hubEnv.ts
+  - apps/hub/src/services/collectionWrite.ts
+  - apps/hub/src/routes/collections.ts
+  - apps/hub/src/routes/search.ts
   - apps/hub/src/services/hubSearchQuery.ts
   - apps/server/public/features/hub
   - apps/server/public/lib/hub.ts
@@ -51,13 +54,24 @@ Networked collaboration / discovery — not required for offline practice analyt
 6. Rate-limit identity ignores `X-Forwarded-For` / `X-Real-Ip` unless `HUB_TRUST_PROXY=1`.
    **Enforced by:** `apps/hub/src/services/clientIp.ts` — status: verified
 
+7. Production CORS must be an explicit origin list (`CORS_ORIGIN`); `*` and unset refuse to listen.
+   **Enforced by:** `apps/hub/src/services/hubEnv.ts:resolveCorsOrigin()` — status: verified
+   **Unauthorized result:** process does not bind
+
+8. Collection star/mode/key stats are computed from maps on the Hub; client-supplied stats are not accepted.
+   **Enforced by:** `apps/hub/src/routes/collections.ts` POST/PUT — status: verified
+
+9. Public `GET /search` returns the hub search index only. Cache miss is empty (`cached: false`); it does not live-proxy Hinamizawa.
+   **Enforced by:** `apps/hub/src/routes/search.ts` — status: verified
+
 ## Important symbols
 
 - `apps/hub/src/*`
 - `apps/hub/src/services/cache.ts:hashQueryParams()` — SHA-256 (32 hex) hub search index identity; boot rehashes legacy keys
 - `apps/server/src/hubUrl.ts:resolveHubBaseUrl()` — shared Hub URL (default `http://localhost:4322`) for Workshop, OAuth redeem, and Download Maps
-- `apps/server/public/lib/hub.ts` — runtime Workshop client (clears JWT on Hub 401). `packages/hub-client` is unused
+- `apps/server/public/lib/hub.ts` — runtime Workshop client (clears JWT on Hub 401; delete + export). `packages/hub-client` is the Node Eden client and is not used in the browser
 - `apps/server/src/routes/system.ts` — client app OAuth handoff helpers
+- Workshop detail: owner or admin can edit/delete; Save calls `GET /collections/:id/export` so `downloadCount` increments
 
 ## Tag taxonomy
 

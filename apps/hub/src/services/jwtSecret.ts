@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { isHubProduction } from "./hubEnv";
 
 const WEAK_SECRETS = new Set([
   "",
@@ -12,12 +13,6 @@ const WEAK_SECRETS = new Set([
 const MIN_SECRET_LENGTH = 32;
 
 let cachedSecret: string | null = null;
-
-function isProduction(): boolean {
-  const node = (process.env.NODE_ENV ?? "").toLowerCase();
-  const hub = (process.env.HUB_ENV ?? "").toLowerCase();
-  return node === "production" || hub === "production";
-}
 
 function isWeakSecret(raw: string): boolean {
   if (WEAK_SECRETS.has(raw)) return true;
@@ -39,14 +34,14 @@ export function resolveJwtSecret(): string {
 
   const raw = process.env.JWT_SECRET?.trim() ?? "";
   const insecureOk =
-    !isProduction() && process.env.HUB_ALLOW_INSECURE_JWT === "1";
+    !isHubProduction() && process.env.HUB_ALLOW_INSECURE_JWT === "1";
 
   if (raw && !isWeakSecret(raw)) {
     cachedSecret = raw;
     return cachedSecret;
   }
 
-  if (isProduction()) {
+  if (isHubProduction()) {
     throw new Error(
       "[hub] JWT_SECRET is missing or too weak. Set a random secret (≥32 chars).",
     );

@@ -7,10 +7,8 @@ import { ListSkeleton } from "../../components/LoadingSkeleton";
 import { PageTitle } from "../../components/PageTitle";
 import {
   fetchCollections,
-  fetchBeatmapsetInfo,
   fetchRealmCollectionSetIds,
   fetchSmartCollectionSetIds,
-  type OnlineBeatmapSet,
   type RealmCollectionItem,
   type SmartCollectionItem,
 } from "../../lib/api";
@@ -22,33 +20,16 @@ import {
   type HubModeTag,
   type HubTag,
 } from "../../lib/hub";
-import { computeHubCollectionStats } from "../../lib/hubStats";
 import { pushToast } from "../../lib/toasts";
 import { HubLoginButton } from "./HubLoginButton";
 import { HubTagFilters } from "./HubTagFilters";
 
-const INFO_BATCH = 100;
-
-async function loadSetsForStats(setIds: number[]): Promise<OnlineBeatmapSet[]> {
-  const unique = [...new Set(setIds.filter((id) => id > 0))];
-  const byId = new Map<number, OnlineBeatmapSet>();
-  for (let i = 0; i < unique.length; i += INFO_BATCH) {
-    const chunk = unique.slice(i, i + INFO_BATCH);
-    if (chunk.length === 0) continue;
-    const res = await fetchBeatmapsetInfo(chunk);
-    for (const set of res.items) byId.set(set.id, set);
-  }
-  return unique
-    .map((id) => byId.get(id))
-    .filter((s): s is OnlineBeatmapSet => s != null);
-}
+const PREVIEW_SLOTS = 4;
 
 type SourceKey =
   | { kind: "smart"; id: number }
   | { kind: "realm"; id: string }
   | null;
-
-const PREVIEW_SLOTS = 4;
 
 function SourceListCard({
   title,
@@ -205,14 +186,11 @@ export function HubSharePage() {
       if (!name.trim()) throw new Error("Name is required");
       if (beatmapsetIds.length === 0) throw new Error("No maps to share");
       if (tags.length === 0) throw new Error("Pick at least one tag");
-      const sets = await loadSetsForStats(beatmapsetIds);
-      const stats = computeHubCollectionStats(sets);
       return createHubCollection(hubUrl, jwt, {
         name: name.trim(),
         description: description.trim() || undefined,
         beatmapsetIds,
         tags,
-        stats,
       });
     },
     onSuccess: (data) => {

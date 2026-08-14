@@ -23,11 +23,8 @@ import {
 } from "@roxysu/db/hub";
 import { requireAuth, jwtPlugin, optionalViewerUserId } from "../middleware/auth";
 import { bearer } from "@elysiajs/bearer";
-import {
-  computeCollectionStatsFromSetIds,
-  isHubRuleset,
-  type CollectionPlayStats,
-} from "../services/collectionStats";
+import { computeCollectionStatsFromSetIds, isHubRuleset } from "../services/collectionStats";
+import { uniqueBeatmapsetIds, uniqueTags } from "../services/collectionWrite";
 import { parseHubSearchQuery } from "../services/hubSearchQuery";
 import { allowRateLimit } from "../services/rateLimit";
 import { clientIp } from "../services/clientIp";
@@ -94,35 +91,6 @@ function textSearchFilter(text: string): SQL | undefined {
     sql`lower(${collections.name}) like ${pattern} escape '\\'`,
     sql`lower(${hubUsers.username}) like ${pattern} escape '\\'`,
   );
-}
-
-function normalizeIncomingStats(
-  raw: CollectionPlayStats | undefined,
-): CollectionPlayStats | null {
-  if (!raw) return null;
-  const starsMin =
-    raw.starsMin != null && Number.isFinite(raw.starsMin) ? raw.starsMin : null;
-  const starsMax =
-    raw.starsMax != null && Number.isFinite(raw.starsMax) ? raw.starsMax : null;
-  const dominantMode =
-    raw.dominantMode && isHubRuleset(raw.dominantMode)
-      ? raw.dominantMode
-      : null;
-  const dominantKeys =
-    raw.dominantKeys != null &&
-    Number.isSafeInteger(raw.dominantKeys) &&
-    raw.dominantKeys > 0
-      ? raw.dominantKeys
-      : null;
-  if (
-    starsMin == null &&
-    starsMax == null &&
-    dominantMode == null &&
-    dominantKeys == null
-  ) {
-    return null;
-  }
-  return { starsMin, starsMax, dominantMode, dominantKeys };
 }
 
 // ---------------------------------------------------------------------------
@@ -443,51 +411,55 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
   .post(
     "/",
     async ({ body, user }) => {
-      const invalidTags = body.tags.filter(
-        (tag) => !VALID_TAGS.includes(tag as Tag)
-      );
+      const tags = uniqueTags(body.tags);
+      const invalidTags = tags.filter((tag) => !VALID_TAGS.includes(tag as Tag));
       if (invalidTags.length > 0) {
         return status(400, { message: `Invalid tags: ${invalidTags.join(", ")}` });
       }
 
-      const stats =
-        normalizeIncomingStats(body.stats) ??
-        (await computeCollectionStatsFromSetIds(body.beatmapsetIds));
+      const maps = uniqueBeatmapsetIds(body.beatmapsetIds, body.mapNames);
+      if (maps.beatmapsetIds.length === 0) {
+        return status(400, { message: "At least one beatmapset id is required" });
+      }
 
-      const col = await db
-        .insert(collections)
-        .values({
-          ownerId: user.sub,
-          name: body.name,
-          description: body.description ?? "",
-          starsMin: stats.starsMin,
-          starsMax: stats.starsMax,
-          dominantMode: stats.dominantMode,
-          dominantKeys: stats.dominantKeys,
-        })
-        .returning()
-        .get();
+      const stats = await computeCollectionStatsFromSetIds(maps.beatmapsetIds);
 
-      if (body.beatmapsetIds.length > 0) {
-        await db.insert(collectionMaps).values(
-          body.beatmapsetIds.map((id, i) => ({
+      const created = await db.transaction(async (tx) => {
+        const col = await tx
+          .insert(collections)
+          .values({
+            ownerId: user.sub,
+            name: body.name,
+            description: body.description ?? "",
+            starsMin: stats.starsMin,
+            starsMax: stats.starsMax,
+            dominantMode: stats.dominantMode,
+            dominantKeys: stats.dominantKeys,
+          })
+          .returning()
+          .get();
+
+        await tx.insert(collectionMaps).values(
+          maps.beatmapsetIds.map((id, i) => ({
             collectionId: col.id,
             beatmapsetId: id,
-            mapName: body.mapNames?.[i] ?? "",
-          }))
+            mapName: maps.mapNames[i] ?? "",
+          })),
         );
-      }
 
-      if (body.tags.length > 0) {
-        await db.insert(collectionTags).values(
-          body.tags.map((tag) => ({
-            collectionId: col.id,
-            tag,
-          }))
-        );
-      }
+        if (tags.length > 0) {
+          await tx.insert(collectionTags).values(
+            tags.map((tag) => ({
+              collectionId: col.id,
+              tag,
+            })),
+          );
+        }
 
-      return { id: col.id, message: "Collection created" };
+        return col;
+      });
+
+      return { id: created.id, message: "Collection created" };
     },
     {
       body: t.Object({
@@ -501,21 +473,6 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
           t.Array(t.String({ maxLength: 200 }), { maxItems: 2000 }),
         ),
         tags: t.Array(t.String(), { maxItems: 32 }),
-        stats: t.Optional(
-          t.Object({
-            starsMin: t.Nullable(t.Number()),
-            starsMax: t.Nullable(t.Number()),
-            dominantMode: t.Nullable(
-              t.Union([
-                t.Literal("osu"),
-                t.Literal("taiko"),
-                t.Literal("fruits"),
-                t.Literal("mania"),
-              ]),
-            ),
-            dominantKeys: t.Nullable(t.Number()),
-          }),
-        ),
       }),
     }
   )
@@ -534,63 +491,70 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
         return status(403, { message: "Not your collection" });
       }
 
-      if (body.tags) {
-        const invalidTags = body.tags.filter(
-          (tag) => !VALID_TAGS.includes(tag as Tag)
+      const tags = body.tags != null ? uniqueTags(body.tags) : null;
+      if (tags) {
+        const invalidTags = tags.filter(
+          (tag) => !VALID_TAGS.includes(tag as Tag),
         );
         if (invalidTags.length > 0) {
           return status(400, { message: `Invalid tags: ${invalidTags.join(", ")}` });
         }
       }
 
-      const stats =
+      const maps =
         body.beatmapsetIds != null
-          ? normalizeIncomingStats(body.stats) ??
-            (await computeCollectionStatsFromSetIds(body.beatmapsetIds))
+          ? uniqueBeatmapsetIds(body.beatmapsetIds, body.mapNames)
           : null;
-
-      await db
-        .update(collections)
-        .set({
-          ...(body.name && { name: body.name }),
-          ...(body.description !== undefined && { description: body.description }),
-          ...(stats
-            ? {
-                starsMin: stats.starsMin,
-                starsMax: stats.starsMax,
-                dominantMode: stats.dominantMode,
-                dominantKeys: stats.dominantKeys,
-              }
-            : {}),
-          updatedAt: new Date(),
-        })
-        .where(eq(collections.id, params.id));
-
-      if (body.tags) {
-        await db
-          .delete(collectionTags)
-          .where(eq(collectionTags.collectionId, params.id));
-        if (body.tags.length > 0) {
-          await db.insert(collectionTags).values(
-            body.tags.map((tag) => ({ collectionId: params.id, tag }))
-          );
-        }
+      if (maps && maps.beatmapsetIds.length === 0) {
+        return status(400, { message: "At least one beatmapset id is required" });
       }
 
-      if (body.beatmapsetIds) {
-        await db
-          .delete(collectionMaps)
-          .where(eq(collectionMaps.collectionId, params.id));
-        if (body.beatmapsetIds.length > 0) {
-          await db.insert(collectionMaps).values(
-            body.beatmapsetIds.map((id, i) => ({
+      const stats = maps
+        ? await computeCollectionStatsFromSetIds(maps.beatmapsetIds)
+        : null;
+
+      await db.transaction(async (tx) => {
+        await tx
+          .update(collections)
+          .set({
+            ...(body.name && { name: body.name }),
+            ...(body.description !== undefined && { description: body.description }),
+            ...(stats
+              ? {
+                  starsMin: stats.starsMin,
+                  starsMax: stats.starsMax,
+                  dominantMode: stats.dominantMode,
+                  dominantKeys: stats.dominantKeys,
+                }
+              : {}),
+            updatedAt: new Date(),
+          })
+          .where(eq(collections.id, params.id));
+
+        if (tags) {
+          await tx
+            .delete(collectionTags)
+            .where(eq(collectionTags.collectionId, params.id));
+          if (tags.length > 0) {
+            await tx.insert(collectionTags).values(
+              tags.map((tag) => ({ collectionId: params.id, tag })),
+            );
+          }
+        }
+
+        if (maps) {
+          await tx
+            .delete(collectionMaps)
+            .where(eq(collectionMaps.collectionId, params.id));
+          await tx.insert(collectionMaps).values(
+            maps.beatmapsetIds.map((id, i) => ({
               collectionId: params.id,
               beatmapsetId: id,
-              mapName: body.mapNames?.[i] ?? "",
+              mapName: maps.mapNames[i] ?? "",
             })),
           );
         }
-      }
+      });
 
       return { message: "Collection updated" };
     },
@@ -605,21 +569,6 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
         ),
         mapNames: t.Optional(
           t.Array(t.String({ maxLength: 200 }), { maxItems: 2000 }),
-        ),
-        stats: t.Optional(
-          t.Object({
-            starsMin: t.Nullable(t.Number()),
-            starsMax: t.Nullable(t.Number()),
-            dominantMode: t.Nullable(
-              t.Union([
-                t.Literal("osu"),
-                t.Literal("taiko"),
-                t.Literal("fruits"),
-                t.Literal("mania"),
-              ]),
-            ),
-            dominantKeys: t.Nullable(t.Number()),
-          }),
         ),
       }),
     }

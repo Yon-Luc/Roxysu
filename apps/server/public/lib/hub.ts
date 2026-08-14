@@ -412,12 +412,6 @@ export function createHubCollection(
     description?: string;
     beatmapsetIds: number[];
     tags: string[];
-    stats?: {
-      starsMin: number | null;
-      starsMax: number | null;
-      dominantMode: "osu" | "taiko" | "fruits" | "mania" | null;
-      dominantKeys: number | null;
-    };
   },
 ) {
   return hubFetch<{ id: number; message: string }>(hubUrl, "/collections", {
@@ -437,18 +431,23 @@ export function updateHubCollection(
     tags?: string[];
     beatmapsetIds?: number[];
     mapNames?: string[];
-    stats?: {
-      starsMin: number | null;
-      starsMax: number | null;
-      dominantMode: "osu" | "taiko" | "fruits" | "mania" | null;
-      dominantKeys: number | null;
-    };
   },
 ) {
   return hubFetch<{ message: string }>(hubUrl, `/collections/${id}`, {
     method: "PUT",
     token,
     body: JSON.stringify(body),
+  });
+}
+
+export function deleteHubCollection(
+  hubUrl: string,
+  token: string,
+  id: number,
+) {
+  return hubFetch<{ message: string }>(hubUrl, `/collections/${id}`, {
+    method: "DELETE",
+    token,
   });
 }
 

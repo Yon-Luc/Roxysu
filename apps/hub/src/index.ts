@@ -3,6 +3,7 @@ import { cors } from "@elysiajs/cors";
 import { cron } from "@elysiajs/cron";
 import { runMigrations } from "./db";
 import { resolveJwtSecret } from "./services/jwtSecret";
+import { resolveCorsOrigin } from "./services/hubEnv";
 import { rehashSearchCacheKeys } from "./services/cache";
 import { tickSearchCacheRefreshes } from "./services/cacheRefreshCron";
 import { authRoutes } from "./routes/auth";
@@ -12,6 +13,7 @@ import { adminRoutes } from "./routes/admin";
 
 // Fail closed on missing/weak JWT secret before binding the port.
 resolveJwtSecret();
+const corsOrigin = resolveCorsOrigin();
 
 // Run DB migrations before the server starts
 runMigrations();
@@ -22,7 +24,7 @@ const PORT = parseInt(process.env.PORT ?? "4322", 10);
 const app = new Elysia()
   .use(
     cors({
-      origin: process.env.CORS_ORIGIN ?? "*",
+      origin: corsOrigin,
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       allowedHeaders: ["Content-Type", "Authorization"],
     }),

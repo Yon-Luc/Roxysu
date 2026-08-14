@@ -5,6 +5,7 @@ touches:
   - apps/hub/src/middleware/auth.ts
   - apps/hub/src/services/hubRole.ts
   - apps/hub/src/services/clientIp.ts
+  - apps/hub/src/services/hubEnv.ts
   - apps/hub/src/routes
   - roxysu-hub-plan.md
 ---
@@ -28,4 +29,7 @@ touches:
 6. Rate limits do not trust forwarded client IPs unless `HUB_TRUST_PROXY=1` (then `X-Real-Ip`, else last `X-Forwarded-For` hop).
    **Enforced by:** `apps/hub/src/services/clientIp.ts` — status: verified
 
-**Unauthorized result:** request rejected / forbidden before mutation.
+7. Production CORS is an explicit origin list. `CORS_ORIGIN=*` or unset refuses to listen.
+   **Enforced by:** `apps/hub/src/services/hubEnv.ts:resolveCorsOrigin()` — status: verified
+
+**Unauthorized result:** request rejected / forbidden before mutation; Hub does not start if production CORS is unset/`*`.

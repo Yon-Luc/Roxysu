@@ -123,7 +123,7 @@ Separate networked process (`apps/hub`, `:4322`) for sharing collections and mai
 
 ### Hub search index
 
-Admin-managed pre-warmed beatmapset results in the Hub store (`search_cache` table). Used by the download page — not part of the client app mirror.
+Admin-managed pre-warmed beatmapset results in the Hub store (`search_cache` table). Public `GET /search` serves this index only (miss is empty). Used by the download page — not part of the client app mirror.
 
 **Not:** "search cache", "cache" alone
 

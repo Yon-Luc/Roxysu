@@ -61,11 +61,16 @@ const MODE_ALIASES: Record<string, Exclude<MirrorSearchParams["mode"], "any" | u
     "osu!": "osu",
     standard: "osu",
     std: "osu",
+    o: "osu",
     taiko: "taiko",
+    t: "taiko",
     fruits: "fruits",
     catch: "fruits",
     ctb: "fruits",
+    c: "fruits",
+    f: "fruits",
     mania: "mania",
+    m: "mania",
   };
 
 const MIRROR_STATUS: Record<

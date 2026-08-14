@@ -58,6 +58,30 @@ describe("parseOnlineMirrorQuery", () => {
     ]);
   });
 
+  test("maps mode=m status=r to mania + ranked without free-text q", () => {
+    const q = parseOnlineMirrorQuery("mode=m status=r");
+    expect(q.mirrorParams.mode).toBe("mania");
+    expect(q.mirrorParams.status).toBe("ranked");
+    expect(q.mirrorParams.q).toBeUndefined();
+    expect(q.postFilters).toEqual([]);
+  });
+
+  test("maps mode=mania status=r to mania + ranked without free-text q", () => {
+    const q = parseOnlineMirrorQuery("mode=mania status=r");
+    expect(q.mirrorParams.mode).toBe("mania");
+    expect(q.mirrorParams.status).toBe("ranked");
+    expect(q.mirrorParams.q).toBeUndefined();
+    expect(q.postFilters).toEqual([]);
+  });
+
+  test("maps mode:m status:r to mania + ranked", () => {
+    const q = parseOnlineMirrorQuery("mode:m status:r");
+    expect(q.mirrorParams.mode).toBe("mania");
+    expect(q.mirrorParams.status).toBe("ranked");
+    expect(q.mirrorParams.q).toBeUndefined();
+    expect(q.postFilters).toEqual([]);
+  });
+
   test("maps stars range to min/max stars + post-filter", () => {
     const q = parseOnlineMirrorQuery("stars:5..6 ranked");
     expect(q.mirrorParams.status).toBe("ranked");

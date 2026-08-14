@@ -142,6 +142,19 @@ describe("parseQuery", () => {
       type: "term",
       term: { type: "status", values: ["ranked"] },
     });
+    expect(parseQuery("mode=m")).toEqual({
+      type: "term",
+      term: { type: "mode", value: "m" },
+    });
+    expect(parseQuery("mode=mania")).toEqual({
+      type: "term",
+      term: { type: "mode", value: "mania" },
+    });
+    expect(parseQuery("mode=m status=r")).toEqual({
+      type: "and",
+      left: { type: "term", term: { type: "mode", value: "m" } },
+      right: { type: "term", term: { type: "status", values: ["ranked"] } },
+    });
   });
 
   test("boolean AND OR NOT and parens", () => {

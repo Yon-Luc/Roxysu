@@ -159,6 +159,10 @@ function parseFieldTerm(raw: string): FieldTerm {
         );
       }
     }
+    const gluedMode = raw.match(/^mode=(.+)$/i);
+    if (gluedMode) {
+      return { type: "mode", value: gluedMode[1]!.trim() };
+    }
     // Could be acc>98 style without field prefix... support field+op glued
     const glued = raw.match(/^(acc|retry|mastery|pp|stars|misses|miss|score|keys|key|lns|ln|sunny|danstars|sunnystars)(>=|<=|>|<|=)(-?\d+(?:\.\d+)?)$/i);
     if (glued) {

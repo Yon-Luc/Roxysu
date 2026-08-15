@@ -182,7 +182,10 @@ async function setHasKeymode(setId: number, keys: number): Promise<boolean> {
   }
 }
 
-/** Keep set IDs that have at least one mania diff with the given key count. */
+/**
+ * @deprecated Prefer embedded search `cs` via `fetchAllBeatmapsetIds({ keymode })`.
+ * Per-set `/s/{id}` storms rate-limit Hinamizawa and silently drop 7K maps.
+ */
 export async function filterSetIdsByKeymode(
   setIds: number[],
   keys: number,
@@ -213,14 +216,15 @@ export async function filterSetIdsByKeymode(
     ),
   );
 
-  // Preserve discovery order from the search crawl.
   const keptSet = new Set(kept);
   return unique.filter((id) => keptSet.has(id));
 }
 
 /**
  * Run the hinamizawa search for a cache entry and upsert the result.
- * Applies Roxysu keymode filter when `key`/`keys` is present in query_params.
+ * Keymode uses embedded search `beatmaps[].cs` during the crawl (same as
+ * Download Maps). Do not N+1 `/s/{id}` — Hinamizawa 429s were silently
+ * dropping most 7K sets and truncating the hub search index.
  */
 export async function refreshCache(cacheId: number): Promise<void> {
   const entry = await db
@@ -241,19 +245,18 @@ export async function refreshCache(cacheId: number): Promise<void> {
     }`,
   );
 
-  const result = await fetchAllBeatmapsetIds(hinaiParams, (fetched, total) => {
-    process.stdout.write(`\r[cache] ${fetched}/${total} beatmapsets fetched`);
+  const result = await fetchAllBeatmapsetIds(hinaiParams, {
+    keymode: keymode ?? undefined,
+    onProgress: (scraped, catalogueTotal, kept) => {
+      process.stdout.write(
+        `\r[cache] scraped ${scraped}/${catalogueTotal} sets` +
+          (keymode != null ? ` · kept ${kept} (${keymode}K)` : ""),
+      );
+    },
   });
   console.log();
 
-  let ids = result.beatmapsetIds;
-  if (keymode != null) {
-    ids = await filterSetIdsByKeymode(ids, keymode, (checked, total) => {
-      process.stdout.write(`\r[cache] key filter ${checked}/${total}`);
-    });
-    console.log();
-  }
-
+  const ids = result.beatmapsetIds;
   const now = new Date();
   await db
     .update(searchCache)
@@ -267,7 +270,12 @@ export async function refreshCache(cacheId: number): Promise<void> {
     })
     .where(eq(searchCache.id, cacheId));
 
-  console.log(`[cache] Done — ${ids.length} IDs stored`);
+  console.log(
+    `[cache] Done — ${ids.length} IDs stored` +
+      (keymode != null
+        ? ` (${keymode}K from ${result.totalCount} ranked/loved catalogue)`
+        : ` across ${result.pages} pages`),
+  );
 }
 
 /**

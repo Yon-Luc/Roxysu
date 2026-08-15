@@ -22,7 +22,7 @@ import {
   type OnlineBeatmapSet,
 } from "./search";
 import { MIRROR_USER_AGENT } from "./userAgent";
-import { hubIdsToStubSets, tryHubCachedSearch } from "./hubSearch";
+import { hubIdsToStubSets, tryFetchAllHubCachedIds, tryHubCachedSearch } from "./hubSearch";
 
 export type MirrorSearchResult = {
   provider: string;
@@ -413,6 +413,7 @@ export async function collectMatchingOnlineBeatmapsets(
   const maxSets = opts.maxSets ?? 10_000;
   const countOnly = opts.countOnly === true;
   const postFilters = opts.onlineQuery.postFilters;
+  const hubKeymode = exactKeymodeFromPostFilters(postFilters);
   const { owned, pending, hide } = excludeOwned
     ? await loadIdsToHideFromDownloadSearch(db)
     : {
@@ -420,6 +421,57 @@ export async function collectMatchingOnlineBeatmapsets(
         pending: new Set<number>(),
         hide: new Set<number>(),
       };
+
+  // Same eligibility as paginated Download search: no post-filters, or exact key=N.
+  if (postFilters.length === 0 || hubKeymode != null) {
+    const hub = await tryFetchAllHubCachedIds(
+      {
+        ...opts.onlineQuery.mirrorParams,
+        ...(hubKeymode != null ? { key: hubKeymode } : {}),
+      },
+      {
+        shouldStop: opts.shouldStop,
+        maxPages,
+      },
+    );
+
+    if (hub) {
+      const matchedIds: number[] = [];
+      const seen = new Set<number>();
+      let ownedSkipped = 0;
+      let hitSetCap = false;
+
+      for (const id of hub.beatmapsetIds) {
+        if (opts.shouldStop?.()) break;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        if (excludeOwned && hide.has(id)) {
+          if (owned.has(id) || pending.has(id)) ownedSkipped += 1;
+          continue;
+        }
+        matchedIds.push(id);
+        if (matchedIds.length >= maxSets) {
+          hitSetCap = true;
+          break;
+        }
+      }
+
+      opts.onPage?.({
+        mirrorPage: Math.max(0, hub.pagesFetched - 1),
+        matchedSoFar: matchedIds.length,
+        ownedSkipped,
+      });
+
+      return {
+        sets: countOnly ? [] : hubIdsToStubSets(matchedIds),
+        matched: matchedIds.length,
+        ownedSkipped,
+        pagesScanned: hub.pagesFetched,
+        hitPageCap: hub.truncated,
+        hitSetCap,
+      };
+    }
+  }
 
   const sets: OnlineBeatmapSet[] = [];
   const seen = new Set<number>();
@@ -542,7 +594,8 @@ export async function countMatchingOnlineBeatmapsets(
   // Fast path: hinai v2 returns total_count for locally-served queries
   // (ranked/loved, no post-filters). With excludeOwned + no free-text q we
   // subtract owned sets that match the same mirror filters from SQLite.
-  // Post-filters (e.g. key=7) and text search still need a full crawl.
+  // Exact key=N (and other post-filters) go through collectMatching… which
+  // prefers a primed hub search cache before crawling the mirror.
   const hasPostFilters = onlineQuery.postFilters.length > 0;
   const excludeOwned = opts.excludeOwned !== false;
   const provider = getActiveBeatmapMirrorProvider();

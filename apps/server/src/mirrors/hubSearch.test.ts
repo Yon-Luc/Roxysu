@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mirrorParamsToHubQuery, tryHubCachedSearch } from "./hubSearch";
+import {
+  mirrorParamsToHubQuery,
+  tryFetchAllHubCachedIds,
+  tryHubCachedSearch,
+} from "./hubSearch";
 
 const originalFetch = globalThis.fetch;
 
@@ -14,6 +18,21 @@ describe("mirrorParamsToHubQuery", () => {
       mirrorParamsToHubQuery({
         mode: "mania",
         status: "ranked",
+        key: 7,
+      }),
+    ).toEqual({
+      mode: 3,
+      status: "ranked",
+      key: 7,
+    });
+  });
+
+  test("omits sort so Download defaults still hit admin-primed caches", () => {
+    expect(
+      mirrorParamsToHubQuery({
+        mode: "mania",
+        status: "ranked",
+        sort: "ranked_desc",
         key: 7,
       }),
     ).toEqual({
@@ -99,5 +118,80 @@ describe("tryHubCachedSearch", () => {
 
     await tryHubCachedSearch({ mode: "mania", status: "ranked" });
     expect(requested!).toContain("http://localhost:4322/search");
+  });
+});
+
+describe("tryFetchAllHubCachedIds", () => {
+  test("paginates hub pages into one id list", async () => {
+    process.env.HUB_URL = "http://hub.test";
+    const pages = new Map<number, number[]>([
+      [0, Array.from({ length: 100 }, (_, i) => i + 1)],
+      [1, Array.from({ length: 50 }, (_, i) => i + 101)],
+    ]);
+    const requested: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      requested.push(url);
+      const page = Number(new URL(url).searchParams.get("page") ?? 0);
+      const ids = pages.get(page) ?? [];
+      return new Response(
+        JSON.stringify({
+          cached: true,
+          stale: false,
+          total: 150,
+          page,
+          limit: 100,
+          beatmapsetIds: ids,
+          label: "Ranked 7K",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as unknown as typeof fetch;
+
+    const hit = await tryFetchAllHubCachedIds({
+      mode: "mania",
+      status: "ranked",
+      key: 7,
+    });
+
+    expect(hit).not.toBeNull();
+    expect(hit!.total).toBe(150);
+    expect(hit!.beatmapsetIds).toHaveLength(150);
+    expect(hit!.beatmapsetIds[0]).toBe(1);
+    expect(hit!.beatmapsetIds[149]).toBe(150);
+    expect(hit!.pagesFetched).toBe(2);
+    expect(hit!.truncated).toBe(false);
+    expect(requested.some((u) => u.includes("page=1"))).toBe(true);
+  });
+
+  test("returns null when a later page misses", async () => {
+    process.env.HUB_URL = "http://hub.test";
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const page = Number(new URL(String(input)).searchParams.get("page") ?? 0);
+      if (page === 0) {
+        return new Response(
+          JSON.stringify({
+            cached: true,
+            total: 200,
+            page: 0,
+            limit: 100,
+            beatmapsetIds: Array.from({ length: 100 }, (_, i) => i + 1),
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response(
+        JSON.stringify({ cached: false, beatmapsetIds: [] }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as unknown as typeof fetch;
+
+    expect(
+      await tryFetchAllHubCachedIds({
+        mode: "mania",
+        status: "ranked",
+        key: 7,
+      }),
+    ).toBeNull();
   });
 });

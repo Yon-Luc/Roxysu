@@ -5,6 +5,8 @@ touches:
   - apps/server/src/routes/mirrors.ts
   - apps/server/src/mirrors/batchJob.ts
   - apps/server/src/mirrors/onlineQuery.ts
+  - apps/server/src/mirrors/searchOnline.ts
+  - apps/server/src/mirrors/hubSearch.ts
   - apps/server/src/query-language/parse.ts
   - apps/server/src/index.ts
   - apps/server/src/index.node.ts
@@ -25,18 +27,27 @@ Fetch beatmap sets via configured mirrors (hinai / nerinyan / osu.direct) from t
 4. In-memory locks (`job.running`, `openingInProgress`) are cleared on server startup via `clearStuckMirrorBatchLocks()` (same pattern as `clearStuckRealmReaderPause`).
 5. A second **Stop** while status is already `stopping` force-clears the lock so the UI cannot stay stuck if a download slot ignored cancellation.
 6. Download search QL accepts glued mode filters (`mode=m`, `mode=mania`) and short aliases (`m`, `o`, `t`, `c`, `f`) — same as hub browse — so they are not mistaken for free-text mirror `query`.
+7. Paginated search, **Count all missing**, and **Download all missing** prefer a primed Hub search cache when the query has no post-filters or an exact `key=N` only (`tryHubCachedSearch` / `tryFetchAllHubCachedIds`). Hub lookup omits `sort` so it matches admin-primed entries (admin UI does not store sort). Cache miss or Hub down falls back to the live mirror crawl. Owned/pending subtraction is an ID-set intersect against local hide ids — not `total − count(owned mania ranked)`.
 
 ## Important symbols
 
 - `apps/server/src/routes/mirrors.ts`
 - `apps/server/src/mirrors/batchJob.ts:clearStuckMirrorBatchLocks()`
 - `apps/server/src/mirrors/batchJob.ts:stopMirrorBatchJob()`
+- `apps/server/src/mirrors/hubSearch.ts:tryFetchAllHubCachedIds()`
+- `apps/server/src/mirrors/searchOnline.ts:collectMatchingOnlineBeatmapsets()`
 - `apps/server/public/features/download/*`
 
 ## Dependencies
 
+- `features/hub/` — Hub search index URL via `resolveHubBaseUrl()` / `HUB_URL`
 - settings / path configuration for download targets (inferred — confirm when changing)
 
 ## Depended on by
 
 - (standalone download UX)
+
+## Related knowledge
+
+- [features/hub/index.md](../hub/index.md)
+- [architecture/hub-vs-local.md](../../architecture/hub-vs-local.md)

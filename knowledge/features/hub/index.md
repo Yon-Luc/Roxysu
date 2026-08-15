@@ -10,6 +10,8 @@ touches:
   - apps/hub/src/services/collectionWrite.ts
   - apps/hub/src/routes/collections.ts
   - apps/hub/src/routes/search.ts
+  - apps/hub/src/services/cache.ts
+  - apps/hub/src/services/hinamizawa.ts
   - apps/hub/src/services/hubSearchQuery.ts
   - apps/server/public/features/hub
   - apps/server/public/lib/hub.ts
@@ -71,6 +73,7 @@ Networked collaboration / discovery — not required for offline practice analyt
 
 - `apps/hub/src/*`
 - `apps/hub/src/services/cache.ts:hashQueryParams()` — SHA-256 (32 hex) hub search index identity; boot rehashes legacy keys
+- `apps/hub/src/services/hinamizawa.ts:fetchAllBeatmapsetIds()` — cache refresh crawls Hinamizawa search pages; optional `keymode` keeps sets using embedded `beatmaps[].cs` (same as Download Maps). Do not N+1 `/s/{id}` for key filter (429s silently truncated Ranked 7K to ~page 26)
 - `apps/server/src/hubUrl.ts:resolveHubBaseUrl()` — shared Hub URL for Workshop, OAuth redeem, and Download Maps (`HUB_URL`; localhost in `bun run dev`, `https://roxysu-api.yonx.app` when `ROXYSU_DESKTOP=1`)
 - `apps/server/public/lib/hub.ts` — runtime Workshop client (clears JWT on Hub 401; delete + export). `packages/hub-client` is the Node Eden client and is not used in the browser
 - `apps/server/src/routes/system.ts` — client app OAuth handoff helpers
@@ -117,6 +120,7 @@ update tag validation — status: verified
 ## Depended on by
 
 - Hub UI pages under `apps/server/public/features/hub`
+- `features/download-mirrors/` — Download Maps search / count / download-all prefer primed Hub search index
 
 ## Failure behavior
 

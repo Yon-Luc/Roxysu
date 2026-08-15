@@ -126,6 +126,31 @@ export function StatsPage({
     placeholderData: keepPreviousData,
   });
 
+  const history = data?.skillHistory ?? [];
+  const ppTrend = data?.ppTrend ?? [];
+  const accTrend = data?.accuracyTrend ?? [];
+
+  // Must stay above loading/error returns — Rules of Hooks.
+  const chartHistory = useMemo(
+    () =>
+      history.map((point) => ({
+        at: point.at,
+        push: historyBandValue(point, "push", skillAxis),
+        accuracy: historyBandValue(point, "accuracy", skillAxis),
+        consistency: historyBandValue(point, "consistency", skillAxis),
+      })),
+    [history, skillAxis],
+  );
+  const ppAccChart = useMemo(
+    () =>
+      ppTrend.map((p, i) => ({
+        day: p.day,
+        totalPp: p.totalPp,
+        avgAccuracy: (accTrend[i]?.avgAccuracy ?? 0) * 100,
+      })),
+    [ppTrend, accTrend],
+  );
+
   if (isLoading) {
     return (
       <div className="space-y-10">
@@ -184,10 +209,7 @@ export function StatsPage({
   }
 
   const skill = data.skill;
-  const history = data.skillHistory ?? [];
   const weekly = data.weeklyActivity ?? [];
-  const ppTrend = data.ppTrend ?? [];
-  const accTrend = data.accuracyTrend ?? [];
   const ranks = data.rankDistribution ?? [];
   const mix = data.skillsetMix;
   const byHour = data.playByHour ?? [];
@@ -213,26 +235,6 @@ export function StatsPage({
       pct: mix?.flnPct ?? 0,
     },
   ];
-
-  const chartHistory = useMemo(
-    () =>
-      history.map((point) => ({
-        at: point.at,
-        push: historyBandValue(point, "push", skillAxis),
-        accuracy: historyBandValue(point, "accuracy", skillAxis),
-        consistency: historyBandValue(point, "consistency", skillAxis),
-      })),
-    [history, skillAxis],
-  );
-  const ppAccChart = useMemo(
-    () =>
-      ppTrend.map((p, i) => ({
-        day: p.day,
-        totalPp: p.totalPp,
-        avgAccuracy: (accTrend[i]?.avgAccuracy ?? 0) * 100,
-      })),
-    [ppTrend, accTrend],
-  );
 
   const axisFilterActive = skillAxis !== "all";
   const notEnoughData = dict?.stats.notEnoughData ?? "Not enough data yet.";

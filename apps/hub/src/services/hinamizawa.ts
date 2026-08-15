@@ -16,9 +16,16 @@ export interface HinamizawaSearchParams {
   [key: string]: string | number | undefined;
 }
 
+/** One set from hinai `/v3/osu/beatmaps/search/v2` (ids + optional embedded diffs). */
+export interface SearchV2Set {
+  SetID: number;
+  /** Mania keymodes present on embedded beatmaps (from `cs`), if any. */
+  maniaKeys: number[];
+}
+
 /** Normalized page from hinai `/v3/osu/beatmaps/search/v2`. */
 export interface SearchV2Response {
-  results: Array<{ SetID: number }>;
+  results: SearchV2Set[];
   total_count: number;
   total_pages: number;
 }
@@ -38,9 +45,38 @@ function asFiniteNumber(value: unknown): number | null {
 }
 
 /**
+ * Mania keymodes from a search/set payload's `beatmaps` array.
+ * Same rule as Download Maps: `mode_int === 3` (or mode name) and `Math.round(cs)`.
+ */
+export function maniaKeysFromBeatmaps(beatmaps: unknown): number[] {
+  if (!Array.isArray(beatmaps)) return [];
+  const keys = new Set<number>();
+  for (const item of beatmaps) {
+    const row = asRecord(item);
+    if (!row) continue;
+    const modeInt = asFiniteNumber(row.mode_int);
+    const modeName =
+      typeof row.mode === "string" ? row.mode.toLowerCase() : "";
+    const isMania = modeInt === 3 || modeName === "mania";
+    if (!isMania) continue;
+    const cs = asFiniteNumber(row.cs);
+    if (cs == null) continue;
+    const k = Math.round(cs);
+    if (k > 0 && k <= 18) keys.add(k);
+  }
+  return [...keys].sort((a, b) => a - b);
+}
+
+export function setHasManiaKeymode(
+  maniaKeys: number[],
+  keymode: number,
+): boolean {
+  return maniaKeys.includes(keymode);
+}
+
+/**
  * Parse hinai v2 search JSON into a stable hub shape.
- * Live API returns `{ beatmapsets: [{ id }], total_count, total_pages }`
- * (osu!-style), not CheeseGull `{ results: [{ SetID }] }`.
+ * Live API returns `{ beatmapsets: [{ id, beatmaps: [{ mode_int, cs }] }], … }`.
  */
 export function parseSearchV2Response(payload: unknown): SearchV2Response {
   const row = asRecord(payload);
@@ -60,13 +96,16 @@ export function parseSearchV2Response(payload: unknown): SearchV2Response {
     );
   }
 
-  const results: Array<{ SetID: number }> = [];
+  const results: SearchV2Set[] = [];
   for (const item of rawSets) {
     const set = asRecord(item);
     if (!set) continue;
     const id = asFiniteNumber(set.id) ?? asFiniteNumber(set.SetID);
     if (id == null || id <= 0) continue;
-    results.push({ SetID: id });
+    results.push({
+      SetID: id,
+      maniaKeys: maniaKeysFromBeatmaps(set.beatmaps),
+    });
   }
 
   const total_count =
@@ -122,43 +161,81 @@ async function fetchPage(
 
 export interface PaginatedSearchResult {
   beatmapsetIds: number[];
+  /** Unfiltered catalogue size from Hinamizawa (before optional keymode keep). */
   totalCount: number;
   pages: number;
 }
 
+export type FetchAllBeatmapsetIdsOpts = {
+  /** Keep only sets whose embedded search diffs include this mania keymode. */
+  keymode?: number;
+  onProgress?: (scraped: number, catalogueTotal: number, kept: number) => void;
+};
+
 /**
- * Walk ALL pages for a given query and return every SetID found.
+ * Walk ALL pages for a given query and return SetIDs.
  * Used by the admin cache refresh to build the full list.
  *
- * Respects the API's pagination: starts at page 0 and increments until
- * we've collected total_pages worth of results.
+ * When `keymode` is set, filter using embedded `beatmaps[].cs` on each search
+ * page (same as Download Maps) — never N+1 `/s/{id}` (rate-limits truncating
+ * the cache).
  */
 export async function fetchAllBeatmapsetIds(
   params: HinamizawaSearchParams,
-  onProgress?: (fetched: number, total: number) => void,
+  onProgressOrOpts?:
+    | ((fetched: number, total: number) => void)
+    | FetchAllBeatmapsetIdsOpts,
 ): Promise<PaginatedSearchResult> {
+  const opts: FetchAllBeatmapsetIdsOpts =
+    typeof onProgressOrOpts === "function"
+      ? {
+          onProgress: (scraped, catalogueTotal, kept) =>
+            onProgressOrOpts(kept > 0 ? kept : scraped, catalogueTotal),
+        }
+      : (onProgressOrOpts ?? {});
+  const keymode = opts.keymode;
   const LIMIT = 100;
   const ids: number[] = [];
+  const seen = new Set<number>();
+  let scraped = 0;
+  let pagesFetched = 0;
 
-  // First page — also tells us the total
   const first = await fetchPage(params, 0, LIMIT);
-  ids.push(...first.results.map((r) => r.SetID));
-  onProgress?.(ids.length, first.total_count);
+  const catalogueTotal = first.total_count;
+  const declaredPages = Math.max(
+    first.total_pages,
+    Math.ceil(Math.max(catalogueTotal, 1) / LIMIT),
+  );
 
-  const totalPages = first.total_pages;
+  function ingest(page: SearchV2Response) {
+    pagesFetched += 1;
+    scraped += page.results.length;
+    for (const row of page.results) {
+      if (seen.has(row.SetID)) continue;
+      seen.add(row.SetID);
+      if (keymode != null && !setHasManiaKeymode(row.maniaKeys, keymode)) {
+        continue;
+      }
+      ids.push(row.SetID);
+    }
+    opts.onProgress?.(scraped, catalogueTotal, ids.length);
+  }
 
-  // Fetch remaining pages sequentially — sequential is the fast path per the docs
-  // (serving page N caches the cursor for N+1)
-  for (let page = 1; page < totalPages; page++) {
+  ingest(first);
+
+  for (let page = 1; page < declaredPages + 8; page++) {
+    if (catalogueTotal > 0 && scraped >= catalogueTotal) break;
+
     const data = await fetchPage(params, page, LIMIT);
-    ids.push(...data.results.map((r) => r.SetID));
-    onProgress?.(ids.length, first.total_count);
+    if (data.results.length === 0) break;
+    ingest(data);
+    if (data.results.length < LIMIT) break;
   }
 
   return {
     beatmapsetIds: ids,
-    totalCount: first.total_count,
-    pages: totalPages,
+    totalCount: catalogueTotal,
+    pages: pagesFetched,
   };
 }
 

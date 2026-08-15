@@ -1,0 +1,15 @@
+{
+	"login": {
+		"title": "Entrar",
+		"description": "Digite seu email abaixo para entrar na sua conta",
+		"forgotPassword": "Esqueceu sua senha?",
+		"loginWithGitHub": "Entrar com GitHub",
+		"signUp": "Criar uma conta",
+		"loggingIn": "Entrando...",
+		"dontHaveAccount": "Não tem uma conta?",
+		"signUpWithGitHub": "Criar uma conta com GitHub",
+		"orContinueWith": "Ou continue com",
+		"alreadyHaveAccount": "Já tem uma conta?",
+		"signIn": "Entrar"
+	}
+}

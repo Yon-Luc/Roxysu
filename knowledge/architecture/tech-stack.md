@@ -19,7 +19,7 @@ Record the intentional dual-runtime stack and UI/API choices.
 | Layer | Choice |
 |---|---|
 | Client app API | Bun + Elysia (`apps/server`, port 4321) |
-| UI | React 19, TanStack Router/Query, Recharts, Tailwind 4, mediabunny (replay video export) |
+| UI | React 19, TanStack Router/Query, Recharts, Tailwind 4, lucide-react, mediabunny (replay video export) |
 | Realm extraction | Node + Realm JS + `better-sqlite3` (`apps/realm-reader`) |
 | Local mirror | Drizzle schema in `packages/db`; `client.bun` vs `client.node` |
 | Hub | Separate Elysia app (`apps/hub`, port 4322) |

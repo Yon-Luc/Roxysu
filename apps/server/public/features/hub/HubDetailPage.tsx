@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Check } from "lucide-react";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { GoBackLink } from "../../components/GoBackLink";
 import { OnlineSetCard } from "../../components/OnlineSetCard";
@@ -123,13 +124,7 @@ function PlaceholderSetCard({
             title="Already owned"
             aria-label="Already owned"
           >
-            <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5" aria-hidden>
-              <path
-                fillRule="evenodd"
-                d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z"
-                clipRule="evenodd"
-              />
-            </svg>
+            <Check className="h-3.5 w-3.5" aria-hidden />
           </span>
         ) : null}
       </div>

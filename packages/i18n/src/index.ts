@@ -17,6 +17,10 @@ export const dictionaries = {
 	es: {
 		auth: () => import('./dictionary/auth/es.json').then((module) => module.default),
 		app: () => import('./dictionary/app/es.json').then((module) => module.default)
+	},
+	pt: {
+		auth: () => import('./dictionary/auth/pt.json').then((module) => module.default),
+		app: () => import('./dictionary/app/pt.json').then((module) => module.default)
 	}
 }
 

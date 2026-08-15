@@ -33,6 +33,7 @@
     "@tanstack/react-virtual": "^3.14.9",
     "drizzle-orm": "0.36.4",
     "elysia": "^1.4.29",
+    "lucide-react": "^1.31.0",
     "mediabunny": "^1.53.1",
     "react": "^19",
     "react-dom": "^19",

@@ -9,6 +9,7 @@ import {
 } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { Search } from "lucide-react";
 import { BeatmapCover } from "./BeatmapCover";
 import {
   fetchCollections,
@@ -485,7 +486,7 @@ export function CommandPalette({
             {dict?.common.quickSearch}
           </label>
           <div className="flex items-center gap-3">
-            <SearchIcon className="size-5 shrink-0 text-faint" />
+            <Search className="size-5 shrink-0 text-faint" />
             <input
               ref={inputRef}
               id={titleId}
@@ -602,22 +603,4 @@ export function useCommandPaletteShortcut(onToggle: () => void) {
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onToggle]);
-}
-
-function SearchIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <circle cx="11" cy="11" r="7" />
-      <path d="M20 20l-3-3" />
-    </svg>
-  );
 }

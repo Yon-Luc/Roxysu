@@ -15,6 +15,7 @@ describe('checkLanguage', () => {
 		expect(checkLanguage('en')).toBe('en')
 		expect(checkLanguage('fr')).toBe('fr')
 		expect(checkLanguage('es')).toBe('es')
+		expect(checkLanguage('pt')).toBe('pt')
 	})
 })
 
@@ -37,6 +38,10 @@ describe('getDictionary', () => {
 		expect(esDict.login.title).toBe('Iniciar sesión')
 		const esApp = await getDictionary('es', 'app')
 		expect(esApp.nav.settings).toBe('Ajustes')
+		const ptDict = await getDictionary('pt', 'auth')
+		expect(ptDict.login.title).toBe('Entrar')
+		const ptApp = await getDictionary('pt', 'app')
+		expect(ptApp.nav.settings).toBe('Configurações')
 	})
 
 	test('falls back to the default locale', async () => {
@@ -48,7 +53,8 @@ describe('getDictionary', () => {
 		expect(getStaticPathsI18n()).toEqual([
 			{ params: { lang: 'en' } },
 			{ params: { lang: 'fr' } },
-			{ params: { lang: 'es' } }
+			{ params: { lang: 'es' } },
+			{ params: { lang: 'pt' } }
 		])
 	})
 })

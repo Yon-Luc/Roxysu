@@ -1,5 +1,10 @@
-import { useEffect, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { OnlineSetCard } from "../../components/OnlineSetCard";
 import { SkeletonBlock, CardGridSkeleton } from "../../components/LoadingSkeleton";
 import { PageTitle } from "../../components/PageTitle";
@@ -13,7 +18,9 @@ import {
   startMirrorBatchJob,
   type MirrorBatchJob,
   type MirrorMissingCount,
+  type OnlineBeatmapSet,
 } from "../../lib/api";
+import { DownloadSearchGrid } from "./DownloadSearchGrid";
 import { pushToast } from "../../lib/toasts";
 import {
   isDevUi,
@@ -42,7 +49,6 @@ type StoredSearch = {
   q: string;
   sort: Sort;
   excludeOwned: boolean;
-  page: number;
   noVideo: boolean;
   pageCount: number;
   downloadConcurrency: number;
@@ -68,7 +74,6 @@ function readStored(): StoredSearch {
     q: "key=7 status=r",
     sort: "ranked_desc",
     excludeOwned: true,
-    page: 0,
     noVideo: true,
     pageCount: 3,
     downloadConcurrency: 3,
@@ -97,10 +102,6 @@ function readStored(): StoredSearch {
         typeof parsed.excludeOwned === "boolean"
           ? parsed.excludeOwned
           : defaults.excludeOwned,
-      page:
-        typeof parsed.page === "number" && parsed.page >= 0
-          ? Math.floor(parsed.page)
-          : defaults.page,
       noVideo:
         typeof parsed.noVideo === "boolean" ? parsed.noVideo : defaults.noVideo,
       pageCount,
@@ -127,14 +128,12 @@ export function DownloadMapsPage() {
   const [excludeOwned, setExcludeOwned] = useState(initial.excludeOwned);
   const [noVideo, setNoVideo] = useState(initial.noVideo);
   const [downloadConcurrency, setDownloadConcurrency] = useState(initial.downloadConcurrency);
-  const [page, setPage] = useState(initial.page);
   const [pageCount, setPageCount] = useState(initial.pageCount);
   const [batchError, setBatchError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState({
     q: initial.q,
     sort: initial.sort,
     excludeOwned: initial.excludeOwned,
-    page: initial.page,
   });
 
   const {
@@ -152,21 +151,25 @@ export function DownloadMapsPage() {
     q: string;
     sort: Sort;
     excludeOwned: boolean;
-    page: number;
   }) {
     setSubmitted(next);
     persist({ ...next, noVideo, pageCount, downloadConcurrency });
   }
 
-  const query = useQuery({
+  const query = useInfiniteQuery({
     queryKey: ["mirrors", "search", submitted],
-    queryFn: () =>
+    queryFn: ({ pageParam }) =>
       fetchMirrorSearch({
         query: submitted.q,
         sort: submitted.sort,
-        page: submitted.page,
+        page: pageParam,
         excludeOwned: submitted.excludeOwned,
       }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, _pages, lastPageParam) => {
+      if (!lastPage || "error" in lastPage) return undefined;
+      return lastPage.hasMore ? lastPageParam + 1 : undefined;
+    },
   });
 
   const downloadDirQuery = useQuery({
@@ -191,7 +194,7 @@ export function DownloadMapsPage() {
         mode: "pages",
         query: submitted.q,
         sort: submitted.sort,
-        startPage: submitted.page,
+        startPage: 0,
         pageCount,
         noVideo,
         excludeOwned: submitted.excludeOwned,
@@ -352,24 +355,41 @@ export function DownloadMapsPage() {
         MIRROR_BATCH_QUERY_KEY,
         batchState as MirrorBatchJob,
       );
-      void queryClient.invalidateQueries({ queryKey: ["mirrors", "search"] });
     },
     onError: (err) => {
       setSaveMessage(err instanceof Error ? err.message : String(err));
     },
   });
 
-  const rawItems = query.data && "items" in query.data ? query.data.items : [];
-  const ownedSkipped =
-    query.data && "ownedSkipped" in query.data ? query.data.ownedSkipped : 0;
-  const pendingSkipped =
-    query.data && "pendingSkipped" in query.data
-      ? Number(query.data.pendingSkipped) || 0
-      : 0;
-  const hasMore =
-    query.data && "hasMore" in query.data ? query.data.hasMore : false;
-  const provider =
-    query.data && "provider" in query.data ? query.data.provider : null;
+  const pages = query.data?.pages ?? [];
+  const pageError = pages.find(
+    (page) => page && typeof page === "object" && "error" in page,
+  );
+  const { rawItems, ownedSkipped, pendingSkipped, provider } = useMemo(() => {
+    const seen = new Set<number>();
+    const items: OnlineBeatmapSet[] = [];
+    let owned = 0;
+    let pending = 0;
+    let via: string | null = null;
+    for (const page of pages) {
+      if (!page || "error" in page) continue;
+      owned += Number(page.ownedSkipped) || 0;
+      pending += Number(page.pendingSkipped) || 0;
+      if (page.provider) via = page.provider;
+      for (const set of page.items) {
+        if (seen.has(set.id)) continue;
+        seen.add(set.id);
+        items.push(set);
+      }
+    }
+    return {
+      rawItems: items,
+      ownedSkipped: owned,
+      pendingSkipped: pending,
+      provider: via,
+    };
+  }, [pages]);
+  const hasMore = query.hasNextPage === true;
   const items =
     submitted.excludeOwned && pendingDownloadIds.size > 0
       ? rawItems.filter((set) => !pendingDownloadIds.has(set.id))
@@ -406,7 +426,14 @@ export function DownloadMapsPage() {
   useEffect(() => {
     setMissingCount(null);
     setCountError(null);
+    setPendingDownloadIds(new Set());
   }, [submitted.q, submitted.sort, submitted.excludeOwned]);
+
+  const loadMore = useCallback(() => {
+    if (query.hasNextPage && !query.isFetchingNextPage) {
+      void query.fetchNextPage();
+    }
+  }, [query.hasNextPage, query.isFetchingNextPage, query.fetchNextPage]);
 
   useEffect(() => {
     if (
@@ -455,14 +482,11 @@ export function DownloadMapsPage() {
         className="flex flex-col gap-3"
         onSubmit={(e) => {
           e.preventDefault();
-          const next = {
+          commit({
             q,
             sort,
             excludeOwned,
-            page: 0,
-          };
-          setPage(0);
-          commit(next);
+          });
         }}
       >
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
@@ -513,7 +537,6 @@ export function DownloadMapsPage() {
                   q: submitted.q,
                   sort: submitted.sort,
                   excludeOwned: next,
-                  page: submitted.page,
                 });
               }}
             />
@@ -530,7 +553,6 @@ export function DownloadMapsPage() {
                   q,
                   sort,
                   excludeOwned,
-                  page,
                   noVideo: next,
                   pageCount,
                   downloadConcurrency,
@@ -549,7 +571,7 @@ export function DownloadMapsPage() {
               onChange={(e) => {
                 const next = Math.min(10, Math.max(1, Math.floor(Number(e.target.value))));
                 setDownloadConcurrency(next);
-                persist({ q, sort, excludeOwned, page, noVideo, pageCount, downloadConcurrency: next });
+                persist({ q, sort, excludeOwned, noVideo, pageCount, downloadConcurrency: next });
               }}
               className="w-12 rounded border border-subtle bg-surface px-1 py-0.5 text-center text-sm"
               aria-label="Number of maps to download in parallel (1–10)"
@@ -592,7 +614,7 @@ export function DownloadMapsPage() {
               title={
                 missingActionsDisabledReason ??
                 (!canDownloadAllMissing && submitted.excludeOwned
-                  ? "No missing maps on this page — try another query or Count all missing"
+                  ? "No missing maps in these results — try another query or Count all missing"
                   : "Crawl the mirror for every missing set matching this query")
               }
             >
@@ -601,7 +623,7 @@ export function DownloadMapsPage() {
                 : "Download all missing"}
             </button>
             <label className="flex flex-col gap-1 text-sm text-muted">
-              Or pages from here
+              Or pages from the start
               <select
                 className="rx-select"
                 value={pageCount}
@@ -612,7 +634,6 @@ export function DownloadMapsPage() {
                     q,
                     sort,
                     excludeOwned,
-                    page,
                     noVideo,
                     pageCount: next,
                     downloadConcurrency,
@@ -656,7 +677,7 @@ export function DownloadMapsPage() {
           </div>
 
           <p className="text-sm text-muted">
-            Search shows one page (~50).{" "}
+            Search loads more as you scroll.{" "}
             <span className="font-medium text-ink">Count all missing</span> totals
             the result for{" "}
             <code className="text-ink">{submitted.q || "(defaults)"}</code>{" "}
@@ -835,8 +856,8 @@ export function DownloadMapsPage() {
             ? query.error.message
             : "Search failed"}
         </p>
-      ) : query.data && "error" in query.data ? (
-        <p className="text-danger">{String(query.data.error)}</p>
+      ) : pageError && "error" in pageError ? (
+        <p className="text-danger">{String(pageError.error)}</p>
       ) : (
         <div className="space-y-4">
           <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm text-muted">
@@ -850,71 +871,52 @@ export function DownloadMapsPage() {
                 : ""}
               {provider ? ` · via ${provider}` : ""}
             </p>
-            <p className="text-faint">Page {page + 1}</p>
+            <p className="text-faint">
+              {hasMore ? "Scroll for more" : items.length > 0 ? "End of results" : ""}
+            </p>
           </div>
 
           {items.length === 0 ? (
             <p className="text-muted">
-              No unowned maps on this page. Try another query or next page.
+              No unowned maps for this search. Try another query.
             </p>
           ) : (
-            <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {items.map((set) => (
-                <li key={set.id}>
-                  <OnlineSetCard
-                    set={set}
-                    actions={
-                      <button
-                        type="button"
-                        className="rx-btn-primary"
-                        disabled={batchBusy || saveSet.isPending}
-                        title="Save .osz into the shared beatmaps download folder"
-                        onClick={() =>
-                          saveSet.mutate({
-                            setId: set.id,
-                            artist: set.artist,
-                            title: set.title,
-                          })
-                        }
-                      >
-                        {saveSet.isPending &&
-                        saveSet.variables?.setId === set.id
-                          ? "Saving…"
-                          : "Download"}
-                      </button>
-                    }
-                  />
-                </li>
-              ))}
-            </ul>
+            <DownloadSearchGrid
+              items={items}
+              hasMore={hasMore}
+              fetchingMore={query.isFetchingNextPage}
+              onNearEnd={loadMore}
+              renderItem={(set) => (
+                <OnlineSetCard
+                  set={set}
+                  actions={
+                    <button
+                      type="button"
+                      className="rx-btn-primary"
+                      disabled={batchBusy || saveSet.isPending}
+                      title="Save .osz into the shared beatmaps download folder"
+                      onClick={() =>
+                        saveSet.mutate({
+                          setId: set.id,
+                          artist: set.artist,
+                          title: set.title,
+                        })
+                      }
+                    >
+                      {saveSet.isPending &&
+                      saveSet.variables?.setId === set.id
+                        ? "Saving…"
+                        : "Download"}
+                    </button>
+                  }
+                />
+              )}
+            />
           )}
 
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              className="rx-btn"
-              disabled={page <= 0 || query.isFetching}
-              onClick={() => {
-                const nextPage = Math.max(0, page - 1);
-                setPage(nextPage);
-                commit({ ...submitted, page: nextPage });
-              }}
-            >
-              Previous
-            </button>
-            <button
-              type="button"
-              className="rx-btn"
-              disabled={!hasMore || query.isFetching}
-              onClick={() => {
-                const nextPage = page + 1;
-                setPage(nextPage);
-                commit({ ...submitted, page: nextPage });
-              }}
-            >
-              Next
-            </button>
-          </div>
+          {query.isFetchingNextPage ? (
+            <p className="text-sm text-muted">Loading more…</p>
+          ) : null}
         </div>
       )}
     </div>

@@ -22,6 +22,7 @@ touches:
   - packages/hub-client
   - apps/hub/Dockerfile
   - apps/hub/docker-compose.yml
+  - knowledge/decisions/hub-search-base-index.md
 ---
 
 # Hub
@@ -69,15 +70,23 @@ Networked collaboration / discovery — not required for offline practice analyt
 9. Public `GET /search` returns the hub search index only. Cache miss is empty (`cached: false`); it does not live-proxy Hinamizawa.
    **Enforced by:** `apps/hub/src/routes/search.ts` — status: verified
 
+10. Hub search index rows are keyed by **base identity** only (`mode`, `status`, `key`, `sort`). Secondary filters (`min_stars`/`max_stars`, bpm/length, `query`, `creator`) are applied in memory against enriched stubs at request time.
+    **Enforced by:** `apps/hub/src/services/cache.ts:hashQueryParams()` / `filterStubs()` — status: verified
+
+11. Kill switches (env, read per request): `HUB_SEARCH_INDEX=0` forces miss; `HUB_SEARCH_HTTP_CACHE=0` forces `Cache-Control`/`CDN-Cache-Control: no-store` (stops new Cloudflare edge entries; does not flush existing HITs — bypass the CF Cache Rule for that).
+    **Enforced by:** `apps/hub/src/services/hubEnv.ts` + `apps/hub/src/routes/search.ts` — status: verified
+
 ## Important symbols
 
 - `apps/hub/src/*`
-- `apps/hub/src/services/cache.ts:hashQueryParams()` — SHA-256 (32 hex) hub search index identity; boot rehashes legacy keys. Identity includes admin-primed `query_params` (mode, status, sort, stars, query, creator, bpm/length, key). Download Maps lookups must send the same fields — including `sort` — via `mirrorParamsToHubQuery`.
-- `apps/hub/src/services/hinamizawa.ts:fetchAllBeatmapsetIds()` — cache refresh crawls Hinamizawa search pages; optional `keymode` keeps sets using embedded `beatmaps[].cs` (same as Download Maps). Do not N+1 `/s/{id}` for key filter (429s silently truncated Ranked 7K to ~page 26)
-- `apps/server/public/features/hub/HubAdminCachePage.tsx` — admin prime UI: sort (default `ranked_desc` / Recently ranked), mode, status, stars, query, creator, bpm/length, keys, frequency
+- `apps/hub/src/services/cache.ts:hashQueryParams()` — SHA-256 (32 hex) of **base** params only; boot rehashes/strips secondary fields from stored `query_params`. Download Maps still forwards secondary filters + `sort` via `mirrorParamsToHubQuery`; Hub looks up by base then filters stubs.
+- `apps/hub/src/services/cache.ts:filterStubs()` / `parseStoredStubs()` — dual-read legacy `number[]` or enriched stub JSON; secondary filter at request time
+- `apps/hub/src/services/hinamizawa.ts:fetchAllBeatmapsetStubs()` — cache refresh crawls Hinamizawa search pages into enriched stubs; optional `keymode` keeps sets using embedded `beatmaps[].cs`. Do not N+1 `/s/{id}` for key filter
+- `apps/hub/src/services/hubEnv.ts:isHubSearchIndexEnabled()` / `isHubSearchHttpCacheEnabled()` — prod kill switches
+- `apps/server/public/features/hub/HubAdminCachePage.tsx` — admin prime UI: base fields only (mode, status, keys, sort, frequency); secondary filters are runtime on Download Maps
 - `apps/server/src/hubUrl.ts:resolveHubBaseUrl()` — shared Hub URL for Workshop, OAuth redeem, and Download Maps (`HUB_URL`; localhost in `bun run dev`, `https://roxysu-api.yonx.app` when `ROXYSU_DESKTOP=1`)
 - `apps/server/public/lib/hub.ts` — runtime Workshop client (clears JWT on Hub 401; delete + export). `packages/hub-client` is the Node Eden client and is not used in the browser
-- `apps/server/src/mirrors/hubSearch.ts:mirrorParamsToHubQuery()` — maps Download mirror params to Hub GET `/search` (forwards `sort`, star bounds, key, etc.)
+- `apps/server/src/mirrors/hubSearch.ts:mirrorParamsToHubQuery()` / `hubResultToOnlineSets()` — maps Download params to Hub GET `/search`; prefers enriched `beatmapsets`
 - `apps/server/src/routes/system.ts` — client app OAuth handoff helpers
 - Workshop detail: owner or admin can edit/delete; Save calls `GET /collections/:id/export` so `downloadCount` increments
 - Browse mode chip (`q=mode=m`) matches `dominantMode` **or** the corresponding Hub tag (`mania` / `std` / `ctb` / `taiko`)
@@ -87,7 +96,17 @@ Networked collaboration / discovery — not required for offline practice analyt
 - OAuth callback accepts only `h=` (handoff id), never a JWT in the URL
 - `apps/hub/src/db.ts` — `bun run db:migrate` and Hub boot both apply Hub store migrations
 - `apps/hub/Dockerfile` — build context is repo root. Copy every `apps/*/package.json` so `bun.lock`'s workspace graph stays valid under `--frozen-lockfile`.
-- `apps/hub/docker-compose.yml` — Coolify run config: pull prebuilt image, named volume at `/app/data`, `expose` 4322 (no host `ports`), `HUB_TRUST_PROXY=1`, production CORS allowlist for local Workshop.
+- `apps/hub/docker-compose.yml` — Coolify run config: pull prebuilt image, named volume at `/app/data`, `expose` 4322 (no host `ports`), `HUB_TRUST_PROXY=1`, production CORS allowlist for local Workshop; defaults `HUB_SEARCH_HTTP_CACHE=0` for safe rollout.
+
+### Hub search edge cache (Cloudflare reverse proxy)
+
+Hub does not publish to Cloudflare Workers. When the Hub hostname is orange-cloud proxied:
+
+1. Origin hits set `CDN-Cache-Control: public, max-age=…` (capped by `HUB_SEARCH_EDGE_CACHE_MAX_AGE_SEC`, default 1h) when `HUB_SEARCH_HTTP_CACHE=1`; browsers get `private, no-store`.
+2. JSON is **not** CF-cacheable by default — ops must add a named Cache Rule: `GET` + path `/search*` → Eligible for cache, respect origin TTL. Bypass that rule for instant edge kill.
+3. Incident order: `HUB_SEARCH_INDEX=0` (live mirror) → CF Bypass `/search*` → `HUB_SEARCH_HTTP_CACHE=0` (+ Bypass until TTL/purge).
+
+**See:** [decisions/hub-search-base-index.md](../../decisions/hub-search-base-index.md)
 
 ## Tag taxonomy
 

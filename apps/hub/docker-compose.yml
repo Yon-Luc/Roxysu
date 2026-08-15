@@ -21,6 +21,10 @@ services:
       - DATABASE_URL=/app/data/hub.sqlite
       - HUB_TRUST_PROXY=1
       - HUB_CACHE_TTL_MS=86400000
+      # Safe rollout: keep HTTP edge cache off until base primes are validated
+      - HUB_SEARCH_HTTP_CACHE=0
+      - HUB_SEARCH_INDEX=1
+      - HUB_SEARCH_EDGE_CACHE_MAX_AGE_SEC=3600
       - CORS_ORIGIN=http://127.0.0.1:4321,http://localhost:4321
       - HUB_CLIENT_REDIRECT_URI=http://127.0.0.1:4321/#/hub-callback
       - HUB_DESKTOP_REDIRECT_URI=http://127.0.0.1:4321/api/system/hub-oauth/complete

@@ -56,13 +56,6 @@ function frequencyLabel(minutes: number | null): string {
   return match?.label ?? (minutes == null ? "Off" : `Every ${minutes}m`);
 }
 
-function optionalNumber(raw: string): number | undefined {
-  const t = raw.trim();
-  if (!t) return undefined;
-  const n = Number(t);
-  return Number.isFinite(n) ? n : undefined;
-}
-
 function paramsSummary(params: HubSearchCacheEntry["queryParams"]): string {
   const parts: string[] = [];
   if (params.mode != null) {
@@ -75,17 +68,6 @@ function paramsSummary(params: HubSearchCacheEntry["queryParams"]): string {
     const sort = SORT_OPTIONS.find((s) => s.value === String(params.sort));
     parts.push(sort?.label ?? String(params.sort));
   }
-  if (params.min_stars != null || params.max_stars != null) {
-    parts.push(`★${params.min_stars ?? "…"}–${params.max_stars ?? "…"}`);
-  }
-  if (params.min_bpm != null || params.max_bpm != null) {
-    parts.push(`bpm ${params.min_bpm ?? "…"}–${params.max_bpm ?? "…"}`);
-  }
-  if (params.min_length != null || params.max_length != null) {
-    parts.push(`len ${params.min_length ?? "…"}–${params.max_length ?? "…"}`);
-  }
-  if (params.creator) parts.push(`mapper:${params.creator}`);
-  if (params.query) parts.push(`“${params.query}”`);
   return parts.join(" · ") || "(empty)";
 }
 
@@ -99,14 +81,6 @@ export function HubAdminCachePage() {
   const [status, setStatus] = useState<string>("ranked");
   const [key, setKey] = useState("7");
   const [sort, setSort] = useState<string>("ranked_desc");
-  const [minStars, setMinStars] = useState("");
-  const [maxStars, setMaxStars] = useState("");
-  const [minBpm, setMinBpm] = useState("");
-  const [maxBpm, setMaxBpm] = useState("");
-  const [minLength, setMinLength] = useState("");
-  const [maxLength, setMaxLength] = useState("");
-  const [query, setQuery] = useState("");
-  const [creator, setCreator] = useState("");
   const [frequency, setFrequency] = useState<number | null>(360);
 
   const meQuery = useQuery({
@@ -131,14 +105,6 @@ export function HubAdminCachePage() {
   const createMut = useMutation({
     mutationFn: () => {
       const keyNum = Number(key);
-      const minStarsN = optionalNumber(minStars);
-      const maxStarsN = optionalNumber(maxStars);
-      const minBpmN = optionalNumber(minBpm);
-      const maxBpmN = optionalNumber(maxBpm);
-      const minLengthN = optionalNumber(minLength);
-      const maxLengthN = optionalNumber(maxLength);
-      const queryTrim = query.trim();
-      const creatorTrim = creator.trim();
       return createHubAdminCache(hubUrl, jwt!, {
         label: label.trim() || undefined,
         refreshIntervalMinutes: frequency,
@@ -149,14 +115,6 @@ export function HubAdminCachePage() {
           ...(Number.isSafeInteger(keyNum) && keyNum > 0
             ? { key: keyNum }
             : {}),
-          ...(minStarsN != null ? { min_stars: minStarsN } : {}),
-          ...(maxStarsN != null ? { max_stars: maxStarsN } : {}),
-          ...(minBpmN != null ? { min_bpm: minBpmN } : {}),
-          ...(maxBpmN != null ? { max_bpm: maxBpmN } : {}),
-          ...(minLengthN != null ? { min_length: minLengthN } : {}),
-          ...(maxLengthN != null ? { max_length: maxLengthN } : {}),
-          ...(queryTrim ? { query: queryTrim } : {}),
-          ...(creatorTrim ? { creator: creatorTrim } : {}),
         },
       });
     },
@@ -262,7 +220,8 @@ export function HubAdminCachePage() {
         <GoBackLink to="/hub">Workshop</GoBackLink>
         <PageTitle className="mt-3">Search cache</PageTitle>
         <p className="rx-subtitle">
-          Prime Download quick-search indexes (match Download sort + filters)
+          Prime one base index per mode/status/keys/sort — Download Maps filters
+          stars, BPM, name, and mapper against stored stubs at request time
         </p>
       </div>
 
@@ -273,7 +232,7 @@ export function HubAdminCachePage() {
           createMut.mutate();
         }}
       >
-        <h2 className="text-sm font-semibold text-ink">Create cache</h2>
+        <h2 className="text-sm font-semibold text-ink">Create base cache</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <label className="flex flex-col gap-1 text-xs text-muted">
             Label
@@ -356,86 +315,6 @@ export function HubAdminCachePage() {
                 </option>
               ))}
             </select>
-          </label>
-          <label className="flex flex-col gap-1 text-xs text-muted">
-            Min stars
-            <input
-              className="rx-input"
-              value={minStars}
-              onChange={(e) => setMinStars(e.target.value)}
-              placeholder="optional"
-              inputMode="decimal"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-xs text-muted">
-            Max stars
-            <input
-              className="rx-input"
-              value={maxStars}
-              onChange={(e) => setMaxStars(e.target.value)}
-              placeholder="optional"
-              inputMode="decimal"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-xs text-muted">
-            Min BPM
-            <input
-              className="rx-input"
-              value={minBpm}
-              onChange={(e) => setMinBpm(e.target.value)}
-              placeholder="optional"
-              inputMode="numeric"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-xs text-muted">
-            Max BPM
-            <input
-              className="rx-input"
-              value={maxBpm}
-              onChange={(e) => setMaxBpm(e.target.value)}
-              placeholder="optional"
-              inputMode="numeric"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-xs text-muted">
-            Min length (s)
-            <input
-              className="rx-input"
-              value={minLength}
-              onChange={(e) => setMinLength(e.target.value)}
-              placeholder="optional"
-              inputMode="numeric"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-xs text-muted">
-            Max length (s)
-            <input
-              className="rx-input"
-              value={maxLength}
-              onChange={(e) => setMaxLength(e.target.value)}
-              placeholder="optional"
-              inputMode="numeric"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-xs text-muted sm:col-span-2">
-            Query (free text)
-            <input
-              className="rx-input"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="optional title/artist text"
-              maxLength={200}
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-xs text-muted">
-            Creator / mapper
-            <input
-              className="rx-input"
-              value={creator}
-              onChange={(e) => setCreator(e.target.value)}
-              placeholder="optional"
-              maxLength={100}
-            />
           </label>
         </div>
         <button

@@ -4,6 +4,30 @@ import { MIRROR_USER_AGENT } from "./userAgent";
 
 const HUB_SEARCH_TIMEOUT_MS = 8_000;
 
+/** Enriched stub from Hub GET /search `beatmapsets`. */
+export type HubSearchBeatmapset = {
+  id: number;
+  artist?: string;
+  title?: string;
+  creator?: string;
+  status?: string;
+  bpm?: number | null;
+  favouriteCount?: number;
+  playCount?: number;
+  hasVideo?: boolean;
+  rankedDate?: string | null;
+  lengthSeconds?: number | null;
+  beatmaps?: Array<{
+    id: number;
+    version?: string;
+    stars?: number;
+    mode?: string;
+    modeInt?: number;
+    keys?: number | null;
+    totalLength?: number | null;
+  }>;
+};
+
 export type HubSearchCacheResult = {
   cached: true;
   stale: boolean;
@@ -11,6 +35,7 @@ export type HubSearchCacheResult = {
   page: number;
   limit: number;
   beatmapsetIds: number[];
+  beatmapsets: HubSearchBeatmapset[];
   label: string | null;
 };
 
@@ -80,9 +105,11 @@ export async function tryHubCachedSearch(
       page?: number;
       limit?: number;
       beatmapsetIds?: number[];
+      beatmapsets?: HubSearchBeatmapset[];
       label?: string | null;
     };
     if (!body.cached || !Array.isArray(body.beatmapsetIds)) return null;
+    const beatmapsets = Array.isArray(body.beatmapsets) ? body.beatmapsets : [];
     return {
       cached: true,
       stale: !!body.stale,
@@ -90,6 +117,7 @@ export async function tryHubCachedSearch(
       page: body.page ?? params.page ?? 0,
       limit: body.limit ?? params.limit ?? 100,
       beatmapsetIds: body.beatmapsetIds,
+      beatmapsets,
       label: body.label ?? null,
     };
   } catch {
@@ -114,12 +142,59 @@ export function hubIdsToStubSets(ids: number[]): OnlineBeatmapSet[] {
   }));
 }
 
+/** Map Hub enriched stubs (or fall back to ids) into OnlineBeatmapSet. */
+export function hubResultToOnlineSets(hit: HubSearchCacheResult): OnlineBeatmapSet[] {
+  if (hit.beatmapsets.length > 0) {
+    return hit.beatmapsets.map((set) => hubStubToOnlineSet(set));
+  }
+  return hubIdsToStubSets(hit.beatmapsetIds);
+}
+
+export function hubStubToOnlineSet(set: HubSearchBeatmapset): OnlineBeatmapSet {
+  const beatmaps = (set.beatmaps ?? []).map((d, i) => ({
+    id: d.id > 0 ? d.id : set.id * 1000 + i + 1,
+    version: d.version ?? "Unknown",
+    stars: typeof d.stars === "number" ? d.stars : 0,
+    mode: d.mode ?? "osu",
+    modeInt: typeof d.modeInt === "number" ? d.modeInt : 0,
+    keys: d.keys ?? null,
+    totalLength: d.totalLength ?? null,
+  }));
+  let lengthSeconds = set.lengthSeconds ?? null;
+  if (lengthSeconds == null) {
+    for (const b of beatmaps) {
+      if (b.totalLength != null && b.totalLength > 0) {
+        lengthSeconds =
+          lengthSeconds == null
+            ? b.totalLength
+            : Math.max(lengthSeconds, b.totalLength);
+      }
+    }
+  }
+  return {
+    id: set.id,
+    artist: set.artist ?? "",
+    title: set.title?.trim() ? set.title : `Beatmapset ${set.id}`,
+    creator: set.creator ?? "",
+    status: set.status ?? "",
+    bpm: set.bpm ?? null,
+    favouriteCount: set.favouriteCount ?? 0,
+    playCount: set.playCount ?? 0,
+    hasVideo: set.hasVideo === true,
+    rankedDate: set.rankedDate ?? null,
+    lengthSeconds,
+    beatmaps,
+  };
+}
+
 /** Hub GET /search limit cap (must match Hub route schema). */
 export const HUB_SEARCH_PAGE_LIMIT = 100;
 const HUB_FETCH_PARALLEL = 8;
 
 export type HubCachedIdList = {
   beatmapsetIds: number[];
+  /** Enriched sets when Hub returned beatmapsets; otherwise id stubs. */
+  sets: OnlineBeatmapSet[];
   total: number;
   stale: boolean;
   label: string | null;
@@ -150,6 +225,7 @@ export async function tryFetchAllHubCachedIds(
 
   const total = first.total;
   const ids: number[] = [...first.beatmapsetIds];
+  const sets: OnlineBeatmapSet[] = hubResultToOnlineSets(first);
   let pagesFetched = 1;
   const totalPages = Math.max(1, Math.ceil(total / HUB_SEARCH_PAGE_LIMIT));
   const pagesToFetch = Math.min(totalPages, maxPages);
@@ -157,6 +233,7 @@ export async function tryFetchAllHubCachedIds(
   if (pagesToFetch <= 1 || ids.length >= total) {
     return {
       beatmapsetIds: ids,
+      sets,
       total,
       stale: first.stale,
       label: first.label,
@@ -169,6 +246,7 @@ export async function tryFetchAllHubCachedIds(
     if (opts?.shouldStop?.()) {
       return {
         beatmapsetIds: ids,
+        sets,
         total,
         stale: first.stale,
         label: first.label,
@@ -201,11 +279,13 @@ export async function tryFetchAllHubCachedIds(
       if (!hit) return null;
       pagesFetched += 1;
       ids.push(...hit.beatmapsetIds);
+      sets.push(...hubResultToOnlineSets(hit));
     }
   }
 
   return {
     beatmapsetIds: ids,
+    sets,
     total,
     stale: first.stale,
     label: first.label,

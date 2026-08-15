@@ -237,14 +237,13 @@ export function exactKeymodeFromPostFilters(
 
 /**
  * Hub cache eligibility for Download Maps.
- * Star post-filters are ignored here: they already map to min_stars/max_stars on
- * mirror params (cache identity). Hub stubs have no per-diff stars, so a Hub hit
- * trusts Hinamizawa set-level star bounds from the primed entry.
+ * Stars are applied on Hub as secondary filters against enriched stubs (and
+ * still forwarded as min_stars/max_stars). Exact key=N selects the base prime.
  *
  * Returns:
- * - `{ keymode: null }` — eligible, no key filter
+ * - `{ keymode: null }` — eligible, no key filter (base without key)
  * - `{ keymode: N }` — eligible with exact key=N
- * - `null` — not eligible (other post-filters)
+ * - `null` — not eligible (e.g. key ranges)
  */
 export function hubCacheKeymode(
   filters: OnlinePostFilter[],

@@ -484,19 +484,12 @@ export function createHubAdminCache(
   body: {
     label?: string;
     refreshIntervalMinutes?: number | null;
+    /** Base prime identity only (secondary filters are request-time on GET /search). */
     query_params: {
       mode?: number;
       status?: string;
-      query?: string;
       key?: number;
       sort?: string;
-      min_stars?: number;
-      max_stars?: number;
-      min_bpm?: number;
-      max_bpm?: number;
-      min_length?: number;
-      max_length?: number;
-      creator?: string;
     };
   },
 ) {

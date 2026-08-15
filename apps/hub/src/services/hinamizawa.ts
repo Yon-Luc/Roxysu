@@ -16,11 +16,37 @@ export interface HinamizawaSearchParams {
   [key: string]: string | number | undefined;
 }
 
-/** One set from hinai `/v3/osu/beatmaps/search/v2` (ids + optional embedded diffs). */
+/** One difficulty kept from hinai search `beatmaps[]` for filtering / display. */
+export interface SearchV2Difficulty {
+  id: number;
+  version: string;
+  stars: number;
+  mode: string;
+  modeInt: number;
+  /** Mania keys from `cs` when mode is mania. */
+  keys: number | null;
+  totalLength: number | null;
+}
+
+/**
+ * One set from hinai `/v3/osu/beatmaps/search/v2`.
+ * Enriched fields are best-effort from the search page (no `/s/{id}` N+1).
+ */
 export interface SearchV2Set {
   SetID: number;
   /** Mania keymodes present on embedded beatmaps (from `cs`), if any. */
   maniaKeys: number[];
+  artist: string;
+  title: string;
+  creator: string;
+  status: string;
+  bpm: number | null;
+  favouriteCount: number;
+  playCount: number;
+  hasVideo: boolean;
+  rankedDate: string | null;
+  lengthSeconds: number | null;
+  beatmaps: SearchV2Difficulty[];
 }
 
 /** Normalized page from hinai `/v3/osu/beatmaps/search/v2`. */
@@ -42,6 +68,44 @@ function asFiniteNumber(value: unknown): number | null {
     return Number.isFinite(n) ? n : null;
   }
   return null;
+}
+
+function asString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function maxLengthSeconds(
+  beatmaps: Array<{ totalLength: number | null }>,
+): number | null {
+  let max: number | null = null;
+  for (const b of beatmaps) {
+    if (b.totalLength == null || !(b.totalLength > 0)) continue;
+    max = max == null ? b.totalLength : Math.max(max, b.totalLength);
+  }
+  return max;
+}
+
+function parseDifficulty(
+  raw: unknown,
+  fallbackId: number,
+): SearchV2Difficulty | null {
+  const row = asRecord(raw);
+  if (!row) return null;
+  const id = asFiniteNumber(row.id) ?? fallbackId;
+  if (id <= 0) return null;
+  const modeInt = asFiniteNumber(row.mode_int) ?? 0;
+  const modeName = asString(row.mode)?.toLowerCase() ?? "osu";
+  const cs = asFiniteNumber(row.cs);
+  const isMania = modeInt === 3 || modeName === "mania";
+  return {
+    id,
+    version: asString(row.version) ?? "Unknown",
+    stars: asFiniteNumber(row.difficulty_rating) ?? 0,
+    mode: asString(row.mode) ?? "osu",
+    modeInt,
+    keys: isMania && cs != null ? Math.round(cs) : null,
+    totalLength: asFiniteNumber(row.total_length),
+  };
 }
 
 /**
@@ -74,9 +138,46 @@ export function setHasManiaKeymode(
   return maniaKeys.includes(keymode);
 }
 
+function parseSearchV2Set(item: unknown): SearchV2Set | null {
+  const set = asRecord(item);
+  if (!set) return null;
+  const id = asFiniteNumber(set.id) ?? asFiniteNumber(set.SetID);
+  if (id == null || id <= 0) return null;
+
+  const rawBeatmaps = Array.isArray(set.beatmaps) ? set.beatmaps : [];
+  const beatmaps: SearchV2Difficulty[] = [];
+  let i = 0;
+  for (const raw of rawBeatmaps) {
+    i += 1;
+    const diff = parseDifficulty(raw, id * 1000 + i);
+    if (diff) beatmaps.push(diff);
+  }
+  beatmaps.sort((a, b) => a.stars - b.stars);
+
+  return {
+    SetID: id,
+    maniaKeys: maniaKeysFromBeatmaps(set.beatmaps),
+    artist: asString(set.artist) ?? "",
+    title: asString(set.title) ?? "",
+    creator: asString(set.creator) ?? "",
+    status: asString(set.status) ?? "",
+    bpm: asFiniteNumber(set.bpm),
+    favouriteCount:
+      asFiniteNumber(set.favourite_count) ??
+      asFiniteNumber(set.FavouriteCount) ??
+      0,
+    playCount:
+      asFiniteNumber(set.play_count) ?? asFiniteNumber(set.PlayCount) ?? 0,
+    hasVideo: set.video === true || set.HasVideo === true,
+    rankedDate: asString(set.ranked_date) ?? asString(set.RankedDate),
+    lengthSeconds: maxLengthSeconds(beatmaps),
+    beatmaps,
+  };
+}
+
 /**
  * Parse hinai v2 search JSON into a stable hub shape.
- * Live API returns `{ beatmapsets: [{ id, beatmaps: [{ mode_int, cs }] }], … }`.
+ * Live API returns `{ beatmapsets: [{ id, artist, title, beatmaps: […] }], … }`.
  */
 export function parseSearchV2Response(payload: unknown): SearchV2Response {
   const row = asRecord(payload);
@@ -98,14 +199,8 @@ export function parseSearchV2Response(payload: unknown): SearchV2Response {
 
   const results: SearchV2Set[] = [];
   for (const item of rawSets) {
-    const set = asRecord(item);
-    if (!set) continue;
-    const id = asFiniteNumber(set.id) ?? asFiniteNumber(set.SetID);
-    if (id == null || id <= 0) continue;
-    results.push({
-      SetID: id,
-      maniaKeys: maniaKeysFromBeatmaps(set.beatmaps),
-    });
+    const parsed = parseSearchV2Set(item);
+    if (parsed) results.push(parsed);
   }
 
   const total_count =
@@ -166,11 +261,79 @@ export interface PaginatedSearchResult {
   pages: number;
 }
 
+export interface PaginatedStubResult {
+  stubs: SearchV2Set[];
+  /** Unfiltered catalogue size from Hinamizawa (before optional keymode keep). */
+  totalCount: number;
+  pages: number;
+}
+
 export type FetchAllBeatmapsetIdsOpts = {
   /** Keep only sets whose embedded search diffs include this mania keymode. */
   keymode?: number;
   onProgress?: (scraped: number, catalogueTotal: number, kept: number) => void;
 };
+
+async function crawlAllPages(
+  params: HinamizawaSearchParams,
+  opts: FetchAllBeatmapsetIdsOpts,
+): Promise<PaginatedStubResult> {
+  const keymode = opts.keymode;
+  const LIMIT = 100;
+  const stubs: SearchV2Set[] = [];
+  const seen = new Set<number>();
+  let scraped = 0;
+  let pagesFetched = 0;
+
+  const first = await fetchPage(params, 0, LIMIT);
+  const catalogueTotal = first.total_count;
+  const declaredPages = Math.max(
+    first.total_pages,
+    Math.ceil(Math.max(catalogueTotal, 1) / LIMIT),
+  );
+
+  function ingest(page: SearchV2Response) {
+    pagesFetched += 1;
+    scraped += page.results.length;
+    for (const row of page.results) {
+      if (seen.has(row.SetID)) continue;
+      seen.add(row.SetID);
+      if (keymode != null && !setHasManiaKeymode(row.maniaKeys, keymode)) {
+        continue;
+      }
+      stubs.push(row);
+    }
+    opts.onProgress?.(scraped, catalogueTotal, stubs.length);
+  }
+
+  ingest(first);
+
+  for (let page = 1; page < declaredPages + 8; page++) {
+    if (catalogueTotal > 0 && scraped >= catalogueTotal) break;
+
+    const data = await fetchPage(params, page, LIMIT);
+    if (data.results.length === 0) break;
+    ingest(data);
+    if (data.results.length < LIMIT) break;
+  }
+
+  return {
+    stubs,
+    totalCount: catalogueTotal,
+    pages: pagesFetched,
+  };
+}
+
+/**
+ * Walk ALL pages for a given query and return enriched stubs.
+ * Used by the admin cache refresh to build the hub search index payload.
+ */
+export async function fetchAllBeatmapsetStubs(
+  params: HinamizawaSearchParams,
+  opts: FetchAllBeatmapsetIdsOpts = {},
+): Promise<PaginatedStubResult> {
+  return crawlAllPages(params, opts);
+}
 
 /**
  * Walk ALL pages for a given query and return SetIDs.
@@ -193,49 +356,11 @@ export async function fetchAllBeatmapsetIds(
             onProgressOrOpts(kept > 0 ? kept : scraped, catalogueTotal),
         }
       : (onProgressOrOpts ?? {});
-  const keymode = opts.keymode;
-  const LIMIT = 100;
-  const ids: number[] = [];
-  const seen = new Set<number>();
-  let scraped = 0;
-  let pagesFetched = 0;
-
-  const first = await fetchPage(params, 0, LIMIT);
-  const catalogueTotal = first.total_count;
-  const declaredPages = Math.max(
-    first.total_pages,
-    Math.ceil(Math.max(catalogueTotal, 1) / LIMIT),
-  );
-
-  function ingest(page: SearchV2Response) {
-    pagesFetched += 1;
-    scraped += page.results.length;
-    for (const row of page.results) {
-      if (seen.has(row.SetID)) continue;
-      seen.add(row.SetID);
-      if (keymode != null && !setHasManiaKeymode(row.maniaKeys, keymode)) {
-        continue;
-      }
-      ids.push(row.SetID);
-    }
-    opts.onProgress?.(scraped, catalogueTotal, ids.length);
-  }
-
-  ingest(first);
-
-  for (let page = 1; page < declaredPages + 8; page++) {
-    if (catalogueTotal > 0 && scraped >= catalogueTotal) break;
-
-    const data = await fetchPage(params, page, LIMIT);
-    if (data.results.length === 0) break;
-    ingest(data);
-    if (data.results.length < LIMIT) break;
-  }
-
+  const result = await crawlAllPages(params, opts);
   return {
-    beatmapsetIds: ids,
-    totalCount: catalogueTotal,
-    pages: pagesFetched,
+    beatmapsetIds: result.stubs.map((s) => s.SetID),
+    totalCount: result.totalCount,
+    pages: result.pages,
   };
 }
 

@@ -9,3 +9,4 @@ Constraints agents must not accidentally violate. Terms: [vocabulary.md](../voca
 | Poll for imports, not Realm listeners | [poll-not-realm-listeners.md](poll-not-realm-listeners.md) |
 | Keep analytics in server | [keep-analytics-in-server.md](keep-analytics-in-server.md) |
 | Hub is a separate process | [hub-separate-process.md](hub-separate-process.md) |
+| Hub search base index + killable edge cache | [hub-search-base-index.md](hub-search-base-index.md) |

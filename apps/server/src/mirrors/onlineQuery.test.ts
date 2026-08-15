@@ -184,7 +184,7 @@ describe("hubCacheKeymode", () => {
     expect(hubCacheKeymode(q.postFilters)).toEqual({ keymode: 7 });
   });
 
-  test("key plus stars is eligible (stars are cache identity only)", () => {
+  test("key plus stars is eligible (stars are Hub secondary filters)", () => {
     const q = parseOnlineMirrorQuery("key=7 stars:5..6 status=r");
     expect(hubCacheKeymode(q.postFilters)).toEqual({ keymode: 7 });
   });

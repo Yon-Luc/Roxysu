@@ -84,8 +84,55 @@ describe("tryHubCachedSearch", () => {
       page: 0,
       limit: 100,
       beatmapsetIds: [101, 202],
+      beatmapsets: [],
       label: "Ranked 7K",
     });
+  });
+
+  test("prefers enriched beatmapsets from hub", async () => {
+    process.env.HUB_URL = "http://hub.test";
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          cached: true,
+          stale: false,
+          total: 1,
+          page: 0,
+          limit: 100,
+          beatmapsetIds: [101],
+          beatmapsets: [
+            {
+              id: 101,
+              artist: "A",
+              title: "Song",
+              creator: "M",
+              bpm: 160,
+              beatmaps: [
+                {
+                  id: 1,
+                  stars: 5,
+                  modeInt: 3,
+                  keys: 7,
+                  version: "7K",
+                  mode: "mania",
+                  totalLength: 90,
+                },
+              ],
+            },
+          ],
+          label: "Ranked 7K",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )) as unknown as typeof fetch;
+
+    const hit = await tryHubCachedSearch({
+      mode: "mania",
+      status: "ranked",
+      key: 7,
+      minStars: 4,
+    });
+    expect(hit!.beatmapsets).toHaveLength(1);
+    expect(hit!.beatmapsets[0]!.title).toBe("Song");
   });
 
   test("returns null on cache miss", async () => {

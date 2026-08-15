@@ -22,7 +22,7 @@ import {
   type OnlineBeatmapSet,
 } from "./search";
 import { MIRROR_USER_AGENT } from "./userAgent";
-import { hubIdsToStubSets, tryFetchAllHubCachedIds, tryHubCachedSearch } from "./hubSearch";
+import { hubResultToOnlineSets, tryFetchAllHubCachedIds, tryHubCachedSearch } from "./hubSearch";
 
 export type MirrorSearchResult = {
   provider: string;
@@ -207,7 +207,7 @@ export async function searchOnlineBeatmapsets(
   let pagesScanned = 0;
 
   // Prefer hub search index when the entry is primed (same HUB_URL default as Workshop).
-  // Star post-filters are ignored for eligibility (set-level bounds on mirror params).
+  // Hub applies secondary filters (stars/bpm/name/…) against enriched stubs.
   if (hubElig) {
     const hubHit = await tryHubCachedSearch({
       ...mirrorBase,
@@ -220,7 +220,7 @@ export async function searchOnlineBeatmapsets(
       mirrorHasMore =
         (hubHit.page + 1) * hubHit.limit < hubHit.total ||
         hubHit.beatmapsetIds.length >= MIRROR_PAGE_CAPACITY;
-      for (const set of hubIdsToStubSets(hubHit.beatmapsetIds)) {
+      for (const set of hubResultToOnlineSets(hubHit)) {
         if (seen.has(set.id)) continue;
         seen.add(set.id);
         if (excludeOwned && hide.has(set.id)) {
@@ -422,7 +422,7 @@ export async function collectMatchingOnlineBeatmapsets(
         hide: new Set<number>(),
       };
 
-  // Same eligibility as paginated Download search (stars ignored; exact key=N ok).
+  // Same eligibility as paginated Download search (exact key=N; Hub filters secondary).
   if (hubElig) {
     const hub = await tryFetchAllHubCachedIds(
       {
@@ -436,21 +436,21 @@ export async function collectMatchingOnlineBeatmapsets(
     );
 
     if (hub) {
-      const matchedIds: number[] = [];
+      const matchedSets: OnlineBeatmapSet[] = [];
       const seen = new Set<number>();
       let ownedSkipped = 0;
       let hitSetCap = false;
 
-      for (const id of hub.beatmapsetIds) {
+      for (const set of hub.sets) {
         if (opts.shouldStop?.()) break;
-        if (seen.has(id)) continue;
-        seen.add(id);
-        if (excludeOwned && hide.has(id)) {
-          if (owned.has(id) || pending.has(id)) ownedSkipped += 1;
+        if (seen.has(set.id)) continue;
+        seen.add(set.id);
+        if (excludeOwned && hide.has(set.id)) {
+          if (owned.has(set.id) || pending.has(set.id)) ownedSkipped += 1;
           continue;
         }
-        matchedIds.push(id);
-        if (matchedIds.length >= maxSets) {
+        matchedSets.push(set);
+        if (matchedSets.length >= maxSets) {
           hitSetCap = true;
           break;
         }
@@ -458,13 +458,13 @@ export async function collectMatchingOnlineBeatmapsets(
 
       opts.onPage?.({
         mirrorPage: Math.max(0, hub.pagesFetched - 1),
-        matchedSoFar: matchedIds.length,
+        matchedSoFar: matchedSets.length,
         ownedSkipped,
       });
 
       return {
-        sets: countOnly ? [] : hubIdsToStubSets(matchedIds),
-        matched: matchedIds.length,
+        sets: countOnly ? [] : matchedSets,
+        matched: matchedSets.length,
         ownedSkipped,
         pagesScanned: hub.pagesFetched,
         hitPageCap: hub.truncated,

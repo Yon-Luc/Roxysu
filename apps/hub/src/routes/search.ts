@@ -1,15 +1,38 @@
 import Elysia, { t } from "elysia";
 import {
-  hashQueryParams,
-  lookupCache,
+  edgeCacheTtlSecondsForRow,
+  filterStubs,
+  lookupCacheByBase,
+  parseStoredStubs,
   refreshCache,
-  sliceIds,
+  secondaryFiltersFromQuery,
+  sliceStubs,
   type CacheQueryParams,
 } from "../services/cache";
 import { allowRateLimit } from "../services/rateLimit";
 import { clientIp } from "../services/clientIp";
+import {
+  isHubSearchHttpCacheEnabled,
+  isHubSearchIndexEnabled,
+} from "../services/hubEnv";
 
 const refreshing = new Set<number>();
+
+function setNoStore(set: { headers: Record<string, string | number> }) {
+  set.headers["Cache-Control"] = "no-store";
+  set.headers["CDN-Cache-Control"] = "no-store";
+  set.headers["Cloudflare-CDN-Cache-Control"] = "no-store";
+}
+
+function setEdgeCache(
+  set: { headers: Record<string, string | number> },
+  maxAgeSec: number,
+) {
+  // Browsers / local clients should not sticky-cache; Cloudflare edge may.
+  set.headers["Cache-Control"] = "private, no-store";
+  set.headers["CDN-Cache-Control"] = `public, max-age=${maxAgeSec}`;
+  set.headers["Cloudflare-CDN-Cache-Control"] = `public, max-age=${maxAgeSec}`;
+}
 
 export const searchRoutes = new Elysia({ prefix: "/search" }).get(
   "/",
@@ -17,6 +40,7 @@ export const searchRoutes = new Elysia({ prefix: "/search" }).get(
     const ip = clientIp(request, server);
     if (!allowRateLimit(`search:${ip}`, { limit: 60, windowMs: 60_000 })) {
       set.status = 429;
+      setNoStore(set);
       return { message: "Too many search requests" };
     }
 
@@ -37,8 +61,22 @@ export const searchRoutes = new Elysia({ prefix: "/search" }).get(
       delete params.keys;
     }
 
-    const queryHash = hashQueryParams(params);
-    const { status, row } = await lookupCache(queryHash);
+    if (!isHubSearchIndexEnabled()) {
+      setNoStore(set);
+      return {
+        cached: false,
+        stale: false,
+        cachedAt: null,
+        label: null,
+        total: 0,
+        page,
+        limit,
+        beatmapsetIds: [] as number[],
+        beatmapsets: [] as ReturnType<typeof parseStoredStubs>,
+      };
+    }
+
+    const { status, row } = await lookupCacheByBase(params);
 
     if (row) {
       if (status === "hit-stale" && !refreshing.has(row.id)) {
@@ -54,7 +92,15 @@ export const searchRoutes = new Elysia({ prefix: "/search" }).get(
         }
       }
 
-      const { ids, total } = sliceIds(row.beatmapsetIds, page, limit);
+      const secondary = secondaryFiltersFromQuery(params);
+      const filtered = filterStubs(parseStoredStubs(row.beatmapsetIds), secondary);
+      const { stubs, ids, total } = sliceStubs(filtered, page, limit);
+
+      if (isHubSearchHttpCacheEnabled()) {
+        setEdgeCache(set, edgeCacheTtlSecondsForRow(row));
+      } else {
+        setNoStore(set);
+      }
 
       return {
         cached: true,
@@ -65,9 +111,11 @@ export const searchRoutes = new Elysia({ prefix: "/search" }).get(
         page,
         limit,
         beatmapsetIds: ids,
+        beatmapsets: stubs,
       };
     }
 
+    setNoStore(set);
     return {
       cached: false,
       stale: false,
@@ -77,6 +125,7 @@ export const searchRoutes = new Elysia({ prefix: "/search" }).get(
       page,
       limit,
       beatmapsetIds: [] as number[],
+      beatmapsets: [] as ReturnType<typeof parseStoredStubs>,
     };
   },
   {

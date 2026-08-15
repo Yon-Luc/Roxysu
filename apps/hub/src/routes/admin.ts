@@ -4,32 +4,22 @@ import { db } from "../db";
 import { searchCache } from "@roxysu/db/hub";
 import { requireAdmin } from "../middleware/auth";
 import {
+  baseParamsFromCacheQuery,
   hashQueryParams,
   normalizeRefreshIntervalMinutes,
   refreshCache,
   type CacheQueryParams,
 } from "../services/cache";
+import { hubCacheTtlMs } from "../services/hubEnv";
 
-const TTL_MS = parseInt(process.env.HUB_CACHE_TTL_MS ?? "86400000", 10);
-
-const queryParamsSchema = t.Object(
-  {
-    status: t.Optional(t.String()),
-    mode: t.Optional(t.Numeric()),
-    query: t.Optional(t.String()),
-    min_stars: t.Optional(t.Numeric()),
-    max_stars: t.Optional(t.Numeric()),
-    min_bpm: t.Optional(t.Numeric()),
-    max_bpm: t.Optional(t.Numeric()),
-    min_length: t.Optional(t.Numeric()),
-    max_length: t.Optional(t.Numeric()),
-    creator: t.Optional(t.String()),
-    sort: t.Optional(t.String()),
-    /** Roxysu-only mania keymode filter (not sent to Hinamizawa). */
-    key: t.Optional(t.Numeric({ minimum: 1, maximum: 18 })),
-  },
-  { additionalProperties: true },
-);
+/** Base prime identity only — secondary filters are request-time on GET /search. */
+const queryParamsSchema = t.Object({
+  status: t.Optional(t.String()),
+  mode: t.Optional(t.Numeric()),
+  sort: t.Optional(t.String()),
+  /** Roxysu-only mania keymode filter (not sent to Hinamizawa). */
+  key: t.Optional(t.Numeric({ minimum: 1, maximum: 18 })),
+});
 
 function serializeCacheRow(row: typeof searchCache.$inferSelect) {
   const ageMs = Date.now() - new Date(row.cachedAt).getTime();
@@ -49,7 +39,7 @@ function serializeCacheRow(row: typeof searchCache.$inferSelect) {
     queryParams: JSON.parse(row.queryParams) as CacheQueryParams,
     totalCount: row.totalCount,
     cachedAt: row.cachedAt,
-    stale: ageMs > TTL_MS,
+    stale: ageMs > hubCacheTtlMs(),
     ageMs,
     refreshIntervalMinutes: row.refreshIntervalMinutes,
     lastRefreshAt: row.lastRefreshAt,
@@ -72,7 +62,9 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
   .post(
     "/cache",
     async ({ body }) => {
-      const params = body.query_params as CacheQueryParams;
+      const params = baseParamsFromCacheQuery(
+        body.query_params as CacheQueryParams,
+      );
       const queryHash = hashQueryParams(params);
       const refreshIntervalMinutes = normalizeRefreshIntervalMinutes(
         body.refreshIntervalMinutes,

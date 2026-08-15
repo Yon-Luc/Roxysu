@@ -235,6 +235,27 @@ export function exactKeymodeFromPostFilters(
   return null;
 }
 
+/**
+ * Hub cache eligibility for Download Maps.
+ * Star post-filters are ignored here: they already map to min_stars/max_stars on
+ * mirror params (cache identity). Hub stubs have no per-diff stars, so a Hub hit
+ * trusts Hinamizawa set-level star bounds from the primed entry.
+ *
+ * Returns:
+ * - `{ keymode: null }` — eligible, no key filter
+ * - `{ keymode: N }` — eligible with exact key=N
+ * - `null` — not eligible (other post-filters)
+ */
+export function hubCacheKeymode(
+  filters: OnlinePostFilter[],
+): { keymode: number | null } | null {
+  const nonStar = filters.filter((f) => f.field !== "stars");
+  if (nonStar.length === 0) return { keymode: null };
+  const keymode = exactKeymodeFromPostFilters(nonStar);
+  if (keymode != null) return { keymode };
+  return null;
+}
+
 export type ParseOnlineMirrorQueryOpts = {
   /** Defaults when the QL omits mode/status/sort. */
   defaultMode?: MirrorSearchParams["mode"];

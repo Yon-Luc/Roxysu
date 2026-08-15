@@ -1,7 +1,7 @@
 import type { Db } from "../db-runtime";
 import {
   OnlineQueryError,
-  exactKeymodeFromPostFilters,
+  hubCacheKeymode,
   parseOnlineMirrorQuery,
   setMatchesOnlinePostFilters,
   type OnlineMirrorQuery,
@@ -186,7 +186,7 @@ export async function searchOnlineBeatmapsets(
       };
 
   const postFilters = onlineQuery?.postFilters ?? [];
-  const hubKeymode = exactKeymodeFromPostFilters(postFilters);
+  const hubElig = hubCacheKeymode(postFilters);
   /** Exact key=N can hit a keymode-aware hub cache; other post-filters need overfetch. */
   const needsOverfetch = postFilters.length > 0;
 
@@ -207,11 +207,11 @@ export async function searchOnlineBeatmapsets(
   let pagesScanned = 0;
 
   // Prefer hub search index when the entry is primed (same HUB_URL default as Workshop).
-  // Exact keymode equality is included in the hub query identity.
-  if (postFilters.length === 0 || hubKeymode != null) {
+  // Star post-filters are ignored for eligibility (set-level bounds on mirror params).
+  if (hubElig) {
     const hubHit = await tryHubCachedSearch({
       ...mirrorBase,
-      ...(hubKeymode != null ? { key: hubKeymode } : {}),
+      ...(hubElig.keymode != null ? { key: hubElig.keymode } : {}),
       page,
       limit: MIRROR_PAGE_CAPACITY,
     });
@@ -413,7 +413,7 @@ export async function collectMatchingOnlineBeatmapsets(
   const maxSets = opts.maxSets ?? 10_000;
   const countOnly = opts.countOnly === true;
   const postFilters = opts.onlineQuery.postFilters;
-  const hubKeymode = exactKeymodeFromPostFilters(postFilters);
+  const hubElig = hubCacheKeymode(postFilters);
   const { owned, pending, hide } = excludeOwned
     ? await loadIdsToHideFromDownloadSearch(db)
     : {
@@ -422,12 +422,12 @@ export async function collectMatchingOnlineBeatmapsets(
         hide: new Set<number>(),
       };
 
-  // Same eligibility as paginated Download search: no post-filters, or exact key=N.
-  if (postFilters.length === 0 || hubKeymode != null) {
+  // Same eligibility as paginated Download search (stars ignored; exact key=N ok).
+  if (hubElig) {
     const hub = await tryFetchAllHubCachedIds(
       {
         ...opts.onlineQuery.mirrorParams,
-        ...(hubKeymode != null ? { key: hubKeymode } : {}),
+        ...(hubElig.keymode != null ? { key: hubElig.keymode } : {}),
       },
       {
         shouldStop: opts.shouldStop,

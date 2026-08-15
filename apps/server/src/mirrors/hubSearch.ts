@@ -39,8 +39,7 @@ export function mirrorParamsToHubQuery(
   if (params.minLength != null) out.min_length = params.minLength;
   if (params.maxLength != null) out.max_length = params.maxLength;
   if (params.creator?.trim()) out.creator = params.creator.trim();
-  // Do not forward `sort`: Hub admin primes omit it, and Download Maps always
-  // defaults to ranked_desc — including sort makes GET /search a cache miss.
+  if (params.sort) out.sort = params.sort;
   if (params.key != null && Number.isSafeInteger(params.key) && params.key > 0) {
     out.key = params.key;
   }

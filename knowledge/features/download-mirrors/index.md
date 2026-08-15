@@ -27,7 +27,7 @@ Fetch beatmap sets via configured mirrors (hinai / nerinyan / osu.direct) from t
 4. In-memory locks (`job.running`, `openingInProgress`) are cleared on server startup via `clearStuckMirrorBatchLocks()` (same pattern as `clearStuckRealmReaderPause`).
 5. A second **Stop** while status is already `stopping` force-clears the lock so the UI cannot stay stuck if a download slot ignored cancellation.
 6. Download search QL accepts glued mode filters (`mode=m`, `mode=mania`) and short aliases (`m`, `o`, `t`, `c`, `f`) — same as hub browse — so they are not mistaken for free-text mirror `query`.
-7. Paginated search, **Count all missing**, and **Download all missing** prefer a primed Hub search cache when the query has no post-filters or an exact `key=N` only (`tryHubCachedSearch` / `tryFetchAllHubCachedIds`). Hub lookup omits `sort` so it matches admin-primed entries (admin UI does not store sort). Cache miss or Hub down falls back to the live mirror crawl. Owned/pending subtraction is an ID-set intersect against local hide ids — not `total − count(owned mania ranked)`.
+7. Paginated search, **Count all missing**, and **Download all missing** prefer a primed Hub search cache when `hubCacheKeymode(postFilters)` allows it: no non-star post-filters, or a single exact `key=N` (star bounds may also be present). Star post-filters are ignored for eligibility — they already map to `min_stars`/`max_stars` on the Hub query identity (Hinamizawa set-level filter during prime); Hub stubs have no per-diff stars. Lookups forward `sort` via `mirrorParamsToHubQuery` so they match admin primes (admin UI defaults to Recently ranked / `ranked_desc`). Cache miss or Hub down falls back to the live mirror crawl. Owned/pending subtraction is an ID-set intersect against local hide ids — not `total − count(owned mania ranked)`.
 
 ## Important symbols
 
@@ -35,6 +35,8 @@ Fetch beatmap sets via configured mirrors (hinai / nerinyan / osu.direct) from t
 - `apps/server/src/mirrors/batchJob.ts:clearStuckMirrorBatchLocks()`
 - `apps/server/src/mirrors/batchJob.ts:stopMirrorBatchJob()`
 - `apps/server/src/mirrors/hubSearch.ts:tryFetchAllHubCachedIds()`
+- `apps/server/src/mirrors/hubSearch.ts:mirrorParamsToHubQuery()`
+- `apps/server/src/mirrors/onlineQuery.ts:hubCacheKeymode()`
 - `apps/server/src/mirrors/searchOnline.ts:collectMatchingOnlineBeatmapsets()`
 - `apps/server/public/features/download/*`
 

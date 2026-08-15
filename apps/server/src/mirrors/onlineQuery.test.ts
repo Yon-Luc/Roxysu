@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   OnlineQueryError,
   exactKeymodeFromPostFilters,
+  hubCacheKeymode,
   parseOnlineMirrorQuery,
   setMatchesOnlinePostFilters,
 } from "./onlineQuery";
@@ -170,5 +171,40 @@ describe("exactKeymodeFromPostFilters", () => {
 
   test("returns null for empty post-filters", () => {
     expect(exactKeymodeFromPostFilters([])).toBeNull();
+  });
+});
+
+describe("hubCacheKeymode", () => {
+  test("empty post-filters are eligible without key", () => {
+    expect(hubCacheKeymode([])).toEqual({ keymode: null });
+  });
+
+  test("exact key alone is eligible", () => {
+    const q = parseOnlineMirrorQuery("key=7 status=r");
+    expect(hubCacheKeymode(q.postFilters)).toEqual({ keymode: 7 });
+  });
+
+  test("key plus stars is eligible (stars are cache identity only)", () => {
+    const q = parseOnlineMirrorQuery("key=7 stars:5..6 status=r");
+    expect(hubCacheKeymode(q.postFilters)).toEqual({ keymode: 7 });
+  });
+
+  test("stars alone are eligible without key", () => {
+    const q = parseOnlineMirrorQuery("stars>=5 status=r");
+    expect(hubCacheKeymode(q.postFilters)).toEqual({ keymode: null });
+  });
+
+  test("key range is not eligible", () => {
+    const q = parseOnlineMirrorQuery("key>=4 key<=7 status=r");
+    expect(hubCacheKeymode(q.postFilters)).toBeNull();
+  });
+
+  test("non-star non-exact-key filters are not eligible", () => {
+    expect(
+      hubCacheKeymode([
+        { field: "keys", op: "=", value: 7 },
+        { field: "keys", op: "=", value: 4 },
+      ]),
+    ).toBeNull();
   });
 });

@@ -492,6 +492,10 @@ export function createHubAdminCache(
       sort?: string;
       min_stars?: number;
       max_stars?: number;
+      min_bpm?: number;
+      max_bpm?: number;
+      min_length?: number;
+      max_length?: number;
       creator?: string;
     };
   },

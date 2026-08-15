@@ -27,18 +27,21 @@ describe("mirrorParamsToHubQuery", () => {
     });
   });
 
-  test("omits sort so Download defaults still hit admin-primed caches", () => {
+  test("forwards sort so Recently ranked matches admin primes", () => {
     expect(
       mirrorParamsToHubQuery({
         mode: "mania",
         status: "ranked",
         sort: "ranked_desc",
         key: 7,
+        minStars: 5,
       }),
     ).toEqual({
       mode: 3,
       status: "ranked",
+      sort: "ranked_desc",
       key: 7,
+      min_stars: 5,
     });
   });
 });

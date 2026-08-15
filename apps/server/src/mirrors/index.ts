@@ -41,6 +41,8 @@ export {
   OnlineQueryError,
   parseOnlineMirrorQuery,
   setMatchesOnlinePostFilters,
+  exactKeymodeFromPostFilters,
+  hubCacheKeymode,
   type OnlineMirrorQuery,
   type OnlinePostFilter,
 } from "./onlineQuery";

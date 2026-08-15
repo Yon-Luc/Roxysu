@@ -72,10 +72,12 @@ Networked collaboration / discovery — not required for offline practice analyt
 ## Important symbols
 
 - `apps/hub/src/*`
-- `apps/hub/src/services/cache.ts:hashQueryParams()` — SHA-256 (32 hex) hub search index identity; boot rehashes legacy keys
+- `apps/hub/src/services/cache.ts:hashQueryParams()` — SHA-256 (32 hex) hub search index identity; boot rehashes legacy keys. Identity includes admin-primed `query_params` (mode, status, sort, stars, query, creator, bpm/length, key). Download Maps lookups must send the same fields — including `sort` — via `mirrorParamsToHubQuery`.
 - `apps/hub/src/services/hinamizawa.ts:fetchAllBeatmapsetIds()` — cache refresh crawls Hinamizawa search pages; optional `keymode` keeps sets using embedded `beatmaps[].cs` (same as Download Maps). Do not N+1 `/s/{id}` for key filter (429s silently truncated Ranked 7K to ~page 26)
+- `apps/server/public/features/hub/HubAdminCachePage.tsx` — admin prime UI: sort (default `ranked_desc` / Recently ranked), mode, status, stars, query, creator, bpm/length, keys, frequency
 - `apps/server/src/hubUrl.ts:resolveHubBaseUrl()` — shared Hub URL for Workshop, OAuth redeem, and Download Maps (`HUB_URL`; localhost in `bun run dev`, `https://roxysu-api.yonx.app` when `ROXYSU_DESKTOP=1`)
 - `apps/server/public/lib/hub.ts` — runtime Workshop client (clears JWT on Hub 401; delete + export). `packages/hub-client` is the Node Eden client and is not used in the browser
+- `apps/server/src/mirrors/hubSearch.ts:mirrorParamsToHubQuery()` — maps Download mirror params to Hub GET `/search` (forwards `sort`, star bounds, key, etc.)
 - `apps/server/src/routes/system.ts` — client app OAuth handoff helpers
 - Workshop detail: owner or admin can edit/delete; Save calls `GET /collections/:id/export` so `downloadCount` increments
 - Browse mode chip (`q=mode=m`) matches `dominantMode` **or** the corresponding Hub tag (`mania` / `std` / `ctb` / `taiko`)

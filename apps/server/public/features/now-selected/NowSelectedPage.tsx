@@ -48,7 +48,10 @@ function isManiaBeatmap(
   );
 }
 
-function liveBackgroundSources(data: TosuLive | undefined): string[] {
+/** Main live query omits `play` (separate subscription) to avoid extra re-renders. */
+type TosuLiveView = Omit<TosuLive, "play">;
+
+function liveBackgroundSources(data: TosuLiveView | undefined): string[] {
   if (!data?.beatmap) return [];
   const urls: string[] = [];
   const checksum = data.beatmap.checksum;
@@ -65,7 +68,7 @@ function liveBackgroundSources(data: TosuLive | undefined): string[] {
 
 function statusLabel(
   dict: ReturnType<typeof useAppDict>["dict"],
-  data: TosuLive | undefined,
+  data: TosuLiveView | undefined,
 ): { text: string; className: string } {
   if (!data || !data.enabled) {
     return {

@@ -531,6 +531,7 @@
     "statPbs": "PBs",
     "statDuration": "Duration",
     "playsHeading": "Plays",
+    "loadMore": "Load more",
     "noPlaysLive": "No plays yet — new scores will show up here after sync.",
     "noPlaysDone": "No plays in this session.",
     "untitled": "Untitled",

@@ -327,9 +327,10 @@ export function HubDetailPage({ id }: { id: string }) {
     mutationFn: async () => {
       const c = detailQuery.data;
       if (!c) throw new Error("Collection not loaded");
+      const fromIds = c.beatmapsetIds ?? [];
       const beatmapsetIds =
-        c.beatmapsetIds?.length > 0
-          ? c.beatmapsetIds
+        fromIds.length > 0
+          ? fromIds
           : c.maps.map((m) => m.beatmapsetId);
       if (!beatmapsetIds.length) throw new Error("Collection has no maps");
 

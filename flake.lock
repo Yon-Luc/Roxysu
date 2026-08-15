@@ -3,8 +3,8 @@
     "linux-resources": {
       "flake": false,
       "locked": {
-        "lastModified": 1786777288,
-        "narHash": "sha256-zZuKaW7Lb17QeADs3MfSn4GowDUMnTeTRdEpjY/TtQM=",
+        "lastModified": 1786782674,
+        "narHash": "sha256-e0yRu762gZy2UCzH9qzgHSqEEXJWChYP6jfrqUuptyQ=",
         "type": "tarball",
         "url": "https://github.com/Yon-Luc/Roxysu/releases/latest/download/Roxysu-linux-x64-resources.tar.gz"
       },

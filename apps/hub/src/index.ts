@@ -4,7 +4,7 @@ import { cron } from "@elysiajs/cron";
 import { runMigrations } from "./db";
 import { resolveJwtSecret } from "./services/jwtSecret";
 import { resolveCorsOrigin } from "./services/hubEnv";
-import { rehashSearchCacheKeys } from "./services/cache";
+import { migrateBlobsToRows, rehashSearchCacheKeys } from "./services/cache";
 import { tickSearchCacheRefreshes } from "./services/cacheRefreshCron";
 import { authRoutes } from "./routes/auth";
 import { collectionRoutes } from "./routes/collections";
@@ -18,6 +18,7 @@ const corsOrigin = resolveCorsOrigin();
 // Run DB migrations before the server starts
 runMigrations();
 await rehashSearchCacheKeys();
+await migrateBlobsToRows();
 
 const PORT = parseInt(process.env.PORT ?? "4322", 10);
 

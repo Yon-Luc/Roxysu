@@ -3,6 +3,8 @@ import type { MirrorSearchParams, OnlineBeatmapSet } from "./search";
 import { MIRROR_USER_AGENT } from "./userAgent";
 
 const HUB_SEARCH_TIMEOUT_MS = 8_000;
+const HUB_SEARCH_ALL_TIMEOUT_MS = 20_000;
+const HUB_CIRCUIT_COOLDOWN_MS = 30_000;
 
 /** Enriched stub from Hub GET /search `beatmapsets`. */
 export type HubSearchBeatmapset = {
@@ -38,6 +40,28 @@ export type HubSearchCacheResult = {
   beatmapsets: HubSearchBeatmapset[];
   label: string | null;
 };
+
+let hubCircuitOpenUntil = 0;
+
+export function resetHubSearchCircuit(): void {
+  hubCircuitOpenUntil = 0;
+}
+
+export function isHubSearchCircuitOpen(): boolean {
+  return Date.now() < hubCircuitOpenUntil;
+}
+
+function noteHubSuccess(): void {
+  hubCircuitOpenUntil = 0;
+}
+
+function noteHubFailure(): void {
+  hubCircuitOpenUntil = Date.now() + HUB_CIRCUIT_COOLDOWN_MS;
+}
+
+function isServerFailure(status: number): boolean {
+  return status >= 500;
+}
 
 /** Map local mirror search params to hub/hinamizawa query string fields. */
 export function mirrorParamsToHubQuery(
@@ -79,6 +103,8 @@ export function mirrorParamsToHubQuery(
 export async function tryHubCachedSearch(
   params: MirrorSearchParams & { page?: number; limit?: number; key?: number },
 ): Promise<HubSearchCacheResult | null> {
+  if (isHubSearchCircuitOpen()) return null;
+
   const base = resolveHubBaseUrl();
 
   const query = mirrorParamsToHubQuery(params);
@@ -97,7 +123,10 @@ export async function tryHubCachedSearch(
       },
       signal: AbortSignal.timeout(HUB_SEARCH_TIMEOUT_MS),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      if (isServerFailure(res.status)) noteHubFailure();
+      return null;
+    }
     const body = (await res.json()) as {
       cached?: boolean;
       stale?: boolean;
@@ -109,6 +138,7 @@ export async function tryHubCachedSearch(
       label?: string | null;
     };
     if (!body.cached || !Array.isArray(body.beatmapsetIds)) return null;
+    noteHubSuccess();
     const beatmapsets = Array.isArray(body.beatmapsets) ? body.beatmapsets : [];
     return {
       cached: true,
@@ -121,6 +151,7 @@ export async function tryHubCachedSearch(
       label: body.label ?? null,
     };
   } catch {
+    noteHubFailure();
     return null;
   }
 }
@@ -189,7 +220,6 @@ export function hubStubToOnlineSet(set: HubSearchBeatmapset): OnlineBeatmapSet {
 
 /** Hub GET /search limit cap (must match Hub route schema). */
 export const HUB_SEARCH_PAGE_LIMIT = 100;
-const HUB_FETCH_PARALLEL = 8;
 
 export type HubCachedIdList = {
   beatmapsetIds: number[];
@@ -203,8 +233,29 @@ export type HubCachedIdList = {
   truncated: boolean;
 };
 
+function compactToOnlineSet(row: {
+  id: number;
+  artist?: string;
+  title?: string;
+}): OnlineBeatmapSet {
+  return {
+    id: row.id,
+    artist: row.artist ?? "",
+    title: row.title?.trim() ? row.title : `Beatmapset ${row.id}`,
+    creator: "",
+    status: "",
+    bpm: null,
+    favouriteCount: 0,
+    playCount: 0,
+    hasVideo: false,
+    rankedDate: null,
+    lengthSeconds: null,
+    beatmaps: [],
+  };
+}
+
 /**
- * Pull every beatmapset id from a primed hub search cache entry.
+ * Pull every matching beatmapset from a primed hub search index in one dump.
  * Returns null on miss / error so callers fall back to the live mirror crawl.
  */
 export async function tryFetchAllHubCachedIds(
@@ -215,81 +266,72 @@ export async function tryFetchAllHubCachedIds(
     maxPages?: number;
   },
 ): Promise<HubCachedIdList | null> {
+  if (opts?.shouldStop?.()) {
+    return {
+      beatmapsetIds: [],
+      sets: [],
+      total: 0,
+      stale: false,
+      label: null,
+      pagesFetched: 0,
+      truncated: true,
+    };
+  }
+  if (isHubSearchCircuitOpen()) return null;
+
   const maxPages = Math.max(1, opts?.maxPages ?? 10_000);
-  const first = await tryHubCachedSearch({
-    ...params,
-    page: 0,
-    limit: HUB_SEARCH_PAGE_LIMIT,
-  });
-  if (!first) return null;
+  const maxSets = maxPages * HUB_SEARCH_PAGE_LIMIT;
+  const base = resolveHubBaseUrl();
+  const query = mirrorParamsToHubQuery(params);
+  const url = new URL(`${base}/search/all`);
+  for (const [k, v] of Object.entries(query)) {
+    url.searchParams.set(k, String(v));
+  }
+  url.searchParams.set("fields", "compact");
+  url.searchParams.set("max", String(Math.min(maxSets, 100_000)));
 
-  const total = first.total;
-  const ids: number[] = [...first.beatmapsetIds];
-  const sets: OnlineBeatmapSet[] = hubResultToOnlineSets(first);
-  let pagesFetched = 1;
-  const totalPages = Math.max(1, Math.ceil(total / HUB_SEARCH_PAGE_LIMIT));
-  const pagesToFetch = Math.min(totalPages, maxPages);
+  try {
+    const res = await fetch(url, {
+      headers: {
+        accept: "application/json",
+        "user-agent": MIRROR_USER_AGENT,
+      },
+      signal: AbortSignal.timeout(HUB_SEARCH_ALL_TIMEOUT_MS),
+    });
+    if (!res.ok) {
+      if (isServerFailure(res.status)) noteHubFailure();
+      return null;
+    }
+    const body = (await res.json()) as {
+      cached?: boolean;
+      stale?: boolean;
+      total?: number;
+      truncated?: boolean;
+      beatmapsetIds?: number[];
+      beatmapsets?: Array<{ id: number; artist?: string; title?: string }>;
+      label?: string | null;
+    };
+    if (!body.cached || !Array.isArray(body.beatmapsetIds)) return null;
+    noteHubSuccess();
 
-  if (pagesToFetch <= 1 || ids.length >= total) {
+    const ids = body.beatmapsetIds;
+    const compact = Array.isArray(body.beatmapsets) ? body.beatmapsets : [];
+    const sets =
+      compact.length > 0
+        ? compact.map((row) => compactToOnlineSet(row))
+        : hubIdsToStubSets(ids);
+
     return {
       beatmapsetIds: ids,
       sets,
-      total,
-      stale: first.stale,
-      label: first.label,
-      pagesFetched,
-      truncated: totalPages > maxPages && ids.length < total,
+      total: body.total ?? ids.length,
+      stale: !!body.stale,
+      label: body.label ?? null,
+      pagesFetched: 1,
+      truncated: body.truncated === true || ids.length < (body.total ?? ids.length),
     };
+  } catch {
+    noteHubFailure();
+    return null;
   }
-
-  for (let page = 1; page < pagesToFetch; page += HUB_FETCH_PARALLEL) {
-    if (opts?.shouldStop?.()) {
-      return {
-        beatmapsetIds: ids,
-        sets,
-        total,
-        stale: first.stale,
-        label: first.label,
-        pagesFetched,
-        truncated: true,
-      };
-    }
-
-    const batchPages: number[] = [];
-    for (
-      let p = page;
-      p < Math.min(page + HUB_FETCH_PARALLEL, pagesToFetch);
-      p += 1
-    ) {
-      batchPages.push(p);
-    }
-
-    const results = await Promise.all(
-      batchPages.map((p) =>
-        tryHubCachedSearch({
-          ...params,
-          page: p,
-          limit: HUB_SEARCH_PAGE_LIMIT,
-        }),
-      ),
-    );
-
-    for (const hit of results) {
-      // Incomplete cache read → force mirror fallback rather than a wrong count.
-      if (!hit) return null;
-      pagesFetched += 1;
-      ids.push(...hit.beatmapsetIds);
-      sets.push(...hubResultToOnlineSets(hit));
-    }
-  }
-
-  return {
-    beatmapsetIds: ids,
-    sets,
-    total,
-    stale: first.stale,
-    label: first.label,
-    pagesFetched,
-    truncated: totalPages > maxPages && ids.length < total,
-  };
 }

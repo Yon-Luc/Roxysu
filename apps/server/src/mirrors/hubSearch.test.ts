@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
+  isHubSearchCircuitOpen,
   mirrorParamsToHubQuery,
+  resetHubSearchCircuit,
   tryFetchAllHubCachedIds,
   tryHubCachedSearch,
 } from "./hubSearch";
@@ -10,6 +12,7 @@ const originalFetch = globalThis.fetch;
 afterEach(() => {
   delete process.env.HUB_URL;
   globalThis.fetch = originalFetch;
+  resetHubSearchCircuit();
 });
 
 describe("mirrorParamsToHubQuery", () => {
@@ -172,26 +175,25 @@ describe("tryHubCachedSearch", () => {
 });
 
 describe("tryFetchAllHubCachedIds", () => {
-  test("paginates hub pages into one id list", async () => {
+  test("loads the hub dump in one request", async () => {
     process.env.HUB_URL = "http://hub.test";
-    const pages = new Map<number, number[]>([
-      [0, Array.from({ length: 100 }, (_, i) => i + 1)],
-      [1, Array.from({ length: 50 }, (_, i) => i + 101)],
-    ]);
     const requested: string[] = [];
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = String(input);
       requested.push(url);
-      const page = Number(new URL(url).searchParams.get("page") ?? 0);
-      const ids = pages.get(page) ?? [];
+      const ids = Array.from({ length: 150 }, (_, i) => i + 1);
       return new Response(
         JSON.stringify({
           cached: true,
           stale: false,
           total: 150,
-          page,
-          limit: 100,
+          truncated: false,
           beatmapsetIds: ids,
+          beatmapsets: ids.map((id) => ({
+            id,
+            artist: "A",
+            title: `T${id}`,
+          })),
           label: "Ranked 7K",
         }),
         { status: 200, headers: { "content-type": "application/json" } },
@@ -209,32 +211,21 @@ describe("tryFetchAllHubCachedIds", () => {
     expect(hit!.beatmapsetIds).toHaveLength(150);
     expect(hit!.beatmapsetIds[0]).toBe(1);
     expect(hit!.beatmapsetIds[149]).toBe(150);
-    expect(hit!.pagesFetched).toBe(2);
+    expect(hit!.sets[0]!.title).toBe("T1");
+    expect(hit!.pagesFetched).toBe(1);
     expect(hit!.truncated).toBe(false);
-    expect(requested.some((u) => u.includes("page=1"))).toBe(true);
+    expect(requested).toHaveLength(1);
+    expect(requested[0]!).toContain("/search/all");
+    expect(requested[0]!).toContain("fields=compact");
   });
 
-  test("returns null when a later page misses", async () => {
+  test("returns null when the dump misses", async () => {
     process.env.HUB_URL = "http://hub.test";
-    globalThis.fetch = (async (input: RequestInfo | URL) => {
-      const page = Number(new URL(String(input)).searchParams.get("page") ?? 0);
-      if (page === 0) {
-        return new Response(
-          JSON.stringify({
-            cached: true,
-            total: 200,
-            page: 0,
-            limit: 100,
-            beatmapsetIds: Array.from({ length: 100 }, (_, i) => i + 1),
-          }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
-      }
-      return new Response(
+    globalThis.fetch = (async () =>
+      new Response(
         JSON.stringify({ cached: false, beatmapsetIds: [] }),
         { status: 200, headers: { "content-type": "application/json" } },
-      );
-    }) as unknown as typeof fetch;
+      )) as unknown as typeof fetch;
 
     expect(
       await tryFetchAllHubCachedIds({
@@ -243,5 +234,25 @@ describe("tryFetchAllHubCachedIds", () => {
         key: 7,
       }),
     ).toBeNull();
+  });
+});
+
+describe("hub search circuit", () => {
+  test("opens after a network failure and skips the next lookup", async () => {
+    process.env.HUB_URL = "http://hub.test";
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls += 1;
+      throw new Error("offline");
+    }) as unknown as typeof fetch;
+
+    expect(
+      await tryHubCachedSearch({ mode: "mania", status: "ranked", key: 7 }),
+    ).toBeNull();
+    expect(isHubSearchCircuitOpen()).toBe(true);
+    expect(
+      await tryHubCachedSearch({ mode: "mania", status: "ranked", key: 7 }),
+    ).toBeNull();
+    expect(calls).toBe(1);
   });
 });

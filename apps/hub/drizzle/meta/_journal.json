@@ -29,6 +29,13 @@
       "when": 1786700000000,
       "tag": "0003_collection_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1786750000000,
+      "tag": "0004_search_index_rows",
+      "breakpoints": true
     }
   ]
 }

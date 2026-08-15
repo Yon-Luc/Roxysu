@@ -11,6 +11,7 @@ touches:
   - apps/hub/src/routes/collections.ts
   - apps/hub/src/routes/search.ts
   - apps/hub/src/services/cache.ts
+  - apps/hub/src/services/searchIndex.ts
   - apps/hub/src/services/hinamizawa.ts
   - apps/hub/src/services/hubSearchQuery.ts
   - apps/server/public/features/hub
@@ -70,8 +71,8 @@ Networked collaboration / discovery — not required for offline practice analyt
 9. Public `GET /search` returns the hub search index only. Cache miss is empty (`cached: false`); it does not live-proxy Hinamizawa.
    **Enforced by:** `apps/hub/src/routes/search.ts` — status: verified
 
-10. Hub search index rows are keyed by **base identity** only (`mode`, `status`, `key`, `sort`). Secondary filters (`min_stars`/`max_stars`, bpm/length, `query`, `creator`) are applied in memory against enriched stubs at request time.
-    **Enforced by:** `apps/hub/src/services/cache.ts:hashQueryParams()` / `filterStubs()` — status: verified
+10. Hub search index primes are keyed by **base identity** only (`mode`, `status`, `key`, `sort`). Secondary filters (`min_stars`/`max_stars`, bpm/length, `query`, `creator`) are applied in SQL against `search_index_sets` / `search_index_diffs` at request time. Star match is any difficulty in range.
+    **Enforced by:** `apps/hub/src/services/cache.ts:hashQueryParams()` / `apps/hub/src/services/searchIndex.ts` — status: verified
 
 11. Kill switches (env, read per request): `HUB_SEARCH_INDEX=0` forces miss; `HUB_SEARCH_HTTP_CACHE=0` forces `Cache-Control`/`CDN-Cache-Control: no-store` (stops new Cloudflare edge entries; does not flush existing HITs — bypass the CF Cache Rule for that).
     **Enforced by:** `apps/hub/src/services/hubEnv.ts` + `apps/hub/src/routes/search.ts` — status: verified
@@ -79,14 +80,15 @@ Networked collaboration / discovery — not required for offline practice analyt
 ## Important symbols
 
 - `apps/hub/src/*`
-- `apps/hub/src/services/cache.ts:hashQueryParams()` — SHA-256 (32 hex) of **base** params only; boot rehashes/strips secondary fields from stored `query_params`. Download Maps still forwards secondary filters + `sort` via `mirrorParamsToHubQuery`; Hub looks up by base then filters stubs.
-- `apps/hub/src/services/cache.ts:filterStubs()` / `parseStoredStubs()` — dual-read legacy `number[]` or enriched stub JSON; secondary filter at request time
+- `apps/hub/src/services/cache.ts:hashQueryParams()` — SHA-256 (32 hex) of **base** params only; boot rehashes/strips secondary fields from stored `query_params`. Download Maps still forwards secondary filters + `sort` via `mirrorParamsToHubQuery`; Hub looks up by base then SQL-filters index rows.
+- `apps/hub/src/services/searchIndex.ts` — persist stubs as rows; `GET /search` pages in SQL; `GET /search/all` dumps ids/compact/full. Boot `migrateBlobsToRows()` lifts leftover JSON blobs.
+- `apps/hub/src/services/cache.ts:parseStoredStubs()` — dual-read leftover blob JSON for one-shot migration only
 - `apps/hub/src/services/hinamizawa.ts:fetchAllBeatmapsetStubs()` — cache refresh crawls Hinamizawa search pages into enriched stubs; optional `keymode` keeps sets using embedded `beatmaps[].cs`. Do not N+1 `/s/{id}` for key filter
 - `apps/hub/src/services/hubEnv.ts:isHubSearchIndexEnabled()` / `isHubSearchHttpCacheEnabled()` — prod kill switches
 - `apps/server/public/features/hub/HubAdminCachePage.tsx` — admin prime UI: base fields only (mode, status, keys, sort, frequency); secondary filters are runtime on Download Maps
 - `apps/server/src/hubUrl.ts:resolveHubBaseUrl()` — shared Hub URL for Workshop, OAuth redeem, and Download Maps (`HUB_URL`; localhost in `bun run dev`, `https://roxysu-api.yonx.app` when `ROXYSU_DESKTOP=1`)
 - `apps/server/public/lib/hub.ts` — runtime Workshop client (clears JWT on Hub 401; delete + export). `packages/hub-client` is the Node Eden client and is not used in the browser
-- `apps/server/src/mirrors/hubSearch.ts:mirrorParamsToHubQuery()` / `hubResultToOnlineSets()` — maps Download params to Hub GET `/search`; prefers enriched `beatmapsets`
+- `apps/server/src/mirrors/hubSearch.ts:mirrorParamsToHubQuery()` / `tryFetchAllHubCachedIds()` — maps Download params to Hub GET `/search` (page) or `/search/all` (count/download-all). Circuit breaker skips Hub for 30s after timeout/5xx.
 - `apps/server/src/routes/system.ts` — client app OAuth handoff helpers
 - Workshop detail: owner or admin can edit/delete; Save calls `GET /collections/:id/export` so `downloadCount` increments
 - Browse mode chip (`q=mode=m`) matches `dominantMode` **or** the corresponding Hub tag (`mania` / `std` / `ctb` / `taiko`)

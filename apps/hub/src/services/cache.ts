@@ -12,6 +12,10 @@ import {
   hubCacheTtlMs,
   hubSearchEdgeCacheMaxAgeSec,
 } from "./hubEnv";
+import {
+  cacheHasIndexRows,
+  replaceSetsForCache,
+} from "./searchIndex";
 
 const KEY_FILTER_CONCURRENCY = 8;
 const UA = "roxysu-hub/0.1 (+https://github.com/Yon-Luc/Roxysu)";
@@ -235,16 +239,42 @@ export function cacheKeymode(params: CacheQueryParams): number | null {
   return n;
 }
 
+export const searchCacheMetaColumns = {
+  id: searchCache.id,
+  queryHash: searchCache.queryHash,
+  queryParams: searchCache.queryParams,
+  totalCount: searchCache.totalCount,
+  label: searchCache.label,
+  refreshIntervalMinutes: searchCache.refreshIntervalMinutes,
+  lastRefreshAt: searchCache.lastRefreshAt,
+  refreshError: searchCache.refreshError,
+  refreshBackoffUntil: searchCache.refreshBackoffUntil,
+  cachedAt: searchCache.cachedAt,
+} as const;
+
+export type SearchCacheMeta = {
+  id: number;
+  queryHash: string;
+  queryParams: string;
+  totalCount: number;
+  label: string;
+  refreshIntervalMinutes: number | null;
+  lastRefreshAt: Date | null;
+  refreshError: string | null;
+  refreshBackoffUntil: Date | null;
+  cachedAt: Date;
+};
+
 export type CacheStatus = "hit-fresh" | "hit-stale" | "miss";
 
 export interface CacheLookupResult {
   status: CacheStatus;
-  row: typeof searchCache.$inferSelect | null;
+  row: SearchCacheMeta | null;
 }
 
 export async function lookupCache(queryHash: string): Promise<CacheLookupResult> {
   const row = await db
-    .select()
+    .select(searchCacheMetaColumns)
     .from(searchCache)
     .where(eq(searchCache.queryHash, queryHash))
     .get();
@@ -553,7 +583,7 @@ export async function filterSetIdsByKeymode(
  */
 export async function refreshCache(cacheId: number): Promise<void> {
   const entry = await db
-    .select()
+    .select(searchCacheMetaColumns)
     .from(searchCache)
     .where(eq(searchCache.id, cacheId))
     .get();
@@ -585,20 +615,22 @@ export async function refreshCache(cacheId: number): Promise<void> {
 
   const stubs = result.stubs.map(stubFromSearchV2);
   const now = new Date();
-  await db
-    .update(searchCache)
-    .set({
-      beatmapsetIds: JSON.stringify(stubs),
-      totalCount: stubs.length,
-      cachedAt: now,
-      lastRefreshAt: now,
-      refreshError: null,
-      refreshBackoffUntil: null,
-      // Keep stored params as base-only identity.
-      queryParams: JSON.stringify(params),
-      queryHash: hashQueryParams(params),
-    })
-    .where(eq(searchCache.id, cacheId));
+  await db.transaction(async (tx) => {
+    await replaceSetsForCache(tx, cacheId, stubs);
+    await tx
+      .update(searchCache)
+      .set({
+        beatmapsetIds: "[]",
+        totalCount: stubs.length,
+        cachedAt: now,
+        lastRefreshAt: now,
+        refreshError: null,
+        refreshBackoffUntil: null,
+        queryParams: JSON.stringify(params),
+        queryHash: hashQueryParams(params),
+      })
+      .where(eq(searchCache.id, cacheId));
+  });
 
   console.log(
     `[cache] Done — ${stubs.length} stubs stored` +
@@ -606,6 +638,42 @@ export async function refreshCache(cacheId: number): Promise<void> {
         ? ` (${keymode}K from ${result.totalCount} ranked/loved catalogue)`
         : ` across ${result.pages} pages`),
   );
+}
+
+/** One-shot: lift legacy `beatmapset_ids` JSON into search index rows. */
+export async function migrateBlobsToRows(): Promise<number> {
+  const rows = await db
+    .select({
+      id: searchCache.id,
+      beatmapsetIds: searchCache.beatmapsetIds,
+    })
+    .from(searchCache);
+
+  let migrated = 0;
+  for (const row of rows) {
+    if (!row.beatmapsetIds || row.beatmapsetIds === "[]") continue;
+    if (await cacheHasIndexRows(db, row.id)) {
+      await db
+        .update(searchCache)
+        .set({ beatmapsetIds: "[]" })
+        .where(eq(searchCache.id, row.id));
+      continue;
+    }
+    const stubs = parseStoredStubs(row.beatmapsetIds);
+    if (stubs.length === 0) continue;
+    await db.transaction(async (tx) => {
+      await replaceSetsForCache(tx, row.id, stubs);
+      await tx
+        .update(searchCache)
+        .set({ beatmapsetIds: "[]" })
+        .where(eq(searchCache.id, row.id));
+    });
+    migrated += 1;
+  }
+  if (migrated > 0) {
+    console.log(`[cache] Migrated ${migrated} search_cache blobs into index rows`);
+  }
+  return migrated;
 }
 
 /**

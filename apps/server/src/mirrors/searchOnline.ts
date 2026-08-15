@@ -190,13 +190,13 @@ export async function searchOnlineBeatmapsets(
   /** Exact key=N can hit a keymode-aware hub cache; other post-filters need overfetch. */
   const needsOverfetch = postFilters.length > 0;
 
-  const { owned, pending, hide } = excludeOwned
-    ? await loadIdsToHideFromDownloadSearch(db)
-    : {
+  const hidePromise = excludeOwned
+    ? loadIdsToHideFromDownloadSearch(db)
+    : Promise.resolve({
         owned: new Set<number>(),
         pending: new Set<number>(),
         hide: new Set<number>(),
-      };
+      });
 
   const matched: OnlineBeatmapSet[] = [];
   const seen = new Set<number>();
@@ -207,31 +207,55 @@ export async function searchOnlineBeatmapsets(
   let pagesScanned = 0;
 
   // Prefer hub search index when the entry is primed (same HUB_URL default as Workshop).
-  // Hub applies secondary filters (stars/bpm/name/…) against enriched stubs.
+  // Hub applies secondary filters (stars/bpm/name/…) against index rows.
   if (hubElig) {
-    const hubHit = await tryHubCachedSearch({
+    const hubParams = {
       ...mirrorBase,
       ...(hubElig.keymode != null ? { key: hubElig.keymode } : {}),
-      page,
       limit: MIRROR_PAGE_CAPACITY,
-    });
-    if (hubHit) {
-      lastRawCount = hubHit.beatmapsetIds.length;
-      mirrorHasMore =
-        (hubHit.page + 1) * hubHit.limit < hubHit.total ||
-        hubHit.beatmapsetIds.length >= MIRROR_PAGE_CAPACITY;
-      for (const set of hubResultToOnlineSets(hubHit)) {
-        if (seen.has(set.id)) continue;
-        seen.add(set.id);
-        if (excludeOwned && hide.has(set.id)) {
-          if (owned.has(set.id)) ownedSkipped += 1;
-          else if (pending.has(set.id)) pendingSkipped += 1;
-          continue;
+    };
+    const [hideResult, firstHit] = await Promise.all([
+      hidePromise,
+      tryHubCachedSearch({ ...hubParams, page }),
+    ]);
+    const { owned, pending, hide } = hideResult;
+
+    if (firstHit) {
+      const consume = (hit: NonNullable<typeof firstHit>): boolean => {
+        lastRawCount = hit.beatmapsetIds.length;
+        let leftover = false;
+        for (const set of hubResultToOnlineSets(hit)) {
+          if (seen.has(set.id)) continue;
+          seen.add(set.id);
+          if (excludeOwned && hide.has(set.id)) {
+            if (owned.has(set.id)) ownedSkipped += 1;
+            else if (pending.has(set.id)) pendingSkipped += 1;
+            continue;
+          }
+          if (matched.length >= MIRROR_PAGE_CAPACITY) {
+            leftover = true;
+            break;
+          }
+          matched.push(set);
         }
-        matched.push(set);
+        return leftover;
+      };
+
+      let leftover = consume(firstHit);
+      let lastHit = firstHit;
+      let hubHasMore = (firstHit.page + 1) * firstHit.limit < firstHit.total;
+      while (matched.length < MIRROR_PAGE_CAPACITY && hubHasMore) {
+        const more = await tryHubCachedSearch({
+          ...hubParams,
+          page: lastHit.page + 1,
+        });
+        if (!more) break;
+        leftover = consume(more);
+        lastHit = more;
+        hubHasMore = (more.page + 1) * more.limit < more.total;
       }
 
-      const hasMore = mirrorHasMore || matched.length >= MIRROR_PAGE_CAPACITY;
+      const hasMore = leftover || hubHasMore;
       return {
         provider: `hub-cache/${provider.id}`,
         page,
@@ -243,12 +267,14 @@ export async function searchOnlineBeatmapsets(
         items: matched,
         query: onlineQuery?.rawQuery,
         hubCached: true,
-        note: hubHit.label
-          ? `Served from hub cache (${hubHit.label}${hubHit.stale ? ", refreshing" : ""}).`
-          : `Served from hub cache${hubHit.stale ? " (refreshing in background)" : ""}.`,
+        note: firstHit.label
+          ? `Served from hub cache (${firstHit.label}${firstHit.stale ? ", refreshing" : ""}).`
+          : `Served from hub cache${firstHit.stale ? " (refreshing in background)" : ""}.`,
       };
     }
   }
+
+  const { owned, pending, hide } = await hidePromise;
 
   // With post-filters we walk from mirror page 0 and skip the first
   // `page * CAPACITY` matches so UI page N is still a full page of matches.

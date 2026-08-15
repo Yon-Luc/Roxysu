@@ -42,7 +42,15 @@ export async function tickSearchCacheRefreshes(): Promise<void> {
   tickRunning = true;
   try {
     const rows = await db
-      .select()
+      .select({
+        id: searchCache.id,
+        label: searchCache.label,
+        queryHash: searchCache.queryHash,
+        totalCount: searchCache.totalCount,
+        refreshIntervalMinutes: searchCache.refreshIntervalMinutes,
+        lastRefreshAt: searchCache.lastRefreshAt,
+        refreshBackoffUntil: searchCache.refreshBackoffUntil,
+      })
       .from(searchCache)
       .where(
         and(

@@ -28,16 +28,16 @@ Fetch beatmap sets via configured mirrors (hinai / nerinyan / osu.direct) from t
 4. In-memory locks (`job.running`, `openingInProgress`) are cleared on server startup via `clearStuckMirrorBatchLocks()` (same pattern as `clearStuckRealmReaderPause`).
 5. A second **Stop** while status is already `stopping` force-clears the lock so the UI cannot stay stuck if a download slot ignored cancellation.
 6. Download search QL accepts glued mode filters (`mode=m`, `mode=mania`) and short aliases (`m`, `o`, `t`, `c`, `f`) — same as hub browse — so they are not mistaken for free-text mirror `query`.
-7. Paginated search, **Count all missing**, and **Download all missing** prefer a primed Hub search index when `hubCacheKeymode(postFilters)` allows it: no non-star post-filters, or a single exact `key=N` (star post-filters may also be present). Hub looks up the **base** prime (`mode`/`status`/`key`/`sort`) and applies secondary filters (`min_stars`/`max_stars`, bpm/length, query, creator) against enriched stubs. Lookups forward `sort` + secondary params via `mirrorParamsToHubQuery` so they match admin base primes (admin UI defaults to Recently ranked / `ranked_desc`). Cache miss, `HUB_SEARCH_INDEX=0`, or Hub down falls back to the live mirror crawl. Owned/pending subtraction is an ID-set intersect against local hide ids — not `total − count(owned mania ranked)`.
+7. Paginated search, **Count all missing**, and **Download all missing** prefer a primed Hub search index when `hubCacheKeymode(postFilters)` allows it: no non-star post-filters, or a single exact `key=N` (star post-filters may also be present). Hub looks up the **base** prime (`mode`/`status`/`key`/`sort`) and applies secondary filters in SQL. Page search uses `GET /search`; count/download-all use one `GET /search/all`. Lookups forward `sort` + secondary params via `mirrorParamsToHubQuery` so they match admin base primes (admin UI defaults to Recently ranked / `ranked_desc`). Cache miss, `HUB_SEARCH_INDEX=0`, Hub 5xx/timeout (then a 30s circuit skip), or Hub down falls back to the live mirror crawl. Owned/pending subtraction is an ID-set intersect against local hide ids — not `total − count(owned mania ranked)`. A hub page that shrinks after hide is refilled from later SQL pages.
 
 ## Important symbols
 
 - `apps/server/src/routes/mirrors.ts`
 - `apps/server/src/mirrors/batchJob.ts:clearStuckMirrorBatchLocks()`
 - `apps/server/src/mirrors/batchJob.ts:stopMirrorBatchJob()`
-- `apps/server/src/mirrors/hubSearch.ts:tryFetchAllHubCachedIds()`
+- `apps/server/src/mirrors/hubSearch.ts:tryFetchAllHubCachedIds()` — single `GET /search/all`
 - `apps/server/src/mirrors/hubSearch.ts:mirrorParamsToHubQuery()`
-- `apps/server/src/mirrors/hubSearch.ts:hubResultToOnlineSets()`
+- `apps/server/src/mirrors/hubSearch.ts:tryHubCachedSearch()` — paged `GET /search` + circuit breaker
 - `apps/server/src/mirrors/onlineQuery.ts:hubCacheKeymode()`
 - `apps/server/src/mirrors/searchOnline.ts:collectMatchingOnlineBeatmapsets()`
 - `apps/server/public/features/download/*`

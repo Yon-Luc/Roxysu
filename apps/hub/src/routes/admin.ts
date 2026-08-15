@@ -8,7 +8,9 @@ import {
   hashQueryParams,
   normalizeRefreshIntervalMinutes,
   refreshCache,
+  searchCacheMetaColumns,
   type CacheQueryParams,
+  type SearchCacheMeta,
 } from "../services/cache";
 import { hubCacheTtlMs } from "../services/hubEnv";
 
@@ -21,7 +23,7 @@ const queryParamsSchema = t.Object({
   key: t.Optional(t.Numeric({ minimum: 1, maximum: 18 })),
 });
 
-function serializeCacheRow(row: typeof searchCache.$inferSelect) {
+function serializeCacheRow(row: SearchCacheMeta) {
   const ageMs = Date.now() - new Date(row.cachedAt).getTime();
   const interval = row.refreshIntervalMinutes;
   const lastRefresh = row.lastRefreshAt
@@ -53,7 +55,7 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
 
   .get("/cache", async () => {
     const rows = await db
-      .select()
+      .select(searchCacheMetaColumns)
       .from(searchCache)
       .orderBy(desc(searchCache.cachedAt));
     return rows.map(serializeCacheRow);
@@ -71,7 +73,7 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
       );
 
       const existing = await db
-        .select()
+        .select({ id: searchCache.id })
         .from(searchCache)
         .where(eq(searchCache.queryHash, queryHash))
         .get();
@@ -105,7 +107,7 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
       }
 
       const row = await db
-        .select()
+        .select(searchCacheMetaColumns)
         .from(searchCache)
         .where(eq(searchCache.id, inserted.id))
         .get();
@@ -133,7 +135,7 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
     "/cache/:id",
     async ({ params, body }) => {
       const row = await db
-        .select()
+        .select(searchCacheMetaColumns)
         .from(searchCache)
         .where(eq(searchCache.id, params.id))
         .get();
@@ -157,7 +159,7 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
         .where(eq(searchCache.id, params.id));
 
       const updated = await db
-        .select()
+        .select(searchCacheMetaColumns)
         .from(searchCache)
         .where(eq(searchCache.id, params.id))
         .get();
@@ -178,7 +180,7 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
     "/cache/:id/refresh",
     async ({ params }) => {
       const row = await db
-        .select()
+        .select({ id: searchCache.id })
         .from(searchCache)
         .where(eq(searchCache.id, params.id))
         .get();
@@ -203,7 +205,7 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
       }
 
       const updated = await db
-        .select()
+        .select(searchCacheMetaColumns)
         .from(searchCache)
         .where(eq(searchCache.id, params.id))
         .get();
@@ -223,7 +225,7 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
     "/cache/:id",
     async ({ params }) => {
       const row = await db
-        .select()
+        .select({ id: searchCache.id })
         .from(searchCache)
         .where(eq(searchCache.id, params.id))
         .get();

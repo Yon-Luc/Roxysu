@@ -123,11 +123,11 @@ Separate networked process (`apps/hub`, `:4322`) for sharing collections and mai
 
 ### Hub search index
 
-Admin-managed pre-warmed beatmapset results in the Hub store (`search_cache` table). Each row is a **base prime** (`mode`, `status`, `key`, `sort`) storing enriched beatmapset stubs (or legacy id lists until re-prime). Public `GET /search` looks up by base identity, filters secondary criteria in memory, and returns a page (`beatmapsetIds` + `beatmapsets`). Miss is empty — no live Hinamizawa proxy. Used by the download page — not part of the client app mirror.
+Admin-managed pre-warmed beatmapset results in the Hub store. Each `search_cache` row is a **base prime** (`mode`, `status`, `key`, `sort`). Beatmapset stubs live in `search_index_sets` / `search_index_diffs` (legacy `beatmapset_ids` JSON is migrated on boot). Public `GET /search` looks up by base identity, applies secondary filters in SQL, and returns a page. `GET /search/all` dumps matching ids (or compact stubs) for count / download-all. Miss is empty — no live Hinamizawa proxy. Used by the download page — not part of the client app mirror.
 
 **Not:** "search cache", "cache" alone
 
-**In code:** `search_cache` table, hub admin routes, `apps/hub/src/services/cache.ts`
+**In code:** `search_cache`, `search_index_sets`, `search_index_diffs`, hub admin routes, `apps/hub/src/services/searchIndex.ts`
 
 **See:** [features/hub/](features/hub/index.md), [decisions/hub-search-base-index.md](decisions/hub-search-base-index.md)
 

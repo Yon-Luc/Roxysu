@@ -224,3 +224,72 @@ export const searchCache = sqliteTable("search_cache", {
 
 export type SearchCache = typeof searchCache.$inferSelect;
 export type NewSearchCache = typeof searchCache.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// Hub search index rows (one beatmapset per prime; diffs for star filters)
+// ---------------------------------------------------------------------------
+export const searchIndexSets = sqliteTable(
+  "search_index_sets",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    cacheId: integer("cache_id")
+      .notNull()
+      .references(() => searchCache.id, { onDelete: "cascade" }),
+    beatmapsetId: integer("beatmapset_id").notNull(),
+    artist: text("artist").notNull().default(""),
+    title: text("title").notNull().default(""),
+    creator: text("creator").notNull().default(""),
+    status: text("status").notNull().default(""),
+    bpm: real("bpm"),
+    favouriteCount: integer("favourite_count").notNull().default(0),
+    playCount: integer("play_count").notNull().default(0),
+    hasVideo: integer("has_video", { mode: "boolean" }).notNull().default(false),
+    rankedDate: text("ranked_date"),
+    lengthSeconds: integer("length_seconds"),
+    position: integer("position").notNull(),
+  },
+  (t) => ({
+    cachePositionIdx: index("search_index_sets_cache_position_idx").on(
+      t.cacheId,
+      t.position,
+    ),
+    cacheBpmIdx: index("search_index_sets_cache_bpm_idx").on(t.cacheId, t.bpm),
+    cacheLengthIdx: index("search_index_sets_cache_length_idx").on(
+      t.cacheId,
+      t.lengthSeconds,
+    ),
+    cacheSetUnique: uniqueIndex("search_index_sets_cache_set_unique").on(
+      t.cacheId,
+      t.beatmapsetId,
+    ),
+  }),
+);
+
+export type SearchIndexSet = typeof searchIndexSets.$inferSelect;
+export type NewSearchIndexSet = typeof searchIndexSets.$inferInsert;
+
+export const searchIndexDiffs = sqliteTable(
+  "search_index_diffs",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    setRowId: integer("set_row_id")
+      .notNull()
+      .references(() => searchIndexSets.id, { onDelete: "cascade" }),
+    beatmapId: integer("beatmap_id").notNull(),
+    version: text("version").notNull().default("Unknown"),
+    stars: real("stars").notNull().default(0),
+    mode: text("mode").notNull().default("osu"),
+    modeInt: integer("mode_int").notNull().default(0),
+    keys: integer("keys"),
+    totalLength: integer("total_length"),
+  },
+  (t) => ({
+    setStarsIdx: index("search_index_diffs_set_stars_idx").on(
+      t.setRowId,
+      t.stars,
+    ),
+  }),
+);
+
+export type SearchIndexDiff = typeof searchIndexDiffs.$inferSelect;
+export type NewSearchIndexDiff = typeof searchIndexDiffs.$inferInsert;

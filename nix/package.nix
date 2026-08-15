@@ -20,7 +20,7 @@
   bunDepsHash ? "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
 }: let
   pname = "roxysu";
-  version = "0.1.9";
+  version = "0.1.10";
   nodejs = nodejs_24;
 
   # Keep in sync with realm version in bun.lock / apps/realm-reader.

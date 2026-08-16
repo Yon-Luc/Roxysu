@@ -1,4 +1,5 @@
 import type { BeatmapPreview } from "./api";
+import { layoutManiaPlayfield } from "./osuSkinIni";
 import {
   orientationDegrees,
   type ColumnSkin,
@@ -461,6 +462,49 @@ export function migratePreviewScroll(raw: number): number {
   );
 }
 
+function spriteSize(
+  img: CanvasImageSource | null | undefined,
+): { w: number; h: number } | null {
+  if (!img) return null;
+  if (typeof HTMLImageElement !== "undefined" && img instanceof HTMLImageElement) {
+    if (img.naturalWidth <= 0) return null;
+    return { w: img.naturalWidth, h: img.naturalHeight };
+  }
+  if (typeof ImageBitmap !== "undefined" && img instanceof ImageBitmap) {
+    return img.width > 0 ? { w: img.width, h: img.height } : null;
+  }
+  if (typeof HTMLCanvasElement !== "undefined" && img instanceof HTMLCanvasElement) {
+    return img.width > 0 ? { w: img.width, h: img.height } : null;
+  }
+  if (typeof OffscreenCanvas !== "undefined" && img instanceof OffscreenCanvas) {
+    return img.width > 0 ? { w: img.width, h: img.height } : null;
+  }
+  return null;
+}
+
+function drawSprite(
+  ctx: PaintContext2D,
+  img: CanvasImageSource | null | undefined,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  alpha: number,
+) {
+  if (!img || w <= 0 || h <= 0) return false;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.drawImage(img, x, y, w, h);
+  ctx.restore();
+  return true;
+}
+
+function spriteDestHeight(img: CanvasImageSource | null | undefined, destW: number): number {
+  const size = spriteSize(img);
+  if (!size || size.w <= 0) return destW;
+  return destW * (size.h / size.w);
+}
+
 function colSkin(skin: KeymodeSkin, col: number): ColumnSkin {
   const cols = skin.columns;
   return (
@@ -475,6 +519,19 @@ function colSkin(skin: KeymodeSkin, col: number): ColumnSkin {
     }
   );
 }
+
+export type ManiaNotefieldSprites = {
+  notes: (CanvasImageSource | null)[];
+  heads: (CanvasImageSource | null)[];
+  bodies: (CanvasImageSource | null)[];
+  tails: (CanvasImageSource | null)[];
+  keysUp: (CanvasImageSource | null)[];
+  keysDown: (CanvasImageSource | null)[];
+  stageLeft: CanvasImageSource | null;
+  stageRight: CanvasImageSource | null;
+  stageHint: CanvasImageSource | null;
+  stageBottom: CanvasImageSource | null;
+};
 
 export type PaintManiaNotefieldArgs = {
   ctx: PaintContext2D;
@@ -496,7 +553,28 @@ export type PaintManiaNotefieldArgs = {
   /** Precomputed head judgment map; built from `judgments` if omitted. */
   headJudgments?: Map<number, NotefieldJudgment>;
   highlightMissNotes?: boolean;
+  sprites?: ManiaNotefieldSprites | null;
 };
+
+type ColGeom = {
+  x: number;
+  colW: number;
+  noteX: number;
+  noteW: number;
+  tapH: number;
+};
+
+function importedColGeom(
+  sprites: ManiaNotefieldSprites,
+  col: number,
+  x: number,
+  colW: number,
+): ColGeom {
+  const note = sprites.notes[col] ?? sprites.heads[col];
+  const noteW = colW;
+  const tapH = Math.max(8, Math.min(spriteDestHeight(note, noteW), colW * 1.4));
+  return { x, colW, noteX: x, noteW, tapH };
+}
 
 /** Paint one mania notefield frame at `tMs`. */
 export function paintManiaNotefield(args: PaintManiaNotefieldArgs): void {
@@ -513,19 +591,32 @@ export function paintManiaNotefield(args: PaintManiaNotefieldArgs): void {
     liveHeldMask = null,
     judgments,
     highlightMissNotes: markMisses = false,
+    sprites = null,
   } = args;
 
   const cols = Math.max(1, args.columnCount);
   const shape = keymodeSkin.shape;
+  const imported = keymodeSkin.imported;
+  const useSprites = Boolean(imported && sprites);
   const headMap = args.headJudgments ?? buildHeadJudgmentMap(judgments);
-  const receptorY = h * hitPosition;
-  // Cover may not reach the receptor — leave a small gap so the hit line stays visible.
+  const importedLayout =
+    useSprites && imported
+      ? layoutManiaPlayfield({
+          canvasW: w,
+          canvasH: h,
+          keys: cols,
+          columnWidth: imported.columnWidth,
+          columnSpacing: imported.columnSpacing,
+          hitPositionPx: imported.hitPositionPx,
+          stageLeft: spriteSize(sprites!.stageLeft),
+          stageRight: spriteSize(sprites!.stageRight),
+        })
+      : null;
+  const receptorY = importedLayout ? importedLayout.receptorY : h * hitPosition;
   const coverH = Math.min(
     h * laneCover,
     Math.max(0, receptorY - 12),
   );
-  // Keep visual approach speed (px/wall-sec) independent of playback rate:
-  // map time advances at `rate`, so scale the map-time window by rate.
   const rate = Math.max(0.01, args.playbackRate);
   const scrollSpeed = clampScrollSpeed(args.scrollSpeed);
   const timeRangeMs = (OSU_MAX_TIME_RANGE_MS / scrollSpeed) * rate;
@@ -541,19 +632,67 @@ export function paintManiaNotefield(args: PaintManiaNotefieldArgs): void {
         ? frameList[frameIdx]!.keys
         : 0;
 
+  function geomFor(col: number): ColGeom {
+    if (importedLayout && sprites) {
+      const slot = importedLayout.columns[col] ?? {
+        x: col * colW,
+        w: colW,
+      };
+      return importedColGeom(sprites, col, slot.x, slot.w);
+    }
+    const skin = colSkin(keymodeSkin, col);
+    const g = noteGeom(shape, col, colW, skin);
+    return { x: col * colW, colW, noteX: g.x, noteW: g.noteW, tapH: g.tapH };
+  }
+
   ctx.clearRect(0, 0, w, h);
 
   ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
   ctx.fillRect(0, 0, w, h);
 
+  if (importedLayout) {
+    if (importedLayout.stageLeft && sprites?.stageLeft) {
+      drawSprite(
+        ctx,
+        sprites.stageLeft,
+        importedLayout.stageLeft.x,
+        importedLayout.stageLeft.y,
+        importedLayout.stageLeft.w,
+        importedLayout.stageLeft.h,
+        1,
+      );
+    }
+    if (importedLayout.stageRight && sprites?.stageRight) {
+      drawSprite(
+        ctx,
+        sprites.stageRight,
+        importedLayout.stageRight.x,
+        importedLayout.stageRight.y,
+        importedLayout.stageRight.w,
+        importedLayout.stageRight.h,
+        1,
+      );
+    }
+  }
+
   ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
   ctx.lineWidth = 1;
-  for (let c = 1; c < cols; c += 1) {
-    const x = c * colW;
-    ctx.beginPath();
-    ctx.moveTo(x, coverH);
-    ctx.lineTo(x, h);
-    ctx.stroke();
+  if (importedLayout) {
+    for (let i = 1; i < importedLayout.lines.length - 1; i += 1) {
+      const x = importedLayout.lines[i]!;
+      ctx.beginPath();
+      ctx.moveTo(x, coverH);
+      ctx.lineTo(x, h);
+      ctx.stroke();
+    }
+  } else {
+    for (let c = 1; c < cols; c += 1) {
+      const x = c * colW;
+      ctx.beginPath();
+      ctx.moveTo(x, coverH);
+      ctx.lineTo(x, h);
+      ctx.stroke();
+    }
   }
 
   ctx.save();
@@ -571,8 +710,12 @@ export function paintManiaNotefield(args: PaintManiaNotefieldArgs): void {
 
     const col = Math.min(cols - 1, Math.max(0, note.column));
     const skin = colSkin(keymodeSkin, col);
-    const { x, noteW, tapH } = noteGeom(shape, col, colW, skin);
+    const { noteX: x, noteW, tapH } = geomFor(col);
     const isHold = note.endMs > note.startMs + 20;
+    const tapSprite = sprites?.notes[col] ?? null;
+    const headSprite = sprites?.heads[col] ?? tapSprite;
+    const bodySprite = sprites?.bodies[col] ?? null;
+    const tailSprite = sprites?.tails[col] ?? null;
 
     const judgment = headMap.get(i);
     const hasJudgment = judgment != null;
@@ -613,18 +756,67 @@ export function paintManiaNotefield(args: PaintManiaNotefieldArgs): void {
       const bottom = Math.max(startY, endY);
       const height = Math.max(tapH, bottom - top);
       const showHead = keymodeSkin.lnShowHead;
-      drawHoldBody(
-        ctx,
-        shape,
-        x,
-        top,
-        noteW,
-        height,
-        displayLnColor,
-        skin.lnBodyScale,
-        keymodeSkin.lnTailShape,
-      );
+      const tailH = tailSprite
+        ? Math.max(6, Math.min(spriteDestHeight(tailSprite, noteW), tapH * 1.2))
+        : 0;
+      const bodyTop = top + tailH * 0.45;
+      const bodyH = Math.max(1, bottom - bodyTop);
+      if (
+        !useSprites ||
+        !drawSprite(
+          ctx,
+          bodySprite,
+          x + noteW * 0.08,
+          bodyTop,
+          noteW * 0.84,
+          bodyH,
+          markMisses ? 0.7 : 0.95,
+        )
+      ) {
+        drawHoldBody(
+          ctx,
+          shape,
+          x,
+          top,
+          noteW,
+          height,
+          displayLnColor,
+          skin.lnBodyScale,
+          keymodeSkin.lnTailShape,
+        );
+      }
+      if (useSprites && tailSprite) {
+        drawSprite(ctx, tailSprite, x, top - tailH * 0.15, noteW, tailH, alpha);
+      }
       if (showHead && (headOnScreen || note.startMs >= t)) {
+        if (
+          !useSprites ||
+          !drawSprite(ctx, headSprite, x, startY - tapH / 2, noteW, tapH, alpha)
+        ) {
+          drawTap(
+            ctx,
+            shape,
+            x,
+            startY,
+            noteW,
+            tapH,
+            displayNoteColor,
+            alpha,
+            skin.orientation,
+          );
+        }
+      }
+      if (showPressMarker && (headOnScreen || pressMarkerOnScreen)) {
+        drawPressMarkerLine(ctx, x, noteW, pressY, judgment!.result);
+      }
+      if (markMisses && isMiss && hasJudgment) {
+        drawMissHoldRect(ctx, x, top, noteW, height);
+      }
+    } else if (markMisses && hasJudgment && headOnScreen) {
+      if (
+        !useSprites ||
+        !drawSprite(ctx, tapSprite, x, startY - tapH / 2, noteW, tapH, alpha)
+      ) {
         drawTap(
           ctx,
           shape,
@@ -637,87 +829,121 @@ export function paintManiaNotefield(args: PaintManiaNotefieldArgs): void {
           skin.orientation,
         );
       }
-      if (showPressMarker && (headOnScreen || pressMarkerOnScreen)) {
-        drawPressMarkerLine(ctx, x, noteW, pressY, judgment!.result);
-      }
-      if (markMisses && isMiss && hasJudgment) {
-        drawMissHoldRect(ctx, x, top, noteW, height);
-      }
-    } else if (markMisses && hasJudgment && headOnScreen) {
-      drawTap(
-        ctx,
-        shape,
-        x,
-        startY,
-        noteW,
-        tapH,
-        displayNoteColor,
-        alpha,
-        skin.orientation,
-      );
       if (isMiss) {
         drawMissRect(ctx, x, startY, noteW, tapH);
       } else if (showPressMarker && (headOnScreen || pressMarkerOnScreen)) {
         drawPressMarkerLine(ctx, x, noteW, pressY, judgment!.result);
       }
     } else if (note.startMs >= t) {
-      drawTap(
-        ctx,
-        shape,
-        x,
-        startY,
-        noteW,
-        tapH,
-        displayNoteColor,
-        alpha,
-        skin.orientation,
-      );
+      if (
+        !useSprites ||
+        !drawSprite(ctx, tapSprite, x, startY - tapH / 2, noteW, tapH, alpha)
+      ) {
+        drawTap(
+          ctx,
+          shape,
+          x,
+          startY,
+          noteW,
+          tapH,
+          displayNoteColor,
+          alpha,
+          skin.orientation,
+        );
+      }
     } else if (!markMisses && judged && t - judgment.tMs < 120) {
-      // Brief flash at receptor after hit.
       const flashY = receptorY;
       const flashAlpha = 1 - (t - judgment.tMs) / 120;
       const flashScale = 1.15;
       const fw = noteW * flashScale;
       const fh = tapH * flashScale;
-      drawTap(
-        ctx,
-        shape,
-        x + (noteW - fw) / 2,
-        flashY,
-        fw,
-        fh,
-        noteColor,
-        flashAlpha,
-        skin.orientation,
-      );
+      if (
+        !useSprites ||
+        !drawSprite(
+          ctx,
+          tapSprite,
+          x + (noteW - fw) / 2,
+          flashY - fh / 2,
+          fw,
+          fh,
+          flashAlpha,
+        )
+      ) {
+        drawTap(
+          ctx,
+          shape,
+          x + (noteW - fw) / 2,
+          flashY,
+          fw,
+          fh,
+          noteColor,
+          flashAlpha,
+          skin.orientation,
+        );
+      }
     }
   }
 
   ctx.restore();
 
-  ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
-  ctx.fillRect(0, receptorY - 1.5, w, 3);
-  for (let c = 0; c < cols; c += 1) {
-    const skin = colSkin(keymodeSkin, c);
-    const { x, noteW, tapH } = noteGeom(shape, c, colW, skin);
-    const held = (keys & (1 << c)) !== 0;
-    drawReceptor(
+  if (useSprites && sprites?.stageHint) {
+    const left = importedLayout?.columns[0]?.x ?? 0;
+    const right = importedLayout
+      ? importedLayout.columns[cols - 1]!.x + importedLayout.columns[cols - 1]!.w
+      : w;
+    const hintW = right - left;
+    const hintH = Math.max(4, Math.min(spriteDestHeight(sprites.stageHint, hintW), 24));
+    drawSprite(
       ctx,
-      shape,
-      x,
-      receptorY,
-      noteW,
-      tapH,
-      skin.noteColor,
-      held,
-      skin.orientation,
+      sprites.stageHint,
+      left,
+      receptorY - hintH / 2,
+      hintW,
+      hintH,
+      1,
     );
+  } else {
+    ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+    ctx.fillRect(0, receptorY - 1.5, w, 3);
   }
 
-  ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
-  ctx.fillRect(0, receptorY + 1.5, w, h - receptorY);
+  for (let c = 0; c < cols; c += 1) {
+    const skin = colSkin(keymodeSkin, c);
+    const { noteX: x, noteW, tapH } = geomFor(c);
+    const held = (keys & (1 << c)) !== 0;
+    const keyImg = held
+      ? (sprites?.keysDown[c] ?? sprites?.keysUp[c] ?? null)
+      : (sprites?.keysUp[c] ?? null);
+    const keyH = keyImg
+      ? Math.max(tapH, Math.min(spriteDestHeight(keyImg, noteW), h - receptorY))
+      : tapH;
+    if (!useSprites || !drawSprite(ctx, keyImg, x, receptorY, noteW, keyH, 1)) {
+      drawReceptor(
+        ctx,
+        shape,
+        x,
+        receptorY,
+        noteW,
+        tapH,
+        skin.noteColor,
+        held,
+        skin.orientation,
+      );
+    }
+  }
 
-  // Solid black lane cover — hides the top of the playfield.
+  if (useSprites && sprites?.stageBottom && importedLayout) {
+    const left = importedLayout.columns[0]!.x;
+    const right =
+      importedLayout.columns[cols - 1]!.x + importedLayout.columns[cols - 1]!.w;
+    const bw = right - left;
+    const bh = Math.min(h - receptorY, spriteDestHeight(sprites.stageBottom, bw));
+    drawSprite(ctx, sprites.stageBottom, left, h - bh, bw, bh, 1);
+  } else {
+    ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
+    ctx.fillRect(0, receptorY + 1.5, w, h - receptorY);
+  }
+
   if (coverH > 0) {
     ctx.fillStyle = "#000000";
     ctx.fillRect(0, 0, w, coverH);

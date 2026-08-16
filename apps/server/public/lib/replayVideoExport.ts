@@ -56,6 +56,9 @@ import {
   type KeymodeSkin,
   type PreviewSkin,
 } from "./previewSkin";
+import { loadImportedManiaSprites } from "./maniaSkinImport";
+import { importedHitPositionFrac } from "./osuSkinIni";
+import type { ManiaNotefieldSprites } from "./paintManiaNotefield";
 import { getStdSkin, type StdSkin } from "./stdSkin";
 import { getTaikoSkin, type TaikoSkin } from "./taikoSkin";
 import { getCatchSkin, type CatchSkin } from "./catchSkin";
@@ -1147,6 +1150,7 @@ function paintComposedFrame(args: {
     hitPosition: number;
     laneCover: number;
     headJudgments: Map<number, NotefieldJudgment>;
+    sprites?: ManiaNotefieldSprites | null;
   };
 }): void {
   const {
@@ -1233,6 +1237,7 @@ function paintComposedFrame(args: {
       judgments: replay.judgments,
       headJudgments: args.maniaPaint.headJudgments,
       highlightMissNotes: false,
+      sprites: args.maniaPaint.sprites,
     });
   }
 
@@ -1287,11 +1292,14 @@ export async function exportReplayVideo(
   onProgress?.({ phase: "audio" });
   throwIfAborted(signal);
 
-  const [fullAudio, bg, logo, catcherSprite] = await Promise.all([
+  const [fullAudio, bg, logo, catcherSprite, maniaSprites] = await Promise.all([
     decodeBeatmapAudio(audioUrl, signal),
     hideBackground ? Promise.resolve(null) : loadBackgroundImage(replay, signal),
     loadRoxysuLogo(signal),
     fruits ? loadImageFromUrl(catcherSpriteUrl, signal) : Promise.resolve(null),
+    mania
+      ? loadImportedManiaSprites(replay.beatmap.columnCount)
+      : Promise.resolve(null),
   ]);
 
   const { startMs, endMs } = exportTimeWindow(replay, trimIdle);
@@ -1447,23 +1455,27 @@ export async function exportReplayVideo(
           }
           if (!sorted) notes = [...list].sort((a, b) => a.startMs - b.startMs);
         }
+        const skin = resolveKeymodeSkin(previewSkin, replay.beatmap.columnCount);
         return {
           notes,
           scrollSpeed: clampScrollSpeed(
             opts.scrollSpeed ?? PREVIEW_SCROLL_DEFAULT,
           ),
-          skin: resolveKeymodeSkin(previewSkin, replay.beatmap.columnCount),
-          hitPosition: clamp(
-            previewSkin.hitPosition,
-            HIT_POSITION_MIN,
-            HIT_POSITION_MAX,
-          ),
+          skin,
+          hitPosition: skin.imported
+            ? importedHitPositionFrac(skin.imported.hitPositionPx)
+            : clamp(
+                previewSkin.hitPosition,
+                HIT_POSITION_MIN,
+                HIT_POSITION_MAX,
+              ),
           laneCover: clamp(
             previewSkin.laneCover,
             LANE_COVER_MIN,
             LANE_COVER_MAX,
           ),
           headJudgments: buildHeadJudgmentMap(replay.judgments),
+          sprites: maniaSprites as ManiaNotefieldSprites | null,
         };
       })()
     : undefined;

@@ -503,7 +503,20 @@
     "catchBanana": "Banane",
     "catchCatcher": "Catcher",
     "catchHyperDash": "Hyperdash",
-    "catchTrail": "Traînée du catcher"
+    "catchTrail": "Traînée du catcher",
+    "importButton": "Importer un .osk",
+    "importTitle": "Importer un skin mania",
+    "importSubtitle": "Prévisualisez « {{name}} », puis choisissez les keymodes à garder.",
+    "importKeymodes": "Appliquer aux keymodes",
+    "importFallback": "proche",
+    "importPreview": "Aperçu",
+    "importCancel": "Annuler",
+    "importConfirm": "Utiliser ce skin",
+    "importApplying": "Enregistrement…",
+    "importReading": "Lecture du skin…",
+    "importDropHint": "Déposez un .osk ou un dossier de skin",
+    "importActive": "« {{name}} » utilisé en {{keys}}K",
+    "importRemove": "Retirer le skin importé"
   },
   "command": {
     "placeholder": "Rechercher pages, sections, maps…",

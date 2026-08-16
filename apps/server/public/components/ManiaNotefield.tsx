@@ -10,6 +10,11 @@ import {
   type NotefieldJudgment,
 } from "../lib/paintManiaNotefield";
 import {
+  useImportedManiaSprites,
+  type ManiaSkinSprites,
+} from "../lib/maniaSkinImport";
+import { importedHitPositionFrac } from "../lib/osuSkinIni";
+import {
   HIT_POSITION_MAX,
   HIT_POSITION_MIN,
   LANE_COVER_MAX,
@@ -54,6 +59,8 @@ type ManiaNotefieldProps = {
   playbackRate?: number;
   /** Override skin (e.g. live editor preview). Falls back to stored skin. */
   skinOverride?: KeymodeSkin;
+  /** Override imported sprites (confirm-import preview). */
+  spritesOverride?: ManiaSkinSprites | null;
   /** Replay key frames (bitmask per column). */
   frames?: NotefieldFrame[];
   /**
@@ -82,6 +89,7 @@ export function ManiaNotefield({
   scrollSpeed = PREVIEW_SCROLL_DEFAULT,
   playbackRate = 1,
   skinOverride,
+  spritesOverride,
   frames,
   liveHeldMask = null,
   judgments,
@@ -100,14 +108,16 @@ export function ManiaNotefield({
   const highlightMissRef = useRef(highlightMissNotes);
   const storedSkin = usePreviewSkin();
   const keymodeSkin = skinOverride ?? resolveKeymodeSkin(storedSkin, columnCount);
+  const storedSprites = useImportedManiaSprites(columnCount);
+  const sprites = spritesOverride ?? storedSprites;
   const skinRef = useRef(keymodeSkin);
   skinRef.current = keymodeSkin;
+  const spritesRef = useRef(sprites);
+  spritesRef.current = sprites;
   const hitPositionRef = useRef(storedSkin.hitPosition);
-  hitPositionRef.current = clamp(
-    storedSkin.hitPosition,
-    HIT_POSITION_MIN,
-    HIT_POSITION_MAX,
-  );
+  hitPositionRef.current = keymodeSkin.imported
+    ? importedHitPositionFrac(keymodeSkin.imported.hitPositionPx)
+    : clamp(storedSkin.hitPosition, HIT_POSITION_MIN, HIT_POSITION_MAX);
   const laneCoverRef = useRef(storedSkin.laneCover);
   laneCoverRef.current = clamp(
     storedSkin.laneCover,
@@ -182,6 +192,7 @@ export function ManiaNotefield({
         skin: skinRef.current,
         hitPosition: hitPositionRef.current,
         laneCover: laneCoverRef.current,
+        sprites: spritesRef.current,
         frames: framesRef.current,
         liveHeldMask: liveHeldMaskRef.current,
         headJudgments: headJudgmentsRef.current,

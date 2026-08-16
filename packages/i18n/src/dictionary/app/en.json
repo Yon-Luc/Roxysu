@@ -407,7 +407,7 @@
   },
   "skin": {
     "pageTitle": "Preview skin",
-    "subtitle": "Customize note shape, colors, size, hit position, and lane cover for each keymode. Applies to beatmap preview.",
+    "subtitle": "Customize note shape, colors, size, hit position, and lane cover for each keymode — or drop an osu! .osk. Applies to beatmap preview and score rewatch.",
     "noteShape": "Note shape",
     "noteShapeDesc": "Set per-column arrow direction below. Receptors follow the same orientation.",
     "longNotes": "Long notes",
@@ -503,7 +503,20 @@
     "catchBanana": "Banana",
     "catchCatcher": "Catcher",
     "catchHyperDash": "Hyperdash",
-    "catchTrail": "Catcher trail"
+    "catchTrail": "Catcher trail",
+    "importButton": "Import .osk",
+    "importTitle": "Import mania skin",
+    "importSubtitle": "Preview “{{name}}”, then choose which keymodes to keep.",
+    "importKeymodes": "Apply to keymodes",
+    "importFallback": "nearest",
+    "importPreview": "Preview",
+    "importCancel": "Cancel",
+    "importConfirm": "Use this skin",
+    "importApplying": "Saving…",
+    "importReading": "Reading skin…",
+    "importDropHint": "Drop .osk or skin folder",
+    "importActive": "Using “{{name}}” for {{keys}}K",
+    "importRemove": "Remove imported skin"
   },
   "command": {
     "placeholder": "Search pages, sections, maps…",

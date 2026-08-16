@@ -12,6 +12,11 @@ touches:
   - apps/server/public/lib/paintCatchPlayfield.ts
   - apps/server/public/components/ManiaNotefield.tsx
   - apps/server/public/lib/paintManiaNotefield.ts
+  - apps/server/public/lib/previewSkin.ts
+  - apps/server/public/lib/osuSkinIni.ts
+  - apps/server/public/lib/maniaSkinImport.ts
+  - apps/server/public/components/ManiaSkinImportModal.tsx
+  - apps/server/public/components/ManiaSkinDropHost.tsx
   - apps/server/public/lib/stdSkin.ts
   - apps/server/public/lib/taikoSkin.ts
   - apps/server/public/lib/catchSkin.ts
@@ -66,16 +71,24 @@ Playfield = the visual layer for that ruleset (notefield, 512×384, or taiko lan
 5. Skins are separate stores: `roxysu:preview-skin` (mania), `roxysu:std-skin`,
    `roxysu:taiko-skin`, `roxysu:catch-skin`.
 
-6. Taiko scroll is a user skin setting (`scrollSpeed`), not BPM/SV.
+6. An **imported mania skin** can replace the procedural mania skin per keymode.
+   Drop an `.osk` or `skin.ini` folder on Skin → Mania, beatmap preview, or score
+   rewatch. A confirm modal previews the skin and asks which keymodes to apply.
+   Layout (column widths, spacing, hit position) and sprites (notes, LN, keys,
+   stage) come from `skin.ini` `[Mania]` sections. Image blobs persist in
+   IndexedDB (`roxysu-mania-skin`); JSON metadata stays in `roxysu:preview-skin`.
+   Reset keymode / reset all deletes those blobs.
 
-7. Catcher width is `106.75 * |1 - 0.7 * (cs - 5) / 5|` times skin
+7. Taiko scroll is a user skin setting (`scrollSpeed`), not BPM/SV.
+
+8. Catcher width is `106.75 * |1 - 0.7 * (cs - 5) / 5|` times skin
    `catcherScale` (default `0.7`). Hyperdash is a visual flag from walk-speed vs
    next fruit distance. When preview has no replay frames, the catcher lerps
    across fruits and large droplets so it sits on each object at hit time.
    The catcher is `roxyctb.png` (Roxy holding a plate); the plate in the
    art is the catch surface — no extra platter is drawn.
 
-8. Judges are visual-quality approximations, not full lazer sims.
+9. Judges are visual-quality approximations, not full lazer sims.
 
 ## Security rules
 
@@ -103,6 +116,13 @@ Score rewatch:
     → fetchScoreReplay → load*Chart + *Judge
     → ScoreReplayModal HUD uses per-ruleset weights
     → matching playfield draws frames + judgments
+
+Imported mania skin:
+  drop .osk / skin folder
+    → unzip + parse skin.ini
+    → confirm modal (preview + keymode picker)
+    → persist sprites in IndexedDB + layout on preview skin
+    → paintManiaNotefield draws sprites / stage / column layout
 ```
 
 ## Implementation
@@ -111,6 +131,7 @@ Score rewatch:
 - Fat API payload: unused `notes` / `hitObjects` / `taikoHitObjects` /
   `catchHitObjects` / frame arrays are `[]`.
 - Store / dispatch names: `"mania"`, `"osu"`, `"taiko"`, `"fruits"`.
+- `lib/osuSkinIni.ts` / `lib/maniaSkinImport.ts` — .osk parse + IndexedDB sprites.
 
 ## Dependencies
 
@@ -126,6 +147,6 @@ Score rewatch:
 
 ## Related knowledge
 
-- [vocabulary.md](../../vocabulary.md) — Score rewatch, Taiko playfield, Catch playfield
+- [vocabulary.md](../../vocabulary.md) — Score rewatch, Taiko playfield, Catch playfield, Imported mania skin
 - [replay-video-export/](../replay-video-export/index.md)
 - [architecture/client-theme.md](../../architecture/client-theme.md)

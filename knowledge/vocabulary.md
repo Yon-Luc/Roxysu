@@ -241,6 +241,21 @@ standard. UI label is Catch; aliases `ctb` / `catch` exist only at filter edges.
 
 ---
 
+### Imported mania skin
+
+A user-provided osu! legacy skin (`.osk` or a folder with `skin.ini`) applied to
+the mania notefield for beatmap preview and score rewatch. Sprites live in
+IndexedDB; per-keymode layout metadata lives on the preview skin store.
+
+**Not:** the procedural PreviewSkin editor (colors / shapes), lazer-native skins,
+std/taiko/catch skins
+
+**In code:** `maniaSkinImport.ts`, `osuSkinIni.ts`, `roxysu:preview-skin` `imported`
+
+**See:** [features/preview-replay/](features/preview-replay/index.md)
+
+---
+
 ### Score rewatch
 
 Client-app playback of a stored score's replay frames and judgments against the

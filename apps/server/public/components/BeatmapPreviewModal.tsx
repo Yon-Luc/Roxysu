@@ -46,6 +46,7 @@ import {
 import { StdPlayfield } from "./StdPlayfield";
 import { TaikoPlayfield } from "./TaikoPlayfield";
 import { CatchPlayfield } from "./CatchPlayfield";
+import { ManiaSkinDropHost } from "./ManiaSkinDropHost";
 import { NotefieldStage } from "./NotefieldStage";
 import {
   EMPTY_SUMMARY,
@@ -806,6 +807,10 @@ export function BeatmapPreviewModal({
       onClick={onClose}
       role="presentation"
     >
+      <ManiaSkinDropHost
+        enabled={isMania}
+        className="flex h-full w-full items-stretch justify-center"
+      >
       <div
         ref={dialogRef}
         role="dialog"
@@ -1339,6 +1344,7 @@ export function BeatmapPreviewModal({
           ) : null}
         </div>
       </div>
+      </ManiaSkinDropHost>
     </div>
   );
 }

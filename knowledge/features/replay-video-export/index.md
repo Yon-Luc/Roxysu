@@ -34,12 +34,13 @@ and not a live screen capture.
 
 2. Timeline is **map time at 1×**. UI playback rate and DT/HT rate do not stretch
    the export; mania scroll uses the user's current scroll preference with
-   `playbackRate: 1`.
+   `playbackRate: 1`. Imported mania sprites are used when that keymode is imported.
    **Status:** verified — `replayVideoExport.ts`.
 
 3. Frame composition mirrors the score rewatch page: beatmap background, top-left
    title / subtitle / mods, playfield at modal-like scale with the user's skin
-   (std or mania preview skin, scroll, hit position, lane cover, field width),
+   (std or mania preview / imported mania skin, scroll, hit position, lane cover,
+   field width),
    live combo/accuracy HUD, and bottom stored/sim stats with a Roxysu logo +
    wordmark watermark on the bottom left. Control buttons
    (Rewatch / Play / Export / Window / Esc) are omitted.

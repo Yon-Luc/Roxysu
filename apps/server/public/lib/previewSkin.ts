@@ -44,6 +44,14 @@ export type ColumnSkin = {
   lnBodyScale: number;
 };
 
+export type ImportedManiaLayout = {
+  name: string;
+  hitPositionPx: number;
+  columnWidth: number[];
+  columnSpacing: number[];
+  columnLineWidth: number[];
+};
+
 export type KeymodeSkin = {
   shape: NoteShape;
   columns: ColumnSkin[];
@@ -57,6 +65,7 @@ export type KeymodeSkin = {
   lnTailShape: LnTailShape;
   /** When false, hold notes omit the head note graphic. */
   lnShowHead: boolean;
+  imported?: ImportedManiaLayout;
 };
 
 /** Receptor Y as a fraction of playfield height (0 = top, 1 = bottom). */
@@ -201,6 +210,37 @@ function parseColumn(raw: unknown, index: number, keys?: number): ColumnSkin {
   };
 }
 
+function parseImportedLayout(raw: unknown): ImportedManiaLayout | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const i = raw as Partial<ImportedManiaLayout>;
+  if (typeof i.name !== "string" || i.name.length === 0) return undefined;
+  if (typeof i.hitPositionPx !== "number" || !Number.isFinite(i.hitPositionPx)) {
+    return undefined;
+  }
+  if (!Array.isArray(i.columnWidth) || i.columnWidth.length === 0) return undefined;
+  const columnWidth = i.columnWidth.filter(
+    (n): n is number => typeof n === "number" && Number.isFinite(n) && n > 0,
+  );
+  if (columnWidth.length === 0) return undefined;
+  const columnSpacing = Array.isArray(i.columnSpacing)
+    ? i.columnSpacing.filter(
+        (n): n is number => typeof n === "number" && Number.isFinite(n),
+      )
+    : [];
+  const columnLineWidth = Array.isArray(i.columnLineWidth)
+    ? i.columnLineWidth.filter(
+        (n): n is number => typeof n === "number" && Number.isFinite(n),
+      )
+    : [];
+  return {
+    name: i.name,
+    hitPositionPx: i.hitPositionPx,
+    columnWidth,
+    columnSpacing,
+    columnLineWidth,
+  };
+}
+
 function parseKeymodeSkin(raw: unknown, keys: Keymode): KeymodeSkin {
   const base = defaultKeymodeSkin(keys);
   if (!raw || typeof raw !== "object") return base;
@@ -210,6 +250,7 @@ function parseKeymodeSkin(raw: unknown, keys: Keymode): KeymodeSkin {
       ? k.shape
       : "flat";
   const cols = Array.isArray(k.columns) ? k.columns : [];
+  const imported = parseImportedLayout(k.imported);
   return {
     shape,
     columns: Array.from({ length: keys }, (_, i) =>
@@ -220,6 +261,7 @@ function parseKeymodeSkin(raw: unknown, keys: Keymode): KeymodeSkin {
     uniformSize: k.uniformSize === true,
     lnTailShape: parseLnTailShape(k.lnTailShape),
     lnShowHead: k.lnShowHead !== false,
+    ...(imported ? { imported } : {}),
   };
 }
 
@@ -382,5 +424,6 @@ export function resolveKeymodeSkin(
     uniformSize: base.uniformSize,
     lnTailShape: base.lnTailShape,
     lnShowHead: base.lnShowHead,
+    ...(base.imported ? { imported: base.imported } : {}),
   };
 }

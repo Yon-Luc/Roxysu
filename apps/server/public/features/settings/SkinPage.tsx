@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PageTitle } from "../../components/PageTitle";
 import { ManiaNotefield } from "../../components/ManiaNotefield";
+import {
+  ManiaSkinDropHost,
+  ManiaSkinFileButton,
+} from "../../components/ManiaSkinDropHost";
 import { StandardSkinEditor } from "./sections/StandardSkinEditor";
 import { TaikoSkinEditor } from "./sections/TaikoSkinEditor";
 import { CatchSkinEditor } from "./sections/CatchSkinEditor";
@@ -16,8 +20,6 @@ import {
   copyKeymodeColors,
   defaultKeymodeSkin,
   getPreviewSkin,
-  resetKeymodeSkin,
-  resetPreviewSkin,
   setPreviewSkin,
   usePreviewSkin,
   type ColumnSkin,
@@ -30,6 +32,10 @@ import {
   pageSectionDomId,
   useScrollToPageSection,
 } from "../../lib/pageSections";
+import {
+  resetAllImported,
+  resetImportedKeymode,
+} from "../../lib/maniaSkinImport";
 import { useAppDict, t } from "../../lib/i18n";
 import type { Dictionary } from "@roxysu/i18n";
 
@@ -204,6 +210,7 @@ export function SkinPage({ section }: { section?: string } = {}) {
   const keySkin = skin.keymodes[keys];
   const sampleNotes = useMemo(() => buildSampleNotes(keys), [keys]);
   const isArrow = keySkin.shape === "arrow";
+  const isImported = Boolean(keySkin.imported);
 
   useEffect(() => {
     if (!playing) return;
@@ -342,17 +349,18 @@ export function SkinPage({ section }: { section?: string } = {}) {
           <p className="rx-subtitle">{dict?.skin.subtitle}</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {tab === "mania" ? <ManiaSkinFileButton /> : null}
           <button
             type="button"
             className="rx-btn"
-            onClick={() => resetKeymodeSkin(keys)}
+            onClick={() => void resetImportedKeymode(keys)}
           >
             {t(dict?.skin.resetKeymode, { keys })}
           </button>
           <button
             type="button"
             className="rx-btn"
-            onClick={() => resetPreviewSkin()}
+            onClick={() => void resetAllImported()}
           >
             {dict?.skin.resetAll}
           </button>
@@ -399,7 +407,7 @@ export function SkinPage({ section }: { section?: string } = {}) {
       </div>
 
       {tab === "mania" ? (
-        <>
+        <ManiaSkinDropHost className="space-y-6">
       <div className="flex flex-wrap gap-2">
         {KEYMODES.map((k) => (
           <button
@@ -413,8 +421,28 @@ export function SkinPage({ section }: { section?: string } = {}) {
         ))}
       </div>
 
+      {isImported ? (
+        <div className="rx-panel flex flex-wrap items-center justify-between gap-3 p-4">
+          <p className="text-sm text-ink">
+            {t(dict?.skin.importActive, {
+              name: keySkin.imported?.name ?? "",
+              keys,
+            })}
+          </p>
+          <button
+            type="button"
+            className="rx-btn text-xs"
+            onClick={() => void resetImportedKeymode(keys)}
+          >
+            {dict?.skin.importRemove ?? "Remove imported skin"}
+          </button>
+        </div>
+      ) : null}
+
       <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,22rem)]">
         <div className="space-y-4">
+          {isImported ? null : (
+          <>
           <div
             id={pageSectionDomId("note-shape")}
             className="rx-panel scroll-mt-6 p-4"
@@ -498,6 +526,8 @@ export function SkinPage({ section }: { section?: string } = {}) {
               </label>
             </div>
           </div>
+          </>
+          )}
 
           <div
             id={pageSectionDomId("playfield")}
@@ -510,6 +540,7 @@ export function SkinPage({ section }: { section?: string } = {}) {
               {dict?.skin.playfieldDesc}
             </p>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              {isImported ? null : (
               <label className="flex flex-col gap-1 text-xs text-muted">
                 <span>
                   {t(dict?.skin.hitPosition, {
@@ -530,6 +561,7 @@ export function SkinPage({ section }: { section?: string } = {}) {
                   className="accent-[var(--accent)]"
                 />
               </label>
+              )}
               <label className="flex flex-col gap-1 text-xs text-muted">
                 <span>
                   {t(dict?.skin.laneCover, {
@@ -553,6 +585,7 @@ export function SkinPage({ section }: { section?: string } = {}) {
             </div>
           </div>
 
+          {isImported ? null : (
           <div
             id={pageSectionDomId("columns")}
             className="rx-panel scroll-mt-6 overflow-hidden p-0"
@@ -772,6 +805,7 @@ export function SkinPage({ section }: { section?: string } = {}) {
               })}
             </ul>
           </div>
+          )}
         </div>
 
         <div className="space-y-3 lg:sticky lg:top-4 lg:self-start">
@@ -822,7 +856,7 @@ export function SkinPage({ section }: { section?: string } = {}) {
           <p className="text-xs text-faint">{dict?.skin.saveNote}</p>
         </div>
       </section>
-        </>
+        </ManiaSkinDropHost>
       ) : null}
 
       {tab === "std" ? <StandardSkinEditor /> : null}

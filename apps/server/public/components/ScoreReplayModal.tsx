@@ -39,6 +39,7 @@ import {
 import { StdPlayfield } from "./StdPlayfield";
 import { TaikoPlayfield } from "./TaikoPlayfield";
 import { CatchPlayfield } from "./CatchPlayfield";
+import { ManiaSkinDropHost } from "./ManiaSkinDropHost";
 import { NotefieldStage } from "./NotefieldStage";
 import {
   buildReplayAnalysis,
@@ -1029,6 +1030,10 @@ export function ScoreReplayModal({
       onClick={onClose}
       role="presentation"
     >
+      <ManiaSkinDropHost
+        enabled={isManiaReplay}
+        className="flex h-full w-full items-stretch justify-center"
+      >
       <div
         ref={dialogRef}
         role="dialog"
@@ -1629,6 +1634,7 @@ export function ScoreReplayModal({
         onClose={() => setExportOptionsOpen(false)}
         onConfirm={(choices) => void startExport(choices)}
       />
+      </ManiaSkinDropHost>
     </div>
   );
 }

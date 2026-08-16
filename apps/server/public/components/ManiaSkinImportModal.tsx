@@ -97,7 +97,7 @@ export function ManiaSkinImportModal({
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-end justify-center bg-black/70 p-4 sm:items-center"
+      className="fixed inset-0 z-[70] flex items-stretch justify-center bg-black/80 p-0 sm:items-center sm:p-3 md:p-5"
       onClick={() => {
         if (!applying && !busy) onClose();
       }}
@@ -109,60 +109,82 @@ export function ManiaSkinImportModal({
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-elevated shadow-2xl shadow-black/60 outline-none"
+        className="flex h-full max-h-none w-full max-w-none flex-col overflow-hidden rounded-none bg-canvas shadow-2xl shadow-black/70 outline-none sm:h-[min(96vh,64rem)] sm:max-w-[min(96vw,80rem)] sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="border-b border-white/5 px-5 py-4">
-          <h2 id={titleId} className="font-display text-lg font-bold text-ink">
-            {dict?.skin.importTitle ?? "Import mania skin"}
-          </h2>
-          <p className="mt-1 text-sm text-muted">
-            {t(dict?.skin.importSubtitle, { name: draft.name })}
-          </p>
+        <div className="flex shrink-0 flex-wrap items-start justify-between gap-3 border-b border-white/5 px-5 py-3">
+          <div className="min-w-0">
+            <h2 id={titleId} className="font-display text-lg font-bold text-ink">
+              {dict?.skin.importTitle ?? "Import mania skin"}
+            </h2>
+            <p className="mt-0.5 text-sm text-muted">
+              {t(dict?.skin.importSubtitle, { name: draft.name })}
+            </p>
+          </div>
+          <div className="flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              className="rx-btn"
+              disabled={applying || busy}
+              onClick={onClose}
+            >
+              {dict?.skin.importCancel ?? "Cancel"}
+            </button>
+            <button
+              type="button"
+              className="rx-btn-primary"
+              disabled={applying || busy || selected.length === 0}
+              onClick={() => void confirm()}
+            >
+              {applying
+                ? (dict?.skin.importApplying ?? "Saving…")
+                : (dict?.skin.importConfirm ?? "Use this skin")}
+            </button>
+          </div>
         </div>
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+        <div className="flex min-h-0 flex-1 flex-col gap-3 px-5 py-3">
           {error ? (
-            <p className="text-sm text-rose-300">{error}</p>
+            <p className="shrink-0 text-sm text-rose-300">{error}</p>
           ) : null}
-          <fieldset>
-            <legend className="mb-2 text-sm font-semibold text-ink">
-              {dict?.skin.importKeymodes ?? "Apply to keymodes"}
-            </legend>
-            <div className="flex flex-wrap gap-2">
-              {KEYMODES.map((keys) => {
-                const on = selected.includes(keys);
-                const hasSection = defined.size === 0 || defined.has(keys);
-                return (
-                  <label
-                    key={keys}
-                    className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 py-1 text-sm ${
-                      on
-                        ? "border-accent bg-accent/15 text-ink"
-                        : "border-border text-muted"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      className="accent-[var(--accent)]"
-                      checked={on}
-                      onChange={() => toggle(keys)}
-                    />
-                    {keys}K
-                    {!hasSection ? (
-                      <span className="text-[10px] uppercase tracking-wide text-faint">
-                        {dict?.skin.importFallback ?? "nearest"}
-                      </span>
-                    ) : null}
-                  </label>
-                );
-              })}
-            </div>
-          </fieldset>
-          <div>
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold text-ink">
+          <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2">
+            <fieldset className="min-w-0">
+              <legend className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
+                {dict?.skin.importKeymodes ?? "Apply to keymodes"}
+              </legend>
+              <div className="flex flex-wrap gap-2">
+                {KEYMODES.map((keys) => {
+                  const on = selected.includes(keys);
+                  const hasSection = defined.size === 0 || defined.has(keys);
+                  return (
+                    <label
+                      key={keys}
+                      className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 py-1 text-sm ${
+                        on
+                          ? "border-accent bg-accent/15 text-ink"
+                          : "border-border text-muted"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="accent-[var(--accent)]"
+                        checked={on}
+                        onChange={() => toggle(keys)}
+                      />
+                      {keys}K
+                      {!hasSection ? (
+                        <span className="text-[10px] uppercase tracking-wide text-faint">
+                          {dict?.skin.importFallback ?? "nearest"}
+                        </span>
+                      ) : null}
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
+            <div className="min-w-0">
+              <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
                 {dict?.skin.importPreview ?? "Preview"}
-              </h3>
+              </p>
               <div className="flex flex-wrap gap-1">
                 {KEYMODES.map((keys) => (
                   <button
@@ -178,7 +200,9 @@ export function ManiaSkinImportModal({
                 ))}
               </div>
             </div>
-            <div className="h-[22rem] overflow-hidden rounded-xl bg-black/40">
+          </div>
+          <div className="flex min-h-0 flex-1 justify-center">
+            <div className="h-full w-full max-w-[min(100%,28rem)] overflow-hidden rounded-xl bg-black/80 sm:max-w-[min(55%,36rem)]">
               {pack ? (
                 <ManiaNotefield
                   columnCount={previewKeys}
@@ -207,28 +231,8 @@ export function ManiaSkinImportModal({
             </div>
           </div>
           {applyError ? (
-            <p className="text-sm text-rose-300">{applyError}</p>
+            <p className="shrink-0 text-sm text-rose-300">{applyError}</p>
           ) : null}
-        </div>
-        <div className="flex justify-end gap-2 border-t border-white/5 px-5 py-4">
-          <button
-            type="button"
-            className="rx-btn"
-            disabled={applying || busy}
-            onClick={onClose}
-          >
-            {dict?.skin.importCancel ?? "Cancel"}
-          </button>
-          <button
-            type="button"
-            className="rx-btn-primary"
-            disabled={applying || busy || selected.length === 0}
-            onClick={() => void confirm()}
-          >
-            {applying
-              ? (dict?.skin.importApplying ?? "Saving…")
-              : (dict?.skin.importConfirm ?? "Use this skin")}
-          </button>
         </div>
       </div>
     </div>

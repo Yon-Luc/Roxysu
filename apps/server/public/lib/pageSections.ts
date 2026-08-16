@@ -173,6 +173,20 @@ export const PAGE_SECTIONS: PageSectionDef[] = [
     label: "osu!standard skin",
     keywords: ["skin", "std", "osu", "circles", "sliders", "spinners", "combo"],
   },
+  {
+    id: "taiko-skin",
+    to: "/skin",
+    pageLabel: "Skin",
+    label: "Taiko skin",
+    keywords: ["skin", "taiko", "don", "kat", "drumroll"],
+  },
+  {
+    id: "catch-skin",
+    to: "/skin",
+    pageLabel: "Skin",
+    label: "Catch skin",
+    keywords: ["skin", "catch", "ctb", "fruits", "catcher"],
+  },
 ];
 
 export function pageSectionDomId(sectionId: string): string {

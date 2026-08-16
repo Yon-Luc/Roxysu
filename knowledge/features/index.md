@@ -18,5 +18,5 @@ One subdirectory per product surface. Terms: [vocabulary.md](../vocabulary.md).
 | Desktop | [desktop/](desktop/index.md) |
 | tosu live overlay input | [tosu-live/](tosu-live/index.md) |
 | Now selected | [now-selected/](now-selected/index.md) |
-| Standard preview, rewatch & playfield skin | [preview-replay/](preview-replay/index.md) |
+| Preview, rewatch & playfield skins | [preview-replay/](preview-replay/index.md) |
 | Replay video export | [replay-video-export/](replay-video-export/index.md) |

@@ -213,10 +213,39 @@ Shared DSL for practice search, collections, and global search. One parser/compi
 
 ---
 
+### Taiko playfield
+
+The visual layer that draws don/kat notes, drumrolls, swells, and the receptor
+for **taiko** (`rulesetShortName` `taiko`, Mode `1`). Scroll speed is a user skin
+setting, not BPM/SV.
+
+**Not:** "taiko notefield", converted Mode 0 maps played as taiko
+
+**In code:** `TaikoPlayfield`, `paintTaikoPlayfield`, `roxysu:taiko-skin`
+
+**See:** [features/preview-replay/](features/preview-replay/index.md)
+
+---
+
+### Catch playfield
+
+The visual layer that draws fruits, droplets, bananas, and the catcher for
+**catch** (`rulesetShortName` `fruits`, Mode `2`). Playfield is 512×384 like
+standard. UI label is Catch; aliases `ctb` / `catch` exist only at filter edges.
+
+**Not:** "ctb preview" as a separate product surface, converted Mode 0 maps played as catch
+
+**In code:** `CatchPlayfield`, `paintCatchPlayfield`, `roxysu:catch-skin`
+
+**See:** [features/preview-replay/](features/preview-replay/index.md)
+
+---
+
 ### Score rewatch
 
 Client-app playback of a stored score's replay frames and judgments against the
-beatmap chart and audio (mania notefield or standard playfield).
+beatmap chart and audio (mania notefield, standard playfield, Taiko playfield, or
+Catch playfield).
 
 **Not:** "replay preview" alone, "video export", live **Play** mode in the modal
 
@@ -229,7 +258,8 @@ beatmap chart and audio (mania notefield or standard playfield).
 ### Replay video export
 
 Browser-side encode of a score rewatch into an MP4 (playfield + beatmap audio)
-using mediabunny / WebCodecs. Runs offline in the client app; does not upload.
+using mediabunny / WebCodecs. Supports mania, standard, taiko, and catch.
+Runs offline in the client app; does not upload.
 
 **Not:** "screen record", "replay render" on the server, "export" alone
 

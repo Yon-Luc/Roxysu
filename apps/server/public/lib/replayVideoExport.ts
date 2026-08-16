@@ -57,12 +57,27 @@ import {
   type PreviewSkin,
 } from "./previewSkin";
 import { getStdSkin, type StdSkin } from "./stdSkin";
+import { getTaikoSkin, type TaikoSkin } from "./taikoSkin";
+import { getCatchSkin, type CatchSkin } from "./catchSkin";
+import {
+  buildTaikoJudgmentMap,
+  paintTaikoPlayfield,
+  type TaikoPlayfieldJudgment,
+} from "./paintTaikoPlayfield";
+import {
+  buildCatchComboNumbers,
+  buildCatchJudgmentMap,
+  paintCatchPlayfield,
+  type CatcherTrailPoint,
+  type CatchPlayfieldJudgment,
+} from "./paintCatchPlayfield";
 import {
   FIELD_WIDTH_DEFAULT,
   FIELD_WIDTH_MAX,
   FIELD_WIDTH_MIN,
 } from "../components/previewPrefs";
 import roxyIconUrl from "../roxy.png";
+import catcherSpriteUrl from "../roxyctb.png";
 
 export const REPLAY_VIDEO_WIDTH = 1920;
 export const REPLAY_VIDEO_HEIGHT = 1080;
@@ -385,6 +400,24 @@ const STD_RESULT_WEIGHT: Record<ReplayJudgmentResult, number> = {
 };
 const STD_ACC_SCALE = 300;
 
+const TAIKO_RESULT_WEIGHT: Record<ReplayJudgmentResult, number> = {
+  perfect: 300,
+  great: 300,
+  good: 150,
+  ok: 150,
+  meh: 0,
+  miss: 0,
+};
+
+const CATCH_RESULT_WEIGHT: Record<ReplayJudgmentResult, number> = {
+  perfect: 300,
+  great: 300,
+  good: 100,
+  ok: 100,
+  meh: 100,
+  miss: 0,
+};
+
 const HEADER_H = 88;
 const FOOTER_H = 64;
 /** Strip under the playfield for combo/accuracy when hudPlacement is `below`. */
@@ -406,6 +439,8 @@ export type ReplayVideoExportOptions = {
   fullscreen?: boolean;
   /** Explicit skins (falls back to localStorage stores). */
   stdSkin?: StdSkin;
+  taikoSkin?: TaikoSkin;
+  catchSkin?: CatchSkin;
   previewSkin?: PreviewSkin;
   /** Resolution / fps / encode quality preset. */
   presetId?: ReplayVideoExportPresetId;
@@ -450,6 +485,13 @@ function isStdRuleset(shortName: string | null | undefined): boolean {
 function isManiaRuleset(shortName: string | null | undefined): boolean {
   return (shortName ?? "").toLowerCase() === "mania";
 }
+function isTaikoRuleset(shortName: string | null | undefined): boolean {
+  return (shortName ?? "").toLowerCase() === "taiko";
+}
+function isFruitsRuleset(shortName: string | null | undefined): boolean {
+  const s = (shortName ?? "").toLowerCase();
+  return s === "fruits" || s === "catch" || s === "ctb";
+}
 
 function chartEndMs(replay: LoadedScoreReplay): number {
   let end = replay.beatmap.lengthMs ?? 0;
@@ -459,6 +501,13 @@ function chartEndMs(replay: LoadedScoreReplay): number {
   for (const o of replay.beatmap.hitObjects ?? []) {
     if (o.type === "circle") end = Math.max(end, o.timeMs);
     else end = Math.max(end, o.endMs);
+  }
+  for (const o of replay.beatmap.taikoHitObjects ?? []) {
+    if (o.type === "hit") end = Math.max(end, o.timeMs);
+    else end = Math.max(end, o.endMs);
+  }
+  for (const o of replay.beatmap.catchHitObjects ?? []) {
+    end = Math.max(end, o.timeMs);
   }
   for (const j of replay.judgments ?? []) {
     end = Math.max(end, j.tMs);
@@ -615,13 +664,28 @@ async function loadRoxysuLogo(
   return loadImageFromUrl(roxyIconUrl, signal);
 }
 
+function hudWeights(ruleset: string | null | undefined): {
+  weight: Record<ReplayJudgmentResult, number>;
+  scale: number;
+} {
+  if (isStdRuleset(ruleset)) {
+    return { weight: STD_RESULT_WEIGHT, scale: STD_ACC_SCALE };
+  }
+  if (isTaikoRuleset(ruleset)) {
+    return { weight: TAIKO_RESULT_WEIGHT, scale: STD_ACC_SCALE };
+  }
+  if (isFruitsRuleset(ruleset)) {
+    return { weight: CATCH_RESULT_WEIGHT, scale: STD_ACC_SCALE };
+  }
+  return { weight: MANIA_RESULT_WEIGHT, scale: MANIA_ACC_SCALE };
+}
+
 function computeHud(
   judgments: Array<{ tMs: number; result: ReplayJudgmentResult }>,
   tMs: number,
-  std: boolean,
+  ruleset: string | null | undefined,
 ): HudState {
-  const weight = std ? STD_RESULT_WEIGHT : MANIA_RESULT_WEIGHT;
-  const scale = std ? STD_ACC_SCALE : MANIA_ACC_SCALE;
+  const { weight, scale } = hudWeights(ruleset);
   let combo = 0;
   let last: ReplayJudgmentResult | null = null;
   let accWeight = 0;
@@ -648,7 +712,7 @@ function evenDim(n: number): number {
 function layoutPlayfield(
   canvasW: number,
   canvasH: number,
-  std: boolean,
+  letterbox: boolean,
   fieldWidthPct: number,
   fullscreen: boolean,
 ): PlayfieldRect {
@@ -656,7 +720,7 @@ function layoutPlayfield(
   const contentH = canvasH - HEADER_H - FOOTER_H;
   const contentW = canvasW;
 
-  if (std) {
+  if (letterbox) {
     const availW = contentW - CONTENT_PAD * 2;
     const availH = contentH - CONTENT_PAD * 2;
     const scale = Math.min(availW / 4, availH / 3);
@@ -691,7 +755,7 @@ function layoutPlayfield(
  * `maxW`/`maxH` come from the preset as upper bounds.
  */
 function layoutTightCanvas(
-  std: boolean,
+  letterbox: boolean,
   maxW: number,
   maxH: number,
   fieldWidthPct: number,
@@ -703,7 +767,7 @@ function layoutTightCanvas(
   const hudH = hudBelow ? HUD_BELOW_H : 0;
   const chromeH = HEADER_H + FOOTER_H + hudH;
 
-  if (std) {
+  if (letterbox) {
     const availW = maxW - padX * 2;
     const availH = maxH - chromeH - padY * 2;
     const scale = Math.min(availW / 4, availH / 3);
@@ -787,7 +851,8 @@ function drawHeader(
 
   const subtitleParts = [
     replay.beatmap.artist,
-    isStdRuleset(replay.beatmap.rulesetShortName)
+    isStdRuleset(replay.beatmap.rulesetShortName) ||
+    isFruitsRuleset(replay.beatmap.rulesetShortName)
       ? `CS ${(replay.beatmap.circleSize ?? 5).toFixed(1)} · AR ${(replay.beatmap.approachRate ?? 5).toFixed(1)}`
       : replay.beatmap.columnCount > 0
         ? `${replay.beatmap.columnCount}K`
@@ -1046,6 +1111,8 @@ function paintComposedFrame(args: {
   replay: LoadedScoreReplay;
   tMs: number;
   std: boolean;
+  taiko: boolean;
+  fruits: boolean;
   bg: HTMLImageElement | null;
   logo: HTMLImageElement | null;
   hideBackground: boolean;
@@ -1059,6 +1126,19 @@ function paintComposedFrame(args: {
     judgmentMaps: ReturnType<typeof buildHeadMap>;
     skin: StdSkin;
     hidden: boolean;
+  };
+  taikoPaint?: {
+    skin: TaikoSkin;
+    hidden: boolean;
+    judgmentMap: ReturnType<typeof buildTaikoJudgmentMap>;
+  };
+  catchPaint?: {
+    skin: CatchSkin;
+    hidden: boolean;
+    trail: CatcherTrailPoint[];
+    comboNumbers: number[];
+    judgmentMap: ReturnType<typeof buildCatchJudgmentMap>;
+    catcherSprite: HTMLImageElement | null;
   };
   maniaPaint?: {
     notes: LoadedScoreReplay["beatmap"]["notes"];
@@ -1076,6 +1156,8 @@ function paintComposedFrame(args: {
     replay,
     tMs,
     std,
+    taiko,
+    fruits,
     bg,
     logo,
     hideBackground,
@@ -1105,7 +1187,36 @@ function paintComposedFrame(args: {
       comboNumbers: args.stdPaint.comboNumbers,
       judgmentMaps: args.stdPaint.judgmentMaps,
     });
-  } else if (!std && args.maniaPaint) {
+  } else if (taiko && args.taikoPaint) {
+    paintTaikoPlayfield({
+      ctx: playfieldCtx,
+      width: rect.w,
+      height: rect.h,
+      tMs,
+      hitObjects: replay.beatmap.taikoHitObjects ?? [],
+      frames: replay.taikoFrames ?? [],
+      hidden: args.taikoPaint.hidden,
+      skin: args.taikoPaint.skin,
+      judgmentMap: args.taikoPaint.judgmentMap,
+    });
+  } else if (fruits && args.catchPaint) {
+    paintCatchPlayfield({
+      ctx: playfieldCtx,
+      width: rect.w,
+      height: rect.h,
+      tMs,
+      hitObjects: replay.beatmap.catchHitObjects ?? [],
+      circleSize: replay.beatmap.circleSize,
+      approachRate: replay.beatmap.approachRate,
+      frames: replay.catchFrames ?? [],
+      hidden: args.catchPaint.hidden,
+      skin: args.catchPaint.skin,
+      trail: args.catchPaint.trail,
+      comboNumbers: args.catchPaint.comboNumbers,
+      judgmentMap: args.catchPaint.judgmentMap,
+      catcherSprite: args.catchPaint.catcherSprite,
+    });
+  } else if (!std && !taiko && !fruits && args.maniaPaint) {
     paintManiaNotefield({
       ctx: playfieldCtx,
       width: rect.w,
@@ -1130,7 +1241,7 @@ function paintComposedFrame(args: {
   const hud = computeHud(
     replay.judgments as Array<{ tMs: number; result: ReplayJudgmentResult }>,
     tMs,
-    std,
+    replay.beatmap.rulesetShortName,
   );
   drawHud(ctx, rect, hud, hudPlacement);
   drawFooterStats(ctx, replay, width, height, logo);
@@ -1161,9 +1272,12 @@ export async function exportReplayVideo(
   const ruleset = replay.beatmap.rulesetShortName;
   const std = isStdRuleset(ruleset);
   const mania = isManiaRuleset(ruleset);
-  if (!std && !mania) {
-    throw new Error("Replay video export supports mania and standard only");
+  const taiko = isTaikoRuleset(ruleset);
+  const fruits = isFruitsRuleset(ruleset);
+  if (!std && !mania && !taiko && !fruits) {
+    throw new Error("Replay video export supports mania, standard, taiko, and catch");
   }
+  const letterbox = std || fruits;
 
   const audioUrl = localBeatmapAudioUrl(replay.beatmap.audioFileHash);
   if (!audioUrl) {
@@ -1173,10 +1287,11 @@ export async function exportReplayVideo(
   onProgress?.({ phase: "audio" });
   throwIfAborted(signal);
 
-  const [fullAudio, bg, logo] = await Promise.all([
+  const [fullAudio, bg, logo, catcherSprite] = await Promise.all([
     decodeBeatmapAudio(audioUrl, signal),
     hideBackground ? Promise.resolve(null) : loadBackgroundImage(replay, signal),
     loadRoxysuLogo(signal),
+    fruits ? loadImageFromUrl(catcherSpriteUrl, signal) : Promise.resolve(null),
   ]);
 
   const { startMs, endMs } = exportTimeWindow(replay, trimIdle);
@@ -1199,7 +1314,7 @@ export async function exportReplayVideo(
   let rect: PlayfieldRect;
   if (tightCrop) {
     const tight = layoutTightCanvas(
-      std,
+      letterbox,
       opts.width ?? preset.width,
       opts.height ?? preset.height,
       fieldWidth,
@@ -1212,7 +1327,7 @@ export async function exportReplayVideo(
   } else {
     width = opts.width ?? preset.width;
     height = opts.height ?? preset.height;
-    rect = layoutPlayfield(width, height, std, fieldWidth, fullscreen);
+    rect = layoutPlayfield(width, height, letterbox, fieldWidth, fullscreen);
   }
 
   const encodeQuality = buildVideoEncodeQuality(
@@ -1292,7 +1407,32 @@ export async function exportReplayVideo(
       }
     : undefined;
 
-  const maniaPaint = !std
+  const taikoPaint = taiko
+    ? {
+        skin: opts.taikoSkin ?? getTaikoSkin(),
+        hidden: replay.playback.acronyms.includes("HD"),
+        judgmentMap: buildTaikoJudgmentMap(
+          replay.judgments as TaikoPlayfieldJudgment[],
+        ),
+      }
+    : undefined;
+
+  const catchPaint = fruits
+    ? {
+        skin: opts.catchSkin ?? getCatchSkin(),
+        hidden: replay.playback.acronyms.includes("HD"),
+        trail: [] as CatcherTrailPoint[],
+        comboNumbers: buildCatchComboNumbers(
+          replay.beatmap.catchHitObjects ?? [],
+        ),
+        judgmentMap: buildCatchJudgmentMap(
+          replay.judgments as CatchPlayfieldJudgment[],
+        ),
+        catcherSprite,
+      }
+    : undefined;
+
+  const maniaPaint = mania
     ? (() => {
         const previewSkin = opts.previewSkin ?? getPreviewSkin();
         const list = replay.beatmap.notes ?? [];
@@ -1339,6 +1479,8 @@ export async function exportReplayVideo(
       replay,
       tMs,
       std,
+      taiko,
+      fruits,
       bg,
       logo,
       hideBackground,
@@ -1347,6 +1489,8 @@ export async function exportReplayVideo(
       playfieldCtx,
       rect,
       stdPaint,
+      taikoPaint,
+      catchPaint,
       maniaPaint,
     });
     await videoSource.add(tSec, frameDuration);

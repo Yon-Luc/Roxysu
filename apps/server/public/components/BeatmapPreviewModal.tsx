@@ -11,6 +11,8 @@ import { fetchBeatmapPreview, type BeatmapPreview } from "../lib/api";
 import { AudioClock, sampleAudioClock } from "../lib/audioClock";
 import { clamp, formatAccuracy, formatClock } from "../lib/format";
 import { useStdSkin } from "../lib/stdSkin";
+import { useTaikoSkin } from "../lib/taikoSkin";
+import { useCatchSkin } from "../lib/catchSkin";
 import {
   localBeatmapAudioUrl,
   localBeatmapCoverUrl,
@@ -42,6 +44,8 @@ import {
   type NotefieldJudgment,
 } from "./ManiaNotefield";
 import { StdPlayfield } from "./StdPlayfield";
+import { TaikoPlayfield } from "./TaikoPlayfield";
+import { CatchPlayfield } from "./CatchPlayfield";
 import { NotefieldStage } from "./NotefieldStage";
 import {
   EMPTY_SUMMARY,
@@ -96,6 +100,8 @@ export function BeatmapPreviewModal({
   const bindsRef = useRef<string[]>([]);
   const skin = usePreviewSkin();
   const stdSkin = useStdSkin();
+  const taikoSkin = useTaikoSkin();
+  const catchSkin = useCatchSkin();
 
   const [prefs, setPrefs] = useState<PreviewPrefs>(() => loadPrefs());
   const prefsRef = useRef(prefs);
@@ -723,7 +729,7 @@ export function BeatmapPreviewModal({
   const subtitle = data
     ? [
         data.artist,
-        data.rulesetShortName === "osu"
+        data.rulesetShortName === "osu" || data.rulesetShortName === "fruits"
           ? `CS ${(data.circleSize ?? 5).toFixed(1)} · AR ${(data.approachRate ?? 5).toFixed(1)}`
           : data.columnCount > 0
             ? `${data.columnCount}K`
@@ -743,6 +749,13 @@ export function BeatmapPreviewModal({
     for (const o of data?.hitObjects ?? []) {
       if (o.type === "circle") end = Math.max(end, o.timeMs);
       else end = Math.max(end, o.endMs);
+    }
+    for (const o of data?.taikoHitObjects ?? []) {
+      if (o.type === "hit") end = Math.max(end, o.timeMs);
+      else end = Math.max(end, o.endMs);
+    }
+    for (const o of data?.catchHitObjects ?? []) {
+      end = Math.max(end, o.timeMs);
     }
     return end;
   })();
@@ -765,6 +778,15 @@ export function BeatmapPreviewModal({
     data?.rulesetShortName === "osu" &&
     Boolean(data.supported) &&
     (data.hitObjects?.length ?? 0) > 0;
+  const isTaiko =
+    data?.rulesetShortName === "taiko" &&
+    Boolean(data.supported) &&
+    (data.taikoHitObjects?.length ?? 0) > 0;
+  const isCatch =
+    data?.rulesetShortName === "fruits" &&
+    Boolean(data.supported) &&
+    (data.catchHitObjects?.length ?? 0) > 0;
+  const isLetterbox = isStd || isCatch;
   const binds =
     isMania ? resolveKeybinds(keybindsAll, data!.columnCount) : [];
   const isPlay = mode === "play";
@@ -793,7 +815,7 @@ export function BeatmapPreviewModal({
         className={
           fullscreen
             ? "relative flex h-full w-full max-h-none max-w-none flex-col overflow-hidden rounded-none bg-canvas shadow-2xl shadow-black/70 outline-none"
-            : isStd
+            : isLetterbox
               ? "relative flex h-full max-h-none w-full max-w-none flex-col overflow-hidden rounded-none bg-canvas shadow-2xl shadow-black/70 outline-none sm:h-[min(96vh,64rem)] sm:max-w-[min(96vw,96rem)] sm:rounded-2xl"
               : "relative flex h-full max-h-none w-full max-w-none flex-col overflow-hidden rounded-none bg-canvas shadow-2xl shadow-black/70 outline-none sm:h-[min(96vh,58rem)] sm:max-w-6xl sm:rounded-2xl"
         }
@@ -952,7 +974,7 @@ export function BeatmapPreviewModal({
 
               <div
                 className={
-                  isStd
+                  isLetterbox
                     ? fullscreen
                       ? "relative mx-auto min-h-0 w-full max-w-none flex-1 px-1 py-1 sm:px-2 sm:py-2"
                       : "relative mx-auto min-h-0 w-full max-w-none flex-1 px-2 py-2 sm:px-3 sm:py-3"
@@ -961,7 +983,7 @@ export function BeatmapPreviewModal({
                       : "relative mx-auto min-h-0 w-full max-w-2xl flex-1 px-3 py-2 sm:max-w-3xl sm:px-6 sm:py-4"
                 }
                 style={
-                  fullscreen && !isStd
+                  fullscreen && !isLetterbox
                     ? { maxWidth: `${prefs.fieldWidth}%` }
                     : undefined
                 }
@@ -995,12 +1017,34 @@ export function BeatmapPreviewModal({
                       />
                     </div>
                   </div>
+                ) : isTaiko ? (
+                  <div className="relative h-full w-full overflow-hidden rounded-xl">
+                    <TaikoPlayfield
+                      hitObjects={data.taikoHitObjects ?? []}
+                      getCurrentTimeMs={mapTimeMs}
+                      skin={taikoSkin}
+                    />
+                  </div>
+                ) : isCatch ? (
+                  <div className="relative h-full w-full">
+                    <div className="h-full w-full overflow-hidden rounded-xl">
+                      <CatchPlayfield
+                        hitObjects={data.catchHitObjects ?? []}
+                        circleSize={data.circleSize ?? 5}
+                        approachRate={data.approachRate ?? 5}
+                        getCurrentTimeMs={mapTimeMs}
+                        skin={catchSkin}
+                      />
+                    </div>
+                  </div>
                 ) : (
                   <div className="flex h-full min-h-[16rem] items-center justify-center rounded-xl bg-black/40 px-6 text-center text-sm text-on-media-muted">
                     {data.rulesetShortName === "mania" ||
-                    data.rulesetShortName === "osu"
+                    data.rulesetShortName === "osu" ||
+                    data.rulesetShortName === "taiko" ||
+                    data.rulesetShortName === "fruits"
                       ? "Could not load playfield for this map."
-                      : "Playfield preview supports mania and standard. Audio and background still work."}
+                      : "Playfield preview supports mania, standard, taiko, and catch. Audio and background still work."}
                   </div>
                 )}
               </div>
@@ -1223,7 +1267,7 @@ export function BeatmapPreviewModal({
                     </>
                   ) : null}
 
-                  {fullscreen && !isStd ? (
+                  {fullscreen && !isLetterbox ? (
                     <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-on-media-muted sm:max-w-xs">
                       <span className="shrink-0">
                         Size {Math.round(prefs.fieldWidth)}%

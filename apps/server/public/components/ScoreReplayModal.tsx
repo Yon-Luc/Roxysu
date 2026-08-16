@@ -12,6 +12,8 @@ import { fetchScoreReplay, type ScoreReplay } from "../lib/api";
 import { AudioClock, sampleAudioClock } from "../lib/audioClock";
 import { clamp, formatAccuracy, formatClock } from "../lib/format";
 import { useStdSkin } from "../lib/stdSkin";
+import { useTaikoSkin } from "../lib/taikoSkin";
+import { useCatchSkin } from "../lib/catchSkin";
 import { usePreviewSkin } from "../lib/previewSkin";
 import { ModBadges } from "./ModBadges";
 import {
@@ -35,6 +37,8 @@ import {
   type ReplayJudgmentResult,
 } from "./ManiaNotefield";
 import { StdPlayfield } from "./StdPlayfield";
+import { TaikoPlayfield } from "./TaikoPlayfield";
+import { CatchPlayfield } from "./CatchPlayfield";
 import { NotefieldStage } from "./NotefieldStage";
 import {
   buildReplayAnalysis,
@@ -85,6 +89,24 @@ const STD_RESULT_WEIGHT: Record<ReplayJudgmentResult, number> = {
 };
 const STD_ACC_SCALE = 300;
 
+const TAIKO_RESULT_WEIGHT: Record<ReplayJudgmentResult, number> = {
+  perfect: 300,
+  great: 300,
+  good: 150,
+  ok: 150,
+  meh: 0,
+  miss: 0,
+};
+
+const CATCH_RESULT_WEIGHT: Record<ReplayJudgmentResult, number> = {
+  perfect: 300,
+  great: 300,
+  good: 100,
+  ok: 100,
+  meh: 100,
+  miss: 0,
+};
+
 type ModalMode = "rewatch" | "play";
 type LoadedScoreReplay = ScoreReplay & {
   beatmap: NonNullable<ScoreReplay["beatmap"]>;
@@ -94,6 +116,8 @@ type LoadedScoreReplay = ScoreReplay & {
   judgments: NonNullable<ScoreReplay["judgments"]>;
   simulated: NonNullable<ScoreReplay["simulated"]>;
   stdFrames?: NonNullable<ScoreReplay["stdFrames"]>;
+  taikoFrames?: NonNullable<ScoreReplay["taikoFrames"]>;
+  catchFrames?: NonNullable<ScoreReplay["catchFrames"]>;
 };
 
 function isLoadedScoreReplay(
@@ -197,6 +221,8 @@ export function ScoreReplayModal({
   const [prefs, setPrefs] = useState<PreviewPrefs>(() => loadPrefs());
   const prefsRef = useRef(prefs);
   const skin = useStdSkin();
+  const taikoSkin = useTaikoSkin();
+  const catchSkin = useCatchSkin();
   const previewSkin = usePreviewSkin();
   const [mode, setMode] = useState<ModalMode>("rewatch");
   const [playing, setPlaying] = useState(false);
@@ -455,9 +481,11 @@ export function ScoreReplayModal({
     if (!replayData || exporting || isPlay) return;
     if (
       replayData.beatmap.rulesetShortName !== "mania" &&
-      replayData.beatmap.rulesetShortName !== "osu"
+      replayData.beatmap.rulesetShortName !== "osu" &&
+      replayData.beatmap.rulesetShortName !== "taiko" &&
+      replayData.beatmap.rulesetShortName !== "fruits"
     ) {
-      setExportError("Export supports mania and standard only");
+      setExportError("Export supports mania, standard, taiko, and catch");
       return;
     }
     setExportError(null);
@@ -481,6 +509,8 @@ export function ScoreReplayModal({
         fieldWidth: prefsRef.current.fieldWidth,
         fullscreen: prefsRef.current.fullscreen,
         stdSkin: skin,
+        taikoSkin,
+        catchSkin,
         previewSkin,
         presetId: choices.presetId,
         hideBackground: choices.hideBackground,
@@ -864,9 +894,16 @@ export function ScoreReplayModal({
   useEffect(() => {
     if (mode !== "rewatch" || !replayData) return;
     const { judgments } = replayData;
-    const isStd = replayData.beatmap.rulesetShortName === "osu";
-    const weight = isStd ? STD_RESULT_WEIGHT : MANIA_RESULT_WEIGHT;
-    const scale = isStd ? STD_ACC_SCALE : MANIA_ACC_SCALE;
+    const ruleset = replayData.beatmap.rulesetShortName;
+    const weight =
+      ruleset === "osu"
+        ? STD_RESULT_WEIGHT
+        : ruleset === "taiko"
+          ? TAIKO_RESULT_WEIGHT
+          : ruleset === "fruits"
+            ? CATCH_RESULT_WEIGHT
+            : MANIA_RESULT_WEIGHT;
+    const scale = ruleset === "mania" ? MANIA_ACC_SCALE : STD_ACC_SCALE;
     let raf = 0;
     let running = true;
 
@@ -919,7 +956,8 @@ export function ScoreReplayModal({
   const subtitleParts = replayData
     ? [
         replayData.beatmap.artist,
-        replayData.beatmap.rulesetShortName === "osu"
+        replayData.beatmap.rulesetShortName === "osu" ||
+        replayData.beatmap.rulesetShortName === "fruits"
           ? `CS ${(replayData.beatmap.circleSize ?? 5).toFixed(1)} · AR ${(replayData.beatmap.approachRate ?? 5).toFixed(1)}`
           : replayData.beatmap.columnCount > 0
             ? `${replayData.beatmap.columnCount}K`
@@ -935,6 +973,13 @@ export function ScoreReplayModal({
     for (const o of replayData?.beatmap.hitObjects ?? []) {
       if (o.type === "circle") end = Math.max(end, o.timeMs);
       else end = Math.max(end, o.endMs);
+    }
+    for (const o of replayData?.beatmap.taikoHitObjects ?? []) {
+      if (o.type === "hit") end = Math.max(end, o.timeMs);
+      else end = Math.max(end, o.endMs);
+    }
+    for (const o of replayData?.beatmap.catchHitObjects ?? []) {
+      end = Math.max(end, o.timeMs);
     }
     return end;
   })();
@@ -958,6 +1003,15 @@ export function ScoreReplayModal({
     !!replayData &&
     replayData.beatmap.rulesetShortName === "osu" &&
     (replayData.beatmap.hitObjects?.length ?? 0) > 0;
+  const isTaikoReplay =
+    !!replayData &&
+    replayData.beatmap.rulesetShortName === "taiko" &&
+    (replayData.beatmap.taikoHitObjects?.length ?? 0) > 0;
+  const isCatchReplay =
+    !!replayData &&
+    replayData.beatmap.rulesetShortName === "fruits" &&
+    (replayData.beatmap.catchHitObjects?.length ?? 0) > 0;
+  const isLetterboxReplay = isStdReplay || isCatchReplay;
   const { outerRef: stdFitRef, size: stdFitSize } = useAspectFit(4 / 3);
   const canLivePlay = isManiaReplay;
   const binds = canLivePlay
@@ -984,7 +1038,7 @@ export function ScoreReplayModal({
         className={
           fullscreen
             ? "relative flex h-full w-full max-h-none max-w-none flex-col overflow-hidden rounded-none bg-canvas shadow-2xl shadow-black/70 outline-none"
-            : isStdReplay
+            : isLetterboxReplay
               ? "relative flex h-full max-h-none w-full max-w-none flex-col overflow-hidden rounded-none bg-canvas shadow-2xl shadow-black/70 outline-none sm:h-[min(96vh,64rem)] sm:max-w-[min(96vw,96rem)] sm:rounded-2xl"
               : "relative flex h-full max-h-none w-full max-w-none flex-col overflow-hidden rounded-none bg-canvas shadow-2xl shadow-black/70 outline-none sm:h-[min(96vh,58rem)] sm:max-w-6xl sm:rounded-2xl"
         }
@@ -1078,7 +1132,7 @@ export function ScoreReplayModal({
                 </button>
               </div>
             ) : null}
-            {!isPlay && (isManiaReplay || isStdReplay) ? (
+            {!isPlay && (isManiaReplay || isStdReplay || isTaikoReplay || isCatchReplay) ? (
               <button
                 type="button"
                 onClick={openExportOptions}
@@ -1170,16 +1224,16 @@ export function ScoreReplayModal({
               ) : null}
 
               <div
-                ref={isStdReplay ? stdFitRef : undefined}
+                ref={isLetterboxReplay ? stdFitRef : undefined}
                 className={
                   showAnalysis
                     ? "relative flex min-h-0 flex-1 flex-col sm:flex-row"
-                    : `relative flex min-h-0 flex-1 flex-col${isStdReplay ? " items-center justify-center" : ""}`
+                    : `relative flex min-h-0 flex-1 flex-col${isLetterboxReplay ? " items-center justify-center" : ""}`
                 }
               >
                 <div
                   className={
-                    isStdReplay
+                    isLetterboxReplay
                       ? "relative mx-auto min-h-0 shrink-0"
                       : fullscreen
                         ? "relative mx-auto min-h-0 w-full flex-1 px-2 py-1 sm:px-4 sm:py-2"
@@ -1188,7 +1242,7 @@ export function ScoreReplayModal({
                           : "relative mx-auto min-h-0 w-full max-w-2xl flex-1 px-3 py-2 sm:max-w-3xl sm:px-6 sm:py-4"
                   }
                   style={
-                    isStdReplay
+                    isLetterboxReplay
                       ? stdFitSize
                         ? {
                             width: `${stdFitSize.width}px`,
@@ -1265,6 +1319,32 @@ export function ScoreReplayModal({
                           getCurrentTimeMs={mapTimeMs}
                           hidden={replayData.playback.acronyms.includes("HD")}
                           skin={skin}
+                        />
+                      </div>
+                    </div>
+                  ) : isTaikoReplay ? (
+                    <div className="relative h-full w-full overflow-hidden rounded-xl">
+                      <TaikoPlayfield
+                        hitObjects={replayData.beatmap.taikoHitObjects ?? []}
+                        frames={replayData.taikoFrames ?? []}
+                        judgments={replayData.judgments}
+                        getCurrentTimeMs={mapTimeMs}
+                        hidden={replayData.playback.acronyms.includes("HD")}
+                        skin={taikoSkin}
+                      />
+                    </div>
+                  ) : isCatchReplay ? (
+                    <div className="relative h-full w-full">
+                      <div className="h-full w-full overflow-hidden rounded-xl">
+                        <CatchPlayfield
+                          hitObjects={replayData.beatmap.catchHitObjects ?? []}
+                          circleSize={replayData.beatmap.circleSize ?? 5}
+                          approachRate={replayData.beatmap.approachRate ?? 5}
+                          frames={replayData.catchFrames ?? []}
+                          judgments={replayData.judgments}
+                          getCurrentTimeMs={mapTimeMs}
+                          hidden={replayData.playback.acronyms.includes("HD")}
+                          skin={catchSkin}
                         />
                       </div>
                     </div>
@@ -1474,7 +1554,7 @@ export function ScoreReplayModal({
                     </label>
                     ) : null}
 
-                    {fullscreen && !isStdReplay ? (
+                    {fullscreen && !isLetterboxReplay ? (
                       <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-on-media-muted sm:max-w-xs">
                         <span className="shrink-0">
                           Size {Math.round(prefs.fieldWidth)}%

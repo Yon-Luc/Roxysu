@@ -20,3 +20,14 @@ export type {
   StdHitObject,
   StdPoint,
 } from "./stdTypes";
+export { parseTaikoChart } from "./parseTaiko";
+export type {
+  ParsedTaikoChart,
+  TaikoColor,
+  TaikoHitObject,
+} from "./taikoTypes";
+export { parseCatchChart, catcherWidth } from "./parseCatch";
+export type {
+  CatchHitObject,
+  ParsedCatchChart,
+} from "./catchTypes";

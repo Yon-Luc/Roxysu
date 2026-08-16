@@ -27,6 +27,20 @@ export function PreviewSkinSection() {
         >
           {dict?.settings.openStdSkinEditor}
         </Link>
+        <Link
+          to="/skin"
+          search={{ section: "taiko-skin" }}
+          className="rx-btn inline-flex"
+        >
+          {dict?.settings.openTaikoSkinEditor ?? "Edit taiko skin"}
+        </Link>
+        <Link
+          to="/skin"
+          search={{ section: "catch-skin" }}
+          className="rx-btn inline-flex"
+        >
+          {dict?.settings.openCatchSkinEditor ?? "Edit catch skin"}
+        </Link>
       </div>
     </section>
   );

@@ -70,6 +70,7 @@ writeFileSync(path.join(outDir, "index.html"), html);
 // Static assets referenced by index.html / PWA (not emitted by the JS bundle).
 for (const rel of [
   "roxy.png",
+  "roxyctb.png",
   "manifest.webmanifest",
   "icons",
   "sw.js",

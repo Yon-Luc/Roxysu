@@ -15,6 +15,24 @@ export type StdReplayFrame = {
   buttons: number;
 };
 
+/** Taiko drum bitmask: 1 left don, 2 left kat, 4 right don, 8 right kat. */
+export type TaikoReplayFrame = {
+  tMs: number;
+  keys: number;
+};
+
+/** Catcher position + dash. */
+export type CatchReplayFrame = {
+  tMs: number;
+  x: number;
+  dashing: boolean;
+};
+
+export const TAIKO_LEFT_DON = 1;
+export const TAIKO_LEFT_KAT = 2;
+export const TAIKO_RIGHT_DON = 4;
+export const TAIKO_RIGHT_KAT = 8;
+
 /** @deprecated Prefer ManiaReplayFrame — kept for mania-judge compatibility. */
 export type ReplayFrame = ManiaReplayFrame;
 
@@ -28,9 +46,15 @@ export type DecodedReplay = {
   frames: ManiaReplayFrame[];
   /** Standard cursor frames when ruleset is osu; empty otherwise. */
   stdFrames: StdReplayFrame[];
+  /** Taiko drum frames when ruleset is taiko; empty otherwise. */
+  taikoFrames: TaikoReplayFrame[];
+  /** Catcher frames when ruleset is fruits; empty otherwise. */
+  catchFrames: CatchReplayFrame[];
 };
 
 const RULESET_OSU = 0;
+const RULESET_TAIKO = 1;
+const RULESET_FRUITS = 2;
 const RULESET_MANIA = 3;
 
 /**
@@ -76,6 +100,10 @@ export async function decodeLegacyReplay(
     rulesetId === RULESET_MANIA ? toManiaFrames(legacy) : [];
   const stdFrames =
     rulesetId === RULESET_OSU ? toStdFrames(legacy) : [];
+  const taikoFrames =
+    rulesetId === RULESET_TAIKO ? toTaikoFrames(legacy) : [];
+  const catchFrames =
+    rulesetId === RULESET_FRUITS ? toCatchFrames(legacy) : [];
 
   return {
     rulesetId,
@@ -85,6 +113,8 @@ export async function decodeLegacyReplay(
     modsLegacy,
     frames,
     stdFrames,
+    taikoFrames,
+    catchFrames,
   };
 }
 
@@ -209,10 +239,61 @@ function toStdFrames(legacy: LegacyFrame[]): StdReplayFrame[] {
   return frames;
 }
 
+function toTaikoFrames(legacy: LegacyFrame[]): TaikoReplayFrame[] {
+  const frames: TaikoReplayFrame[] = [];
+  let currentTime: number | null = null;
+  let lastKeys = -1;
+
+  for (const f of legacy) {
+    if (currentTime != null && f.time < currentTime) continue;
+    currentTime = f.time;
+    const keys = Math.max(0, Math.floor(f.buttons)) & 15;
+    if (keys !== lastKeys || frames.length === 0) {
+      frames.push({ tMs: f.time, keys });
+      lastKeys = keys;
+    }
+  }
+
+  return frames;
+}
+
+function toCatchFrames(legacy: LegacyFrame[]): CatchReplayFrame[] {
+  const frames: CatchReplayFrame[] = [];
+  let currentTime: number | null = null;
+  let lastX = Number.NaN;
+  let lastDash = false;
+
+  for (const f of legacy) {
+    if (currentTime != null && f.time < currentTime) continue;
+    currentTime = f.time;
+    const dashing = (Math.floor(f.buttons) & 1) !== 0;
+    if (
+      frames.length > 0 &&
+      dashing === lastDash &&
+      Math.abs(f.x - lastX) < 0.01
+    ) {
+      continue;
+    }
+    frames.push({ tMs: f.time, x: f.x, dashing });
+    lastX = f.x;
+    lastDash = dashing;
+  }
+
+  return frames;
+}
+
 export function isManiaRulesetId(id: number): boolean {
   return id === RULESET_MANIA;
 }
 
 export function isOsuRulesetId(id: number): boolean {
   return id === RULESET_OSU;
+}
+
+export function isTaikoRulesetId(id: number): boolean {
+  return id === RULESET_TAIKO;
+}
+
+export function isFruitsRulesetId(id: number): boolean {
+  return id === RULESET_FRUITS;
 }

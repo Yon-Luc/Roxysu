@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { PageTitle } from "../../components/PageTitle";
 import { ManiaNotefield } from "../../components/ManiaNotefield";
 import { StandardSkinEditor } from "./sections/StandardSkinEditor";
+import { TaikoSkinEditor } from "./sections/TaikoSkinEditor";
+import { CatchSkinEditor } from "./sections/CatchSkinEditor";
 import {
   KEYMODES,
   LN_TAIL_SHAPES,
@@ -188,8 +190,14 @@ export function SkinPage({ section }: { section?: string } = {}) {
   const [keys, setKeys] = useState<Keymode>(7);
   const [previewTimeMs, setPreviewTimeMs] = useState(800);
   const [playing, setPlaying] = useState(true);
-  const [tab, setTab] = useState<"mania" | "std">(
-    section === "std-skin" ? "std" : "mania",
+  const [tab, setTab] = useState<"mania" | "std" | "taiko" | "catch">(
+    section === "std-skin"
+      ? "std"
+      : section === "taiko-skin"
+        ? "taiko"
+        : section === "catch-skin"
+          ? "catch"
+          : "mania",
   );
   const timeRef = useRef(800);
 
@@ -369,6 +377,24 @@ export function SkinPage({ section }: { section?: string } = {}) {
           onClick={() => setTab("std")}
         >
           {dict?.skin.tabStandard ?? "osu!standard"}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "taiko"}
+          className={tab === "taiko" ? "rx-btn-primary" : "rx-btn"}
+          onClick={() => setTab("taiko")}
+        >
+          {dict?.skin.tabTaiko ?? "Taiko"}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "catch"}
+          className={tab === "catch" ? "rx-btn-primary" : "rx-btn"}
+          onClick={() => setTab("catch")}
+        >
+          {dict?.skin.tabCatch ?? "Catch"}
         </button>
       </div>
 
@@ -800,6 +826,8 @@ export function SkinPage({ section }: { section?: string } = {}) {
       ) : null}
 
       {tab === "std" ? <StandardSkinEditor /> : null}
+      {tab === "taiko" ? <TaikoSkinEditor /> : null}
+      {tab === "catch" ? <CatchSkinEditor /> : null}
     </div>
   );
 }

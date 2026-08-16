@@ -6,75 +6,76 @@ touches:
   - apps/server/public/components/ScoreReplayModal.tsx
   - apps/server/public/components/StdPlayfield.tsx
   - apps/server/public/lib/paintStdPlayfield.ts
+  - apps/server/public/components/TaikoPlayfield.tsx
+  - apps/server/public/lib/paintTaikoPlayfield.ts
+  - apps/server/public/components/CatchPlayfield.tsx
+  - apps/server/public/lib/paintCatchPlayfield.ts
   - apps/server/public/components/ManiaNotefield.tsx
   - apps/server/public/lib/paintManiaNotefield.ts
   - apps/server/public/lib/stdSkin.ts
+  - apps/server/public/lib/taikoSkin.ts
+  - apps/server/public/lib/catchSkin.ts
   - apps/server/public/features/settings/sections/StandardSkinEditor.tsx
+  - apps/server/public/features/settings/sections/TaikoSkinEditor.tsx
+  - apps/server/public/features/settings/sections/CatchSkinEditor.tsx
   - apps/server/src/routes/scores.ts
   - apps/server/src/replay/stdJudge.ts
+  - apps/server/src/replay/taikoJudge.ts
+  - apps/server/src/replay/catchJudge.ts
   - apps/server/src/replay/loadStdChart.ts
+  - apps/server/src/replay/loadTaikoChart.ts
+  - apps/server/src/replay/loadCatchChart.ts
   - packages/osu-chart/src/parseStd.ts
+  - packages/osu-chart/src/parseTaiko.ts
+  - packages/osu-chart/src/parseCatch.ts
 ---
 
-# Standard preview, rewatch, and playfield skin
+# Preview, rewatch, and playfield skins
 
 ## Purpose
 
-Support **standard** (`osu`, game mode 0) beatmaps inside the existing preview and
-score-rewatch suite (which originally covered **mania** only). When a standard
-beatmap/score is selected, the UI renders an osu!-style playfield instead of a
-mania notefield, and the score rewatch uses standard accuracy weights.
+Support **mania**, **standard** (`osu`), **taiko**, and **catch** (`fruits`)
+inside beatmap preview and score rewatch. Each ruleset has its own parser, judge,
+paint module, and localStorage skin.
 
 ## Business meaning
 
 Beatmap preview = listen + watch the chart play without judging input.
 Score rewatch = replay a stored judgment timeline with the playing audio.
-Standard playfield = the visual layer that draws circles, sliders, spinners, the
-cursor trail, and judgment popups in osu! coordinates (512×384).
+Playfield = the visual layer for that ruleset (notefield, 512×384, or taiko lane).
 
 ## Business rules
 
-1. Standard accuracy weights are 300/100/50 on a 300 scale (perfect and great both
-   300, good 100, ok and meh 50, miss 0). Mania weights stay 305/300/200/100/50 on
-   a 305 scale.
-   **Source:** `apps/server/src/replay/stdJudge.ts` (`stdAccuracyFromCounts*`) and
-   `apps/server/public/components/ScoreReplayModal.tsx` (`STD_RESULT_WEIGHT`,
-   `STD_ACC_SCALE`) — status: verified by `apps/server/src/replay/std.test.ts`.
+1. Accuracy weights are per-ruleset. Mania: 305/300/200/100/50 on a 305 scale.
+   Standard: 300/100/50 on a 300 scale. Taiko: Great 300, Ok 150, Miss 0.
+   Catch: fruit 300, droplet/banana 100 (caught), miss 0.
+   **Source:** `stdJudge.ts`, `taikoJudge.ts`, `catchJudge.ts`, HUD tables in
+   `ScoreReplayModal.tsx` — status: verified by `std.test.ts`, `taiko.test.ts`,
+   `catch.test.ts`.
 
-2. **HR** (hard rock) flips the playfield and raises AR/OD, but does **not** shrink
-   circle size. `adjustStdDifficulty` in `stdJudge.ts` keeps `cs` unchanged, matching
-   real osu! behavior. AR adjust: HR `min(10, ar * 1.4)`, Easy `ar * 0.5`
-   **Source:** `stdJudge.ts:adjustStdDifficulty`
+2. **HR** on standard flips Y and raises AR/OD, but does **not** shrink CS.
+   **HR** on catch flips X and **does** scale CS (smaller plate). Taiko has no
+   playfield flip.
+   **Source:** `stdJudge.ts:adjustStdDifficulty`, `catchJudge.ts:adjustCatchDifficulty`
 
-3. Slider ticks are timing-accurate: spacing = `beatLength / SliderTickRate` at the
-   local timing point; ticks are emitted per span (mirrored on repeats) with
-   `{ frac, tMs }`; a tick landing exactly on the tail is dropped.
-   **Source:** `parseStd.ts:computeSliderTicks`
+3. Preview and rewatch accept native Mode only (`0`/`1`/`2`/`3`). Converted
+   maps (Mode 0 played as taiko/catch) stay unsupported (422 / `supported: false`).
 
-4. Combo numbers advance for circles and slider heads only (spinners do not count).
+4. Live Play and replay analysis stay **mania only**.
 
-5. Preview reverts to the default standard skin and passes raw (non-stacked) hit
-   objects; rewatch passes HR-flipped, stacked objects with `hidden` set when HD is
-   active.
+5. Skins are separate stores: `roxysu:preview-skin` (mania), `roxysu:std-skin`,
+   `roxysu:taiko-skin`, `roxysu:catch-skin`.
 
-6. The standard playfield skin is a separate store from the mania preview skin
-   (`roxysu:std-skin` vs `roxysu:preview-skin`).
+6. Taiko scroll is a user skin setting (`scrollSpeed`), not BPM/SV.
 
-7. Hit circle / slider body size is scaled visually by `hitCircleScale` on the
-   skin (default `0.9`, clamped 0.5–1.5). It only affects rendering — server-side
-   judgment hit circles still use the real osu! radius from `circleSize`.
-   **Source:** `StdPlayfield.tsx` (radius = `circleRadius(cs) * scale`),
-   `lib/stdSkin.ts` — status: verified.
+7. Catcher width is `106.75 * |1 - 0.7 * (cs - 5) / 5|` times skin
+   `catcherScale` (default `0.7`). Hyperdash is a visual flag from walk-speed vs
+   next fruit distance. When preview has no replay frames, the catcher lerps
+   across fruits and large droplets so it sits on each object at hit time.
+   The catcher is `roxyctb.png` (Roxy holding a plate); the plate in the
+   art is the catch surface — no extra platter is drawn.
 
-8. Slider and spinner bodies stay visible until `endMs` (plus a short linger). A
-   head judgment must not despawn the track, ticks, or ball. Circles still hide
-   shortly after their hit.
-   **Source:** `StdPlayfield.tsx` visible-window `hideAfter` — status: inferred.
-
-9. The standard skin editor loops a dense demo chart (overlapping circles, long
-   sliders, spinner) at AR 6 so combo colors and slider elements stay on screen
-   long enough to inspect.
-   **Source:** `StandardSkinEditor.tsx` — status: inferred.
+8. Judges are visual-quality approximations, not full lazer sims.
 
 ## Security rules
 
@@ -83,59 +84,48 @@ scope.
 
 ## Important states
 
-- **Preview**: `frames`/`judgments` are hidden; animations (approach ring, slider
-  ball) run from `getCurrentTimeMs()`.
-- **Rewatch**: replay frames drive the cursor; judgments drive head/tick/tail flash,
-  follow circle, combo numbers, and hit popups.
-- **Hidden (HD)**: objects fade out across the final 40% of the preempt.
+- **Preview**: frames/judgments hidden; animations run from `getCurrentTimeMs()`.
+  Catch synthesizes perfect catcher motion from hit objects.
+- **Rewatch**: replay frames drive cursor / keys / catcher; judgments drive flash
+  and HUD.
+- **Hidden (HD)**: objects fade across the final 40% of the approach.
 
 ## Main flows
 
 ```text
 Beatmap preview:
-  user selects standard beatmap
-    → fetchBeatmapPreview → /api/beatmaps/:id/preview → parseStdChart → hitObjects
-    → based on ruleset, render StdPlayfield (skin from roxysu:std-skin)
+  user selects beatmap
+    → fetchBeatmapPreview → parseStd / parseTaiko / parseCatch / OsuFileParser
+    → render matching playfield + skin
 
 Score rewatch:
-  user selects standard score
-    → fetchScoreReplay → /api/scores/:id/replay → loadStdChart + stdJudge
-    → ScoreReplayModal computes accuracy with std weights
-    → StdPlayfield draws frames + judgments + HD fade
+  user selects score
+    → fetchScoreReplay → load*Chart + *Judge
+    → ScoreReplayModal HUD uses per-ruleset weights
+    → matching playfield draws frames + judgments
 ```
 
 ## Implementation
 
-- `paintStdPlayfield.ts` — pure standard playfield paint (circles, sliders, spinners,
-  cursor trail, judgments). `StdPlayfield.tsx` is the thin React rAF wrapper.
-- `paintManiaNotefield.ts` — pure mania notefield paint. `ManiaNotefield.tsx` is the
-  thin React wrapper; re-exports judgment types, scroll prefs, and `JUDGMENT_COLORS`
-  for existing importers.
-- `stdSkin.ts` — standard skin store: defaults, `useStdSkin`, `comboColorFor`.
-- `StandardSkinEditor.tsx` — settings section with demo chart + color swatches +
-  element toggles + reset.
-- `stdJudge.ts` — standard judgments (head/tick/tail/spinner) and accuracy helpers.
-- `scores.ts` / `beatmaps.ts` — standard preview + replay routes.
+- Paint modules are pure; React wrappers are rAF. Video export calls the same paint.
+- Fat API payload: unused `notes` / `hitObjects` / `taikoHitObjects` /
+  `catchHitObjects` / frame arrays are `[]`.
+- Store / dispatch names: `"mania"`, `"osu"`, `"taiko"`, `"fruits"`.
 
 ## Dependencies
 
-- `packages/osu-chart` — `parseStdChart` provides hitObjects, ticks, timing points.
-- `apps/server/src/replay/stdJudge.ts` — judgment computation.
-- `lib/api.ts` — `fetchBeatmapPreview`, `fetchScoreReplay` typed payloads.
+- `packages/osu-chart` — parsers for all four rulesets.
+- `apps/server/src/replay/*Judge.ts` — judgment computation.
+- `lib/api.ts` — `fetchBeatmapPreview`, `fetchScoreReplay`.
 
 ## Depended on by
 
-- `apps/server/public/lib/stdSkin.ts` store is consumed by `StdPlayfield.tsx`,
-  `ScoreReplayModal.tsx`, `BeatmapPreviewModal.tsx`, `BeatmapPreviewEmbed.tsx`,
-  and `StandardSkinEditor.tsx`.
-- [replay-video-export/](../replay-video-export/index.md) — paints the same
-  playfield frames offline via `paintStdPlayfield` / `paintManiaNotefield`.
-- [now-selected/](../now-selected/index.md) — embedded beatmap preview on the
-  Now selected page.
+- Skin stores consumed by playfields, preview/rewatch modals, embed, and editors.
+- [replay-video-export/](../replay-video-export/index.md)
+- [now-selected/](../now-selected/index.md)
 
 ## Related knowledge
 
-- [vocabulary.md](../vocabulary.md)
-- [features/index.md](index.md)
+- [vocabulary.md](../../vocabulary.md) — Score rewatch, Taiko playfield, Catch playfield
 - [replay-video-export/](../replay-video-export/index.md)
-- [architecture/client-theme.md](../../architecture/client-theme.md) — preview/rewatch chrome uses `on-media` text
+- [architecture/client-theme.md](../../architecture/client-theme.md)

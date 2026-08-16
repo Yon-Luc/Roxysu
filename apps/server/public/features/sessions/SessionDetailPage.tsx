@@ -251,7 +251,9 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
               const isFresh = freshIds.has(score.id);
               const previewableRuleset =
                 score.rulesetShortName === "mania" ||
-                score.rulesetShortName === "osu";
+                score.rulesetShortName === "osu" ||
+                score.rulesetShortName === "taiko" ||
+                score.rulesetShortName === "fruits";
               const canPreview =
                 Boolean(score.beatmapId) && previewableRuleset;
               const canRewatch = score.hasReplay && previewableRuleset;

@@ -5,6 +5,8 @@ touches:
   - apps/server/public/lib/replayVideoExport.ts
   - apps/server/public/lib/paintStdPlayfield.ts
   - apps/server/public/lib/paintManiaNotefield.ts
+  - apps/server/public/lib/paintTaikoPlayfield.ts
+  - apps/server/public/lib/paintCatchPlayfield.ts
   - apps/server/public/components/ScoreReplayModal.tsx
   - apps/server/public/components/ReplayVideoExportOptionsModal.tsx
   - apps/server/package.json
@@ -26,8 +28,8 @@ and not a live screen capture.
 
 ## Business rules
 
-1. Supported rulesets: **mania** and **standard** (`osu`) only — same as score
-   rewatch.
+1. Supported rulesets: **mania**, **standard** (`osu`), **taiko**, and **catch**
+   (`fruits`) — same as score rewatch.
    **Status:** verified — `exportReplayVideo` guards on ruleset short name.
 
 2. Timeline is **map time at 1×**. UI playback rate and DT/HT rate do not stretch
@@ -69,7 +71,7 @@ no auth gate).
 
 ## Important states
 
-- **Idle** — Export button available in rewatch for mania/standard.
+- **Idle** — Export button available in rewatch for mania/standard/taiko/catch.
 - **Options** — quality preset modal (Discord / 720p / 1080p / Compact) with
   size estimate and hide-background toggle.
 - **Encoding** — overlay with progress; live audio paused.
@@ -83,7 +85,7 @@ user opens score rewatch → clicks Export
   → ReplayVideoExportOptionsModal (preset + hide background + size estimate)
   → decode beatmap audio (+ background unless hidden)
   → for each frame at fixed FPS:
-        compose background + header + paintStd/paintMania (sized) + HUD + stats
+        compose background + header + paintStd/paintMania/paintTaiko/paintCatch + HUD + stats
         CanvasSource.add(t, 1/fps)
   → AudioBufferSource.add(sliced buffer)
   → finalize MP4 → downloadBlob
@@ -102,6 +104,8 @@ user opens score rewatch → clicks Export
 - `apps/server/public/lib/replayVideoExport.ts:downloadBlob()`
 - `apps/server/public/lib/paintStdPlayfield.ts:paintStdPlayfield()`
 - `apps/server/public/lib/paintManiaNotefield.ts:paintManiaNotefield()`
+- `apps/server/public/lib/paintTaikoPlayfield.ts:paintTaikoPlayfield()`
+- `apps/server/public/lib/paintCatchPlayfield.ts:paintCatchPlayfield()`
 
 ## Dependencies
 

@@ -29,7 +29,8 @@ ScoreReplayModal (rewatch)
 ## Business guarantee
 
 The file shows the same playfield content as rewatch (skin, judgments, cursor /
-keys) with beatmap audio, at map time 1×, without uploading anywhere.
+keys / catcher) with beatmap audio, at map time 1×, without uploading anywhere.
+Supported rulesets: mania, standard, taiko, catch.
 
 ## Implementation references
 

@@ -65,6 +65,9 @@ const SKIN_SECTION_KEYS: Record<string, keyof Dictionary["app"]["skin"]> = {
   playfield: "playfield",
   columns: "columns",
   "live-preview": "livePreview",
+  "std-skin": "tabStandard",
+  "taiko-skin": "tabTaiko",
+  "catch-skin": "tabCatch",
 };
 
 function sectionLabels(

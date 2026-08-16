@@ -11,9 +11,13 @@ import { AudioClock, sampleAudioClock } from "../lib/audioClock";
 import { clamp, formatClock } from "../lib/format";
 import { localBeatmapAudioUrl, localBeatmapCoverUrl, osuBeatmapCoverUrl } from "../lib/osuUrls";
 import { useStdSkin } from "../lib/stdSkin";
+import { useTaikoSkin } from "../lib/taikoSkin";
+import { useCatchSkin } from "../lib/catchSkin";
 import { usePreviewSkin } from "../lib/previewSkin";
 import { NotefieldStage } from "./NotefieldStage";
 import { StdPlayfield } from "./StdPlayfield";
+import { TaikoPlayfield } from "./TaikoPlayfield";
+import { CatchPlayfield } from "./CatchPlayfield";
 import { maniaHitWindows } from "../lib/maniaWindows";
 import {
   PREVIEW_SCROLL_MAX,
@@ -72,6 +76,8 @@ export function BeatmapPreviewEmbed({
   const prefs = loadPrefs();
   const skin = usePreviewSkin();
   const stdSkin = useStdSkin();
+  const taikoSkin = useTaikoSkin();
+  const catchSkin = useCatchSkin();
   void skin;
 
   const [playing, setPlaying] = useState(false);
@@ -323,6 +329,14 @@ export function BeatmapPreviewEmbed({
     data?.supported &&
     data.rulesetShortName === "osu" &&
     (data.hitObjects?.length ?? 0) > 0;
+  const isTaiko =
+    data?.supported &&
+    data.rulesetShortName === "taiko" &&
+    (data.taikoHitObjects?.length ?? 0) > 0;
+  const isCatch =
+    data?.supported &&
+    data.rulesetShortName === "fruits" &&
+    (data.catchHitObjects?.length ?? 0) > 0;
   const maxDuration = Math.max(durationMs, lengthMsRef.current);
   const stageHeightRem = clampPreviewEmbedHeightRem(heightRem);
   const stageHeightStyle = {
@@ -330,19 +344,19 @@ export function BeatmapPreviewEmbed({
   } as const;
 
   // Match BeatmapPreviewModal windowed layout: mania max-w-2xl / sm:max-w-3xl.
-  const stageShellClass = isStd
+  const stageShellClass = isStd || isCatch
     ? "relative mx-auto w-full max-w-3xl px-2 py-2 sm:px-3"
     : "relative mx-auto w-full max-w-2xl px-3 py-2 sm:max-w-3xl sm:px-6 sm:py-3";
 
   return (
-    <div className="relative flex flex-col overflow-hidden rounded-xl border border-white/8 bg-black/40">
+    <div className="rx-preview-embed relative flex flex-col overflow-hidden rounded-xl border">
       <div
         className="pointer-events-none absolute inset-0 bg-cover bg-center"
         style={bgUrl ? { backgroundImage: `url(${bgUrl})` } : undefined}
         aria-hidden
       />
       <div
-        className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/55 via-black/70 to-black/88"
+        className="rx-preview-embed-scrim pointer-events-none absolute inset-0"
         aria-hidden
       />
 
@@ -399,17 +413,35 @@ export function BeatmapPreviewEmbed({
                   skin={stdSkin}
                 />
               </div>
+            ) : isTaiko ? (
+              <div className="h-full w-full overflow-hidden rounded-xl">
+                <TaikoPlayfield
+                  hitObjects={data.taikoHitObjects ?? []}
+                  getCurrentTimeMs={mapTimeMs}
+                  skin={taikoSkin}
+                />
+              </div>
+            ) : isCatch ? (
+              <div className="h-full w-full overflow-hidden rounded-xl">
+                <CatchPlayfield
+                  hitObjects={data.catchHitObjects ?? []}
+                  circleSize={data.circleSize ?? 5}
+                  approachRate={data.approachRate ?? 5}
+                  getCurrentTimeMs={mapTimeMs}
+                  skin={catchSkin}
+                />
+              </div>
             ) : (
               <div className="flex h-full items-center justify-center px-4 text-center text-sm text-on-media-muted">
                 {dict?.nowSelected.previewUnsupported ??
-                  "Playfield preview supports mania and standard."}
+                  "Playfield preview supports mania, standard, taiko, and catch."}
               </div>
             )}
           </div>
         ) : null}
       </div>
 
-      <div className="relative z-10 border-t border-white/10 bg-black/40 px-3 py-2 backdrop-blur-[2px]">
+      <div className="rx-preview-embed-controls relative z-10 border-t px-3 py-2 backdrop-blur-[2px]">
         {audioError || (!isLoading && data && !audioUrl) ? (
           <p className="mb-2 text-xs text-amber-200/90">
             {audioError ??

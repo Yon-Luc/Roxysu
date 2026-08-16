@@ -26,7 +26,12 @@ import {
   chartTimingFromOsuText,
   getChartTimingAnalysis,
 } from "../map-analysis/computeTimingAnalysis";
-import { OsuFileParser, parseStdChart } from "@roxysu/osu-chart";
+import {
+  OsuFileParser,
+  parseCatchChart,
+  parseStdChart,
+  parseTaikoChart,
+} from "@roxysu/osu-chart";
 import {
   getOsuDataPath,
   resolveLazerFilePath,
@@ -386,11 +391,15 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
         columnCount: 0,
         notes: [] as Array<{ column: number; startMs: number; endMs: number }>,
         hitObjects: [] as ReturnType<typeof parseStdChart>["hitObjects"],
+        taikoHitObjects: [] as ReturnType<typeof parseTaikoChart>["hitObjects"],
+        catchHitObjects: [] as ReturnType<typeof parseCatchChart>["hitObjects"],
       };
 
       const isMania = row.rulesetShortName === "mania";
       const isStd = row.rulesetShortName === "osu";
-      if (!isMania && !isStd) {
+      const isTaiko = row.rulesetShortName === "taiko";
+      const isCatch = row.rulesetShortName === "fruits";
+      if (!isMania && !isStd && !isTaiko && !isCatch) {
         return { ...base, supported: false };
       }
 
@@ -429,6 +438,44 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
           approachRate: chart.approachRate,
           overallDifficulty: chart.overallDifficulty,
           hitObjects: chart.hitObjects,
+        };
+      }
+
+      if (isTaiko) {
+        const chart = parseTaikoChart(osuText);
+        if (chart.status === "NotTaiko") {
+          return { ...base, supported: false };
+        }
+        if (chart.status === "Fail" || chart.hitObjects.length === 0) {
+          set.status = 422;
+          return { error: "Failed to parse beatmap" };
+        }
+        return {
+          ...base,
+          supported: true,
+          circleSize: chart.circleSize,
+          approachRate: chart.approachRate,
+          overallDifficulty: chart.overallDifficulty,
+          taikoHitObjects: chart.hitObjects,
+        };
+      }
+
+      if (isCatch) {
+        const chart = parseCatchChart(osuText);
+        if (chart.status === "NotCatch") {
+          return { ...base, supported: false };
+        }
+        if (chart.status === "Fail" || chart.hitObjects.length === 0) {
+          set.status = 422;
+          return { error: "Failed to parse beatmap" };
+        }
+        return {
+          ...base,
+          supported: true,
+          circleSize: chart.circleSize,
+          approachRate: chart.approachRate,
+          overallDifficulty: chart.overallDifficulty,
+          catchHitObjects: chart.hitObjects,
         };
       }
 

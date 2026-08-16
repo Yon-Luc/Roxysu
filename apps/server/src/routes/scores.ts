@@ -6,27 +6,43 @@ import {
   getOsuDataPath,
   resolveLazerFilePath,
 } from "../shared/lazer-files";
-import type { StdHitObject } from "@roxysu/osu-chart";
+import type {
+  CatchHitObject,
+  StdHitObject,
+  TaikoHitObject,
+} from "@roxysu/osu-chart";
 import {
   decodeLegacyReplay,
+  isFruitsRulesetId,
   isManiaRulesetId,
   isOsuRulesetId,
+  isTaikoRulesetId,
 } from "../replay/decode";
 import { simulateManiaJudgments } from "../replay/judge";
 import { parseScoreMods } from "../replay/mods";
 import { getScoreRow, loadChartForScore } from "../replay/loadChart";
 import { loadStdChartForScore } from "../replay/loadStdChart";
+import { loadTaikoChartForScore } from "../replay/loadTaikoChart";
+import { loadCatchChartForScore } from "../replay/loadCatchChart";
 import {
   adjustStdDifficulty,
   applyStdHardRockFlip,
   simulateStdJudgments,
 } from "../replay/stdJudge";
+import { simulateTaikoJudgments } from "../replay/taikoJudge";
+import {
+  adjustCatchDifficulty,
+  applyCatchHardRockFlip,
+  simulateCatchJudgments,
+} from "../replay/catchJudge";
 import {
   loadManiaPpCurves,
   resolveScorePp,
 } from "../mania-rating/estimateScorePp";
 
 const EMPTY_HIT_OBJECTS: StdHitObject[] = [];
+const EMPTY_TAIKO_OBJECTS: TaikoHitObject[] = [];
+const EMPTY_CATCH_OBJECTS: CatchHitObject[] = [];
 const EMPTY_NOTES: Array<{ column: number; startMs: number; endMs: number }> =
   [];
 const EMPTY_MANIA_FRAMES: Array<{ tMs: number; keys: number }> = [];
@@ -35,6 +51,12 @@ const EMPTY_STD_FRAMES: Array<{
   x: number;
   y: number;
   buttons: number;
+}> = [];
+const EMPTY_TAIKO_FRAMES: Array<{ tMs: number; keys: number }> = [];
+const EMPTY_CATCH_FRAMES: Array<{
+  tMs: number;
+  x: number;
+  dashing: boolean;
 }> = [];
 
 export const scoreRoutes = new Elysia({ prefix: "/scores" })
@@ -54,9 +76,11 @@ export const scoreRoutes = new Elysia({ prefix: "/scores" })
 
       const isMania = score.rulesetShortName === "mania";
       const isStd = score.rulesetShortName === "osu";
-      if (!isMania && !isStd) {
+      const isTaiko = score.rulesetShortName === "taiko";
+      const isCatch = score.rulesetShortName === "fruits";
+      if (!isMania && !isStd && !isTaiko && !isCatch) {
         set.status = 422;
-        return { error: "Replay rewatch supports mania and standard only" };
+        return { error: "Replay rewatch supports mania, standard, taiko, and catch" };
       }
 
       if (!score.replayFileHash) {
@@ -168,6 +192,8 @@ export const scoreRoutes = new Elysia({ prefix: "/scores" })
             columnCount: 0,
             notes: EMPTY_NOTES,
             hitObjects: flipped.hitObjects,
+            taikoHitObjects: EMPTY_TAIKO_OBJECTS,
+            catchHitObjects: EMPTY_CATCH_OBJECTS,
           },
           playback: {
             rate: mods.rate,
@@ -176,6 +202,133 @@ export const scoreRoutes = new Elysia({ prefix: "/scores" })
           },
           frames: EMPTY_MANIA_FRAMES,
           stdFrames: flipped.frames,
+          taikoFrames: EMPTY_TAIKO_FRAMES,
+          catchFrames: EMPTY_CATCH_FRAMES,
+          judgments,
+          simulated: summary,
+        };
+      }
+
+      if (isTaiko) {
+        if (!isTaikoRulesetId(decoded.rulesetId)) {
+          set.status = 422;
+          return { error: "Replay is not taiko" };
+        }
+
+        const chartResult = await loadTaikoChartForScore(db, score);
+        if (!chartResult.ok) {
+          set.status = chartResult.status;
+          return { error: chartResult.error };
+        }
+        const { chart } = chartResult;
+        const mods = parseScoreMods(score.mods);
+        const { judgments, summary } = simulateTaikoJudgments({
+          hitObjects: chart.hitObjects,
+          frames: decoded.taikoFrames,
+          overallDifficulty: chart.overallDifficulty,
+          mods,
+        });
+
+        return {
+          score: scorePayload,
+          beatmap: {
+            id: chart.beatmapId,
+            title: chart.title,
+            artist: chart.artist,
+            difficultyName: chart.difficultyName,
+            setOnlineId: chart.setOnlineId,
+            rulesetShortName: chart.rulesetShortName,
+            overallDifficulty: chart.overallDifficulty,
+            circleSize: chart.circleSize,
+            approachRate: chart.approachRate,
+            previewTime: chart.previewTime,
+            audioFileHash: chart.audioFileHash,
+            backgroundFileHash: chart.backgroundFileHash,
+            lengthMs: chart.lengthMs,
+            columnCount: 0,
+            notes: EMPTY_NOTES,
+            hitObjects: EMPTY_HIT_OBJECTS,
+            taikoHitObjects: chart.hitObjects,
+            catchHitObjects: EMPTY_CATCH_OBJECTS,
+          },
+          playback: {
+            rate: mods.rate,
+            mirror: false,
+            acronyms: mods.acronyms,
+          },
+          frames: EMPTY_MANIA_FRAMES,
+          stdFrames: EMPTY_STD_FRAMES,
+          taikoFrames: decoded.taikoFrames,
+          catchFrames: EMPTY_CATCH_FRAMES,
+          judgments,
+          simulated: summary,
+        };
+      }
+
+      if (isCatch) {
+        if (!isFruitsRulesetId(decoded.rulesetId)) {
+          set.status = 422;
+          return { error: "Replay is not catch" };
+        }
+
+        const chartResult = await loadCatchChartForScore(db, score);
+        if (!chartResult.ok) {
+          set.status = chartResult.status;
+          return { error: chartResult.error };
+        }
+        const { chart } = chartResult;
+        const mods = parseScoreMods(score.mods);
+        const diff = adjustCatchDifficulty(
+          {
+            cs: chart.circleSize,
+            ar: chart.approachRate,
+            od: chart.overallDifficulty,
+          },
+          mods,
+        );
+        const flipped = applyCatchHardRockFlip(
+          chart.hitObjects,
+          decoded.catchFrames,
+          mods.hardRock,
+        );
+        const { judgments, summary } = simulateCatchJudgments({
+          hitObjects: flipped.hitObjects,
+          frames: flipped.frames,
+          circleSize: chart.circleSize,
+          mods,
+        });
+
+        return {
+          score: scorePayload,
+          beatmap: {
+            id: chart.beatmapId,
+            title: chart.title,
+            artist: chart.artist,
+            difficultyName: chart.difficultyName,
+            setOnlineId: chart.setOnlineId,
+            rulesetShortName: chart.rulesetShortName,
+            overallDifficulty: diff.od,
+            circleSize: diff.cs,
+            approachRate: diff.ar,
+            previewTime: chart.previewTime,
+            audioFileHash: chart.audioFileHash,
+            backgroundFileHash: chart.backgroundFileHash,
+            lengthMs: chart.lengthMs,
+            columnCount: 0,
+            notes: EMPTY_NOTES,
+            hitObjects: EMPTY_HIT_OBJECTS,
+            taikoHitObjects: EMPTY_TAIKO_OBJECTS,
+            catchHitObjects: flipped.hitObjects,
+          },
+          playback: {
+            rate: mods.rate,
+            mirror: false,
+            acronyms: mods.acronyms,
+          },
+          frames: EMPTY_MANIA_FRAMES,
+          stdFrames: EMPTY_STD_FRAMES,
+          taikoFrames: EMPTY_TAIKO_FRAMES,
+          catchFrames: flipped.frames,
           judgments,
           simulated: summary,
         };
@@ -227,6 +380,8 @@ export const scoreRoutes = new Elysia({ prefix: "/scores" })
           columnCount: chart.columnCount,
           notes: displayNotes,
           hitObjects: EMPTY_HIT_OBJECTS,
+          taikoHitObjects: EMPTY_TAIKO_OBJECTS,
+          catchHitObjects: EMPTY_CATCH_OBJECTS,
         },
         playback: {
           rate: mods.rate,
@@ -235,6 +390,8 @@ export const scoreRoutes = new Elysia({ prefix: "/scores" })
         },
         frames: decoded.frames,
         stdFrames: EMPTY_STD_FRAMES,
+        taikoFrames: EMPTY_TAIKO_FRAMES,
+        catchFrames: EMPTY_CATCH_FRAMES,
         judgments,
         simulated: summary,
       };

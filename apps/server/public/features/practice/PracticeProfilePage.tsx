@@ -525,7 +525,9 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
                     enabled={
                       score.hasReplay &&
                       (score.rulesetShortName === "mania" ||
-                        score.rulesetShortName === "osu")
+                        score.rulesetShortName === "osu" ||
+                        score.rulesetShortName === "taiko" ||
+                        score.rulesetShortName === "fruits")
                     }
                     className="rx-btn !px-2.5 !py-1 text-xs font-semibold"
                   />

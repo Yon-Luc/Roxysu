@@ -127,7 +127,7 @@ export function MarathonPage() {
         `${first.artist ?? "Unknown"} Marathon`.slice(0, 80),
       );
     }
-    if (!version && keyCount) setVersion(`${keyCount}K`);
+    if (!version && keyCount) setVersion(`[Roxysu] ${keyCount}K`);
   }, [tracks, title, version, keyCount]);
 
   const searchQuery = [
@@ -223,7 +223,7 @@ export function MarathonPage() {
     onSuccess: (sources) => {
       setTracks(sources);
       setTitle("");
-      setVersion(`${recKey}K`);
+      setVersion(`[Roxysu] ${recKey}K`);
       void navigate({
         to: "/marathon",
         search: { ids: sources.map((s) => s.id).join(","), key: recKey },
@@ -263,7 +263,7 @@ export function MarathonPage() {
         pauseMs,
         title: title.trim() || "Marathon",
         artist: artist.trim() || "Various Artists",
-        version: version.trim() || `${keyCount ?? ""}K`,
+        version: marathonDiffName(version, keyCount),
         onProgress: setProgress,
       });
       setProgress({ phase: "import" });
@@ -615,6 +615,11 @@ export function MarathonPage() {
       </section>
     </div>
   );
+}
+
+function marathonDiffName(raw: string, keyCount: number | null): string {
+  const base = raw.trim() || `${keyCount ?? ""}K`.trim() || "Marathon";
+  return base.startsWith("[Roxysu]") ? base : `[Roxysu] ${base}`;
 }
 
 function isPlayableSource(source: MarathonSource): boolean {

@@ -12,7 +12,9 @@ export {
   checkFusedMatchesOriginals,
   fuseManiaCharts,
   parseHpDrainRate,
+  parseSliderMultiplier,
   parseTimingPointRows,
+  scaleInheritedBeatLength,
 } from "./fuse";
 export type {
   FuseManiaOptions,

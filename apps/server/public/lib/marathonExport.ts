@@ -94,8 +94,8 @@ export async function generateMarathonOsz(args: {
   throwIfAborted(signal);
   onProgress?.({ phase: "encode" });
   const mixed = mixAudio(decoded, pauseMs / 1000);
-  const encoded = await encodeAudio(mixed);
-  const durationsMs = decoded.map((buf) => Math.round(buf.duration * 1000));
+  const encoded = encodeAudio(mixed.buffer);
+  const durationsMs = mixed.durationsMs;
 
   throwIfAborted(signal);
   onProgress?.({ phase: "collage" });
@@ -188,9 +188,15 @@ function toStereo44100(buffer: AudioBuffer): [Float32Array, Float32Array] {
   return [left.subarray(0, n), right.subarray(0, n)];
 }
 
-function mixAudio(buffers: AudioBuffer[], pauseSec: number): AudioBuffer {
+function mixAudio(
+  buffers: AudioBuffer[],
+  pauseSec: number,
+): { buffer: AudioBuffer; durationsMs: number[] } {
   const parts: Array<[Float32Array, Float32Array]> = buffers.map(toStereo44100);
   const pauseFrames = Math.max(0, Math.round(pauseSec * TARGET_RATE));
+  const durationsMs = parts.map((part) =>
+    Math.round((part[0].length / TARGET_RATE) * 1000),
+  );
   let total = 0;
   for (let i = 0; i < parts.length; i += 1) {
     total += parts[i]![0].length;
@@ -213,7 +219,7 @@ function mixAudio(buffers: AudioBuffer[], pauseSec: number): AudioBuffer {
   });
   out.copyToChannel(left, 0);
   out.copyToChannel(right, 1);
-  return out;
+  return { buffer: out, durationsMs };
 }
 
 function encodeAudio(

@@ -24,9 +24,9 @@ A **Map marathon** is one new unsubmitted mania difficulty: songs play back-to-b
 1. Mania only. Every source must share one key count.
 2. Between 2 and 12 maps. Sources without local audio (or a readable `.osu`) are skipped, not listed.
 3. Pause between songs is user-chosen (0–5000 ms, default 2000). Audio duration is the decoded file length, not last-note time.
-4. Chart fusion lives in `@roxysu/osu-chart` (`fuseManiaCharts`). Inherited timing points are preserved. Custom hitsound files are not packed. After fuse, each segment’s notes and BPM/SV are checked against the original charts (`checkFusedMatchesOriginals`); a mismatch aborts generate.
+4. Chart fusion lives in `@roxysu/osu-chart` (`fuseManiaCharts`). Lazer mania scroll uses inherited SV / effect `ScrollSpeed` only (`-100` = 1.0×); `SliderMultiplier` is not applied, and a red line resets scroll to 1.0. Greens are copied as-is. Notes and timing points at or after a song’s audio duration are clipped so they cannot leak into the next song. At each song start a red line + the original starting SV is written. Custom hitsound files are not packed. After fuse, in-window notes and BPM/SV are checked against the originals.
 5. The client app does not write Realm. The `.osz` is written to the beatmaps download folder and opened with `openOszWithOsu`.
-6. 4K/7K recommend can fill the track list (`GET /api/practice/recommend`). Sessions recommend can send its current list to `/marathon`.
+6. 4K/7K recommend can fill the track list (`GET /api/practice/recommend`), optionally filtered to a dan tier (`dan:"Regular 9"`, `dan:"Gamma"`, …). Sessions recommend can send its current list to `/marathon`.
 
 ## Main flows
 

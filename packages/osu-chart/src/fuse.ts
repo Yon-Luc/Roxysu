@@ -87,6 +87,23 @@ export function parseHpDrainRate(osuText: string): number {
   return parseDifficultyNumber(osuText, "HPDrainRate", 7);
 }
 
+export function parseSliderMultiplier(osuText: string): number {
+  const n = parseDifficultyNumber(osuText, "SliderMultiplier", 1.4);
+  return n > 0 ? n : 1.4;
+}
+
+export function scaleInheritedBeatLength(
+  beatLength: number,
+  originalSm: number,
+  fusedSm: number,
+): number {
+  if (!(beatLength < 0)) return -100;
+  const originalSv = -100 / beatLength;
+  const fusedSv = originalSv * (originalSm / fusedSm);
+  if (!(fusedSv > 0)) return -100;
+  return -100 / fusedSv;
+}
+
 export function fuseManiaCharts(
   sources: FuseManiaSource[],
   options: FuseManiaOptions,
@@ -114,6 +131,7 @@ export function fuseManiaCharts(
       timing: parseTimingPointRows(source.osuText),
       hp: parseHpDrainRate(source.osuText),
       od: parseDifficultyNumber(source.osuText, "OverallDifficulty", 8),
+      sliderMultiplier: parseSliderMultiplier(source.osuText),
     };
   });
 
@@ -126,6 +144,7 @@ export function fuseManiaCharts(
     }
   }
 
+  const fusedSm = parsed[0]!.sliderMultiplier;
   const notes: ChartNote[] = [];
   const fullTimingPoints: TimingPointRow[] = [];
   const breaks: Array<[number, number]> = [];
@@ -137,23 +156,26 @@ export function fuseManiaCharts(
     segmentStartsMs.push(offset);
 
     for (const note of item.chart.notes) {
-      const startMs = Math.max(0, note.startMs) + offset;
-      const endMs = Math.max(startMs, Math.max(0, note.endMs) + offset);
+      const localStart = Math.max(0, note.startMs);
+      if (localStart >= item.durationMs) continue;
+      const startMs = localStart + offset;
+      const endMs = Math.min(
+        offset + item.durationMs,
+        Math.max(startMs, Math.max(0, note.endMs) + offset),
+      );
       notes.push({ column: note.column, startMs, endMs });
     }
 
     for (const row of item.timing) {
       const localTime = Math.max(0, row.timeMs);
-      fullTimingPoints.push({ ...row, timeMs: localTime + offset });
-    }
-
-    if (item.chart.timingPoints.length === 0 && item.timing.length === 0) {
+      if (localTime >= item.durationMs) continue;
       fullTimingPoints.push({
-        timeMs: offset,
-        beatLength: 500,
-        uninherited: true,
+        ...row,
+        timeMs: localTime + offset,
       });
     }
+
+    pushSegmentTimingReset(fullTimingPoints, offset, item.timing);
 
     offset += item.durationMs;
     if (i < parsed.length - 1 && pauseMs > 0) {
@@ -172,6 +194,7 @@ export function fuseManiaCharts(
       columnCount: keyCount,
       hpDrainRate: first.hp,
       overallDifficulty: first.od,
+      sliderMultiplier: fusedSm,
     },
     timingPoints: fullTimingPoints
       .filter((row) => row.uninherited !== false)
@@ -216,27 +239,31 @@ export function checkFusedMatchesOriginals(
     }
 
     const original = parseOsuChart(sources[i]!.osuText);
+    const durationMs = sources[i]!.audioDurationMs;
     const origNotes = [...original.notes]
       .map((n) => ({
         column: n.column,
         startMs: Math.max(0, n.startMs),
         endMs: Math.max(Math.max(0, n.startMs), Math.max(0, n.endMs)),
       }))
+      .filter((n) => n.startMs < durationMs)
       .sort((a, b) => a.startMs - b.startMs || a.column - b.column);
 
     const expectedNotes = origNotes.map((n) => ({
       column: n.column,
       startMs: n.startMs + offset,
-      endMs: n.endMs + offset,
+      endMs: Math.min(offset + durationMs, n.endMs + offset),
     }));
 
     compareNotes(i, expectedNotes, fused.chart.notes, mismatches, "fused");
     compareNotes(i, expectedNotes, writtenNotes, mismatches, "written");
 
-    const origTiming = parseTimingPointRows(sources[i]!.osuText).map((row) => ({
-      ...row,
-      timeMs: Math.max(0, row.timeMs) + offset,
-    }));
+    const origTiming = parseTimingPointRows(sources[i]!.osuText)
+      .map((row) => ({
+        ...row,
+        timeMs: Math.max(0, row.timeMs) + offset,
+      }))
+      .filter((row) => row.timeMs - offset < durationMs);
     compareTiming(i, origTiming, fused.chart.fullTimingPoints ?? [], mismatches, "fused");
     compareTiming(i, origTiming, writtenTiming, mismatches, "written");
   }
@@ -351,6 +378,72 @@ function compareTiming(
           : `Map ${mapIndex + 1} (${label}): BPM ${gotBpm.toFixed(3)} ≠ ${expBpm.toFixed(3)}`,
     });
     return;
+  }
+}
+
+function startingTiming(rows: TimingPointRow[]): {
+  bpm: TimingPointRow;
+  sv: TimingPointRow;
+} {
+  const sorted = [...rows].sort((a, b) => a.timeMs - b.timeMs);
+  let bpm: TimingPointRow | null = null;
+  let sv: TimingPointRow | null = null;
+  for (const row of sorted) {
+    if (row.timeMs > 0) break;
+    if (row.uninherited !== false) bpm = row;
+    else sv = row;
+  }
+  if (!bpm) {
+    bpm =
+      sorted.find((row) => row.uninherited !== false) ?? {
+        timeMs: 0,
+        beatLength: 500,
+        uninherited: true,
+      };
+  }
+  if (!sv) {
+    sv = {
+      timeMs: 0,
+      beatLength: -100,
+      uninherited: false,
+      meter: bpm.meter ?? 4,
+      sampleSet: bpm.sampleSet ?? 2,
+      sampleIndex: bpm.sampleIndex ?? 0,
+      volume: bpm.volume ?? 100,
+      effects: 0,
+    };
+  }
+  return { bpm, sv };
+}
+
+function hasPointAt(
+  points: TimingPointRow[],
+  timeMs: number,
+  uninherited: boolean,
+): boolean {
+  return points.some(
+    (row) =>
+      Math.abs(row.timeMs - timeMs) <= TIME_EPS_MS &&
+      (row.uninherited !== false) === uninherited,
+  );
+}
+
+function pushSegmentTimingReset(
+  points: TimingPointRow[],
+  timeMs: number,
+  sourceTiming: TimingPointRow[],
+): void {
+  const { bpm, sv } = startingTiming(sourceTiming);
+  if (!hasPointAt(points, timeMs, true)) {
+    points.push({ ...bpm, timeMs, uninherited: true });
+  }
+  if (!hasPointAt(points, timeMs, false)) {
+    points.push({
+      ...sv,
+      timeMs,
+      beatLength: sv.beatLength < 0 ? sv.beatLength : -100,
+      uninherited: false,
+    });
   }
 }
 

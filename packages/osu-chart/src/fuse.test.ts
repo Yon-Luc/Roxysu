@@ -12,6 +12,7 @@ function maniaOsu(opts: {
   timing?: string[];
   hp?: number;
   od?: number;
+  sliderMultiplier?: number;
 }): string {
   return [
     "osu file format v14",
@@ -27,6 +28,7 @@ function maniaOsu(opts: {
     `HPDrainRate:${opts.hp ?? 7}`,
     `CircleSize:${opts.cs}`,
     `OverallDifficulty:${opts.od ?? 8}`,
+    `SliderMultiplier:${opts.sliderMultiplier ?? 1.4}`,
     "[TimingPoints]",
     ...(opts.timing ?? ["0,500,4,2,0,100,1,0"]),
     "[HitObjects]",
@@ -80,9 +82,9 @@ describe("fuseManiaCharts", () => {
     const inherited = fused.chart.fullTimingPoints!.filter(
       (p) => p.uninherited === false,
     );
-    expect(inherited).toHaveLength(1);
-    expect(inherited[0]!.timeMs).toBe(1400);
-    expect(inherited[0]!.beatLength).toBe(-50);
+    expect(inherited.some((p) => p.timeMs === 1400 && p.beatLength === -50)).toBe(
+      true,
+    );
 
     expect(fused.osuText).toContain("AudioFilename: audio.m4a");
     expect(fused.osuText).toContain('0,0,"bg.jpg",0,0');
@@ -200,6 +202,184 @@ describe("fuseManiaCharts", () => {
         },
       ),
     ).toThrow(/not mania/);
+  });
+
+  test("keeps mid-song BPM changes from the original", () => {
+    const a = maniaOsu({
+      version: "1",
+      cs: 4,
+      notes: ["64,192,100,1,0,0:0:0:0:"],
+      timing: ["0,500,4,2,0,100,1,0"],
+    });
+    const b = maniaOsu({
+      version: "2",
+      cs: 4,
+      notes: ["192,192,50,1,0,0:0:0:0:", "192,192,600,1,0,0:0:0:0:"],
+      timing: [
+        "0,400,4,2,0,100,1,0",
+        "250,-80,4,2,0,100,0,0",
+        "500,300,4,2,0,100,1,0",
+      ],
+    });
+
+    const fused = fuseManiaCharts(
+      [
+        { osuText: a, audioDurationMs: 1000 },
+        { osuText: b, audioDurationMs: 800 },
+      ],
+      {
+        pauseMs: 200,
+        metadata: {
+          title: "M",
+          artist: "A",
+          creator: "Roxysu",
+          version: "4K",
+          audioFilename: "audio.wav",
+        },
+      },
+    );
+
+    const song2 = 1200;
+    const reds = fused.chart.fullTimingPoints!.filter(
+      (p) => p.uninherited !== false,
+    );
+    expect(reds.some((p) => p.timeMs === song2 && p.beatLength === 400)).toBe(
+      true,
+    );
+    expect(
+      reds.some((p) => p.timeMs === song2 + 500 && p.beatLength === 300),
+    ).toBe(true);
+    const greens = fused.chart.fullTimingPoints!.filter(
+      (p) => p.uninherited === false,
+    );
+    expect(
+      greens.some((p) => p.timeMs === song2 + 250 && p.beatLength === -80),
+    ).toBe(true);
+    expect(fused.osuText).toContain("1700,300.000000000000,4,2,0,100,1,0");
+  });
+
+  test("resets BPM and SV at the next song", () => {
+    const slowEnd = maniaOsu({
+      version: "1",
+      cs: 4,
+      notes: ["64,192,100,1,0,0:0:0:0:"],
+      timing: ["0,500,4,2,0,100,1,0", "800,-400,4,2,0,100,0,0"],
+    });
+    const faster = maniaOsu({
+      version: "2",
+      cs: 4,
+      notes: ["192,192,50,1,0,0:0:0:0:"],
+      timing: ["0,300,4,2,0,100,1,0"],
+    });
+
+    const fused = fuseManiaCharts(
+      [
+        { osuText: slowEnd, audioDurationMs: 1000 },
+        { osuText: faster, audioDurationMs: 800 },
+      ],
+      {
+        pauseMs: 200,
+        metadata: {
+          title: "M",
+          artist: "A",
+          creator: "Roxysu",
+          version: "4K",
+          audioFilename: "audio.wav",
+        },
+      },
+    );
+
+    const pauseStart = fused.chart.fullTimingPoints!.filter(
+      (p) => Math.abs(p.timeMs - 1000) <= 1,
+    );
+    const song2Start = fused.chart.fullTimingPoints!.filter(
+      (p) => Math.abs(p.timeMs - 1200) <= 1,
+    );
+
+    expect(pauseStart.some((p) => p.uninherited !== false && p.beatLength === 300)).toBe(
+      false,
+    );
+
+    const song2Red = song2Start.find((p) => p.uninherited !== false);
+    const song2Green = song2Start.find((p) => p.uninherited === false);
+    expect(song2Red?.beatLength).toBe(300);
+    expect(song2Green?.beatLength).toBe(-100);
+  });
+
+  test("does not scale SV by SliderMultiplier (lazer mania ignores SM)", () => {
+    const a = maniaOsu({
+      version: "1",
+      cs: 4,
+      notes: ["64,192,100,1,0,0:0:0:0:"],
+      sliderMultiplier: 1.4,
+    });
+    const b = maniaOsu({
+      version: "2",
+      cs: 4,
+      notes: ["192,192,50,1,0,0:0:0:0:"],
+      timing: ["0,400,4,2,0,100,1,0", "0,-80,4,2,0,100,0,0"],
+      sliderMultiplier: 0.7,
+    });
+
+    const fused = fuseManiaCharts(
+      [
+        { osuText: a, audioDurationMs: 1000 },
+        { osuText: b, audioDurationMs: 800 },
+      ],
+      {
+        pauseMs: 0,
+        metadata: {
+          title: "M",
+          artist: "A",
+          creator: "Roxysu",
+          version: "4K",
+          audioFilename: "audio.wav",
+        },
+      },
+    );
+
+    const song2Green = fused.chart.fullTimingPoints!.find(
+      (p) => p.uninherited === false && Math.abs(p.timeMs - 1000) <= 1,
+    );
+    expect(song2Green?.beatLength).toBe(-80);
+  });
+
+  test("does not leak timing points past a song's audio into the next song", () => {
+    const a = maniaOsu({
+      version: "1",
+      cs: 4,
+      notes: ["64,192,100,1,0,0:0:0:0:"],
+      timing: ["0,500,4,2,0,100,1,0", "1500,-50,4,2,0,100,0,0"],
+    });
+    const b = maniaOsu({
+      version: "2",
+      cs: 4,
+      notes: ["192,192,50,1,0,0:0:0:0:"],
+      timing: ["0,400,4,2,0,100,1,0"],
+    });
+
+    const fused = fuseManiaCharts(
+      [
+        { osuText: a, audioDurationMs: 1000 },
+        { osuText: b, audioDurationMs: 800 },
+      ],
+      {
+        pauseMs: 0,
+        metadata: {
+          title: "M",
+          artist: "A",
+          creator: "Roxysu",
+          version: "4K",
+          audioFilename: "audio.wav",
+        },
+      },
+    );
+
+    expect(
+      fused.chart.fullTimingPoints!.some(
+        (p) => p.uninherited === false && p.beatLength === -50,
+      ),
+    ).toBe(false);
   });
 
   test("parseTimingPointRows keeps inherited SV", () => {

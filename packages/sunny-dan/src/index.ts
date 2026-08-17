@@ -17,3 +17,9 @@ export {
   estimateDanielDan,
   type DanielDanEstimate,
 } from "./estimateDanielDan";
+export {
+  danQueryForTier,
+  danTierFromLabel,
+  danTiersForKeyCount,
+  danTiersFromTable,
+} from "./danTiers";

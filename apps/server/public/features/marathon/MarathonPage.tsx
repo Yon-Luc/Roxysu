@@ -19,6 +19,7 @@ import {
 import { useAppDict, t } from "../../lib/i18n";
 import { pushToast } from "../../lib/toasts";
 import { formatStars } from "../../lib/format";
+import { danQueryForTier, danTiersForKeyCount } from "@roxysu/sunny-dan";
 
 const MAX_MAPS = 12;
 const DEFAULT_PAUSE_MS = 2000;
@@ -87,6 +88,7 @@ export function MarathonPage() {
   const [recFocus, setRecFocus] = useState<RecommendFocus>("push");
   const [recSkillset, setRecSkillset] = useState<RecommendSkillset>("both");
   const [recCount, setRecCount] = useState(4);
+  const [recDan, setRecDan] = useState("");
   const [progress, setProgress] = useState<MarathonExportProgress | null>(null);
 
   const keyCount = tracks.find((t) => t.keyCount != null)?.keyCount ?? null;
@@ -143,14 +145,31 @@ export function MarathonPage() {
     enabled: debouncedQ.length > 0,
   });
 
+  const danTiers = useMemo(() => {
+    const table = recSkillset === "ln" || recSkillset === "fln" ? "LN" : "RC";
+    return danTiersForKeyCount(recKey, table);
+  }, [recKey, recSkillset]);
+
+  useEffect(() => {
+    if (recDan && !danTiers.includes(recDan)) setRecDan("");
+  }, [danTiers, recDan]);
+
   const recommend = useQuery({
-    queryKey: ["marathon-recommend", recKey, recFocus, recSkillset, recCount],
+    queryKey: [
+      "marathon-recommend",
+      recKey,
+      recFocus,
+      recSkillset,
+      recCount,
+      recDan,
+    ],
     queryFn: () =>
       fetchPracticeRecommend({
         focus: recFocus,
         skillset: recFocus === "deficit" ? undefined : recSkillset,
         count: recCount,
         keyCount: recKey,
+        q: recDan ? danQueryForTier(recDan) : undefined,
       }),
   });
 
@@ -543,6 +562,21 @@ export function MarathonPage() {
             ))}
           </div>
         ) : null}
+        <label className="block text-sm">
+          <span className="rx-label">{dict?.marathon.dan ?? "Dan"}</span>
+          <select
+            className="rx-input mt-1 w-full max-w-xs"
+            value={recDan}
+            onChange={(e) => setRecDan(e.target.value)}
+          >
+            <option value="">{dict?.marathon.danAny ?? "Any"}</option>
+            {danTiers.map((tier) => (
+              <option key={tier} value={tier}>
+                {tier}
+              </option>
+            ))}
+          </select>
+        </label>
         <div className="flex flex-wrap items-center gap-2">
           <span className="rx-label">{dict?.marathon.count ?? "Count"}</span>
           {[4, 6, 8, 10].map((n) => (

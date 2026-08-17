@@ -73,7 +73,8 @@ Playfield = the visual layer for that ruleset (notefield, 512×384, or taiko lan
 
 6. An **imported mania skin** can replace the procedural mania skin per keymode.
    Drop an `.osk` or `skin.ini` folder on Skin → Mania, beatmap preview, or score
-   rewatch. A confirm modal previews the skin and asks which keymodes to apply.
+   rewatch, or use Skin → Mania **Import .osk** (`ManiaSkinFileButton`). A confirm
+   modal previews the skin and asks which keymodes to apply.
    Layout (column widths, spacing, hit position) and sprites (notes, LN, keys,
    stage) come from `skin.ini` `[Mania]` sections. Image blobs persist in
    IndexedDB (`roxysu-mania-skin`); JSON metadata stays in `roxysu:preview-skin`.
@@ -118,7 +119,7 @@ Score rewatch:
     → matching playfield draws frames + judgments
 
 Imported mania skin:
-  drop .osk / skin folder
+  drop .osk / skin folder  OR  Skin → Import .osk file picker
     → unzip + parse skin.ini
     → confirm modal (preview + keymode picker)
     → persist sprites in IndexedDB + layout on preview skin

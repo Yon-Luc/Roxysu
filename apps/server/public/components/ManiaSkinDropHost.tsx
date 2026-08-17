@@ -1,4 +1,4 @@
-import { useCallback, useState, type DragEvent, type ReactNode } from "react";
+import { useCallback, useRef, useState, type DragEvent, type ReactNode } from "react";
 import {
   draftFromDataTransfer,
   draftFromFileList,
@@ -101,36 +101,44 @@ export function ManiaSkinFileButton({
   className?: string;
 }) {
   const { dict } = useAppDict();
+  const inputRef = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState<ManiaSkinImportDraft | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   return (
     <>
-      <label className={`${className} cursor-pointer`}>
-        <input
-          type="file"
-          accept=".osk,.zip,skin.ini"
-          className="sr-only"
-          disabled={busy}
-          onChange={(e) => {
-            const files = e.currentTarget.files;
-            e.currentTarget.value = "";
-            if (!files || files.length === 0) return;
-            setBusy(true);
-            setError(null);
-            void draftFromFileList(files)
-              .then(setDraft)
-              .catch((err) => {
-                setError(err instanceof Error ? err.message : String(err));
-              })
-              .finally(() => setBusy(false));
-          }}
-        />
+      <button
+        type="button"
+        className={className}
+        disabled={busy}
+        onClick={() => inputRef.current?.click()}
+      >
         {busy
           ? (dict?.skin.importReading ?? "Reading skin…")
           : (dict?.skin.importButton ?? "Import .osk")}
-      </label>
+      </button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".osk,.zip,application/zip,application/x-zip-compressed"
+        className="hidden"
+        disabled={busy}
+        onClick={(e) => e.stopPropagation()}
+        onChange={(e) => {
+          const files = e.currentTarget.files;
+          e.currentTarget.value = "";
+          if (!files || files.length === 0) return;
+          setBusy(true);
+          setError(null);
+          void draftFromFileList(files)
+            .then(setDraft)
+            .catch((err) => {
+              setError(err instanceof Error ? err.message : String(err));
+            })
+            .finally(() => setBusy(false));
+        }}
+      />
       {error && !draft ? (
         <span className="text-sm text-rose-300">{error}</span>
       ) : null}

@@ -37,6 +37,7 @@ Parse `.osu` charts from lazer storage, run Sunny Rework–style estimates, pers
 
 - `features/sessions/` — 4K/7K suggest
 - `features/practice-profiles/` — mania estimates
+- `features/map-marathon/` — fill track list from 4K/7K recommend
 
 ## Related knowledge
 

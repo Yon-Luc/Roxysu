@@ -16,6 +16,7 @@ import { systemRoutes } from "./system";
 import { tosuRoutes } from "./tosu";
 import { ratingLabRoutes } from "./ratingLab";
 import { mirrorRoutes } from "./mirrors";
+import { marathonRoutes } from "./marathon";
 
 const productApi = () =>
   new Elysia({ prefix: "/api" })
@@ -33,7 +34,8 @@ const productApi = () =>
     .use(searchRoutes)
     .use(collectionRoutes)
     .use(settingsRoutes)
-    .use(tosuRoutes);
+    .use(tosuRoutes)
+    .use(marathonRoutes);
 
 /** Desktop / Node product API (no Rating Lab). */
 export function createProductApiRoutes() {

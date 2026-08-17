@@ -1,7 +1,25 @@
 export {
   buildManiaOsuText,
 } from "./write";
-export type { ManiaOsuChart, ManiaOsuDifficulty, ManiaOsuMetadata } from "./write";
+export type {
+  ManiaOsuChart,
+  ManiaOsuDifficulty,
+  ManiaOsuMetadata,
+  TimingPointRow,
+} from "./write";
+export {
+  beatLengthToBpm,
+  checkFusedMatchesOriginals,
+  fuseManiaCharts,
+  parseHpDrainRate,
+  parseTimingPointRows,
+} from "./fuse";
+export type {
+  FuseManiaOptions,
+  FuseManiaResult,
+  FuseManiaSource,
+  FuseTimingMismatch,
+} from "./fuse";
 export { OsuFileParser } from "./osuFileParser.js";
 export {
   isHold,

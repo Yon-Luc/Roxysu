@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -106,6 +106,7 @@ export function SessionSevenKRecommend({
   excludeBeatmapIds: string[];
 }) {
   const { dict } = useAppDict();
+  const navigate = useNavigate();
   const ratingMode = useRatingDisplayMode();
   const [prefs, setPrefs] = useState<RecPrefs>(() => loadPrefs(keyCount));
   const [shuffleKey, setShuffleKey] = useState(0);
@@ -166,6 +167,22 @@ export function SessionSevenKRecommend({
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-center justify-end gap-2">
+        <button
+          type="button"
+          className="rx-btn"
+          disabled={items.length < 2}
+          onClick={() => {
+            void navigate({
+              to: "/marathon",
+              search: {
+                ids: items.map((item) => item.id).join(","),
+                key: keyCount,
+              },
+            });
+          }}
+        >
+          {dict?.session.sendToMarathon ?? "Send to marathon"}
+        </button>
         <button
           type="button"
           className="rx-btn"

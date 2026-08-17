@@ -49,6 +49,7 @@ practice list / collection match / search
 
 - `features/smart-collections/` — collections store query text
 - `features/sessions/` — Up Next suggest uses query language filters
+- `features/map-marathon/` — search to add maps
 
 ## Related knowledge
 

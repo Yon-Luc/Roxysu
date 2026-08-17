@@ -1,14 +1,25 @@
 import type { ChartNote } from "./types";
 
+export type TimingPointRow = {
+  timeMs: number;
+  beatLength: number;
+  meter?: number;
+  sampleSet?: number;
+  sampleIndex?: number;
+  volume?: number;
+  uninherited?: boolean;
+  effects?: number;
+};
+
 export type ManiaOsuMetadata = {
   title: string;
   artist: string;
   creator: string;
   version: string;
   audioFilename: string;
-  /** Optional background image filename referenced in [Events]. */
   backgroundFilename?: string;
   previewTime?: number;
+  tags?: string;
 };
 
 export type ManiaOsuDifficulty = {
@@ -24,8 +35,9 @@ export type ManiaOsuDifficulty = {
 export type ManiaOsuChart = {
   metadata: ManiaOsuMetadata;
   difficulty: ManiaOsuDifficulty;
-  /** Uninherited timing points: [timeMs, beatLengthMs]. */
   timingPoints: Array<[number, number]>;
+  fullTimingPoints?: TimingPointRow[];
+  breaks?: Array<[number, number]>;
   notes: ChartNote[];
 };
 
@@ -57,9 +69,9 @@ export function buildManiaOsuText(chart: ManiaOsuChart): string {
     "",
     "[General]",
     "Mode:3",
-    `AudioFilename:${md.audioFilename}`,
+    `AudioFilename: ${md.audioFilename}`,
     "AudioLeadIn:0",
-    "PreviewTime:-1",
+    `PreviewTime:${md.previewTime ?? -1}`,
     "Countdown:0",
     "SampleSet:Soft",
     "StackLeniency:0.7",
@@ -76,7 +88,7 @@ export function buildManiaOsuText(chart: ManiaOsuChart): string {
     `Creator:${md.creator}`,
     `Version:${md.version}`,
     "Source:",
-    "Tags:roxysu",
+    `Tags:${md.tags ?? "roxysu"}`,
     "BeatmapID:0",
     "BeatmapSetID:-1",
     "",
@@ -97,10 +109,37 @@ export function buildManiaOsuText(chart: ManiaOsuChart): string {
     lines.push(`0,0,"${escaped}",0,0`);
   }
 
+  for (const [startMs, endMs] of chart.breaks ?? []) {
+    lines.push(`2,${Math.round(startMs)},${Math.round(endMs)}`);
+  }
+
   lines.push("", "[TimingPoints]");
 
-  for (const [timeMs, beatLengthMs] of chart.timingPoints) {
-    lines.push(`${Math.round(timeMs)},${beatLengthMs.toFixed(12)},4,2,0,100,1,0`);
+  const rows: TimingPointRow[] =
+    chart.fullTimingPoints && chart.fullTimingPoints.length > 0
+      ? chart.fullTimingPoints
+      : chart.timingPoints.map(([timeMs, beatLength]) => ({
+          timeMs,
+          beatLength,
+          uninherited: true,
+        }));
+
+  for (const row of rows) {
+    const uninherited = row.uninherited === false ? 0 : 1;
+    const beat =
+      uninherited === 1 ? row.beatLength.toFixed(12) : String(row.beatLength);
+    lines.push(
+      [
+        Math.round(row.timeMs),
+        beat,
+        row.meter ?? 4,
+        row.sampleSet ?? 2,
+        row.sampleIndex ?? 0,
+        row.volume ?? 100,
+        uninherited,
+        row.effects ?? 0,
+      ].join(","),
+    );
   }
 
   lines.push("", "[HitObjects]");

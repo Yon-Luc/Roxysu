@@ -23,6 +23,7 @@ import { SkinPage } from "./features/settings/SkinPage";
 import { OverlayPage } from "./features/overlay/OverlayPage";
 import { RatingLabPage } from "./features/rating-lab/RatingLabPage";
 import { DownloadMapsPage } from "./features/download/DownloadMapsPage";
+import { MarathonPage } from "./features/marathon/MarathonPage";
 import { StatsPage } from "./features/stats/StatsPage";
 import { NowSelectedPage } from "./features/now-selected/NowSelectedPage";
 import { isDesktopShell } from "./lib/desktop";
@@ -194,6 +195,23 @@ const downloadMapsRoute = createRoute({
   component: DownloadMapsPage,
 });
 
+const marathonRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/marathon",
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { ids?: string; key?: number } => {
+    const ids =
+      typeof search.ids === "string" && search.ids.trim().length > 0
+        ? search.ids
+        : undefined;
+    const rawKey = Number(search.key);
+    const key = rawKey === 4 || rawKey === 7 ? rawKey : undefined;
+    return { ids, key };
+  },
+  component: MarathonPage,
+});
+
 const hubRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/hub",
@@ -287,6 +305,7 @@ const routeTree = rootRoute.addChildren([
     collectionsRoute,
     collectionResultsRoute,
     downloadMapsRoute,
+    marathonRoute,
     hubRoute,
     hubCallbackRoute,
     hubShareRoute,

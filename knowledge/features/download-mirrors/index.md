@@ -52,7 +52,7 @@ Fetch beatmap sets via configured mirrors (hinai / nerinyan / osu.direct) from t
 
 ## Depended on by
 
-- (standalone download UX)
+- `features/map-marathon/` — saves the fused `.osz` to the beatmaps folder and calls `openOszWithOsu`
 
 ## Related knowledge
 

@@ -284,6 +284,18 @@ Runs offline in the client app; does not upload.
 
 ---
 
+### Map marathon
+
+A user-built mania chart made by concatenating several same-key-count maps from the practice library, with a configurable silence gap and a grid collage of their backgrounds, then imported into lazer as one `.osz`.
+
+**Not:** Sunny dan ratings, a Collection, a playlist of separate maps
+
+**In code:** `fuseManiaCharts`, `/marathon`, `POST /api/marathon/sources`, `POST /api/marathon/open-in-osu`
+
+**See:** [features/map-marathon/](features/map-marathon/index.md)
+
+---
+
 ### Now selected
 
 Client-app page that displays the in-game selected beatmap from **tosu live**, with optional embedded beatmap preview and mania pattern detail (pattern weights, density over time). Supports a Focus layout for a second monitor.

@@ -218,6 +218,35 @@ export async function fetchPracticeRecommend(params: {
   );
 }
 
+export async function fetchMarathonSources(ids: string[]) {
+  return unwrap(
+    await api.api.marathon.sources.post({ ids }),
+    "/api/marathon/sources",
+  );
+}
+
+export async function openMarathonInOsu(file: Blob, filename: string) {
+  const form = new FormData();
+  form.append("file", file, filename);
+  form.append("filename", filename);
+  const res = await fetch("/api/marathon/open-in-osu", {
+    method: "POST",
+    body: form,
+  });
+  const data: unknown = await res.json().catch(() => null);
+  if (!res.ok) {
+    const err =
+      data &&
+      typeof data === "object" &&
+      "error" in data &&
+      typeof (data as { error: unknown }).error === "string"
+        ? (data as { error: string }).error
+        : `Open in osu! failed (${res.status})`;
+    throw new Error(err);
+  }
+  return data as { opened: number; filename: string; path: string };
+}
+
 export async function fetchBeatmap(id: string) {
   return unwrap(await api.api.beatmaps({ id }).get(), `/api/beatmaps/${id}`);
 }
@@ -873,6 +902,11 @@ export type PracticeRecommend = Exclude<
   Awaited<ReturnType<typeof fetchPracticeRecommend>>,
   { error: string }
 >;
+export type MarathonSources = Exclude<
+  Awaited<ReturnType<typeof fetchMarathonSources>>,
+  { error: string }
+>;
+export type MarathonSource = MarathonSources["sources"][number];
 export type BeatmapProfile = Exclude<
   Awaited<ReturnType<typeof fetchBeatmap>>,
   { error: string }

@@ -14,6 +14,7 @@ One subdirectory per product surface. Terms: [vocabulary.md](../vocabulary.md).
 | Sunny dan / 4K/7K recommend | [sunny-dan-recommendations/](sunny-dan-recommendations/index.md) |
 | Stats | [stats/](stats/index.md) |
 | Download mirrors | [download-mirrors/](download-mirrors/index.md) |
+| Map marathon | [map-marathon/](map-marathon/index.md) |
 | Hub | [hub/](hub/index.md) |
 | Desktop | [desktop/](desktop/index.md) |
 | tosu live overlay input | [tosu-live/](tosu-live/index.md) |

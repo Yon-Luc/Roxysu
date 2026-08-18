@@ -20,6 +20,7 @@ touches:
   - apps/server/public/lib/stdSkin.ts
   - apps/server/public/lib/taikoSkin.ts
   - apps/server/public/lib/catchSkin.ts
+  - apps/server/public/features/settings/SkinColorInput.tsx
   - apps/server/public/features/settings/sections/StandardSkinEditor.tsx
   - apps/server/public/features/settings/sections/TaikoSkinEditor.tsx
   - apps/server/public/features/settings/sections/CatchSkinEditor.tsx

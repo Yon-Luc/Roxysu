@@ -38,6 +38,7 @@ import {
 } from "../../lib/maniaSkinImport";
 import { useAppDict, t } from "../../lib/i18n";
 import type { Dictionary } from "@roxysu/i18n";
+import { SkinColorInput } from "./SkinColorInput";
 
 function buildSampleNotes(keys: number) {
   const notes: { column: number; startMs: number; endMs: number }[] = [];
@@ -155,10 +156,9 @@ function ColorField({
     <div className="flex flex-col gap-1.5 text-xs text-muted">
       <span>{label}</span>
       <div className="flex items-center gap-2">
-        <input
-          type="color"
+        <SkinColorInput
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={onChange}
           className="h-8 w-10 shrink-0 cursor-pointer rounded bg-transparent"
           aria-label={t(dict?.skin.colorPickerAria, { label })}
         />

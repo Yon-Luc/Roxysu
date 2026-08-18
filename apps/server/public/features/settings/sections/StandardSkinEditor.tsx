@@ -14,6 +14,7 @@ import {
   type StdSkin,
 } from "../../../lib/stdSkin";
 import { useAppDict } from "../../../lib/i18n";
+import { SkinColorInput } from "../SkinColorInput";
 
 const LOOP_MS = 9000;
 
@@ -138,10 +139,9 @@ function ColorRow({
     <div className="flex flex-col gap-1.5 text-xs text-muted">
       <span>{label}</span>
       <div className="flex items-center gap-2">
-        <input
-          type="color"
+        <SkinColorInput
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={onChange}
           className="h-8 w-10 shrink-0 cursor-pointer rounded bg-transparent"
           aria-label={label}
         />
@@ -280,22 +280,20 @@ export function StandardSkinEditor() {
             </legend>
             <div className="flex flex-wrap gap-1.5">
               {skin.comboColors.map((color, index) => (
-                <div key={`${index}-${color}`} className="relative">
-                  <input
-                    type="color"
-                    value={color}
-                    onChange={(e) =>
-                      update({
-                        comboColors: skin.comboColors.map((c, i) =>
-                          i === index ? e.target.value : c,
-                        ),
-                      })
-                    }
-                    className="size-9 cursor-pointer rounded border border-black/40"
-                    aria-label={`${dict?.skin.noteColor ?? "Note"} ${index + 1}`}
-                    title={`${dict?.skin.noteColor ?? "Note"} ${index + 1} — ${comboColorFor(skin, index + 1)}`}
-                  />
-                </div>
+                <SkinColorInput
+                  key={index}
+                  value={color}
+                  onChange={(next) =>
+                    update({
+                      comboColors: skin.comboColors.map((c, i) =>
+                        i === index ? next : c,
+                      ),
+                    })
+                  }
+                  className="size-9 cursor-pointer rounded border border-black/40"
+                  aria-label={`${dict?.skin.noteColor ?? "Note"} ${index + 1}`}
+                  title={`${dict?.skin.noteColor ?? "Note"} ${index + 1} — ${comboColorFor(skin, index + 1)}`}
+                />
               ))}
             </div>
           </fieldset>

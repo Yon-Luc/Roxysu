@@ -14,6 +14,7 @@ import {
   type CatchSkin,
 } from "../../../lib/catchSkin";
 import { useAppDict } from "../../../lib/i18n";
+import { SkinColorInput } from "../SkinColorInput";
 
 const LOOP_MS = 8000;
 
@@ -68,10 +69,9 @@ function ColorRow({
     <div className="flex flex-col gap-1.5 text-xs text-muted">
       <span>{label}</span>
       <div className="flex items-center gap-2">
-        <input
-          type="color"
+        <SkinColorInput
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={onChange}
           className="h-8 w-10 shrink-0 cursor-pointer rounded bg-transparent"
           aria-label={label}
         />
@@ -211,14 +211,13 @@ export function CatchSkinEditor() {
             </legend>
             <div className="flex flex-wrap gap-1.5">
               {skin.comboColors.map((color, index) => (
-                <input
-                  key={`${index}-${color}`}
-                  type="color"
+                <SkinColorInput
+                  key={index}
                   value={color}
-                  onChange={(e) =>
+                  onChange={(next) =>
                     update({
                       comboColors: skin.comboColors.map((c, i) =>
-                        i === index ? e.target.value : c,
+                        i === index ? next : c,
                       ),
                     })
                   }

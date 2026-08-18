@@ -121,14 +121,14 @@ export function ManiaSkinFileButton({
       <input
         ref={inputRef}
         type="file"
-        accept=".osk,.zip,application/zip,application/x-zip-compressed"
+        accept=".osk,.zip"
         className="hidden"
         disabled={busy}
         onClick={(e) => e.stopPropagation()}
         onChange={(e) => {
-          const files = e.currentTarget.files;
+          const files = [...(e.currentTarget.files ?? [])];
           e.currentTarget.value = "";
-          if (!files || files.length === 0) return;
+          if (files.length === 0) return;
           setBusy(true);
           setError(null);
           void draftFromFileList(files)

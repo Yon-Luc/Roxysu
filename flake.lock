@@ -3,14 +3,14 @@
     "linux-resources": {
       "flake": false,
       "locked": {
-        "lastModified": 1787168148,
-        "narHash": "sha256-N+wbUycJm8wkdYtMIowJr7lr6f94MR9ou/V4CzUfkPg=",
+        "lastModified": 1787169838,
+        "narHash": "sha256-sNNBr4dJFl/1rwXxuxNrN2ILkqlYT5uSGcm+JSUXYaY=",
         "type": "tarball",
-        "url": "https://github.com/Yon-Luc/Roxysu/releases/download/v0.1.12/Roxysu-0.1.12-linux-x64-resources.tar.gz"
+        "url": "https://github.com/Yon-Luc/Roxysu/releases/download/v0.1.13/Roxysu-0.1.13-linux-x64-resources.tar.gz"
       },
       "original": {
         "type": "tarball",
-        "url": "https://github.com/Yon-Luc/Roxysu/releases/download/v0.1.12/Roxysu-0.1.12-linux-x64-resources.tar.gz"
+        "url": "https://github.com/Yon-Luc/Roxysu/releases/download/v0.1.13/Roxysu-0.1.13-linux-x64-resources.tar.gz"
       }
     },
     "nixpkgs": {

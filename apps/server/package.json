@@ -1,6 +1,6 @@
 {
   "name": "Roxysu",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "overrides": {
     "bun": "npm:bun-types"
   },

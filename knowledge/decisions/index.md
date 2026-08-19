@@ -10,3 +10,4 @@ Constraints agents must not accidentally violate. Terms: [vocabulary.md](../voca
 | Keep analytics in server | [keep-analytics-in-server.md](keep-analytics-in-server.md) |
 | Hub is a separate process | [hub-separate-process.md](hub-separate-process.md) |
 | Hub search base index + killable edge cache | [hub-search-base-index.md](hub-search-base-index.md) |
+| Release tags include the linux-resources lock | [release-tag-includes-linux-resources.md](release-tag-includes-linux-resources.md) |

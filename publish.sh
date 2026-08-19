@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Cut a Roxysu desktop release: bump versions → commit → tag → push → wait for
-# CI assets → refresh flake.lock (linux-resources) → commit + push.
+# CI assets → refresh flake.lock (linux-resources) → commit + push → move the
+# same tag to HEAD so github:Yon-Luc/Roxysu/vX.Y.Z includes the matching payload.
+#
+# The first tag push is what triggers CI. The linux-resources pin can only be
+# written after that tarball exists, so the tag is force-moved afterward.
 #
 # Usage:
 #   ./publish.sh 0.1.5
@@ -12,7 +16,7 @@
 #   --skip-tests       Skip bun test / typecheck before tagging
 #   --skip-push        Commit + tag locally only
 #   --skip-flake       Stop after push (no wait / flake update)
-#   --flake-only VER   Only wait for assets + update flake.lock
+#   --flake-only VER   Only wait for assets + update flake.lock + retarget tag
 #   --yes              Skip interactive confirmation
 #   --allow-dirty      Allow a dirty working tree (not recommended)
 set -euo pipefail
@@ -46,7 +50,7 @@ run() {
 }
 
 usage() {
-  sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'
   exit "${1:-0}"
 }
 
@@ -202,6 +206,35 @@ EOF
   log "flake.lock updated for ${tag}"
 }
 
+# CI builds from the initial tag. After linux-resources is locked, the published
+# tag must point at HEAD or github:Yon-Luc/Roxysu/vX.Y.Z wraps the previous payload.
+retarget_release_tag() {
+  local tag="$1"
+  local version="${2:-${tag#v}}"
+  local head peeled
+  head="$(git rev-parse HEAD)"
+  if git rev-parse "$tag" >/dev/null 2>&1; then
+    peeled="$(git rev-parse "$tag^{}")"
+    if [[ "$peeled" == "$head" ]]; then
+      log "Tag $tag already points at HEAD"
+      return
+    fi
+  fi
+  log "Moving $tag → $(git rev-parse --short HEAD) (includes linux-resources lock)"
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "dry-run: git tag -f -a $tag HEAD && git push --force origin $tag"
+    return
+  fi
+  git tag -f -a "$tag" -m "Roxysu ${version}" HEAD
+  if [[ "$SKIP_PUSH" -eq 0 ]]; then
+    # Force-pushing the tag may re-run desktop CI; assets are the same version.
+    git push origin "refs/tags/${tag}" --force
+    gh release edit "$tag" --target "$head" >/dev/null
+  else
+    log "Skipped tag push. Later: git push origin $tag --force"
+  fi
+}
+
 release_notes() {
   local prev="$1" ver="$2"
   local range
@@ -232,6 +265,7 @@ if [[ "$FLAKE_ONLY" -eq 1 ]]; then
   require_cmd gh
   wait_for_release_asset "$TAG" "$STABLE_ASSET"
   update_flake_lock "$TAG"
+  retarget_release_tag "$TAG" "$VERSION"
   exit 0
 fi
 
@@ -342,10 +376,11 @@ if [[ "$SKIP_FLAKE" -eq 1 || "$SKIP_PUSH" -eq 1 ]]; then
 fi
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
-  log "dry-run: would wait for $STABLE_ASSET then nix flake update linux-resources"
+  log "dry-run: would wait for $STABLE_ASSET then nix flake update linux-resources then move $TAG to HEAD"
   exit 0
 fi
 
 wait_for_release_asset "$TAG" "$STABLE_ASSET"
 update_flake_lock "$TAG"
+retarget_release_tag "$TAG" "$VERSION"
 log "Release $TAG complete."

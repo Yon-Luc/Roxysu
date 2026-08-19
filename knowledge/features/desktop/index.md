@@ -23,7 +23,7 @@ Distribute Roxysu as a desktop app without changing the local-mirror-centric arc
 
 - `apps/desktop/main.js` — spawns client app + realm-reader; sets `ROXYSU_DESKTOP=1` and `HUB_URL` (`https://roxysu-api.yonx.app` unless overridden)
 - `nix/prebuilt.nix` / `nix/package.nix` — `--set-default HUB_URL https://roxysu-api.yonx.app`
-- `publish.sh` — bumps versions, tags to trigger CI, then force-moves the tag to the `linux-resources` lock commit so `github:Yon-Luc/Roxysu/vX.Y.Z` wraps that payload
+- `publish.sh` — bumps versions, tags to trigger CI, pins `linux-resources` to the versioned GitHub tarball, then force-moves the tag to that lock commit
 
 ## Dependencies
 

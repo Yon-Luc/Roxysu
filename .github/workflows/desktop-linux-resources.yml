@@ -26,6 +26,9 @@ concurrency:
 jobs:
   build:
     name: Build Linux resources tarball
+    # First tag push uploads assets. Force-moving the tag onto flake.lock must
+    # not rebuild — a new tarball at the same versioned URL would break the pin.
+    if: github.event_name == 'workflow_dispatch' || github.event.created
     runs-on: ubuntu-latest
     timeout-minutes: 60
 

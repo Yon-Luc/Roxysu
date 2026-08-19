@@ -5,10 +5,10 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
     # Prebuilt Linux app payload from GitHub Releases (CI: desktop-linux-resources).
-    # URL is mutable (`latest`); content is pinned in flake.lock until you run:
-    #   nix flake update linux-resources
+    # Versioned URL (not releases/latest) so Nix's tarball cache cannot keep an
+    # older payload. publish.sh rewrites this after CI uploads the tarball.
     linux-resources = {
-      url = "https://github.com/Yon-Luc/Roxysu/releases/latest/download/Roxysu-linux-x64-resources.tar.gz";
+      url = "https://github.com/Yon-Luc/Roxysu/releases/download/v0.1.12/Roxysu-0.1.12-linux-x64-resources.tar.gz";
       flake = false;
     };
   };
@@ -92,7 +92,7 @@
 
     # nix develop — toolchain for hacking (Bun server + Electron smoke).
     # nix build / nix run / nix profile install — packaged desktop app (prebuilt).
-    # Refresh the prebuilt payload: nix flake update linux-resources
+    # Refresh a github:Yon-Luc/Roxysu input: nix flake update --refresh
     # From GitHub (once pushed): nix run github:Yon-Luc/Roxysu
     # Install into PATH + app menu: nix profile install github:Yon-Luc/Roxysu
     #   or on NixOS: programs.roxysu.enable (see nixosModules above).
@@ -121,7 +121,7 @@
       shellHook = ''
         echo "Roxysu dev shell — bun $(bun --version), node $(node --version), electron $(electron --version), dotnet $(dotnet --version)"
         echo "Packaged app (prebuilt ${resourcesVersion}): nix build .#roxysu && nix run .#roxysu"
-        echo "Refresh prebuilt: nix flake update linux-resources"
+        echo "Refresh a github:Yon-Luc/Roxysu input: nix flake update --refresh"
         echo "From-source fallback: nix build .#roxysu-from-source"
       '';
     };

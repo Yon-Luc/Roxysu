@@ -27,6 +27,7 @@ cd "$ROOT"
 DESKTOP_PKG="$ROOT/apps/desktop/package.json"
 SERVER_PKG="$ROOT/apps/server/package.json"
 NIX_PACKAGE="$ROOT/nix/package.nix"
+FLAKE_NIX="$ROOT/flake.nix"
 STABLE_ASSET="Roxysu-linux-x64-resources.tar.gz"
 
 DRY_RUN=0
@@ -151,6 +152,34 @@ set_nix_package_version() {
   ' "$NIX_PACKAGE" "$ver"
 }
 
+set_flake_linux_resources_url() {
+  local ver="$1"
+  local url="https://github.com/Yon-Luc/Roxysu/releases/download/v${ver}/Roxysu-${ver}-linux-x64-resources.tar.gz"
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "dry-run: set linux-resources url = $url"
+    return
+  fi
+  node -e '
+    const fs = require("fs");
+    const p = process.argv[1];
+    const url = process.argv[2];
+    let text = fs.readFileSync(p, "utf8");
+    let replaced = 0;
+    text = text.replace(
+      /url = "https:\/\/github\.com\/Yon-Luc\/Roxysu\/releases\/[^"]+"/,
+      () => {
+        replaced += 1;
+        return "url = \"" + url + "\"";
+      },
+    );
+    if (replaced !== 1) {
+      console.error("expected one linux-resources url in", p, "got", replaced);
+      process.exit(1);
+    }
+    fs.writeFileSync(p, text);
+  ' "$FLAKE_NIX" "$url"
+}
+
 confirm() {
   local prompt="$1"
   if [[ "$ASSUME_YES" -eq 1 || "$DRY_RUN" -eq 1 ]]; then
@@ -178,25 +207,27 @@ wait_for_release_asset() {
 
 update_flake_lock() {
   local tag="$1"
+  local ver="${tag#v}"
   require_cmd nix
-  log "Refreshing flake input linux-resources (points at releases/latest)…"
-  # Ensure "latest" resolves to this tag's assets before locking.
+  log "Pinning linux-resources to ${tag} tarball…"
   local latest
   latest="$(gh release view --json tagName -q .tagName)"
   if [[ "$latest" != "$tag" ]]; then
     die "GitHub latest release is $latest, expected $tag — refuse to update flake.lock"
   fi
-  run nix flake update linux-resources
+  set_flake_linux_resources_url "$ver"
+  # --refresh bypasses Nix tarball-ttl so a new versioned URL is actually fetched.
+  run nix flake update linux-resources --refresh
   if [[ "$DRY_RUN" -eq 1 ]]; then
     return
   fi
-  if git diff --quiet -- flake.lock; then
-    log "flake.lock unchanged (already pinned to this payload?)"
+  if git diff --quiet -- flake.lock flake.nix; then
+    log "flake.lock / flake.nix unchanged (already pinned to this payload?)"
     return
   fi
-  run git add flake.lock
+  run git add flake.lock flake.nix
   run git commit -m "$(cat <<EOF
-Refresh linux-resources flake lock for ${tag}.
+Pin linux-resources to ${tag}.
 
 EOF
 )"
@@ -227,7 +258,6 @@ retarget_release_tag() {
   fi
   git tag -f -a "$tag" -m "Roxysu ${version}" HEAD
   if [[ "$SKIP_PUSH" -eq 0 ]]; then
-    # Force-pushing the tag may re-run desktop CI; assets are the same version.
     git push origin "refs/tags/${tag}" --force
     gh release edit "$tag" --target "$head" >/dev/null
   else

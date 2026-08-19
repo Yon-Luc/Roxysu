@@ -5,6 +5,8 @@ touches:
   - publish.sh
   - flake.nix
   - flake.lock
+  - .github/workflows/desktop-linux-resources.yml
+  - .github/workflows/desktop-win.yml
 ---
 
 # Release tags include the linux-resources lock
@@ -21,9 +23,12 @@ The prebuilt client app version comes from the tarball (`package.json` / `resour
 
 - Do not leave `vX.Y.Z` on the version-bump commit after `flake.lock` is refreshed.
 - `publish.sh` force-moves the tag to HEAD after the linux-resources lock commit (and `--flake-only` does the same).
-- Do not pin `linux-resources` in `flake.nix` to a tag that has not been retargeted yet.
+- Pin `linux-resources` to a **versioned** GitHub asset URL (`releases/download/vX.Y.Z/…`), never `releases/latest`. Nix caches tarballs by URL (`tarball-ttl`); `nix flake update linux-resources` against `latest` can keep or even downgrade to the previous payload.
+- Consumers of `github:Yon-Luc/Roxysu` should `nix flake update --refresh` then rebuild — not update `linux-resources` in isolation.
+- Desktop CI must not rebuild on a tag force-move (`github.event.created` only). Replacing the tarball at the same versioned URL would invalidate `flake.lock`.
 
 ## Relevant implementation
 
-- `publish.sh` — `update_flake_lock()`, `retarget_release_tag()`
-- `flake.nix` input `linux-resources` (`releases/latest/download/…`, content pinned in `flake.lock`)
+- `publish.sh` — `set_flake_linux_resources_url()`, `update_flake_lock()`, `retarget_release_tag()`
+- `flake.nix` input `linux-resources` (versioned release asset, content pinned in `flake.lock`)
+- `.github/workflows/desktop-linux-resources.yml`, `.github/workflows/desktop-win.yml`

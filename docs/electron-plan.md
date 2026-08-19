@@ -75,18 +75,18 @@ roxysu/
 | `nix profile install .#roxysu` | Install into your profile |
 | `nix run github:Yon-Luc/Roxysu` | Same package, from GitHub (after push) |
 
-**Fast path (preferred):** CI uploads `Roxysu-*-linux-x64-resources.tar.gz` and a
-stable `Roxysu-linux-x64-resources.tar.gz` on each release. The flake input
-`linux-resources` points at `releases/latest/download/…`; content is pinned in
-`flake.lock`. Refresh with:
+**Fast path (preferred):** CI uploads `Roxysu-*-linux-x64-resources.tar.gz` on each
+release. The flake input `linux-resources` points at that version's GitHub asset
+(`releases/download/vX.Y.Z/Roxysu-X.Y.Z-linux-x64-resources.tar.gz`), pinned in
+`flake.lock`. `publish.sh` rewrites the URL after CI uploads. Consumers of
+`github:Yon-Luc/Roxysu` refresh with:
 
 ```bash
-nix flake update linux-resources
-# or: nix flake update
+nix flake update --refresh
 ```
 
-Then `nix build .#roxysu` wraps nixpkgs Electron around that payload — no local
-`bun install` / UI / native rebuild.
+Then rebuild / `nix run`. Do not `nix flake update linux-resources` against a
+mutable `releases/latest` URL — Nix's tarball cache can keep the previous payload.
 
 **From-source fallback:** `nix/package.nix` still wraps nixpkgs Electron + Node.
 After `bun.lock` changes, refresh `bunDepsHash` from the hash `nix build .#roxysu-from-source` prints.

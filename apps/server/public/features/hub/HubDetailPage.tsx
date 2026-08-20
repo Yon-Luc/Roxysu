@@ -423,7 +423,7 @@ export function HubDetailPage({ id }: { id: string }) {
       void queryClient.invalidateQueries({ queryKey: ["hub-favorites"] });
       pushToast({
         title: dict?.hub?.collectionDeleted ?? "Collection deleted",
-        detail: dict?.hub?.deletedDetail ?? "Removed from Workshop. Your local copy is unchanged.",
+        detail: dict?.hub?.deletedDetail ?? "Removed from Community. Your local copy is unchanged.",
         tone: "success",
       });
       void navigate({ to: "/hub" });
@@ -475,7 +475,7 @@ export function HubDetailPage({ id }: { id: string }) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <GoBackLink to="/hub">{dict?.hub?.workshop ?? "Workshop"}</GoBackLink>
+          <GoBackLink to="/hub">{dict?.hub?.workshop ?? "Community"}</GoBackLink>
           <PageTitle>{c?.name ?? (dict?.hub?.collection ?? "Collection")}</PageTitle>
           {c ? (
             <p className="rx-subtitle">
@@ -912,7 +912,7 @@ export function HubDetailPage({ id }: { id: string }) {
       </ConfirmModal>
       <ConfirmModal
         open={deleteOpen}
-        title={dict?.hub?.deleteFromWorkshop ?? "Delete from Workshop"}
+        title={dict?.hub?.deleteFromWorkshop ?? "Delete from Community"}
         confirmLabel={dict?.hub?.delete ?? "Delete"}
         busy={deleteMut.isPending}
         onClose={() => {
@@ -921,7 +921,7 @@ export function HubDetailPage({ id }: { id: string }) {
         onConfirm={() => deleteMut.mutate()}
       >
         <p>
-          {t(dict?.hub?.deleteBody ?? "This removes {{name}} from Workshop. Anyone else will lose the public pack.", {
+          {t(dict?.hub?.deleteBody ?? "This removes {{name}} from Community. Anyone else will lose the public pack.", {
             name: c?.name ?? "this collection",
           })}
         </p>

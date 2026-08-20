@@ -224,7 +224,7 @@ export function HubBrowsePage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <PageTitle>{dict?.hub?.workshop ?? "Workshop"}</PageTitle>
+          <PageTitle>{dict?.hub?.workshop ?? "Community"}</PageTitle>
           <p className="rx-subtitle">
             {dict?.hub?.browseSubtitle ?? "Browse and share beatmap collection packs."}
           </p>
@@ -386,7 +386,7 @@ export function HubBrowsePage() {
         <p className="text-sm text-muted">
           {debouncedQ
             ? (dict?.hub?.noAddedMatch ?? "No added collections match your search.")
-            : (dict?.hub?.noAddedYet ?? "No collections saved from the Workshop yet. Open a collection and tap Save collection.")}
+            : (dict?.hub?.noAddedYet ?? "No collections saved from the Community yet. Open a collection and tap Save collection.")}
         </p>
       ) : (
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

@@ -86,19 +86,19 @@ Networked collaboration / discovery — not required for offline practice analyt
 - `apps/hub/src/services/hinamizawa.ts:fetchAllBeatmapsetStubs()` — cache refresh crawls Hinamizawa search pages into enriched stubs; optional `keymode` keeps sets using embedded `beatmaps[].cs`. Do not N+1 `/s/{id}` for key filter
 - `apps/hub/src/services/hubEnv.ts:isHubSearchIndexEnabled()` / `isHubSearchHttpCacheEnabled()` — prod kill switches
 - `apps/server/public/features/hub/HubAdminCachePage.tsx` — admin prime UI: base fields only (mode, status, keys, sort, frequency); secondary filters are runtime on Download Maps
-- `apps/server/src/hubUrl.ts:resolveHubBaseUrl()` — shared Hub URL for Workshop, OAuth redeem, and Download Maps (`HUB_URL`; localhost in `bun run dev`, `https://roxysu-api.yonx.app` when `ROXYSU_DESKTOP=1`)
-- `apps/server/public/lib/hub.ts` — runtime Workshop client (clears JWT on Hub 401; delete + export). `packages/hub-client` is the Node Eden client and is not used in the browser
+- `apps/server/src/hubUrl.ts:resolveHubBaseUrl()` — shared Hub URL for Community, OAuth redeem, and Download Maps (`HUB_URL`; localhost in `bun run dev`, `https://roxysu-api.yonx.app` when `ROXYSU_DESKTOP=1`)
+- `apps/server/public/lib/hub.ts` — runtime Community client (clears JWT on Hub 401; delete + export). `packages/hub-client` is the Node Eden client and is not used in the browser
 - `apps/server/src/mirrors/hubSearch.ts:mirrorParamsToHubQuery()` / `tryFetchAllHubCachedIds()` — maps Download params to Hub GET `/search` (page) or `/search/all` (count/download-all). Circuit breaker skips Hub for 30s after timeout/5xx.
 - `apps/server/src/routes/system.ts` — client app OAuth handoff helpers
-- Workshop detail: owner or admin can edit/delete; Save calls `GET /collections/:id/export` so `downloadCount` increments
+- Community detail: owner or admin can edit/delete; Save calls `GET /collections/:id/export` so `downloadCount` increments
 - Browse mode chip (`q=mode=m`) matches `dominantMode` **or** the corresponding Hub tag (`mania` / `std` / `ctb` / `taiko`)
-- Workshop Favorites tab uses `GET /collections/me/favorites`
+- Community Favorites tab uses `GET /collections/me/favorites`
 - List and favorites DTOs omit full `beatmapsetIds` (preview IDs + `mapCount` only). Detail uses `maps[]`; export still returns the full ID list.
-- Workshop Added tab renders from local hub-added rows; ownership uses `POST /api/mirrors/ownership/diff` rather than shipping every owned set ID.
+- Community Added tab renders from local hub-added rows; ownership uses `POST /api/mirrors/ownership/diff` rather than shipping every owned set ID.
 - OAuth callback accepts only `h=` (handoff id), never a JWT in the URL
 - `apps/hub/src/db.ts` — `bun run db:migrate` and Hub boot both apply Hub store migrations
 - `apps/hub/Dockerfile` — build context is repo root. Copy every `apps/*/package.json` so `bun.lock`'s workspace graph stays valid under `--frozen-lockfile`.
-- `apps/hub/docker-compose.yml` — Coolify run config: pull prebuilt image, named volume at `/app/data`, `expose` 4322 (no host `ports`), `HUB_TRUST_PROXY=1`, production CORS allowlist for local Workshop; defaults `HUB_SEARCH_HTTP_CACHE=0` for safe rollout.
+- `apps/hub/docker-compose.yml` — Coolify run config: pull prebuilt image, named volume at `/app/data`, `expose` 4322 (no host `ports`), `HUB_TRUST_PROXY=1`, production CORS allowlist for local Community; defaults `HUB_SEARCH_HTTP_CACHE=0` for safe rollout.
 
 ### Hub search edge cache (Cloudflare reverse proxy)
 
@@ -147,7 +147,7 @@ update tag validation — status: verified
 
 ## Failure behavior
 
-1. Workshop Log out removes the JWT from `localStorage` only. Hub does not keep a revoke list; a copied JWT stays valid until expiry (30 days). Hub 401 still clears the stored JWT.
+1. Community Log out removes the JWT from `localStorage` only. Hub does not keep a revoke list; a copied JWT stays valid until expiry (30 days). Hub 401 still clears the stored JWT.
 2. OAuth pending codes live in Hub process memory and are lost on restart.
 
 ## Related knowledge

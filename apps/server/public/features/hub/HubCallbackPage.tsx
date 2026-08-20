@@ -34,7 +34,7 @@ export function HubCallbackPage() {
   return (
     <div className="space-y-2 p-6">
       <p className="text-sm text-muted">
-        {error ? error : (dict?.hub?.callbackSigningIn ?? "Signing in to Workshop…")}
+        {error ? error : (dict?.hub?.callbackSigningIn ?? "Signing in to Community…")}
       </p>
     </div>
   );

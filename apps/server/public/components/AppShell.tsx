@@ -44,7 +44,7 @@ const ALL_NAV = [
   { to: "/sessions", label: "Sessions", labelKey: "sessions", icon: List },
   { to: "/now-selected", label: "Now selected", labelKey: "nowSelected", icon: AudioLines },
   { to: "/collections", label: "Collections", labelKey: "collections", icon: LayoutGrid },
-  { to: "/hub", label: "Workshop", labelKey: "hub", icon: Share2 },
+  { to: "/hub", label: "Community", labelKey: "hub", icon: Share2 },
   { to: "/download-maps", label: "Download", labelKey: "download", icon: Download },
   { to: "/marathon", label: "Marathon", labelKey: "marathon", icon: Layers },
   { to: "/rating-lab", label: "Rating Lab", labelKey: "ratingLab", icon: Star },

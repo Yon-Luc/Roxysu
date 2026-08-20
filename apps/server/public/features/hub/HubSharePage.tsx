@@ -206,7 +206,7 @@ export function HubSharePage() {
     },
     onSuccess: (data) => {
       pushToast({
-        title: dict?.hub?.sharedToWorkshop ?? "Shared to Workshop",
+        title: dict?.hub?.sharedToWorkshop ?? "Shared to Community",
         detail: dict?.hub?.sharedDetail ?? "Your collection is now public.",
         tone: "success",
       });
@@ -241,10 +241,10 @@ export function HubSharePage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <GoBackLink to="/hub">{dict?.hub?.workshop ?? "Workshop"}</GoBackLink>
+          <GoBackLink to="/hub">{dict?.hub?.workshop ?? "Community"}</GoBackLink>
           <PageTitle>{dict?.hub?.shareCollectionTitle ?? "Share collection"}</PageTitle>
           <p className="rx-subtitle">
-            {dict?.hub?.shareSubtitle ?? "Upload a local smart or lazer collection to the Workshop."}
+            {dict?.hub?.shareSubtitle ?? "Upload a local smart or lazer collection to the Community."}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -270,7 +270,7 @@ export function HubSharePage() {
           >
             {shareMut.isPending
               ? (dict?.hub?.sharing ?? "Sharing…")
-              : (dict?.hub?.shareToWorkshop ?? "Share to Workshop")}
+              : (dict?.hub?.shareToWorkshop ?? "Share to Community")}
           </button>
         </div>
       </div>
@@ -279,7 +279,7 @@ export function HubSharePage() {
         <div className="rx-card p-5">
           <div className="font-semibold text-ink">{dict?.hub?.signInRequired ?? "Sign in required"}</div>
           <p className="mt-1 text-sm text-muted">
-            {dict?.hub?.loginToPublish ?? "Log in with osu! to publish a collection to the Workshop."}
+            {dict?.hub?.loginToPublish ?? "Log in with osu! to publish a collection to the Community."}
           </p>
           <HubLoginButton className="rx-btn-primary mt-4 inline-flex" />
         </div>
@@ -371,7 +371,7 @@ export function HubSharePage() {
         <div>
           <h2 className="text-sm font-semibold text-ink">{dict?.hub?.details ?? "Details"}</h2>
           <p className="mt-0.5 text-xs text-muted">
-            {dict?.hub?.detailsSubtitle ?? "How this collection appears in the Workshop."}
+            {dict?.hub?.detailsSubtitle ?? "How this collection appears in the Community."}
           </p>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -436,7 +436,7 @@ export function HubSharePage() {
         >
           {shareMut.isPending
             ? (dict?.hub?.sharing ?? "Sharing…")
-            : (dict?.hub?.shareToWorkshop ?? "Share to Workshop")}
+              : (dict?.hub?.shareToWorkshop ?? "Share to Community")}
         </button>
       </div>
     </div>

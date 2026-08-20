@@ -221,7 +221,7 @@ export function HubAdminCachePage() {
     return (
       <div className="flex flex-col gap-4">
         <div>
-          <GoBackLink to="/hub">{dict?.hub?.workshop ?? "Workshop"}</GoBackLink>
+          <GoBackLink to="/hub">{dict?.hub?.workshop ?? "Community"}</GoBackLink>
           <PageTitle className="mt-3">{dict?.hub?.searchCache ?? "Search cache"}</PageTitle>
           <p className="rx-subtitle">{dict?.hub?.adminLabel ?? "Admin"}</p>
         </div>
@@ -233,7 +233,7 @@ export function HubAdminCachePage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <GoBackLink to="/hub">{dict?.hub?.workshop ?? "Workshop"}</GoBackLink>
+        <GoBackLink to="/hub">{dict?.hub?.workshop ?? "Community"}</GoBackLink>
         <PageTitle className="mt-3">{dict?.hub?.searchCache ?? "Search cache"}</PageTitle>
         <p className="rx-subtitle">
           {dict?.hub?.adminCacheSubtitle ??

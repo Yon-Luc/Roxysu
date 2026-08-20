@@ -126,7 +126,7 @@ const ALL_PAGE_ITEMS: {
     keywords: ["tosu", "live", "selected", "preview", "second monitor"],
   },
   { to: "/collections", label: "Collections", keywords: ["queries"] },
-  { to: "/hub", label: "Workshop", keywords: ["hub", "share", "osu", "oauth", "packs", "collections"] },
+  { to: "/hub", label: "Community", keywords: ["hub", "share", "osu", "oauth", "packs", "collections"] },
   {
     to: "/download-maps",
     label: "Download",

@@ -35,5 +35,5 @@ download, hub`
 Initially only nav/dashboard/stats/practice/sessions/collections/now-selected/
 marathon/settings/skin were wired. The `overlay`, `ratingLab`, `download`, and
 `hub` sections were added later so those pages (Overlay, Rating Lab, Download
-maps, and all Workshop/Hub pages) render in the selected language instead of
+maps, and all Community/Hub pages) render in the selected language instead of
 hardcoded English.

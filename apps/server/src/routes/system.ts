@@ -42,7 +42,7 @@ const HUB_OAUTH_DONE_HTML = `<!DOCTYPE html>
 </head>
 <body>
   <main>
-    <h1>Signed in to Roxysu Workshop</h1>
+    <h1>Signed in to Roxysu Community</h1>
     <p>You can close this tab and return to the app.</p>
   </main>
 </body>

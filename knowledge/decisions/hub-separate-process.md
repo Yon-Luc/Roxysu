@@ -26,4 +26,4 @@ Different trust model (OAuth, multi-user) and lifecycle from offline-first analy
 
 - `apps/hub/`
 - `packages/db` hub schema
-- `packages/hub-client` — Node Eden Treaty client (not the Workshop browser client)
+- `packages/hub-client` — Node Eden Treaty client (not the Community browser client)

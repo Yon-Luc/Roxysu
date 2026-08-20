@@ -36,4 +36,4 @@ touches:
 
 ## Failure behavior
 
-Workshop logout is local-only (clears `localStorage`). Hub does not revoke JWTs server-side. OAuth callback redeems `h=` only; a JWT in the URL is ignored.
+Community logout is local-only (clears `localStorage`). Hub does not revoke JWTs server-side. OAuth callback redeems `h=` only; a JWT in the URL is ignored.

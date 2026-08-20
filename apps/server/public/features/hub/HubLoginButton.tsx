@@ -8,6 +8,7 @@ import {
   setHubJwt,
   useHubUrl,
 } from "../../lib/hub";
+import { useAppDict } from "../../lib/i18n";
 
 type HubLoginButtonProps = {
   className?: string;
@@ -20,7 +21,7 @@ type HubLoginButtonProps = {
  */
 export function HubLoginButton({
   className = "rx-btn-primary",
-  children = "Log in with osu!",
+  children,
 }: HubLoginButtonProps) {
   const hubUrl = useHubUrl();
   const queryClient = useQueryClient();
@@ -28,6 +29,8 @@ export function HubLoginButton({
   const [waiting, setWaiting] = useState(false);
   const [handoff, setHandoff] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { dict } = useAppDict();
+  const label = children ?? (dict?.hub?.loginButtonLabel ?? "Log in with osu!");
 
   useEffect(() => {
     if (!waiting || !handoff) return;
@@ -46,16 +49,16 @@ export function HubLoginButton({
         if (ac.signal.aborted) return;
         setWaiting(false);
         setHandoff(null);
-        setError(err instanceof Error ? err.message : "Login failed");
+        setError(err instanceof Error ? err.message : (dict?.hub?.loginFailed ?? "Login failed"));
       }
     })();
     return () => ac.abort();
-  }, [waiting, handoff, queryClient]);
+  }, [waiting, handoff, queryClient, dict]);
 
   if (!desktop) {
     return (
       <a href={hubLoginUrl(hubUrl)} className={className}>
-        {children}
+        {label}
       </a>
     );
   }
@@ -70,7 +73,7 @@ export function HubLoginButton({
           setError(null);
           const open = window.roxysuDesktop?.openExternal;
           if (!open) {
-            setError("Desktop bridge unavailable");
+            setError(dict?.hub?.loginDesktopBridge ?? "Desktop bridge unavailable");
             return;
           }
           void (async () => {
@@ -83,13 +86,13 @@ export function HubLoginButton({
               setWaiting(true);
             } catch (err: unknown) {
               setError(
-                err instanceof Error ? err.message : "Could not open browser",
+                err instanceof Error ? err.message : (dict?.hub?.loginOpenBrowser ?? "Could not open browser"),
               );
             }
           })();
         }}
       >
-        {waiting ? "Waiting for browser…" : children}
+        {waiting ? (dict?.hub?.loginWaitingBrowser ?? "Waiting for browser…") : label}
       </button>
       {error ? <span className="text-xs text-danger">{error}</span> : null}
     </span>

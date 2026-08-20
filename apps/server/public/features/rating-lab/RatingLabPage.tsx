@@ -23,6 +23,7 @@ import {
   type RatingLabCompareItem,
 } from "../../lib/api";
 import { formatPp, formatStars } from "../../lib/format";
+import { useAppDict, t } from "../../lib/i18n";
 
 const RATING_LAB_QUERY_KEY = "roxysu:rating-lab-query";
 const RATING_LAB_PP_ACC_KEY = "roxysu:rating-lab-pp-accuracy";
@@ -146,6 +147,7 @@ function SortHeader({
 
 export function RatingLabPage() {
   const queryClient = useQueryClient();
+  const { dict } = useAppDict();
   const [queryDraft, setQueryDraft] = useState(readStoredQuery);
   const [activeQuery, setActiveQuery] = useState(readStoredQuery);
   const [baseline, setBaseline] = useState("");
@@ -335,21 +337,19 @@ export function RatingLabPage() {
   return (
     <div className="space-y-8">
       <div>
-        <PageTitle>Rating Lab</PageTitle>
+        <PageTitle>{dict?.ratingLab.title ?? "Rating Lab"}</PageTitle>
         <p className="mt-2 max-w-3xl text-sm text-muted">
-          Compare experimental mania star rating and PP (at a chosen custom
-          accuracy) against a baseline. Uses local{" "}
-          <code className="text-xs">.osu</code> files and versioned calculator
-          binaries configured in Settings.
+          {dict?.ratingLab.subtitle ??
+            "Compare experimental mania star rating and PP (at a chosen custom accuracy) against a baseline. Uses local .osu files and versioned calculator binaries configured in Settings."}
         </p>
       </div>
 
       <section className="rx-panel space-y-4 p-5">
         <div className="flex flex-wrap items-end gap-3">
           <label className="min-w-[16rem] flex-1">
-            <span className="text-xs font-semibold uppercase tracking-wide text-faint">
-              Query
-            </span>
+              <span className="text-xs font-semibold uppercase tracking-wide text-faint">
+                {dict?.ratingLab.query ?? "Query"}
+              </span>
             <div className="mt-1.5 flex gap-2">
               <input
                 type="text"
@@ -366,7 +366,7 @@ export function RatingLabPage() {
             </div>
           </label>
           <button type="button" className="rx-btn-primary" onClick={runSearch}>
-            Compare
+            {dict?.ratingLab.compare ?? "Compare"}
           </button>
         </div>
 
@@ -390,9 +390,9 @@ export function RatingLabPage() {
 
         <div className="grid gap-4 sm:grid-cols-3">
           <label>
-            <span className="text-xs font-semibold uppercase tracking-wide text-faint">
-              Baseline
-            </span>
+              <span className="text-xs font-semibold uppercase tracking-wide text-faint">
+                {dict?.ratingLab.baseline ?? "Baseline"}
+              </span>
             <select
               value={baselineId}
               onChange={(e) => {
@@ -405,18 +405,18 @@ export function RatingLabPage() {
                 <option key={v.id} value={v.id}>
                   {v.label}
                   {v.usesImport
-                    ? " (import)"
+                    ? dict?.ratingLab.suffixImport ?? " (import)"
                     : !v.executableConfigured
-                      ? " (no binary)"
+                      ? dict?.ratingLab.suffixNoBinary ?? " (no binary)"
                       : ""}
                 </option>
               ))}
             </select>
           </label>
           <label>
-            <span className="text-xs font-semibold uppercase tracking-wide text-faint">
-              Experiment
-            </span>
+              <span className="text-xs font-semibold uppercase tracking-wide text-faint">
+                {dict?.ratingLab.experiment ?? "Experiment"}
+              </span>
             <select
               value={experimentId}
               onChange={(e) => {
@@ -428,15 +428,17 @@ export function RatingLabPage() {
               {versions.map((v) => (
                 <option key={v.id} value={v.id}>
                   {v.label}
-                  {!v.usesImport && !v.executableConfigured ? " (no binary)" : ""}
+                  {!v.usesImport && !v.executableConfigured
+                    ? dict?.ratingLab.suffixNoBinary ?? " (no binary)"
+                    : ""}
                 </option>
               ))}
             </select>
           </label>
           <label>
-            <span className="text-xs font-semibold uppercase tracking-wide text-faint">
-              PP at accuracy
-            </span>
+              <span className="text-xs font-semibold uppercase tracking-wide text-faint">
+                {dict?.ratingLab.ppAtAccuracy ?? "PP at accuracy"}
+              </span>
             <select
               value={String(ppAccuracy)}
               onChange={(e) => {
@@ -458,18 +460,19 @@ export function RatingLabPage() {
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rx-panel p-4">
             <div className="text-xs uppercase tracking-wide text-faint">
-              Matches
+              {dict?.ratingLab.matches ?? "Matches"}
             </div>
             <div className="mt-1 text-2xl font-bold text-ink">
               {summary.totalMatches.toLocaleString()}
             </div>
             <div className="mt-1 text-xs text-muted">
-              {summary.comparedCount.toLocaleString()} with both ratings
+              {summary.comparedCount.toLocaleString()}{" "}
+              {dict?.ratingLab.withBothRatings ?? "with both ratings"}
             </div>
           </div>
           <div className="rx-panel p-4">
             <div className="text-xs uppercase tracking-wide text-faint">
-              Mean Δ SR
+              {dict?.ratingLab.meanDeltaSr ?? "Mean Δ SR"}
             </div>
             <div
               className={`mt-1 text-2xl font-bold ${deltaClass(summary.meanDeltaStarRating)}`}
@@ -477,12 +480,15 @@ export function RatingLabPage() {
               {formatDelta(summary.meanDeltaStarRating, 3)}★
             </div>
             <div className="mt-1 text-xs text-muted">
-              median {formatDelta(summary.medianDeltaStarRating, 3)}★
+              {dict?.ratingLab.median ?? "median"}{" "}
+              {formatDelta(summary.medianDeltaStarRating, 3)}★
             </div>
           </div>
           <div className="rx-panel p-4">
             <div className="text-xs uppercase tracking-wide text-faint">
-              Mean Δ PP ({formatPpAccuracyLabel(ppAccuracy)})
+              {t(dict?.ratingLab.meanDeltaPp, {
+                label: formatPpAccuracyLabel(ppAccuracy),
+              })}
             </div>
             <div
               className={`mt-1 text-2xl font-bold ${deltaClass(summary.meanDeltaPpSs)}`}
@@ -495,14 +501,16 @@ export function RatingLabPage() {
           </div>
           <div className="rx-panel p-4">
             <div className="text-xs uppercase tracking-wide text-faint">
-              Missing cache
+              {dict?.ratingLab.missingCache ?? "Missing cache"}
             </div>
             <div className="mt-1 text-2xl font-bold text-ink">
               {summary.missingBaseline + summary.missingExperiment}
             </div>
             <div className="mt-1 text-xs text-muted">
-              baseline {summary.missingBaseline} · experiment{" "}
-              {summary.missingExperiment}
+              {t(dict?.ratingLab.missingCacheDetail, {
+                baseline: summary.missingBaseline,
+                experiment: summary.missingExperiment,
+              })}
             </div>
           </div>
         </section>
@@ -510,7 +518,9 @@ export function RatingLabPage() {
 
       {histogram.length > 0 ? (
         <section className="rx-panel p-5">
-          <h2 className="text-sm font-bold text-ink">SR delta distribution</h2>
+          <h2 className="text-sm font-bold text-ink">
+            {dict?.ratingLab.srDeltaDistribution ?? "SR delta distribution"}
+          </h2>
           <div className="mt-4 h-56">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={histogram}>
@@ -540,60 +550,78 @@ export function RatingLabPage() {
       <section className="rx-panel p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-bold text-ink">Results</h2>
+            <h2 className="text-sm font-bold text-ink">
+              {dict?.ratingLab.results ?? "Results"}
+            </h2>
             <p className="mt-1 font-mono text-xs text-faint">{activeQuery}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <a href={exportUrl} className="rx-btn" download>
-              Export CSV
+              {dict?.ratingLab.exportCsv ?? "Export CSV"}
             </a>
             <a
               href={exportHtmlUrl}
               className="rx-btn"
               download="rating-lab-analyse.html"
-              title="Self-contained HTML analysis page with filters, graph, and osu! links"
+              title={
+                dict?.ratingLab.exportHtmlTitle ??
+                "Self-contained HTML analysis page with filters, graph, and osu! links"
+              }
             >
-              Export HTML
+              {dict?.ratingLab.exportHtml ?? "Export HTML"}
             </a>
             <button
               type="button"
               className="rx-btn-primary"
               disabled={jobBusy}
-              title="Compute ratings that are still missing for the baseline (including Base PP)"
+              title={
+                dict?.ratingLab.computeMissingBaselineTitle ??
+                "Compute ratings that are still missing for the baseline (including Base PP)"
+              }
               onClick={() => jobMut.mutate({ start: "baseline" })}
             >
-              Compute missing baseline
+              {dict?.ratingLab.computeMissingBaseline ?? "Compute missing baseline"}
             </button>
             <button
               type="button"
               className="rx-btn-primary"
               disabled={jobBusy}
-              title="Compute ratings that are still missing for the experiment"
+              title={
+                dict?.ratingLab.computeMissingExperimentTitle ??
+                "Compute ratings that are still missing for the experiment"
+              }
               onClick={() => jobMut.mutate({ start: "experiment" })}
             >
-              Compute missing experiment
+              {dict?.ratingLab.computeMissingExperiment ??
+                "Compute missing experiment"}
             </button>
             <button
               type="button"
               className="rx-btn"
               disabled={jobBusy}
-              title="Force recompute every matching baseline map, even if already cached"
+              title={
+                dict?.ratingLab.forceRerunBaselineTitle ??
+                "Force recompute every matching baseline map, even if already cached"
+              }
               onClick={() =>
                 jobMut.mutate({ start: "baseline", force: true })
               }
             >
-              Force rerun baseline
+              {dict?.ratingLab.forceRerunBaseline ?? "Force rerun baseline"}
             </button>
             <button
               type="button"
               className="rx-btn"
               disabled={jobBusy}
-              title="Force recompute every matching experiment map, even if already cached"
+              title={
+                dict?.ratingLab.forceRerunExperimentTitle ??
+                "Force recompute every matching experiment map, even if already cached"
+              }
               onClick={() =>
                 jobMut.mutate({ start: "experiment", force: true })
               }
             >
-              Force rerun experiment
+              {dict?.ratingLab.forceRerunExperiment ?? "Force rerun experiment"}
             </button>
             <button
               type="button"
@@ -605,44 +633,58 @@ export function RatingLabPage() {
               }
               onClick={() => jobMut.mutate("stop")}
             >
-              Stop
+              {dict?.ratingLab.stop ?? "Stop"}
             </button>
           </div>
         </div>
 
         <label className="mt-4 block max-w-md">
           <span className="text-xs font-semibold uppercase tracking-wide text-faint">
-            Filter by name
+            {dict?.ratingLab.filterByName ?? "Filter by name"}
           </span>
           <input
             className="rx-input mt-1 w-full"
             value={nameDraft}
-            placeholder="Title, artist, or difficulty…"
+            placeholder={
+              dict?.ratingLab.filterByNamePlaceholder ??
+              "Title, artist, or difficulty…"
+            }
             onChange={(e) => setNameDraft(e.target.value)}
           />
         </label>
 
         {jobQuery.data && jobQuery.data.status !== "idle" ? (
           <p className="mt-3 text-xs text-muted">
-            Job: {jobQuery.data.status}
-            {jobQuery.data.force ? " · force" : " · missing only"}
+            {dict?.ratingLab.job ?? "Job:"}
+            {jobQuery.data.status}
+            {jobQuery.data.force
+              ? dict?.ratingLab.jobForce ?? " · force"
+              : dict?.ratingLab.jobMissingOnly ?? " · missing only"}
             {jobQuery.data.versionId ? ` · ${jobQuery.data.versionId}` : ""}
             {jobQuery.data.attemptedThisRun > 0
-              ? ` · ${jobQuery.data.computedThisRun}/${jobQuery.data.attemptedThisRun} ok this run`
+              ? t(dict?.ratingLab.jobProgress, {
+                  computed: jobQuery.data.computedThisRun,
+                  attempted: jobQuery.data.attemptedThisRun,
+                })
               : ""}
             {jobQuery.data.error ? ` · ${jobQuery.data.error}` : ""}
           </p>
         ) : null}
 
         {compareQuery.isLoading ? (
-          <p className="mt-4 text-sm text-muted">Loading comparison…</p>
+          <p className="mt-4 text-sm text-muted">
+            {dict?.ratingLab.loadingComparison ?? "Loading comparison…"}
+          </p>
         ) : compareQuery.error ? (
           <p className="mt-4 text-sm text-danger">
             {compareQuery.error.message}
           </p>
         ) : !compareData || compareData.items.length === 0 ? (
           <p className="mt-4 text-sm text-muted">
-            {nameFilter ? "No matches for this name filter." : "No matches."}
+            {nameFilter
+              ? dict?.ratingLab.noMatchesFilter ??
+                "No matches for this name filter."
+              : dict?.ratingLab.noMatches ?? "No matches."}
           </p>
         ) : (
           <>
@@ -651,7 +693,7 @@ export function RatingLabPage() {
                 <thead>
                   <tr className="border-b border-line text-xs">
                     <SortHeader
-                      label="Map"
+                      label={dict?.ratingLab.colMap ?? "Map"}
                       column="map"
                       sort={sort}
                       order={order}
@@ -659,7 +701,7 @@ export function RatingLabPage() {
                     />
                     {!baselineUsesImport ? (
                       <SortHeader
-                        label="Import ★"
+                        label={dict?.ratingLab.colImport ?? "Import ★"}
                         column="importStar"
                         sort={sort}
                         order={order}
@@ -681,28 +723,32 @@ export function RatingLabPage() {
                       onSort={handleSort}
                     />
                     <SortHeader
-                      label="Δ★"
+                      label={dict?.ratingLab.colDeltaStar ?? "Δ★"}
                       column="deltaStar"
                       sort={sort}
                       order={order}
                       onSort={handleSort}
                     />
                     <SortHeader
-                      label={`Base PP (${formatPpAccuracyLabel(ppAccuracy)})`}
+                      label={t(dict?.ratingLab.colBasePp, {
+                        label: formatPpAccuracyLabel(ppAccuracy),
+                      })}
                       column="basePp"
                       sort={sort}
                       order={order}
                       onSort={handleSort}
                     />
                     <SortHeader
-                      label={`Exp PP (${formatPpAccuracyLabel(ppAccuracy)})`}
+                      label={t(dict?.ratingLab.colExpPp, {
+                        label: formatPpAccuracyLabel(ppAccuracy),
+                      })}
                       column="expPp"
                       sort={sort}
                       order={order}
                       onSort={handleSort}
                     />
                     <SortHeader
-                      label="ΔPP"
+                      label={dict?.ratingLab.colDeltaPp ?? "ΔPP"}
                       column="deltaPp"
                       sort={sort}
                       order={order}
@@ -738,7 +784,7 @@ export function RatingLabPage() {
                           />
                           <div className="min-w-0">
                             <div className="truncate font-medium text-ink">
-                              {item.title ?? "Unknown"}
+                              {item.title ?? dict?.ratingLab.unknown ?? "Unknown"}
                             </div>
                             <div className="truncate text-xs text-muted">
                               {item.artist ?? "?"}
@@ -797,8 +843,11 @@ export function RatingLabPage() {
 
             <div className="mt-4 flex items-center justify-between text-sm text-muted">
               <span>
-                {compareData.total.toLocaleString()} matches · page{" "}
-                {compareData.page} / {totalPages}
+                {t(dict?.ratingLab.matchesPage, {
+                  total: compareData.total.toLocaleString(),
+                  page: compareData.page,
+                  totalPages,
+                })}
               </span>
               <div className="flex gap-2">
                 <button
@@ -807,7 +856,7 @@ export function RatingLabPage() {
                   disabled={page <= 1}
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                 >
-                  Previous
+                  {dict?.practice.previous ?? "Previous"}
                 </button>
                 <button
                   type="button"
@@ -815,7 +864,7 @@ export function RatingLabPage() {
                   disabled={page >= totalPages}
                   onClick={() => setPage((p) => p + 1)}
                 >
-                  Next
+                  {dict?.practice.next ?? "Next"}
                 </button>
               </div>
             </div>
@@ -825,7 +874,9 @@ export function RatingLabPage() {
 
       {summary && summary.topStarMovers.length > 0 ? (
         <section className="rx-panel p-5">
-          <h2 className="text-sm font-bold text-ink">Largest SR movers</h2>
+          <h2 className="text-sm font-bold text-ink">
+            {dict?.ratingLab.largestMovers ?? "Largest SR movers"}
+          </h2>
           <ul className="mt-3 space-y-2 text-sm">
             {summary.topStarMovers.map((item: RatingLabCompareItem) => (
               <li key={item.beatmapId} className="flex justify-between gap-4">

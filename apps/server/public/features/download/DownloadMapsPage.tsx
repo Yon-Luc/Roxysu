@@ -25,6 +25,7 @@ import { pushToast } from "../../lib/toasts";
 import {
   isDevUi,
 } from "./batchProgress";
+import { useAppDict, t } from "../../lib/i18n";
 import { DownloadSessionPanel } from "./DownloadSessionPanel";
 import {
   startFakeMirrorBatch,
@@ -54,19 +55,28 @@ type StoredSearch = {
   downloadConcurrency: number;
 };
 
-const SORT_OPTIONS: { value: Sort; label: string }[] = [
-  { value: "ranked_desc", label: "Recently ranked" },
-  { value: "plays_desc", label: "Most played" },
-  { value: "favourites_desc", label: "Most favourited" },
-  { value: "difficulty_desc", label: "Hardest" },
-  { value: "title_asc", label: "Title A–Z" },
-  { value: "ranked_asc", label: "Oldest ranked" },
+const SORT_OPTIONS: Sort[] = [
+  "ranked_desc",
+  "plays_desc",
+  "favourites_desc",
+  "difficulty_desc",
+  "title_asc",
+  "ranked_asc",
 ];
+
+const SORT_LABEL_FALLBACK: Record<Sort, string> = {
+  ranked_desc: "Recently ranked",
+  plays_desc: "Most played",
+  favourites_desc: "Most favourited",
+  difficulty_desc: "Hardest",
+  title_asc: "Title A–Z",
+  ranked_asc: "Oldest ranked",
+};
 
 const PAGE_COUNT_OPTIONS = [1, 2, 3, 5, 10] as const;
 
 function isSort(value: unknown): value is Sort {
-  return SORT_OPTIONS.some((o) => o.value === value);
+  return SORT_OPTIONS.includes(value as Sort);
 }
 
 function readStored(): StoredSearch {
@@ -121,7 +131,25 @@ function persist(state: StoredSearch) {
 }
 
 export function DownloadMapsPage() {
+  const { dict } = useAppDict();
   const initial = readStored();
+
+  const sortLabel = (value: Sort): string => {
+    switch (value) {
+      case "ranked_desc":
+        return dict?.download?.sortLabels?.recentlyRanked ?? "Recently ranked";
+      case "plays_desc":
+        return dict?.download?.sortLabels?.mostPlayed ?? "Most played";
+      case "favourites_desc":
+        return dict?.download?.sortLabels?.mostFavourited ?? "Most favourited";
+      case "difficulty_desc":
+        return dict?.download?.sortLabels?.hardest ?? "Hardest";
+      case "title_asc":
+        return dict?.download?.sortLabels?.titleAZ ?? "Title A–Z";
+      case "ranked_asc":
+        return dict?.download?.sortLabels?.oldestRanked ?? "Oldest ranked";
+    }
+  };
   const queryClient = useQueryClient();
   const [q, setQ] = useState(initial.q);
   const [sort, setSort] = useState<Sort>(initial.sort);
@@ -279,7 +307,9 @@ export function DownloadMapsPage() {
         return;
       }
       if (!("opened" in data)) {
-        setOpenInOsuMessage("Open in osu! failed");
+        setOpenInOsuMessage(
+          dict?.download?.openFailed ?? "Open in osu! failed",
+        );
         void queryClient.invalidateQueries({ queryKey: MIRROR_BATCH_QUERY_KEY });
         return;
       }
@@ -291,17 +321,32 @@ export function DownloadMapsPage() {
         setOpenInOsuMessage(data.message);
       } else if (data.opened === 0 && data.savedForImport === 0) {
         setOpenInOsuMessage(
-          "No .osz archives left in the download folder — ready-to-open list cleared.",
+          dict?.download?.noOszLeft ??
+            "No .osz archives left in the download folder — ready-to-open list cleared.",
         );
       } else {
-        setOpenInOsuMessage(
-          `Opened ${data.opened} archive${data.opened === 1 ? "" : "s"} in osu!` +
-            (data.failed > 0 ? ` (${data.failed} failed)` : "") +
-            (data.savedForImport === 0
-              ? " · osu! is importing (task count is per difficulty, not per set)"
-              : ` · ${data.savedForImport} still to open`) +
-            ". Don't click Open again while tasks are running.",
-        );
+        const openedMsg =
+          t(dict?.download?.openedArchives, {
+            opened: data.opened,
+            s: data.opened === 1 ? "" : "s",
+          }) ||
+          `Opened ${data.opened} archive${data.opened === 1 ? "" : "s"} in osu!`;
+        const failedMsg =
+          data.failed > 0
+            ? t(dict?.download?.failedPart, { failed: data.failed }) ||
+              ` (${data.failed} failed)`
+            : "";
+        const stillMsg =
+          data.savedForImport === 0
+            ? dict?.download?.importing ??
+              " · osu! is importing (task count is per difficulty, not per set)"
+            : t(dict?.download?.stillToOpen, {
+                saved: data.savedForImport,
+              }) || ` · ${data.savedForImport} still to open`;
+        const dontClickMsg =
+          dict?.download?.dontClick ??
+          ". Don't click Open again while tasks are running.";
+        setOpenInOsuMessage(openedMsg + failedMsg + stillMsg + dontClickMsg);
       }
       void queryClient.invalidateQueries({ queryKey: MIRROR_BATCH_QUERY_KEY });
     },
@@ -331,13 +376,15 @@ export function DownloadMapsPage() {
         return;
       }
       if (!("result" in data) || !("savedForImport" in data)) {
-        setSaveMessage("Save failed");
+        setSaveMessage(dict?.download?.saveFailed ?? "Save failed");
         return;
       }
       setSaveMessage(
         data.result === "exists"
-          ? `#${data.setId} already on disk — ready to open in osu!`
-          : `#${data.setId} saved — ready to open in osu!`,
+          ? t(dict?.download?.saveExists, { id: data.setId }) ||
+            `#${data.setId} already on disk — ready to open in osu!`
+          : t(dict?.download?.saveSaved, { id: data.setId }) ||
+            `#${data.setId} saved — ready to open in osu!`,
       );
       setReadyToOpenCount(data.savedForImport);
       setPendingDownloadIds((prev) => {
@@ -415,11 +462,13 @@ export function DownloadMapsPage() {
     !query.isLoading &&
     !countMissing.isPending;
   const missingActionsDisabledReason = !submitted.excludeOwned
-    ? "Enable “Hide maps I already own” to count or download missing maps"
+    ? dict?.download?.missingEnabledReason ??
+      "Enable “Hide maps I already own” to count or download missing maps"
     : batchBusy
-      ? "Wait for the current batch to finish or stop it"
+      ? dict?.download?.missingBatchBusyReason ??
+        "Wait for the current batch to finish or stop it"
       : query.isLoading
-        ? "Wait for search to finish"
+        ? dict?.download?.missingSearchingReason ?? "Wait for search to finish"
         : null;
   const showDevTools = isDevUi();
 
@@ -467,14 +516,18 @@ export function DownloadMapsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <PageTitle>Download maps</PageTitle>
+        <PageTitle>{dict?.download?.pageTitle ?? "Download maps"}</PageTitle>
         <p className="rx-subtitle mt-2 max-w-2xl">
-          Search online with the same query language as Practice — then download
-          every missing set that matches. Downloads (single or batch) save{" "}
-          <code className="text-ink">.osz</code> files into{" "}
-          <code className="text-ink">{downloadDir}</code>. Use{" "}
-          <span className="font-medium text-ink">Open in osu!</span> to import
-          them into osu!lazer.
+          {dict?.download?.subtitle1 ??
+            "Search online with the same query language as Practice — then download every missing set that matches. Downloads (single or batch) save"}{" "}
+          <code className="text-ink">.osz</code>{" "}
+          {dict?.download?.subtitle2 ?? "files into"}{" "}
+          <code className="text-ink">{downloadDir}</code>.{" "}
+          {dict?.download?.subtitle3 ?? "Use"}{" "}
+          <span className="font-medium text-ink">
+            {dict?.download?.openInOsu ?? "Open in osu!"}
+          </span>{" "}
+          {dict?.download?.subtitle4 ?? "to import them into osu!lazer."}
         </p>
       </div>
 
@@ -492,7 +545,7 @@ export function DownloadMapsPage() {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
           <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm text-muted">
             <span className="flex items-center gap-2">
-              Query
+              {dict?.download?.queryLabel ?? "Query"}
               <QueryLanguageHelpButton />
             </span>
             <input
@@ -500,26 +553,26 @@ export function DownloadMapsPage() {
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="key=7 status=r"
-              aria-label="Beatmap search query"
+              aria-label={dict?.download?.queryAria ?? "Beatmap search query"}
             />
           </label>
           <label className="flex flex-col gap-1 text-sm text-muted">
-            Sort
+            {dict?.download?.sortLabel ?? "Sort"}
             <select
               className="rx-select"
               value={sort}
               onChange={(e) => setSort(e.target.value as Sort)}
-              aria-label="Sort order"
+              aria-label={dict?.download?.sortAria ?? "Sort order"}
             >
               {SORT_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
+                <option key={o} value={o}>
+                  {sortLabel(o)}
                 </option>
               ))}
             </select>
           </label>
           <button type="submit" className="rx-btn-primary shrink-0">
-            Search
+            {dict?.download?.search ?? "Search"}
           </button>
         </div>
         <div className="flex flex-wrap gap-4 text-sm text-muted">
@@ -540,7 +593,7 @@ export function DownloadMapsPage() {
                 });
               }}
             />
-            Hide maps I already own
+            {dict?.download?.hideOwned ?? "Hide maps I already own"}
           </label>
           <label className="inline-flex items-center gap-2">
             <input
@@ -559,10 +612,12 @@ export function DownloadMapsPage() {
                 });
               }}
             />
-            Download without video
+            {dict?.download?.noVideo ?? "Download without video"}
           </label>
           <label className="inline-flex items-center gap-2">
-            <span className="text-muted">Parallel downloads:</span>
+            <span className="text-muted">
+              {dict?.download?.parallelDownloads ?? "Parallel downloads:"}
+            </span>
             <input
               type="number"
               min={1}
@@ -574,9 +629,14 @@ export function DownloadMapsPage() {
                 persist({ q, sort, excludeOwned, noVideo, pageCount, downloadConcurrency: next });
               }}
               className="w-12 rounded border border-subtle bg-surface px-1 py-0.5 text-center text-sm"
-              aria-label="Number of maps to download in parallel (1–10)"
+              aria-label={
+                dict?.download?.parallelAria ??
+                "Number of maps to download in parallel (1–10)"
+              }
             />
-            <span className="text-muted text-xs">(1–10)</span>
+            <span className="text-muted text-xs">
+              {dict?.download?.parallelRange ?? "(1–10)"}
+            </span>
           </label>
         </div>
       </form>
@@ -601,10 +661,13 @@ export function DownloadMapsPage() {
               onClick={() => countMissing.mutate()}
               title={
                 missingActionsDisabledReason ??
-                "Count missing sets (uses hub search cache when primed, otherwise crawls the mirror)"
+                (dict?.download?.countTitle ??
+                  "Count missing sets (uses hub search cache when primed, otherwise crawls the mirror)")
               }
             >
-              {countMissing.isPending ? "Counting…" : "Count all missing"}
+              {countMissing.isPending
+                ? dict?.download?.counting ?? "Counting…"
+                : dict?.download?.countAllMissing ?? "Count all missing"}
             </button>
             <button
               type="button"
@@ -614,16 +677,22 @@ export function DownloadMapsPage() {
               title={
                 missingActionsDisabledReason ??
                 (!canDownloadAllMissing && submitted.excludeOwned
-                  ? "No missing maps in these results — try another query or Count all missing"
-                  : "Crawl the mirror for every missing set matching this query")
+                  ? dict?.download?.noMissingTitle ??
+                    "No missing maps in these results — try another query or Count all missing"
+                  : dict?.download?.crawlTitle ??
+                    "Crawl the mirror for every missing set matching this query")
               }
             >
               {missingCount
-                ? `Download all missing (${missingCount.matched.toLocaleString()}${missingCount.hitCap ? "+" : ""})`
-                : "Download all missing"}
+                ? t(dict?.download?.downloadAllMissingCount, {
+                    count: missingCount.matched.toLocaleString(),
+                    plus: missingCount.hitCap ? "+" : "",
+                  }) ||
+                  `Download all missing (${missingCount.matched.toLocaleString()}${missingCount.hitCap ? "+" : ""})`
+                : dict?.download?.downloadAllMissing ?? "Download all missing"}
             </button>
             <label className="flex flex-col gap-1 text-sm text-muted">
-              Or pages from the start
+              {dict?.download?.orPagesFromStart ?? "Or pages from the start"}
               <select
                 className="rx-select"
                 value={pageCount}
@@ -639,11 +708,17 @@ export function DownloadMapsPage() {
                     downloadConcurrency,
                   });
                 }}
-                aria-label="Number of pages to batch download"
+                aria-label={
+                  dict?.download?.pagesFromStartAria ??
+                  "Number of pages to batch download"
+                }
               >
                 {PAGE_COUNT_OPTIONS.map((n) => (
                   <option key={n} value={n}>
-                    {n} page{n === 1 ? "" : "s"}
+                    {t(dict?.download?.pagesOption, {
+                      n,
+                      s: n === 1 ? "" : "s",
+                    }) || `${n} page${n === 1 ? "" : "s"}`}
                   </option>
                 ))}
               </select>
@@ -656,7 +731,10 @@ export function DownloadMapsPage() {
               }
               onClick={() => startPagesBatch.mutate()}
             >
-              Download {pageCount} page{pageCount === 1 ? "" : "s"}
+              {t(dict?.download?.downloadPages, {
+                n: pageCount,
+                s: pageCount === 1 ? "" : "s",
+              }) || `Download ${pageCount} page${pageCount === 1 ? "" : "s"}`}
             </button>
             <button
               type="button"
@@ -666,28 +744,43 @@ export function DownloadMapsPage() {
                 setOpenInOsuMessage(null);
                 openInOsu.mutate();
               }}
-              title="Open saved .osz files with osu!lazer (also writes import-into-osu.sh / .bat)"
+              title={
+                dict?.download?.openInOsuTitle ??
+                "Open saved .osz files with osu!lazer (also writes import-into-osu.sh / .bat)"
+              }
             >
               {openInOsu.isPending
-                ? "Opening…"
+                ? dict?.download?.opening ?? "Opening…"
                 : savedForImport > 0
-                  ? `Open in osu! (${savedForImport})`
-                  : "Open in osu!"}
+                  ? t(dict?.download?.openInOsuCount, {
+                      n: savedForImport,
+                    }) || `Open in osu! (${savedForImport})`
+                  : dict?.download?.openInOsu ?? "Open in osu!"}
             </button>
           </div>
 
           <p className="text-sm text-muted">
-            Search loads more as you scroll.{" "}
-            <span className="font-medium text-ink">Count all missing</span> totals
-            the result for{" "}
+            {dict?.download?.scrollHint ?? "Search loads more as you scroll."}{" "}
+            <span className="font-medium text-ink">
+              {dict?.download?.countAllMissing ?? "Count all missing"}
+            </span>{" "}
+            {dict?.download?.totalsFor ?? "totals the result for"}{" "}
             <code className="text-ink">{submitted.q || "(defaults)"}</code>{" "}
-            minus owned maps (hub search cache when primed, otherwise a mirror
-            crawl) so you know the real total before{" "}
-            <span className="font-medium text-ink">Download all missing</span>.
-            Broad ranked/loved counts on hinai are usually instant; filters like{" "}
-            <code className="text-ink">key=7</code> still crawl mirror pages
-            (capped). Files go to the shared folder; then use{" "}
-            <span className="font-medium text-ink">Open in osu!</span> or{" "}
+            {dict?.download?.minusOwned ??
+              "minus owned maps (hub search cache when primed, otherwise a mirror crawl) so you know the real total before"}{" "}
+            <span className="font-medium text-ink">
+              {dict?.download?.downloadAllMissing ?? "Download all missing"}
+            </span>
+            .{" "}
+            {dict?.download?.broadInstant ??
+              "Broad ranked/loved counts on hinai are usually instant; filters like"}{" "}
+            <code className="text-ink">key=7</code>{" "}
+            {dict?.download?.crawlPages ??
+              "still crawl mirror pages (capped). Files go to the shared folder; then use"}{" "}
+            <span className="font-medium text-ink">
+              {dict?.download?.openInOsu ?? "Open in osu!"}
+            </span>{" "}
+            {dict?.download?.orUse ?? "or"}{" "}
             <code className="text-ink">import-into-osu.sh</code> /{" "}
             <code className="text-ink">import-into-osu.bat</code>.
           </p>
@@ -697,28 +790,36 @@ export function DownloadMapsPage() {
           ) : null}
           {missingCount ? (
             <p className="text-sm text-muted">
-              Count:{" "}
+              {dict?.download?.countLabel ?? "Count:"}{" "}
               <span className="font-medium text-ink">
                 {missingCount.matched.toLocaleString()}
               </span>{" "}
-              missing
+              {dict?.download?.missing ?? "missing"}
               {missingCount.ownedSkipped > 0
-                ? ` · hid ${missingCount.ownedSkipped.toLocaleString()} owned/pending`
+                ? t(dict?.download?.hidOwned, {
+                    count: missingCount.ownedSkipped.toLocaleString(),
+                  }) || ` · hid ${missingCount.ownedSkipped.toLocaleString()} owned/pending`
                 : ""}
               {" · "}
-              {missingCount.pagesScanned} page
-              {missingCount.pagesScanned === 1 ? "" : "s"} scanned
+              {t(dict?.download?.pagesScanned, {
+                count: missingCount.pagesScanned,
+                s: missingCount.pagesScanned === 1 ? "" : "s",
+              }) || `${missingCount.pagesScanned} page${missingCount.pagesScanned === 1 ? "" : "s"} scanned`}
               {missingCount.hitCap
-                ? ` · hit safety cap (${missingCount.cappedAt.maxPages} pages / ${missingCount.cappedAt.maxSets.toLocaleString()} sets)`
+                ? t(dict?.download?.safetyCap, {
+                    pages: missingCount.cappedAt.maxPages,
+                    sets: missingCount.cappedAt.maxSets.toLocaleString(),
+                  }) ||
+                  ` · hit safety cap (${missingCount.cappedAt.maxPages} pages / ${missingCount.cappedAt.maxSets.toLocaleString()} sets)`
                 : ""}
             </p>
           ) : null}
           {countMissing.isPending ? (
             <p className="text-sm text-muted">
-              Counting missing maps… broad ranked/loved queries are usually
-              instant; post-filters like{" "}
-              <code className="text-ink">key=7 status=r</code> may still crawl
-              mirror pages.
+              {dict?.download?.countingMissing ??
+                "Counting missing maps… broad ranked/loved queries are usually instant; post-filters like"}{" "}
+              <code className="text-ink">key=7 status=r</code>{" "}
+              {dict?.download?.countingMissingTail ?? "may still crawl mirror pages."}
             </p>
           ) : null}
 
@@ -735,38 +836,60 @@ export function DownloadMapsPage() {
           {batch && batch.status !== "idle" ? (
             <div className="space-y-2 text-sm text-muted">
               <p>
-                Batch: <span className="text-ink">{batch.status}</span>
+                {dict?.download?.batchLabel ?? "Batch:"}{" "}
+                <span className="text-ink">{batch.status}</span>
                 {" · "}
                 {batch.mode}
                 {" · "}
-                {batch.downloaded}/{batch.queued || "?"} saved
+                {t(dict?.download?.saved, {
+                  saved: batch.downloaded,
+                  queued: batch.queued || "?",
+                }) || `${batch.downloaded}/${batch.queued || "?"} saved`}
                 {batch.matched > 0
-                  ? ` · ${batch.matched.toLocaleString()} matched`
+                  ? t(dict?.download?.matched, {
+                      count: batch.matched.toLocaleString(),
+                    }) || ` · ${batch.matched.toLocaleString()} matched`
                   : ""}
                 {batch.pagesScanned > 0
-                  ? ` · ${batch.pagesScanned} pages scanned`
+                  ? t(dict?.download?.pagesScannedBatch, {
+                      count: batch.pagesScanned,
+                    }) || ` · ${batch.pagesScanned} pages scanned`
                   : ""}
-                {batch.hitCap ? " · hit safety cap" : ""}
+                {batch.hitCap
+                  ? ` · ${dict?.download?.safetyCapBatch ?? "hit safety cap"}`
+                  : ""}
                 {batch.skippedExisting > 0
-                  ? ` · ${batch.skippedExisting} already on disk`
+                  ? t(dict?.download?.skippedExisting, {
+                      count: batch.skippedExisting,
+                    }) || ` · ${batch.skippedExisting} already on disk`
                   : ""}
                 {batch.skippedOwned > 0
-                  ? ` · hid ${batch.skippedOwned} owned`
+                  ? t(dict?.download?.hidOwnedBatch, {
+                      count: batch.skippedOwned,
+                    }) || ` · hid ${batch.skippedOwned} owned`
                   : ""}
-                {batch.failed > 0 ? ` · ${batch.failed} failed` : ""}
+                {batch.failed > 0
+                  ? t(dict?.download?.failedBatch, {
+                      count: batch.failed,
+                    }) || ` · ${batch.failed} failed`
+                  : ""}
                 {savedForImport > 0
-                  ? ` · ${savedForImport} ready to open`
+                  ? t(dict?.download?.readyToOpen, {
+                      count: savedForImport,
+                    }) || ` · ${savedForImport} ready to open`
                   : ""}
               </p>
               {batch.query ? (
-                <p className="truncate text-faint">Query: {batch.query}</p>
+                <p className="truncate text-faint">
+                  {dict?.download?.batchQueryLabel ?? "Query:"} {batch.query}
+                </p>
               ) : null}
               {batch.error ? (
                 <p className="text-danger">{batch.error}</p>
               ) : null}
               {batch.importScriptSh || batch.importScriptBat ? (
                 <p className="truncate text-faint">
-                  Import scripts:{" "}
+                  {dict?.download?.importScripts ?? "Import scripts:"}{" "}
                   {batch.importScriptSh
                     ? batch.importScriptSh.split(/[/\\]/).pop()
                     : null}
@@ -793,11 +916,15 @@ export function DownloadMapsPage() {
       {showDevTools ? (
         <section className="rx-panel space-y-3 border border-dashed border-warning/40 p-4">
           <div>
-            <h2 className="font-semibold text-ink">Dev · download UI</h2>
+            <h2 className="font-semibold text-ink">
+              {dict?.download?.devTitle ?? "Dev · download UI"}
+            </h2>
             <p className="text-sm text-muted">
-              Client-only fake jobs — no mirror traffic, no{" "}
-              <code className="text-ink">.osz</code> writes. Use these to try
-              the session view, floating chip, ETA, and completion toast.
+              {dict?.download?.devDesc ??
+                "Client-only fake jobs — no mirror traffic, no"}{" "}
+              <code className="text-ink">.osz</code>{" "}
+              {dict?.download?.devDesc2 ??
+                "writes. Use these to try the session view, floating chip, ETA, and completion toast."}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -807,7 +934,7 @@ export function DownloadMapsPage() {
               disabled={batchBusy}
               onClick={() => runFake("fast")}
             >
-              Fake fast (40)
+              {dict?.download?.fakeFast ?? "Fake fast (40)"}
             </button>
             <button
               type="button"
@@ -815,7 +942,7 @@ export function DownloadMapsPage() {
               disabled={batchBusy}
               onClick={() => runFake("realistic")}
             >
-              Fake realistic (20)
+              {dict?.download?.fakeRealistic ?? "Fake realistic (20)"}
             </button>
             <button
               type="button"
@@ -823,20 +950,20 @@ export function DownloadMapsPage() {
               disabled={batchBusy}
               onClick={() => runFake("fail")}
             >
-              Fake fail mid-way
+              {dict?.download?.fakeFail ?? "Fake fail mid-way"}
             </button>
             <button
               type="button"
               className="rx-btn"
               onClick={() =>
                 pushToast({
-                  title: "Download finished",
-                  detail: "12 maps saved (dev toast)",
+                  title: dict?.download?.toastTitle ?? "Download finished",
+                  detail: dict?.download?.toastDetail ?? "12 maps saved (dev toast)",
                   tone: "success",
                 })
               }
             >
-              Test completion toast
+              {dict?.download?.testToast ?? "Test completion toast"}
             </button>
           </div>
         </section>
@@ -854,7 +981,7 @@ export function DownloadMapsPage() {
         <p className="text-danger">
           {query.error instanceof Error
             ? query.error.message
-            : "Search failed"}
+            : dict?.download?.searchFailed ?? "Search failed"}
         </p>
       ) : pageError && "error" in pageError ? (
         <p className="text-danger">{String(pageError.error)}</p>
@@ -862,23 +989,39 @@ export function DownloadMapsPage() {
         <div className="space-y-4">
           <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm text-muted">
             <p>
-              {items.length} result{items.length === 1 ? "" : "s"}
+              {t(dict?.download?.resultsCount, {
+                count: items.length,
+                s: items.length === 1 ? "" : "s",
+              }) || `${items.length} result${items.length === 1 ? "" : "s"}`}
               {ownedSkipped > 0
-                ? ` · hid ${ownedSkipped} you already own`
+                ? t(dict?.download?.hidOwnedResults, {
+                    count: ownedSkipped,
+                  }) || ` · hid ${ownedSkipped} you already own`
                 : ""}
               {pendingSkipped + hiddenPendingLocal > 0
-                ? ` · hid ${pendingSkipped + hiddenPendingLocal} recently downloaded`
+                ? t(dict?.download?.hidRecent, {
+                    count: pendingSkipped + hiddenPendingLocal,
+                  }) ||
+                  ` · hid ${pendingSkipped + hiddenPendingLocal} recently downloaded`
                 : ""}
-              {provider ? ` · via ${provider}` : ""}
+              {provider
+                ? t(dict?.download?.viaProvider, { provider }) ||
+                  ` · via ${provider}`
+                : ""}
             </p>
             <p className="text-faint">
-              {hasMore ? "Scroll for more" : items.length > 0 ? "End of results" : ""}
+              {hasMore
+                ? dict?.download?.scrollForMore ?? "Scroll for more"
+                : items.length > 0
+                  ? dict?.download?.endOfResults ?? "End of results"
+                  : ""}
             </p>
           </div>
 
           {items.length === 0 ? (
             <p className="text-muted">
-              No unowned maps for this search. Try another query.
+              {dict?.download?.noUnowned ??
+                "No unowned maps for this search. Try another query."}
             </p>
           ) : (
             <DownloadSearchGrid
@@ -894,7 +1037,10 @@ export function DownloadMapsPage() {
                       type="button"
                       className="rx-btn-primary"
                       disabled={batchBusy || saveSet.isPending}
-                      title="Save .osz into the shared beatmaps download folder"
+                      title={
+                        dict?.download?.saveCardTitle ??
+                        "Save .osz into the shared beatmaps download folder"
+                      }
                       onClick={() =>
                         saveSet.mutate({
                           setId: set.id,
@@ -905,8 +1051,8 @@ export function DownloadMapsPage() {
                     >
                       {saveSet.isPending &&
                       saveSet.variables?.setId === set.id
-                        ? "Saving…"
-                        : "Download"}
+                        ? dict?.download?.saving ?? "Saving…"
+                        : dict?.download?.downloadCard ?? "Download"}
                     </button>
                   }
                 />
@@ -915,7 +1061,9 @@ export function DownloadMapsPage() {
           )}
 
           {query.isFetchingNextPage ? (
-            <p className="text-sm text-muted">Loading more…</p>
+            <p className="text-sm text-muted">
+              {dict?.download?.loadingMore ?? "Loading more…"}
+            </p>
           ) : null}
         </div>
       )}

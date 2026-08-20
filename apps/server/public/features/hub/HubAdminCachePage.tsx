@@ -16,14 +16,18 @@ import {
   type HubSearchCacheEntry,
 } from "../../lib/hub";
 import { pushToast } from "../../lib/toasts";
+import { useAppDict, t } from "../../lib/i18n";
+import type { Dictionary } from "@roxysu/i18n";
 import { HubLoginButton } from "./HubLoginButton";
 
-const FREQUENCY_OPTIONS: Array<{ label: string; minutes: number | null }> = [
-  { label: "Off (manual)", minutes: null },
-  { label: "Every 1 hour", minutes: 60 },
-  { label: "Every 6 hours", minutes: 360 },
-  { label: "Every 12 hours", minutes: 720 },
-  { label: "Every 24 hours", minutes: 1440 },
+type AppDict = Dictionary["app"];
+
+const FREQUENCY_OPTIONS: Array<{ key: string; fallback: string; minutes: number | null }> = [
+  { key: "adminFreqOffManual", fallback: "Off (manual)", minutes: null },
+  { key: "adminFreqHour1", fallback: "Every 1 hour", minutes: 60 },
+  { key: "adminFreqHour6", fallback: "Every 6 hours", minutes: 360 },
+  { key: "adminFreqHour12", fallback: "Every 12 hours", minutes: 720 },
+  { key: "adminFreqHour24", fallback: "Every 24 hours", minutes: 1440 },
 ];
 
 const MODE_OPTIONS = [
@@ -43,20 +47,25 @@ const STATUS_OPTIONS = [
 ] as const;
 
 const SORT_OPTIONS = [
-  { value: "ranked_desc", label: "Recently ranked" },
-  { value: "plays_desc", label: "Most played" },
-  { value: "favourites_desc", label: "Most favourited" },
-  { value: "difficulty_desc", label: "Hardest" },
-  { value: "title_asc", label: "Title A–Z" },
-  { value: "ranked_asc", label: "Oldest ranked" },
+  { value: "ranked_desc", key: "adminSortRankedDesc", fallback: "Recently ranked" },
+  { value: "plays_desc", key: "adminSortPlaysDesc", fallback: "Most played" },
+  { value: "favourites_desc", key: "adminSortFavouritesDesc", fallback: "Most favourited" },
+  { value: "difficulty_desc", key: "adminSortDifficultyDesc", fallback: "Hardest" },
+  { value: "title_asc", key: "adminSortTitleAsc", fallback: "Title A–Z" },
+  { value: "ranked_asc", key: "adminSortRankedAsc", fallback: "Oldest ranked" },
 ] as const;
 
-function frequencyLabel(minutes: number | null): string {
-  const match = FREQUENCY_OPTIONS.find((o) => o.minutes === minutes);
-  return match?.label ?? (minutes == null ? "Off" : `Every ${minutes}m`);
+function hubStr(dict: AppDict | undefined, key: string): string | undefined {
+  return (dict?.hub as Record<string, string | undefined> | undefined)?.[key];
 }
 
-function paramsSummary(params: HubSearchCacheEntry["queryParams"]): string {
+function frequencyLabel(dict: AppDict | undefined, minutes: number | null): string {
+  if (minutes == null) return hubStr(dict, "adminFreqOff") ?? "Off";
+  const match = FREQUENCY_OPTIONS.find((o) => o.minutes === minutes);
+  return match ? (hubStr(dict, match.key) ?? match.fallback) : `Every ${minutes}m`;
+}
+
+function paramsSummary(dict: AppDict | undefined, params: HubSearchCacheEntry["queryParams"]): string {
   const parts: string[] = [];
   if (params.mode != null) {
     const mode = MODE_OPTIONS.find((m) => m.value === Number(params.mode));
@@ -66,15 +75,16 @@ function paramsSummary(params: HubSearchCacheEntry["queryParams"]): string {
   if (params.key != null) parts.push(`${params.key}K`);
   if (params.sort) {
     const sort = SORT_OPTIONS.find((s) => s.value === String(params.sort));
-    parts.push(sort?.label ?? String(params.sort));
+    parts.push(sort ? (hubStr(dict, sort.key) ?? sort.fallback) : String(params.sort));
   }
-  return parts.join(" · ") || "(empty)";
+  return parts.join(" · ") || (hubStr(dict, "adminEmpty") ?? "(empty)");
 }
 
 export function HubAdminCachePage() {
   const hubUrl = useHubUrl();
   const jwt = useHubJwt();
   const queryClient = useQueryClient();
+  const { dict } = useAppDict();
 
   const [label, setLabel] = useState("Ranked 7K");
   const [mode, setMode] = useState(3);
@@ -120,14 +130,18 @@ export function HubAdminCachePage() {
     },
     onSuccess: (data) => {
       pushToast({
-        title: `Primed “${label.trim() || "cache"}”`,
-        detail: `${data.totalCount} sets`,
+        title: t(dict?.hub?.adminPrimedTitle ?? "Primed “{{label}}”", {
+          label: label.trim() || "cache",
+        }),
+        detail: t(dict?.hub?.adminSetsCount ?? "{{count}} sets", {
+          count: data.totalCount.toLocaleString(),
+        }),
         tone: "success",
       });
       invalidate();
     },
     onError: (err: Error) => {
-      pushToast({ title: "Create failed", detail: err.message, tone: "error" });
+      pushToast({ title: dict?.hub?.adminCreateFailed ?? "Create failed", detail: err.message, tone: "error" });
     },
   });
 
@@ -135,14 +149,16 @@ export function HubAdminCachePage() {
     mutationFn: (id: number) => refreshHubAdminCache(hubUrl, jwt!, id),
     onSuccess: (data) => {
       pushToast({
-        title: "Cache refreshed",
-        detail: `${data.totalCount} sets`,
+        title: dict?.hub?.adminCacheRefreshed ?? "Cache refreshed",
+        detail: t(dict?.hub?.adminSetsCount ?? "{{count}} sets", {
+          count: data.totalCount.toLocaleString(),
+        }),
         tone: "success",
       });
       invalidate();
     },
     onError: (err: Error) => {
-      pushToast({ title: "Refresh failed", detail: err.message, tone: "error" });
+      pushToast({ title: dict?.hub?.adminRefreshFailed ?? "Refresh failed", detail: err.message, tone: "error" });
     },
   });
 
@@ -155,22 +171,22 @@ export function HubAdminCachePage() {
         refreshIntervalMinutes: args.refreshIntervalMinutes,
       }),
     onSuccess: () => {
-      pushToast({ title: "Frequency updated", tone: "success" });
+      pushToast({ title: dict?.hub?.adminFrequencyUpdated ?? "Frequency updated", tone: "success" });
       invalidate();
     },
     onError: (err: Error) => {
-      pushToast({ title: "Update failed", detail: err.message, tone: "error" });
+      pushToast({ title: dict?.hub?.adminUpdateFailed ?? "Update failed", detail: err.message, tone: "error" });
     },
   });
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => deleteHubAdminCache(hubUrl, jwt!, id),
     onSuccess: () => {
-      pushToast({ title: "Cache entry deleted", tone: "success" });
+      pushToast({ title: dict?.hub?.adminCacheDeleted ?? "Cache entry deleted", tone: "success" });
       invalidate();
     },
     onError: (err: Error) => {
-      pushToast({ title: "Delete failed", detail: err.message, tone: "error" });
+      pushToast({ title: dict?.hub?.adminDeleteFailed ?? "Delete failed", detail: err.message, tone: "error" });
     },
   });
 
@@ -180,10 +196,10 @@ export function HubAdminCachePage() {
     return (
       <div className="flex flex-col gap-4">
         <div>
-          <PageTitle>Search cache</PageTitle>
-          <p className="rx-subtitle">Admin</p>
+          <PageTitle>{dict?.hub?.searchCache ?? "Search cache"}</PageTitle>
+          <p className="rx-subtitle">{dict?.hub?.adminLabel ?? "Admin"}</p>
         </div>
-        <p className="text-sm text-muted">Log in to manage Download search caches.</p>
+        <p className="text-sm text-muted">{dict?.hub?.adminLoginHint ?? "Log in to manage Download search caches."}</p>
         <HubLoginButton />
       </div>
     );
@@ -193,8 +209,8 @@ export function HubAdminCachePage() {
     return (
       <div className="flex flex-col gap-4">
         <div>
-          <PageTitle>Search cache</PageTitle>
-          <p className="rx-subtitle">Admin</p>
+          <PageTitle>{dict?.hub?.searchCache ?? "Search cache"}</PageTitle>
+          <p className="rx-subtitle">{dict?.hub?.adminLabel ?? "Admin"}</p>
         </div>
         <ListSkeleton count={3} showThumbnail={false} />
       </div>
@@ -205,11 +221,11 @@ export function HubAdminCachePage() {
     return (
       <div className="flex flex-col gap-4">
         <div>
-          <GoBackLink to="/hub">Workshop</GoBackLink>
-          <PageTitle className="mt-3">Search cache</PageTitle>
-          <p className="rx-subtitle">Admin</p>
+          <GoBackLink to="/hub">{dict?.hub?.workshop ?? "Workshop"}</GoBackLink>
+          <PageTitle className="mt-3">{dict?.hub?.searchCache ?? "Search cache"}</PageTitle>
+          <p className="rx-subtitle">{dict?.hub?.adminLabel ?? "Admin"}</p>
         </div>
-        <p className="text-sm text-danger">Admin access required.</p>
+        <p className="text-sm text-danger">{dict?.hub?.adminAccessRequired ?? "Admin access required."}</p>
       </div>
     );
   }
@@ -217,11 +233,11 @@ export function HubAdminCachePage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <GoBackLink to="/hub">Workshop</GoBackLink>
-        <PageTitle className="mt-3">Search cache</PageTitle>
+        <GoBackLink to="/hub">{dict?.hub?.workshop ?? "Workshop"}</GoBackLink>
+        <PageTitle className="mt-3">{dict?.hub?.searchCache ?? "Search cache"}</PageTitle>
         <p className="rx-subtitle">
-          Prime one base index per mode/status/keys/sort — Download Maps filters
-          stars, BPM, name, and mapper against stored stubs at request time
+          {dict?.hub?.adminCacheSubtitle ??
+            "Prime one base index per mode/status/keys/sort — Download Maps filters stars, BPM, name, and mapper against stored stubs at request time"}
         </p>
       </div>
 
@@ -232,10 +248,10 @@ export function HubAdminCachePage() {
           createMut.mutate();
         }}
       >
-        <h2 className="text-sm font-semibold text-ink">Create base cache</h2>
+        <h2 className="text-sm font-semibold text-ink">{dict?.hub?.adminCreateBaseCache ?? "Create base cache"}</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <label className="flex flex-col gap-1 text-xs text-muted">
-            Label
+            {dict?.hub?.adminFieldLabel ?? "Label"}
             <input
               className="rx-input"
               value={label}
@@ -245,7 +261,7 @@ export function HubAdminCachePage() {
             />
           </label>
           <label className="flex flex-col gap-1 text-xs text-muted">
-            Mode
+            {dict?.hub?.mode ?? "Mode"}
             <select
               className="rx-input"
               value={mode}
@@ -259,7 +275,7 @@ export function HubAdminCachePage() {
             </select>
           </label>
           <label className="flex flex-col gap-1 text-xs text-muted">
-            Status
+            {dict?.hub?.adminStatusField ?? "Status"}
             <select
               className="rx-input"
               value={status}
@@ -273,7 +289,7 @@ export function HubAdminCachePage() {
             </select>
           </label>
           <label className="flex flex-col gap-1 text-xs text-muted">
-            Sort
+            {dict?.hub?.sort ?? "Sort"}
             <select
               className="rx-input"
               value={sort}
@@ -281,23 +297,23 @@ export function HubAdminCachePage() {
             >
               {SORT_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
-                  {o.label}
+                  {hubStr(dict, o.key) ?? o.fallback}
                 </option>
               ))}
             </select>
           </label>
           <label className="flex flex-col gap-1 text-xs text-muted">
-            Keys (mania)
+            {dict?.hub?.adminKeysField ?? "Keys (mania)"}
             <input
               className="rx-input"
               value={key}
               onChange={(e) => setKey(e.target.value)}
-              placeholder="e.g. 7"
+              placeholder={dict?.hub?.adminKeysPlaceholder ?? "e.g. 7"}
               inputMode="numeric"
             />
           </label>
           <label className="flex flex-col gap-1 text-xs text-muted">
-            Frequency check for new beatmaps
+            {dict?.hub?.adminFrequencyField ?? "Frequency check for new beatmaps"}
             <select
               className="rx-input"
               value={frequency == null ? "" : String(frequency)}
@@ -308,10 +324,10 @@ export function HubAdminCachePage() {
             >
               {FREQUENCY_OPTIONS.map((o) => (
                 <option
-                  key={o.label}
+                  key={o.key}
                   value={o.minutes == null ? "" : String(o.minutes)}
                 >
-                  {o.label}
+                  {hubStr(dict, o.key) ?? o.fallback}
                 </option>
               ))}
             </select>
@@ -322,7 +338,9 @@ export function HubAdminCachePage() {
           className="rx-btn rx-btn-primary w-fit"
           disabled={createMut.isPending}
         >
-          {createMut.isPending ? "Priming…" : "Create & prime"}
+          {createMut.isPending
+            ? (dict?.hub?.adminPriming ?? "Priming…")
+            : (dict?.hub?.adminCreatePrime ?? "Create & prime")}
         </button>
       </form>
 
@@ -331,7 +349,7 @@ export function HubAdminCachePage() {
       ) : listQuery.error ? (
         <p className="text-sm text-danger">{listQuery.error.message}</p>
       ) : entries.length === 0 ? (
-        <p className="text-sm text-muted">No cache entries yet.</p>
+        <p className="text-sm text-muted">{dict?.hub?.adminNoEntries ?? "No cache entries yet."}</p>
       ) : (
         <ul className="flex flex-col gap-3">
           {entries.map((entry) => (
@@ -339,25 +357,31 @@ export function HubAdminCachePage() {
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <h3 className="font-semibold text-ink">
-                    {entry.label || `Cache #${entry.id}`}
+                    {entry.label ||
+                      t(dict?.hub?.adminCacheNum ?? "Cache #{{id}}", {
+                        id: entry.id,
+                      })}
                   </h3>
                   <p className="text-xs text-muted">
-                    {paramsSummary(entry.queryParams)} · {entry.totalCount} sets
+                    {paramsSummary(dict, entry.queryParams)} ·{" "}
+                    {t(dict?.hub?.adminSetsCount ?? "{{count}} sets", {
+                      count: entry.totalCount.toLocaleString(),
+                    })}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2 text-xs">
                   {entry.stale ? (
                     <span className="rounded bg-warning/20 px-2 py-0.5 text-warning">
-                      Stale
+                      {dict?.hub?.adminStale ?? "Stale"}
                     </span>
                   ) : (
                     <span className="rounded bg-success/15 px-2 py-0.5 text-success">
-                      Fresh
+                      {dict?.hub?.adminFresh ?? "Fresh"}
                     </span>
                   )}
                   {entry.refreshError ? (
                     <span className="rounded bg-danger/20 px-2 py-0.5 text-danger">
-                      Error
+                      {dict?.hub?.adminErrorBadge ?? "Error"}
                     </span>
                   ) : null}
                 </div>
@@ -365,15 +389,16 @@ export function HubAdminCachePage() {
 
               <div className="grid gap-1 text-xs text-muted sm:grid-cols-2">
                 <span>
-                  Last refresh:{" "}
+                  {dict?.hub?.adminLastRefresh ?? "Last refresh:"}{" "}
                   {entry.lastRefreshAt
                     ? formatRelativeTime(entry.lastRefreshAt)
-                    : "never"}
+                    : (dict?.hub?.adminNever ?? "never")}
                 </span>
                 <span>
-                  Frequency: {frequencyLabel(entry.refreshIntervalMinutes)}
+                  {dict?.hub?.adminFrequencySelect ?? "Frequency"}:{" "}
+                  {frequencyLabel(dict, entry.refreshIntervalMinutes)}
                   {entry.nextRefreshAt
-                    ? ` · next ${formatRelativeTime(entry.nextRefreshAt)}`
+                    ? `${dict?.hub?.adminNextPrefix ?? " · next "}${formatRelativeTime(entry.nextRefreshAt)}`
                     : ""}
                 </span>
                 {entry.refreshError ? (
@@ -385,7 +410,7 @@ export function HubAdminCachePage() {
 
               <div className="flex flex-wrap items-center gap-2">
                 <label className="flex items-center gap-2 text-xs text-muted">
-                  Frequency
+                  {dict?.hub?.adminFrequencySelect ?? "Frequency"}
                   <select
                     className="rx-input py-1 text-xs"
                     value={
@@ -404,10 +429,10 @@ export function HubAdminCachePage() {
                   >
                     {FREQUENCY_OPTIONS.map((o) => (
                       <option
-                        key={o.label}
+                        key={o.key}
                         value={o.minutes == null ? "" : String(o.minutes)}
                       >
-                        {o.label}
+                        {hubStr(dict, o.key) ?? o.fallback}
                       </option>
                     ))}
                   </select>
@@ -418,7 +443,7 @@ export function HubAdminCachePage() {
                   disabled={refreshMut.isPending}
                   onClick={() => refreshMut.mutate(entry.id)}
                 >
-                  Refresh now
+                  {dict?.hub?.adminRefreshNow ?? "Refresh now"}
                 </button>
                 <button
                   type="button"
@@ -427,14 +452,16 @@ export function HubAdminCachePage() {
                   onClick={() => {
                     if (
                       window.confirm(
-                        `Delete cache “${entry.label || entry.id}”?`,
+                        t(dict?.hub?.adminDeleteConfirm ?? "Delete cache “{{name}}”?", {
+                          name: entry.label || entry.id,
+                        }),
                       )
                     ) {
                       deleteMut.mutate(entry.id);
                     }
                   }}
                 >
-                  Delete
+                  {dict?.hub?.delete ?? "Delete"}
                 </button>
               </div>
             </li>

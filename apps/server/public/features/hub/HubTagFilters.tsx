@@ -6,6 +6,7 @@ import {
   type HubModeTag,
   type HubTag,
 } from "../../lib/hub";
+import { useAppDict } from "../../lib/i18n";
 
 export type HubTagFiltersProps = {
   mode: HubModeTag | "all";
@@ -23,6 +24,7 @@ export function HubTagFilters({
   onTagsChange,
   selectModeAsTag = false,
 }: HubTagFiltersProps) {
+  const { dict } = useAppDict();
   const groups = hubTagGroupsForMode(mode);
   const modeSet = new Set<string>(HUB_MODE_TAGS);
 
@@ -64,7 +66,7 @@ export function HubTagFilters({
           className={`rx-btn text-xs ${mode === "all" ? "rx-btn-primary" : ""}`}
           onClick={() => setMode("all")}
         >
-          {HUB_MODE_LABELS.all}
+          {dict?.hub?.all ?? HUB_MODE_LABELS.all}
         </button>
         {HUB_MODE_TAGS.map((m) => (
           <button

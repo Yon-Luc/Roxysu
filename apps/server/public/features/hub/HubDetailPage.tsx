@@ -39,6 +39,7 @@ import {
   ownedCountForSets,
 } from "../../lib/hubOwnership";
 import { pushToast } from "../../lib/toasts";
+import { useAppDict, t } from "../../lib/i18n";
 import { MIRROR_BATCH_QUERY_KEY } from "../download/useMirrorBatchJob";
 import {
   collectPackKeys,
@@ -52,19 +53,15 @@ import {
 import { HubLoginButton } from "./HubLoginButton";
 import { HubTagFilters } from "./HubTagFilters";
 
-const OWNERSHIP_OPTIONS: Array<{ value: MapOwnershipFilter; label: string }> = [
-  { value: "all", label: "All" },
-  { value: "missing", label: "Not owned" },
-  { value: "owned", label: "Owned" },
-];
+const OWNERSHIP_VALUES: MapOwnershipFilter[] = ["all", "missing", "owned"];
 
-const SORT_OPTIONS: Array<{ value: MapSort; label: string }> = [
-  { value: "stars_desc", label: "Highest stars" },
-  { value: "stars_asc", label: "Lowest stars" },
-  { value: "name_asc", label: "Name A–Z" },
-  { value: "name_desc", label: "Name Z–A" },
-  { value: "ranked_desc", label: "Newest ranked" },
-  { value: "collection", label: "Collection order" },
+const SORT_VALUES: MapSort[] = [
+  "stars_desc",
+  "stars_asc",
+  "name_asc",
+  "name_desc",
+  "ranked_desc",
+  "collection",
 ];
 
 const INFO_BATCH = 100;
@@ -114,24 +111,25 @@ function PlaceholderSetCard({
   mapName: string;
   owned?: boolean;
 }) {
+  const { dict } = useAppDict();
   return (
     <div className="rx-card flex h-full flex-col p-4">
       <div className="flex items-start justify-between gap-2">
-        <div className="truncate text-sm text-muted">Beatmapset</div>
+        <div className="truncate text-sm text-muted">{dict?.hub?.beatmapset ?? "Beatmapset"}</div>
         {owned ? (
           <span
             className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600/90 text-ink"
-            title="Already owned"
-            aria-label="Already owned"
+            title={dict?.hub?.alreadyOwned ?? "Already owned"}
+            aria-label={dict?.hub?.alreadyOwned ?? "Already owned"}
           >
             <Check className="h-3.5 w-3.5" aria-hidden />
           </span>
         ) : null}
       </div>
       <div className="truncate font-bold text-ink">
-        {mapName || `Set ${setId}`}
+        {mapName || t(dict?.hub?.setLabel ?? "Set {{id}}", { id: setId })}
       </div>
-      <div className="mt-1 text-xs text-faint">#{setId} · metadata unavailable</div>
+      <div className="mt-1 text-xs text-faint">#{setId} · {dict?.hub?.metadataUnavailable ?? "metadata unavailable"}</div>
       <div className="mt-3">
         <a
           href={`https://osu.ppy.sh/beatmapsets/${setId}`}
@@ -139,7 +137,7 @@ function PlaceholderSetCard({
           rel="noreferrer"
           className="rx-btn"
         >
-          Website
+          {dict?.hub?.website ?? "Website"}
         </a>
       </div>
     </div>
@@ -159,6 +157,33 @@ export function HubDetailPage({ id }: { id: string }) {
   const jwt = useHubJwt();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { dict } = useAppDict();
+
+  const ownershipLabel = (v: MapOwnershipFilter): string =>
+    v === "all"
+      ? (dict?.hub?.ownershipAll ?? "All")
+      : v === "missing"
+        ? (dict?.hub?.ownershipMissing ?? "Not owned")
+        : (dict?.hub?.ownershipOwned ?? "Owned");
+
+  const sortLabel = (v: MapSort): string => {
+    switch (v) {
+      case "stars_desc":
+        return dict?.hub?.sortHighestStars ?? "Highest stars";
+      case "stars_asc":
+        return dict?.hub?.sortLowestStars ?? "Lowest stars";
+      case "name_asc":
+        return dict?.hub?.sortNameAsc ?? "Name A–Z";
+      case "name_desc":
+        return dict?.hub?.sortNameDesc ?? "Name Z–A";
+      case "ranked_desc":
+        return dict?.hub?.sortNewestRanked ?? "Newest ranked";
+      case "collection":
+        return dict?.hub?.sortCollectionOrder ?? "Collection order";
+      default:
+        return v;
+    }
+  };
 
   const [saveOpen, setSaveOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -274,7 +299,7 @@ export function HubDetailPage({ id }: { id: string }) {
 
   const favoriteMut = useMutation({
     mutationFn: async (favorited: boolean) => {
-      if (!jwt) throw new Error("Log in to favorite collections");
+      if (!jwt) throw new Error(dict?.hub?.loginToFavoriteError ?? "Log in to favorite collections");
       await favoriteHubCollection(hubUrl, collectionId, jwt, favorited);
     },
     onSuccess: () => {
@@ -286,7 +311,7 @@ export function HubDetailPage({ id }: { id: string }) {
     },
     onError: (err) =>
       pushToast({
-        title: "Favorite failed",
+        title: dict?.hub?.favoriteFailed ?? "Favorite failed",
         detail: err.message,
         tone: "error",
       }),
@@ -294,7 +319,7 @@ export function HubDetailPage({ id }: { id: string }) {
 
   const editMut = useMutation({
     mutationFn: async () => {
-      if (!jwt) throw new Error("Log in to edit");
+      if (!jwt) throw new Error(dict?.hub?.loginToEditError ?? "Log in to edit");
       await updateHubCollection(hubUrl, jwt, collectionId, {
         name: editName.trim(),
         description: editDescription,
@@ -308,11 +333,11 @@ export function HubDetailPage({ id }: { id: string }) {
       });
       void queryClient.invalidateQueries({ queryKey: ["hub-collections"] });
       void queryClient.invalidateQueries({ queryKey: ["hub-favorites"] });
-      pushToast({ title: "Collection updated", tone: "success" });
+      pushToast({ title: dict?.hub?.collectionUpdated ?? "Collection updated", tone: "success" });
     },
     onError: (err) =>
       pushToast({
-        title: "Edit failed",
+        title: dict?.hub?.editFailed ?? "Edit failed",
         detail: err.message,
         tone: "error",
       }),
@@ -321,13 +346,13 @@ export function HubDetailPage({ id }: { id: string }) {
   const saveMut = useMutation({
     mutationFn: async () => {
       const c = detailQuery.data;
-      if (!c) throw new Error("Collection not loaded");
+      if (!c) throw new Error(dict?.hub?.collectionNotLoaded ?? "Collection not loaded");
       const fromIds = c.beatmapsetIds ?? [];
       const beatmapsetIds =
         fromIds.length > 0
           ? fromIds
           : c.maps.map((m) => m.beatmapsetId);
-      if (!beatmapsetIds.length) throw new Error("Collection has no maps");
+      if (!beatmapsetIds.length) throw new Error(dict?.hub?.collectionNoMapsError ?? "Collection has no maps");
 
       try {
         await exportHubCollection(hubUrl, collectionId);
@@ -364,17 +389,24 @@ export function HubDetailPage({ id }: { id: string }) {
         queryKey: ["hub-collection", hubUrl, collectionId],
       });
       pushToast({
-        title: updateAvailable ? "Collection updated in game" : "Collection saved",
+        title: updateAvailable
+          ? (dict?.hub?.savedInGameTitle ?? "Collection updated in game")
+          : (dict?.hub?.collectionSavedTitle ?? "Collection saved"),
         detail:
           saved.ownership.missingCount > 0
-            ? `${saved.ownership.missingCount.toLocaleString()} missing maps are downloading. Synced as !Roxysu ${detailQuery.data?.name ?? ""}.`
-            : `Synced to lazer as !Roxysu ${detailQuery.data?.name ?? ""}.`,
+            ? t(dict?.hub?.savedMissingDetail ?? "{{count}} missing maps are downloading. Synced as !Roxysu {{name}}.", {
+                count: saved.ownership.missingCount.toLocaleString(),
+                name: detailQuery.data?.name ?? "",
+              })
+            : t(dict?.hub?.savedDetail ?? "Synced to lazer as !Roxysu {{name}}.", {
+                name: detailQuery.data?.name ?? "",
+              }),
         tone: "success",
       });
     },
     onError: (err) =>
       pushToast({
-        title: "Save failed",
+        title: dict?.hub?.saveFailed ?? "Save failed",
         detail: err.message,
         tone: "error",
       }),
@@ -382,7 +414,7 @@ export function HubDetailPage({ id }: { id: string }) {
 
   const deleteMut = useMutation({
     mutationFn: async () => {
-      if (!jwt) throw new Error("Log in to delete");
+      if (!jwt) throw new Error(dict?.hub?.loginToDeleteError ?? "Log in to delete");
       await deleteHubCollection(hubUrl, jwt, collectionId);
     },
     onSuccess: () => {
@@ -390,15 +422,15 @@ export function HubDetailPage({ id }: { id: string }) {
       void queryClient.invalidateQueries({ queryKey: ["hub-collections"] });
       void queryClient.invalidateQueries({ queryKey: ["hub-favorites"] });
       pushToast({
-        title: "Collection deleted",
-        detail: "Removed from Workshop. Your local copy is unchanged.",
+        title: dict?.hub?.collectionDeleted ?? "Collection deleted",
+        detail: dict?.hub?.deletedDetail ?? "Removed from Workshop. Your local copy is unchanged.",
         tone: "success",
       });
       void navigate({ to: "/hub" });
     },
     onError: (err) =>
       pushToast({
-        title: "Delete failed",
+        title: dict?.hub?.deleteFailed ?? "Delete failed",
         detail: err.message,
         tone: "error",
       }),
@@ -443,11 +475,13 @@ export function HubDetailPage({ id }: { id: string }) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <GoBackLink to="/hub">Workshop</GoBackLink>
-          <PageTitle>{c?.name ?? "Collection"}</PageTitle>
+          <GoBackLink to="/hub">{dict?.hub?.workshop ?? "Workshop"}</GoBackLink>
+          <PageTitle>{c?.name ?? (dict?.hub?.collection ?? "Collection")}</PageTitle>
           {c ? (
             <p className="rx-subtitle">
-              by {c.owner.username}
+              {t(dict?.hub?.by ?? "by {{username}}", {
+                username: c.owner.username,
+              })}
               {c.description ? ` · ${c.description}` : ""}
             </p>
           ) : null}
@@ -460,10 +494,14 @@ export function HubDetailPage({ id }: { id: string }) {
               disabled={!c || favoriteMut.isPending}
               onClick={() => favoriteMut.mutate(!!c?.favoritedByMe)}
             >
-              {c?.favoritedByMe ? "Unfavorite" : "Favorite"}
+              {c?.favoritedByMe
+                ? (dict?.hub?.unfavorite ?? "Unfavorite")
+                : (dict?.hub?.favorite ?? "Favorite")}
             </button>
           ) : (
-            <HubLoginButton className="rx-btn">Log in to favorite</HubLoginButton>
+            <HubLoginButton className="rx-btn">
+              {dict?.hub?.loginToFavorite ?? "Log in to favorite"}
+            </HubLoginButton>
           )}
           {canManage ? (
             <button
@@ -472,7 +510,9 @@ export function HubDetailPage({ id }: { id: string }) {
               disabled={!c}
               onClick={() => setEditing((v) => !v)}
             >
-              {editing ? "Cancel edit" : "Edit"}
+              {editing
+                ? (dict?.hub?.cancelEdit ?? "Cancel edit")
+                : (dict?.hub?.edit ?? "Edit")}
             </button>
           ) : null}
           {canManage ? (
@@ -482,7 +522,7 @@ export function HubDetailPage({ id }: { id: string }) {
               disabled={!c || deleteMut.isPending}
               onClick={() => setDeleteOpen(true)}
             >
-              Delete
+              {dict?.hub?.delete ?? "Delete"}
             </button>
           ) : null}
           {updateAvailable ? (
@@ -492,7 +532,7 @@ export function HubDetailPage({ id }: { id: string }) {
               disabled={!c || saveMut.isPending}
               onClick={() => setSaveOpen(true)}
             >
-              Update in game
+              {dict?.hub?.updateInGame ?? "Update in game"}
             </button>
           ) : (
             <button
@@ -501,7 +541,9 @@ export function HubDetailPage({ id }: { id: string }) {
               disabled={!c || saveMut.isPending}
               onClick={() => setSaveOpen(true)}
             >
-              {isAdded ? "Re-save collection" : "Save collection"}
+              {isAdded
+                ? (dict?.hub?.resaveCollection ?? "Re-save collection")
+                : (dict?.hub?.saveCollection ?? "Save collection")}
             </button>
           )}
         </div>
@@ -515,9 +557,9 @@ export function HubDetailPage({ id }: { id: string }) {
         <>
           {editing ? (
             <section className="rx-panel space-y-4 p-4 sm:p-5">
-              <h2 className="text-sm font-semibold text-ink">Edit collection</h2>
+              <h2 className="text-sm font-semibold text-ink">{dict?.hub?.editCollection ?? "Edit collection"}</h2>
               <label className="block space-y-1.5 text-sm">
-                <span className="rx-label">Name</span>
+                <span className="rx-label">{dict?.hub?.name ?? "Name"}</span>
                 <input
                   className="rx-input w-full"
                   value={editName}
@@ -526,7 +568,7 @@ export function HubDetailPage({ id }: { id: string }) {
                 />
               </label>
               <label className="block space-y-1.5 text-sm">
-                <span className="rx-label">Description</span>
+                <span className="rx-label">{dict?.hub?.description ?? "Description"}</span>
                 <textarea
                   className="rx-textarea min-h-[5rem] w-full resize-y"
                   value={editDescription}
@@ -535,7 +577,7 @@ export function HubDetailPage({ id }: { id: string }) {
                 />
               </label>
               <div className="space-y-2">
-                <span className="rx-label">Tags</span>
+                <span className="rx-label">{dict?.hub?.tags ?? "Tags"}</span>
                 <HubTagFilters
                   mode={editMode}
                   tags={editTags}
@@ -555,7 +597,9 @@ export function HubDetailPage({ id }: { id: string }) {
                   }
                   onClick={() => editMut.mutate()}
                 >
-                  {editMut.isPending ? "Saving…" : "Save changes"}
+                  {editMut.isPending
+                    ? (dict?.hub?.saving ?? "Saving…")
+                    : (dict?.hub?.saveChanges ?? "Save changes")}
                 </button>
               </div>
             </section>
@@ -567,10 +611,10 @@ export function HubDetailPage({ id }: { id: string }) {
                 {formatOwnedMapsLabel(ownership.owned, ownership.total)}
               </span>
             ) : (
-              <span>{c.mapCount.toLocaleString()} maps</span>
+              <span>{t(dict?.hub?.mapsCount ?? "{{count}} maps", { count: c.mapCount.toLocaleString() })}</span>
             )}
-            <span>{c.downloadCount.toLocaleString()} downloads</span>
-            <span>{c.favoriteCount.toLocaleString()} favorites</span>
+            <span>{t(dict?.hub?.downloadsCount ?? "{{count}} downloads", { count: c.downloadCount.toLocaleString() })}</span>
+            <span>{t(dict?.hub?.favoritesCount ?? "{{count}} favorites", { count: c.favoriteCount.toLocaleString() })}</span>
             {formatHubStarsRange(c.starsMin, c.starsMax) ? (
               <span>{formatHubStarsRange(c.starsMin, c.starsMax)}</span>
             ) : null}
@@ -580,10 +624,10 @@ export function HubDetailPage({ id }: { id: string }) {
               </span>
             ) : null}
             {isAdded ? (
-              <span className="text-success/90">Saved to game</span>
+              <span className="text-success/90">{dict?.hub?.savedToGame ?? "Saved to game"}</span>
             ) : null}
             {updateAvailable ? (
-              <span className="text-warning">Creator updated this pack</span>
+              <span className="text-warning">{dict?.hub?.creatorUpdated ?? "Creator updated this pack"}</span>
             ) : null}
           </div>
           {c.tags.length > 0 ? (
@@ -600,7 +644,7 @@ export function HubDetailPage({ id }: { id: string }) {
           ) : null}
 
           {setIds.length === 0 ? (
-            <p className="text-muted">This collection has no maps.</p>
+            <p className="text-muted">{dict?.hub?.noMaps ?? "This collection has no maps."}</p>
           ) : cardsQuery.isPending && !cardsQuery.data ? (
             <CardGridSkeleton count={6} />
           ) : cardsQuery.error && !cardsQuery.data ? (
@@ -610,28 +654,28 @@ export function HubDetailPage({ id }: { id: string }) {
               <section className="rx-panel space-y-3 p-4 sm:p-5">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                   <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm text-muted">
-                    Search maps
+                    {dict?.hub?.searchMaps ?? "Search maps"}
                     <input
                       className="rx-input w-full"
                       value={mapFilters.q}
                       onChange={(e) => patchMapFilters({ q: e.target.value })}
-                      placeholder="Title, artist, mapper, or set id"
-                      aria-label="Search maps in collection"
+                      placeholder={dict?.hub?.searchMapsPlaceholder ?? "Title, artist, mapper, or set id"}
+                      aria-label={dict?.hub?.searchMapsAria ?? "Search maps in collection"}
                     />
                   </label>
                   <label className="flex flex-col gap-1 text-sm text-muted">
-                    Sort
+                    {dict?.hub?.sort ?? "Sort"}
                     <select
                       className="rx-select"
                       value={mapFilters.sort}
                       onChange={(e) =>
                         patchMapFilters({ sort: e.target.value as MapSort })
                       }
-                      aria-label="Sort maps"
+                      aria-label={dict?.hub?.sortMapsAria ?? "Sort maps"}
                     >
-                      {SORT_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
+                      {SORT_VALUES.map((value) => (
+                        <option key={value} value={value}>
+                          {sortLabel(value)}
                         </option>
                       ))}
                     </select>
@@ -646,37 +690,41 @@ export function HubDetailPage({ id }: { id: string }) {
                     aria-expanded={moreFiltersOpen}
                     onClick={() => setMoreFiltersOpen((v) => !v)}
                   >
-                    {moreFiltersOpen ? "Fewer filters" : "More filters"}
-                    {advancedFiltersActive && !moreFiltersOpen ? " · on" : ""}
+                    {moreFiltersOpen
+                      ? (dict?.hub?.fewerFilters ?? "Fewer filters")
+                      : (dict?.hub?.moreFilters ?? "More filters")}
+                    {advancedFiltersActive && !moreFiltersOpen
+                      ? (dict?.hub?.onSuffix ?? " · on")
+                      : ""}
                   </button>
                 </div>
 
                 {moreFiltersOpen ? (
                   <div className="space-y-3 border-t border-white/10 pt-3">
                     <div className="space-y-1.5">
-                      <span className="rx-label">Ownership</span>
+                      <span className="rx-label">{dict?.hub?.ownership ?? "Ownership"}</span>
                       <div className="flex flex-wrap gap-2">
-                        {OWNERSHIP_OPTIONS.map((o) => (
-                          <button
-                            key={o.value}
-                            type="button"
-                            className={`rx-btn text-xs ${
-                              mapFilters.ownership === o.value
-                                ? "rx-btn-primary"
-                                : ""
-                            }`}
-                            onClick={() =>
-                              patchMapFilters({ ownership: o.value })
-                            }
-                          >
-                            {o.label}
-                          </button>
-                        ))}
+                      {OWNERSHIP_VALUES.map((value) => (
+                        <button
+                          key={value}
+                          type="button"
+                          className={`rx-btn text-xs ${
+                            mapFilters.ownership === value
+                              ? "rx-btn-primary"
+                              : ""
+                          }`}
+                          onClick={() =>
+                            patchMapFilters({ ownership: value })
+                          }
+                        >
+                          {ownershipLabel(value)}
+                        </button>
+                      ))}
                       </div>
                     </div>
 
                     <div className="space-y-1.5">
-                      <span className="rx-label">Mode</span>
+                      <span className="rx-label">{dict?.hub?.mode ?? "Mode"}</span>
                       <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
@@ -711,7 +759,7 @@ export function HubDetailPage({ id }: { id: string }) {
 
                     {showKeysFilter ? (
                       <div className="space-y-1.5">
-                        <span className="rx-label">Keys</span>
+                        <span className="rx-label">{dict?.hub?.keys ?? "Keys"}</span>
                         <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
@@ -720,7 +768,7 @@ export function HubDetailPage({ id }: { id: string }) {
                             }`}
                             onClick={() => patchMapFilters({ keys: null })}
                           >
-                            All
+                            {dict?.hub?.all ?? "All"}
                           </button>
                           {packKeys.map((k) => (
                             <button
@@ -740,7 +788,7 @@ export function HubDetailPage({ id }: { id: string }) {
 
                     <div className="flex flex-wrap items-end gap-3">
                       <label className="flex flex-col gap-1 text-sm text-muted">
-                        Min ★
+                        {dict?.hub?.minStars ?? "Min ★"}
                         <input
                           className="rx-input w-24"
                           type="number"
@@ -751,11 +799,11 @@ export function HubDetailPage({ id }: { id: string }) {
                           onChange={(e) =>
                             patchMapFilters({ minStars: e.target.value })
                           }
-                          aria-label="Minimum star rating"
+                          aria-label={dict?.hub?.minStarsAria ?? "Minimum star rating"}
                         />
                       </label>
                       <label className="flex flex-col gap-1 text-sm text-muted">
-                        Max ★
+                        {dict?.hub?.maxStars ?? "Max ★"}
                         <input
                           className="rx-input w-24"
                           type="number"
@@ -766,7 +814,7 @@ export function HubDetailPage({ id }: { id: string }) {
                           onChange={(e) =>
                             patchMapFilters({ maxStars: e.target.value })
                           }
-                          aria-label="Maximum star rating"
+                          aria-label={dict?.hub?.maxStarsAria ?? "Maximum star rating"}
                         />
                       </label>
                       <button
@@ -774,26 +822,28 @@ export function HubDetailPage({ id }: { id: string }) {
                         className="rx-btn text-xs"
                         onClick={() => setMapFilters(DEFAULT_MAP_FILTERS)}
                       >
-                        Reset filters
+                        {dict?.hub?.resetFilters ?? "Reset filters"}
                       </button>
                     </div>
                   </div>
                 ) : null}
 
                 <p className="text-sm text-muted">
-                  Showing {filteredMaps.length.toLocaleString()} of{" "}
-                  {setIds.length.toLocaleString()}
+                  {t(dict?.hub?.showingOf ?? "Showing {{shown}} of {{total}}", {
+                    shown: filteredMaps.length.toLocaleString(),
+                    total: setIds.length.toLocaleString(),
+                  })}
                   {mapFilters.ownership === "missing"
-                    ? " · not owned"
+                    ? (dict?.hub?.notOwnedSuffix ?? " · not owned")
                     : mapFilters.ownership === "owned"
-                      ? " · owned"
+                      ? (dict?.hub?.ownedSuffix ?? " · owned")
                       : ""}
                 </p>
               </section>
 
               {filteredMaps.length === 0 ? (
                 <p className="text-muted">
-                  No maps match these filters. Try clearing search or ownership.
+                  {dict?.hub?.noMapsMatchFilters ?? "No maps match these filters. Try clearing search or ownership."}
                 </p>
               ) : (
                 <>
@@ -818,7 +868,7 @@ export function HubDetailPage({ id }: { id: string }) {
                     className="rx-btn mt-4"
                     onClick={() => setMapPage((p) => p + 1)}
                   >
-                    Load more maps
+                    {dict?.hub?.loadMoreMaps ?? "Load more maps"}
                   </button>
                 ) : null}
                 </>
@@ -830,8 +880,12 @@ export function HubDetailPage({ id }: { id: string }) {
 
       <ConfirmModal
         open={saveOpen}
-        title={updateAvailable ? "Update collection in game" : "Save collection"}
-        confirmLabel={updateAvailable ? "Update & download" : "Save & download"}
+        title={updateAvailable
+          ? (dict?.hub?.updateInGameTitle ?? "Update collection in game")
+          : (dict?.hub?.saveCollection ?? "Save collection")}
+        confirmLabel={updateAvailable
+          ? (dict?.hub?.updateAndDownload ?? "Update & download")
+          : (dict?.hub?.saveAndDownload ?? "Save & download")}
         busy={saveMut.isPending}
         onClose={() => {
           if (!saveMut.isPending) setSaveOpen(false);
@@ -839,24 +893,27 @@ export function HubDetailPage({ id }: { id: string }) {
         onConfirm={() => saveMut.mutate()}
       >
         <p>
-          This adds the pack to osu!lazer as{" "}
-          <span className="text-ink">!Roxysu {c?.name ?? "…"}</span>.
+          {t(dict?.hub?.confirmSaveBody ?? "This adds the pack to osu!lazer as !Roxysu {{name}}.", {
+            name: c?.name ?? "…",
+          })}
         </p>
         <p>
           {missingCount > 0
-            ? `${missingCount.toLocaleString()} missing maps will be downloaded.`
-            : "You already own every map in this collection."}
+            ? t(dict?.hub?.missingMapsDownload ?? "{{count}} missing maps will be downloaded.", {
+                count: missingCount.toLocaleString(),
+              })
+            : (dict?.hub?.ownEveryMap ?? "You already own every map in this collection.")}
         </p>
         {updateAvailable ? (
           <p className="text-warning/90">
-            The creator changed this collection since you last saved it.
+            {dict?.hub?.creatorChanged ?? "The creator changed this collection since you last saved it."}
           </p>
         ) : null}
       </ConfirmModal>
       <ConfirmModal
         open={deleteOpen}
-        title="Delete from Workshop"
-        confirmLabel="Delete"
+        title={dict?.hub?.deleteFromWorkshop ?? "Delete from Workshop"}
+        confirmLabel={dict?.hub?.delete ?? "Delete"}
         busy={deleteMut.isPending}
         onClose={() => {
           if (!deleteMut.isPending) setDeleteOpen(false);
@@ -864,11 +921,11 @@ export function HubDetailPage({ id }: { id: string }) {
         onConfirm={() => deleteMut.mutate()}
       >
         <p>
-          This removes{" "}
-          <span className="text-ink">{c?.name ?? "this collection"}</span> from
-          Workshop. Anyone else will lose the public pack.
+          {t(dict?.hub?.deleteBody ?? "This removes {{name}} from Workshop. Anyone else will lose the public pack.", {
+            name: c?.name ?? "this collection",
+          })}
         </p>
-        <p>A copy already saved to your game is not deleted.</p>
+        <p>{dict?.hub?.copyNotDeleted ?? "A copy already saved to your game is not deleted."}</p>
       </ConfirmModal>
     </div>
   );

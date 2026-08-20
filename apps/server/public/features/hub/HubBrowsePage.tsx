@@ -26,6 +26,7 @@ import {
   type HubTag,
 } from "../../lib/hub";
 import { pushToast } from "../../lib/toasts";
+import { useAppDict, t } from "../../lib/i18n";
 import { HubLoginButton } from "./HubLoginButton";
 import { HubTagFilters } from "./HubTagFilters";
 
@@ -41,6 +42,7 @@ export function HubBrowsePage() {
   const [debouncedQ, setDebouncedQ] = useState("");
   const [page, setPage] = useState(0);
   const jwt = useHubJwt();
+  const { dict } = useAppDict();
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
@@ -136,14 +138,16 @@ export function HubBrowsePage() {
       void queryClient.invalidateQueries({ queryKey: ["hub-added-collections"] });
       void queryClient.invalidateQueries({ queryKey: ["collections"] });
       pushToast({
-        title: "Removed from collection",
-        detail: "Unlinked from Roxysu and removed the !Roxysu pack from lazer.",
+        title: dict?.hub?.removedFromCollection ?? "Removed from collection",
+        detail:
+          dict?.hub?.removedDetail ??
+          "Unlinked from Roxysu and removed the !Roxysu pack from lazer.",
         tone: "success",
       });
     },
     onError: (err) =>
       pushToast({
-        title: "Remove failed",
+        title: dict?.hub?.removeFailed ?? "Remove failed",
         detail: err.message,
         tone: "error",
       }),
@@ -220,9 +224,9 @@ export function HubBrowsePage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <PageTitle>Workshop</PageTitle>
+          <PageTitle>{dict?.hub?.workshop ?? "Workshop"}</PageTitle>
           <p className="rx-subtitle">
-            Browse and share beatmap collection packs.
+            {dict?.hub?.browseSubtitle ?? "Browse and share beatmap collection packs."}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -238,24 +242,24 @@ export function HubBrowsePage() {
                 ) : null}
                 <span className="text-ink">{meQuery.data.username}</span>
               </div>
-              <button
-                type="button"
-                className="rx-btn"
-                onClick={() => logout.mutate()}
-              >
-                Log out
-              </button>
+                <button
+                  type="button"
+                  className="rx-btn"
+                  onClick={() => logout.mutate()}
+                >
+                  {dict?.hub?.logout ?? "Log out"}
+                </button>
             </>
           ) : (
             <HubLoginButton />
           )}
           {meQuery.data?.role === "admin" ? (
-            <Link to="/hub/admin/cache" className="rx-btn">
-              Search cache
-            </Link>
+              <Link to="/hub/admin/cache" className="rx-btn">
+                {dict?.hub?.searchCache ?? "Search cache"}
+              </Link>
           ) : null}
           <Link to="/hub/share" className="rx-btn">
-            Share collection
+            {dict?.hub?.shareCollection ?? "Share collection"}
           </Link>
         </div>
       </div>
@@ -266,14 +270,14 @@ export function HubBrowsePage() {
           className={`rx-btn text-sm ${tab === "browse" ? "rx-btn-primary" : ""}`}
           onClick={() => setTab("browse")}
         >
-          Search collections
+          {dict?.hub?.tabBrowse ?? "Search collections"}
         </button>
         <button
           type="button"
           className={`rx-btn text-sm ${tab === "favorites" ? "rx-btn-primary" : ""}`}
           onClick={() => setTab("favorites")}
         >
-          Favorites
+          {t(dict?.hub?.tabFavorites ?? "Favorites")}
           {favoritesQuery.data && favoritesQuery.data.data.length > 0
             ? ` (${favoritesQuery.data.data.length})`
             : ""}
@@ -283,7 +287,7 @@ export function HubBrowsePage() {
           className={`rx-btn text-sm ${tab === "added" ? "rx-btn-primary" : ""}`}
           onClick={() => setTab("added")}
         >
-          Collections added
+          {t(dict?.hub?.tabAdded ?? "Collections added")}
           {addedQuery.data && addedQuery.data.items.length > 0
             ? ` (${addedQuery.data.items.length})`
             : ""}
@@ -298,12 +302,12 @@ export function HubBrowsePage() {
           onChange={(e) => setQ(e.target.value)}
           placeholder={
             tab === "added"
-              ? "Search added collections…"
+              ? (dict?.hub?.searchAddedPlaceholder ?? "Search added collections…")
               : tab === "favorites"
-                ? "Search favorites…"
-                : "Search name, player, mode=m key=7 stars>=5…"
+                ? (dict?.hub?.searchFavoritesPlaceholder ?? "Search favorites…")
+                : (dict?.hub?.searchBrowsePlaceholder ?? "Search name, player, mode=m key=7 stars>=5…")
           }
-          aria-label="Search collections"
+          aria-label={dict?.hub?.searchAria ?? "Search collections"}
         />
         {tab === "browse" ? (
           <HubTagFilters
@@ -323,8 +327,8 @@ export function HubBrowsePage() {
         ) : browseItems.length === 0 ? (
           <p className="text-sm text-muted">
             {browseHasFilters
-              ? "No collections match your search."
-              : "No collections yet."}
+              ? (dict?.hub?.noMatchSearch ?? "No collections match your search.")
+              : (dict?.hub?.noCollectionsYet ?? "No collections yet.")}
           </p>
         ) : (
           <ul
@@ -351,7 +355,7 @@ export function HubBrowsePage() {
         )
       ) : tab === "favorites" ? (
         !jwt ? (
-          <p className="text-sm text-muted">Log in to see collections you favorited.</p>
+          <p className="text-sm text-muted">{dict?.hub?.loginToSeeFavorites ?? "Log in to see collections you favorited."}</p>
         ) : favoritesQuery.isPending ? (
           <CardGridSkeleton count={6} />
         ) : favoritesQuery.error ? (
@@ -359,8 +363,8 @@ export function HubBrowsePage() {
         ) : favoriteItems.length === 0 ? (
           <p className="text-sm text-muted">
             {debouncedQ
-              ? "No favorites match your search."
-              : "No favorites yet. Open a collection and tap Favorite."}
+              ? (dict?.hub?.noFavoritesMatch ?? "No favorites match your search.")
+              : (dict?.hub?.noFavoritesYet ?? "No favorites yet. Open a collection and tap Favorite.")}
           </p>
         ) : (
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -381,8 +385,8 @@ export function HubBrowsePage() {
       ) : addedItems.length === 0 ? (
         <p className="text-sm text-muted">
           {debouncedQ
-            ? "No added collections match your search."
-            : "No collections saved from the Workshop yet. Open a collection and tap Save collection."}
+            ? (dict?.hub?.noAddedMatch ?? "No added collections match your search.")
+            : (dict?.hub?.noAddedYet ?? "No collections saved from the Workshop yet. Open a collection and tap Save collection.")}
         </p>
       ) : (
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -406,26 +410,31 @@ export function HubBrowsePage() {
       listQuery.data &&
       listQuery.data.total > (listQuery.data.limit ?? 20) ? (
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <button
-            type="button"
-            className="rx-btn"
-            disabled={page <= 0 || listQuery.isFetching}
-            onClick={() => setPage((p) => Math.max(0, p - 1))}
-          >
-            Previous
-          </button>
-          <span className="text-sm text-muted">
-            Page {page + 1} / {totalPages}
-            {listQuery.isFetching ? " · updating…" : ""}
-          </span>
-          <button
-            type="button"
-            className="rx-btn"
-            disabled={page + 1 >= totalPages || listQuery.isFetching}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            Next
-          </button>
+            <button
+              type="button"
+              className="rx-btn"
+              disabled={page <= 0 || listQuery.isFetching}
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+            >
+              {dict?.hub?.previous ?? "Previous"}
+            </button>
+            <span className="text-sm text-muted">
+              {t(dict?.hub?.pageOf ?? "Page {{current}} / {{total}}", {
+                current: page + 1,
+                total: totalPages,
+              })}
+              {listQuery.isFetching
+                ? (dict?.hub?.updating ?? " · updating…")
+                : ""}
+            </span>
+            <button
+              type="button"
+              className="rx-btn"
+              disabled={page + 1 >= totalPages || listQuery.isFetching}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              {dict?.hub?.next ?? "Next"}
+            </button>
         </div>
       ) : null}
     </div>

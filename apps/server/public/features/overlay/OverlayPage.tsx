@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { BeatmapCover } from "../../components/BeatmapCover";
 import { ModBadges } from "../../components/ModBadges";
 import { fetchOverlay } from "../../lib/api";
+import { useAppDict } from "../../lib/i18n";
 import {
   formatAccuracy,
   formatPp,
@@ -32,6 +33,7 @@ export function OverlayPage({
 }) {
   const limit = clampLimit(limitProp ?? DEFAULT_LIMIT);
   const bg: OverlayBg = bgProp === "clear" ? "clear" : "solid";
+  const { dict } = useAppDict();
 
   useEffect(() => {
     document.documentElement.classList.add(OVERLAY_CLASS);
@@ -113,7 +115,7 @@ export function OverlayPage({
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60" />
                 <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent" />
               </span>
-              Live session
+              {dict?.overlay.liveSession ?? "Live session"}
               {liveSession ? (
                 <span className="font-semibold normal-case tracking-normal text-white/75">
                   · {liveSession.scoreCount} plays
@@ -122,7 +124,7 @@ export function OverlayPage({
             </span>
           ) : (
             <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/80 overlay-text">
-              Recent scores
+              {dict?.overlay.recentScores ?? "Recent scores"}
             </span>
           )}
         </header>
@@ -153,16 +155,16 @@ export function OverlayPage({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <span className="truncate text-sm font-semibold text-white overlay-text">
-                      {score.title ?? "Untitled"}
+                      {score.title ?? dict?.session.untitled ?? "Untitled"}
                     </span>
                     {score.isPb ? (
                       <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-amber-300 overlay-text">
-                        PB
+                        {dict?.session.pb ?? "PB"}
                       </span>
                     ) : null}
                     {isFresh ? (
                       <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-accent overlay-text">
-                        New
+                        {dict?.session.new ?? "New"}
                       </span>
                     ) : null}
                   </div>

@@ -21,6 +21,7 @@ import {
   type HubTag,
 } from "../../lib/hub";
 import { pushToast } from "../../lib/toasts";
+import { useAppDict, t } from "../../lib/i18n";
 import { HubLoginButton } from "./HubLoginButton";
 import { HubTagFilters } from "./HubTagFilters";
 
@@ -131,6 +132,7 @@ export function HubSharePage() {
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState<HubTag[]>([]);
   const [tagMode, setTagMode] = useState<HubModeTag | "all">("all");
+  const { dict } = useAppDict();
 
   const meQuery = useQuery({
     queryKey: ["hub-me", hubUrl, jwt],
@@ -186,15 +188,15 @@ export function HubSharePage() {
 
   const shareMut = useMutation({
     mutationFn: async () => {
-      if (!jwt) throw new Error("Log in with osu! first");
-      if (!name.trim()) throw new Error("Name is required");
-      if (!source) throw new Error("Pick a collection");
-      if (tags.length === 0) throw new Error("Pick at least one tag");
+      if (!jwt) throw new Error(dict?.hub?.loginFirstError ?? "Log in with osu! first");
+      if (!name.trim()) throw new Error(dict?.hub?.nameRequiredError ?? "Name is required");
+      if (!source) throw new Error(dict?.hub?.pickCollectionError ?? "Pick a collection");
+      if (tags.length === 0) throw new Error(dict?.hub?.pickTagError ?? "Pick at least one tag");
       const full =
         source.kind === "smart"
           ? await fetchSmartCollectionSetIds(source.id)
           : await fetchRealmCollectionSetIds(source.id);
-      if (full.beatmapsetIds.length === 0) throw new Error("No maps to share");
+      if (full.beatmapsetIds.length === 0) throw new Error(dict?.hub?.noMapsToShareError ?? "No maps to share");
       return createHubCollection(hubUrl, jwt, {
         name: name.trim(),
         description: description.trim() || undefined,
@@ -204,15 +206,15 @@ export function HubSharePage() {
     },
     onSuccess: (data) => {
       pushToast({
-        title: "Shared to Workshop",
-        detail: "Your collection is now public.",
+        title: dict?.hub?.sharedToWorkshop ?? "Shared to Workshop",
+        detail: dict?.hub?.sharedDetail ?? "Your collection is now public.",
         tone: "success",
       });
       void navigate({ to: "/hub/$id", params: { id: String(data.id) } });
     },
     onError: (err) =>
       pushToast({
-        title: "Share failed",
+        title: dict?.hub?.shareFailed ?? "Share failed",
         detail: err.message,
         tone: "error",
       }),
@@ -239,10 +241,10 @@ export function HubSharePage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <GoBackLink to="/hub">Workshop</GoBackLink>
-          <PageTitle>Share collection</PageTitle>
+          <GoBackLink to="/hub">{dict?.hub?.workshop ?? "Workshop"}</GoBackLink>
+          <PageTitle>{dict?.hub?.shareCollectionTitle ?? "Share collection"}</PageTitle>
           <p className="rx-subtitle">
-            Upload a local smart or lazer collection to the Workshop.
+            {dict?.hub?.shareSubtitle ?? "Upload a local smart or lazer collection to the Workshop."}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -266,16 +268,18 @@ export function HubSharePage() {
             disabled={!canSubmit || shareMut.isPending}
             onClick={() => shareMut.mutate()}
           >
-            {shareMut.isPending ? "Sharing…" : "Share to Workshop"}
+            {shareMut.isPending
+              ? (dict?.hub?.sharing ?? "Sharing…")
+              : (dict?.hub?.shareToWorkshop ?? "Share to Workshop")}
           </button>
         </div>
       </div>
 
       {!jwt ? (
         <div className="rx-card p-5">
-          <div className="font-semibold text-ink">Sign in required</div>
+          <div className="font-semibold text-ink">{dict?.hub?.signInRequired ?? "Sign in required"}</div>
           <p className="mt-1 text-sm text-muted">
-            Log in with osu! to publish a collection to the Workshop.
+            {dict?.hub?.loginToPublish ?? "Log in with osu! to publish a collection to the Workshop."}
           </p>
           <HubLoginButton className="rx-btn-primary mt-4 inline-flex" />
         </div>
@@ -283,15 +287,15 @@ export function HubSharePage() {
 
       <section className="space-y-3">
         <div>
-          <h2 className="text-sm font-semibold text-ink">Source</h2>
+          <h2 className="text-sm font-semibold text-ink">{dict?.hub?.source ?? "Source"}</h2>
           <p className="mt-0.5 text-xs text-muted">
-            Pick a local collection to upload.
+            {dict?.hub?.pickSource ?? "Pick a local collection to upload."}
           </p>
         </div>
         <div className="grid gap-4 lg:grid-cols-2">
           <SourceListCard
-            title="Smart"
-            emptyLabel="No smart collections yet."
+            title={dict?.hub?.smart ?? "Smart"}
+            emptyLabel={dict?.hub?.noSmartCollections ?? "No smart collections yet."}
             loading={collectionsQuery.isLoading}
             isEmpty={smartItems.length === 0}
           >
@@ -305,8 +309,8 @@ export function HubSharePage() {
             ))}
           </SourceListCard>
           <SourceListCard
-            title="Lazer"
-            emptyLabel="No lazer collections synced yet."
+            title={dict?.hub?.lazer ?? "Lazer"}
+            emptyLabel={dict?.hub?.noLazerCollections ?? "No lazer collections synced yet."}
             loading={collectionsQuery.isLoading}
             isEmpty={realmItems.length === 0}
           >
@@ -333,20 +337,20 @@ export function HubSharePage() {
             )}
           </div>
           <div className="p-4">
-            <div className="truncate font-bold text-ink">
-              {selectedLabel ?? "Selected collection"}
-            </div>
-            <div className="mt-1 text-sm text-muted">
-              {previewQuery.isLoading
-                ? "Resolving maps…"
-                : previewQuery.error
-                  ? previewQuery.error.message
-                  : `${previewTotal.toLocaleString()} beatmapsets ready${
-                      unresolved > 0
-                        ? ` · ${unresolved.toLocaleString()} unresolved locally`
-                        : ""
-                    }`}
-            </div>
+              <div className="truncate font-bold text-ink">
+                {selectedLabel ?? (dict?.hub?.selectedCollection ?? "Selected collection")}
+              </div>
+              <div className="mt-1 text-sm text-muted">
+                {previewQuery.isLoading
+                  ? (dict?.hub?.resolvingMaps ?? "Resolving maps…")
+                  : previewQuery.error
+                    ? previewQuery.error.message
+                    : `${t(dict?.hub?.beatmapsetsReady ?? "{{count}} beatmapsets ready", { count: previewTotal.toLocaleString() })}${
+                        unresolved > 0
+                          ? t(dict?.hub?.unresolvedLocally ?? " · {{count}} unresolved locally", { count: unresolved.toLocaleString() })
+                          : ""
+                      }`}
+              </div>
             {tags.length > 0 ? (
               <div className="mt-3 flex flex-wrap gap-1">
                 {tags.map((tag) => (
@@ -365,39 +369,39 @@ export function HubSharePage() {
 
       <section className="rx-panel space-y-4 p-4 sm:p-5">
         <div>
-          <h2 className="text-sm font-semibold text-ink">Details</h2>
+          <h2 className="text-sm font-semibold text-ink">{dict?.hub?.details ?? "Details"}</h2>
           <p className="mt-0.5 text-xs text-muted">
-            How this collection appears in the Workshop.
+            {dict?.hub?.detailsSubtitle ?? "How this collection appears in the Workshop."}
           </p>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="space-y-1.5 text-sm sm:col-span-2">
-            <span className="rx-label">Name</span>
+            <span className="rx-label">{dict?.hub?.name ?? "Name"}</span>
             <input
               className="rx-input w-full"
               value={name}
               onChange={(e) => setName(e.target.value)}
               maxLength={100}
-              placeholder="Collection name"
+              placeholder={dict?.hub?.collectionNamePlaceholder ?? "Collection name"}
             />
           </label>
           <label className="space-y-1.5 text-sm sm:col-span-2">
-            <span className="rx-label">Description</span>
+            <span className="rx-label">{dict?.hub?.description ?? "Description"}</span>
             <textarea
               className="rx-textarea min-h-[5.5rem] w-full resize-y"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               maxLength={500}
-              placeholder="Optional short description"
+              placeholder={dict?.hub?.descriptionPlaceholder ?? "Optional short description"}
             />
           </label>
         </div>
 
         <div className="space-y-2">
           <div>
-            <span className="rx-label">Tags</span>
+            <span className="rx-label">{dict?.hub?.tags ?? "Tags"}</span>
             <p className="mt-0.5 text-xs text-muted">
-              Pick a gamemode, then add pattern tags (required).
+              {dict?.hub?.tagsHint ?? "Pick a gamemode, then add pattern tags (required)."}
             </p>
           </div>
           <HubTagFilters
@@ -413,16 +417,16 @@ export function HubSharePage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-muted">
           {!jwt
-            ? "Log in to share."
+            ? (dict?.hub?.loginToShare ?? "Log in to share.")
             : !source
-              ? "Select a source collection."
+              ? (dict?.hub?.selectSource ?? "Select a source collection.")
               : beatmapsetIds.length === 0 && !previewQuery.isLoading
-                ? "Selected collection has no resolvable maps."
+                ? (dict?.hub?.noResolvableMaps ?? "Selected collection has no resolvable maps.")
                 : tags.length === 0
-                  ? "Pick at least one tag."
+                  ? (dict?.hub?.pickTag ?? "Pick at least one tag.")
                   : !name.trim()
-                    ? "Add a name."
-                    : "Ready to publish."}
+                    ? (dict?.hub?.addName ?? "Add a name.")
+                    : (dict?.hub?.readyToPublish ?? "Ready to publish.")}
         </p>
         <button
           type="button"
@@ -430,7 +434,9 @@ export function HubSharePage() {
           disabled={!canSubmit || shareMut.isPending}
           onClick={() => shareMut.mutate()}
         >
-          {shareMut.isPending ? "Sharing…" : "Share to Workshop"}
+          {shareMut.isPending
+            ? (dict?.hub?.sharing ?? "Sharing…")
+            : (dict?.hub?.shareToWorkshop ?? "Share to Workshop")}
         </button>
       </div>
     </div>

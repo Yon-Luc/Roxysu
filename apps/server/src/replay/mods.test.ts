@@ -57,10 +57,21 @@ describe("isNomodOrMirrorOnly", () => {
     expect(isNomodOrMirrorOnly('["MR"]')).toBe(true);
   });
 
+  test("allows Classic only and Mirror+Classic combos", () => {
+    expect(isNomodOrMirrorOnly('[{"acronym":"CL"}]')).toBe(true);
+    expect(isNomodOrMirrorOnly('["CL"]')).toBe(true);
+    expect(
+      isNomodOrMirrorOnly('[{"acronym":"CL"},{"acronym":"MR"}]'),
+    ).toBe(true);
+  });
+
   test("rejects rate and other gameplay mods", () => {
     expect(isNomodOrMirrorOnly('[{"acronym":"DT"}]')).toBe(false);
     expect(isNomodOrMirrorOnly('[{"acronym":"HT"}]')).toBe(false);
     expect(isNomodOrMirrorOnly('[{"acronym":"HD"}]')).toBe(false);
+    expect(isNomodOrMirrorOnly('[{"acronym":"CL"},{"acronym":"DT"}]')).toBe(
+      false,
+    );
     expect(isNomodOrMirrorOnly('[{"acronym":"MR"},{"acronym":"DT"}]')).toBe(
       false,
     );

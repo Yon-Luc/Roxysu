@@ -88,12 +88,13 @@ export function parseScoreMods(mods: string | null | undefined): ModAcronyms {
   };
 }
 
-/** Mods allowed when aggregating stats / skill (NM or Mirror only). */
-const STATS_ALLOWED_MODS = new Set(["MR"]);
+/** Mods allowed when aggregating stats / skill (NM, Mirror, or Classic only). */
+const STATS_ALLOWED_MODS = new Set(["MR", "CL"]);
 
 /**
- * True for nomod scores and Mirror-only scores.
- * Rejects HT/DT/NC/HD/etc. — Mirror may be combined with itself only.
+ * True for nomod scores and Mirror-only / Classic-only scores
+ * (Mirror + Classic combos are also accepted).
+ * Rejects HT/DT/NC/HD/etc.
  */
 export function isNomodOrMirrorOnly(mods: string | null | undefined): boolean {
   const entries = parseModEntries(mods);

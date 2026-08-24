@@ -1,7 +1,7 @@
 import type { Db } from "@roxysu/db/types";
 import { imports, scores } from "@roxysu/db/schema";
 import { Elysia } from "elysia";
-import { count, desc, max } from "drizzle-orm";
+import { desc, max } from "drizzle-orm";
 
 import { publish, subscribe, type AppEvent } from "./shared/events";
 
@@ -10,7 +10,6 @@ type PollState = {
   lastImportStatus: string | null;
   lastImportRowsChanged: number;
   lastImportDeletes: number;
-  scoreCount: number;
   maxPlayedAt: number | null;
 };
 
@@ -36,7 +35,6 @@ async function readState(db: Db): Promise<PollState> {
 
   const [scoreRow] = await db
     .select({
-      n: count(),
       maxPlayed: max(scores.playedAt),
     })
     .from(scores);
@@ -51,7 +49,6 @@ async function readState(db: Db): Promise<PollState> {
     lastImportStatus: lastImport?.status ?? null,
     lastImportRowsChanged: lastImport?.rowsChanged ?? 0,
     lastImportDeletes: deletes,
-    scoreCount: scoreRow?.n ?? 0,
     maxPlayedAt: playedAtMs(scoreRow?.maxPlayed),
   };
 }
@@ -80,12 +77,10 @@ export function startPollLoop(db: Db, intervalMs = 1500): () => void {
         }
 
         if (
-          next.scoreCount > prev.scoreCount ||
-          (next.maxPlayedAt != null &&
-            prev.maxPlayedAt != null &&
-            next.maxPlayedAt > prev.maxPlayedAt)
+          next.maxPlayedAt != null &&
+          (prev.maxPlayedAt == null || next.maxPlayedAt > prev.maxPlayedAt)
         ) {
-          publish({ type: "score.imported", scoreCount: next.scoreCount });
+          publish({ type: "score.imported", scoreCount: 0 });
           publish({ type: "dashboard.updated" });
         }
       }
@@ -112,26 +107,42 @@ export const sseRoutes = new Elysia({ prefix: "/api" }).get(
   ({ request }) => {
     const encoder = new TextEncoder();
     let unsubscribe: (() => void) | null = null;
+    let heartbeat: ReturnType<typeof setInterval> | null = null;
 
     const stream = new ReadableStream({
       start(controller) {
+        const cleanup = () => {
+          if (heartbeat != null) {
+            clearInterval(heartbeat);
+            heartbeat = null;
+          }
+          unsubscribe?.();
+          unsubscribe = null;
+        };
+
         const send = (event: AppEvent) => {
           try {
             controller.enqueue(encoder.encode(formatSse(event)));
           } catch {
-            // stream closed
+            cleanup();
           }
         };
 
-        // Initial ping so EventSource connects cleanly
         controller.enqueue(
           encoder.encode(`event: connected\ndata: {"ok":true}\n\n`),
         );
 
         unsubscribe = subscribe(send);
+        heartbeat = setInterval(() => {
+          try {
+            controller.enqueue(encoder.encode(`: ping\n\n`));
+          } catch {
+            cleanup();
+          }
+        }, 20_000);
 
         request.signal.addEventListener("abort", () => {
-          unsubscribe?.();
+          cleanup();
           try {
             controller.close();
           } catch {
@@ -140,7 +151,12 @@ export const sseRoutes = new Elysia({ prefix: "/api" }).get(
         });
       },
       cancel() {
+        if (heartbeat != null) {
+          clearInterval(heartbeat);
+          heartbeat = null;
+        }
         unsubscribe?.();
+        unsubscribe = null;
       },
     });
 

@@ -1,3 +1,4 @@
+import { lazy } from "react";
 import {
   Outlet,
   createHashHistory,
@@ -6,7 +7,6 @@ import {
   createRouter,
 } from "@tanstack/react-router";
 import { AppShell } from "./components/AppShell";
-import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { PracticeListPage } from "./features/practice/PracticeListPage";
 import { PracticeProfilePage } from "./features/practice/PracticeProfilePage";
 import { SessionsPage } from "./features/sessions/SessionsPage";
@@ -16,16 +16,46 @@ import { CollectionResultsPage } from "./features/collections/CollectionResultsP
 import { HubBrowsePage } from "./features/hub/HubBrowsePage";
 import { HubCallbackPage } from "./features/hub/HubCallbackPage";
 import { HubDetailPage } from "./features/hub/HubDetailPage";
-import { HubSharePage } from "./features/hub/HubSharePage";
-import { HubAdminCachePage } from "./features/hub/HubAdminCachePage";
 import { SettingsPage } from "./features/settings/SettingsPage";
 import { SkinPage } from "./features/settings/SkinPage";
 import { OverlayPage } from "./features/overlay/OverlayPage";
-import { RatingLabPage } from "./features/rating-lab/RatingLabPage";
-import { DownloadMapsPage } from "./features/download/DownloadMapsPage";
-import { MarathonPage } from "./features/marathon/MarathonPage";
-import { StatsPage } from "./features/stats/StatsPage";
 import { NowSelectedPage } from "./features/now-selected/NowSelectedPage";
+
+const DashboardPage = lazy(() =>
+  import("./features/dashboard/DashboardPage").then((m) => ({
+    default: m.DashboardPage,
+  })),
+);
+const StatsPage = lazy(() =>
+  import("./features/stats/StatsPage").then((m) => ({
+    default: m.StatsPage,
+  })),
+);
+const DownloadMapsPage = lazy(() =>
+  import("./features/download/DownloadMapsPage").then((m) => ({
+    default: m.DownloadMapsPage,
+  })),
+);
+const MarathonPage = lazy(() =>
+  import("./features/marathon/MarathonPage").then((m) => ({
+    default: m.MarathonPage,
+  })),
+);
+const RatingLabPage = lazy(() =>
+  import("./features/rating-lab/RatingLabPage").then((m) => ({
+    default: m.RatingLabPage,
+  })),
+);
+const HubSharePage = lazy(() =>
+  import("./features/hub/HubSharePage").then((m) => ({
+    default: m.HubSharePage,
+  })),
+);
+const HubAdminCachePage = lazy(() =>
+  import("./features/hub/HubAdminCachePage").then((m) => ({
+    default: m.HubAdminCachePage,
+  })),
+);
 import { isDesktopShell } from "./lib/desktop";
 import type { StatsGranularity, StatsRange, StatsSkillAxis } from "./lib/api";
 import {

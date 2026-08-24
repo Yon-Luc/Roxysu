@@ -21,7 +21,7 @@ realm-reader poll/watermark extraction
     ↓
 persist raw import tables + imports row
     ↓
-server startPollLoop (sse.ts) sees new imports
+server startPollLoop (sse.ts) sees new `imports` rows / newer `MAX(played_at)`
     ↓
 analytics pipeline (Retry → Session → Mastery → Statistics)
     ↓

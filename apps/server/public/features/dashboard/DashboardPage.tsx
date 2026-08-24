@@ -100,7 +100,7 @@ export function DashboardPage() {
           label={dict?.dashboard.lastSync ?? "Last sync"}
           value={
             last
-              ? `${dict?.sync.status[last.status] ?? last.status}${last.finishedAt ? ` · ${formatRelativeTime(last.finishedAt)}` : ""}`
+              ? `${dict?.sync.status[last.status] ?? last.status}${last.finishedAt ? ` · ${formatRelativeTime(last.finishedAt, dict?.common)}` : ""}`
               : "—"
           }
         />
@@ -119,7 +119,7 @@ export function DashboardPage() {
             <div className="mt-1 text-xs text-muted">
               {session.scoreCount} {dict?.dashboard.plays ?? "plays"}
               {" · "}
-              {formatRelativeTime(session.startedAt)}
+              {formatRelativeTime(session.startedAt, dict?.common)}
             </div>
           </Link>
         ) : (
@@ -293,7 +293,7 @@ export function DashboardPage() {
                       {formatAccuracy(score.accuracy)}
                     </div>
                     <div className="text-xs tabular-nums text-muted">
-                      {formatPp(score.pp)} · {formatRelativeTime(score.playedAt)}
+                      {formatPp(score.pp)} · {formatRelativeTime(score.playedAt, dict?.common)}
                     </div>
                   </div>
                 </>

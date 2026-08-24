@@ -89,33 +89,41 @@ export function useMirrorBatchJob() {
   };
 }
 
-/** Remember when the downloading phase began so ETA ignores scan time. */
+/** Prefer the server download-phase epoch; local clock is only a fallback. */
 function useDownloadingClock(
   batch: MirrorBatchJob | undefined,
   phase: string,
   busy: boolean,
 ): number | null {
-  const [startedAtMs, setStartedAtMs] = useState<number | null>(null);
+  const [fallbackMs, setFallbackMs] = useState<number | null>(null);
   const jobKeyRef = useRef<string | null>(null);
 
   const jobKey = batch?.startedAt ?? null;
+  const serverMs = parseIsoMs(batch?.downloadingStartedAt);
 
   useEffect(() => {
     if (jobKey !== jobKeyRef.current) {
       jobKeyRef.current = jobKey;
-      setStartedAtMs(null);
+      setFallbackMs(null);
     }
   }, [jobKey]);
 
   useEffect(() => {
     if (!busy) {
-      setStartedAtMs(null);
+      setFallbackMs(null);
       return;
     }
-    if (phase === "downloading") {
-      setStartedAtMs((prev) => prev ?? Date.now());
+    if (phase === "downloading" && serverMs == null) {
+      setFallbackMs((prev) => prev ?? Date.now());
     }
-  }, [busy, phase]);
+  }, [busy, phase, serverMs]);
 
-  return busy && phase === "downloading" ? startedAtMs : null;
+  if (!busy || phase !== "downloading") return null;
+  return serverMs ?? fallbackMs;
+}
+
+function parseIsoMs(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const ms = Date.parse(iso);
+  return Number.isFinite(ms) ? ms : null;
 }

@@ -39,7 +39,7 @@ export type CollectionSyncSuccess = {
 export type CollectionSyncFailure = {
   ok: false;
   error: string;
-  code: "locked" | "schema_mismatch" | "other";
+  code: "locked" | "schema_mismatch" | "in_flight" | "other";
 };
 
 export type CollectionSyncResult = CollectionSyncSuccess | CollectionSyncFailure;

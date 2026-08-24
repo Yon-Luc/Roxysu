@@ -898,10 +898,10 @@ export function StatsPage({
           <p className="mt-4 text-xs text-faint">
             {dict?.stats.playHistory ?? "Play history"}
             {summary.firstPlayedAt
-              ? ` ${dict?.stats.from ?? "from"} ${formatRelativeTime(summary.firstPlayedAt)}`
+              ? ` ${dict?.stats.from ?? "from"} ${formatRelativeTime(summary.firstPlayedAt, dict?.common)}`
               : ""}
             {summary.lastPlayedAt
-              ? ` · ${dict?.stats.last ?? "last"} ${formatRelativeTime(summary.lastPlayedAt)}`
+              ? ` · ${dict?.stats.last ?? "last"} ${formatRelativeTime(summary.lastPlayedAt, dict?.common)}`
               : ""}
           </p>
         ) : null}

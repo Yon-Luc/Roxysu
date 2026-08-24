@@ -1,4 +1,13 @@
-import { mkdirSync, writeFileSync, existsSync } from "node:fs";
+import {
+  mkdirSync,
+  existsSync,
+  createWriteStream,
+  unlinkSync,
+  renameSync,
+  statSync,
+} from "node:fs";
+import { pipeline } from "node:stream/promises";
+import { Readable } from "node:stream";
 import path from "node:path";
 import type { Db } from "../db-runtime";
 import {
@@ -66,6 +75,7 @@ export type MirrorBatchJobState = {
   currentSetId: number | null;
   currentTitle: string | null;
   startedAt: string | null;
+  downloadingStartedAt: string | null;
   finishedAt: string | null;
   error: string | null;
   recentErrors: Array<{ setId: number; error: string }>;
@@ -147,6 +157,7 @@ type JobInternal = {
   currentSetId: number | null;
   currentTitle: string | null;
   startedAt: Date | null;
+  downloadingStartedAt: Date | null;
   finishedAt: Date | null;
   error: string | null;
   recentErrors: Array<{ setId: number; error: string }>;
@@ -157,6 +168,8 @@ type JobInternal = {
 };
 
 let openingInProgress = false;
+let savingInProgress = false;
+let didIdleReconcile = false;
 /** Monotonic id so abandoned async batches stop mutating `job`. */
 let jobGeneration = 0;
 
@@ -174,9 +187,11 @@ export function clearStuckMirrorBatchLocks(): boolean {
   const wasLocked =
     job.running ||
     openingInProgress ||
+    savingInProgress ||
     job.status === "running" ||
     job.status === "stopping";
   openingInProgress = false;
+  savingInProgress = false;
   // Abandon any in-flight runBatch / download slots still awaiting I/O.
   jobGeneration += 1;
   job.generation = jobGeneration;
@@ -199,6 +214,8 @@ export function clearStuckMirrorBatchLocks(): boolean {
 
 /** Reset in-memory batch state (tests / process-start equivalent). */
 export function resetMirrorBatchJobForTests(): void {
+  didIdleReconcile = false;
+  savingInProgress = false;
   clearStuckMirrorBatchLocks();
   job = {
     status: "idle",
@@ -225,6 +242,7 @@ export function resetMirrorBatchJobForTests(): void {
     currentSetId: null,
     currentTitle: null,
     startedAt: null,
+    downloadingStartedAt: null,
     finishedAt: null,
     error: null,
     recentErrors: [],
@@ -243,6 +261,7 @@ export function simulateStuckMirrorBatchForTests(
   job.status = status;
   job.phase = "downloading";
   job.startedAt = new Date();
+  job.downloadingStartedAt = job.startedAt;
   job.finishedAt = null;
   job.error = null;
 }
@@ -318,6 +337,7 @@ let job: JobInternal = {
   currentSetId: null,
   currentTitle: null,
   startedAt: null,
+  downloadingStartedAt: null,
   finishedAt: null,
   error: null,
   recentErrors: [],
@@ -344,9 +364,16 @@ function parseRetryAfterSeconds(res: Response): number | null {
 
 export function getMirrorBatchJobState(): MirrorBatchJobState {
   if (!job.running) {
-    reconcileIdleSavedPaths();
+    if (!didIdleReconcile) {
+      reconcileIdleSavedPaths();
+      didIdleReconcile = true;
+    } else if (job.savedPaths.length > 0) {
+      job.savedPaths = job.savedPaths.filter((p) => existsSync(p));
+    }
   }
-  const ready = pathsReadyToOpen();
+  const ready = job.running
+    ? filterNotSentToOsu(job.savedPaths, job.downloadDir)
+    : pathsReadyToOpen();
   return {
     status: job.status,
     phase: job.phase,
@@ -372,6 +399,7 @@ export function getMirrorBatchJobState(): MirrorBatchJobState {
     currentSetId: job.currentSetId,
     currentTitle: job.currentTitle,
     startedAt: job.startedAt?.toISOString() ?? null,
+    downloadingStartedAt: job.downloadingStartedAt?.toISOString() ?? null,
     finishedAt: job.finishedAt?.toISOString() ?? null,
     error: job.error,
     recentErrors: job.recentErrors,
@@ -424,6 +452,7 @@ function resetJob(
     currentSetId: null,
     currentTitle: null,
     startedAt: new Date(),
+    downloadingStartedAt: null,
     finishedAt: null,
     error: null,
     recentErrors: [],
@@ -479,7 +508,7 @@ async function collectSetsPages(
     }
     job.matched = sets.length;
     job.skippedOwned = ownedSkipped;
-    if (!result.hasMore && result.mirrorCount === 0) break;
+    if (!result.hasMore) break;
   }
 
   return { sets, ownedSkipped };
@@ -544,12 +573,32 @@ async function downloadSetToDisk(
       throw new Error(`HTTP ${res.status}`);
     }
 
-    const bytes = new Uint8Array(await res.arrayBuffer());
-    if (bytes.byteLength < 64) {
-      throw new Error("Response too small to be an .osz");
+    if (!res.body) {
+      throw new Error("Empty response body");
     }
 
-    writeFileSync(destPath, bytes);
+    const tmpPath = `${destPath}.part`;
+    try {
+      await pipeline(
+        Readable.fromWeb(
+          res.body as unknown as import("stream/web").ReadableStream,
+        ),
+        createWriteStream(tmpPath),
+      );
+      const size = statSync(tmpPath).size;
+      if (size < 64) {
+        unlinkSync(tmpPath);
+        throw new Error("Response too small to be an .osz");
+      }
+      renameSync(tmpPath, destPath);
+    } catch (err) {
+      try {
+        unlinkSync(tmpPath);
+      } catch {
+        // ignore leftover part file
+      }
+      throw err;
+    }
     return { result: "downloaded", path: destPath };
   }
 
@@ -569,6 +618,7 @@ async function downloadQueue(
   job.downloadDir = downloadDir;
   mkdirSync(downloadDir, { recursive: true });
   job.phase = "downloading";
+  job.downloadingStartedAt = new Date();
   job.queued = sets.length;
   job.savedPaths = [];
   const downloadedIds: number[] = [];
@@ -713,6 +763,7 @@ async function runBatch(
     if (generation === job.generation) {
       job.running = false;
       job.stopRequested = false;
+      didIdleReconcile = false;
     }
   }
 }
@@ -721,7 +772,7 @@ export function startMirrorBatchJob(
   db: Db,
   request: MirrorBatchStartRequest,
 ): MirrorBatchJobState {
-  if (job.running) {
+  if (job.running || savingInProgress) {
     throw new Error("A batch download is already running");
   }
 
@@ -818,9 +869,11 @@ export async function saveBeatmapsetArchive(opts: {
     path: string;
   }
 > {
-  if (job.running) {
+  if (job.running || savingInProgress) {
     throw new Error("A batch download is already running");
   }
+  savingInProgress = true;
+  try {
   const setId = opts.setId;
   if (!Number.isSafeInteger(setId) || setId <= 0) {
     throw new Error("Invalid beatmapset id");
@@ -855,6 +908,9 @@ export async function saveBeatmapsetArchive(opts: {
     result,
     path: destPath,
   };
+  } finally {
+    savingInProgress = false;
+  }
 }
 
 /**

@@ -21,7 +21,7 @@ POST /api/collections (query text)
     ↓
 persist row in collections
     ↓
-optional collection match count store refresh / query language execute for results
+optional collection match count store refresh (yields between collections after import)
 ```
 
 ## Business guarantee

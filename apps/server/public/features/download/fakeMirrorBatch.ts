@@ -76,6 +76,7 @@ function idleJob(): MirrorBatchJob {
     currentSetId: null,
     currentTitle: null,
     startedAt: null,
+    downloadingStartedAt: null,
     finishedAt: null,
     error: null,
     recentErrors: [],
@@ -180,6 +181,7 @@ export function startFakeMirrorBatch(opts: FakeStartOptions) {
       pagesScanned: 3,
       currentSetId: 900_001,
       currentTitle: titleFor(0),
+      downloadingStartedAt: new Date().toISOString(),
     });
     schedule(() => stepDownload(0), delayMs);
   };

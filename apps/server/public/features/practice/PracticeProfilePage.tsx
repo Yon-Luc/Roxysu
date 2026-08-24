@@ -275,7 +275,7 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
         />
         <MiniStat
           label={dict?.practice.detail.statLastPlayed}
-          value={formatRelativeTime(stats.lastPlayedAt)}
+          value={formatRelativeTime(stats.lastPlayedAt, dict?.common)}
         />
       </section>
 
@@ -466,7 +466,7 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
                     className="rx-row justify-between !px-2 !py-1.5 text-sm"
                   >
                     <span className="text-subtle">
-                      {formatRelativeTime(s.startedAt)}
+                      {formatRelativeTime(s.startedAt, dict?.common)}
                     </span>
                     <span className="tabular-nums text-muted">
                       {t(dict?.practice.detail.plays, {
@@ -516,7 +516,7 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
             {recentScores.map((score) => (
               <li key={score.id} className="rx-row justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-1.5 text-sm text-subtle">
-                  <span>{formatRelativeTime(score.playedAt)}</span>
+                  <span>{formatRelativeTime(score.playedAt, dict?.common)}</span>
                   <ModBadges mods={score.mods} />
                 </div>
                 <div className="flex shrink-0 items-center gap-3 text-sm font-semibold tabular-nums text-ink">

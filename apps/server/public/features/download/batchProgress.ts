@@ -67,11 +67,10 @@ export function estimateBatchEta(opts: {
     return { label: "Estimating…", ready: false };
   }
   if (phase !== "downloading" || queued <= 0) return null;
-  if (
-    processed < ETA_MIN_SAMPLES ||
-    downloadingStartedAtMs == null ||
-    processed >= queued
-  ) {
+  if (processed >= queued) {
+    return { label: "Wrapping up…", ready: false };
+  }
+  if (processed < ETA_MIN_SAMPLES || downloadingStartedAtMs == null) {
     return { label: "Estimating…", ready: false };
   }
 

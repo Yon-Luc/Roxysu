@@ -182,7 +182,7 @@ export function OverlayPage({
                   <div className="text-[11px] tabular-nums text-white/65 overlay-text">
                     {formatPp(score.pp)}
                     {mode === "recent"
-                      ? ` · ${formatRelativeTime(score.playedAt)}`
+                      ? ` · ${formatRelativeTime(score.playedAt, dict?.common)}`
                       : ""}
                   </div>
                 </div>

@@ -325,7 +325,7 @@ export function CommandPalette({
         subtitle: sessionsData?.current
           ? `${t(dict?.command.playsCount, {
               count: sessionsData.current.scoreCount,
-            })} · ${formatRelativeTime(sessionsData.current.startedAt)}`
+            })} · ${formatRelativeTime(sessionsData.current.startedAt, dict?.common)}`
           : dict?.command.openLiveSession,
         onSelect: () =>
           go("/sessions/$sessionId", { params: { sessionId: "current" } }),
@@ -364,7 +364,7 @@ export function CommandPalette({
           label,
           subtitle: `${t(dict?.command.playsCount, {
             count: session.scoreCount,
-          })} · ${formatRelativeTime(session.startedAt)}`,
+          })} · ${formatRelativeTime(session.startedAt, dict?.common)}`,
           hint: session.endedAt == null ? dict?.command.live : undefined,
           onSelect: () =>
             go("/sessions/$sessionId", {

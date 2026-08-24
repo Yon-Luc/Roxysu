@@ -1,6 +1,5 @@
 
 import type { Db } from "@roxysu/db/types";
-import { ensureSunnyDanForIdsSync } from "../../map-analysis/computeSunnyDan";
 import { skillForAxis } from "./sevenKSkill";
 import { calculateMapMatch, mapMatchesAxis } from "./mapMatch";
 import {
@@ -46,27 +45,13 @@ export function pickCandidatesInRange(
     opts.keyCount,
   );
 
-  let rows = loadCandidates(
+  const rows = loadCandidates(
     db,
     filter.sql,
     filter.params,
     opts.excludeIds,
     opts.pool,
   );
-
-  const missing = rows
-    .filter((r) => r.sunnyStar == null)
-    .map((r) => r.id);
-  if (missing.length > 0) {
-    ensureSunnyDanForIdsSync(db, missing);
-    rows = loadCandidates(
-      db,
-      filter.sql,
-      filter.params,
-      opts.excludeIds,
-      opts.pool,
-    );
-  }
 
   const minRatio = opts.targetRatio - opts.tolerance;
   const maxRatio = opts.targetRatio + opts.tolerance;

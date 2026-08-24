@@ -26,7 +26,7 @@ It is not a temporary cache — it is Roxysu's schema-controlled store alongside
 
 ## Important symbols
 
-- `packages/db/src/schema.ts`
+- `packages/db/src/schema.ts` — `scores` also has `scores_user_pending_ruleset_beatmap_idx` and `scores_beatmap_pending_idx` (practice query predicates)
 - `@roxysu/db/client.bun`, `@roxysu/db/client.node`
 
 ## Related knowledge

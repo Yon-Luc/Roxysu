@@ -32,6 +32,7 @@ function SkillPlayList({
   ratingMode: RatingDisplayMode;
   empty: string;
 }) {
+  const { dict } = useAppDict();
   return (
     <section>
       <h4 className="mb-2 text-sm font-bold text-ink">{title}</h4>
@@ -65,7 +66,7 @@ function SkillPlayList({
                       : formatStars(play.sunnyStar)}
                     {" · "}
                     {play.playedAt != null
-                      ? formatRelativeTime(String(play.playedAt))
+                      ? formatRelativeTime(String(play.playedAt), dict?.common)
                       : "—"}
                   </div>
                 </div>

@@ -391,14 +391,14 @@ export function HubAdminCachePage() {
                 <span>
                   {dict?.hub?.adminLastRefresh ?? "Last refresh:"}{" "}
                   {entry.lastRefreshAt
-                    ? formatRelativeTime(entry.lastRefreshAt)
+                    ? formatRelativeTime(entry.lastRefreshAt, dict?.common)
                     : (dict?.hub?.adminNever ?? "never")}
                 </span>
                 <span>
                   {dict?.hub?.adminFrequencySelect ?? "Frequency"}:{" "}
                   {frequencyLabel(dict, entry.refreshIntervalMinutes)}
                   {entry.nextRefreshAt
-                    ? `${dict?.hub?.adminNextPrefix ?? " · next "}${formatRelativeTime(entry.nextRefreshAt)}`
+                    ? `${dict?.hub?.adminNextPrefix ?? " · next "}${formatRelativeTime(entry.nextRefreshAt, dict?.common)}`
                     : ""}
                 </span>
                 {entry.refreshError ? (

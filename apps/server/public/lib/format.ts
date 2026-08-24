@@ -1,4 +1,12 @@
 import { formatModAcronym, parseModEntries } from "@server/replay/mods";
+import { t } from "./i18n";
+
+export type RelativeTimeLabels = {
+  justNow?: string;
+  minutesAgo?: string;
+  hoursAgo?: string;
+  daysAgo?: string;
+};
 
 export function formatAccuracy(value: number | null | undefined): string {
   if (value == null) return "—";
@@ -37,18 +45,31 @@ export function formatDurationSeconds(
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
-export function formatRelativeTime(iso: string | null | undefined): string {
+export function formatRelativeTime(
+  iso: string | null | undefined,
+  labels?: RelativeTimeLabels | null,
+): string {
   if (!iso) return "—";
   const then = new Date(iso).getTime();
   if (Number.isNaN(then)) return "—";
   const diff = Date.now() - then;
   const minutes = Math.floor(diff / 60_000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1) return labels?.justNow ?? "just now";
+  if (minutes < 60) {
+    return labels?.minutesAgo
+      ? t(labels.minutesAgo, { n: minutes })
+      : `${minutes}m ago`;
+  }
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) {
+    return labels?.hoursAgo
+      ? t(labels.hoursAgo, { n: hours })
+      : `${hours}h ago`;
+  }
   const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
+  if (days < 30) {
+    return labels?.daysAgo ? t(labels.daysAgo, { n: days }) : `${days}d ago`;
+  }
   return new Date(iso).toLocaleDateString();
 }
 

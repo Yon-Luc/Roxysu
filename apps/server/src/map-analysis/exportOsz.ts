@@ -1,15 +1,23 @@
 import type { Db } from "@roxysu/db/types";
 import { beatmaps } from "@roxysu/db/schema";
-import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { eq, inArray } from "drizzle-orm";
 
 import { getOsuDataPath, resolveLazerFilePath } from "../shared/lazer-files";
-import { buildZip, type ZipEntry } from "./zipStore";
+import { buildZip, ZipFileWriter, type ZipEntry } from "./zipStore";
 
 export const COLLECTION_EXPORT_MAX_SETS = 100;
 
 export type OszPack = {
   bytes: Uint8Array;
+  filename: string;
+};
+
+export type OszFilePack = {
+  filePath: string;
   filename: string;
 };
 
@@ -162,12 +170,12 @@ function parseOsuFilenames(osuText: string): {
   return { audioFilename, backgroundFilename };
 }
 
-function readLazerBytes(hash: string | null): Uint8Array | null {
+async function readLazerBytes(hash: string | null): Promise<Uint8Array | null> {
   if (!hash) return null;
-  const path = resolveLazerFilePath(hash, getOsuDataPath());
-  if (!path) return null;
+  const filePath = resolveLazerFilePath(hash, getOsuDataPath());
+  if (!filePath) return null;
   try {
-    return new Uint8Array(readFileSync(path));
+    return new Uint8Array(await readFile(filePath));
   } catch {
     return null;
   }
@@ -201,7 +209,7 @@ function osuEntryName(row: BeatmapExportRow, osuText: string): string {
   return sanitizeArchiveName(fromMeta, "beatmap.osu");
 }
 
-function packRows(rows: BeatmapExportRow[]): OszPack | OszBuildError {
+async function packRows(rows: BeatmapExportRow[]): Promise<OszPack | OszBuildError> {
   if (rows.length === 0) {
     return { error: "No beatmaps to export", status: 404 };
   }
@@ -212,7 +220,7 @@ function packRows(rows: BeatmapExportRow[]): OszPack | OszBuildError {
   let anyOsu = false;
 
   for (const row of rows) {
-    const osuBytes = readLazerBytes(row.hash);
+    const osuBytes = await readLazerBytes(row.hash);
     if (!osuBytes) continue;
     anyOsu = true;
     const osuText = new TextDecoder("utf-8", { fatal: false }).decode(osuBytes);
@@ -238,7 +246,7 @@ function packRows(rows: BeatmapExportRow[]): OszPack | OszBuildError {
   let audioBytes: Uint8Array | null = null;
   let audioNameHint: string | null = null;
   for (const row of rows) {
-    const bytes = readLazerBytes(row.audioFileHash);
+    const bytes = await readLazerBytes(row.audioFileHash);
     if (bytes) {
       audioBytes = bytes;
       audioNameHint = row.audioFile;
@@ -262,7 +270,7 @@ function packRows(rows: BeatmapExportRow[]): OszPack | OszBuildError {
   let bgBytes: Uint8Array | null = null;
   let bgNameHint: string | null = null;
   for (const row of rows) {
-    const bytes = readLazerBytes(row.backgroundFileHash);
+    const bytes = await readLazerBytes(row.backgroundFileHash);
     if (bytes) {
       bgBytes = bytes;
       bgNameHint = row.backgroundFile;
@@ -355,7 +363,7 @@ export async function buildCollectionExportZip(
   db: Db,
   setIds: string[],
   collectionName: string,
-): Promise<OszPack | OszBuildError> {
+): Promise<OszFilePack | OszBuildError> {
   const unique = [...new Set(setIds.filter(Boolean))];
   if (unique.length === 0) {
     return { error: "No beatmaps to export", status: 404 };
@@ -379,24 +387,42 @@ export async function buildCollectionExportZip(
     else bySet.set(row.setId, [row]);
   }
 
-  const outer: ZipEntry[] = [];
+  const filePath = path.join(
+    tmpdir(),
+    `roxysu-collection-${randomBytes(8).toString("hex")}.zip`,
+  );
+  const writer = new ZipFileWriter(filePath);
   const usedNames = new Set<string>();
+  let packed = 0;
 
-  for (const setId of unique) {
-    const rows = bySet.get(setId);
-    if (!rows || rows.length === 0) continue;
-    const pack = packRows(rows);
-    if ("error" in pack) continue;
+  try {
+    for (const setId of unique) {
+      const rows = bySet.get(setId);
+      if (!rows || rows.length === 0) continue;
+      const pack = await packRows(rows);
+      if ("error" in pack) continue;
 
-    let name = pack.filename;
-    if (usedNames.has(name.toLowerCase())) {
-      name = sanitizeDownloadFilename(`${setId}`, ".osz");
+      let name = pack.filename;
+      if (usedNames.has(name.toLowerCase())) {
+        name = sanitizeDownloadFilename(`${setId}`, ".osz");
+      }
+      usedNames.add(name.toLowerCase());
+      await writer.add(name, pack.bytes);
+      packed += 1;
     }
-    usedNames.add(name.toLowerCase());
-    outer.push({ name, data: pack.bytes });
+    await writer.finish();
+  } catch (err) {
+    try {
+      await writer.finish();
+    } catch {
+      // ignore close errors after a failed write
+    }
+    throw err;
   }
 
-  if (outer.length === 0) {
+  if (packed === 0) {
+    const { unlink } = await import("node:fs/promises");
+    await unlink(filePath).catch(() => undefined);
     return {
       error: "Could not pack any beatmap sets from this collection",
       status: 404,
@@ -404,13 +430,13 @@ export async function buildCollectionExportZip(
   }
 
   return {
-    bytes: buildZip(outer),
+    filePath,
     filename: sanitizeDownloadFilename(collectionName || "collection", ".zip"),
   };
 }
 
 export function isOszBuildError(
-  value: OszPack | OszBuildError,
+  value: OszPack | OszFilePack | OszBuildError,
 ): value is OszBuildError {
   return "error" in value;
 }

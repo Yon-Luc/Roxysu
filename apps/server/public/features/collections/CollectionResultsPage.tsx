@@ -167,7 +167,7 @@ export function CollectionResultsPage({
                       </span>
                       <span>{formatAccuracy(item.bestAccuracy)}</span>
                       <span>{formatPp(item.bestPp)}</span>
-                      <span>{formatRelativeTime(item.lastPlayedAt)}</span>
+                      <span>{formatRelativeTime(item.lastPlayedAt, dict?.common)}</span>
                     </div>
                   </div>
                 </Link>

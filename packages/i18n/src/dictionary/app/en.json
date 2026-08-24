@@ -19,7 +19,11 @@
     "lightMode": "Light mode",
     "hideMenu": "Hide menu",
     "showMenu": "Show menu",
-    "language": "Language"
+    "language": "Language",
+    "justNow": "just now",
+    "minutesAgo": "{{n}}m ago",
+    "hoursAgo": "{{n}}h ago",
+    "daysAgo": "{{n}}d ago"
   },
   "sync": {
     "paused": "Paused",

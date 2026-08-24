@@ -1,3 +1,5 @@
+import { createWriteStream, type WriteStream } from "node:fs";
+
 /** Minimal ZIP (STORE only) for bundling .osu + audio + background. */
 
 function crc32(data: Uint8Array): number {
@@ -38,6 +40,91 @@ export type ZipEntry = {
   name: string;
   data: Uint8Array;
 };
+
+/** Write an uncompressed ZIP to disk one entry at a time. */
+export class ZipFileWriter {
+  private offset = 0;
+  private centrals: Uint8Array[] = [];
+  private count = 0;
+  private readonly stream: WriteStream;
+
+  constructor(destPath: string) {
+    this.stream = createWriteStream(destPath);
+  }
+
+  private write(data: Uint8Array): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.stream.write(data, (err) => (err ? reject(err) : resolve()));
+    });
+  }
+
+  async add(name: string, data: Uint8Array): Promise<void> {
+    const nameBytes = new TextEncoder().encode(name);
+    const crc = crc32(data);
+    const size = data.length;
+    const localHeader = concat([
+      u32(0x04034b50),
+      u16(20),
+      u16(0),
+      u16(0),
+      u16(0),
+      u16(0),
+      u32(crc),
+      u32(size),
+      u32(size),
+      u16(nameBytes.length),
+      u16(0),
+      nameBytes,
+    ]);
+    const centralHeader = concat([
+      u32(0x02014b50),
+      u16(20),
+      u16(20),
+      u16(0),
+      u16(0),
+      u16(0),
+      u16(0),
+      u32(crc),
+      u32(size),
+      u32(size),
+      u16(nameBytes.length),
+      u16(0),
+      u16(0),
+      u16(0),
+      u16(0),
+      u32(0),
+      u32(this.offset),
+      nameBytes,
+    ]);
+    await this.write(localHeader);
+    await this.write(data);
+    this.centrals.push(centralHeader);
+    this.offset += localHeader.length + data.length;
+    this.count += 1;
+  }
+
+  async finish(): Promise<void> {
+    const centralDir = concat(this.centrals);
+    await this.write(centralDir);
+    await this.write(
+      concat([
+        u32(0x06054b50),
+        u16(0),
+        u16(0),
+        u16(this.count),
+        u16(this.count),
+        u32(centralDir.length),
+        u32(this.offset),
+        u16(0),
+      ]),
+    );
+    await new Promise<void>((resolve, reject) => {
+      this.stream.end((err: Error | null | undefined) =>
+        err ? reject(err) : resolve(),
+      );
+    });
+  }
+}
 
 /** Build an uncompressed ZIP archive. */
 export function buildZip(entries: ZipEntry[]): Uint8Array {

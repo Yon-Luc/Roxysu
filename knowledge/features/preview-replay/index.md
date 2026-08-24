@@ -11,6 +11,7 @@ touches:
   - apps/server/public/components/CatchPlayfield.tsx
   - apps/server/public/lib/paintCatchPlayfield.ts
   - apps/server/public/components/ManiaNotefield.tsx
+  - apps/server/public/lib/playfieldRaf.ts
   - apps/server/public/lib/paintManiaNotefield.ts
   - apps/server/public/lib/previewSkin.ts
   - apps/server/public/lib/osuSkinIni.ts
@@ -138,7 +139,13 @@ Imported mania skin:
 
 ## Implementation
 
-- Paint modules are pure; React wrappers are rAF. Video export calls the same paint.
+- Paint modules are pure; React wrappers are rAF via `startPlayfieldRaf`.
+  The loop skips `paint*` when map time and a snapshot (size, skin, mask,
+  notes) are unchanged, and cancels while `document.hidden`. Video export
+  calls the same paint.
+- Score rewatch HUD ticks incrementally through judgments and calls `setHud`
+  only when combo / accuracy / last result change. Paused + unchanged time
+  skips the scan. Overlay lives in memoized `ReplayHudOverlay`.
 - Fat API payload: unused `notes` / `hitObjects` / `taikoHitObjects` /
   `catchHitObjects` / frame arrays are `[]`.
 - Store / dispatch names: `"mania"`, `"osu"`, `"taiko"`, `"fruits"`.

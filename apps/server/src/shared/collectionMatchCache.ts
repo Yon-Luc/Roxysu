@@ -1,5 +1,5 @@
 /**
- * Lazy match-count cache for smart collections.
+ * Lazy match-count store for smart collections.
  *
  * GET /collections reads `cached_match_count` from the DB row instead of
  * running countMatches per collection. Counts refresh on create/update and
@@ -11,6 +11,8 @@ import { eq, isNull } from "drizzle-orm";
 import { buildQueryContext, countMatchesPure } from "../query-language/execute";
 import { subscribe } from "./events";
 import { invalidateCollectionMd5Cache } from "./syncCollections";
+
+const YIELD_EVERY = 1;
 
 export function refreshCollectionMatchCount(db: Db, id: number): void {
   const [col] = db
@@ -33,30 +35,49 @@ export function refreshCollectionMatchCount(db: Db, id: number): void {
   }
 }
 
-let _refreshPending = false;
+let _refreshRunning = false;
+let _refreshQueued = false;
+
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
 
 /** Coalesce rapid refresh requests into one background run. */
 export function scheduleRefreshAllMatchCounts(db: Db): void {
-  if (_refreshPending) return;
-  _refreshPending = true;
-  setImmediate(() => {
-    _refreshPending = false;
-    try {
-      refreshAllCollectionMatchCounts(db);
-    } catch (err) {
-      console.error("[collectionMatchCache] refresh error", err);
-    }
-  });
+  if (_refreshRunning) {
+    _refreshQueued = true;
+    return;
+  }
+  if (_refreshQueued && !_refreshRunning) {
+    return;
+  }
+  _refreshRunning = true;
+  void runRefreshAllMatchCounts(db);
 }
 
-export function refreshAllCollectionMatchCounts(db: Db): void {
+async function runRefreshAllMatchCounts(db: Db): Promise<void> {
+  try {
+    await refreshAllCollectionMatchCounts(db);
+  } catch (err) {
+    console.error("[collectionMatchCache] refresh error", err);
+  } finally {
+    _refreshRunning = false;
+    if (_refreshQueued) {
+      _refreshQueued = false;
+      scheduleRefreshAllMatchCounts(db);
+    }
+  }
+}
+
+export async function refreshAllCollectionMatchCounts(db: Db): Promise<void> {
   const rows = db
     .select({ id: collections.id, query: collections.query })
     .from(collections)
     .all();
   if (rows.length === 0) return;
   const ctx = buildQueryContext(db);
-  for (const col of rows) {
+  for (let i = 0; i < rows.length; i += 1) {
+    const col = rows[i]!;
     try {
       const count = countMatchesPure(db, col.query, ctx);
       db.update(collections)
@@ -65,6 +86,9 @@ export function refreshAllCollectionMatchCounts(db: Db): void {
         .run();
     } catch {
       // skip invalid queries silently
+    }
+    if ((i + 1) % YIELD_EVERY === 0 && i + 1 < rows.length) {
+      await yieldToEventLoop();
     }
   }
 }

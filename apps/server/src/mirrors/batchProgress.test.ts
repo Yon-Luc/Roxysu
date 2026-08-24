@@ -49,8 +49,32 @@ describe("estimateBatchEta", () => {
       downloadingStartedAtMs: now - 10_000,
       nowMs: now,
     });
-    // 1s/map × 30 remaining
     expect(eta?.ready).toBe(true);
     expect(eta?.label).toBe("~30s left");
+  });
+
+  test("uses a stable epoch so remount mid-batch keeps the rate", () => {
+    const downloadStart = 1_000_000;
+    const remountNow = downloadStart + 20_000;
+    const eta = estimateBatchEta({
+      phase: "downloading",
+      queued: 40,
+      processed: 20,
+      downloadingStartedAtMs: downloadStart,
+      nowMs: remountNow,
+    });
+    expect(eta?.ready).toBe(true);
+    expect(eta?.label).toBe("~20s left");
+  });
+
+  test("labels the terminal phase as wrapping up", () => {
+    const eta = estimateBatchEta({
+      phase: "downloading",
+      queued: 40,
+      processed: 40,
+      downloadingStartedAtMs: Date.now() - 10_000,
+      nowMs: Date.now(),
+    });
+    expect(eta).toEqual({ label: "Wrapping up…", ready: false });
   });
 });

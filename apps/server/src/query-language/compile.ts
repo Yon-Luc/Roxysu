@@ -75,7 +75,7 @@ function compileTerm(
     case "mode":
       return `lower(b.ruleset_short_name) = lower(${push(term.value)})`;
     case "mapper":
-      return `b.mapper_username LIKE ${push(`%${term.value}%`)} ESCAPE '\\'`;
+      return `b.mapper_username LIKE ${push(likePattern(term.value))} ESCAPE '\\'`;
     case "title":
       return `b.title LIKE ${push(likePattern(term.value, term.prefix))} ESCAPE '\\'`;
     case "artist":
@@ -132,7 +132,7 @@ function compileTerm(
           AND s.delete_pending = 0
           ${usernameClause}
           ${gamemodeClause}
-          AND s.mods LIKE ${push(`%${term.value}%`)} ESCAPE '\\'
+          AND s.mods LIKE ${push(likePattern(term.value))} ESCAPE '\\'
       )`;
     }
     case "acc": {
@@ -267,10 +267,10 @@ function compileTerm(
       return `(${withOnlineId(statusIn(online))} OR (${statusIn(local)}))`;
     }
     case "text": {
-      const pat = push(`%${term.value}%`);
-      const p2 = push(`%${term.value}%`);
-      const p3 = push(`%${term.value}%`);
-      const p4 = push(`%${term.value}%`);
+      const pat = push(likePattern(term.value));
+      const p2 = push(likePattern(term.value));
+      const p3 = push(likePattern(term.value));
+      const p4 = push(likePattern(term.value));
       return `(
         b.title LIKE ${pat} ESCAPE '\\'
         OR b.artist LIKE ${p2} ESCAPE '\\'

@@ -52,6 +52,15 @@ export type ManiaRatingJobState = {
 const BATCH_SIZE = 32;
 const YIELD_MS = 10;
 
+let coverageSnapshot: ManiaRatingCoverage | null = null;
+
+const EMPTY_COVERAGE: ManiaRatingCoverage = {
+  maniaTotal: 0,
+  computed: 0,
+  missing: 0,
+  failed: 0,
+};
+
 let job: {
   status: ManiaRatingJobStatus;
   versionId: string | null;
@@ -220,14 +229,28 @@ export function getManiaRatingCoverage(
 
 export function getManiaRatingJobState(db: Db): ManiaRatingJobState {
   const versionId = job.versionId;
+  const running = job.status === "running" || job.status === "stopping";
+  let coverage: ManiaRatingCoverage;
+  if (!versionId) {
+    coverage = EMPTY_COVERAGE;
+  } else if (running && coverageSnapshot) {
+    const computed = coverageSnapshot.computed + job.computedThisRun;
+    coverage = {
+      maniaTotal: coverageSnapshot.maniaTotal,
+      computed,
+      missing: Math.max(0, coverageSnapshot.missing - job.computedThisRun),
+      failed: coverageSnapshot.failed,
+    };
+  } else {
+    coverage = getManiaRatingCoverage(db, versionId);
+    if (!running) coverageSnapshot = coverage;
+  }
   return {
     status: job.status,
     versionId,
     query: job.query,
     force: job.force,
-    coverage: versionId
-      ? getManiaRatingCoverage(db, versionId)
-      : { maniaTotal: 0, computed: 0, missing: 0, failed: 0 },
+    coverage,
     computedThisRun: job.computedThisRun,
     attemptedThisRun: job.attemptedThisRun,
     startedAt: job.startedAt?.toISOString() ?? null,
@@ -246,6 +269,7 @@ function clearTimer(): void {
 }
 
 function finish(status: "completed" | "idle" | "error", error?: string): void {
+  coverageSnapshot = null;
   clearTimer();
   const db = job.db;
   const rebuildAnalytics =
@@ -465,6 +489,7 @@ export function startManiaRatingBackfill(
   job.finishedAt = null;
   job.error = null;
   job.db = db;
+  coverageSnapshot = getManiaRatingCoverage(db, versionId);
 
   const ast = parseQuery(query);
   const compiled = compileQuery(ast);

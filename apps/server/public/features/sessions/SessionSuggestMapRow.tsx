@@ -89,7 +89,7 @@ export function SessionSuggestMapRow({
           </div>
           <div className="text-xs tabular-nums text-muted">
             {item.lastPlayedAt
-              ? formatRelativeTime(item.lastPlayedAt)
+              ? formatRelativeTime(item.lastPlayedAt, dict?.common)
               : dict?.session.neverPlayed}
           </div>
         </div>

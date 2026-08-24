@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { ScoreReplay } from "../lib/api";
+import { resizePlayfieldCanvas, startPlayfieldRaf } from "../lib/playfieldRaf";
 import type { StdSkin } from "../lib/stdSkin";
 import {
   buildComboNumbers,
@@ -72,20 +73,9 @@ export function StdPlayfield({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    let raf = 0;
-    let running = true;
-
+    let loop: ReturnType<typeof startPlayfieldRaf> | null = null;
     function resize() {
-      const parent = canvas!.parentElement;
-      if (!parent) return;
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const w = parent.clientWidth;
-      const h = parent.clientHeight;
-      canvas!.width = Math.max(1, Math.floor(w * dpr));
-      canvas!.height = Math.max(1, Math.floor(h * dpr));
-      canvas!.style.width = `${w}px`;
-      canvas!.style.height = `${h}px`;
-      ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
+      resizePlayfieldCanvas(canvas!, ctx!, () => loop?.invalidate());
     }
 
     resize();
@@ -96,30 +86,40 @@ export function StdPlayfield({
       requestAnimationFrame(resize);
     });
 
-    function draw() {
-      if (!running) return;
-      paintStdPlayfield({
-        ctx: ctx!,
-        width: canvas!.clientWidth,
-        height: canvas!.clientHeight,
-        tMs: getTimeRef.current(),
-        hitObjects: objectsRef.current,
-        circleSize: csRef.current,
-        approachRate: arRef.current,
-        frames: framesRef.current,
-        hidden: hiddenRef.current,
-        skin: skinRef.current,
-        trail: trailRef.current,
-        comboNumbers: comboRef.current,
-        judgmentMaps: judgmentsRef.current,
-      });
-      raf = requestAnimationFrame(draw);
-    }
-
-    raf = requestAnimationFrame(draw);
+    loop = startPlayfieldRaf({
+      getTimeMs: () => getTimeRef.current(),
+      snapshot: () => [
+        canvas!.clientWidth,
+        canvas!.clientHeight,
+        objectsRef.current,
+        csRef.current,
+        arRef.current,
+        framesRef.current,
+        hiddenRef.current,
+        skinRef.current,
+        comboRef.current,
+        judgmentsRef.current,
+      ],
+      paint: (tMs) => {
+        paintStdPlayfield({
+          ctx: ctx!,
+          width: canvas!.clientWidth,
+          height: canvas!.clientHeight,
+          tMs,
+          hitObjects: objectsRef.current,
+          circleSize: csRef.current,
+          approachRate: arRef.current,
+          frames: framesRef.current,
+          hidden: hiddenRef.current,
+          skin: skinRef.current,
+          trail: trailRef.current,
+          comboNumbers: comboRef.current,
+          judgmentMaps: judgmentsRef.current,
+        });
+      },
+    });
     return () => {
-      running = false;
-      cancelAnimationFrame(raf);
+      loop?.stop();
       ro.disconnect();
     };
   }, []);

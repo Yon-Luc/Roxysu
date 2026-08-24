@@ -30,6 +30,9 @@ chosen per-browser via `apps/server/public/lib/language.ts`.
 session, collection, nowSelected, marathon, media, overlay, ratingLab,
 download, hub`
 
+`common` includes relative-time templates (`justNow`, `minutesAgo`,
+`hoursAgo`, `daysAgo`) consumed by `formatRelativeTime(iso, dict?.common)`.
+
 ## History
 
 Initially only nav/dashboard/stats/practice/sessions/collections/now-selected/

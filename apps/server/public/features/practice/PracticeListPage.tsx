@@ -611,7 +611,7 @@ export function PracticeListPage() {
                       <span>{formatMisses(item.bestMisses)}</span>
                       <span>{formatScore(item.bestScore)}</span>
                       <span>{formatPp(item.bestPp)}</span>
-                      <span>{formatRelativeTime(item.lastPlayedAt)}</span>
+                      <span>{formatRelativeTime(item.lastPlayedAt, dict?.common)}</span>
                     </div>
                   </div>
                 </Link>

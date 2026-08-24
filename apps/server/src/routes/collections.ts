@@ -7,6 +7,9 @@ import {
 } from "@roxysu/db/schema";
 import { isManagedCollectionName } from "@roxysu/collection-sync";
 import { Elysia, t } from "elysia";
+import { createReadStream } from "node:fs";
+import { unlink } from "node:fs/promises";
+import { Readable } from "node:stream";
 import { desc, eq, inArray } from "drizzle-orm";
 
 import { dbPlugin } from "../db-runtime";
@@ -192,7 +195,11 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
         sync = await syncCollectionsToLazer(db);
         if (!sync.ok) {
           if (sync.error.code === "locked") set.status = 423;
-          else if (sync.error.code === "schema_mismatch") set.status = 409;
+          else if (
+            sync.error.code === "schema_mismatch" ||
+            sync.error.code === "in_flight"
+          )
+            set.status = 409;
           else set.status = 500;
           return {
             error: sync.error.error,
@@ -251,7 +258,11 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
       const outcome = await syncCollectionsToLazer(db);
       if (!outcome.ok) {
         if (outcome.error.code === "locked") set.status = 423;
-        else if (outcome.error.code === "schema_mismatch") set.status = 409;
+        else if (
+          outcome.error.code === "schema_mismatch" ||
+          outcome.error.code === "in_flight"
+        )
+          set.status = 409;
         else set.status = 500;
         return { error: outcome.error.error, code: outcome.error.code };
       }
@@ -315,7 +326,11 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
     const outcome = await syncCollectionsToLazer(db);
     if (!outcome.ok) {
       if (outcome.error.code === "locked") set.status = 423;
-      else if (outcome.error.code === "schema_mismatch") set.status = 409;
+      else if (
+        outcome.error.code === "schema_mismatch" ||
+        outcome.error.code === "in_flight"
+      )
+        set.status = 409;
       else set.status = 500;
       return { error: outcome.error.error, code: outcome.error.code };
     }
@@ -504,13 +519,20 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
               set.status = pack.status;
               return { error: pack.error };
             }
-            return new Response(Buffer.from(pack.bytes), {
-              headers: {
-                "content-type": "application/zip",
-                "content-disposition": oszContentDisposition(pack.filename),
-                "cache-control": "no-store",
-              },
+            const file = createReadStream(pack.filePath);
+            file.on("close", () => {
+              void unlink(pack.filePath).catch(() => undefined);
             });
+            return new Response(
+              Readable.toWeb(file) as unknown as ReadableStream,
+              {
+                headers: {
+                  "content-type": "application/zip",
+                  "content-disposition": oszContentDisposition(pack.filename),
+                  "cache-control": "no-store",
+                },
+              },
+            );
           } catch (err) {
             if (err instanceof QueryParseError) {
               set.status = 400;

@@ -22,6 +22,8 @@ The searchable practice catalog — same query language powers collections and g
 1. Soft-deleted / `delete_pending` maps and scores are excluded from product queries.
 2. Query language fields include mode, mapper, title/artist/diff, stars, key, ln, dan/sunny, mods, acc, misses, score, pp, retry, mastery, played.
 3. Boolean `AND` / `OR` / `NOT`, ranges, comparisons, and `^` prefix text matches are supported.
+4. Practice/search HTTP handlers read persisted Sunny dan / pattern rows only. They do not compute missing ratings on the request path. Unrated maps have null labels and miss `dan:` / `pattern:` until the Settings jobs fill the stores.
+5. Username/gamemode query context is resolved once and reused until settings change or a new import lands. The retry subselect is built only when the AST uses `retry:`.
 
 ## Main flows
 

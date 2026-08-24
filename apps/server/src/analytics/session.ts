@@ -5,7 +5,7 @@ import {
   capitalizeSessionName,
   generateSessionName,
 } from "@roxysu/session-names";
-import { and, asc, count, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { publish } from "../shared/events";
 import { SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
 import {
@@ -31,7 +31,23 @@ function collectTakenNames(rows: { name: string | null }[]): Set<string> {
   return taken;
 }
 
+async function sessionNamesNeedBackfill(db: Db): Promise<boolean> {
+  const [row] = await db
+    .select({ id: sessions.id })
+    .from(sessions)
+    .where(
+      or(
+        isNull(sessions.name),
+        eq(sessions.name, ""),
+        sql`substr(${sessions.name}, 1, 1) != upper(substr(${sessions.name}, 1, 1))`,
+      ),
+    )
+    .limit(1);
+  return row != null;
+}
+
 async function backfillSessionNames(db: Db): Promise<void> {
+  if (!(await sessionNamesNeedBackfill(db))) return;
   const rows = await db
     .select({ id: sessions.id, name: sessions.name })
     .from(sessions);
@@ -63,6 +79,60 @@ function sessionDisplayName(session: { id: number; name: string | null }): strin
 
 function toMs(value: Date | number): number {
   return value instanceof Date ? value.getTime() : value;
+}
+
+const METRICS_PATCH_CHUNK = 200;
+
+function applySessionIdPatches(
+  db: Db,
+  patches: Array<{ scoreId: string; sessionId: number }>,
+): void {
+  for (let i = 0; i < patches.length; i += METRICS_PATCH_CHUNK) {
+    const chunk = patches.slice(i, i + METRICS_PATCH_CHUNK);
+    if (chunk.length === 0) continue;
+    const cases = chunk.map(() => "WHEN ? THEN ?").join(" ");
+    const ids = chunk.map(() => "?").join(", ");
+    const params: Array<string | number> = [];
+    for (const p of chunk) {
+      params.push(p.scoreId, p.sessionId);
+    }
+    for (const p of chunk) {
+      params.push(p.scoreId);
+    }
+    db.$client
+      .query(
+        `UPDATE score_metrics SET session_id = CASE score_id ${cases} END WHERE score_id IN (${ids})`,
+      )
+      .run(...params);
+  }
+}
+
+function sessionRowChanged(
+  prev:
+    | {
+        startedAt: Date | number;
+        endedAt: Date | number | null;
+        scoreCount: number;
+        rulesetShortName: string | null;
+      }
+    | undefined,
+  bucket: {
+    startedAt: Date;
+    endedAt: Date;
+    scoreIds: string[];
+    rulesetShortName: string | null;
+  },
+  isOpen: boolean,
+  namePatch: { name?: string },
+): boolean {
+  if (!prev) return true;
+  if (namePatch.name != null) return true;
+  if (toMs(prev.startedAt) !== bucket.startedAt.getTime()) return true;
+  const nextEnded = isOpen ? null : bucket.endedAt.getTime();
+  const prevEnded = prev.endedAt == null ? null : toMs(prev.endedAt);
+  if (prevEnded !== nextEnded) return true;
+  if (prev.scoreCount !== bucket.scoreIds.length) return true;
+  return (prev.rulesetShortName ?? null) !== (bucket.rulesetShortName ?? null);
 }
 
 export type SessionEngineResult = {
@@ -118,17 +188,19 @@ export async function runSessionEngine(db: Db): Promise<SessionEngineResult> {
   );
 
   if (rows.length === 0) {
-    for (const m of allMetrics) {
-      if (m.sessionId != null) {
-        await db
-          .update(scoreMetrics)
-          .set({ sessionId: null })
-          .where(eq(scoreMetrics.scoreId, m.scoreId));
+    await db.transaction(async (tx) => {
+      for (const m of allMetrics) {
+        if (m.sessionId != null) {
+          await tx
+            .update(scoreMetrics)
+            .set({ sessionId: null })
+            .where(eq(scoreMetrics.scoreId, m.scoreId));
+        }
       }
-    }
-    if (existingSessions.length > 0) {
-      await db.delete(sessions);
-    }
+      if (existingSessions.length > 0) {
+        await tx.delete(sessions);
+      }
+    });
     return { started, finished };
   }
 
@@ -169,93 +241,105 @@ export async function runSessionEngine(db: Db): Promise<SessionEngineResult> {
   const scoreToSession = new Map<string, number>();
   const claimedSessionIds = new Set<number>();
 
-  for (const bucket of buckets) {
-    const isOpen = now - bucket.endedAt.getTime() <= SESSION_GAP_MS;
+  await db.transaction(async (tx) => {
+    for (const bucket of buckets) {
+      const isOpen = now - bucket.endedAt.getTime() <= SESSION_GAP_MS;
 
-    // Prefer the earliest score's prior session, then any unclaimed match.
-    let sessionId: number | null = null;
-    for (const scoreId of bucket.scoreIds) {
-      const prev = sessionByScore.get(scoreId);
-      if (
-        prev != null &&
-        existingById.has(prev) &&
-        !claimedSessionIds.has(prev)
-      ) {
-        sessionId = prev;
-        break;
+      // Prefer the earliest score's prior session, then any unclaimed match.
+      let sessionId: number | null = null;
+      for (const scoreId of bucket.scoreIds) {
+        const prev = sessionByScore.get(scoreId);
+        if (
+          prev != null &&
+          existingById.has(prev) &&
+          !claimedSessionIds.has(prev)
+        ) {
+          sessionId = prev;
+          break;
+        }
+      }
+
+      const prevRow = sessionId != null ? existingById.get(sessionId) : undefined;
+      const wasOpen = prevRow != null && prevRow.endedAt == null;
+
+      if (sessionId != null) {
+        claimedSessionIds.add(sessionId);
+        const namePatch =
+          prevRow?.name == null ? { name: assignName(sessionId) } : {};
+        if (sessionRowChanged(prevRow, bucket, isOpen, namePatch)) {
+          await tx
+            .update(sessions)
+            .set({
+              startedAt: bucket.startedAt,
+              endedAt: isOpen ? null : bucket.endedAt,
+              scoreCount: bucket.scoreIds.length,
+              rulesetShortName: bucket.rulesetShortName,
+              ...namePatch,
+            })
+            .where(eq(sessions.id, sessionId));
+        }
+
+        if (isOpen && !wasOpen) started.push(sessionId);
+        if (!isOpen && wasOpen) finished.push(sessionId);
+      } else {
+        const inserted = await tx
+          .insert(sessions)
+          .values({
+            startedAt: bucket.startedAt,
+            endedAt: isOpen ? null : bucket.endedAt,
+            scoreCount: bucket.scoreIds.length,
+            rulesetShortName: bucket.rulesetShortName,
+          })
+          .returning({ id: sessions.id });
+
+        sessionId = inserted[0]!.id;
+        claimedSessionIds.add(sessionId);
+        await tx
+          .update(sessions)
+          .set({ name: assignName(sessionId) })
+          .where(eq(sessions.id, sessionId));
+        if (isOpen) started.push(sessionId);
+      }
+
+      for (const scoreId of bucket.scoreIds) {
+        scoreToSession.set(scoreId, sessionId);
       }
     }
 
-    const prevRow = sessionId != null ? existingById.get(sessionId) : undefined;
-    const wasOpen = prevRow != null && prevRow.endedAt == null;
-
-    if (sessionId != null) {
-      claimedSessionIds.add(sessionId);
-      const namePatch =
-        prevRow?.name == null ? { name: assignName(sessionId) } : {};
-      await db
-        .update(sessions)
-        .set({
-          startedAt: bucket.startedAt,
-          endedAt: isOpen ? null : bucket.endedAt,
-          scoreCount: bucket.scoreIds.length,
-          rulesetShortName: bucket.rulesetShortName,
-          ...namePatch,
-        })
-        .where(eq(sessions.id, sessionId));
-
-      if (isOpen && !wasOpen) started.push(sessionId);
-      if (!isOpen && wasOpen) finished.push(sessionId);
-    } else {
-      const inserted = await db
-        .insert(sessions)
-        .values({
-          startedAt: bucket.startedAt,
-          endedAt: isOpen ? null : bucket.endedAt,
-          scoreCount: bucket.scoreIds.length,
-          rulesetShortName: bucket.rulesetShortName,
-        })
-        .returning({ id: sessions.id });
-
-      sessionId = inserted[0]!.id;
-      claimedSessionIds.add(sessionId);
-      await db
-        .update(sessions)
-        .set({ name: assignName(sessionId) })
-        .where(eq(sessions.id, sessionId));
-      if (isOpen) started.push(sessionId);
+    const orphanIds = existingSessions
+      .map((s) => s.id)
+      .filter((id) => !claimedSessionIds.has(id));
+    if (orphanIds.length > 0) {
+      await tx.delete(sessions).where(inArray(sessions.id, orphanIds));
     }
 
-    for (const scoreId of bucket.scoreIds) {
-      scoreToSession.set(scoreId, sessionId);
-    }
-  }
-
-  const orphanIds = existingSessions
-    .map((s) => s.id)
-    .filter((id) => !claimedSessionIds.has(id));
-  if (orphanIds.length > 0) {
-    await db.delete(sessions).where(inArray(sessions.id, orphanIds));
-  }
-
-  for (const [scoreId, sessionId] of scoreToSession) {
-    const existing = metricsByScore.get(scoreId);
-    if (existing) {
-      if (existing.sessionId !== sessionId) {
-        await db
-          .update(scoreMetrics)
-          .set({ sessionId })
-          .where(eq(scoreMetrics.scoreId, scoreId));
+    const metricPatches: Array<{ scoreId: string; sessionId: number }> = [];
+    const metricInserts: Array<{
+      scoreId: string;
+      retryIndex: number;
+      isPb: boolean;
+      sessionId: number;
+    }> = [];
+    for (const [scoreId, sessionId] of scoreToSession) {
+      const existing = metricsByScore.get(scoreId);
+      if (existing) {
+        if (existing.sessionId !== sessionId) {
+          metricPatches.push({ scoreId, sessionId });
+        }
+      } else {
+        metricInserts.push({
+          scoreId,
+          retryIndex: 0,
+          isPb: false,
+          sessionId,
+        });
       }
-    } else {
-      await db.insert(scoreMetrics).values({
-        scoreId,
-        retryIndex: 0,
-        isPb: false,
-        sessionId,
-      });
     }
-  }
+    applySessionIdPatches(db, metricPatches);
+    if (metricInserts.length > 0) {
+      await tx.insert(scoreMetrics).values(metricInserts);
+    }
+  });
 
   for (const id of started) {
     publish({ type: "session.started", sessionId: id });

@@ -200,11 +200,11 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
         <p className="rx-subtitle">
           {isLive ? `${session.name} · ` : ""}
           {t(dict?.session.started, {
-            time: formatRelativeTime(session.startedAt),
+            time: formatRelativeTime(session.startedAt, dict?.common),
           })}
           {session.endedAt
             ? t(dict?.session.ended, {
-                time: formatRelativeTime(session.endedAt),
+                time: formatRelativeTime(session.endedAt, dict?.common),
               })
             : ""}
           {session.rulesetShortName ? ` · ${session.rulesetShortName}` : ""}
@@ -309,7 +309,7 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
                     </div>
                     <div className="text-xs tabular-nums text-muted">
                       {formatPp(score.pp)} · {score.maxCombo}x ·{" "}
-                      {formatRelativeTime(score.playedAt)}
+                      {formatRelativeTime(score.playedAt, dict?.common)}
                     </div>
                   </div>
                 </>

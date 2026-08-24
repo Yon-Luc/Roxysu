@@ -1,6 +1,9 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { createPortal } from "react-dom";
-import { ScoreReplayModal } from "./ScoreReplayModal";
+
+const ScoreReplayModal = lazy(() =>
+  import("./ScoreReplayModal").then((m) => ({ default: m.ScoreReplayModal })),
+);
 
 type ScoreReplayButtonProps = {
   scoreId: string;
@@ -34,10 +37,16 @@ export function ScoreReplayButton({
       </button>
       {open
         ? createPortal(
-            <ScoreReplayModal
-              scoreId={scoreId}
-              onClose={() => setOpen(false)}
-            />,
+            <Suspense
+              fallback={
+                <div className="fixed inset-0 z-50 bg-black/80" aria-hidden />
+              }
+            >
+              <ScoreReplayModal
+                scoreId={scoreId}
+                onClose={() => setOpen(false)}
+              />
+            </Suspense>,
             document.body,
           )
         : null}

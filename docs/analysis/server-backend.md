@@ -1,5 +1,12 @@
 # Server backend analysis — `apps/server/src`
 
+**Status (2026-08-24):** findings implemented. Corrections vs the original write-up:
+- **C1** — 120-map backfill was only on `dan:`/`pattern:` queries; page enrich + recommend `pick.ts` also computed. All request-path compute removed.
+- **H1** — do **not** gate the poll on listener count (analytics + match-count store always subscribe). Dropped `COUNT(*)`; kept `imports` + `MAX(played_at)`.
+- **H3** — per-score / per-name UPDATE claims were overstated. Implemented transaction + batched dirty metrics + skip empty name scan. Did not scope by `changedScoreIds`.
+- **M1** — UI does not poll `/batch` while idle. Reconcile now runs once per idle period.
+- **M5** — overlapping write-back is **409 `in_flight`**, not a shared in-flight promise.
+
 Audit date: 2026-08-24. Severity: critical / high / medium / low.
 Cross-checked against `packages/db/src/schema.ts` (existing indexes) and the
 realm-reader sync design (`docs/analysis/realm-reader-and-db.md`).

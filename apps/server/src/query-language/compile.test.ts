@@ -35,3 +35,15 @@ describe("dan tier compile", () => {
     expect(params).toEqual(expect.arrayContaining(["%Regular%"]));
   });
 });
+
+describe("LIKE wildcard escaping", () => {
+  test("mapper:% is a literal percent, not a wildcard", () => {
+    const { params } = compileQuery(parseQuery("mapper:%"));
+    expect(params).toContain("%\\%%");
+  });
+
+  test("bare text _ is escaped", () => {
+    const { params } = compileQuery(parseQuery("_"));
+    expect(params).toContain("%\\_%");
+  });
+});

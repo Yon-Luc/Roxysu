@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { Suspense, useCallback, useMemo, useState, type ReactNode } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import type { Dictionary } from "@roxysu/i18n";
@@ -31,6 +31,7 @@ import { DownloadBatchChrome } from "../features/download/DownloadBatchChrome";
 import { useMirrorBatchJob } from "../features/download/useMirrorBatchJob";
 import { toggleTheme, useResolvedTheme } from "../lib/theme";
 import { ToastHost } from "../lib/toasts";
+import { PageHeaderSkeleton } from "./LoadingSkeleton";
 import roxyIcon from "../roxy.png";
 
 const APP_VERSION_LABEL = formatAppVersionLabel();
@@ -370,7 +371,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               focusLayout ? "max-w-7xl" : "max-w-6xl"
             }`}
           >
-            {children}
+            <Suspense fallback={<PageHeaderSkeleton />}>{children}</Suspense>
           </div>
         </div>
       </main>

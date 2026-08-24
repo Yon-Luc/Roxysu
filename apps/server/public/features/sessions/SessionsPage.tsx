@@ -68,7 +68,7 @@ export function SessionsPage() {
                 })}
                 {" · "}
                 {t(dict?.session.started, {
-                  time: formatRelativeTime(data.current.startedAt),
+                  time: formatRelativeTime(data.current.startedAt, dict?.common),
                 })}
                 {data.current.rulesetShortName
                   ? ` · ${data.current.rulesetShortName}`
@@ -131,9 +131,9 @@ export function SessionsPage() {
                     </div>
                     <div className="mt-0.5 text-sm text-muted">
                       {isOpen ? `${s.name} · ` : ""}
-                      {formatRelativeTime(s.startedAt)}
+                      {formatRelativeTime(s.startedAt, dict?.common)}
                       {s.endedAt
-                        ? ` → ${formatRelativeTime(s.endedAt)}`
+                        ? ` → ${formatRelativeTime(s.endedAt, dict?.common)}`
                         : ""}
                       {s.rulesetShortName ? ` · ${s.rulesetShortName}` : ""}
                     </div>

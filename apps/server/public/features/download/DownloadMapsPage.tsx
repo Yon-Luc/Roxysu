@@ -132,7 +132,7 @@ function persist(state: StoredSearch) {
 
 export function DownloadMapsPage() {
   const { dict } = useAppDict();
-  const initial = readStored();
+  const [initial] = useState(readStored);
 
   const sortLabel = (value: Sort): string => {
     switch (value) {

@@ -141,6 +141,13 @@ export const scores = sqliteTable(
     legacyOnlineIdIdx: index("scores_legacy_online_id_idx").on(t.legacyOnlineId),
     beatmapIdIdx: index("scores_beatmap_id_idx").on(t.beatmapId),
     playedAtIdx: index("scores_played_at_idx").on(t.playedAt),
+    userPendingRulesetBeatmapIdx: index(
+      "scores_user_pending_ruleset_beatmap_idx",
+    ).on(t.userUsername, t.deletePending, t.rulesetShortName, t.beatmapId),
+    beatmapPendingIdx: index("scores_beatmap_pending_idx").on(
+      t.beatmapId,
+      t.deletePending,
+    ),
   }),
 );
 

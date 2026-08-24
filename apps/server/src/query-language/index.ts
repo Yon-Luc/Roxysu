@@ -12,6 +12,7 @@ export {
 };
 export { astUsesDanRating } from "./astUsesDan";
 export { astUsesPatternAnalysis } from "./astUsesPattern";
+export { astUsesRetry } from "./astUsesRetry";
 export {
   searchBeatmaps,
   sampleBeatmaps,

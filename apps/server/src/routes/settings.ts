@@ -14,6 +14,7 @@ import {
   setActiveFormulaId,
 } from "../analytics/mastery/engine";
 import { runAnalyticsPipeline } from "../analytics/pipeline";
+import { invalidateQueryContextCache } from "../query-language/execute";
 import {
   buildScoresGamemodeSettings,
   normalizeScoresGamemodeFilterInput,
@@ -290,6 +291,7 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
       }
 
       if (scoresFilterChanged) {
+        invalidateQueryContextCache();
         await runAnalyticsPipeline(db, { forceFull: true });
         publish({ type: "dashboard.updated" });
         publish({ type: "mastery.updated" });

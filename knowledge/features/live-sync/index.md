@@ -26,7 +26,7 @@ Continuously extract Realm beatmaps and scores into the local mirror; surface Sy
 
 - `apps/realm-reader/src/index.ts`
 - `apps/realm-reader/src/sync.ts`
-- `apps/server/src/sse.ts`
+- `apps/server/src/sse.ts` — poll `imports` + `MAX(played_at)` (no `COUNT(*)`); SSE `: ping` heartbeat ~20s
 
 ## Dependencies
 

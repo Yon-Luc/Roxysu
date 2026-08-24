@@ -29,7 +29,7 @@ query language fields + GET /api/practice/recommend + Session Suggest UI
 
 ## Business guarantee
 
-Recommendations use persisted estimates; without backfill, 4K/7K suggest quality is limited. `GET /api/practice/recommend` does not start Sunny backfill.
+Recommendations and `dan:` / `pattern:` filters use persisted estimates only. Without the Settings jobs, 4K/7K suggest quality is limited and those filters miss unrated maps. `GET /api/practice`, `GET /api/search`, and `GET /api/practice/recommend` do not start or run Sunny/Daniel/pattern compute.
 
 ## Implementation references
 

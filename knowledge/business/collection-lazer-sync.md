@@ -21,6 +21,7 @@ touches:
 7. Single `realm.write()` transaction.
 8. Managed collections missing from payload are deleted.
 9. Hub-added collections may use ids `HUB_SYNC_ID_BASE + hubId`.
+10. Only one write-back may run at a time; a second caller gets HTTP 409 `in_flight`.
 
 **Status:** verified
 

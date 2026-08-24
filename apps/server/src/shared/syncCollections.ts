@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -37,11 +38,49 @@ export type { LazerCollectionSyncSuccess, LazerCollectionSyncError };
 
 const PAUSE_SETTLE_MS = 2_000;
 
+let writeBackInFlight: Promise<
+  | { ok: true; result: LazerCollectionSyncSuccess }
+  | { ok: false; error: LazerCollectionSyncError }
+> | null = null;
+
 type Md5List = { hashes: string[]; skippedNoMd5: number };
-const md5ListCache = new Map<string, Md5List>();
+type Md5CacheEntry = { value: Md5List; at: number };
+
+const MD5_CACHE_MAX = 32;
+const MD5_CACHE_TTL_MS = 10 * 60 * 1000;
+const md5ListCache = new Map<string, Md5CacheEntry>();
 
 export function invalidateCollectionMd5Cache(): void {
   md5ListCache.clear();
+}
+
+function md5CacheGet(key: string): Md5List | undefined {
+  const entry = md5ListCache.get(key);
+  if (!entry) return undefined;
+  if (Date.now() - entry.at > MD5_CACHE_TTL_MS) {
+    md5ListCache.delete(key);
+    return undefined;
+  }
+  md5ListCache.delete(key);
+  md5ListCache.set(key, entry);
+  return entry.value;
+}
+
+function md5CacheSet(key: string, value: Md5List): void {
+  if (md5ListCache.has(key)) md5ListCache.delete(key);
+  md5ListCache.set(key, { value, at: Date.now() });
+  while (md5ListCache.size > MD5_CACHE_MAX) {
+    const oldest = md5ListCache.keys().next().value;
+    if (oldest == null) break;
+    md5ListCache.delete(oldest);
+  }
+}
+
+function hubMd5CacheKey(ids: number[]): string {
+  const digest = createHash("sha1")
+    .update(ids.slice().sort((a, b) => a - b).join(","))
+    .digest("hex");
+  return `hub:${digest}`;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -155,8 +194,8 @@ export async function md5HashesForSetOnlineIds(
     ...new Set(setOnlineIds.filter((id) => Number.isSafeInteger(id) && id > 0)),
   ];
   if (unique.length === 0) return { hashes: [], skippedNoMd5: 0 };
-  const cacheKey = `hub:${unique.slice().sort((a, b) => a - b).join(",")}`;
-  const cached = md5ListCache.get(cacheKey);
+  const cacheKey = hubMd5CacheKey(unique);
+  const cached = md5CacheGet(cacheKey);
   if (cached) return cached;
 
   const rows = await db
@@ -194,7 +233,7 @@ export async function md5HashesForSetOnlineIds(
   const skippedNoMd5 = unique.filter((id) => !resolved.has(id)).length;
 
   const result = { hashes, skippedNoMd5 };
-  md5ListCache.set(cacheKey, result);
+  md5CacheSet(cacheKey, result);
   return result;
 }
 
@@ -216,6 +255,30 @@ function parseBeatmapsetIdsJson(raw: string): number[] {
 }
 
 export async function syncCollectionsToLazer(
+  db: Db,
+): Promise<
+  | { ok: true; result: LazerCollectionSyncSuccess }
+  | { ok: false; error: LazerCollectionSyncError }
+> {
+  if (writeBackInFlight) {
+    return {
+      ok: false,
+      error: {
+        error: "Collection write-back already running",
+        code: "in_flight",
+      },
+    };
+  }
+
+  writeBackInFlight = runCollectionWriteBack(db);
+  try {
+    return await writeBackInFlight;
+  } finally {
+    writeBackInFlight = null;
+  }
+}
+
+async function runCollectionWriteBack(
   db: Db,
 ): Promise<
   | { ok: true; result: LazerCollectionSyncSuccess }
@@ -243,12 +306,12 @@ export async function syncCollectionsToLazer(
     }
 
     const cacheKey = `smart:${col.query}`;
-    const cached = md5ListCache.get(cacheKey);
+    const cached = md5CacheGet(cacheKey);
     const { hashes, skippedNoMd5: skipped } = cached
       ? cached
       : (() => {
           const computed = listCollectionMd5Hashes(db, col.query);
-          md5ListCache.set(cacheKey, computed);
+          md5CacheSet(cacheKey, computed);
           return computed;
         })();
     skippedNoMd5 += skipped;

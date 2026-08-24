@@ -23,6 +23,7 @@ import {
   usePreviewSkin,
   type KeymodeSkin,
 } from "../lib/previewSkin";
+import { resizePlayfieldCanvas, startPlayfieldRaf } from "../lib/playfieldRaf";
 
 type Note = BeatmapPreview["notes"][number];
 
@@ -153,59 +154,61 @@ export function ManiaNotefield({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    let raf = 0;
-    let running = true;
-
+    let loop: ReturnType<typeof startPlayfieldRaf> | null = null;
     function resize() {
-      const parent = canvas!.parentElement;
-      if (!parent) return;
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const w = parent.clientWidth;
-      const h = parent.clientHeight;
-      canvas!.width = Math.max(1, Math.floor(w * dpr));
-      canvas!.height = Math.max(1, Math.floor(h * dpr));
-      canvas!.style.width = `${w}px`;
-      canvas!.style.height = `${h}px`;
-      ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
+      resizePlayfieldCanvas(canvas!, ctx!, () => loop?.invalidate());
     }
 
     resize();
     const ro = new ResizeObserver(resize);
     if (canvas.parentElement) ro.observe(canvas.parentElement);
-    // Flex layouts may settle after first paint; re-measure so the field isn't 1×1.
     requestAnimationFrame(() => {
       resize();
       requestAnimationFrame(resize);
     });
 
-    function draw() {
-      if (!running) return;
-      paintManiaNotefield({
-        ctx: ctx!,
-        width: canvas!.clientWidth,
-        height: canvas!.clientHeight,
-        tMs: getTimeRef.current(),
-        columnCount: columnsRef.current,
-        notes: notesRef.current,
-        scrollSpeed: scrollSpeedRef.current,
-        playbackRate: playbackRateRef.current,
-        skin: skinRef.current,
-        hitPosition: hitPositionRef.current,
-        laneCover: laneCoverRef.current,
-        sprites: spritesRef.current,
-        frames: framesRef.current,
-        liveHeldMask: liveHeldMaskRef.current,
-        headJudgments: headJudgmentsRef.current,
-        highlightMissNotes: highlightMissRef.current,
-      });
-      raf = requestAnimationFrame(draw);
-    }
-
-    raf = requestAnimationFrame(draw);
+    loop = startPlayfieldRaf({
+      getTimeMs: () => getTimeRef.current(),
+      snapshot: () => [
+        canvas!.clientWidth,
+        canvas!.clientHeight,
+        columnsRef.current,
+        notesRef.current,
+        scrollSpeedRef.current,
+        playbackRateRef.current,
+        skinRef.current,
+        hitPositionRef.current,
+        laneCoverRef.current,
+        spritesRef.current,
+        framesRef.current,
+        liveHeldMaskRef.current,
+        headJudgmentsRef.current,
+        highlightMissRef.current,
+      ],
+      paint: (tMs) => {
+        paintManiaNotefield({
+          ctx: ctx!,
+          width: canvas!.clientWidth,
+          height: canvas!.clientHeight,
+          tMs,
+          columnCount: columnsRef.current,
+          notes: notesRef.current,
+          scrollSpeed: scrollSpeedRef.current,
+          playbackRate: playbackRateRef.current,
+          skin: skinRef.current,
+          hitPosition: hitPositionRef.current,
+          laneCover: laneCoverRef.current,
+          sprites: spritesRef.current,
+          frames: framesRef.current,
+          liveHeldMask: liveHeldMaskRef.current,
+          headJudgments: headJudgmentsRef.current,
+          highlightMissNotes: highlightMissRef.current,
+        });
+      },
+    });
 
     return () => {
-      running = false;
-      cancelAnimationFrame(raf);
+      loop?.stop();
       ro.disconnect();
     };
   }, []);

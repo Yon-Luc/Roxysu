@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import {
+  memo,
   useEffect,
   useId,
   useLayoutEffect,
@@ -136,6 +137,64 @@ function isLoadedScoreReplay(
   );
 }
 
+function chartEndMsFromReplay(replay: LoadedScoreReplay | null): number {
+  if (!replay) return 0;
+  let end = 0;
+  for (const n of replay.beatmap.notes ?? []) {
+    end = Math.max(end, n.endMs, n.startMs);
+  }
+  for (const o of replay.beatmap.hitObjects ?? []) {
+    end = Math.max(end, o.type === "circle" ? o.timeMs : o.endMs);
+  }
+  for (const o of replay.beatmap.taikoHitObjects ?? []) {
+    end = Math.max(end, o.type === "hit" ? o.timeMs : o.endMs);
+  }
+  for (const o of replay.beatmap.catchHitObjects ?? []) {
+    end = Math.max(end, o.timeMs);
+  }
+  return end;
+}
+
+const ReplayHudOverlay = memo(function ReplayHudOverlay({
+  combo,
+  accuracy,
+  last,
+}: {
+  combo: number;
+  accuracy: number;
+  last: ReplayJudgmentResult | null;
+}) {
+  return (
+    <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex justify-between gap-3 sm:inset-x-6 sm:top-5">
+      <div className="rounded-lg bg-black/55 px-3 py-2 backdrop-blur">
+        <div className="text-[10px] font-semibold uppercase tracking-wide text-on-media-muted">
+          Combo
+        </div>
+        <div className="font-display text-2xl font-bold tabular-nums text-on-media">
+          {combo}
+          <span className="text-base text-on-media-muted">x</span>
+        </div>
+      </div>
+      <div className="rounded-lg bg-black/55 px-3 py-2 text-right backdrop-blur">
+        <div className="text-[10px] font-semibold uppercase tracking-wide text-on-media-muted">
+          Accuracy
+        </div>
+        <div className="font-display text-2xl font-bold tabular-nums text-on-media">
+          {formatAccuracy(accuracy)}
+        </div>
+        {last ? (
+          <div
+            className="mt-0.5 text-xs font-bold uppercase tracking-wide"
+            style={{ color: JUDGMENT_COLORS[last] }}
+          >
+            {last}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+});
+
 function playbackRateOptions(current: number): number[] {
   const options: number[] = [...PRESET_RATES];
   if (!options.some((r) => Math.abs(r - current) < 0.001) && current > 0) {
@@ -266,6 +325,15 @@ export function ScoreReplayModal({
     return buildReplayAnalysis(replayData);
   }, [analysisOn, replayData]);
 
+  const chartEndMs = useMemo(
+    () => chartEndMsFromReplay(replayData),
+    [replayData],
+  );
+  const binds = useMemo(() => {
+    if (!replayData || replayData.beatmap.columnCount <= 0) return [];
+    return resolveKeybinds(keybindsAll, replayData.beatmap.columnCount);
+  }, [keybindsAll, replayData]);
+
   const audioUrl = localBeatmapAudioUrl(replayData?.beatmap.audioFileHash);
   const bgUrl =
     localBeatmapCoverUrl(replayData?.beatmap.backgroundFileHash) ??
@@ -278,31 +346,13 @@ export function ScoreReplayModal({
   modeRef.current = mode;
   exportOptionsOpenRef.current = exportOptionsOpen;
   dataRef.current = data;
-  {
-    let chartEnd = 0;
-    for (const n of replayData?.beatmap.notes ?? []) {
-      chartEnd = Math.max(chartEnd, n.endMs, n.startMs);
-    }
-    for (const o of replayData?.beatmap.hitObjects ?? []) {
-      chartEnd = Math.max(
-        chartEnd,
-        o.type === "circle" ? o.timeMs : o.endMs,
-      );
-    }
-    lengthMsRef.current = Math.max(
-      0,
-      replayData?.beatmap.lengthMs ?? 0,
-      chartEnd,
-    );
-  }
+  lengthMsRef.current = Math.max(
+    0,
+    replayData?.beatmap.lengthMs ?? 0,
+    chartEndMs,
+  );
   durationMsRef.current = durationMs;
-
-  if (replayData && replayData.beatmap.columnCount > 0) {
-    bindsRef.current = resolveKeybinds(
-      keybindsAll,
-      replayData.beatmap.columnCount,
-    );
-  }
+  bindsRef.current = binds;
 
   useEffect(() => {
     try {
@@ -907,29 +957,60 @@ export function ScoreReplayModal({
     const scale = ruleset === "mania" ? MANIA_ACC_SCALE : STD_ACC_SCALE;
     let raf = 0;
     let running = true;
+    let lastT = Number.NEGATIVE_INFINITY;
+    let lastCombo = -1;
+    let lastJudged = -1;
+    let lastResult: ReplayJudgmentResult | null = null;
+    let index = 0;
+    let combo = 0;
+    let last: ReplayJudgmentResult | null = null;
+    let accWeight = 0;
+    let judged = 0;
 
     function tick() {
       if (!running) return;
       const t = mapTimeMs();
-      let combo = 0;
-      let last: ReplayJudgmentResult | null = null;
-      let accWeight = 0;
-      let judged = 0;
-      for (const j of judgments) {
+      const audio = audioRef.current;
+      const paused = !audio || audio.paused || audio.ended;
+      if (paused && t === lastT) {
+        raf = requestAnimationFrame(tick);
+        return;
+      }
+
+      if (t < lastT) {
+        combo = 0;
+        last = null;
+        accWeight = 0;
+        judged = 0;
+        index = 0;
+      }
+
+      while (index < judgments.length) {
+        const j = judgments[index]!;
         if (j.tMs > t) break;
         last = j.result;
-        // Only miss breaks the combo (50/100/200/300 in mania, 50/100/300 in standard).
         if (j.result === "miss") combo = 0;
         else combo += 1;
         accWeight += weight[j.result];
         judged += 1;
+        index += 1;
       }
-      setHud({
-        combo,
-        // No notes judged yet → 100%. Then Σ(weight) / (scale × notes played).
-        accuracy: judged > 0 ? accWeight / (judged * scale) : 1,
-        last,
-      });
+      lastT = t;
+
+      if (
+        combo !== lastCombo ||
+        judged !== lastJudged ||
+        last !== lastResult
+      ) {
+        lastCombo = combo;
+        lastJudged = judged;
+        lastResult = last;
+        setHud({
+          combo,
+          accuracy: judged > 0 ? accWeight / (judged * scale) : 1,
+          last,
+        });
+      }
       raf = requestAnimationFrame(tick);
     }
 
@@ -966,24 +1047,6 @@ export function ScoreReplayModal({
         replayData.score.userUsername,
       ].filter(Boolean)
     : [];
-  const chartEndMs = (() => {
-    let end = 0;
-    for (const n of replayData?.beatmap.notes ?? []) {
-      end = Math.max(end, n.endMs, n.startMs);
-    }
-    for (const o of replayData?.beatmap.hitObjects ?? []) {
-      if (o.type === "circle") end = Math.max(end, o.timeMs);
-      else end = Math.max(end, o.endMs);
-    }
-    for (const o of replayData?.beatmap.taikoHitObjects ?? []) {
-      if (o.type === "hit") end = Math.max(end, o.timeMs);
-      else end = Math.max(end, o.endMs);
-    }
-    for (const o of replayData?.beatmap.catchHitObjects ?? []) {
-      end = Math.max(end, o.timeMs);
-    }
-    return end;
-  })();
   const maxDuration = (() => {
     const candidates = [
       durationMs,
@@ -1015,9 +1078,6 @@ export function ScoreReplayModal({
   const isLetterboxReplay = isStdReplay || isCatchReplay;
   const { outerRef: stdFitRef, size: stdFitSize } = useAspectFit(4 / 3);
   const canLivePlay = isManiaReplay;
-  const binds = canLivePlay
-    ? resolveKeybinds(keybindsAll, replayData!.beatmap.columnCount)
-    : [];
   const showAnalysis = analysisOn && !isPlay && isManiaReplay;
 
   return (
@@ -1260,33 +1320,11 @@ export function ScoreReplayModal({
                   }
                 >
                   {!isPlay ? (
-                    <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex justify-between gap-3 sm:inset-x-6 sm:top-5">
-                      <div className="rounded-lg bg-black/55 px-3 py-2 backdrop-blur">
-                        <div className="text-[10px] font-semibold uppercase tracking-wide text-on-media-muted">
-                          Combo
-                        </div>
-                        <div className="font-display text-2xl font-bold tabular-nums text-on-media">
-                          {hud.combo}
-                          <span className="text-base text-on-media-muted">x</span>
-                        </div>
-                      </div>
-                      <div className="rounded-lg bg-black/55 px-3 py-2 text-right backdrop-blur">
-                        <div className="text-[10px] font-semibold uppercase tracking-wide text-on-media-muted">
-                          Accuracy
-                        </div>
-                        <div className="font-display text-2xl font-bold tabular-nums text-on-media">
-                          {formatAccuracy(hud.accuracy)}
-                        </div>
-                        {hud.last ? (
-                          <div
-                            className="mt-0.5 text-xs font-bold uppercase tracking-wide"
-                            style={{ color: JUDGMENT_COLORS[hud.last] }}
-                          >
-                            {hud.last}
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
+                    <ReplayHudOverlay
+                      combo={hud.combo}
+                      accuracy={hud.accuracy}
+                      last={hud.last}
+                    />
                   ) : null}
 
                   {isManiaReplay ? (

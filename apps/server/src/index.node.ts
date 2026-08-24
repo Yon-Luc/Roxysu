@@ -8,6 +8,7 @@ import { startPollLoop } from "./sse";
 import { startAnalyticsPipeline } from "./analytics/pipeline";
 import { startCollectionMatchCache } from "./shared/collectionMatchCache";
 import { clearStuckMirrorBatchLocks } from "./mirrors";
+import { ensureTosuStarted, stopTosuAdapter } from "./tosu";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -35,6 +36,10 @@ async function main() {
     staticAssetsDir,
   });
 
+  // Kick off tosu adapter init before listening; /api/tosu/live awaits the same
+  // bootstrap, so the snapshot can never be served with uninitialized settings.
+  void ensureTosuStarted(db);
+
   app.listen({ port, hostname });
   const stopPoll = startPollLoop(db);
   const stopAnalytics = startAnalyticsPipeline(db);
@@ -58,6 +63,7 @@ async function main() {
     }
 
     stopAnalytics();
+    stopTosuAdapter();
     stopPoll();
     try {
       // @elysiajs/node may not keep the same stop() contract as Bun.

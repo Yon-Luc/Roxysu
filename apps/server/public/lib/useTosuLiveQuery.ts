@@ -7,7 +7,9 @@ export function tosuLiveRefetchInterval(
   snap: TosuLive | undefined,
 ): number | false {
   if (sseOpen) return false;
-  if (!snap?.enabled) return false;
+  // Poll even when the snapshot says disabled: a wrongly cached disabled
+  // snapshot (e.g. fetched before adapter init) must still self-heal.
+  if (!snap?.enabled) return 10_000;
   if (snap.status === "connecting" || snap.status === "disconnected") {
     return 3_000;
   }

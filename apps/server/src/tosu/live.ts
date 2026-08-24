@@ -326,6 +326,19 @@ function startProbeLoop(): void {
   }, 15_000);
 }
 
+/**
+ * Run `startTosuAdapter` once per process. Entry points kick this off at boot
+ * (without awaiting) and the `/tosu/live` route awaits it, so the snapshot can
+ * never be served before settings are loaded — an uninitialized adapter reads
+ * as `enabled: false`, which clients cache as "tosu live adapter is off".
+ */
+let bootstrapPromise: Promise<void> | null = null;
+
+export function ensureTosuStarted(db: Db): Promise<void> {
+  if (!bootstrapPromise) bootstrapPromise = startTosuAdapter(db);
+  return bootstrapPromise;
+}
+
 export async function startTosuAdapter(db: Db): Promise<void> {
   dbRef = db;
   settings = await readTosuSettings(db);

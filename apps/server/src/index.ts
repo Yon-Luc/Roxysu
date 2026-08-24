@@ -4,7 +4,7 @@ import { db } from "./db";
 import { startPollLoop } from "./sse";
 import { startAnalyticsPipeline } from "./analytics/pipeline";
 import { startCollectionMatchCache } from "./shared/collectionMatchCache";
-import { startTosuAdapter, stopTosuAdapter } from "./tosu";
+import { ensureTosuStarted, stopTosuAdapter } from "./tosu";
 import { clearStuckMirrorBatchLocks } from "./mirrors";
 
 if (clearStuckRealmReaderPause(db)) {
@@ -18,11 +18,14 @@ if (clearStuckMirrorBatchLocks()) {
   );
 }
 
+// Kick off tosu adapter init before listening; /api/tosu/live awaits the same
+// bootstrap, so the snapshot can never be served with uninitialized settings.
+void ensureTosuStarted(db);
+
 app.listen(4321);
 const stopPoll = startPollLoop(db);
 const stopAnalytics = startAnalyticsPipeline(db);
 startCollectionMatchCache(db);
-void startTosuAdapter(db);
 
 console.log(
   `🦊 Roxysu running at http://${app.server?.hostname}:${app.server?.port}`,

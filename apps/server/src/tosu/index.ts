@@ -2,6 +2,7 @@ export {
   getTosuLiveAnalysis,
   getTosuLiveSnapshot,
   requestTosuStart,
+  ensureTosuStarted,
   restartTosuAdapter,
   startTosuAdapter,
   stopTosuAdapter,

@@ -23,10 +23,13 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
    never touches Realm or the local mirror directly.
 2. The surface is display-only: always click-through (empty input region via
    `wl_surface_set_input_region`) and keyboard mode `NONE`.
-3. Linux + zwlr_layer_shell_v1 only. On X11 / non-layer-shell compositors it
+3. The host paints no background of its own (window + webview forced
+   transparent via CSS); all translucency comes from the page's `bg=clear`
+   variant. Without this the GtkWindow theme color shows through as grey.
+4. Linux + zwlr_layer_shell_v1 only. On X11 / non-layer-shell compositors it
    exits with guidance to use the same URL as an OBS browser source instead.
-4. The host is version-agnostic to lazer; only the compositor contract matters.
-5. Layer placement: `OVERLAY` layer, `exclusive_zone = -1`, anchored corner per
+5. The host is version-agnostic to lazer; only the compositor contract matters.
+6. Layer placement: `OVERLAY` layer, `exclusive_zone = -1`, anchored corner per
    `--anchor`, so panels/fullscreen windows never displace it.
 
 ## Main flow

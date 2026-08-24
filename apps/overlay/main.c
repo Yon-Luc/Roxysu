@@ -200,6 +200,13 @@ int main(int argc, char **argv) {
 
   bind_compositor(display);
 
+  GtkCssProvider *css = gtk_css_provider_new();
+  gtk_css_provider_load_from_string(
+      css, "window { background: transparent; } webview { background: transparent; }");
+  gtk_style_context_add_provider_for_display(
+      display, GTK_STYLE_PROVIDER(css), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+  g_object_unref(css);
+
   GtkWindow *window = GTK_WINDOW(gtk_window_new());
   gtk_window_set_title(window, "Roxysu overlay");
   gtk_window_set_default_size(window, cfg.width, cfg.height);

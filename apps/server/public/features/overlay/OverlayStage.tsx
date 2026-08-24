@@ -25,7 +25,7 @@ function ElementContent({
     case "scoreList":
       return <ScoreListElement ctx={ctx} />;
     case "identity":
-      return <IdentityElement ctx={ctx} />;
+      return <IdentityElement ctx={ctx} element={element} />;
     case "difficulty":
       return <DifficultyElement ctx={ctx} />;
     case "livePlay":

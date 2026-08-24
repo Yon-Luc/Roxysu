@@ -48,7 +48,27 @@ export function makeElement(
   };
   if (type === "scoreList") el.options = { limit: 8 };
   if (type === "preview") el.options = { previewHeightRem: 24 };
+  if (type === "identity") {
+    el.options = { showAnalysis: false, ratingSource: "dan", showPattern: false };
+  }
   return el;
+}
+
+export type IdentityOptions = {
+  showAnalysis: boolean;
+  /** Which difficulty estimate to show when analysis is on. */
+  ratingSource: "dan" | "star";
+  showPattern: boolean;
+};
+
+export function identityOptions(
+  options?: Record<string, unknown>,
+): IdentityOptions {
+  return {
+    showAnalysis: options?.showAnalysis === true,
+    ratingSource: options?.ratingSource === "star" ? ("star" as const) : ("dan" as const),
+    showPattern: options?.showPattern === true,
+  };
 }
 
 export function makeProfile(name: string): OverlayProfile {

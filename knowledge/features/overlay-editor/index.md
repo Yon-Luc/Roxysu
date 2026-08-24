@@ -52,6 +52,11 @@ evaluated against **tosu live**.
 8. The preview element renders gameplay only: `BeatmapPreviewEmbed` accepts
    `showControls` (default true) and the overlay passes false to hide the
    seek/timing bar.
+9. The **identity** element carries per-instance options (`identityOptions`):
+   `showAnalysis` toggle, `ratingSource` (`dan` → Sunny dan estimate from tosu
+   live analysis, or `star` → beatmap star rating), and `showPattern`
+   (dominant pattern from tosu live analysis). Configured in the editor
+   inspector; defaults keep the element minimal.
 
 ## Main flows
 

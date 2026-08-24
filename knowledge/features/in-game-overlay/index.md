@@ -47,7 +47,15 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
    `set_layer(OVERLAY)`, plus queue_draw and page-visibility reset) so the
    compositor re-slots the fresh surface above fullscreen windows instead of
    leaving remapped overlays below them.
-10. Focus tracking uses its own Wayland event queue + GSource on the GDK
+10. While shown, a 300ms tick oscillates view opacity 1↔0.999 + requests a
+    PAINT phase, and each show injects a permanent sub-visible CSS animation
+    (`roxysu-keepalive`) so WebKit produces fresh frames continuously —
+    forcing real buffer churn so live HUD updates recompose above fullscreen
+    games instead of freezing until remap. `--debug` prints paints-per-5s:
+    high paints + frozen screen = compositor-side culling; zero paints =
+    frame-clock starvation. `--gsk-renderer` / `--webkit-no-dmabuf` exist to
+    A/B the GTK/WebKit rendering paths when updates stall on niri.
+11. Focus tracking uses its own Wayland event queue + GSource on the GDK
    connection; protocol C code is generated at build time by wayland-scanner
    from wlr-protocols into `apps/overlay/gen/` (gitignored).
 

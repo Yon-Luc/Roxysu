@@ -15,6 +15,7 @@ import {
 import {
   clampPreviewHeightRem,
   clampScoreListLimit,
+  identityOptions,
 } from "./profileModel";
 
 export type OverlayScoreView = {
@@ -162,10 +163,18 @@ function useLiveBeatmap(snapshot: TosuLive | null) {
   return snapshot?.beatmap ?? null;
 }
 
-export function IdentityElement({ ctx }: { ctx: OverlayElementContext }) {
-  const beatmap = useLiveBeatmap(ctx.snapshot);
+export function IdentityElement({
+  ctx,
+  element,
+}: {
+  ctx: OverlayElementContext;
+  element: { options?: Record<string, unknown> };
+}) {
   const { dict } = useAppDict();
+  const beatmap = useLiveBeatmap(ctx.snapshot);
   if (!beatmap) return null;
+  const opts = identityOptions(element.options);
+  const sunny = ctx.snapshot?.analysis.sunny ?? null;
   return (
     <Panel ctx={ctx}>
       <div className="flex items-center gap-3">
@@ -183,11 +192,36 @@ export function IdentityElement({ ctx }: { ctx: OverlayElementContext }) {
           <div className="truncate text-xs text-white/75 overlay-text">
             {[beatmap.artist, beatmap.version].filter(Boolean).join(" · ") || "—"}
           </div>
-          {beatmap.mapper ? (
-            <div className="truncate text-[11px] text-white/55 overlay-text">
-              mapped by {beatmap.mapper}
-            </div>
-          ) : null}
+          <div className="flex min-w-0 items-center gap-2 truncate text-[11px] text-white/60 overlay-text">
+            {beatmap.mapper ? <span>mapped by {beatmap.mapper}</span> : null}
+            {opts.showAnalysis ? (
+              <>
+                {beatmap.mapper ? <span>·</span> : null}
+                {opts.ratingSource === "star" ? (
+                  <span className="font-semibold tabular-nums text-accent">
+                    {beatmap.starRating != null
+                      ? `${beatmap.starRating.toFixed(2)}★`
+                      : "—"}
+                  </span>
+                ) : (
+                  <span className="font-semibold tabular-nums text-accent">
+                    {sunny?.estDiff ?? ""}
+                    {sunny?.sunnyStar != null
+                      ? ` ${sunny.sunnyStar.toFixed(2)}★`
+                      : sunny?.estDiff
+                        ? ""
+                        : "—"}
+                  </span>
+                )}
+              </>
+            ) : null}
+            {opts.showAnalysis && opts.showPattern ? <span>·</span> : null}
+            {opts.showAnalysis && opts.showPattern ? (
+              <span className="capitalize">
+                {ctx.snapshot?.analysis.pattern?.dominantPattern ?? "—"}
+              </span>
+            ) : null}
+          </div>
         </div>
       </div>
     </Panel>

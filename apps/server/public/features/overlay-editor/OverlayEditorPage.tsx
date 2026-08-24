@@ -29,6 +29,7 @@ import {
   clampProfileSize,
   clampScale,
   clampScoreListLimit,
+  identityOptions,
   makeElement,
   makeProfile,
 } from "../overlay/profileModel";
@@ -623,6 +624,73 @@ export function OverlayEditorPage() {
                         }
                       />
                     </Field>
+                  ) : null}
+
+                  {selectedElement.type === "identity" ? (
+                    <>
+                      <label className="flex items-center gap-2 text-xs text-white/80">
+                        <input
+                          type="checkbox"
+                          checked={identityOptions(selectedElement.options).showAnalysis}
+                          onChange={(e) =>
+                            updateElement(selectedElement.instanceId, {
+                              options: {
+                                ...identityOptions(selectedElement.options),
+                                showAnalysis: e.target.checked,
+                              },
+                            })
+                          }
+                        />
+                        Show analysis
+                      </label>
+                      {identityOptions(selectedElement.options).showAnalysis ? (
+                        <>
+                          <Field label="Rating source">
+                            <select
+                              className="rx-input w-full"
+                              value={
+                                identityOptions(selectedElement.options)
+                                  .ratingSource
+                              }
+                              onChange={(e) =>
+                                updateElement(selectedElement.instanceId, {
+                                  options: {
+                                    ...identityOptions(selectedElement.options),
+                                    ratingSource:
+                                      e.target.value === "star"
+                                        ? ("star" as const)
+                                        : ("dan" as const),
+                                  },
+                                })
+                              }
+                            >
+                              <option value="dan">Sunny dan</option>
+                              <option value="star">Star rating</option>
+                            </select>
+                          </Field>
+                          <label className="flex items-center gap-2 text-xs text-white/80">
+                            <input
+                              type="checkbox"
+                              checked={
+                                identityOptions(selectedElement.options)
+                                  .showPattern
+                              }
+                              onChange={(e) =>
+                                updateElement(selectedElement.instanceId, {
+                                  options: {
+                                    ...identityOptions(
+                                      selectedElement.options,
+                                    ),
+                                    showPattern: e.target.checked,
+                                  },
+                                })
+                              }
+                            />
+                            Show pattern
+                          </label>
+                        </>
+                      ) : null}
+                    </>
                   ) : null}
 
                   {selectedElement.type === "preview" ? (

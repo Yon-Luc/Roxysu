@@ -29,6 +29,9 @@ typedef struct {
   int follow_focus;
   const char *match_app_id;
   int list_windows;
+  int debug;
+  const char *gsk_renderer;
+  int webkit_no_dmabuf;
 } Config;
 
 typedef struct Toplevel {
@@ -52,6 +55,7 @@ static WebKitWebView *g_view = NULL;
 static int g_last_applied = -1;
 static int g_warned_waiting = 0;
 static int g_mapped = 0;
+static guint g_paint_count = 0;
 static struct wl_compositor *g_compositor = NULL;
 static FocusCtx g_focus = {0};
 
@@ -72,6 +76,9 @@ static void usage(FILE *out) {
           "                   (case-insensitive substring; default \"%s\")\n"
           "  --follow-focus B 1 = show only while the matched app is focused (default 1);\n"
           "                   0 = always visible\n"
+          "  --debug          print paint-rate stats every 5s (stderr)\n"
+          "  --gsk-renderer R force GTK renderer: gl | vulkan | cairo | ngl\n"
+          "  --webkit-no-dmabuf   disable WebKit DMA-BUF rendering\n"
           "  --list-windows   print known windows (app_id, title, focused) and exit\n"
           "  --help\n"
           "\n"
@@ -113,6 +120,12 @@ static void parse_args(int argc, char **argv, Config *cfg) {
       cfg->follow_focus = parse_bool(argv[++i], cfg->follow_focus);
     } else if (strcmp(a, "--list-windows") == 0) {
       cfg->list_windows = 1;
+    } else if (strcmp(a, "--debug") == 0) {
+      cfg->debug = 1;
+    } else if (strcmp(a, "--gsk-renderer") == 0 && i + 1 < argc) {
+      cfg->gsk_renderer = argv[++i];
+    } else if (strcmp(a, "--webkit-no-dmabuf") == 0) {
+      cfg->webkit_no_dmabuf = 1;
     } else if (strcmp(a, "--anchor") == 0 && i + 1 < argc) {
       const char *pos = argv[++i];
       if (strcmp(pos, "top-left") == 0) {
@@ -240,6 +253,18 @@ static void set_page_hidden(int hidden) {
                                       NULL, NULL, NULL);
 }
 
+static void inject_keepalive(void) {
+  const char *js =
+      "(function(){"
+      "if(document.getElementById('roxysu-keepalive'))return;"
+      "var s=document.createElement('style');s.id='roxysu-keepalive';"
+      "s.textContent='@keyframes roxsyuKa{from{opacity:.99998}to{opacity:1}}"
+      "html{animation:roxsyuKa .2s linear infinite alternate}';"
+      "document.head.appendChild(s);})();";
+  webkit_web_view_evaluate_javascript(g_view, js, -1, NULL, "roxysu-overlay",
+                                      NULL, NULL, NULL);
+}
+
 static void apply_visibility(int visible) {
   if (g_window == NULL || g_view == NULL || g_cfg.follow_focus == 0) return;
   if (g_last_applied == visible) return;
@@ -250,6 +275,7 @@ static void apply_visibility(int visible) {
     gtk_layer_set_layer(g_window, GTK_LAYER_SHELL_LAYER_OVERLAY);
     gtk_widget_queue_draw(GTK_WIDGET(g_view));
     set_page_hidden(0);
+    inject_keepalive();
     g_mapped = 1;
   } else if (!visible && g_mapped) {
     set_page_hidden(1);
@@ -261,6 +287,40 @@ static void apply_visibility(int visible) {
           visible ? "shown" : "hidden",
           g_cfg.match_app_id);
   g_last_applied = visible;
+}
+
+static gboolean damage_tick(gpointer data) {
+  (void)data;
+  if (!g_mapped || g_last_applied != 1 || g_window == NULL || g_view == NULL)
+    return G_SOURCE_CONTINUE;
+
+  static int flip = 0;
+  flip ^= 1;
+  gtk_widget_set_opacity(GTK_WIDGET(g_view), flip ? 1.0 : 0.999);
+
+  GdkSurface *surface = gtk_native_get_surface(GTK_NATIVE(g_window));
+  GdkFrameClock *clock = surface ? gdk_surface_get_frame_clock(surface) : NULL;
+  gtk_widget_queue_draw(GTK_WIDGET(g_view));
+  if (clock != NULL)
+    gdk_frame_clock_request_phase(clock, GDK_FRAME_CLOCK_PHASE_PAINT);
+  return G_SOURCE_CONTINUE;
+}
+
+static gboolean paint_counter(GtkWidget *widget, GdkFrameClock *clock,
+                              gpointer data) {
+  (void)widget;
+  (void)data;
+  (void)clock;
+  g_paint_count++;
+  return G_SOURCE_CONTINUE;
+}
+
+static gboolean debug_report(gpointer data) {
+  (void)data;
+  fprintf(stderr, "roxysu-overlay: paints/5s=%u mapped=%d shown=%d\n",
+          g_paint_count, g_mapped, g_last_applied);
+  g_paint_count = 0;
+  return G_SOURCE_CONTINUE;
 }
 
 static void recompute_focus(void) {
@@ -489,9 +549,35 @@ int main(int argc, char **argv) {
       .follow_focus = 1,
       .match_app_id = DEFAULT_MATCH_APP_ID,
       .list_windows = 0,
+      .debug = 0,
+      .gsk_renderer = NULL,
+      .webkit_no_dmabuf = 0,
   };
-  parse_args(argc, argv, &cfg);
+  static char key_storage[128][256];
+  static char *expanded[256];
+  int eargc = 0;
+  expanded[eargc++] = (char *)"roxysu-overlay";
+  for (int i = 1; i < argc && eargc < 253; i++) {
+    char *eq = strchr(argv[i], '=');
+    if (eq == NULL) {
+      expanded[eargc++] = argv[i];
+      continue;
+    }
+    size_t keylen = (size_t)(eq - argv[i]);
+    if (keylen >= sizeof(key_storage[0])) continue;
+    char *key = key_storage[eargc];
+    memcpy(key, argv[i], keylen);
+    key[keylen] = '\0';
+    expanded[eargc++] = key;
+    expanded[eargc++] = eq + 1;
+  }
+  parse_args(eargc, expanded, &cfg);
   g_cfg = cfg;
+
+  if (cfg.gsk_renderer != NULL)
+    g_setenv("GSK_RENDERER", cfg.gsk_renderer, TRUE);
+  if (cfg.webkit_no_dmabuf)
+    g_setenv("WEBKIT_DISABLE_DMABUF_RENDERER", "1", TRUE);
 
   gtk_init();
 
@@ -569,13 +655,18 @@ int main(int argc, char **argv) {
     return focus_ok ? 0 : 1;
   }
 
+  gtk_widget_add_tick_callback(GTK_WIDGET(view), paint_counter, NULL, NULL);
+
   if (cfg.follow_focus == 0 || !focus_ok) {
     if (!focus_ok && cfg.follow_focus == 1)
       fprintf(stderr,
               "roxysu-overlay: compositor lacks zwlr_foreign_toplevel_management;"
               " focus following disabled, staying always visible\n");
     gtk_window_present(window);
+  } else {
+    g_timeout_add(300, damage_tick, NULL);
   }
+  if (cfg.debug) g_timeout_add(5000, debug_report, NULL);
 
   GMainLoop *loop = g_main_loop_new(NULL, FALSE);
   g_main_loop_run(loop);

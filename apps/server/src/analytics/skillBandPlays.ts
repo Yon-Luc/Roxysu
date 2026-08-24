@@ -40,6 +40,7 @@ export type SkillBandPlayDetail = {
   accuracy: number;
   sunnyStar: number;
   danLabel: string;
+  mods: string | null;
   playedAt: number;
 };
 
@@ -64,6 +65,7 @@ type EnrichedPlayRow = SkillPlayRow & {
   artist: string;
   difficultyName: string;
   sunnyEstDiff: string | null;
+  mods: string | null;
 };
 
 function normalizeTopPlays(raw: number | undefined): number {
@@ -132,6 +134,7 @@ function toDetail(
     danLabel:
       play.sunnyEstDiff ??
       estDiff(sunnyStar, play.lnRatio ?? lnRatioForDan, keyCount),
+    mods: play.mods,
     playedAt: play.playedAt,
   };
 }
@@ -219,6 +222,7 @@ function loadEnrichedSevenKPlays(
       sunnyStar,
       lnRatio,
       sunnyEstDiff,
+      mods: r.mods,
     });
   }
   return out;

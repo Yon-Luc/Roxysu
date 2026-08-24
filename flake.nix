@@ -97,8 +97,18 @@
     # Install into PATH + app menu: nix profile install github:Yon-Luc/Roxysu
     #   or on NixOS: programs.roxysu.enable (see nixosModules above).
     devShells.${system}.default = pkgs.mkShell {
+      # GTK/webkit/layer-shell: builds apps/overlay (roxysu-overlay host).
       buildInputs =
-        [pkgs.bun pkgs.nodejs_24 pkgs.dotnet-sdk_8 electron]
+        [
+          pkgs.bun
+          pkgs.nodejs_24
+          pkgs.dotnet-sdk_8
+          electron
+          pkgs.gtk4
+          pkgs.gtk4-layer-shell
+          pkgs.webkitgtk_6_0
+          pkgs.wayland
+        ]
         ++ nativeDeps;
 
       # Fallback build toolchain for node-gyp, in case a package's

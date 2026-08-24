@@ -281,7 +281,6 @@ async function getPlayTimePatterns(rows: ManiaAnalyticsRow[]) {
   const byDayOfWeek = Array.from({ length: 7 }, () => 0); // 0 = Sunday UTC
 
   for (const row of rows) {
-    if (!isNomodOrMirrorOnly(row.mods)) continue;
     const ms = Number(row.playedAt ?? 0);
     if (!Number.isFinite(ms) || ms <= 0) continue;
     const d = new Date(ms);
@@ -353,7 +352,6 @@ async function getTopMappers(
 ) {
   const byMapper = new Map<string, MapperAgg>();
   for (const row of rows) {
-    if (!isNomodOrMirrorOnly(row.mods)) continue;
     const key = mapperGroupKey(row.mapperOnlineId, row.mapperUsername);
     if (!key) continue;
     const cur = byMapper.get(key) ?? createMapperAgg();
@@ -395,7 +393,6 @@ async function getKeymodeProgression(
   const weekly = new Map<string, Bucket>();
 
   for (const row of rows) {
-    if (!isNomodOrMirrorOnly(row.mods)) continue;
     const ms = Number(row.playedAt ?? 0);
     if (!Number.isFinite(ms) || ms <= 0) continue;
     const played = new Date(ms);
@@ -457,7 +454,6 @@ function getSummaryFromRows(rows: ManiaAnalyticsRow[]) {
   let firstAt: number | null = null;
   let lastAt: number | null = null;
   for (const row of rows) {
-    if (!isNomodOrMirrorOnly(row.mods)) continue;
     scoreCount += 1;
     if (row.beatmapId) maps.add(row.beatmapId);
     const ms = Number(row.playedAt ?? 0);
@@ -484,6 +480,7 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
   const availableKeyCounts = listPlayedKeyCounts(db);
   const curves = loadManiaPpCurvesSync(db);
   const rows = loadManiaAnalyticsRows(db, keyCount);
+  const variantOf = loadDanVariantLookup(db, rows);
 
   const [
     beatmapCountRow,
@@ -507,20 +504,19 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
       )
       .then((rows) => rows[0]),
     Promise.resolve().then(() => {
-      const plays = rows
-        .filter(
-          (row) =>
-            !row.hidden &&
-            isNomodOrMirrorOnly(row.mods) &&
-            row.beatmapId != null,
-        )
-        .map((row) => ({
-          beatmapId: row.beatmapId!,
+      const plays = [];
+      for (const row of rows) {
+        if (row.hidden || row.beatmapId == null) continue;
+        const rating = danRatingFor(row, variantOf);
+        if (!rating) continue;
+        plays.push({
+          beatmapId: row.beatmapId,
           accuracy: Number(row.accuracy ?? 0),
           playedAt: Number(row.playedAt ?? 0),
-          sunnyStar: row.sunnyStar != null ? Number(row.sunnyStar) : null,
-          lnRatio: row.lnRatio != null ? Number(row.lnRatio) : null,
-        }));
+          sunnyStar: rating.star,
+          lnRatio: rating.lnRatio,
+        });
+      }
       return estimateSevenKSkillWithHistoryFromPlays(plays, {
         granularity,
         rangeDays: range,
@@ -530,7 +526,7 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
     }),
     getKeymodeProgression(rows, trendDays, weekCount, curves),
     getRankDistribution(rows),
-    getSkillsetMix(rows),
+    getSkillsetMix(rows, variantOf),
     getPlayTimePatterns(rows),
     getSessionStats(db),
     getTopMappers(rows, curves, 10),

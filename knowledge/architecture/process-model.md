@@ -6,6 +6,7 @@ touches:
   - README.md
   - apps/server/src/sse.ts
   - apps/realm-reader/src/index.ts
+  - apps/overlay/main.c
 ---
 
 # Process model
@@ -35,6 +36,7 @@ Analytics → HTTP /api + SSE → React UI
 - **No IPC** between realm-reader and server; both use the same local mirror file.
 - The client app detects new imports by **polling** the `imports` table, then runs analytics and emits SSE.
 - Optional **tosu** WebSocket feeds live in-progress map state (not the score source of truth).
+- Optional **in-game overlay** host (`apps/overlay`) renders `#/overlay` above lazer on wlr-layer-shell Wayland; client-app HTTP only, no direct store access.
 - Desktop Electron shell spawns server + realm-reader; same model as `bun run dev`.
 
 ## Important symbols

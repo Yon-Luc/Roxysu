@@ -10,3 +10,7 @@ which then show tag linked to those gamemode like 4k /  7k / LN for mania ( patt
 - find a better name and icon for hub
 - fix settings icon which is really ugly
 - for the admin create a pages "users" which display all users which did connect to the app ( osu username + profile picture)
+
+
+
+

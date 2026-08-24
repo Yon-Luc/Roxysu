@@ -40,3 +40,6 @@ result-*
 
 # local branch pin / scratch (not source)
 .branch-*.json
+
+# apps/overlay build artifact
+apps/overlay/roxysu-overlay

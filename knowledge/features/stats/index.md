@@ -19,7 +19,11 @@ Player skill bands / axes and related aggregate practice statistics beyond the d
 
 ## Mod gate
 
-Analytics only aggregate scores that are nomod or use only non-gameplay-affecting mods: Mirror (`MR`) and Classic (`CL`), including MR+CL combos. The gate is `isNomodOrMirrorOnly()` in `packages/mania-judge/src/mods.ts` (via the `apps/server/src/replay/mods.ts` re-export) and also gates PP estimation in `apps/server/src/mania-rating/estimateScorePp.ts`.
+Volume/accuracy aggregates (play counts, rank mix, play-time patterns, summary, daily/weekly/mapper trends) include **all** played scores regardless of mods; stored Realm PP is already mod-aware.
+
+Difficulty-dependent views use the dan difficulty variants store: skill axes, skill history, and skillset mix read variant stars/LN ratio for modded plays (rate ≠ 1.0 or full-LN Invert); modded plays without a computed variant are excluded until rated. NM-equivalent plays (rate 1.0, no Invert; Mirror/Classic ignored) always read the base Sunny dan ratings store.
+
+PP curve estimation stays NM-only (`resolveScorePp` in `apps/server/src/mania-rating/estimateScorePp.ts`): modded scores contribute their stored Realm PP when present, never a curve estimate.
 
 ## Important symbols
 

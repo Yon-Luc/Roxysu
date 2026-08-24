@@ -4,6 +4,7 @@ import { fetchSkillBandPlays, type SkillBandKind, type StatsSkillAxis } from "..
 import { ListSkeleton, SkeletonBlock } from "../../../components/LoadingSkeleton";
 import {
   formatAccuracy,
+  formatMods,
   formatRelativeTime,
   formatStars,
 } from "../../../lib/format";
@@ -27,6 +28,7 @@ function SkillPlayList({
     accuracy: number;
     sunnyStar: number;
     danLabel: string;
+    mods: string | null;
     playedAt: string | number | null;
   }>;
   ratingMode: RatingDisplayMode;
@@ -61,6 +63,8 @@ function SkillPlayList({
                     {formatAccuracy(play.accuracy)}
                   </div>
                   <div className="text-xs tabular-nums text-muted">
+                    {formatMods(play.mods)}
+                    {" · "}
                     {ratingMode === "dan"
                       ? play.danLabel
                       : formatStars(play.sunnyStar)}

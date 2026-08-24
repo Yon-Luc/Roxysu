@@ -508,6 +508,35 @@ function spriteDestHeight(img: CanvasImageSource | null | undefined, destW: numb
   return destW * (size.h / size.w);
 }
 
+function drawHoldBodyTiled(
+  ctx: PaintContext2D,
+  img: CanvasImageSource | null | undefined,
+  x: number,
+  yBottom: number,
+  w: number,
+  h: number,
+  alpha: number,
+): boolean {
+  const size = spriteSize(img);
+  if (!img || !size || w <= 0 || h <= 0 || size.w <= 0 || size.h <= 0) {
+    return false;
+  }
+  const tileH = w * (size.h / size.w);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, yBottom - h, w, h);
+  ctx.clip();
+  ctx.globalAlpha = alpha;
+  let y = yBottom;
+  while (y > yBottom - h) {
+    const segH = Math.min(tileH, y - (yBottom - h));
+    ctx.drawImage(img, 0, 0, size.w, size.h * (segH / tileH), x, y - segH, w, segH);
+    y -= segH;
+  }
+  ctx.restore();
+  return true;
+}
+
 function colSkin(skin: KeymodeSkin, col: number): ColumnSkin {
   const cols = skin.columns;
   return (
@@ -771,11 +800,11 @@ export function paintManiaNotefield(args: PaintManiaNotefieldArgs): void {
       const bodyH = Math.max(1, bottom - bodyTop);
       if (
         !useSprites ||
-        !drawSprite(
+        !drawHoldBodyTiled(
           ctx,
           bodySprite,
           x + noteW * 0.08,
-          bodyTop,
+          bottom,
           noteW * 0.84,
           bodyH,
           markMisses ? 0.7 : 0.95,

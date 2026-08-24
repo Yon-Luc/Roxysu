@@ -83,6 +83,12 @@ Playfield = the visual layer for that ruleset (notefield, 512×384, or taiko lan
    Procedural skins also expose a uniform **column spacing** slider (fraction of
    one column’s share, 0–40%) on Skin → Mania; paint reuses `layoutManiaPlayfield`
    for both imported and procedural paths.
+   LN bodies from imported skins are drawn osu!-style (`drawHoldBodyTiled` in
+   `paintManiaNotefield.ts`): the body image is sampled from its top for exactly
+   the pixels the hold needs, wrapping to the image top when the hold is taller
+   than one image. Tall body images with transparent lower portions therefore
+   fade out toward the tail exactly like in-game; the image is never stretched
+   vertically.
 
 7. Taiko scroll is a user skin setting (`scrollSpeed`), not BPM/SV.
 

@@ -361,9 +361,9 @@ const routeTree = rootRoute.addChildren([
     ...(isDesktopShell() ? [] : [ratingLabRoute]),
     skinRoute,
     settingsRoute,
-    overlayEditorRoute,
   ]),
   overlayRoute,
+  overlayEditorRoute,
 ]);
 
 export const router = createRouter({

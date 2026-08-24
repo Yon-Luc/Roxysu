@@ -7,8 +7,8 @@ touches:
   - packages/db/src/settings-keys.ts
   - apps/server/public/features/overlay
   - apps/server/public/features/overlay-editor
+  - apps/server/public/components/BeatmapPreviewEmbed.tsx
   - apps/server/public/router.tsx
-  - apps/server/public/components/AppShell.tsx
   - packages/i18n/src/dictionary/app
 ---
 
@@ -42,6 +42,16 @@ evaluated against **tosu live**.
 5. The preview embed pauses while `play.active` (same rule as Now selected)
    so in-game audio is not doubled. Preview/density elements are opt-in per
    element instance.
+6. The editor page (`/overlay-editor`) lives under the root route — it renders
+   **without AppShell chrome**. The canvas shows the profile at its real pixel
+   size (1:1); a Fit view toggle scales it to the viewport instead.
+7. Editor chrome (toolbar / palette / layers / inspector) is hidden by default
+   and revealed when the cursor touches a screen edge (~36px) or hovers a
+   layer; clicking empty canvas deselects elements (elements stop propagation;
+   hidden-by-trigger placeholders are selectable too).
+8. The preview element renders gameplay only: `BeatmapPreviewEmbed` accepts
+   `showControls` (default true) and the overlay passes false to hide the
+   seek/timing bar.
 
 ## Main flows
 

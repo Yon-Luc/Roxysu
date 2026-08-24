@@ -116,8 +116,15 @@ export function OverlayStage({
             return interactive ? (
               <div
                 key={element.instanceId}
-                className="absolute rounded border border-dashed border-white/25 text-[11px] text-white/40"
+                className={`absolute cursor-pointer rounded border border-dashed text-[11px] ${
+                  selectedInstanceId === element.instanceId
+                    ? "border-accent text-accent"
+                    : "border-white/25 text-white/40"
+                }`}
                 style={{ left: element.x, top: element.y }}
+                onPointerDown={(event) =>
+                  onElementPointerDown?.(element, event)
+                }
               >
                 <span className="bg-black/50 px-1">
                   {element.type} · hidden by trigger

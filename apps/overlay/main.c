@@ -11,9 +11,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define DEFAULT_URL "http://127.0.0.1:4321/#/overlay?limit=8&bg=clear"
-#define DEFAULT_WIDTH 460
-#define DEFAULT_HEIGHT 640
+#define DEFAULT_URL "http://127.0.0.1:4321/#/overlay?bg=clear&limit=25&profile=Classic"
+#define DEFAULT_WIDTH 1920
+#define DEFAULT_HEIGHT 1090
 #define DEFAULT_MATCH_APP_ID "osu"
 #define NAMESPACE "roxysu-overlay"
 

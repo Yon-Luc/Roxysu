@@ -262,6 +262,7 @@ export function PreviewElement({
       muted
       playingAllowed={!ctx.snapshot?.play?.active}
       heightRem={heightRem}
+      showControls={false}
     />
   );
 }

@@ -45,6 +45,7 @@ export function BeatmapPreviewEmbed({
   playingAllowed,
   heightRem,
   onHeightRemChange,
+  showControls = true,
 }: {
   beatmapId: string;
   autoPlay: boolean;
@@ -54,6 +55,8 @@ export function BeatmapPreviewEmbed({
   /** Playfield stage height in rem. */
   heightRem: number;
   onHeightRemChange?: (next: number) => void;
+  /** Hide the seek/timing control bar (overlay HUD usage). */
+  showControls?: boolean;
 }) {
   const { dict } = useAppDict();
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -441,7 +444,8 @@ export function BeatmapPreviewEmbed({
         ) : null}
       </div>
 
-      <div className="rx-preview-embed-controls relative z-10 border-t px-3 py-2 backdrop-blur-[2px]">
+      {showControls ? (
+        <div className="rx-preview-embed-controls relative z-10 border-t px-3 py-2 backdrop-blur-[2px]">
         {audioError || (!isLoading && data && !audioUrl) ? (
           <p className="mb-2 text-xs text-amber-200/90">
             {audioError ??
@@ -555,7 +559,8 @@ export function BeatmapPreviewEmbed({
             </label>
           ) : null}
         </div>
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 }

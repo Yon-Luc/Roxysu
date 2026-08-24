@@ -52,6 +52,8 @@ typedef struct {
 static Config g_cfg;
 static GtkWindow *g_window = NULL;
 static WebKitWebView *g_view = NULL;
+static gchar *g_uri = NULL;
+static guint g_load_failures = 0;
 static int g_last_applied = -1;
 static int g_warned_waiting = 0;
 static int g_mapped = 0;
@@ -321,6 +323,47 @@ static gboolean debug_report(gpointer data) {
           g_paint_count, g_mapped, g_last_applied);
   g_paint_count = 0;
   return G_SOURCE_CONTINUE;
+}
+
+static gboolean reload_uri_cb(gpointer data) {
+  WebKitWebView *view = WEBKIT_WEB_VIEW(data);
+  if (g_uri != NULL) webkit_web_view_load_uri(view, g_uri);
+  return G_SOURCE_REMOVE;
+}
+
+static void on_web_process_terminated(WebKitWebView *view,
+                                      WebKitWebProcessTerminationReason reason,
+                                      gpointer data) {
+  (void)view;
+  (void)data;
+  fprintf(stderr,
+          "roxysu-overlay: web process %s — reloading in 1s\n",
+          reason == WEBKIT_WEB_PROCESS_CRASHED ? "crashed"
+                                                : "hit its memory limit");
+  g_timeout_add(1000, reload_uri_cb, g_view);
+}
+
+static gboolean on_load_failed(WebKitWebView *view, WebKitLoadEvent event,
+                               gchar *failing_uri, GError *error,
+                               gpointer data) {
+  (void)view;
+  (void)event;
+  (void)failing_uri;
+  (void)data;
+  g_load_failures++;
+  const guint delay = g_load_failures > 5 ? 15000 : 3000;
+  fprintf(stderr, "roxysu-overlay: load failed (%s) — retrying in %ums\n",
+          error != NULL && error->message != NULL ? error->message : "unknown",
+          delay);
+  g_timeout_add(delay, reload_uri_cb, g_view);
+  return TRUE;
+}
+
+static void on_load_changed(WebKitWebView *view, WebKitLoadEvent event,
+                            gpointer data) {
+  (void)view;
+  (void)data;
+  if (event == WEBKIT_LOAD_FINISHED) g_load_failures = 0;
 }
 
 static void recompute_focus(void) {
@@ -640,10 +683,18 @@ int main(int argc, char **argv) {
 
   WebKitWebView *view = WEBKIT_WEB_VIEW(webkit_web_view_new());
   g_view = view;
+  g_uri = g_strdup(cfg.url);
   GdkRGBA transparent = {0.0, 0.0, 0.0, 0.0};
   webkit_web_view_set_background_color(view, &transparent);
   webkit_web_view_load_uri(view, cfg.url);
   gtk_window_set_child(window, GTK_WIDGET(view));
+
+  // Self-heal: a dead web process (OOM, GPU/DMA-BUF crash) leaves the last
+  // frame on screen forever — reload instead.
+  g_signal_connect(view, "web-process-terminated",
+                   G_CALLBACK(on_web_process_terminated), NULL);
+  g_signal_connect(view, "load-failed", G_CALLBACK(on_load_failed), NULL);
+  g_signal_connect(view, "load-changed", G_CALLBACK(on_load_changed), NULL);
 
   g_signal_connect(window, "map", G_CALLBACK(apply_click_through), NULL);
 

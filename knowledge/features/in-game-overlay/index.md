@@ -35,6 +35,11 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
    the surface shows only while a window whose `app_id` (fallback title)
    contains `--match-app-id` (default `osu`) is activated. Compositors without
    that protocol degrade to always-visible with a stderr notice.
+8. **Self-heal**: a dead web process (OOM, GPU/DMA-BUF crash) leaves the last
+   frame on screen forever — symptom: overlay freezes as a static image.
+   `web-process-terminated` reloads after 1s; `load-failed` retries with
+   backoff (3s, then 15s after 5 consecutive failures). If crashes recur,
+   try `--webkit-no-dmabuf`.
    `--follow-focus 0` disables; `--list-windows` dumps app_id/title/focused
    state for tuning the match string.
 8. Visibility is a hard map/unmap of the layer surface. Softer approaches all

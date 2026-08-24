@@ -21,7 +21,7 @@ It is not a temporary cache — it is Roxysu's schema-controlled store alongside
 ## Business rules
 
 1. Raw import tables are realm-reader-owned; derived tables are server-owned.
-2. Soft-deleted Realm objects land in raw rows with `delete_pending = true`; product queries exclude them.
+2. Soft-deleted Realm **Score** and **BeatmapSet** objects land in raw rows with `delete_pending = true`; product queries exclude them. Realm Beatmap has no `DeletePending` (difficulty hide is `hidden`).
 3. Schema migrations are owned by the client app (Drizzle).
 
 ## Important symbols

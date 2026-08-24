@@ -1,6 +1,7 @@
 
 import type { Db } from "@roxysu/db/types";
-import { isNomodOrMirrorOnly } from "../../replay/mods";
+import { resolveDanVariant, danVariantKey } from "../../replay/mods";
+import { loadDanVariantRatingsSync } from "../../map-analysis/computeDanVariants";
 import {
   resolveScoresGamemodeSync,
   scoresGamemodeSql,
@@ -742,15 +743,34 @@ export function loadSevenKPlays(
     lnRatio: number | null;
   }>;
 
-  return rows
-    .filter((r) => isNomodOrMirrorOnly(r.mods))
-    .map((r) => ({
+  // Modded plays read their persisted dan difficulty variants; NM plays read
+  // the base store join. Modded plays without a computed variant are dropped.
+  const variantRatings = loadDanVariantRatingsSync(
+    db,
+    [...new Set(rows.map((r) => r.beatmapId))],
+    "sunny",
+  );
+
+  const out: SkillPlayRow[] = [];
+  for (const r of rows) {
+    let sunnyStar = r.sunnyStar != null ? Number(r.sunnyStar) : null;
+    let lnRatio = r.lnRatio != null ? Number(r.lnRatio) : null;
+    const variant = resolveDanVariant(r.mods);
+    if (variant) {
+      const stored = variantRatings.get(danVariantKey(r.beatmapId, variant));
+      if (!stored) continue;
+      sunnyStar = stored.star;
+      lnRatio = stored.lnRatio;
+    }
+    out.push({
       beatmapId: r.beatmapId,
       accuracy: Number(r.accuracy ?? 0),
       playedAt: Number(r.playedAt ?? 0),
-      sunnyStar: r.sunnyStar != null ? Number(r.sunnyStar) : null,
-      lnRatio: r.lnRatio != null ? Number(r.lnRatio) : null,
-    }));
+      sunnyStar,
+      lnRatio,
+    });
+  }
+  return out;
 }
 
 /**

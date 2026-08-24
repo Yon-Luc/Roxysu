@@ -18,7 +18,10 @@ export {
   parseModEntries,
   readSpeedChange,
   defaultRateForAcronym,
+  resolveDanVariant,
+  danVariantKey,
   type ModAcronyms,
+  type DanVariant,
 } from "./mods";
 
 export {

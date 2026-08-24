@@ -3,6 +3,7 @@ import {
   closeDb,
   ensureDb,
   eq,
+  failStaleRunningImports,
   settings,
   type Db,
 } from "@roxysu/db/client.node";
@@ -28,7 +29,7 @@ const RETRY_MS = Number(process.env.REALM_RETRY_MS ?? 10_000);
 const RESYNC_MS = Number(process.env.REALM_RESYNC_MS ?? 60_000);
 const PAUSE_POLL_MS = Number(process.env.REALM_PAUSE_POLL_MS ?? 2_000);
 const FULL_EVERY_N = Number(process.env.REALM_FULL_EVERY_N ?? 10);
-const FORCE_FULL = process.env.REALM_FULL_SYNC === "1";
+let forceFull = process.env.REALM_FULL_SYNC === "1";
 
 let shuttingDown = false;
 let wakeSleep: (() => void) | null = null;
@@ -159,6 +160,13 @@ async function main() {
     );
   }
 
+  const staleImports = failStaleRunningImports(db);
+  if (staleImports > 0) {
+    console.log(
+      `marked ${staleImports} stale running import(s) as failed — leftover from a previous crash`,
+    );
+  }
+
   let lastRealmPath: string | null = null;
   let lockLogged = false;
   let cycle = 0;
@@ -176,7 +184,7 @@ async function main() {
       }
 
       try {
-        const needBootstrap = FORCE_FULL || !hasSuccessfulImport(db);
+        const needBootstrap = forceFull || !hasSuccessfulImport(db);
         const needReconcile = !needBootstrap && cycle % FULL_EVERY_N === 0;
 
         const result = needBootstrap
@@ -184,6 +192,8 @@ async function main() {
           : needReconcile
             ? runReconcileSync(db, realmPath)
             : runIncrementalSync(db, realmPath);
+
+        if (forceFull && result.kind === "full") forceFull = false;
 
         lockLogged = false;
         cycle += 1;

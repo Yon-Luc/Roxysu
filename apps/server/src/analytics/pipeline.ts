@@ -1,7 +1,7 @@
 
 import type { Db } from "@roxysu/db/types";
 import { beatmaps, imports, scores } from "@roxysu/db/schema";
-import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNotNull, max } from "drizzle-orm";
 import { subscribe, publish, type AppEvent } from "../shared/events";
 import { runRetryEngine } from "./retry";
 import { runSessionEngine } from "./session";
@@ -11,6 +11,7 @@ import { runStatisticsEngine } from "./statistics";
 const DEBOUNCE_MS = 250;
 const IMPORT_WAIT_MS = 1_000;
 const IMPORT_WAIT_MAX_MS = 5 * 60_000;
+const STALE_RUNNING_MS = 10 * 60_000;
 
 let running = false;
 let pending = false;
@@ -28,14 +29,57 @@ export type AnalyticsDelta = {
   kind: string;
 };
 
-function latestImportStatus(db: Db): string | null {
-  const row = db
-    .select({ status: imports.status })
+function playedAtMs(value: Date | number | null | undefined): number | null {
+  if (value == null) return null;
+  if (value instanceof Date) return value.getTime();
+  return value;
+}
+
+function latestImport(db: Db): {
+  status: string;
+  startedAt: Date | number;
+} | null {
+  return (
+    db
+      .select({ status: imports.status, startedAt: imports.startedAt })
+      .from(imports)
+      .orderBy(desc(imports.id))
+      .limit(1)
+      .get() ?? null
+  );
+}
+
+function isStaleRunning(
+  row: { status: string; startedAt: Date | number } | null,
+): boolean {
+  if (!row || row.status !== "running") return false;
+  const started = playedAtMs(row.startedAt);
+  return started != null && Date.now() - started > STALE_RUNNING_MS;
+}
+
+/** Latest import failed/stuck while scores moved past the last successful cursor. */
+function importNeedsForcedFull(db: Db): boolean {
+  const latest = latestImport(db);
+  if (!latest) return false;
+  if (latest.status !== "running" && latest.status !== "failed") return false;
+
+  const lastSuccess = db
+    .select({ watermarkPlayedAt: imports.watermarkPlayedAt })
     .from(imports)
+    .where(eq(imports.status, "success"))
     .orderBy(desc(imports.id))
     .limit(1)
     .get();
-  return row?.status ?? null;
+
+  const scoreRow = db
+    .select({ n: count(), maxPlayed: max(scores.playedAt) })
+    .from(scores)
+    .get();
+  const maxPlayed = playedAtMs(scoreRow?.maxPlayed);
+  if (maxPlayed == null) return false;
+  const watermark = playedAtMs(lastSuccess?.watermarkPlayedAt);
+  if (watermark == null) return (scoreRow?.n ?? 0) > 0;
+  return maxPlayed > watermark;
 }
 
 function parseIdJson(raw: string | null): string[] | null {
@@ -78,7 +122,8 @@ export function loadAnalyticsDelta(
 async function waitForIdleImport(db: Db): Promise<void> {
   const deadline = Date.now() + IMPORT_WAIT_MAX_MS;
   while (Date.now() < deadline) {
-    if (latestImportStatus(db) !== "running") return;
+    const row = latestImport(db);
+    if (!row || row.status !== "running" || isStaleRunning(row)) return;
     await new Promise((r) => setTimeout(r, IMPORT_WAIT_MS));
   }
   console.warn(
@@ -153,8 +198,12 @@ export async function runAnalyticsPipeline(
       pendingImportId = null;
 
       await waitForIdleImport(db);
-      const delta = forceFull ? null : loadAnalyticsDelta(db, targetImportId);
-      const full = forceFull || needsFullRebuild(delta);
+      const forceFromStale = !forceFull && importNeedsForcedFull(db);
+      const delta =
+        forceFull || forceFromStale
+          ? null
+          : loadAnalyticsDelta(db, targetImportId);
+      const full = forceFull || forceFromStale || needsFullRebuild(delta);
 
       console.log(
         `[analytics] pipeline start (${full ? "full" : "delta"}${

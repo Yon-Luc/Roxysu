@@ -6,6 +6,7 @@ import { db } from "./db.node";
 import { createApp } from "./createApp";
 import { startPollLoop } from "./sse";
 import { startAnalyticsPipeline } from "./analytics/pipeline";
+import { startDanVariantJob } from "./map-analysis/danVariantJob";
 import { startCollectionMatchCache } from "./shared/collectionMatchCache";
 import { clearStuckMirrorBatchLocks } from "./mirrors";
 import { ensureTosuStarted, stopTosuAdapter } from "./tosu";
@@ -43,6 +44,7 @@ async function main() {
   app.listen({ port, hostname });
   const stopPoll = startPollLoop(db);
   const stopAnalytics = startAnalyticsPipeline(db);
+  const stopDanVariants = startDanVariantJob(db);
   startCollectionMatchCache(db);
 
   console.log(`🦊 Roxysu (node) running at http://${hostname}:${port}`);
@@ -63,6 +65,7 @@ async function main() {
     }
 
     stopAnalytics();
+    stopDanVariants();
     stopTosuAdapter();
     stopPoll();
     try {

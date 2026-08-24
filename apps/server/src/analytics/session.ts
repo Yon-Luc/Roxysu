@@ -188,17 +188,17 @@ export async function runSessionEngine(db: Db): Promise<SessionEngineResult> {
   );
 
   if (rows.length === 0) {
-    await db.transaction(async (tx) => {
+    db.transaction((tx) => {
       for (const m of allMetrics) {
         if (m.sessionId != null) {
-          await tx
-            .update(scoreMetrics)
+          tx.update(scoreMetrics)
             .set({ sessionId: null })
-            .where(eq(scoreMetrics.scoreId, m.scoreId));
+            .where(eq(scoreMetrics.scoreId, m.scoreId))
+            .run();
         }
       }
       if (existingSessions.length > 0) {
-        await tx.delete(sessions);
+        tx.delete(sessions).run();
       }
     });
     return { started, finished };
@@ -241,7 +241,7 @@ export async function runSessionEngine(db: Db): Promise<SessionEngineResult> {
   const scoreToSession = new Map<string, number>();
   const claimedSessionIds = new Set<number>();
 
-  await db.transaction(async (tx) => {
+  db.transaction((tx) => {
     for (const bucket of buckets) {
       const isOpen = now - bucket.endedAt.getTime() <= SESSION_GAP_MS;
 
@@ -267,8 +267,7 @@ export async function runSessionEngine(db: Db): Promise<SessionEngineResult> {
         const namePatch =
           prevRow?.name == null ? { name: assignName(sessionId) } : {};
         if (sessionRowChanged(prevRow, bucket, isOpen, namePatch)) {
-          await tx
-            .update(sessions)
+          tx.update(sessions)
             .set({
               startedAt: bucket.startedAt,
               endedAt: isOpen ? null : bucket.endedAt,
@@ -276,13 +275,14 @@ export async function runSessionEngine(db: Db): Promise<SessionEngineResult> {
               rulesetShortName: bucket.rulesetShortName,
               ...namePatch,
             })
-            .where(eq(sessions.id, sessionId));
+            .where(eq(sessions.id, sessionId))
+            .run();
         }
 
         if (isOpen && !wasOpen) started.push(sessionId);
         if (!isOpen && wasOpen) finished.push(sessionId);
       } else {
-        const inserted = await tx
+        const inserted = tx
           .insert(sessions)
           .values({
             startedAt: bucket.startedAt,
@@ -290,14 +290,15 @@ export async function runSessionEngine(db: Db): Promise<SessionEngineResult> {
             scoreCount: bucket.scoreIds.length,
             rulesetShortName: bucket.rulesetShortName,
           })
-          .returning({ id: sessions.id });
+          .returning({ id: sessions.id })
+          .get();
 
-        sessionId = inserted[0]!.id;
+        sessionId = inserted.id;
         claimedSessionIds.add(sessionId);
-        await tx
-          .update(sessions)
+        tx.update(sessions)
           .set({ name: assignName(sessionId) })
-          .where(eq(sessions.id, sessionId));
+          .where(eq(sessions.id, sessionId))
+          .run();
         if (isOpen) started.push(sessionId);
       }
 
@@ -310,7 +311,7 @@ export async function runSessionEngine(db: Db): Promise<SessionEngineResult> {
       .map((s) => s.id)
       .filter((id) => !claimedSessionIds.has(id));
     if (orphanIds.length > 0) {
-      await tx.delete(sessions).where(inArray(sessions.id, orphanIds));
+      tx.delete(sessions).where(inArray(sessions.id, orphanIds)).run();
     }
 
     const metricPatches: Array<{ scoreId: string; sessionId: number }> = [];
@@ -337,7 +338,7 @@ export async function runSessionEngine(db: Db): Promise<SessionEngineResult> {
     }
     applySessionIdPatches(db, metricPatches);
     if (metricInserts.length > 0) {
-      await tx.insert(scoreMetrics).values(metricInserts);
+      tx.insert(scoreMetrics).values(metricInserts).run();
     }
   });
 

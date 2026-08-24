@@ -302,10 +302,36 @@ function playedAtMs(value: Date | number | null | undefined): number | null {
   return value;
 }
 
-function getWatermarks(db: Db): {
+type ExtractionWatermarks = {
   maxPlayedAt: Date | null;
   maxLastLocalUpdate: Date | null;
-} {
+};
+
+function laterDate(
+  current: Date | null,
+  value: Date | number | null | undefined,
+): Date | null {
+  const ms = playedAtMs(value);
+  if (ms == null) return current;
+  if (current == null || ms > current.getTime()) return new Date(ms);
+  return current;
+}
+
+function advanceWatermarks(
+  previous: ExtractionWatermarks,
+  scoreRows: ReadonlyArray<{ playedAt?: Date | number | null }>,
+  beatmapRows: ReadonlyArray<{ lastLocalUpdate?: Date | number | null }>,
+): ExtractionWatermarks {
+  let maxPlayedAt = previous.maxPlayedAt;
+  let maxLastLocalUpdate = previous.maxLastLocalUpdate;
+  for (const row of scoreRows) maxPlayedAt = laterDate(maxPlayedAt, row.playedAt);
+  for (const row of beatmapRows) {
+    maxLastLocalUpdate = laterDate(maxLastLocalUpdate, row.lastLocalUpdate);
+  }
+  return { maxPlayedAt, maxLastLocalUpdate };
+}
+
+function fallbackWatermarksFromTables(db: Db): ExtractionWatermarks {
   const [scoreRow] = db
     .select({ maxPlayed: max(scores.playedAt) })
     .from(scores)
@@ -322,6 +348,56 @@ function getWatermarks(db: Db): {
     maxPlayedAt: playedMs != null ? new Date(playedMs) : null,
     maxLastLocalUpdate: updateMs != null ? new Date(updateMs) : null,
   };
+}
+
+function getWatermarks(db: Db): ExtractionWatermarks {
+  const lastSuccess = db
+    .select({
+      watermarkPlayedAt: imports.watermarkPlayedAt,
+      watermarkLastLocalUpdate: imports.watermarkLastLocalUpdate,
+    })
+    .from(imports)
+    .where(eq(imports.status, "success"))
+    .orderBy(desc(imports.id))
+    .limit(1)
+    .get();
+
+  if (
+    lastSuccess &&
+    (lastSuccess.watermarkPlayedAt != null ||
+      lastSuccess.watermarkLastLocalUpdate != null)
+  ) {
+    return {
+      maxPlayedAt:
+        playedAtMs(lastSuccess.watermarkPlayedAt) != null
+          ? new Date(playedAtMs(lastSuccess.watermarkPlayedAt)!)
+          : null,
+      maxLastLocalUpdate:
+        playedAtMs(lastSuccess.watermarkLastLocalUpdate) != null
+          ? new Date(playedAtMs(lastSuccess.watermarkLastLocalUpdate)!)
+          : null,
+    };
+  }
+
+  return fallbackWatermarksFromTables(db);
+}
+
+function withTransaction<T>(db: Db, fn: (tx: Db) => T): T {
+  return withBusyRetry(() =>
+    db.transaction((tx) => fn(tx as unknown as Db)),
+  );
+}
+
+function trySyncRealmCollections(
+  db: Db,
+  realm: Realm,
+  rewriteUnchanged: boolean,
+) {
+  try {
+    syncRealmCollectionsFromRealm(db, realm, { rewriteUnchanged });
+  } catch (err) {
+    console.error("realm collection extract failed:", err);
+  }
 }
 
 function collectMappedRows(realm: Realm): {
@@ -704,6 +780,7 @@ function finishImport(
     changedScoreIds: string[] | null;
     changedBeatmapIds: string[] | null;
   },
+  watermarks: ExtractionWatermarks,
 ) {
   withBusyRetry(() =>
     db
@@ -720,6 +797,8 @@ function finishImport(
         beatmapSetsDeleted: counts.beatmapSetsDeleted,
         changedScoreIds: encodeChangedIds(counts.changedScoreIds),
         changedBeatmapIds: encodeChangedIds(counts.changedBeatmapIds),
+        watermarkPlayedAt: watermarks.maxPlayedAt,
+        watermarkLastLocalUpdate: watermarks.maxLastLocalUpdate,
       })
       .where(eq(imports.id, importId))
       .run(),
@@ -810,8 +889,6 @@ export function runFullSync(db: Db, realmPath: string): SyncResult {
       collected.realmSetIds,
     );
 
-    syncRealmCollectionsFromRealm(db, realm);
-
     const rowsChanged =
       rulesetsUpserted.changed +
       beatmapSetsUpserted.changed +
@@ -822,17 +899,28 @@ export function runFullSync(db: Db, realmPath: string): SyncResult {
       deleted.beatmapSetsDeleted;
 
     // Full bootstrap → null delta (server runs full analytics).
-    finishImport(db, importRow.id, {
-      beatmapSetsUpserted: beatmapSetsUpserted.attempted,
-      beatmapsUpserted: beatmapsUpserted.attempted,
-      scoresUpserted: scoresUpserted.attempted,
-      rowsChanged,
-      scoresDeleted: deleted.scoresDeleted,
-      beatmapsDeleted: deleted.beatmapsDeleted,
-      beatmapSetsDeleted: deleted.beatmapSetsDeleted,
-      changedScoreIds: null,
-      changedBeatmapIds: null,
-    });
+    finishImport(
+      db,
+      importRow.id,
+      {
+        beatmapSetsUpserted: beatmapSetsUpserted.attempted,
+        beatmapsUpserted: beatmapsUpserted.attempted,
+        scoresUpserted: scoresUpserted.attempted,
+        rowsChanged,
+        scoresDeleted: deleted.scoresDeleted,
+        beatmapsDeleted: deleted.beatmapsDeleted,
+        beatmapSetsDeleted: deleted.beatmapSetsDeleted,
+        changedScoreIds: null,
+        changedBeatmapIds: null,
+      },
+      advanceWatermarks(
+        { maxPlayedAt: null, maxLastLocalUpdate: null },
+        collected.scoreRows,
+        collected.beatmapRows,
+      ),
+    );
+
+    trySyncRealmCollections(db, realm, true);
 
     return {
       kind: "full",
@@ -1004,8 +1092,6 @@ export function runReconcileSync(db: Db, realmPath: string): SyncResult {
       replayBackfillRan = true;
     }
 
-    syncRealmCollectionsFromRealm(db, realm);
-
     const rowsChanged =
       deleted.scoresDeleted +
       deleted.beatmapsDeleted +
@@ -1015,18 +1101,25 @@ export function runReconcileSync(db: Db, realmPath: string): SyncResult {
       softSetChanged +
       replayBackfillUpserted;
 
-    finishImport(db, importRow.id, {
-      beatmapSetsUpserted: caughtUp.beatmapSetsUpserted,
-      beatmapsUpserted: caughtUp.beatmapsUpserted,
-      scoresUpserted: caughtUp.scoresUpserted + replayBackfillUpserted,
-      rowsChanged,
-      scoresDeleted: deleted.scoresDeleted,
-      beatmapsDeleted: deleted.beatmapsDeleted,
-      beatmapSetsDeleted: deleted.beatmapSetsDeleted,
-      // Full remapping → null delta so analytics rebuilds.
-      changedScoreIds: replayBackfillRan ? null : changedScoreIds,
-      changedBeatmapIds,
-    });
+    finishImport(
+      db,
+      importRow.id,
+      {
+        beatmapSetsUpserted: caughtUp.beatmapSetsUpserted,
+        beatmapsUpserted: caughtUp.beatmapsUpserted,
+        scoresUpserted: caughtUp.scoresUpserted + replayBackfillUpserted,
+        rowsChanged,
+        scoresDeleted: deleted.scoresDeleted,
+        beatmapsDeleted: deleted.beatmapsDeleted,
+        beatmapSetsDeleted: deleted.beatmapSetsDeleted,
+        // Full remapping → null delta so analytics rebuilds.
+        changedScoreIds: replayBackfillRan ? null : changedScoreIds,
+        changedBeatmapIds,
+      },
+      advanceWatermarks(getWatermarks(db), [], []),
+    );
+
+    trySyncRealmCollections(db, realm, true);
 
     return {
       kind: "reconcile",
@@ -1059,7 +1152,8 @@ export function runIncrementalSync(db: Db, realmPath: string): SyncResult {
   let realm: Realm | undefined;
   try {
     realm = openRealm(realmPath);
-    const actual = assertSchemaVersion(realm);
+    const liveRealm = realm;
+    const actual = assertSchemaVersion(liveRealm);
     setImportSchemaVersion(db, importRow.id, actual);
 
     const setIdsNeeded = new Set<string>();
@@ -1198,32 +1292,10 @@ export function runIncrementalSync(db: Db, realmPath: string): SyncResult {
       }
     }
 
-    const rulesetsUpserted = upsertBatches(
-      db,
-      rulesets,
-      rulesetRows as Record<string, unknown>[],
-      ["shortName"],
-    );
-    const beatmapSetsUpserted = upsertBatches(
-      db,
-      beatmapSets,
-      setRows as Record<string, unknown>[],
-      ["id"],
-    );
-    const beatmapsUpserted = upsertBatches(
-      db,
-      beatmaps,
-      beatmapRows as Record<string, unknown>[],
-      ["id"],
-    );
-    const scoresUpserted = upsertBatches(
-      db,
-      scores,
-      scoreRows as Record<string, unknown>[],
-      ["id"],
-    );
-
-    // Heal maps/scores the watermark missed (null LastLocalUpdate, clock ties, etc.).
+    let rulesetsUpserted = { attempted: 0, changed: 0 };
+    let beatmapSetsUpserted = { attempted: 0, changed: 0 };
+    let beatmapsUpserted = { attempted: 0, changed: 0 };
+    let scoresUpserted = { attempted: 0, changed: 0 };
     let caughtUp = {
       beatmapSetsUpserted: 0,
       beatmapsUpserted: 0,
@@ -1233,45 +1305,83 @@ export function runIncrementalSync(db: Db, realmPath: string): SyncResult {
       changedScoreIds: [] as string[],
       rowsChanged: 0,
     };
-    const sqliteScoreCount =
-      db.select({ n: count() }).from(scores).get()?.n ?? 0;
-    const sqliteBeatmapCount =
-      db.select({ n: count() }).from(beatmaps).get()?.n ?? 0;
-    const sqliteSetCount =
-      db.select({ n: count() }).from(beatmapSets).get()?.n ?? 0;
-    if (
-      realm.objects("Score").length !== sqliteScoreCount ||
-      realm.objects("Beatmap").length !== sqliteBeatmapCount ||
-      realm.objects("BeatmapSet").length !== sqliteSetCount
-    ) {
-      caughtUp = catchUpMissingFromRealm(db, realm, collectRealmIdSets(realm));
-    }
+    let rowsChanged = 0;
 
-    syncRealmCollectionsFromRealm(db, realm);
+    withTransaction(db, (tx) => {
+      rulesetsUpserted = upsertBatches(
+        tx,
+        rulesets,
+        rulesetRows as Record<string, unknown>[],
+        ["shortName"],
+      );
+      beatmapSetsUpserted = upsertBatches(
+        tx,
+        beatmapSets,
+        setRows as Record<string, unknown>[],
+        ["id"],
+      );
+      beatmapsUpserted = upsertBatches(
+        tx,
+        beatmaps,
+        beatmapRows as Record<string, unknown>[],
+        ["id"],
+      );
+      scoresUpserted = upsertBatches(
+        tx,
+        scores,
+        scoreRows as Record<string, unknown>[],
+        ["id"],
+      );
 
-    const rowsChanged =
-      rulesetsUpserted.changed +
-      beatmapSetsUpserted.changed +
-      beatmapsUpserted.changed +
-      scoresUpserted.changed +
-      caughtUp.rowsChanged;
+      const sqliteScoreCount =
+        tx.select({ n: count() }).from(scores).get()?.n ?? 0;
+      const sqliteBeatmapCount =
+        tx.select({ n: count() }).from(beatmaps).get()?.n ?? 0;
+      const sqliteSetCount =
+        tx.select({ n: count() }).from(beatmapSets).get()?.n ?? 0;
+      if (
+        liveRealm.objects("Score").length !== sqliteScoreCount ||
+        liveRealm.objects("Beatmap").length !== sqliteBeatmapCount ||
+        liveRealm.objects("BeatmapSet").length !== sqliteSetCount
+      ) {
+        caughtUp = catchUpMissingFromRealm(
+          tx,
+          liveRealm,
+          collectRealmIdSets(liveRealm),
+        );
+      }
 
-    const changedScoreIds = [...scoreIds, ...caughtUp.changedScoreIds];
-    const changedBeatmapIds = [...beatmapIds, ...caughtUp.changedBeatmapIds];
+      rowsChanged =
+        rulesetsUpserted.changed +
+        beatmapSetsUpserted.changed +
+        beatmapsUpserted.changed +
+        scoresUpserted.changed +
+        caughtUp.rowsChanged;
 
-    finishImport(db, importRow.id, {
-      beatmapSetsUpserted:
-        beatmapSetsUpserted.attempted + caughtUp.beatmapSetsUpserted,
-      beatmapsUpserted: beatmapsUpserted.attempted + caughtUp.beatmapsUpserted,
-      scoresUpserted: scoresUpserted.attempted + caughtUp.scoresUpserted,
-      rowsChanged,
-      scoresDeleted: 0,
-      beatmapsDeleted: 0,
-      beatmapSetsDeleted: 0,
-      // If nothing actually wrote, empty arrays → analytics can no-op via rowsChanged.
-      changedScoreIds: rowsChanged > 0 ? changedScoreIds : [],
-      changedBeatmapIds: rowsChanged > 0 ? changedBeatmapIds : [],
+      const changedScoreIds = [...scoreIds, ...caughtUp.changedScoreIds];
+      const changedBeatmapIds = [...beatmapIds, ...caughtUp.changedBeatmapIds];
+
+      finishImport(
+        tx,
+        importRow.id,
+        {
+          beatmapSetsUpserted:
+            beatmapSetsUpserted.attempted + caughtUp.beatmapSetsUpserted,
+          beatmapsUpserted:
+            beatmapsUpserted.attempted + caughtUp.beatmapsUpserted,
+          scoresUpserted: scoresUpserted.attempted + caughtUp.scoresUpserted,
+          rowsChanged,
+          scoresDeleted: 0,
+          beatmapsDeleted: 0,
+          beatmapSetsDeleted: 0,
+          changedScoreIds,
+          changedBeatmapIds,
+        },
+        advanceWatermarks(watermarks, scoreRows, beatmapRows),
+      );
     });
+
+    trySyncRealmCollections(db, realm, false);
 
     return {
       kind: "incremental",

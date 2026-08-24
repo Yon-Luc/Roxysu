@@ -17,11 +17,11 @@ Keep the practice UI current as new plays appear in lazer.
 ## Flow
 
 ```
-realm-reader poll/watermark extraction
+realm-reader poll / persisted-watermark extraction
     ↓
-persist raw import tables + imports row
+persist raw import tables + imports row (watermarks + changed IDs together)
     ↓
-server startPollLoop (sse.ts) sees new `imports` rows / newer `MAX(played_at)`
+server startPollLoop (sse.ts) sees new `imports` rows / non-empty changed IDs / newer `MAX(played_at)`
     ↓
 analytics pipeline (Retry → Session → Mastery → Statistics)
     ↓
@@ -32,7 +32,7 @@ UI (public/lib/sse.ts)
 
 ## Business guarantee
 
-New scores become visible and analytics refresh without restarting the app; Realm remains read-only during this path.
+New scores become visible and analytics refresh without restarting the app; Realm remains read-only during this path. A crash mid-extract cannot permanently skip analytics: the next cycle re-reads from the last successful watermark.
 
 ## Implementation references
 

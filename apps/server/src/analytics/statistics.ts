@@ -1,7 +1,6 @@
 import type { Db } from "@roxysu/db/types";
 import { beatmaps, dailyStats, mapperStats, scores, weeklyStats } from "@roxysu/db/schema";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
-import { isNomodOrMirrorOnly } from "../replay/mods";
 import {
   loadManiaPpCurves,
   resolveScorePp,
@@ -136,7 +135,6 @@ export async function runStatisticsEngine(
   const mappers = new Map<number, MapperAgg>();
 
   for (const row of rows) {
-    if (!isNomodOrMirrorOnly(row.mods)) continue;
     const played = new Date(toMs(row.playedAt));
     const pp = effectivePp(row, curves);
     bump(daily, dayKey(played), row.accuracy, pp);
@@ -213,7 +211,6 @@ async function rebuildPartitionsForScores(db: Db, scoreIds: string[]) {
   const mappers = new Map<number, MapperAgg>();
 
   for (const row of all) {
-    if (!isNomodOrMirrorOnly(row.mods)) continue;
     const played = new Date(toMs(row.playedAt));
     const dKey = dayKey(played);
     const wKey = weekStartKey(played);
@@ -276,7 +273,6 @@ async function rebuildMapperPartitions(db: Db, mapperOnlineIds: number[]) {
   const mappers = new Map<number, MapperAgg>();
   for (const row of all) {
     if (row.mapperOnlineId == null || row.mapperOnlineId <= 0) continue;
-    if (!isNomodOrMirrorOnly(row.mods)) continue;
     const m = mappers.get(row.mapperOnlineId) ?? createMapperAgg();
     bumpMapperAgg(
       m,

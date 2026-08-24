@@ -40,7 +40,7 @@ Live sessions keep the **Current session** label in headings; the generated name
 
 ## Important symbols
 
-- `apps/server/src/analytics/session.ts` — `SESSION_GAP_MS`, `runSessionEngine()` (global gap algorithm; session/metrics writes in one transaction; name backfill skipped when every name is already capitalized)
+- `apps/server/src/analytics/session.ts` — `SESSION_GAP_MS`, `runSessionEngine()` (global gap algorithm; session/metrics writes in one sync transaction callback — required by better-sqlite3 on desktop; name backfill skipped when every name is already capitalized)
 - `apps/server/src/routes/sessions.ts` — `serializeSession()` includes `name`; score window via `limit`
 - `apps/server/src/routes/overlay.ts` — slim OBS payload
 - `packages/session-names/src/generate.ts` — `generateSessionName(sessionId, taken)`, `capitalizeSessionName()`

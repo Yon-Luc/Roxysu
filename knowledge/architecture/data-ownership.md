@@ -16,7 +16,7 @@ Prevent dual-writer corruption by assigning table ownership per process.
 
 1. **realm-reader** writes only **raw import** tables: `beatmaps`, `scores`, `imports`, mirrored realm collections, and related raw rows.
 2. **server** writes only **derived / user** tables: sessions, mastery, stats, score_metrics, collections, settings, notes/tags, etc.
-3. Soft-deleted Realm objects are upserted with `delete_pending = true`; product queries filter them out.
+3. Soft-deleted Realm Score and BeatmapSet objects are upserted with `delete_pending = true`; product queries filter them out. Realm Beatmap has no `DeletePending`.
 4. Server (Drizzle) owns schema/migrations for the whole local mirror.
 
 ## Security rules

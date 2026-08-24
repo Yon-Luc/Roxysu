@@ -24,6 +24,28 @@ export type RealmCollectionSyncCounts = {
   collectionsDeleted: number;
 };
 
+export type SyncRealmCollectionsOptions = {
+  /** When true, rewrite hashes even if lastModified+hashCount match. */
+  rewriteUnchanged?: boolean;
+};
+
+function playedAtMs(value: Date | number | null | undefined): number | null {
+  if (value == null) return null;
+  if (value instanceof Date) return value.getTime();
+  return value;
+}
+
+function sameTime(
+  a: Date | number | null | undefined,
+  b: Date | number | null | undefined,
+): boolean {
+  const am = playedAtMs(a);
+  const bm = playedAtMs(b);
+  if (am == null && bm == null) return true;
+  if (am == null || bm == null) return false;
+  return am === bm;
+}
+
 /**
  * Mirror all lazer BeatmapCollection rows into SQLite and resolve MD5 →
  * beatmapset online IDs for maps present in the local library.
@@ -31,11 +53,11 @@ export type RealmCollectionSyncCounts = {
 export function syncRealmCollectionsFromRealm(
   db: Db,
   realm: Realm,
+  options?: SyncRealmCollectionsOptions,
 ): RealmCollectionSyncCounts {
+  const rewriteUnchanged = options?.rewriteUnchanged === true;
   const syncedAt = new Date();
   const seenIds = new Set<string>();
-  let collectionsUpserted = 0;
-  let hashesUpserted = 0;
 
   const all = realm.objects<BeatmapCollectionObj>("BeatmapCollection");
   const pending: Array<{
@@ -56,73 +78,106 @@ export function syncRealmCollectionsFromRealm(
       id,
       name: col.Name ?? "",
       lastModified: col.LastModified ?? null,
-      hashes,
+      hashes: [...new Set(hashes)],
     });
   }
 
-  const uniqueHashes = [...new Set(pending.flatMap((p) => p.hashes))];
+  const existing = db
+    .select({
+      id: realmCollections.id,
+      lastModified: realmCollections.lastModified,
+      hashCount: realmCollections.hashCount,
+    })
+    .from(realmCollections)
+    .all();
+  const existingById = new Map(existing.map((row) => [row.id, row]));
+
+  const toWrite = pending.filter((col) => {
+    if (rewriteUnchanged) return true;
+    const prev = existingById.get(col.id);
+    if (!prev) return true;
+    return (
+      !sameTime(prev.lastModified, col.lastModified) ||
+      prev.hashCount !== col.hashes.length
+    );
+  });
+
+  const uniqueHashes = [...new Set(toWrite.flatMap((p) => p.hashes))];
   const md5ToOnlineId = resolveMd5ToOnlineIds(db, uniqueHashes);
 
-  for (const col of pending) {
-    const resolvedIds = new Set<number>();
-    for (const hash of col.hashes) {
-      const onlineId = md5ToOnlineId.get(hash);
-      if (onlineId != null && onlineId > 0) resolvedIds.add(onlineId);
-    }
+  return db.transaction((tx) => {
+    let collectionsUpserted = 0;
+    let hashesUpserted = 0;
 
-    db.insert(realmCollections)
-      .values({
-        id: col.id,
-        name: col.name,
-        lastModified: col.lastModified,
-        hashCount: col.hashes.length,
-        resolvedSetCount: resolvedIds.size,
-        syncedAt,
-      })
-      .onConflictDoUpdate({
-        target: realmCollections.id,
-        set: {
+    for (const col of toWrite) {
+      const resolvedIds = new Set<number>();
+      for (const hash of col.hashes) {
+        const onlineId = md5ToOnlineId.get(hash);
+        if (onlineId != null && onlineId > 0) resolvedIds.add(onlineId);
+      }
+
+      tx.insert(realmCollections)
+        .values({
+          id: col.id,
           name: col.name,
           lastModified: col.lastModified,
           hashCount: col.hashes.length,
           resolvedSetCount: resolvedIds.size,
           syncedAt,
-        },
-      })
-      .run();
-    collectionsUpserted += 1;
+        })
+        .onConflictDoUpdate({
+          target: realmCollections.id,
+          set: {
+            name: col.name,
+            lastModified: col.lastModified,
+            hashCount: col.hashes.length,
+            resolvedSetCount: resolvedIds.size,
+            syncedAt,
+          },
+        })
+        .run();
+      collectionsUpserted += 1;
 
-    db.delete(realmCollectionHashes)
-      .where(eq(realmCollectionHashes.collectionId, col.id))
-      .run();
+      tx.delete(realmCollectionHashes)
+        .where(eq(realmCollectionHashes.collectionId, col.id))
+        .run();
 
-    if (col.hashes.length === 0) continue;
+      if (col.hashes.length === 0) continue;
 
-    const hashRows = col.hashes.map((md5Hash) => ({
-      collectionId: col.id,
-      md5Hash,
-      beatmapsetOnlineId: md5ToOnlineId.get(md5Hash) ?? null,
-    }));
+      const hashRows = col.hashes.map((md5Hash) => ({
+        collectionId: col.id,
+        md5Hash,
+        beatmapsetOnlineId: md5ToOnlineId.get(md5Hash) ?? null,
+      }));
 
-    for (let i = 0; i < hashRows.length; i += HASH_LOOKUP_CHUNK) {
-      const chunk = hashRows.slice(i, i + HASH_LOOKUP_CHUNK);
-      db.insert(realmCollectionHashes).values(chunk).run();
-      hashesUpserted += chunk.length;
+      for (let i = 0; i < hashRows.length; i += HASH_LOOKUP_CHUNK) {
+        const chunk = hashRows.slice(i, i + HASH_LOOKUP_CHUNK);
+        tx.insert(realmCollectionHashes)
+          .values(chunk)
+          .onConflictDoNothing()
+          .run();
+        hashesUpserted += chunk.length;
+      }
     }
-  }
 
-  const existing = db
-    .select({ id: realmCollections.id })
-    .from(realmCollections)
-    .all();
-  let collectionsDeleted = 0;
-  for (const row of existing) {
-    if (seenIds.has(row.id)) continue;
-    db.delete(realmCollections).where(eq(realmCollections.id, row.id)).run();
-    collectionsDeleted += 1;
-  }
+    const staleIds = existing
+      .map((row) => row.id)
+      .filter((id) => !seenIds.has(id));
+    let collectionsDeleted = 0;
+    for (let i = 0; i < staleIds.length; i += HASH_LOOKUP_CHUNK) {
+      const chunk = staleIds.slice(i, i + HASH_LOOKUP_CHUNK);
+      tx.delete(realmCollectionHashes)
+        .where(inArray(realmCollectionHashes.collectionId, chunk))
+        .run();
+      const deleted = tx
+        .delete(realmCollections)
+        .where(inArray(realmCollections.id, chunk))
+        .run();
+      collectionsDeleted += deleted.changes ?? chunk.length;
+    }
 
-  return { collectionsUpserted, hashesUpserted, collectionsDeleted };
+    return { collectionsUpserted, hashesUpserted, collectionsDeleted };
+  });
 }
 
 function resolveMd5ToOnlineIds(

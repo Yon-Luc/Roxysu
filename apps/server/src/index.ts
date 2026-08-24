@@ -3,6 +3,7 @@ import { app } from "./app";
 import { db } from "./db";
 import { startPollLoop } from "./sse";
 import { startAnalyticsPipeline } from "./analytics/pipeline";
+import { startDanVariantJob } from "./map-analysis/danVariantJob";
 import { startCollectionMatchCache } from "./shared/collectionMatchCache";
 import { ensureTosuStarted, stopTosuAdapter } from "./tosu";
 import { clearStuckMirrorBatchLocks } from "./mirrors";
@@ -25,6 +26,7 @@ void ensureTosuStarted(db);
 app.listen(4321);
 const stopPoll = startPollLoop(db);
 const stopAnalytics = startAnalyticsPipeline(db);
+const stopDanVariants = startDanVariantJob(db);
 startCollectionMatchCache(db);
 
 console.log(
@@ -47,6 +49,7 @@ async function shutdown(signal: string) {
 
   stopTosuAdapter();
   stopAnalytics();
+  stopDanVariants();
   stopPoll();
   try {
     await app.stop(true);

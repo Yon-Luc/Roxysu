@@ -73,5 +73,16 @@ export {
   stopPatternAnalysisBackfill,
   countPatternAnalysisMissing,
 } from "./patternAnalysisJob";
+export {
+  getDanVariantJobState,
+  startDanVariantJob,
+  stopDanVariantJob,
+} from "./danVariantJob";
+export {
+  collectDanVariantCombos,
+  backfillDanVariantsSync,
+  loadDanVariantRatingsSync,
+} from "./computeDanVariants";
+export type { DanVariantCombo, DanVariantRatingRow } from "./computeDanVariants";
 export { getChartTimingAnalysis, loadBeatmapOsu, chartTimingFromOsuText } from "./computeTimingAnalysis";
 export type { ChartTimingRating } from "./computeTimingAnalysis";

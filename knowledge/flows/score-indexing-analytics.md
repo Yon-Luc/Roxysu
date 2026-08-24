@@ -26,7 +26,7 @@ SSE consumers refresh
 
 ## Business guarantee
 
-Soft deletes and orphan cleanup feed session/mastery refresh; large/full imports may force full rebuild.
+Soft deletes and orphan cleanup feed session/mastery refresh; large/full imports may force full rebuild. A `running`/`failed` import while scores have moved past the last successful watermark forces a full rebuild. `running` older than 10 minutes is treated as idle.
 
 ## Implementation references
 

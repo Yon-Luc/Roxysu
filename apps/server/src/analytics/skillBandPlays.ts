@@ -1,7 +1,10 @@
 
 import type { Db } from "@roxysu/db/types";
 import { estDiff, nextDanInterval } from "@roxysu/sunny-dan";
-import { isNomodOrMirrorOnly } from "../replay/mods";
+import {
+  danVariantKey,
+  resolveDanVariant,
+} from "../replay/mods";
 import { classifyMapAxis } from "./recommend/axis";
 import type { MapAxis } from "./recommend/types";
 import {
@@ -22,6 +25,7 @@ import {
   resolveScoresUsernamesSync,
   scoresUsernameSql,
 } from "./scoreUsername";
+import { loadDanVariantRatingsSync } from "../map-analysis/computeDanVariants";
 
 const DEFAULT_KEY_COUNT = DEFAULT_SKILL_KEY_COUNT;
 
@@ -183,9 +187,28 @@ function loadEnrichedSevenKPlays(
     sunnyEstDiff: string | null;
   }>;
 
-  return rows
-    .filter((r) => isNomodOrMirrorOnly(r.mods))
-    .map((r) => ({
+  // Modded plays read their persisted dan difficulty variants (dropped until
+  // the variant job computes them); NM plays read the base store join.
+  const variantRatings = loadDanVariantRatingsSync(
+    db,
+    [...new Set(rows.map((r) => r.beatmapId))],
+    "sunny",
+  );
+
+  const out: EnrichedPlayRow[] = [];
+  for (const r of rows) {
+    let sunnyStar = r.sunnyStar != null ? Number(r.sunnyStar) : null;
+    let lnRatio = r.lnRatio != null ? Number(r.lnRatio) : null;
+    let sunnyEstDiff = r.sunnyEstDiff;
+    const variant = resolveDanVariant(r.mods);
+    if (variant) {
+      const stored = variantRatings.get(danVariantKey(r.beatmapId, variant));
+      if (!stored) continue;
+      sunnyStar = stored.star;
+      lnRatio = stored.lnRatio;
+      sunnyEstDiff = stored.estDiff;
+    }
+    out.push({
       scoreId: r.scoreId,
       beatmapId: r.beatmapId,
       title: r.title,
@@ -193,10 +216,12 @@ function loadEnrichedSevenKPlays(
       difficultyName: r.difficultyName,
       accuracy: Number(r.accuracy ?? 0),
       playedAt: Number(r.playedAt ?? 0),
-      sunnyStar: r.sunnyStar != null ? Number(r.sunnyStar) : null,
-      lnRatio: r.lnRatio != null ? Number(r.lnRatio) : null,
-      sunnyEstDiff: r.sunnyEstDiff,
-    }));
+      sunnyStar,
+      lnRatio,
+      sunnyEstDiff,
+    });
+  }
+  return out;
 }
 
 function playsInDanInterval(

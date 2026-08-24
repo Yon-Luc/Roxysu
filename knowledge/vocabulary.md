@@ -159,13 +159,25 @@ Derived count of how many beatmaps match each collection query. Refreshed when c
 
 ### Sunny dan ratings store
 
-Persisted mania difficulty estimates from the Sunny dan backfill job (`beatmap_dan_ratings` table). Powers `dan:` / `sunny:` query fields and 4K/7K recommendations.
+Persisted mania difficulty estimates from the Sunny dan backfill job (`beatmap_dan_ratings` table). Powers `dan:` / `sunny:` query fields and 4K/7K recommendations. Nommod (rate 1.0, no chart conversion) estimates only.
 
 **Not:** "dan cache", "cache" alone
 
 **In code:** `beatmap_dan_ratings`, `sunnyDanJob.ts`
 
 **See:** [features/sunny-dan-recommendations/](features/sunny-dan-recommendations/index.md)
+
+---
+
+### Dan difficulty variants
+
+Persisted mod-aware mania difficulty estimates in `beatmap_dan_rating_variants`: one row per (beatmap, estimator, playback rate quantized to 2 decimals, full-LN Invert conversion) actually played. Computed by the dan variant background job after imports — never on request paths. NM plays stay in the Sunny dan ratings store.
+
+**Not:** "mod cache", "variant cache", part of the Sunny dan ratings store
+
+**In code:** `beatmap_dan_rating_variants`, `computeDanVariants.ts`, `danVariantJob.ts`, `resolveDanVariant()` (`packages/mania-judge`)
+
+**See:** [features/sunny-dan-recommendations/](features/sunny-dan-recommendations/index.md), [flows/sunny-backfill-to-recommend.md](flows/sunny-backfill-to-recommend.md)
 
 ---
 

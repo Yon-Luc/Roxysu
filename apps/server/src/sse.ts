@@ -10,6 +10,8 @@ type PollState = {
   lastImportStatus: string | null;
   lastImportRowsChanged: number;
   lastImportDeletes: number;
+  lastImportHasChangedIds: boolean;
+  scoreCount: number;
   maxPlayedAt: number | null;
 };
 
@@ -28,6 +30,7 @@ async function readState(db: Db): Promise<PollState> {
       scoresDeleted: imports.scoresDeleted,
       beatmapsDeleted: imports.beatmapsDeleted,
       beatmapSetsDeleted: imports.beatmapSetsDeleted,
+      changedScoreIds: imports.changedScoreIds,
     })
     .from(imports)
     .orderBy(desc(imports.id))
@@ -44,11 +47,23 @@ async function readState(db: Db): Promise<PollState> {
     (lastImport?.beatmapsDeleted ?? 0) +
     (lastImport?.beatmapSetsDeleted ?? 0);
 
+  let hasChangedIds = false;
+  if (lastImport?.changedScoreIds) {
+    try {
+      const parsed = JSON.parse(lastImport.changedScoreIds) as unknown;
+      hasChangedIds = Array.isArray(parsed) && parsed.length > 0;
+    } catch {
+      hasChangedIds = false;
+    }
+  }
+
   return {
     lastImportId: lastImport?.id ?? 0,
     lastImportStatus: lastImport?.status ?? null,
     lastImportRowsChanged: lastImport?.rowsChanged ?? 0,
     lastImportDeletes: deletes,
+    lastImportHasChangedIds: hasChangedIds,
+    scoreCount: 0,
     maxPlayedAt: playedAtMs(scoreRow?.maxPlayed),
   };
 }
@@ -71,7 +86,11 @@ export function startPollLoop(db: Db, intervalMs = 1500): () => void {
         if (importAdvanced && next.lastImportStatus === "success") {
           // Always refresh status UI; only rebuild analytics when data changed.
           publish({ type: "dashboard.updated" });
-          if (next.lastImportRowsChanged > 0 || next.lastImportDeletes > 0) {
+          if (
+            next.lastImportRowsChanged > 0 ||
+            next.lastImportDeletes > 0 ||
+            next.lastImportHasChangedIds
+          ) {
             publish({ type: "sync.finished", importId: next.lastImportId });
           }
         }

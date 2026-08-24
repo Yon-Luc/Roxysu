@@ -4,7 +4,11 @@ import type { Db } from "@roxysu/db/types";
 import { beatmaps, scoreMetrics, sessions } from "@roxysu/db/schema";
 import { and, count, eq, sql } from "drizzle-orm";
 import { SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
-import { isNomodOrMirrorOnly } from "../replay/mods";
+import {
+  danVariantKey,
+  resolveDanVariant,
+} from "../replay/mods";
+import { loadDanVariantRatingsSync } from "../map-analysis/computeDanVariants";
 import { classifyMapAxis } from "./recommend/axis";
 import { classifyScoreGrade, PERFECT_TOTAL_SCORE } from "../query-language/scoreGrade";
 import {
@@ -188,12 +192,48 @@ function loadManiaAnalyticsRows(db: Db, keyCount: number): ManiaAnalyticsRow[] {
     .all(SUNNY_ALGORITHM, ...user.params, keyCount) as ManiaAnalyticsRow[];
 }
 
+/** Variant rating (star + LN ratio) for a modded play, or null for NM plays. */
+type DanVariantRating = { star: number; lnRatio: number };
+
+function loadDanVariantLookup(
+  db: Db,
+  rows: ManiaAnalyticsRow[],
+): (row: ManiaAnalyticsRow) => DanVariantRating | null {
+  const beatmapIds = [
+    ...new Set(
+      rows.map((r) => r.beatmapId).filter((id): id is string => id != null),
+    ),
+  ];
+  const ratings = loadDanVariantRatingsSync(db, beatmapIds, SUNNY_ALGORITHM);
+  return (row) => {
+    if (!row.beatmapId) return null;
+    const variant = resolveDanVariant(row.mods);
+    if (!variant) return null;
+    const stored = ratings.get(danVariantKey(row.beatmapId, variant));
+    if (!stored) return null;
+    return { star: stored.star!, lnRatio: stored.lnRatio! };
+  };
+}
+
+/** Dan rating (base or variant) for a play; null when unrated. */
+function danRatingFor(
+  row: ManiaAnalyticsRow,
+  variantOf: (row: ManiaAnalyticsRow) => DanVariantRating | null,
+): { star: number; lnRatio: number } | null {
+  if (row.beatmapId == null) return null;
+  const variant = variantOf(row);
+  if (variant) return variant;
+  // NM-equivalent play: read the base Sunny ratings store.
+  if (resolveDanVariant(row.mods)) return null;
+  if (row.sunnyStar == null || row.lnRatio == null) return null;
+  return { star: Number(row.sunnyStar), lnRatio: Number(row.lnRatio) };
+}
+
 async function getRankDistribution(rows: ManiaAnalyticsRow[]) {
 
   const byLabel = new Map<string, number>();
   for (const row of rows) {
     if (row.rank === -1) continue;
-    if (!isNomodOrMirrorOnly(row.mods)) continue;
     const label = classifyScoreGrade(Number(row.totalScore), row.rank);
     if (!label) continue;
     byLabel.set(label, (byLabel.get(label) ?? 0) + 1);
@@ -206,16 +246,18 @@ async function getRankDistribution(rows: ManiaAnalyticsRow[]) {
   }));
 }
 
-async function getSkillsetMix(rows: ManiaAnalyticsRow[]) {
+async function getSkillsetMix(
+  rows: ManiaAnalyticsRow[],
+  variantOf: (row: ManiaAnalyticsRow) => DanVariantRating | null,
+) {
   let rc = 0;
   let ln = 0;
   let fln = 0;
   for (const row of rows) {
     if (row.hidden) continue;
-    if (!isNomodOrMirrorOnly(row.mods)) continue;
-    const axis = classifyMapAxis(
-      row.lnRatio != null ? Number(row.lnRatio) : null,
-    );
+    const rating = danRatingFor(row, variantOf);
+    if (!rating) continue;
+    const axis = classifyMapAxis(rating.lnRatio);
     if (axis === "fln") fln += 1;
     else if (axis === "ln") ln += 1;
     else rc += 1;

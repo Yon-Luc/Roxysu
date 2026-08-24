@@ -18,7 +18,13 @@ import {
   getPpTrend,
   getWeeklyActivity,
 } from "../analytics/progression";
+import { DANIEL_ALGORITHM } from "../map-analysis/computeDanielDan";
 import { SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
+import {
+  danVariantKey,
+  resolveDanVariant,
+} from "../replay/mods";
+import { loadDanVariantRatingsSync } from "../map-analysis/computeDanVariants";
 import {
   danielEstDiffSelect,
   danielStarSelect,
@@ -108,8 +114,45 @@ export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
       getAccuracyTrend(db, 30),
     ]);
 
+    // Modded plays show their dan difficulty variant labels when computed.
+    const ratedIds = [
+      ...new Set(
+        recentScores
+          .map((s) => s.beatmapId)
+          .filter((id): id is string => id != null),
+      ),
+    ];
+    const sunnyVariants = loadDanVariantRatingsSync(db, ratedIds, SUNNY_ALGORITHM);
+    const danielVariants = loadDanVariantRatingsSync(db, ratedIds, DANIEL_ALGORITHM);
+
     return {
-      recentScores: recentScores.map((s) => ({
+      recentScores: recentScores.map((s) => {
+        let sunnyEstDiff = s.sunnyEstDiff ?? null;
+        let sunnyStar = s.sunnyStar ?? null;
+        let danielEstDiff = s.danielEstDiff ?? null;
+        let danielStar = s.danielStar != null ? Number(s.danielStar) : null;
+        if (s.beatmapId) {
+          const variant = resolveDanVariant(s.mods);
+          if (variant) {
+            const sunnyVariant = sunnyVariants.get(danVariantKey(s.beatmapId, variant));
+            if (sunnyVariant) {
+              sunnyEstDiff = sunnyVariant.estDiff;
+              sunnyStar = sunnyVariant.star;
+            }
+            const keyCount =
+              s.keyCount != null ? Math.round(Number(s.keyCount)) : null;
+            if (keyCount === 4) {
+              const danielVariant = danielVariants.get(
+                danVariantKey(s.beatmapId, variant),
+              );
+              if (danielVariant) {
+                danielEstDiff = danielVariant.estDiff;
+                danielStar = danielVariant.star;
+              }
+            }
+          }
+        }
+        return {
         id: s.id,
         accuracy: s.accuracy,
         pp: resolveScorePp({
@@ -131,14 +174,15 @@ export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
         difficultyName: s.difficultyName,
         starRating: s.starRating,
         keyCount: s.keyCount != null ? Math.round(Number(s.keyCount)) : null,
-        sunnyEstDiff: s.sunnyEstDiff ?? null,
-        sunnyStar: s.sunnyStar ?? null,
-        danielEstDiff: s.danielEstDiff ?? null,
-        danielStar: s.danielStar != null ? Number(s.danielStar) : null,
+        sunnyEstDiff,
+        sunnyStar,
+        danielEstDiff,
+        danielStar,
         setOnlineId:
           s.setOnlineId != null && s.setOnlineId > 0 ? s.setOnlineId : null,
         backgroundFileHash: s.backgroundFileHash,
-      })),
+        };
+      }),
       sync: {
         beatmapCount: beatmapCount?.n ?? 0,
         scoreCount: scoreCount?.n ?? 0,

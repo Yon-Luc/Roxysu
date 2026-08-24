@@ -88,6 +88,42 @@ export function parseScoreMods(mods: string | null | undefined): ModAcronyms {
   };
 }
 
+/**
+ * Dan difficulty variant implied by a score's mods.
+ * `rate` is quantized to 2 decimals; NM (rate 1, no LN conversion) yields null.
+ */
+export type DanVariant = { rate: number; lnOnly: boolean };
+
+const RATE_QUANTUM_MS = 100;
+const INVERT_ACRONYM = "IN";
+
+function quantizeRate(rate: number): number {
+  return Math.round(rate * RATE_QUANTUM_MS) / RATE_QUANTUM_MS;
+}
+
+/**
+ * Resolve which dan difficulty variant (speed rate + full-LN conversion)
+ * a score's mods were played at. Returns null for NM-equivalent plays
+ * (rate 1.0 without Invert); Mirror/Classic do not change the pattern.
+ */
+export function resolveDanVariant(
+  mods: string | null | undefined,
+): DanVariant | null {
+  const parsed = parseScoreMods(mods);
+  const lnOnly = parsed.acronyms.includes(INVERT_ACRONYM);
+  const rate = quantizeRate(parsed.rate);
+  if (!lnOnly && rate === 1) return null;
+  return { rate, lnOnly };
+}
+
+/** Stable composite key for storing/looking up a variant rating row. */
+export function danVariantKey(
+  beatmapId: string,
+  variant: DanVariant,
+): string {
+  return `${beatmapId}|${variant.rate}|${variant.lnOnly ? 1 : 0}`;
+}
+
 /** Mods allowed when aggregating stats / skill (NM, Mirror, or Classic only). */
 const STATS_ALLOWED_MODS = new Set(["MR", "CL"]);
 

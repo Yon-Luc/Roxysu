@@ -179,6 +179,15 @@ export const imports = sqliteTable("imports", {
    * JSON string[] of beatmap IDs touched by this import, or null for full rebuild.
    */
   changedBeatmapIds: text("changed_beatmap_ids"),
+  /**
+   * Extraction cursor persisted with this successful import. Next incremental
+   * cycle reads these instead of MAX() from data tables so a crash after
+   * upserts cannot silently skip analytics.
+   */
+  watermarkPlayedAt: integer("watermark_played_at", { mode: "timestamp_ms" }),
+  watermarkLastLocalUpdate: integer("watermark_last_local_update", {
+    mode: "timestamp_ms",
+  }),
   error: text("error"),
 });
 
@@ -368,6 +377,37 @@ export const beatmapDanRatings = sqliteTable(
   },
   (t) => ({
     pk: primaryKey({ columns: [t.beatmapId, t.algorithm] }),
+  }),
+);
+
+/**
+ * Mod-aware dan estimates ("dan difficulty variants"): one row per
+ * (beatmap, algorithm, speed rate, full-LN conversion) actually played.
+ * Written only by the dan variant job; NM plays stay in `beatmap_dan_ratings`.
+ */
+export const beatmapDanRatingVariants = sqliteTable(
+  "beatmap_dan_rating_variants",
+  {
+    beatmapId: text("beatmap_id")
+      .notNull()
+      .references(() => beatmaps.id),
+    /** Estimator id, e.g. "sunny". */
+    algorithm: text("algorithm").notNull(),
+    /** Playback rate quantized to 2 decimals (DT 1.5, HT 0.75, custom 1.1…). */
+    rate: real("rate").notNull(),
+    /** Chart converted to full-LN via Invert before estimating. */
+    lnOnly: integer("ln_only", { mode: "boolean" }).notNull(),
+    /** Beatmap content hash when computed (invalidate on mismatch). */
+    beatmapHash: text("beatmap_hash"),
+    sunnyStar: real("sunny_star"),
+    lnRatio: real("ln_ratio"),
+    columnCount: integer("column_count"),
+    estDiff: text("est_diff"),
+    error: text("error"),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.beatmapId, t.algorithm, t.rate, t.lnOnly] }),
   }),
 );
 

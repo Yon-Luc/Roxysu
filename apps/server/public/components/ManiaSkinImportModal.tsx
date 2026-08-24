@@ -220,6 +220,7 @@ export function ManiaSkinImportModal({
                     uniformColors: false,
                     uniformWidth: false,
                     uniformSize: false,
+                    columnSpacing: 0,
                     lnTailShape: "flat",
                     lnShowHead: true,
                     imported: pack.layout,

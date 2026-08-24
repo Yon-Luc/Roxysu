@@ -80,6 +80,9 @@ Playfield = the visual layer for that ruleset (notefield, 512×384, or taiko lan
    stage) come from `skin.ini` `[Mania]` sections. Image blobs persist in
    IndexedDB (`roxysu-mania-skin`); JSON metadata stays in `roxysu:preview-skin`.
    Reset keymode / reset all deletes those blobs.
+   Procedural skins also expose a uniform **column spacing** slider (fraction of
+   one column’s share, 0–40%) on Skin → Mania; paint reuses `layoutManiaPlayfield`
+   for both imported and procedural paths.
 
 7. Taiko scroll is a user skin setting (`scrollSpeed`), not BPM/SV.
 

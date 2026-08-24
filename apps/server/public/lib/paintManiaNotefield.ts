@@ -1,13 +1,16 @@
 import type { BeatmapPreview } from "./api";
-import { layoutManiaPlayfield } from "./osuSkinIni";
+import { layoutManiaPlayfield, OSU_MANIA_HEIGHT } from "./osuSkinIni";
 import {
   orientationDegrees,
+  COLUMN_SPACING_MAX,
+  COLUMN_SPACING_MIN,
   type ColumnSkin,
   type KeymodeSkin,
   type LnTailShape,
   type NoteOrientation,
   type NoteShape,
 } from "./previewSkin";
+import { clamp } from "./format";
 
 export type PaintContext2D =
   | CanvasRenderingContext2D
@@ -92,7 +95,7 @@ function bisectFrame(frames: NotefieldFrame[], timeMs: number): number {
 /** Column-centered note geometry; circle/arrow use square noteheads. */
 function noteGeom(
   shape: NoteShape,
-  col: number,
+  slotX: number,
   colW: number,
   skin: ColumnSkin,
 ): NoteGeom {
@@ -100,7 +103,7 @@ function noteGeom(
     const gap = Math.max(1, colW * (1 - skin.widthScale) * 0.5);
     const noteW = colW - gap * 2;
     return {
-      x: col * colW + gap,
+      x: slotX + gap,
       noteW,
       tapH: BASE_TAP_HEIGHT * skin.heightScale,
     };
@@ -109,7 +112,7 @@ function noteGeom(
   const baseW = Math.min(colW * skin.widthScale, colW * SHAPED_WIDTH_CAP);
   const size = Math.max(8, Math.min(baseW * skin.heightScale, colW * 0.95));
   return {
-    x: col * colW + (colW - size) / 2,
+    x: slotX + (colW - size) / 2,
     noteW: size,
     tapH: size,
   };
@@ -599,20 +602,38 @@ export function paintManiaNotefield(args: PaintManiaNotefieldArgs): void {
   const imported = keymodeSkin.imported;
   const useSprites = Boolean(imported && sprites);
   const headMap = args.headJudgments ?? buildHeadJudgmentMap(judgments);
-  const importedLayout =
-    useSprites && imported
-      ? layoutManiaPlayfield({
-          canvasW: w,
-          canvasH: h,
-          keys: cols,
-          columnWidth: imported.columnWidth,
-          columnSpacing: imported.columnSpacing,
-          hitPositionPx: imported.hitPositionPx,
-          stageLeft: spriteSize(sprites!.stageLeft),
-          stageRight: spriteSize(sprites!.stageRight),
-        })
-      : null;
-  const receptorY = importedLayout ? importedLayout.receptorY : h * hitPosition;
+  const playfieldLayout = useSprites && imported
+    ? layoutManiaPlayfield({
+        canvasW: w,
+        canvasH: h,
+        keys: cols,
+        columnWidth: imported.columnWidth,
+        columnSpacing: imported.columnSpacing,
+        hitPositionPx: imported.hitPositionPx,
+        stageLeft: spriteSize(sprites!.stageLeft),
+        stageRight: spriteSize(sprites!.stageRight),
+      })
+    : layoutManiaPlayfield({
+        canvasW: w,
+        canvasH: h,
+        keys: cols,
+        columnWidth: Array.from({ length: cols }, () => 1),
+        columnSpacing: Array.from(
+          { length: Math.max(0, cols - 1) },
+          () =>
+            clamp(
+              typeof keymodeSkin.columnSpacing === "number"
+                ? keymodeSkin.columnSpacing
+                : 0,
+              COLUMN_SPACING_MIN,
+              COLUMN_SPACING_MAX,
+            ),
+        ),
+        hitPositionPx: hitPosition * OSU_MANIA_HEIGHT,
+      });
+  const receptorY = useSprites && imported
+    ? playfieldLayout.receptorY
+    : h * hitPosition;
   const coverH = Math.min(
     h * laneCover,
     Math.max(0, receptorY - 12),
@@ -621,7 +642,6 @@ export function paintManiaNotefield(args: PaintManiaNotefieldArgs): void {
   const scrollSpeed = clampScrollSpeed(args.scrollSpeed);
   const timeRangeMs = (OSU_MAX_TIME_RANGE_MS / scrollSpeed) * rate;
   const scroll = Math.max(0.05, receptorY / timeRangeMs);
-  const colW = w / cols;
   const lookaheadMs = timeRangeMs + 200;
 
   const frameIdx = frameList.length > 0 ? bisectFrame(frameList, t) : -1;
@@ -633,16 +653,16 @@ export function paintManiaNotefield(args: PaintManiaNotefieldArgs): void {
         : 0;
 
   function geomFor(col: number): ColGeom {
-    if (importedLayout && sprites) {
-      const slot = importedLayout.columns[col] ?? {
-        x: col * colW,
-        w: colW,
-      };
+    const slot = playfieldLayout.columns[col] ?? {
+      x: 0,
+      w: w / cols,
+    };
+    if (useSprites && sprites) {
       return importedColGeom(sprites, col, slot.x, slot.w);
     }
     const skin = colSkin(keymodeSkin, col);
-    const g = noteGeom(shape, col, colW, skin);
-    return { x: col * colW, colW, noteX: g.x, noteW: g.noteW, tapH: g.tapH };
+    const g = noteGeom(shape, slot.x, slot.w, skin);
+    return { x: slot.x, colW: slot.w, noteX: g.x, noteW: g.noteW, tapH: g.tapH };
   }
 
   ctx.clearRect(0, 0, w, h);
@@ -650,49 +670,37 @@ export function paintManiaNotefield(args: PaintManiaNotefieldArgs): void {
   ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
   ctx.fillRect(0, 0, w, h);
 
-  if (importedLayout) {
-    if (importedLayout.stageLeft && sprites?.stageLeft) {
-      drawSprite(
-        ctx,
-        sprites.stageLeft,
-        importedLayout.stageLeft.x,
-        importedLayout.stageLeft.y,
-        importedLayout.stageLeft.w,
-        importedLayout.stageLeft.h,
-        1,
-      );
-    }
-    if (importedLayout.stageRight && sprites?.stageRight) {
-      drawSprite(
-        ctx,
-        sprites.stageRight,
-        importedLayout.stageRight.x,
-        importedLayout.stageRight.y,
-        importedLayout.stageRight.w,
-        importedLayout.stageRight.h,
-        1,
-      );
-    }
+  if (useSprites && playfieldLayout.stageLeft && sprites?.stageLeft) {
+    drawSprite(
+      ctx,
+      sprites.stageLeft,
+      playfieldLayout.stageLeft.x,
+      playfieldLayout.stageLeft.y,
+      playfieldLayout.stageLeft.w,
+      playfieldLayout.stageLeft.h,
+      1,
+    );
+  }
+  if (useSprites && playfieldLayout.stageRight && sprites?.stageRight) {
+    drawSprite(
+      ctx,
+      sprites.stageRight,
+      playfieldLayout.stageRight.x,
+      playfieldLayout.stageRight.y,
+      playfieldLayout.stageRight.w,
+      playfieldLayout.stageRight.h,
+      1,
+    );
   }
 
   ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
   ctx.lineWidth = 1;
-  if (importedLayout) {
-    for (let i = 1; i < importedLayout.lines.length - 1; i += 1) {
-      const x = importedLayout.lines[i]!;
-      ctx.beginPath();
-      ctx.moveTo(x, coverH);
-      ctx.lineTo(x, h);
-      ctx.stroke();
-    }
-  } else {
-    for (let c = 1; c < cols; c += 1) {
-      const x = c * colW;
-      ctx.beginPath();
-      ctx.moveTo(x, coverH);
-      ctx.lineTo(x, h);
-      ctx.stroke();
-    }
+  for (let i = 1; i < playfieldLayout.lines.length - 1; i += 1) {
+    const x = playfieldLayout.lines[i]!;
+    ctx.beginPath();
+    ctx.moveTo(x, coverH);
+    ctx.lineTo(x, h);
+    ctx.stroke();
   }
 
   ctx.save();
@@ -887,9 +895,10 @@ export function paintManiaNotefield(args: PaintManiaNotefieldArgs): void {
   ctx.restore();
 
   if (useSprites && sprites?.stageHint) {
-    const left = importedLayout?.columns[0]?.x ?? 0;
-    const right = importedLayout
-      ? importedLayout.columns[cols - 1]!.x + importedLayout.columns[cols - 1]!.w
+    const left = playfieldLayout.columns[0]?.x ?? 0;
+    const right = playfieldLayout.columns[cols - 1]
+      ? playfieldLayout.columns[cols - 1]!.x +
+        playfieldLayout.columns[cols - 1]!.w
       : w;
     const hintW = right - left;
     const hintH = Math.max(4, Math.min(spriteDestHeight(sprites.stageHint, hintW), 24));
@@ -932,10 +941,10 @@ export function paintManiaNotefield(args: PaintManiaNotefieldArgs): void {
     }
   }
 
-  if (useSprites && sprites?.stageBottom && importedLayout) {
-    const left = importedLayout.columns[0]!.x;
+  if (useSprites && sprites?.stageBottom) {
+    const left = playfieldLayout.columns[0]!.x;
     const right =
-      importedLayout.columns[cols - 1]!.x + importedLayout.columns[cols - 1]!.w;
+      playfieldLayout.columns[cols - 1]!.x + playfieldLayout.columns[cols - 1]!.w;
     const bw = right - left;
     const bh = Math.min(h - receptorY, spriteDestHeight(sprites.stageBottom, bw));
     drawSprite(ctx, sprites.stageBottom, left, h - bh, bw, bh, 1);

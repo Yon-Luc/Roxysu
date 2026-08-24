@@ -9,6 +9,8 @@ import { StandardSkinEditor } from "./sections/StandardSkinEditor";
 import { TaikoSkinEditor } from "./sections/TaikoSkinEditor";
 import { CatchSkinEditor } from "./sections/CatchSkinEditor";
 import {
+  COLUMN_SPACING_MAX,
+  COLUMN_SPACING_MIN,
   KEYMODES,
   LN_TAIL_SHAPES,
   NOTE_ORIENTATIONS,
@@ -239,6 +241,7 @@ export function SkinPage({ section }: { section?: string } = {}) {
       uniformColors: boolean;
       uniformWidth: boolean;
       uniformSize: boolean;
+      columnSpacing: number;
       lnTailShape: LnTailShape;
       lnShowHead: boolean;
     }>,
@@ -595,6 +598,26 @@ export function SkinPage({ section }: { section?: string } = {}) {
                 {dict?.skin.columns}
               </h2>
               <div className="flex flex-wrap items-center gap-3">
+                <label className="flex min-w-[10rem] flex-1 cursor-pointer flex-col gap-1 text-xs text-muted sm:max-w-[14rem]">
+                  <span>
+                    {t(dict?.skin.columnSpacing, {
+                      pct: Math.round((keySkin.columnSpacing ?? 0) * 100),
+                    })}
+                  </span>
+                  <input
+                    type="range"
+                    min={COLUMN_SPACING_MIN}
+                    max={COLUMN_SPACING_MAX}
+                    step={0.01}
+                    value={keySkin.columnSpacing ?? 0}
+                    onInput={(e) => {
+                      updateKeymode({
+                        columnSpacing: Number(e.currentTarget.value),
+                      });
+                    }}
+                    className="accent-[var(--accent)]"
+                  />
+                </label>
                 <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
                   <input
                     type="checkbox"

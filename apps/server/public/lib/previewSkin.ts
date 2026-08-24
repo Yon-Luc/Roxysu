@@ -52,6 +52,11 @@ export type ImportedManiaLayout = {
   columnLineWidth: number[];
 };
 
+/** Gap between columns as a fraction of one column’s share (0 = flush). */
+export const COLUMN_SPACING_DEFAULT = 0;
+export const COLUMN_SPACING_MIN = 0;
+export const COLUMN_SPACING_MAX = 0.4;
+
 export type KeymodeSkin = {
   shape: NoteShape;
   columns: ColumnSkin[];
@@ -61,6 +66,11 @@ export type KeymodeSkin = {
   uniformWidth: boolean;
   /** When true, heightScale (size) from column 1 applies to all columns. */
   uniformSize: boolean;
+  /**
+   * Uniform gap between columns as a fraction of one column’s share of the
+   * playfield (0–0.4). Procedural skins only; imported uses skin.ini arrays.
+   */
+  columnSpacing: number;
   /** Shape of the LN end (away from receptor). */
   lnTailShape: LnTailShape;
   /** When false, hold notes omit the head note graphic. */
@@ -135,6 +145,7 @@ export function defaultKeymodeSkin(keys: Keymode): KeymodeSkin {
     uniformColors: false,
     uniformWidth: false,
     uniformSize: false,
+    columnSpacing: COLUMN_SPACING_DEFAULT,
     lnTailShape: "pointed",
     lnShowHead: true,
   };
@@ -259,6 +270,13 @@ function parseKeymodeSkin(raw: unknown, keys: Keymode): KeymodeSkin {
     uniformColors: k.uniformColors === true,
     uniformWidth: k.uniformWidth === true,
     uniformSize: k.uniformSize === true,
+    columnSpacing: clamp(
+      typeof k.columnSpacing === "number"
+        ? k.columnSpacing
+        : base.columnSpacing,
+      COLUMN_SPACING_MIN,
+      COLUMN_SPACING_MAX,
+    ),
     lnTailShape: parseLnTailShape(k.lnTailShape),
     lnShowHead: k.lnShowHead !== false,
     ...(imported ? { imported } : {}),
@@ -422,6 +440,7 @@ export function resolveKeymodeSkin(
     uniformColors: base.uniformColors,
     uniformWidth: base.uniformWidth,
     uniformSize: base.uniformSize,
+    columnSpacing: base.columnSpacing,
     lnTailShape: base.lnTailShape,
     lnShowHead: base.lnShowHead,
     ...(base.imported ? { imported: base.imported } : {}),

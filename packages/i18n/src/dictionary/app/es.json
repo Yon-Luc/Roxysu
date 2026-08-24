@@ -439,6 +439,7 @@
     "sameColor": "Mismo color para todas las columnas",
     "sameWidth": "Mismo ancho para todas las columnas",
     "sameSize": "Mismo tamaño para todas las columnas",
+    "columnSpacing": "Espaciado entre columnas {{pct}}%",
     "copyColorsFrom": "Copiar colores desde",
     "copyColorsFromTitle": "Reutilizar colores de notas y LN de otro keymode",
     "copyColorsFromPlaceholder": "Elegir…",

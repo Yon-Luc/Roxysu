@@ -155,6 +155,49 @@ describe("layoutManiaPlayfield", () => {
     expect(total).toBeCloseTo(320, 5);
     expect(layout.columns[0]!.x).toBeCloseTo(40, 5);
   });
+
+  test("zero spacing matches equal-width flush columns", () => {
+    const layout = layoutManiaPlayfield({
+      canvasW: 400,
+      canvasH: 480,
+      keys: 4,
+      columnWidth: [1, 1, 1, 1],
+      columnSpacing: [0, 0, 0],
+      hitPositionPx: 402,
+    });
+    expect(layout.columns[0]!.x).toBeCloseTo(0, 5);
+    expect(layout.columns[0]!.w).toBeCloseTo(100, 5);
+    expect(layout.columns[1]!.x).toBeCloseTo(100, 5);
+    expect(layout.columns[3]!.x + layout.columns[3]!.w).toBeCloseTo(400, 5);
+  });
+
+  test("non-zero spacing opens gaps and shrinks columns", () => {
+    const flush = layoutManiaPlayfield({
+      canvasW: 400,
+      canvasH: 480,
+      keys: 4,
+      columnWidth: [1, 1, 1, 1],
+      columnSpacing: [0, 0, 0],
+      hitPositionPx: 402,
+    });
+    const spaced = layoutManiaPlayfield({
+      canvasW: 400,
+      canvasH: 480,
+      keys: 4,
+      columnWidth: [1, 1, 1, 1],
+      columnSpacing: [0.2, 0.2, 0.2],
+      hitPositionPx: 402,
+    });
+    expect(spaced.columns[0]!.w).toBeLessThan(flush.columns[0]!.w);
+    const gap01 =
+      spaced.columns[1]!.x -
+      (spaced.columns[0]!.x + spaced.columns[0]!.w);
+    expect(gap01).toBeGreaterThan(0);
+    expect(gap01).toBeCloseTo(spaced.columns[0]!.w * 0.2, 5);
+    const span =
+      spaced.columns[3]!.x + spaced.columns[3]!.w - spaced.columns[0]!.x;
+    expect(span).toBeCloseTo(400, 5);
+  });
 });
 
 describe("importedHitPositionFrac", () => {

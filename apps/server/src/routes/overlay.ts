@@ -206,7 +206,7 @@ export const overlayRoutes = new Elysia({ prefix: "/overlay" })
       await writeOverlayProfiles(db, profiles);
       return { profile: incoming };
     },
-    { body: t.Record(t.String(), t.Unknown()) },
+    { body: t.Any() },
   )
   .delete(
     "/profiles/:id",

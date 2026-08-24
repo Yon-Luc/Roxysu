@@ -73,9 +73,7 @@ export async function fetchOverlayProfiles() {
 
 export async function putOverlayProfile(profile: OverlayProfile) {
   return unwrap(
-    await api.api.overlay.profiles({ id: profile.id }).put({
-      body: profile as unknown as Record<string, unknown>,
-    }),
+    await api.api.overlay.profiles({ id: profile.id }).put(profile),
     "/api/overlay/profiles",
   );
 }

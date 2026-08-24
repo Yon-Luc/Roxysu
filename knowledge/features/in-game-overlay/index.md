@@ -37,18 +37,16 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
    that protocol degrade to always-visible with a stderr notice.
    `--follow-focus 0` disables; `--list-windows` dumps app_id/title/focused
    state for tuning the match string.
-8. Visibility after the first map toggles page-level visibility by injecting
-   JS (`documentElement.style.visibility`) plus a best-effort widget fade on
-   the view; the layer surface is never unmapped, because remapping makes
-   some compositors (Hyprland, niri) drop the overlay below fullscreen
-   windows. GTK4 opacity is unreliable here: it is ignored on Wayland
-   toplevels, and does not reach WebKitGTK's hardware-composited output.
-9. **Repaint forcing**: commits can stall while the surface sits above a
-   fullscreen game (frame-callback starvation / direct-scanout caching), so a
-   300ms tick re-requests a PAINT frame-clock phase, and while hidden it also
-   wobbles window width by 1px (~1.2s cadence) to force a full-damage commit.
-   Without this, hide/show visually lags events until the game's own
-   fullscreen state changes.
+8. Visibility is a hard map/unmap of the layer surface. Softer approaches all
+   failed in practice: GTK4 opacity is ignored on Wayland toplevels and does
+   not reach WebKitGTK's composited output; injected page-visibility JS
+   commits stall because the compositor never recomposes an unchanged-mapped
+   overlay above fullscreen games (visual state lagged events by one
+   focus-period until each fullscreen enter/exit forced recomposition).
+9. Every remap reasserts placement (`set_layer(TOP)` then
+   `set_layer(OVERLAY)`, plus queue_draw and page-visibility reset) so the
+   compositor re-slots the fresh surface above fullscreen windows instead of
+   leaving remapped overlays below them.
 10. Focus tracking uses its own Wayland event queue + GSource on the GDK
    connection; protocol C code is generated at build time by wayland-scanner
    from wlr-protocols into `apps/overlay/gen/` (gitignored).

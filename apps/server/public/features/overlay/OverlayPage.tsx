@@ -1,14 +1,13 @@
 import { focusManager, useQuery } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
-import { BeatmapCover } from "../../components/BeatmapCover";
-import { ModBadges } from "../../components/ModBadges";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchOverlay } from "../../lib/api";
-import { useAppDict } from "../../lib/i18n";
+import { useTosuLiveQuery } from "../../lib/useTosuLiveQuery";
+import { defaultOverlayProfile } from "@server/overlay/profiles";
 import {
-  formatAccuracy,
-  formatPp,
-  formatRelativeTime,
-} from "../../lib/format";
+  OverlayStage,
+} from "./OverlayStage";
+import type { OverlayElementContext } from "./OverlayElements";
+import { ScoreListElement } from "./OverlayElements";
 
 const DEFAULT_LIMIT = 8;
 const OVERLAY_CLASS = "overlay-mode";
@@ -27,14 +26,12 @@ function clampLimit(raw: unknown): number {
 export function OverlayPage({
   limit: limitProp,
   bg: bgProp,
+  profile: profileRef,
 }: {
   limit?: number;
   bg?: OverlayBg;
+  profile?: string;
 }) {
-  const limit = clampLimit(limitProp ?? DEFAULT_LIMIT);
-  const bg: OverlayBg = bgProp === "clear" ? "clear" : "solid";
-  const { dict } = useAppDict();
-
   useEffect(() => {
     document.documentElement.classList.add(OVERLAY_CLASS);
     // Keep React Query treating this page as focused (OBS CEF is often "hidden").
@@ -46,8 +43,8 @@ export function OverlayPage({
   }, []);
 
   const overlayQuery = useQuery({
-    queryKey: ["overlay", limit],
-    queryFn: () => fetchOverlay(limit),
+    queryKey: ["overlay", limitProp ?? null, bgProp ?? null, profileRef ?? null],
+    queryFn: () => fetchOverlay(limitProp, profileRef),
     staleTime: 0,
     refetchInterval: (query) =>
       query.state.data?.mode === "live" ? LIVE_POLL_MS : IDLE_POLL_MS,
@@ -63,7 +60,10 @@ export function OverlayPage({
   const knownIds = useRef<Set<string>>(new Set());
   const [freshIds, setFreshIds] = useState<Set<string>>(new Set());
   const seeded = useRef(false);
-  const scoreIdsKey = scores.map((s) => s.id).join(",");
+  const scoreIdsKey = useMemo(
+    () => scores.map((s) => s.id).join(","),
+    [scores],
+  );
 
   useEffect(() => {
     const incoming = scoreIdsKey.length > 0 ? scoreIdsKey.split(",") : [];
@@ -91,106 +91,60 @@ export function OverlayPage({
     setFreshIds(new Set());
   }, [mode]);
 
+  // No ?profile= → implicit single score-list layout; a missing requested
+  // profile yields null → page renders nothing.
+  const profile =
+    payload?.profile ?? (profileRef != null ? null : defaultOverlayProfile());
+  const snapshotQuery = useTosuLiveQuery({ enabled: profileRef != null });
+
+  const ctx: OverlayElementContext = useMemo(
+    () => ({
+      bg: profile?.bg ?? (bgProp === "clear" ? "clear" : "solid"),
+      mode,
+      scores,
+      freshIds,
+      session: liveSession,
+      snapshot: snapshotQuery.data ?? null,
+    }),
+    [
+      profile?.bg,
+      bgProp,
+      mode,
+      scores,
+      freshIds,
+      liveSession,
+      snapshotQuery.data,
+    ],
+  );
+
   if (overlayQuery.isLoading && !overlayQuery.data) {
     return null;
   }
 
-  if (mode === "empty") {
+  if (!profile) {
+    // A requested profile that does not exist server-side renders nothing.
     return null;
   }
 
-  return (
-    <div className="overlay-root pointer-events-none select-none p-3">
-      <div
-        className={
-          bg === "solid"
-            ? "w-full max-w-md rounded-xl border border-white/10 bg-[#0d0d0d]/92 px-3 py-3 shadow-2xl shadow-black/60 backdrop-blur-md"
-            : "w-full max-w-md"
-        }
-      >
-        <header className="mb-2.5 flex items-center gap-2 px-0.5">
-          {mode === "live" ? (
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-accent overlay-text">
-              <span className="relative flex h-1.5 w-1.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60" />
-                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent" />
-              </span>
-              {dict?.overlay.liveSession ?? "Live session"}
-              {liveSession ? (
-                <span className="font-semibold normal-case tracking-normal text-white/75">
-                  · {liveSession.scoreCount} plays
-                </span>
-              ) : null}
-            </span>
-          ) : (
-            <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/80 overlay-text">
-              {dict?.overlay.recentScores ?? "Recent scores"}
-            </span>
-          )}
-        </header>
-
-        <ul className="flex flex-col gap-1">
-          {scores.map((score) => {
-            const isFresh = freshIds.has(score.id);
-            return (
-              <li
-                key={score.id}
-                className={`overlay-row flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors duration-700 ${
-                  bg === "solid"
-                    ? isFresh
-                      ? "bg-accent/15"
-                      : "bg-white/[0.06]"
-                    : isFresh
-                      ? "bg-black/70"
-                      : "bg-black/55"
-                }`}
-              >
-                <BeatmapCover
-                  backgroundFileHash={score.backgroundFileHash}
-                  setOnlineId={score.setOnlineId}
-                  size="list"
-                  className="h-9 w-9 shrink-0 rounded shadow-md shadow-black/50"
-                  alt=""
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="truncate text-sm font-semibold text-white overlay-text">
-                      {score.title ?? dict?.session.untitled ?? "Untitled"}
-                    </span>
-                    {score.isPb ? (
-                      <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-amber-300 overlay-text">
-                        {dict?.session.pb ?? "PB"}
-                      </span>
-                    ) : null}
-                    {isFresh ? (
-                      <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-accent overlay-text">
-                        {dict?.session.new ?? "New"}
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="flex min-w-0 items-center gap-1 truncate text-xs text-white/70 overlay-text">
-                    <span className="truncate">
-                      {score.difficultyName ?? score.artist ?? "—"}
-                    </span>
-                    <ModBadges mods={score.mods} variant="overlay" />
-                  </div>
-                </div>
-                <div className="shrink-0 text-right">
-                  <div className="text-sm font-semibold tabular-nums text-white overlay-text">
-                    {formatAccuracy(score.accuracy)}
-                  </div>
-                  <div className="text-[11px] tabular-nums text-white/65 overlay-text">
-                    {formatPp(score.pp)}
-                    {mode === "recent"
-                      ? ` · ${formatRelativeTime(score.playedAt, dict?.common)}`
-                      : ""}
-                  </div>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+  if (!profileRef) {
+    // Legacy rendering: natural-width single-column list (pre-profile behavior).
+    if (mode === "empty") return null;
+    const legacyCtx: OverlayElementContext = {
+      ...ctx,
+      scores: scores.slice(0, clampLimit(limitProp)),
+    };
+    return (
+      <div className="overlay-root pointer-events-none select-none p-3">
+        <div className="w-full max-w-md">
+          <ScoreListElement ctx={legacyCtx} />
+        </div>
       </div>
+    );
+  }
+
+  return (
+    <div className="overlay-root pointer-events-none select-none">
+      <OverlayStage profile={profile} ctx={ctx} />
     </div>
   );
 }

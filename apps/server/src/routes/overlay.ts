@@ -18,6 +18,11 @@ import {
   resolveScorePp,
   type ManiaPpCurve,
 } from "../mania-rating/estimateScorePp";
+import {
+  readOverlayProfiles,
+  sanitizeOverlayProfile,
+  writeOverlayProfiles,
+} from "../overlay/profiles";
 
 export const DEFAULT_OVERLAY_LIMIT = 8;
 export const MAX_OVERLAY_LIMIT = 25;
@@ -127,10 +132,25 @@ export const overlayRoutes = new Elysia({ prefix: "/overlay" })
       const limit = clampOverlayLimit(query.limit);
       const current = await getCurrentSession(db);
 
+      const profileRef = query.profile?.trim() || undefined;
+      let profile = null;
+      if (profileRef) {
+        const profiles = await readOverlayProfiles(db);
+        const needle = profileRef.toLowerCase();
+        profile =
+          profiles.find(
+            (p) =>
+              p.id.toLowerCase() === needle || p.name.toLowerCase() === needle,
+          ) ?? null;
+      }
+
+      const base = { profile };
+
       if (current) {
         const scoreRows = await listSessionScores(db, current.id, { limit });
         const curves = await overlayCurves(db, scoreRows);
         return {
+          ...base,
           mode: "live" as const,
           session: {
             id: current.id,
@@ -144,6 +164,7 @@ export const overlayRoutes = new Elysia({ prefix: "/overlay" })
       const recent = await listRecentOverlayScores(db, limit);
       if (recent.length === 0) {
         return {
+          ...base,
           mode: "empty" as const,
           session: null,
           scores: [],
@@ -152,6 +173,7 @@ export const overlayRoutes = new Elysia({ prefix: "/overlay" })
 
       const curves = await overlayCurves(db, recent);
       return {
+        ...base,
         mode: "recent" as const,
         session: null,
         scores: recent.map((s) => serializeOverlayScore(s, curves)),
@@ -160,6 +182,39 @@ export const overlayRoutes = new Elysia({ prefix: "/overlay" })
     {
       query: t.Object({
         limit: t.Optional(t.Numeric()),
+        profile: t.Optional(t.String()),
       }),
+    },
+  )
+  .get("/profiles", async ({ db }) => ({
+    profiles: await readOverlayProfiles(db),
+  }))
+  .put(
+    "/profiles/:id",
+    async ({ db, params, body }) => {
+      const incoming = sanitizeOverlayProfile({ ...body, id: params.id });
+      if (!incoming) {
+        return new Response(JSON.stringify({ error: "invalid profile" }), {
+          status: 400,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      const profiles = await readOverlayProfiles(db);
+      const idx = profiles.findIndex((p) => p.id === incoming.id);
+      if (idx >= 0) profiles[idx] = incoming;
+      else profiles.push(incoming);
+      await writeOverlayProfiles(db, profiles);
+      return { profile: incoming };
+    },
+    { body: t.Record(t.String(), t.Unknown()) },
+  )
+  .delete(
+    "/profiles/:id",
+    async ({ db, params }) => {
+      const profiles = (await readOverlayProfiles(db)).filter(
+        (p) => p.id !== params.id,
+      );
+      await writeOverlayProfiles(db, profiles);
+      return { ok: true };
     },
   );

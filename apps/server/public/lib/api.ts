@@ -47,10 +47,43 @@ export async function fetchDashboard() {
   return unwrap(await api.api.dashboard.get(), "/api/dashboard");
 }
 
-export async function fetchOverlay(limit?: number) {
+export async function fetchOverlay(limit?: number, profile?: string) {
   return unwrap(
-    await api.api.overlay.get({ query: { limit } }),
+    await api.api.overlay.get({ query: { limit, profile } }),
     "/api/overlay",
+  );
+}
+
+export type OverlayProfile = import("@server/overlay/profiles").OverlayProfile;
+export type OverlayElementInstance =
+  import("@server/overlay/profiles").OverlayElementInstance;
+export type OverlayElementType =
+  import("@server/overlay/profiles").OverlayElementType;
+export type OverlayTrigger =
+  import("@server/overlay/profiles").OverlayTrigger;
+export type OverlayTriggerField =
+  import("@server/overlay/profiles").OverlayTriggerField;
+
+export async function fetchOverlayProfiles() {
+  return unwrap(
+    await api.api.overlay.profiles.get(),
+    "/api/overlay/profiles",
+  );
+}
+
+export async function putOverlayProfile(profile: OverlayProfile) {
+  return unwrap(
+    await api.api.overlay.profiles({ id: profile.id }).put({
+      body: profile as unknown as Record<string, unknown>,
+    }),
+    "/api/overlay/profiles",
+  );
+}
+
+export async function deleteOverlayProfile(id: string) {
+  return unwrap(
+    await api.api.overlay.profiles({ id }).delete(),
+    "/api/overlay/profiles",
   );
 }
 

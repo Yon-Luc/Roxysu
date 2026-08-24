@@ -108,6 +108,8 @@
           pkgs.gtk4-layer-shell
           pkgs.webkitgtk_6_0
           pkgs.wayland
+          pkgs.wayland-scanner
+          pkgs.wlr-protocols
         ]
         ++ nativeDeps;
 

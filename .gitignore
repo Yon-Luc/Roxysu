@@ -43,3 +43,5 @@ result-*
 
 # apps/overlay build artifact
 apps/overlay/roxysu-overlay
+# apps/overlay generated wayland protocol code
+apps/overlay/gen/

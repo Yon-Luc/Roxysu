@@ -31,6 +31,27 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
 5. The host is version-agnostic to lazer; only the compositor contract matters.
 6. Layer placement: `OVERLAY` layer, `exclusive_zone = -1`, anchored corner per
    `--anchor`, so panels/fullscreen windows never displace it.
+7. **Focus following** (default on): via `zwlr_foreign_toplevel_management`,
+   the surface shows only while a window whose `app_id` (fallback title)
+   contains `--match-app-id` (default `osu`) is activated. Compositors without
+   that protocol degrade to always-visible with a stderr notice.
+   `--follow-focus 0` disables; `--list-windows` dumps app_id/title/focused
+   state for tuning the match string.
+8. Visibility after the first map toggles page-level visibility by injecting
+   JS (`documentElement.style.visibility`) plus a best-effort widget fade on
+   the view; the layer surface is never unmapped, because remapping makes
+   some compositors (Hyprland, niri) drop the overlay below fullscreen
+   windows. GTK4 opacity is unreliable here: it is ignored on Wayland
+   toplevels, and does not reach WebKitGTK's hardware-composited output.
+9. **Repaint forcing**: commits can stall while the surface sits above a
+   fullscreen game (frame-callback starvation / direct-scanout caching), so a
+   300ms tick re-requests a PAINT frame-clock phase, and while hidden it also
+   wobbles window width by 1px (~1.2s cadence) to force a full-damage commit.
+   Without this, hide/show visually lags events until the game's own
+   fullscreen state changes.
+10. Focus tracking uses its own Wayland event queue + GSource on the GDK
+   connection; protocol C code is generated at build time by wayland-scanner
+   from wlr-protocols into `apps/overlay/gen/` (gitignored).
 
 ## Main flow
 
@@ -41,8 +62,10 @@ apps/overlay (C: GTK4 + gtk4-layer-shell + WebKitGTK 6)
 client app server → GET /api/overlay (live session / recent scores)
 ```
 
-Build: `nix develop` → `./apps/overlay/build.sh` → `./roxysu-overlay`
-(flags: `--url --anchor --margin --width --height --opacity --output`).
+Build: `nix develop` → `./apps/overlay/build.sh` (wayland-scanner generates
+protocol code) → `./roxysu-overlay`
+(flags: `--url --anchor --margin --width --height --opacity --output
+--match-app-id --follow-focus --list-windows`).
 
 ## Important symbols
 
@@ -63,4 +86,5 @@ Build: `nix develop` → `./apps/overlay/build.sh` → `./roxysu-overlay`
 ## Related knowledge
 
 - [vocabulary.md](../vocabulary.md) — In-game overlay
+- [features/overlay-editor/](../overlay-editor/index.md) — profiles behind `?profile=` URLs
 - [architecture/process-model.md](../architecture/process-model.md) — sibling process model

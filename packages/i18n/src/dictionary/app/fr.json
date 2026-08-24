@@ -9,6 +9,7 @@
     "hub": "Atelier",
     "download": "Téléchargements",
     "marathon": "Marathon",
+    "overlayEditor": "Overlay",
     "ratingLab": "Rating Lab",
     "skin": "Skin",
     "settings": "Paramètres"
@@ -798,6 +799,11 @@
   "overlay": {
     "liveSession": "Session en direct",
     "recentScores": "Scores récents"
+  },
+  "overlayEditor": {
+    "title": "Éditeur d'overlay",
+    "subtitle": "Composez le HUD overlay : placez les éléments, dimensionnez le rendu et conditionnez la visibilité à l'état tosu live.",
+    "saved": "Profil overlay enregistré"
   },
   "ratingLab": {
     "title": "Rating Lab",

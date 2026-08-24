@@ -323,6 +323,58 @@ client-app HTTP (`GET /api/overlay`).
 
 ---
 
+### Overlay profile
+
+A named, saved layout for the `/overlay` HUD page: render size (width/height),
+background mode (`solid`/`clear`), and positioned **Overlay elements**.
+Persisted in the Settings HTTP store (`settings` key `overlay.profiles`, JSON
+array) so every consumer — OBS browser source, Wayland host, browser tabs —
+resolves the same layout. Selected via `#/overlay?profile=<id or name>`;
+omitted → legacy single score-list rendering.
+
+**Not:** the `/overlay` page itself, an **Overlay element**, a Now selected
+layout (that one is page-local localStorage)
+
+**In code:** `OverlayProfile`, `apps/server/src/overlay/profiles.ts`,
+`apps/server/public/features/overlay-editor/`
+
+**See:** [features/overlay-editor/](features/overlay-editor/index.md)
+
+---
+
+### Overlay element
+
+One placed widget inside an Overlay profile, with canvas position (x/y), scale,
+per-type options (score-list limit, preview height), and an optional **Overlay
+trigger**. Extended set: `scoreList`, `identity`, `difficulty`, `livePlay`,
+`preview`, `analysis`, `sessionStats`, `personalStats`, `density`. Unknown
+types are dropped by server-side sanitization.
+
+**Not:** a Now selected widget (localStorage-backed, order-only)
+
+**In code:** `OverlayElementInstance`, `OVERLAY_ELEMENT_DEFS`
+(`profileModel.ts`), renderers in `features/overlay/OverlayElements.tsx`
+
+**See:** [features/overlay-editor/](features/overlay-editor/index.md)
+
+---
+
+### Overlay trigger
+
+A simple per-element visibility condition evaluated client-side against the
+**tosu live** snapshot (`play.active`, `status`, `connected`; op `is`/`isNot`;
+action `hide`/`show`/`fade`). No nesting or AND/OR composition. Triggers gate
+rendering only — never data fetching. A missing tosu snapshot leaves elements
+visible.
+
+**Not:** a rule engine, collection query
+
+**In code:** `OverlayTrigger`, `elementTriggerState()` in `profileModel.ts`
+
+**See:** [features/overlay-editor/](features/overlay-editor/index.md)
+
+---
+
 ### Now selected
 
 Client-app page that displays the in-game selected beatmap from **tosu live**, with optional embedded beatmap preview and mania pattern detail (pattern weights, density over time). Supports a Focus layout for a second monitor.

@@ -39,4 +39,4 @@ Optional WebSocket integration with **tosu** for live in-progress map state (ove
 
 - `features/sessions/` — Current session **Now selected** panel
 - `features/now-selected/` — second-monitor Now selected page
-- overlay / live UI surfaces (when enabled)
+- `features/overlay-editor/` — Overlay triggers / live elements on the `/overlay` HUD

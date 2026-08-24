@@ -34,3 +34,10 @@ export const SCORES_GAMEMODE_FILTER_KEY = "scores.gamemode_filter";
 
 export const SCORES_GAMEMODE_AUTO = "auto";
 export const SCORES_GAMEMODE_ALL = "*";
+
+/**
+ * Overlay profiles for the `/overlay` HUD page.
+ * JSON array of OverlayProfile objects (see apps/server/src/overlay/profiles.ts).
+ * Consumers pick one via `#/overlay?profile=<name>`; missing → legacy default layout.
+ */
+export const OVERLAY_PROFILES_KEY = "overlay.profiles";

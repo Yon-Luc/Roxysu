@@ -9,6 +9,7 @@
     "hub": "Community",
     "download": "Download",
     "marathon": "Maratona",
+    "overlayEditor": "Overlay",
     "ratingLab": "Rating Lab",
     "skin": "Skin",
     "settings": "Configurações"
@@ -798,6 +799,11 @@
   "overlay": {
     "liveSession": "Sessão ao vivo",
     "recentScores": "Pontuações recentes"
+  },
+  "overlayEditor": {
+    "title": "Editor de overlay",
+    "subtitle": "Compõe o HUD do overlay: posicione elementos, ajuste o tamanho de renderização e condicione a visibilidade ao estado do tosu live.",
+    "saved": "Perfil de overlay guardado"
   },
   "ratingLab": {
     "title": "Rating Lab",

@@ -9,6 +9,7 @@
     "hub": "Community",
     "download": "Download",
     "marathon": "Marathon",
+    "overlayEditor": "Overlay",
     "ratingLab": "Rating Lab",
     "skin": "Skin",
     "settings": "Settings"
@@ -798,6 +799,11 @@
   "overlay": {
     "liveSession": "Live session",
     "recentScores": "Recent scores"
+  },
+  "overlayEditor": {
+    "title": "Overlay editor",
+    "subtitle": "Compose the in-game overlay HUD: place elements, size the render surface, and gate visibility on tosu live state.",
+    "saved": "Overlay profile saved"
   },
   "ratingLab": {
     "title": "Rating Lab",

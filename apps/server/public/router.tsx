@@ -19,6 +19,11 @@ import { HubDetailPage } from "./features/hub/HubDetailPage";
 import { SettingsPage } from "./features/settings/SettingsPage";
 import { SkinPage } from "./features/settings/SkinPage";
 import { OverlayPage } from "./features/overlay/OverlayPage";
+const OverlayEditorPage = lazy(() =>
+  import("./features/overlay-editor/OverlayEditorPage").then((m) => ({
+    default: m.OverlayEditorPage,
+  })),
+);
 import { NowSelectedPage } from "./features/now-selected/NowSelectedPage";
 
 const DashboardPage = lazy(() =>
@@ -308,7 +313,7 @@ const overlayRoute = createRoute({
   path: "/overlay",
   validateSearch: (
     search: Record<string, unknown>,
-  ): { limit?: number; bg?: "solid" | "clear" } => ({
+  ): { limit?: number; bg?: "solid" | "clear"; profile?: string } => ({
     limit:
       search.limit == null || search.limit === ""
         ? undefined
@@ -316,10 +321,22 @@ const overlayRoute = createRoute({
     // Default is a solid panel; `clear` keeps only text + light row tint.
     bg:
       search.bg === "clear" || search.bg === "solid" ? search.bg : undefined,
+    profile:
+      typeof search.profile === "string" && search.profile.length > 0
+        ? search.profile
+        : undefined,
   }),
   component: function OverlayRoute() {
-    const { limit, bg } = overlayRoute.useSearch();
-    return <OverlayPage limit={limit} bg={bg} />;
+    const { limit, bg, profile } = overlayRoute.useSearch();
+    return <OverlayPage limit={limit} bg={bg} profile={profile} />;
+  },
+});
+
+const overlayEditorRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/overlay-editor",
+  component: function OverlayEditorRoute() {
+    return <OverlayEditorPage />;
   },
 });
 
@@ -344,6 +361,7 @@ const routeTree = rootRoute.addChildren([
     ...(isDesktopShell() ? [] : [ratingLabRoute]),
     skinRoute,
     settingsRoute,
+    overlayEditorRoute,
   ]),
   overlayRoute,
 ]);

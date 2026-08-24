@@ -52,7 +52,6 @@ static WebKitWebView *g_view = NULL;
 static int g_last_applied = -1;
 static int g_warned_waiting = 0;
 static int g_mapped = 0;
-static int g_hidden_ticks = 0;
 static struct wl_compositor *g_compositor = NULL;
 static FocusCtx g_focus = {0};
 
@@ -241,50 +240,21 @@ static void set_page_hidden(int hidden) {
                                       NULL, NULL, NULL);
 }
 
-static void force_repaint_attempt(void) {
-  GdkSurface *surface = gtk_native_get_surface(GTK_NATIVE(g_window));
-  GdkFrameClock *clock = surface ? gdk_surface_get_frame_clock(surface) : NULL;
-  gtk_widget_queue_draw(GTK_WIDGET(g_view));
-  if (clock != NULL)
-    gdk_frame_clock_request_phase(clock, GDK_FRAME_CLOCK_PHASE_PAINT);
-}
-
-static gboolean focus_tick(gpointer data) {
-  (void)data;
-  if (g_last_applied < 0 || !g_mapped || g_window == NULL || g_view == NULL)
-    return G_SOURCE_CONTINUE;
-
-  force_repaint_attempt();
-
-  if (g_last_applied == 0 &&
-      gtk_widget_get_visible(GTK_WIDGET(g_window))) {
-    g_hidden_ticks++;
-    if (g_hidden_ticks % 4 == 0) {
-      static int wobble = 0;
-      wobble ^= 1;
-      gtk_window_set_default_size(g_window, g_cfg.width + wobble,
-                                  g_cfg.height);
-      fprintf(stderr, "roxysu-overlay: repaint nudge\n");
-    }
-  } else {
-    g_hidden_ticks = 0;
-  }
-  return G_SOURCE_CONTINUE;
-}
-
 static void apply_visibility(int visible) {
   if (g_window == NULL || g_view == NULL || g_cfg.follow_focus == 0) return;
   if (g_last_applied == visible) return;
 
   if (visible && !g_mapped) {
     gtk_window_present(g_window);
+    gtk_layer_set_layer(g_window, GTK_LAYER_SHELL_LAYER_TOP);
+    gtk_layer_set_layer(g_window, GTK_LAYER_SHELL_LAYER_OVERLAY);
+    gtk_widget_queue_draw(GTK_WIDGET(g_view));
+    set_page_hidden(0);
     g_mapped = 1;
-  }
-  if (g_mapped) {
-    gtk_widget_set_opacity(GTK_WIDGET(g_view), visible ? 1.0 : 0.0);
-    set_page_hidden(!visible);
-    g_hidden_ticks = 0;
-    force_repaint_attempt();
+  } else if (!visible && g_mapped) {
+    set_page_hidden(1);
+    gtk_widget_set_visible(GTK_WIDGET(g_window), FALSE);
+    g_mapped = 0;
   }
 
   fprintf(stderr, "roxysu-overlay: %s (%s focused)\n",
@@ -605,8 +575,6 @@ int main(int argc, char **argv) {
               "roxysu-overlay: compositor lacks zwlr_foreign_toplevel_management;"
               " focus following disabled, staying always visible\n");
     gtk_window_present(window);
-  } else {
-    g_timeout_add(300, focus_tick, NULL);
   }
 
   GMainLoop *loop = g_main_loop_new(NULL, FALSE);

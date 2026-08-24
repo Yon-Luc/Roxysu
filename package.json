@@ -12,6 +12,8 @@
   "scripts": {
     "dev": "concurrently \"bun run --cwd apps/server dev\" \"bun run --filter '@roxysu/realm-reader' dev\" \"tosu\"",
     "desktop": "bun run --cwd apps/desktop dev",
+    "overlay": "bun run --cwd apps/overlay dev --output=DP-4",
+    "overlay:build": "nix develop -c bash apps/overlay/build.sh",
     "desktop:pack": "bun run --cwd apps/desktop pack",
     "desktop:dist:win": "bun run --cwd apps/desktop dist:win",
     "desktop:dist:linux-resources": "bun run --cwd apps/desktop dist:linux-resources",

@@ -1,6 +1,7 @@
 import { focusManager, useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { fetchOverlay } from "../../lib/api";
+import { fetchOverlay, fetchOverlaySkins } from "../../lib/api";
+import { applyOverlaySkinSnapshot } from "../../lib/overlaySkins";
 import { useTosuLiveQuery } from "../../lib/useTosuLiveQuery";
 import { defaultOverlayProfile } from "@server/overlay/profiles";
 import {
@@ -96,6 +97,23 @@ export function OverlayPage({
   const profile =
     payload?.profile ?? (profileRef != null ? null : defaultOverlayProfile());
   const snapshotQuery = useTosuLiveQuery({ enabled: profileRef != null });
+
+  // Consumer contexts (OBS browser source / Wayland host) start with empty
+  // skin stores; apply the server-side snapshot so they match the editor.
+  useEffect(() => {
+    if (!profileRef) return;
+    let cancelled = false;
+    void fetchOverlaySkins()
+      .then(({ snapshot }) => {
+        if (!cancelled && snapshot) return applyOverlaySkinSnapshot(snapshot);
+      })
+      .catch(() => {
+        /* skins are best-effort */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [profileRef]);
 
   const ctx: OverlayElementContext = useMemo(
     () => ({

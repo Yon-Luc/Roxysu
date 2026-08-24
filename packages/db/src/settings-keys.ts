@@ -41,3 +41,11 @@ export const SCORES_GAMEMODE_ALL = "*";
  * Consumers pick one via `#/overlay?profile=<name>`; missing → legacy default layout.
  */
 export const OVERLAY_PROFILES_KEY = "overlay.profiles";
+
+/**
+ * Skin snapshot served to overlay consumers (OBS browser source / Wayland
+ * host) so they render the same skins as the editor's browser: procedural
+ * mania/std/taiko/catch configs plus imported .osk sprites as data URLs.
+ * JSON object; see apps/server/public/lib/overlaySkins.ts.
+ */
+export const OVERLAY_SKINS_KEY = "overlay.skins";

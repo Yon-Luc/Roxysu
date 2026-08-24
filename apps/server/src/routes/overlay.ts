@@ -1,6 +1,7 @@
-import { beatmapSets, beatmaps, scores } from "@roxysu/db/schema";
+import { beatmapSets, beatmaps, scores, settings } from "@roxysu/db/schema";
 import { Elysia, t } from "elysia";
 import { and, desc, eq } from "drizzle-orm";
+import { OVERLAY_SKINS_KEY } from "@roxysu/db/settings-keys";
 
 import { dbPlugin } from "../db-runtime";
 import { toIso } from "../shared/serialize";
@@ -217,4 +218,54 @@ export const overlayRoutes = new Elysia({ prefix: "/overlay" })
       await writeOverlayProfiles(db, profiles);
       return { ok: true };
     },
-  );
+  )
+  .get("/skins", async ({ db }) => {
+    const [row] = await db
+      .select()
+      .from(settings)
+      .where(eq(settings.key, OVERLAY_SKINS_KEY))
+      .limit(1);
+    if (!row?.value) return { snapshot: null };
+    try {
+      return { snapshot: JSON.parse(row.value) };
+    } catch {
+      return { snapshot: null };
+    }
+  })
+  .put(
+    "/skins",
+    async ({ db, body }) => {
+      const raw = body as Record<string, unknown>;
+      const sprites: Record<string, string> = {};
+      if (raw.sprites != null && typeof raw.sprites === "object") {
+        for (const [key, value] of Object.entries(raw.sprites)) {
+          if (
+            typeof value === "string" &&
+            value.startsWith("data:image/") &&
+            value.length <= 8_000_000
+          ) {
+            sprites[key.slice(0, 128)] = value;
+          }
+        }
+      }
+      const snapshot = {
+        updatedAt: new Date().toISOString(),
+        mania: raw.mania ?? null,
+        std: raw.std ?? null,
+        taiko: raw.taiko ?? null,
+        catch: raw.catch ?? null,
+        sprites,
+      };
+      const value = JSON.stringify(snapshot);
+      await db
+        .insert(settings)
+        .values({ key: OVERLAY_SKINS_KEY, value })
+        .onConflictDoUpdate({ target: settings.key, set: { value } });
+      return { ok: true };
+    },
+    { body: t.Any() },
+  )
+  .delete("/skins", async ({ db }) => {
+    await db.delete(settings).where(eq(settings.key, OVERLAY_SKINS_KEY));
+    return { ok: true };
+  });

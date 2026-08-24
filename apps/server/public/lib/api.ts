@@ -85,6 +85,17 @@ export async function deleteOverlayProfile(id: string) {
   );
 }
 
+export async function fetchOverlaySkins() {
+  return unwrap(await api.api.overlay.skins.get(), "/api/overlay/skins");
+}
+
+export async function putOverlaySkins(snapshot: unknown) {
+  return unwrap(
+    await api.api.overlay.skins.put(snapshot as never),
+    "/api/overlay/skins",
+  );
+}
+
 export type StatsGranularity = "day" | "week";
 export type StatsRange = 30 | 90 | 180;
 export type StatsSkillAxis = "all" | "rc" | "ln" | "fln";

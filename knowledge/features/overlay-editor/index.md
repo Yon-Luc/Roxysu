@@ -2,7 +2,9 @@
 last_verified: 2026-08
 confidence: verified
 touches:
-  - apps/server/src/overlay/profiles.ts
+  - `apps/server/src/overlay/profiles.ts`
+  - apps/server/public/lib/overlaySkins.ts
+  - apps/server/public/lib/maniaSkinImport.ts
   - apps/server/src/routes/overlay.ts
   - packages/db/src/settings-keys.ts
   - apps/server/public/features/overlay
@@ -61,6 +63,15 @@ evaluated against **tosu live**.
     (`backgroundOptions`: `bgEnabled`, `bgColor` hex, `bgOpacity` 0–100).
     Applied on the positioned wrapper in `OverlayStage` (rounded + padding +
     shadow); disabled by default.
+11. **Skin sync**: consumer contexts (OBS browser source / Wayland host) start
+    with empty skin stores, so the editor toolbar has *Push skins*: it
+    snapshots all four procedural skin configs plus imported .osk sprites
+    (data URLs) via `collectOverlaySkinSnapshot()` → `PUT /api/overlay/skins`
+    (settings key `overlay.skins`). Overlay pages apply the snapshot on load
+    (`applyOverlaySkinSnapshot`), restoring sprites into IndexedDB before the
+    configs hit the skin stores. Element option updates must always spread the
+    raw options object — never the normalized helper output, which would drop
+    sibling keys.
 
 ## Main flows
 

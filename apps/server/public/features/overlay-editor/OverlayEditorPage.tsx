@@ -12,9 +12,11 @@ import {
   deleteOverlayProfile,
   fetchOverlayProfiles,
   putOverlayProfile,
+  putOverlaySkins,
   type OverlayElementInstance,
   type OverlayProfile,
 } from "../../lib/api";
+import { collectOverlaySkinSnapshot } from "../../lib/overlaySkins";
 import { pushToast } from "../../lib/toasts";
 import { useAppDict } from "../../lib/i18n";
 import { useTosuLiveQuery } from "../../lib/useTosuLiveQuery";
@@ -181,6 +183,20 @@ export function OverlayEditorPage() {
       setDraftForId(null);
       queryClient.invalidateQueries({ queryKey: ["overlay", "profiles"] });
     },
+  });
+
+  const pushSkinsMutation = useMutation({
+    mutationFn: async () => {
+      const snapshot = await collectOverlaySkinSnapshot();
+      return putOverlaySkins(snapshot);
+    },
+    onSuccess: () =>
+      pushToast({
+        title: "Overlay skins published",
+        detail: "Overlay consumers will render with these skins.",
+        tone: "success",
+      }),
+    onError: (error) => pushToast({ title: String(error), tone: "error" }),
   });
 
   const snapshotQuery = useTosuLiveQuery();
@@ -414,6 +430,15 @@ export function OverlayEditorPage() {
                   Copy URL
                 </button>
               ) : null}
+              <button
+                type="button"
+                className="rx-btn !px-3 !py-1 text-xs"
+                disabled={pushSkinsMutation.isPending}
+                onClick={() => pushSkinsMutation.mutate(undefined)}
+                title="Publish this browser's preview skins (incl. imported .osk) for overlay consumers"
+              >
+                {pushSkinsMutation.isPending ? "Pushing…" : "Push skins"}
+              </button>
               <button
                 type="button"
                 className="rx-btn ml-auto !px-3 !py-1 text-xs"

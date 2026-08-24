@@ -599,6 +599,43 @@ export function ensureImportedSpritesLoaded(): void {
   void hydrateFromIdb();
 }
 
+/** Export every stored imported-skin sprite as a data URL keyed by its blob id. */
+export async function exportImportedSpriteDataUrls(): Promise<
+  Record<string, string>
+> {
+  const rows = await idbGetAll();
+  const out: Record<string, string> = {};
+  for (const [key, blob] of rows) {
+    out[key] = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+  }
+  return out;
+}
+
+/** Restore exported sprites into IndexedDB and rehydrate the sprite cache. */
+export async function importImportedSprites(
+  entries: Record<string, string>,
+): Promise<void> {
+  if (typeof indexedDB === "undefined") return;
+  const pairs: Array<[string, Blob]> = [];
+  for (const [key, dataUrl] of Object.entries(entries)) {
+    try {
+      pairs.push([key, await (await fetch(dataUrl)).blob()]);
+    } catch {
+      // skip broken entry
+    }
+  }
+  if (pairs.length === 0) return;
+  await idbPut(pairs);
+  spriteCache = {};
+  loadStarted = false;
+  ensureImportedSpritesLoaded();
+}
+
 export function getImportedManiaSprites(keys: number): ManiaSkinSprites | null {
   if (!KEYMODES.includes(keys as Keymode)) return null;
   return spriteCache[keys as Keymode] ?? null;

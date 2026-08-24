@@ -530,7 +530,13 @@ export async function resetAllImported(): Promise<void> {
 }
 
 async function hydrateFromIdb(): Promise<void> {
-  const rows = await idbGetAll();
+  await hydrateSpritesFromRows(await idbGetAll());
+}
+
+/** Decode sprite blobs into the per-keymode cache and notify listeners. */
+async function hydrateSpritesFromRows(
+  rows: Array<[string, Blob]>,
+): Promise<void> {
   const grouped: Partial<Record<Keymode, ManiaSkinBlobs>> = {};
   for (const [key, blob] of rows) {
     const keys = Number(key.split(":")[0]) as Keymode;
@@ -603,8 +609,7 @@ export function ensureImportedSpritesLoaded(): void {
 export async function exportImportedSpriteDataUrls(): Promise<
   Record<string, string>
 > {
-  const rows = await idbGetAll();
-  const out: Record<string, string> = {};
+  const rows = await idbGetAll();  const out: Record<string, string> = {};
   for (const [key, blob] of rows) {
     out[key] = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
@@ -614,6 +619,15 @@ export async function exportImportedSpriteDataUrls(): Promise<
     });
   }
   return out;
+}
+
+/** Number of imported-skin sprite blobs stored in this browser's IndexedDB. */
+export async function countImportedSprites(): Promise<number> {
+  try {
+    return (await idbGetAll()).length;
+  } catch {
+    return 0;
+  }
 }
 
 /** Restore exported sprites into IndexedDB and rehydrate the sprite cache. */
@@ -634,6 +648,33 @@ export async function importImportedSprites(
   spriteCache = {};
   loadStarted = false;
   ensureImportedSpritesLoaded();
+}
+
+/**
+ * Load overlay-published sprites straight from the server into the sprite
+ * cache — no IndexedDB involved, so every browser/origin renders the same
+ * imported skins. `blobKeys` are the published sprite ids ("4:notes:0", …).
+ */
+export async function applyOverlaySpriteEntries(
+  blobKeys: string[],
+): Promise<void> {
+  if (typeof indexedDB === "undefined" && typeof Image === "undefined") return;
+  const rows: Array<[string, Blob]> = [];
+  for (const key of blobKeys.slice(0, 512)) {
+    try {
+      const res = await fetch(
+        `/api/overlay/skins/sprites/${encodeURIComponent(key)}`,
+      );
+      if (!res.ok) continue;
+      rows.push([key, await res.blob()]);
+    } catch {
+      // skip broken entry
+    }
+  }
+  if (rows.length === 0) return;
+  spriteCache = {};
+  loadStarted = true;
+  await hydrateSpritesFromRows(rows);
 }
 
 export function getImportedManiaSprites(keys: number): ManiaSkinSprites | null {

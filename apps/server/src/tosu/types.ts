@@ -23,6 +23,8 @@ export type TosuLiveBeatmap = {
   rate: number;
   state: string | null;
   stateNumber: number | null;
+  /** Current in-game audio time (tosu beatmap.time.live, ms). */
+  timeLiveMs: number | null;
 };
 
 export type TosuLivePlay = {

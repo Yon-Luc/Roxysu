@@ -425,6 +425,14 @@
     "resetKeymode": "Restablecer {{keys}}K",
     "resetAll": "Restablecer todo",
     "resetColumns": "Restablecer columnas",
+    "pushOverlay": "Publicar al overlay",
+    "overlaySync": {
+      "title": "Sincronización de skins del overlay",
+      "hint": "Los consumidores del overlay (OBS / host Wayland) usan la instantánea publicada abajo — publica tras cambiar skins.",
+      "push": "Publicar al overlay",
+      "pushing": "Publicando…",
+      "mismatch": "Este navegador tiene sprites sin publicar — publica para actualizar el overlay."
+    },
     "shapes": {
       "flat": "Plana",
       "arrow": "Flecha",

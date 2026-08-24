@@ -29,12 +29,13 @@ While song-selecting or playing, open **Now selected** (optionally `#/now-select
 1. **tosu live** is the selection source — not scores. Realm extraction remains authoritative for plays.
 2. The Current session **Now selected** panel stays as a compact hub; this page is the rich companion.
 3. Preview auto-starts when the map is matched in the local mirror and in-game play is not active (configurable). Pause while `play.active` avoids doubling game audio.
-4. Pattern weights / density / hotspots use the same `ManiaPatternDetail` path as the practice profile (unrated chart).
-5. Maps not in the local mirror still show identity + ephemeral mania analysis from tosu `.osu` text; preview is skipped.
-6. Widget visibility and order are page-local (`localStorage` key `roxysu:now-selected-layout`), not the Settings HTTP store.
-7. Focus layout (`?focus=1`) hides AppShell chrome (sidebar, mobile nav) for a second monitor.
-8. Personal play count / best accuracy / best PP use `GET /api/beatmaps/:id/stats`, not the full practice-profile payload.
-9. Live play ticks patch the tosu live query cache (`tosu.updated` `reason: play`). HTTP poll of `GET /api/tosu/live` runs only when SSE is down.
+4. Preview position syncs with tosu `beatmap.time.live`: while tosu samples are fresh (≤1.5s old), `BeatmapPreviewEmbed` drives its playfield clock from the live time (interpolated at the tosu rate) and hard-corrects local audio when it drifts >350ms; otherwise it falls back to independent playback from the preview point.
+5. Pattern weights / density / hotspots use the same `ManiaPatternDetail` path as the practice profile (unrated chart).
+6. Maps not in the local mirror still show identity + ephemeral mania analysis from tosu `.osu` text; preview is skipped.
+7. Widget visibility and order are page-local (`localStorage` key `roxysu:now-selected-layout`), not the Settings HTTP store.
+8. Focus layout (`?focus=1`) hides AppShell chrome (sidebar, mobile nav) for a second monitor.
+9. Personal play count / best accuracy / best PP use `GET /api/beatmaps/:id/stats`, not the full practice-profile payload.
+10. Live play ticks patch the tosu live query cache (`tosu.updated` `reason: play`). HTTP poll of `GET /api/tosu/live` runs only when SSE is down.
 
 ## Security rules
 
@@ -51,6 +52,7 @@ GET /api/tosu/live  →  NowSelectedPage (SSE tosu.updated; poll only if SSE dow
 GET /api/tosu/live/analysis  →  pattern weights / density (when checksum stable)
 matchedBeatmapId  →  GET /api/beatmaps/:id/stats (play count / best acc / best PP)
 matchedBeatmapId  →  BeatmapPreviewEmbed → GET /api/beatmaps/:id/preview
+beatmap.time.live (SSE play ticks) → BeatmapPreviewEmbed clock sync
 ```
 
 ## Important symbols

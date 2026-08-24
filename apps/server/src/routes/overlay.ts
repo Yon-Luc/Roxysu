@@ -239,9 +239,13 @@ export const overlayRoutes = new Elysia({ prefix: "/overlay" })
       const sprites: Record<string, string> = {};
       if (raw.sprites != null && typeof raw.sprites === "object") {
         for (const [key, value] of Object.entries(raw.sprites)) {
+          // Imported .osk blobs are stored without a MIME type, so exported
+          // data URLs may read "data:application/octet-stream;base64,…" —
+          // accept any base64 data URL, not just image/*.
           if (
             typeof value === "string" &&
-            value.startsWith("data:image/") &&
+            value.startsWith("data:") &&
+            value.includes(";base64,") &&
             value.length <= 8_000_000
           ) {
             sprites[key.slice(0, 128)] = value;
@@ -268,4 +272,35 @@ export const overlayRoutes = new Elysia({ prefix: "/overlay" })
   .delete("/skins", async ({ db }) => {
     await db.delete(settings).where(eq(settings.key, OVERLAY_SKINS_KEY));
     return { ok: true };
-  });
+  })
+  .get(
+    "/skins/sprites/:id",
+    async ({ db, params }) => {
+      const [row] = await db
+        .select()
+        .from(settings)
+        .where(eq(settings.key, OVERLAY_SKINS_KEY))
+        .limit(1);
+      let entry: string | undefined;
+      if (row?.value) {
+        try {
+          const parsed = JSON.parse(row.value) as {
+            sprites?: Record<string, string>;
+          };
+          entry = parsed.sprites?.[params.id];
+        } catch {
+          return new Response("not found", { status: 404 });
+        }
+      }
+      const match = /^data:([\w./+-]*);base64,(.+)$/i.exec(entry ?? "");
+      if (!match) return new Response("not found", { status: 404 });
+      const bytes = Buffer.from(match[2]!, "base64");
+      return new Response(bytes, {
+        headers: {
+          "content-type": match[1] || "application/octet-stream",
+          "cache-control": "no-store",
+        },
+      });
+    },
+    { params: t.Object({ id: t.String() }) },
+  );

@@ -528,8 +528,13 @@ function NowSelectedPreview({
   heightRem: number;
   onHeightRemChange: (next: number) => void;
 }) {
-  const { data: playActive } = useTosuLiveQuery({
-    select: (snap) => Boolean(snap.play?.active),
+  const { data: live } = useTosuLiveQuery({
+    select: (snap) => ({
+      playActive: Boolean(snap.play?.active),
+      connected: Boolean(snap.connected),
+      timeLiveMs: snap.beatmap?.timeLiveMs ?? null,
+      rate: snap.beatmap?.rate ?? null,
+    }),
   });
   return (
     <BeatmapPreviewEmbed
@@ -537,9 +542,12 @@ function NowSelectedPreview({
       beatmapId={beatmapId}
       autoPlay={autoPlay}
       muted={muted}
-      playingAllowed={!(pauseWhilePlaying && playActive)}
+      playingAllowed={!(pauseWhilePlaying && live?.playActive)}
       heightRem={heightRem}
       onHeightRemChange={onHeightRemChange}
+      syncActive={live?.connected ?? false}
+      syncTimeMs={live?.timeLiveMs ?? null}
+      syncRate={live?.rate ?? null}
     />
   );
 }

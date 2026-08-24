@@ -20,6 +20,7 @@ type TosuV2Payload = {
       stars?: { total?: number } | number;
       cs?: number;
     };
+    time?: { live?: number };
   };
   play?: {
     accuracy?: number;
@@ -163,6 +164,7 @@ export function parseTosuV2Message(raw: string): ParsedTosuFrame | null {
     rate,
     state: stateName,
     stateNumber,
+    timeLiveMs: asFinite(bm?.time?.live),
   };
 
   const playRaw = data.play;

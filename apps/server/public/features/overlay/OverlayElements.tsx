@@ -297,6 +297,9 @@ export function PreviewElement({
       playingAllowed={!ctx.snapshot?.play?.active}
       heightRem={heightRem}
       showControls={false}
+      syncActive={Boolean(ctx.snapshot?.connected)}
+      syncTimeMs={ctx.snapshot?.beatmap?.timeLiveMs ?? null}
+      syncRate={ctx.snapshot?.beatmap?.rate ?? null}
     />
   );
 }
@@ -396,12 +399,16 @@ export function PersonalStatsElement({ ctx }: { ctx: OverlayElementContext }) {
 }
 
 export function DensityElement({ ctx }: { ctx: OverlayElementContext }) {
+  const snapshot = ctx.snapshot;
+  const checksum = snapshot?.beatmap?.checksum ?? null;
   const analysisQuery = useQuery({
-    queryKey: ["tosu", "live-analysis-density"],
+    queryKey: ["tosu", "live", "analysis", checksum],
     queryFn: fetchTosuLiveAnalysis,
-    enabled: ctx.snapshot?.matchedBeatmapId != null,
-    refetchInterval: 15_000,
-    refetchIntervalInBackground: true,
+    enabled:
+      Boolean(checksum) &&
+      snapshot?.status === "connected" &&
+      !snapshot.analysis.analyzing,
+    staleTime: 60_000,
   });
   const samples = analysisQuery.data?.detail?.samples ?? [];
   if (samples.length === 0) return null;

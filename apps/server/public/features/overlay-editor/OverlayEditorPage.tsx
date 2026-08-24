@@ -12,11 +12,10 @@ import {
   deleteOverlayProfile,
   fetchOverlayProfiles,
   putOverlayProfile,
-  putOverlaySkins,
   type OverlayElementInstance,
   type OverlayProfile,
 } from "../../lib/api";
-import { collectOverlaySkinSnapshot } from "../../lib/overlaySkins";
+import { publishOverlaySkins } from "../../lib/overlaySkins";
 import { pushToast } from "../../lib/toasts";
 import { useAppDict } from "../../lib/i18n";
 import { useTosuLiveQuery } from "../../lib/useTosuLiveQuery";
@@ -186,17 +185,7 @@ export function OverlayEditorPage() {
   });
 
   const pushSkinsMutation = useMutation({
-    mutationFn: async () => {
-      const snapshot = await collectOverlaySkinSnapshot();
-      return putOverlaySkins(snapshot);
-    },
-    onSuccess: () =>
-      pushToast({
-        title: "Overlay skins published",
-        detail: "Overlay consumers will render with these skins.",
-        tone: "success",
-      }),
-    onError: (error) => pushToast({ title: String(error), tone: "error" }),
+    mutationFn: publishOverlaySkins,
   });
 
   const snapshotQuery = useTosuLiveQuery();

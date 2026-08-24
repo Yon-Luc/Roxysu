@@ -14,6 +14,7 @@ export type AppEvent =
       reason: "play" | "full";
       play?: TosuLivePlay | null;
       beatmapState?: string | null;
+      beatmapTimeMs?: number | null;
     };
 
 type Listener = (event: AppEvent) => void;

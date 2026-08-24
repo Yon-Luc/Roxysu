@@ -68,6 +68,7 @@ function emit(force = false): void {
       reason: "play",
       play,
       beatmapState: beatmap?.state ?? null,
+      beatmapTimeMs: beatmap?.timeLiveMs ?? null,
     });
     return;
   }

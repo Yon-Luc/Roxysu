@@ -39,6 +39,7 @@ import {
   resetImportedKeymode,
 } from "../../lib/maniaSkinImport";
 import { useAppDict, t } from "../../lib/i18n";
+import { OverlaySkinSyncCard } from "./OverlaySkinSyncCard";
 import type { Dictionary } from "@roxysu/i18n";
 import { SkinColorInput } from "./SkinColorInput";
 
@@ -369,6 +370,8 @@ export function SkinPage({ section }: { section?: string } = {}) {
           </button>
         </div>
       </div>
+
+      <OverlaySkinSyncCard />
 
       <div className="flex flex-wrap gap-2" role="tablist" aria-label="Ruleset">
         <button

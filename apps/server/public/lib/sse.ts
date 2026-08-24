@@ -143,14 +143,18 @@ export function connectLiveUpdates(queryClient: QueryClient): () => void {
         reason?: "play" | "full";
         play?: TosuLive["play"];
         beatmapState?: string | null;
+        beatmapTimeMs?: number | null;
       };
       if (detail.reason === "play") {
         queryClient.setQueryData<TosuLive>(["tosu", "live"], (prev) => {
           if (!prev) return prev;
-          const beatmap =
-            prev.beatmap && detail.beatmapState !== undefined
-              ? { ...prev.beatmap, state: detail.beatmapState }
-              : prev.beatmap;
+          let beatmap = prev.beatmap;
+          if (beatmap && detail.beatmapState !== undefined) {
+            beatmap = { ...beatmap, state: detail.beatmapState };
+          }
+          if (beatmap && detail.beatmapTimeMs !== undefined) {
+            beatmap = { ...beatmap, timeLiveMs: detail.beatmapTimeMs };
+          }
           return {
             ...prev,
             play: detail.play ?? prev.play,

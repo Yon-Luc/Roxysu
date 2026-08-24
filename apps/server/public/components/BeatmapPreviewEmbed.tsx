@@ -38,6 +38,17 @@ export function clampPreviewEmbedHeightRem(value: number): number {
   );
 }
 
+/** Hard-correct local audio when it drifts this far from the tosu time. */
+const SYNC_CORRECT_MS = 350;
+/** A tosu sample older than this is stale — fall back to the local clock. */
+const SYNC_FRESH_MS = 1500;
+
+type LiveSyncSample = { ms: number; at: number; playing: boolean };
+
+function syncSampleFresh(sample: LiveSyncSample | null): boolean {
+  return sample != null && performance.now() - sample.at <= SYNC_FRESH_MS;
+}
+
 export function BeatmapPreviewEmbed({
   beatmapId,
   autoPlay,
@@ -46,6 +57,9 @@ export function BeatmapPreviewEmbed({
   heightRem,
   onHeightRemChange,
   showControls = true,
+  syncActive = false,
+  syncTimeMs = null,
+  syncRate = null,
 }: {
   beatmapId: string;
   autoPlay: boolean;
@@ -57,6 +71,12 @@ export function BeatmapPreviewEmbed({
   onHeightRemChange?: (next: number) => void;
   /** Hide the seek/timing control bar (overlay HUD usage). */
   showControls?: boolean;
+  /** tosu live sync: latest in-game audio time (beatmap.time.live, ms). */
+  syncTimeMs?: number | null;
+  /** Playback rate reported by tosu (for interpolation between ticks). */
+  syncRate?: number | null;
+  /** True while tosu is connected and the live map is matched. */
+  syncActive?: boolean;
 }) {
   const { dict } = useAppDict();
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -69,6 +89,7 @@ export function BeatmapPreviewEmbed({
   const previewSeekDone = useRef(false);
   const desiredMsRef = useRef<number | null>(null);
   const seekGuardUntilRef = useRef(0);
+  const liveSyncSampleRef = useRef<LiveSyncSample | null>(null);
   const lengthMsRef = useRef(0);
   const durationMsRef = useRef(0);
   const audioUrlRef = useRef<string | null>(null);
@@ -123,6 +144,9 @@ export function BeatmapPreviewEmbed({
   durationMsRef.current = durationMs;
 
   function mapTimeMs(): number {
+    if (syncSampleFresh(liveSyncSampleRef.current)) {
+      return clockRef.current.nowMs();
+    }
     return sampleAudioClock(clockRef.current, audioRef.current, currentMs);
   }
 
@@ -174,6 +198,7 @@ export function BeatmapPreviewEmbed({
   useEffect(() => {
     previewSeekDone.current = false;
     desiredMsRef.current = null;
+    liveSyncSampleRef.current = null;
     clockRef.current.set(0, { playing: false, rate: 1 });
     audioRef.current?.pause();
     setAudioError(null);
@@ -198,6 +223,7 @@ export function BeatmapPreviewEmbed({
       previewSeekDone.current = true;
       const pt = previewTime;
       if (pt == null || pt <= 0) return;
+      if (syncSampleFresh(liveSyncSampleRef.current)) return;
       if (desiredMsRef.current != null && desiredMsRef.current > 250) return;
       const atMs = (audio!.currentTime || 0) * 1000;
       if (atMs > 250) return;
@@ -224,6 +250,7 @@ export function BeatmapPreviewEmbed({
     }
 
     function syncClockFromAudio() {
+      if (syncSampleFresh(liveSyncSampleRef.current)) return;
       const ms = (audio!.currentTime || 0) * 1000;
       const desired = desiredMsRef.current;
       if (desired != null) {
@@ -319,6 +346,35 @@ export function BeatmapPreviewEmbed({
       });
     }
   }, [playingAllowed, autoPlay, audioUrl]);
+
+  useEffect(() => {
+    if (!syncActive || syncTimeMs == null) {
+      liveSyncSampleRef.current = null;
+      return;
+    }
+    const now = performance.now();
+    const prev = liveSyncSampleRef.current;
+    const playing = prev == null || syncTimeMs > prev.ms + 20;
+    const rate = syncRate != null && syncRate > 0 ? syncRate : 1;
+    liveSyncSampleRef.current = { ms: syncTimeMs, at: now, playing };
+    clockRef.current.set(syncTimeMs, {
+      playing,
+      rate: playing ? rate : clockRef.current.playbackRate,
+    });
+    setCurrentMs(syncTimeMs);
+
+    const audio = audioRef.current;
+    if (!audio) return;
+    const atMs = (audio.currentTime || 0) * 1000;
+    if (Math.abs(atMs - syncTimeMs) <= SYNC_CORRECT_MS) return;
+    desiredMsRef.current = syncTimeMs;
+    seekGuardUntilRef.current = now + 400;
+    try {
+      audio.currentTime = syncTimeMs / 1000;
+    } catch {
+      // InvalidStateError before metadata
+    }
+  }, [syncActive, syncTimeMs, syncRate]);
 
   function onSeek(e: FormEvent<HTMLInputElement>) {
     seekTo(Number(e.currentTarget.value));

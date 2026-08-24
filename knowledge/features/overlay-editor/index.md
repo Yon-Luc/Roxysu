@@ -53,7 +53,8 @@ evaluated against **tosu live**.
    hidden-by-trigger placeholders are selectable too).
 8. The preview element renders gameplay only: `BeatmapPreviewEmbed` accepts
    `showControls` (default true) and the overlay passes false to hide the
-   seek/timing bar.
+   seek/timing bar. The embed's clock syncs with tosu `beatmap.time.live`
+   (see `features/now-selected/` rule 4).
 9. The **identity** element carries per-instance options (`identityOptions`):
    `showAnalysis` toggle, `ratingSource` (`dan` → Sunny dan estimate from tosu
    live analysis, or `star` → beatmap star rating), and `showPattern`
@@ -71,7 +72,21 @@ evaluated against **tosu live**.
     (`applyOverlaySkinSnapshot`), restoring sprites into IndexedDB before the
     configs hit the skin stores. Element option updates must always spread the
     raw options object — never the normalized helper output, which would drop
-    sibling keys.
+    sibling keys. Imported .osk sprites live in IndexedDB scoped to the exact
+    origin (localhost ≠ 127.0.0.1): pushing from an origin without them
+    publishes configs with zero sprites and consumers fall back to the
+    procedural default look — the editor toast warns on this case. The same
+    publish action (`publishOverlaySkins()`) is exposed on the Skin page
+    header, guaranteeing same-origin sprites at the moment of import. Once a
+    snapshot with sprites is published, every consumer converges to it
+    regardless of origin. Consumers load published sprites over HTTP
+    (`GET /api/overlay/skins/sprites/:id`, decoded from the stored data URLs
+    via `applyOverlaySpriteEntries()`) — no browser-side persistence is
+    involved in rendering them; the local mirror is the single source of
+    truth. The Skin page shows an **Overlay skin sync** card
+    (`OverlaySkinSyncCard.tsx`) with this browser's sprite count vs the
+    published snapshot — the way to locate which browser/app actually owns the
+    imported sprites (IndexedDB is per browser, per origin).
 
 ## Main flows
 

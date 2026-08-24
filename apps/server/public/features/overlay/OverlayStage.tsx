@@ -12,7 +12,7 @@ import {
   DensityElement,
   type OverlayElementContext,
 } from "./OverlayElements";
-import { clampScale, elementTriggerState } from "./profileModel";
+import { backgroundOptions, clampScale, elementTriggerState, toRgba } from "./profileModel";
 
 function ElementContent({
   element,
@@ -133,10 +133,13 @@ export function OverlayStage({
             ) : null;
           }
           const selected = interactive && selectedInstanceId === element.instanceId;
+          const bg = backgroundOptions(element.options);
           return (
             <div
               key={element.instanceId}
               className={`absolute origin-top-left transition-opacity duration-500 ${
+                bg.enabled ? "rounded-lg px-2.5 py-2" : ""
+              } ${
                 selected ? "outline outline-1 outline-accent" : ""
               } ${interactive && !selected ? "hover:outline hover:outline-1 hover:outline-white/30" : ""}`}
               style={{
@@ -144,6 +147,13 @@ export function OverlayStage({
                 top: element.y,
                 transform: `scale(${clampScale(element.scale)})`,
                 opacity: state.faded ? 0.25 : 1,
+                backgroundColor: bg.enabled
+                  ? toRgba(bg.color, bg.opacity)
+                  : undefined,
+                boxShadow:
+                  bg.enabled && bg.opacity >= 40
+                    ? "0 8px 24px rgba(0,0,0,0.35)"
+                    : undefined,
               }}
               onPointerDown={
                 interactive

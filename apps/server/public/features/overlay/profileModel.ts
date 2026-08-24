@@ -71,6 +71,45 @@ export function identityOptions(
   };
 }
 
+export type ElementBackgroundOptions = {
+  enabled: boolean;
+  /** Hex color (#rgb / #rrggbb). */
+  color: string;
+  /** 0–100. */
+  opacity: number;
+};
+
+export function backgroundOptions(
+  options?: Record<string, unknown>,
+): ElementBackgroundOptions {
+  const raw = typeof options?.bgColor === "string" ? options.bgColor : "";
+  const opacityRaw = typeof options?.bgOpacity === "number" ? options.bgOpacity : NaN;
+  return {
+    enabled: options?.bgEnabled === true,
+    color: /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(raw) ? raw : "#0d0d0d",
+    opacity: Number.isFinite(opacityRaw)
+      ? Math.min(100, Math.max(0, Math.round(opacityRaw)))
+      : 70,
+  };
+}
+
+/** Convert #rgb/#rrggbb + 0–100 opacity to a CSS rgba() string. */
+export function toRgba(color: string, opacity: number): string {
+  let hex = color.replace("#", "");
+  if (hex.length === 3) {
+    hex = hex
+      .split("")
+      .map((c) => c + c)
+      .join("");
+  }
+  const n = Number.parseInt(hex, 16);
+  if (!Number.isFinite(n)) return color;
+  const r = (n >> 16) & 0xff;
+  const g = (n >> 8) & 0xff;
+  const b = n & 0xff;
+  return `rgba(${r},${g},${b},${(opacity / 100).toFixed(2)})`;
+}
+
 export function makeProfile(name: string): OverlayProfile {
   return {
     id: `profile-${Math.random().toString(36).slice(2, 10)}`,

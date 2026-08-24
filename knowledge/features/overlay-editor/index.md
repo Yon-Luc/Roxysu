@@ -57,6 +57,10 @@ evaluated against **tosu live**.
    live analysis, or `star` → beatmap star rating), and `showPattern`
    (dominant pattern from tosu live analysis). Configured in the editor
    inspector; defaults keep the element minimal.
+10. Every element can opt into a background instead of transparent
+    (`backgroundOptions`: `bgEnabled`, `bgColor` hex, `bgOpacity` 0–100).
+    Applied on the positioned wrapper in `OverlayStage` (rounded + padding +
+    shadow); disabled by default.
 
 ## Main flows
 

@@ -29,6 +29,7 @@ import {
   clampProfileSize,
   clampScale,
   clampScoreListLimit,
+  backgroundOptions,
   identityOptions,
   makeElement,
   makeProfile,
@@ -606,6 +607,66 @@ export function OverlayEditorPage() {
                     />
                   </Field>
 
+                  <div className="rounded-lg border border-white/10 p-2">
+                    <label className="flex items-center gap-2 text-xs text-white/80">
+                      <input
+                        type="checkbox"
+                        checked={backgroundOptions(selectedElement.options).enabled}
+                        onChange={(e) =>
+                          updateElement(selectedElement.instanceId, {
+                            options: {
+                              ...selectedElement.options,
+                              bgEnabled: e.target.checked,
+                            },
+                          })
+                        }
+                      />
+                      Background
+                    </label>
+                    {backgroundOptions(selectedElement.options).enabled ? (
+                      <div className="mt-2 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <span className="w-10 text-xs text-faint">Color</span>
+                          <input
+                            type="color"
+                            className="h-7 w-full cursor-pointer rounded border border-white/15 bg-transparent"
+                            value={
+                              backgroundOptions(selectedElement.options).color
+                            }
+                            onChange={(e) =>
+                              updateElement(selectedElement.instanceId, {
+                                options: {
+                                  ...selectedElement.options,
+                                  bgColor: e.target.value,
+                                },
+                              })
+                            }
+                          />
+                        </div>
+                        <Field
+                          label={`Opacity (${backgroundOptions(selectedElement.options).opacity}%)`}
+                        >
+                          <input
+                            type="range"
+                            min={0}
+                            max={100}
+                            step={1}
+                            value={backgroundOptions(selectedElement.options).opacity}
+                            onChange={(e) =>
+                              updateElement(selectedElement.instanceId, {
+                                options: {
+                                  ...selectedElement.options,
+                                  bgOpacity: Number(e.target.value),
+                                },
+                              })
+                            }
+                            className="w-full"
+                          />
+                        </Field>
+                      </div>
+                    ) : null}
+                  </div>
+
                   {selectedElement.type === "scoreList" ? (
                     <Field label="Score limit">
                       <NumberInput
@@ -635,7 +696,7 @@ export function OverlayEditorPage() {
                           onChange={(e) =>
                             updateElement(selectedElement.instanceId, {
                               options: {
-                                ...identityOptions(selectedElement.options),
+                                ...selectedElement.options,
                                 showAnalysis: e.target.checked,
                               },
                             })
@@ -655,7 +716,7 @@ export function OverlayEditorPage() {
                               onChange={(e) =>
                                 updateElement(selectedElement.instanceId, {
                                   options: {
-                                    ...identityOptions(selectedElement.options),
+                                    ...selectedElement.options,
                                     ratingSource:
                                       e.target.value === "star"
                                         ? ("star" as const)
@@ -678,9 +739,7 @@ export function OverlayEditorPage() {
                               onChange={(e) =>
                                 updateElement(selectedElement.instanceId, {
                                   options: {
-                                    ...identityOptions(
-                                      selectedElement.options,
-                                    ),
+                                    ...selectedElement.options,
                                     showPattern: e.target.checked,
                                   },
                                 })

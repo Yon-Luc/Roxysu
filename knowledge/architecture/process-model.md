@@ -37,7 +37,7 @@ Analytics → HTTP /api + SSE → React UI
 - **No IPC** between realm-reader and server; both use the same local mirror file.
 - The client app detects new imports by **polling** the `imports` table, then runs analytics and emits SSE.
 - Optional **tosu** WebSocket feeds live in-progress map state (not the score source of truth).
-- Optional **in-game overlay** host (`apps/overlay`) renders `#/overlay` above lazer on wlr-layer-shell Wayland; client-app HTTP only, no direct store access. On NixOS packages the Electron shell spawns it as a third child (`resources/overlay/roxysu-overlay`) and restarts it when the `overlay.host_url` setting changes.
+- Optional **in-game overlay** host (`apps/overlay`) renders `#/overlay` above lazer on wlr-layer-shell Wayland; client-app HTTP only, no direct store access. On NixOS packages the Electron shell spawns it as a third child (`resources/overlay/roxysu-overlay`), restarts it when the `overlay.host_url` setting changes, and respawns it if it exits (the host self-exits when its resource watchdog trips — see in-game-overlay rule 15).
 - Desktop Electron shell spawns server + realm-reader (+ bundled overlay host on Linux/Wayland); same model as `bun run dev`.
 
 ## Important symbols

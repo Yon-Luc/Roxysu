@@ -19,6 +19,8 @@ let realmChild = null;
 let overlayChild = null;
 /** Arg token the running overlay child was spawned with (--url=…). */
 let overlayAppliedUrlArg = null;
+/** Timestamp of the last overlay host spawn (liveness respawn rate limit). */
+let overlaySpawnedAt = 0;
 /** Overlay host setting poll timer. @type {NodeJS.Timeout | null} */
 let overlayPollTimer = null;
 /** @type {number[]} */
@@ -384,6 +386,7 @@ function spawnOverlayHost(paths, urlArg) {
     windowsHide: true,
     shell: false,
   });
+  overlaySpawnedAt = Date.now();
   overlayChild.on("exit", (code, signal) => {
     if (!shuttingDown) {
       desktopLog(`overlay exited code=${code} signal=${signal}`);
@@ -393,6 +396,7 @@ function spawnOverlayHost(paths, urlArg) {
 
 const OVERLAY_URL_DEFAULT = `--url=http://${HOST}:${PORT}/#/overlay?bg=clear`;
 const OVERLAY_SETTINGS_POLL_MS = 4000;
+const OVERLAY_RESPAWN_GAP_MS = 15000;
 
 /**
  * Read `overlay.hostUrl` from the client app settings store. Resolves null
@@ -442,6 +446,13 @@ function watchOverlayHostSetting(paths) {
     // Host pre-splits argv on '=', so the URL rides in one --url=… token.
     const nextArg =
       hostUrl === null ? OVERLAY_URL_DEFAULT : `--url=${hostUrl}`;
+    if (overlayChild && overlayChild.exitCode !== null) {
+      if (Date.now() - overlaySpawnedAt < OVERLAY_RESPAWN_GAP_MS) return;
+      desktopLog(
+        `overlay liveness respawn (previous exit code=${overlayChild.exitCode})`,
+      );
+      overlayChild = null;
+    }
     if (nextArg === overlayAppliedUrlArg && overlayChild) return;
     stopChild(overlayChild, "overlay");
     overlayChild = null;

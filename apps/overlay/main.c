@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #define DEFAULT_URL "http://127.0.0.1:4321/#/overlay?bg=clear&limit=25&profile=Classic"
 #define DEFAULT_WIDTH 1920
@@ -579,6 +580,139 @@ static int ft_init(GdkDisplay *display, Config *cfg) {
   return 1;
 }
 
+#define WATCHDOG_INTERVAL_SEC 20
+#define WATCHDOG_MAX_AGE_SEC 1800
+#define WATCHDOG_MAX_FDS 450
+#define WATCHDOG_MAX_RSS_MB 4200
+
+typedef struct {
+  pid_t pid;
+  pid_t ppid;
+  unsigned long rss_kb;
+  int marked;
+} ProcSnap;
+
+static time_t g_started_at;
+
+static long env_long(const char *key, long fallback) {
+  const gchar *v = g_getenv(key);
+  return v != NULL ? atol(v) : fallback;
+}
+
+static unsigned long proc_rss_kb(pid_t pid) {
+  gchar *path = g_strdup_printf("/proc/%d/statm", (int)pid);
+  FILE *f = fopen(path, "r");
+  g_free(path);
+  if (f == NULL)
+    return 0;
+  unsigned long total_pages = 0, rss_pages = 0;
+  if (fscanf(f, "%lu %lu", &total_pages, &rss_pages) != 2)
+    rss_pages = 0;
+  fclose(f);
+  return rss_pages * ((unsigned long)sysconf(_SC_PAGESIZE) / 1024);
+}
+
+static guint proc_fd_count(pid_t pid) {
+  gchar *path = g_strdup_printf("/proc/%d/fd", (int)pid);
+  GDir *d = g_dir_open(path, 0, NULL);
+  guint n = 0;
+  if (d != NULL) {
+    while (g_dir_read_name(d) != NULL)
+      n++;
+    g_dir_close(d);
+  }
+  g_free(path);
+  return n;
+}
+
+static gboolean resource_watchdog(gpointer data) {
+  (void)data;
+  GDir *dir = g_dir_open("/proc", 0, NULL);
+  if (dir == NULL)
+    return G_SOURCE_CONTINUE;
+  GArray *procs = g_array_new(FALSE, FALSE, sizeof(ProcSnap));
+  const gchar *name;
+  while ((name = g_dir_read_name(dir)) != NULL) {
+    gchar *end;
+    long v = strtol(name, &end, 10);
+    if (end == name || *end != '\0' || v <= 0)
+      continue;
+    ProcSnap ps = {.pid = (pid_t)v, .ppid = 0, .rss_kb = 0, .marked = 0};
+    gchar *stat_path = g_strdup_printf("/proc/%d/stat", (int)ps.pid);
+    gchar *raw = NULL;
+    if (g_file_get_contents(stat_path, &raw, NULL, NULL)) {
+      char *rp = strrchr(raw, ')');
+      char state;
+      int ppid = 0;
+      if (rp != NULL && sscanf(rp + 1, " %c %d", &state, &ppid) == 2)
+        ps.ppid = (pid_t)ppid;
+      g_free(raw);
+    }
+    g_free(stat_path);
+    ps.rss_kb = proc_rss_kb(ps.pid);
+    g_array_append_val(procs, ps);
+  }
+  g_dir_close(dir);
+
+  pid_t self = getpid();
+  int progressed = TRUE;
+  while (progressed) {
+    progressed = FALSE;
+    for (guint i = 0; i < procs->len; i++) {
+      ProcSnap *ps = &g_array_index(procs, ProcSnap, i);
+      if (ps->marked)
+        continue;
+      if (ps->ppid == self) {
+        ps->marked = 1;
+        progressed = TRUE;
+        continue;
+      }
+      for (guint j = 0; j < procs->len; j++) {
+        ProcSnap *cand = &g_array_index(procs, ProcSnap, j);
+        if (cand->marked && cand->pid == ps->ppid) {
+          ps->marked = 1;
+          progressed = TRUE;
+          break;
+        }
+      }
+    }
+  }
+
+  unsigned long total_kb = 0;
+  guint max_fds = 0;
+  for (guint i = 0; i < procs->len; i++) {
+    ProcSnap *ps = &g_array_index(procs, ProcSnap, i);
+    if (!ps->marked)
+      continue;
+    total_kb += ps->rss_kb;
+    guint fc = proc_fd_count(ps->pid);
+    if (fc > max_fds)
+      max_fds = fc;
+  }
+  g_array_unref(procs);
+
+  time_t age = time(NULL) - g_started_at;
+  unsigned long total_mb = total_kb / 1024;
+  const char *reason = NULL;
+  long age_cap = env_long("ROXYSU_WATCHDOG_MAX_AGE_SEC", WATCHDOG_MAX_AGE_SEC);
+  long fd_cap = env_long("ROXYSU_WATCHDOG_MAX_FDS", WATCHDOG_MAX_FDS);
+  long rss_cap = env_long("ROXYSU_WATCHDOG_MAX_RSS_MB", WATCHDOG_MAX_RSS_MB);
+  if (age > age_cap)
+    reason = "max age";
+  else if ((long)max_fds > fd_cap)
+    reason = "descendant fd cap";
+  else if ((long)total_mb > rss_cap)
+    reason = "tree rss cap";
+  if (reason != NULL) {
+    fprintf(stderr,
+            "roxysu-overlay: watchdog: %s exceeded (age=%lds tree_rss=%luMB"
+            " max_fds=%u) — exiting for clean respawn\n",
+            reason, (long)age, total_mb, max_fds);
+    exit(0);
+  }
+  return G_SOURCE_CONTINUE;
+}
+
 int main(int argc, char **argv) {
   Config cfg = {
       .url = DEFAULT_URL,
@@ -718,6 +852,8 @@ int main(int argc, char **argv) {
     g_timeout_add(300, damage_tick, NULL);
   }
   if (cfg.debug) g_timeout_add(5000, debug_report, NULL);
+  g_started_at = time(NULL);
+  g_timeout_add_seconds(WATCHDOG_INTERVAL_SEC, resource_watchdog, NULL);
 
   GMainLoop *loop = g_main_loop_new(NULL, FALSE);
   g_main_loop_run(loop);

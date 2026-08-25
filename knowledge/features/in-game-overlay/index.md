@@ -84,6 +84,23 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
    `#/overlay?bg=clear`; non-http(s) values are rejected by the PATCH handler.
    The Electron shell polls `GET /api/settings` (~4s) and stop/spawn-restarts
    the host child whenever the value changes — plain client-app HTTP, no IPC.
+   The same poll is also the liveness respawner: if the host child exits on
+   its own (crash or watchdog), it is respawned within ~4s, rate-limited to
+   one auto-respawn per 15s (`OVERLAY_RESPAWN_GAP_MS`) so a crashing binary
+   cannot spin the poll. Settings-change restarts bypass that gap.
+15. **Resource watchdog**: the host self-terminates before driver state
+   degrades. Every 20s it sums RSS over its process tree (WebKit children)
+   and takes the max open-fd count; measured on NVIDIA 595.84 + WebKitGTK,
+   continuous frame churn leaks ~8 fds/min and tens of MB/min until the
+   kernel floods with `NVRM: can't alloc VA space` (~18 min in) and every
+   frame degrades into noise — see rule 10's churn requirement for why the
+   churn exists. Caps (env-overridable): tree age > 1800s
+   (`ROXYSU_WATCHDOG_MAX_AGE_SEC`), descendant fds > 450
+   (`ROXYSU_WATCHDOG_MAX_FDS`), tree RSS > 4200MB
+   (`ROXYSU_WATCHDOG_MAX_RSS_MB`). On breach the host logs
+   `watchdog: … exiting for clean respawn` and exits 0; the desktop poll
+   respawns it fresh within ~4s (rule 14). Restart cost: a ~1s HUD blink;
+   alternative cost: system-wide GPU allocation failure cascade.
 
 ## Main flow
 

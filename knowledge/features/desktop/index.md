@@ -24,7 +24,7 @@ Distribute Roxysu as a desktop app without changing the local-mirror-centric arc
 
 ## Important symbols
 
-- `apps/desktop/main.js` — spawns client app + realm-reader + optional overlay host; sets `ROXYSU_DESKTOP=1` and `HUB_URL` (`https://roxysu-api.yonx.app` unless overridden). `spawnOverlayHost` runs the bundled `resources/overlay/roxysu-overlay` on Linux + Wayland only (skipped otherwise); `ROXYSU_OVERLAY_BIN` overrides the binary path
+- `apps/desktop/main.js` — spawns client app + realm-reader + optional overlay host; sets `ROXYSU_DESKTOP=1` and `HUB_URL` (`https://roxysu-api.yonx.app` unless overridden). `watchOverlayHostSetting` polls the client-app settings store and spawns/restarts the bundled `resources/overlay/roxysu-overlay` on Linux + Wayland when `overlay.host_url` changes (skipped otherwise); `ROXYSU_OVERLAY_BIN` overrides the binary path
 - `nix/prebuilt.nix` / `nix/package.nix` — bundle the In-game overlay host from [nix/overlay.nix](../../nix/overlay.nix) and set `--set-default HUB_URL https://roxysu-api.yonx.app`
 - `publish.sh` — bumps versions, tags to trigger CI, pins `linux-resources` to the versioned GitHub tarball, then force-moves the tag to that lock commit
 

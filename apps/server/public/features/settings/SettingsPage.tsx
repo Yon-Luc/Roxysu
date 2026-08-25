@@ -9,6 +9,7 @@ import { fetchSettings } from "../../lib/api";
 import { useScrollToPageSection } from "../../lib/pageSections";
 import { useAppDict, t } from "../../lib/i18n";
 import { OsuDataFolderSection } from "./sections/OsuDataFolderSection";
+import { OverlayHostSection } from "./sections/OverlayHostSection";
 import { TosuLiveMapSection } from "./sections/TosuLiveMapSection";
 import { MasteryFormulaSection } from "./sections/MasteryFormulaSection";
 import { ScoreUsernameSection } from "./sections/ScoreUsernameSection";
@@ -87,6 +88,7 @@ export function SettingsPage({ section }: { section?: string } = {}) {
       </div>
 
       <OsuDataFolderSection data={data} />
+      <OverlayHostSection data={data} />
       <TosuLiveMapSection data={data} />
       <MasteryFormulaSection data={data} />
       <ScoreUsernameSection data={data} />

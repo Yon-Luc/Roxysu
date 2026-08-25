@@ -1,5 +1,6 @@
 import { settings } from "@roxysu/db/schema";
 import {
+  OVERLAY_HOST_URL_KEY,
   SCORES_GAMEMODE_FILTER_KEY,
   SCORES_USERNAME_FILTER_KEY,
 } from "@roxysu/db/settings-keys";
@@ -81,6 +82,15 @@ async function readOsuDataOverride(db: Db): Promise<string | null> {
   return row?.value?.trim() ? row.value.trim() : null;
 }
 
+async function readOverlayHostUrl(db: Db): Promise<string | null> {
+  const [row] = await db
+    .select()
+    .from(settings)
+    .where(eq(settings.key, OVERLAY_HOST_URL_KEY))
+    .limit(1);
+  return row?.value?.trim() ? row.value.trim() : null;
+}
+
 async function buildSettingsResponse(db: Db) {
   const formulaId = await getActiveFormulaId(db);
   const [pauseRow] = await db
@@ -92,6 +102,7 @@ async function buildSettingsResponse(db: Db) {
   const paths = buildResolvedOsuPaths(osuOverride);
   const tosu = await readTosuSettings(db);
   const maniaRatingExecutables = await readAllExecutablePaths(db);
+  const overlayHostUrl = await readOverlayHostUrl(db);
   const [scoresUsername, scoresGamemode] = await Promise.all([
     buildScoresUsernameSettings(db),
     buildScoresGamemodeSettings(db),
@@ -112,6 +123,9 @@ async function buildSettingsResponse(db: Db) {
     scores: scoresUsername,
     gamemode: scoresGamemode,
     paths,
+    overlay: {
+      hostUrl: overlayHostUrl,
+    },
     tosu: {
       enabled: tosu.enabled,
       host: tosu.host,
@@ -242,6 +256,23 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
         }
       }
 
+      if (body.overlayHostUrl !== undefined) {
+        const trimmed = body.overlayHostUrl?.trim() ?? "";
+        if (!trimmed) {
+          await db
+            .delete(settings)
+            .where(eq(settings.key, OVERLAY_HOST_URL_KEY));
+        } else if (
+          trimmed.startsWith("http://") ||
+          trimmed.startsWith("https://")
+        ) {
+          await upsertSetting(db, OVERLAY_HOST_URL_KEY, trimmed);
+        } else {
+          set.status = 400;
+          return { error: "overlayHostUrl must be an http(s) URL" };
+        }
+      }
+
       if (body.tosuEnabled !== undefined) {
         await upsertSetting(db, TOSU_ENABLED_KEY, body.tosuEnabled ? "1" : "0");
         tosuChanged = true;
@@ -316,6 +347,11 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
         scoresGamemodeFilter: t.Optional(t.String()),
         /** Absolute lazer data dir, or null/"" to clear the override. */
         osuDataPath: t.Optional(t.Union([t.String(), t.Null()])),
+        /**
+         * Full HUD URL for the desktop in-game overlay host, or null/"" to
+         * reset to the default (#/overlay?bg=clear).
+         */
+        overlayHostUrl: t.Optional(t.Union([t.String(), t.Null()])),
         tosuEnabled: t.Optional(t.Boolean()),
         tosuHost: t.Optional(t.String()),
         /** Absolute path to tosu binary, or null/"" to clear. */

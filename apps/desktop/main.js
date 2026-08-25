@@ -17,6 +17,10 @@ let serverChild = null;
 let realmChild = null;
 /** @type {import("node:child_process").ChildProcess | null} */
 let overlayChild = null;
+/** Arg token the running overlay child was spawned with (--url=…). */
+let overlayAppliedUrlArg = null;
+/** Overlay host setting poll timer. @type {NodeJS.Timeout | null} */
+let overlayPollTimer = null;
 /** @type {number[]} */
 const childLogFds = [];
 let shuttingDown = false;
@@ -358,8 +362,9 @@ function resolveOverlayBin(paths) {
 
 /**
  * @param {ReturnType<typeof resolveDesktopPaths>} paths
+ * @param {string} urlArg Single `--url=…` token (host pre-splits argv on '=').
  */
-function spawnOverlayHost(paths) {
+function spawnOverlayHost(paths, urlArg) {
   if (process.platform !== "linux") return;
   if (!process.env.WAYLAND_DISPLAY) {
     desktopLog("overlay host skipped — no Wayland session");
@@ -371,11 +376,9 @@ function spawnOverlayHost(paths) {
     return;
   }
   const { fd } = openChildLogFd(paths.dataDir, "overlay");
-  // Host pre-splits every argv token on '=' (--key=value style); passing the
-  // URL as a separate value would split at 'bg=clear'. Single token is safe.
-  const url = `--url=http://${HOST}:${PORT}/#/overlay?bg=clear`;
-  desktopLog(`spawn overlay bin=${bin}`);
-  overlayChild = spawn(bin, [url], {
+  desktopLog(`spawn overlay bin=${bin} ${urlArg}`);
+  overlayAppliedUrlArg = urlArg;
+  overlayChild = spawn(bin, [urlArg], {
     env: process.env,
     stdio: ["ignore", fd, fd],
     windowsHide: true,
@@ -386,6 +389,68 @@ function spawnOverlayHost(paths) {
       desktopLog(`overlay exited code=${code} signal=${signal}`);
     }
   });
+}
+
+const OVERLAY_URL_DEFAULT = `--url=http://${HOST}:${PORT}/#/overlay?bg=clear`;
+const OVERLAY_SETTINGS_POLL_MS = 4000;
+
+/**
+ * Read `overlay.hostUrl` from the client app settings store. Resolves null
+ * when unset and undefined when unknown (fetch failed — keep current).
+ */
+function fetchOverlayHostUrl() {
+  return new Promise((resolve) => {
+    const req = http.get(
+      { host: HOST, port: PORT, path: "/api/settings", timeout: 2000 },
+      (res) => {
+        let raw = "";
+        res.on("data", (chunk) => {
+          raw += chunk;
+        });
+        res.on("end", () => {
+          try {
+            const hostUrl = JSON.parse(raw)?.overlay?.hostUrl ?? null;
+            resolve(typeof hostUrl === "string" && hostUrl.trim() ? hostUrl.trim() : null);
+          } catch {
+            resolve(null);
+          }
+        });
+      },
+    );
+    req.on("error", () => resolve(undefined));
+    req.on("timeout", () => {
+      req.destroy();
+      resolve(undefined);
+    });
+  });
+}
+
+/**
+ * Watch the overlay.host_url setting; spawn/restart the host child whenever
+ * it changes (first tick performs the initial spawn). Polls plain client-app
+ * HTTP — no private IPC (see decisions/no-ipc-between-processes).
+ * @param {ReturnType<typeof resolveDesktopPaths>} paths
+ */
+function watchOverlayHostSetting(paths) {
+  if (process.platform !== "linux" || !process.env.WAYLAND_DISPLAY) return;
+  if (!resolveOverlayBin(paths)) return;
+
+  const apply = async () => {
+    if (shuttingDown) return;
+    const hostUrl = await fetchOverlayHostUrl();
+    if (hostUrl === undefined || shuttingDown) return;
+    // Host pre-splits argv on '=', so the URL rides in one --url=… token.
+    const nextArg =
+      hostUrl === null ? OVERLAY_URL_DEFAULT : `--url=${hostUrl}`;
+    if (nextArg === overlayAppliedUrlArg && overlayChild) return;
+    stopChild(overlayChild, "overlay");
+    overlayChild = null;
+    spawnOverlayHost(paths, nextArg);
+  };
+
+  void apply();
+  overlayPollTimer = setInterval(() => void apply(), OVERLAY_SETTINGS_POLL_MS);
+  overlayPollTimer.unref();
 }
 
 /**
@@ -446,6 +511,10 @@ function closeChildLogs() {
 async function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
+  if (overlayPollTimer) {
+    clearInterval(overlayPollTimer);
+    overlayPollTimer = null;
+  }
   stopChild(overlayChild, "overlay");
   stopChild(realmChild, "realm-reader");
   stopChild(serverChild, "server");
@@ -570,8 +639,9 @@ if (!gotLock) {
     // Defer Realm until the UI is up; extract archive lazily (shrink AV scan at install).
     spawnRealmReader(paths, sharedEnv);
 
-    // Optional Wayland in-game overlay host (bundled on NixOS packages).
-    spawnOverlayHost(paths);
+    // Optional Wayland in-game overlay host (bundled on NixOS packages):
+    // spawns from the overlay.host_url setting and restarts on changes.
+    watchOverlayHostSetting(paths);
 
     // NSIS installs only — check after UI is up so startup is not blocked.
     startAutoUpdate({ log: desktopLog });

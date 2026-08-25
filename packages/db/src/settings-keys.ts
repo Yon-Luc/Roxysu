@@ -49,3 +49,11 @@ export const OVERLAY_PROFILES_KEY = "overlay.profiles";
  * JSON object; see apps/server/public/lib/overlaySkins.ts.
  */
 export const OVERLAY_SKINS_KEY = "overlay.skins";
+
+/**
+ * Full HUD URL for the desktop-spawned In-game overlay host, e.g.
+ * http://127.0.0.1:4321/#/overlay?bg=clear&profile=Classic.
+ * Missing/empty → default (#/overlay?bg=clear). The desktop Electron shell
+ * polls GET /api/settings and restarts the overlay child when this changes.
+ */
+export const OVERLAY_HOST_URL_KEY = "overlay.host_url";

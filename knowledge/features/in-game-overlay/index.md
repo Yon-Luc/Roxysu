@@ -79,6 +79,11 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
    `--key value`, so values containing `=` must be passed as a single
    `--key=value` token. Electron passes `--url=http://…?bg=clear`; passing
    the URL as a separate argv value breaks parsing (`unknown option 'clear'`).
+14. **Host URL setting**: `settings` key `overlay.host_url` holds the full HUD
+   URL (Settings page → In-game overlay section). Missing/empty → default
+   `#/overlay?bg=clear`; non-http(s) values are rejected by the PATCH handler.
+   The Electron shell polls `GET /api/settings` (~4s) and stop/spawn-restarts
+   the host child whenever the value changes — plain client-app HTTP, no IPC.
 
 ## Main flow
 

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   formatModAcronym,
   isNomodOrMirrorOnly,
+  parsePatternModQuery,
   parseScoreMods,
   scaleManiaHitWindows,
 } from "./mods";
@@ -89,6 +90,45 @@ describe("scaleManiaHitWindows", () => {
   test("rate 1 is a no-op", () => {
     const base = maniaHitWindows(8);
     expect(scaleManiaHitWindows(base, 1)).toEqual(base);
+  });
+});
+
+describe("parseScoreMods pattern flags", () => {
+  test("IN marks invert, HO marks hold-off", () => {
+    const mods = parseScoreMods('[{"acronym":"IN"},{"acronym":"HO"}]');
+    expect(mods.invert).toBe(true);
+    expect(mods.holdOff).toBe(true);
+    expect(mods.mirror).toBe(false);
+    expect(parseScoreMods("[]").invert).toBe(false);
+    expect(parseScoreMods("[]").holdOff).toBe(false);
+  });
+});
+
+describe("parsePatternModQuery", () => {
+  test("parses supported acronyms case-insensitively", () => {
+    const parsed = parsePatternModQuery("in,ho");
+    expect(parsed.acronyms).toEqual(["IN", "HO"]);
+    expect(parsed.invert).toBe(true);
+    expect(parsed.holdOff).toBe(true);
+    expect(parsed.mirror).toBe(false);
+  });
+
+  test("drops unsupported acronyms", () => {
+    const parsed = parsePatternModQuery("DT,mr,XX");
+    expect(parsed.acronyms).toEqual(["MR"]);
+    expect(parsed.invert).toBe(false);
+    expect(parsed.holdOff).toBe(false);
+    expect(parsed.mirror).toBe(true);
+  });
+
+  test("empty / missing param yields no conversions", () => {
+    for (const raw of [undefined, null, "", ","]) {
+      const parsed = parsePatternModQuery(raw);
+      expect(parsed.acronyms).toEqual([]);
+      expect(parsed.mirror).toBe(false);
+      expect(parsed.invert).toBe(false);
+      expect(parsed.holdOff).toBe(false);
+    }
   });
 });
 

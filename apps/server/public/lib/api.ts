@@ -300,9 +300,11 @@ export async function fetchBeatmapStats(id: string) {
   );
 }
 
-export async function fetchBeatmapPreview(id: string) {
+export async function fetchBeatmapPreview(id: string, mods?: string[]) {
   return unwrap(
-    await api.api.beatmaps({ id }).preview.get(),
+    await api.api.beatmaps({ id }).preview.get({
+      query: { mods: mods && mods.length > 0 ? mods.join(",") : undefined },
+    }),
     `/api/beatmaps/${id}/preview`,
   );
 }

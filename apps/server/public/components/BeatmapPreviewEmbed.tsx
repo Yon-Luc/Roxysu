@@ -25,6 +25,7 @@ import {
 } from "./ManiaNotefield";
 import { loadPrefs, SKIP_MS } from "./previewPrefs";
 import { useAppDict } from "../lib/i18n";
+import { parseScoreMods } from "@server/replay/mods";
 
 export const PREVIEW_EMBED_HEIGHT_MIN = 18;
 export const PREVIEW_EMBED_HEIGHT_MAX = 52;
@@ -60,6 +61,7 @@ export function BeatmapPreviewEmbed({
   syncActive = false,
   syncTimeMs = null,
   syncRate = null,
+  matchMods = null,
 }: {
   beatmapId: string;
   autoPlay: boolean;
@@ -77,6 +79,11 @@ export function BeatmapPreviewEmbed({
   syncRate?: number | null;
   /** True while tosu is connected and the live map is matched. */
   syncActive?: boolean;
+  /**
+   * Raw lazer mods JSON of the in-game selection — MR/IN/HO pattern mods are
+   * applied to the preview chart so it matches what lazer plays.
+   */
+  matchMods?: string | null;
 }) {
   const { dict } = useAppDict();
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -115,9 +122,23 @@ export function BeatmapPreviewEmbed({
   autoPlayRef.current = autoPlay;
   mutedRef.current = muted;
 
+  // Pattern-conversion mods worth applying to the preview chart (MR/IN/HO).
+  const matchModsKey = (() => {
+    const parsed = parseScoreMods(matchMods);
+    const parts: string[] = [];
+    if (parsed.mirror) parts.push("MR");
+    if (parsed.invert) parts.push("IN");
+    if (parsed.holdOff) parts.push("HO");
+    return parts.join(",");
+  })();
+
   const { data, error, isLoading } = useQuery({
-    queryKey: ["beatmap-preview", beatmapId],
-    queryFn: () => fetchBeatmapPreview(beatmapId) as Promise<BeatmapPreview>,
+    queryKey: ["beatmap-preview-embed", beatmapId, matchModsKey],
+    queryFn: () =>
+      fetchBeatmapPreview(
+        beatmapId,
+        matchModsKey ? matchModsKey.split(",") : undefined,
+      ) as Promise<BeatmapPreview>,
     staleTime: 5 * 60_000,
     refetchOnMount: true,
   });

@@ -11,6 +11,25 @@ import type { Db } from "../db-runtime";
 
 export type { ChartNote };
 
+export type ManiaPatternMods = {
+  invert?: boolean;
+  holdOff?: boolean;
+};
+
+/**
+ * Apply lazer pattern-conversion mods to a parsed mania chart, in lazer
+ * order: Invert (rice → inverted full LNs), then Hold Off (LNs → rice).
+ * Matches the Sunny dan estimator's cvtFlag handling.
+ */
+export function applyManiaPatternMods(
+  parser: OsuFileParser,
+  patternMods: ManiaPatternMods | undefined,
+): void {
+  if (!patternMods?.invert && !patternMods?.holdOff) return;
+  if (patternMods.invert) parser.modIN();
+  if (patternMods.holdOff) parser.modHO();
+}
+
 export type LoadedChart = {
   beatmapId: string;
   title: string | null;
@@ -32,6 +51,10 @@ export type LoadedChart = {
 /**
  * Load mania notes for a score, preferring the score's beatmapHash when it
  * still resolves in the local files store.
+ *
+ * `patternMods` applies the lazer pattern-conversion mods Invert (rice →
+ * inverted full LNs) and Hold Off (LNs → rice) so rewatch matches the chart
+ * that was actually played.
  */
 export async function loadChartForScore(
   db: Db,
@@ -39,6 +62,7 @@ export async function loadChartForScore(
     beatmapId: string | null;
     beatmapHash: string | null;
   },
+  patternMods?: ManiaPatternMods,
 ): Promise<
   | { ok: true; chart: LoadedChart }
   | { ok: false; status: number; error: string }
@@ -110,6 +134,8 @@ export async function loadChartForScore(
   if (parser.status === "Fail" || parser.columnCount <= 0) {
     return { ok: false, status: 422, error: "Failed to parse beatmap" };
   }
+
+  applyManiaPatternMods(parser, patternMods);
 
   const notes: ChartNote[] = [];
   for (let i = 0; i < parser.noteStarts.length; i += 1) {

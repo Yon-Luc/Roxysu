@@ -534,6 +534,7 @@ function NowSelectedPreview({
       connected: Boolean(snap.connected),
       timeLiveMs: snap.beatmap?.timeLiveMs ?? null,
       rate: snap.beatmap?.rate ?? null,
+      mods: snap.beatmap?.mods ?? null,
     }),
   });
   return (
@@ -548,6 +549,7 @@ function NowSelectedPreview({
       syncActive={live?.connected ?? false}
       syncTimeMs={live?.timeLiveMs ?? null}
       syncRate={live?.rate ?? null}
+      matchMods={live?.mods ?? null}
     />
   );
 }

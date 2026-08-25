@@ -62,16 +62,22 @@ import {
 
 export type ModalMode = "preview" | "play";
 
+/** Pattern-conversion mods the preview can apply server-side (mania only). */
+const PREVIEW_MOD_OPTIONS = ["MR", "IN", "HO"] as const;
+
 export function BeatmapPreviewModal({
   beatmapId,
   onClose,
   initialMode = "preview",
   practiceRange = null,
+  initialMods,
 }: {
   beatmapId: string;
   onClose: () => void;
   initialMode?: ModalMode;
   practiceRange?: PracticeRange | null;
+  /** Initial pattern mods for mania previews (e.g. ["IN"]). */
+  initialMods?: string[];
 }) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -114,10 +120,17 @@ export function BeatmapPreviewModal({
   const [liveHeldMask, setLiveHeldMask] = useState(0);
   const [liveJudgments, setLiveJudgments] = useState<NotefieldJudgment[]>([]);
   const [liveSummary, setLiveSummary] = useState<JudgmentSummary>(EMPTY_SUMMARY);
+  /** Pattern-conversion mods applied server-side (mania only). */
+  const [previewMods, setPreviewMods] = useState<string[]>(() =>
+    initialMods ? PREVIEW_MOD_OPTIONS.filter((m) => initialMods.includes(m)) : [],
+  );
+  const livePlayModsRef = useRef("");
 
+  const previewModsKey = previewMods.join(",");
   const { data, error, isLoading } = useQuery({
-    queryKey: ["beatmap-preview", beatmapId],
-    queryFn: () => fetchBeatmapPreview(beatmapId) as Promise<BeatmapPreview>,
+    queryKey: ["beatmap-preview", beatmapId, previewModsKey],
+    queryFn: () =>
+      fetchBeatmapPreview(beatmapId, previewMods) as Promise<BeatmapPreview>,
     // Fresh chart/audio hashes after sync; avoid stale cached preview without audio.
     staleTime: 5 * 60_000,
     refetchOnMount: true,
@@ -210,6 +223,7 @@ export function BeatmapPreviewModal({
     const existing = livePlayRef.current;
     if (
       existing &&
+      livePlayModsRef.current === previewModsKey &&
       existing.columnCount === chart.columnCount &&
       existing.overallDifficulty === od
     ) {
@@ -222,6 +236,7 @@ export function BeatmapPreviewModal({
       practiceRange: effectivePracticeRange(),
     });
     livePlayRef.current = play;
+    livePlayModsRef.current = previewModsKey;
     return play;
   }
 
@@ -318,6 +333,14 @@ export function BeatmapPreviewModal({
       const next = PRESET_RATES[clamp(cur + dir, 0, PRESET_RATES.length - 1)]!;
       return { ...p, rate: next };
     });
+  }
+
+  function togglePreviewMod(acronym: (typeof PREVIEW_MOD_OPTIONS)[number]) {
+    setPreviewMods((cur) =>
+      PREVIEW_MOD_OPTIONS.filter((m) =>
+        m === acronym ? !cur.includes(m) : cur.includes(m),
+      ),
+    );
   }
 
   // Auto-start when opened directly in Play mode (e.g. future miss practice).
@@ -1210,6 +1233,46 @@ export function BeatmapPreviewModal({
                       ))}
                     </select>
                   </label>
+
+                  {isMania ? (
+                    <div className="flex items-center gap-1 text-xs text-on-media-muted">
+                      <span className="mr-1 shrink-0">Mods</span>
+                      {(["NM", ...PREVIEW_MOD_OPTIONS] as const).map((label) => {
+                        const active =
+                          label === "NM"
+                            ? previewMods.length === 0
+                            : previewMods.includes(label);
+                        return (
+                          <button
+                            key={label}
+                            type="button"
+                            onClick={() =>
+                              label === "NM"
+                                ? setPreviewMods([])
+                                : togglePreviewMod(label)
+                            }
+                            className={
+                              active
+                                ? "rx-chip bg-accent-glow text-accent"
+                                : "rx-chip bg-elevated text-muted hover:text-ink"
+                            }
+                            aria-pressed={active}
+                            title={
+                              label === "NM"
+                                ? "No mod"
+                                : label === "MR"
+                                  ? "Mirror columns"
+                                  : label === "IN"
+                                    ? "Invert — rice to long notes"
+                                    : "Hold Off — long notes to rice"
+                            }
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
 
                   {isMania ? (
                   <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-on-media-muted sm:max-w-xs">

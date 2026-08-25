@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   danVariantKey,
+  parseScoreMods,
   resolveDanVariant,
 } from "./mods";
 
@@ -75,5 +76,29 @@ describe("danVariantKey", () => {
     expect(a).not.toBe(danVariantKey("map2", { rate: 1.1, lnOnly: false }));
     expect(a).not.toBe(danVariantKey("map1", { rate: 1.5, lnOnly: false }));
     expect(a).not.toBe(danVariantKey("map1", { rate: 1.1, lnOnly: true }));
+  });
+});
+
+describe("parseScoreMods pattern flags", () => {
+  test("NM has no pattern conversion", () => {
+    const mods = parseScoreMods(null);
+    expect(mods.invert).toBe(false);
+    expect(mods.holdOff).toBe(false);
+    expect(mods.mirror).toBe(false);
+  });
+
+  test("IN marks invert, HO marks hold-off", () => {
+    expect(parseScoreMods(modsJson("IN")).invert).toBe(true);
+    expect(parseScoreMods(modsJson("HO")).holdOff).toBe(true);
+    expect(parseScoreMods(modsJson("MR")).mirror).toBe(true);
+  });
+
+  test("combined IN + HO + DT keeps all flags and rate", () => {
+    const mods = parseScoreMods(
+      modsJson("IN", "HO", { acronym: "DT", settings: { speed_change: 1.2 } }),
+    );
+    expect(mods.invert).toBe(true);
+    expect(mods.holdOff).toBe(true);
+    expect(mods.rate).toBe(1.2);
   });
 });

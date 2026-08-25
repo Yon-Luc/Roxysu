@@ -32,6 +32,8 @@ import {
   parseStdChart,
   parseTaikoChart,
 } from "@roxysu/osu-chart";
+import { parsePatternModQuery } from "../replay/mods";
+import { applyManiaPatternMods } from "../replay/loadChart";
 import {
   getOsuDataPath,
   resolveLazerFilePath,
@@ -345,7 +347,9 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
   )
   .get(
     "/:id/preview",
-    async ({ db, params, set }) => {
+    async ({ db, params, query, set }) => {
+      const patternMods = parsePatternModQuery(query?.mods);
+
       const [row] = await db
         .select({
           id: beatmaps.id,
@@ -389,6 +393,7 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
         approachRate: row.approachRate ?? row.overallDifficulty ?? 5,
         supported: false as boolean,
         columnCount: 0,
+        appliedMods: [] as string[],
         notes: [] as Array<{ column: number; startMs: number; endMs: number }>,
         hitObjects: [] as ReturnType<typeof parseStdChart>["hitObjects"],
         taikoHitObjects: [] as ReturnType<typeof parseTaikoChart>["hitObjects"],
@@ -491,11 +496,18 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
         return { error: "Failed to parse beatmap" };
       }
 
+      // Lazer pattern-conversion mods: Invert then Hold Off, Mirror flips
+      // columns on the finished conversion.
+      applyManiaPatternMods(parser, patternMods);
+
       const notes: Array<{ column: number; startMs: number; endMs: number }> =
         [];
       for (let i = 0; i < parser.noteStarts.length; i += 1) {
+        const column = patternMods.mirror
+          ? parser.columnCount - 1 - parser.columns[i]!
+          : parser.columns[i]!;
         notes.push({
-          column: parser.columns[i]!,
+          column,
           startMs: parser.noteStarts[i]!,
           endMs: parser.noteEnds[i]!,
         });
@@ -506,12 +518,16 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
         ...base,
         supported: true,
         columnCount: parser.columnCount,
+        appliedMods: patternMods.acronyms,
         notes,
       };
     },
     {
       params: t.Object({
         id: t.String(),
+      }),
+      query: t.Object({
+        mods: t.Optional(t.String()),
       }),
     },
   )

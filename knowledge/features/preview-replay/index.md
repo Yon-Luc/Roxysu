@@ -3,7 +3,14 @@ last_verified: 2026-08
 confidence: inferred
 touches:
   - apps/server/public/components/BeatmapPreviewModal.tsx
+  - apps/server/public/components/BeatmapPreviewButton.tsx
+  - apps/server/public/components/BeatmapPreviewEmbed.tsx
+  - apps/server/public/features/now-selected/NowSelectedPage.tsx
+  - apps/server/public/features/overlay/OverlayElements.tsx
   - apps/server/public/components/ScoreReplayModal.tsx
+  - apps/server/public/lib/api.ts
+  - apps/server/src/routes/beatmaps.ts
+  - apps/server/src/routes/scores.ts
   - apps/server/public/components/StdPlayfield.tsx
   - apps/server/public/lib/paintStdPlayfield.ts
   - apps/server/public/components/TaikoPlayfield.tsx
@@ -35,6 +42,7 @@ touches:
   - packages/osu-chart/src/parseStd.ts
   - packages/osu-chart/src/parseTaiko.ts
   - packages/osu-chart/src/parseCatch.ts
+  - packages/osu-chart/src/osuFileParser.js
 ---
 
 # Preview, rewatch, and playfield skins
@@ -102,6 +110,22 @@ Playfield = the visual layer for that ruleset (notefield, 512×384, or taiko lan
 
 9. Judges are visual-quality approximations, not full lazer sims.
 
+10. Preview and rewatch match the pattern-conversion mods **Invert (IN)** and
+    **Hold Off (HO)**: mania charts are converted before display/judging so
+    playback shows the chart lazer actually played. Rewatch derives IN/HO from
+    the score's mods (`parseScoreMods` → `loadChartForScore`); preview takes an
+    optional `mods` query param (acronyms `MR|IN|HO`, others dropped) plus an
+    NM/MR/IN/HO pill picker in the modal. Conversions reuse
+    `OsuFileParser.modIN()` / `modHO()` via `applyManiaPatternMods`
+    (Invert then Hold Off, Sunny order). Invert is a start-based approximation:
+    each note becomes an LN ending `max(d/2, d − beatLength/4)` before the next
+    note in its column, and a column's trailing note is dropped — same as the
+    Sunny dan estimator. Mirror flips columns after conversion.
+    **Source:** `replay/loadChart.ts:applyManiaPatternMods`,
+    `routes/scores.ts` mania branch, `routes/beatmaps.ts` `/:id/preview`,
+    `replay/mods.ts:parsePatternModQuery` — status: verified by
+    `patternMods.test.ts`, `mods.test.ts`.
+
 ## Security rules
 
 None — no access control on preview/replay/skin data beyond existing score owner
@@ -119,13 +143,14 @@ scope.
 
 ```text
 Beatmap preview:
-  user selects beatmap
-    → fetchBeatmapPreview → parseStd / parseTaiko / parseCatch / OsuFileParser
+  user selects beatmap (+ optional mania mod pills NM/MR/IN/HO)
+    → fetchBeatmapPreview(beatmapId, mods) → parseStd / parseTaiko / parseCatch / OsuFileParser
+    → applyManiaPatternMods (IN/HO, then Mirror column flip)
     → render matching playfield + skin
 
 Score rewatch:
   user selects score
-    → fetchScoreReplay → load*Chart + *Judge
+    → fetchScoreReplay → load*Chart + *Judge (mania chart pre-converted per score IN/HO mods)
     → ScoreReplayModal HUD uses per-ruleset weights
     → matching playfield draws frames + judgments
 
@@ -147,7 +172,15 @@ Imported mania skin:
   only when combo / accuracy / last result change. Paused + unchanged time
   skips the scan. Overlay lives in memoized `ReplayHudOverlay`.
 - Fat API payload: unused `notes` / `hitObjects` / `taikoHitObjects` /
-  `catchHitObjects` / frame arrays are `[]`.
+  `catchHitObjects` / frame arrays are `[]`. Preview responses echo
+  `appliedMods` for the pattern conversions actually applied.
+- Preview modal keys its preview query and the Play-mode `LiveManiaPlay` cache
+  on the selected mod list so switching IN/HO/MR refetches notes and rebuilds
+  judging instead of reusing the unconverted chart.
+- `BeatmapPreviewEmbed` (Now Selected page, overlay preview element) accepts
+  `matchMods` — callers pass the tosu snapshot's raw mods JSON so the embedded
+  preview auto-matches the in-game MR/IN/HO selection; its query key is
+  `["beatmap-preview-embed", beatmapId, modsKey]`.
 - Store / dispatch names: `"mania"`, `"osu"`, `"taiko"`, `"fruits"`.
 - `lib/osuSkinIni.ts` / `lib/maniaSkinImport.ts` — .osk parse + IndexedDB sprites.
 

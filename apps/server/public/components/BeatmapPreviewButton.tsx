@@ -9,6 +9,8 @@ type BeatmapPreviewButtonProps = {
   /** Open directly in Play mode (e.g. future miss-practice entry). */
   initialMode?: ModalMode;
   practiceRange?: PracticeRange | null;
+  /** Initial pattern mods for mania previews (e.g. ["IN"]). */
+  initialMods?: string[];
 };
 
 export function BeatmapPreviewButton({
@@ -16,6 +18,7 @@ export function BeatmapPreviewButton({
   className,
   initialMode = "preview",
   practiceRange = null,
+  initialMods,
 }: BeatmapPreviewButtonProps) {
   const [open, setOpen] = useState(false);
 
@@ -39,6 +42,7 @@ export function BeatmapPreviewButton({
               onClose={() => setOpen(false)}
               initialMode={initialMode}
               practiceRange={practiceRange}
+              initialMods={initialMods}
             />,
             document.body,
           )

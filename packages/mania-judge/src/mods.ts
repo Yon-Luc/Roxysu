@@ -4,6 +4,10 @@ export type ModAcronyms = {
   mirror: boolean;
   easy: boolean;
   hardRock: boolean;
+  /** Invert (IN): rice converted to inverted full LNs. */
+  invert: boolean;
+  /** Hold Off (HO): long notes flattened to rice. */
+  holdOff: boolean;
 };
 
 type LazerModEntry = {
@@ -85,6 +89,8 @@ export function parseScoreMods(mods: string | null | undefined): ModAcronyms {
     mirror: set.has("MR"),
     easy: set.has("EZ"),
     hardRock: set.has("HR"),
+    invert: set.has(INVERT_ACRONYM),
+    holdOff: set.has(HOLD_OFF_ACRONYM),
   };
 }
 
@@ -96,6 +102,7 @@ export type DanVariant = { rate: number; lnOnly: boolean };
 
 const RATE_QUANTUM_MS = 100;
 const INVERT_ACRONYM = "IN";
+const HOLD_OFF_ACRONYM = "HO";
 
 function quantizeRate(rate: number): number {
   return Math.round(rate * RATE_QUANTUM_MS) / RATE_QUANTUM_MS;

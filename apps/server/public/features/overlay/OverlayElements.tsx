@@ -300,6 +300,7 @@ export function PreviewElement({
       syncActive={Boolean(ctx.snapshot?.connected)}
       syncTimeMs={ctx.snapshot?.beatmap?.timeLiveMs ?? null}
       syncRate={ctx.snapshot?.beatmap?.rate ?? null}
+      matchMods={ctx.snapshot?.beatmap?.mods ?? null}
     />
   );
 }

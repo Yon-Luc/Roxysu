@@ -339,13 +339,16 @@ export const scoreRoutes = new Elysia({ prefix: "/scores" })
         return { error: "Replay is not mania" };
       }
 
-      const chartResult = await loadChartForScore(db, score);
+      const mods = parseScoreMods(score.mods);
+      const chartResult = await loadChartForScore(db, score, {
+        invert: mods.invert,
+        holdOff: mods.holdOff,
+      });
       if (!chartResult.ok) {
         set.status = chartResult.status;
         return { error: chartResult.error };
       }
       const { chart } = chartResult;
-      const mods = parseScoreMods(score.mods);
       const { judgments, summary } = simulateManiaJudgments({
         notes: chart.notes,
         frames: decoded.frames,

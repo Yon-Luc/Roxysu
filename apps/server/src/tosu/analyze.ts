@@ -2,6 +2,7 @@ import type { Db } from "@roxysu/db/types";
 import { beatmaps } from "@roxysu/db/schema";
 import { and, eq } from "drizzle-orm";
 import { readFileSync } from "node:fs";
+import { parseScoreMods } from "@roxysu/mania-judge/mods";
 
 import { analyzeManiaFromOsuText } from "@roxysu/mania-pattern-analysis";
 import {
@@ -100,9 +101,28 @@ function patternFromDb(
   };
 }
 
-function sunnyFromText(osuText: string, speedRate: number): TosuLiveSunny {
+/**
+ * Estimator `cvtFlag` ("IN", "HO", "IN,HO") for a lazer mods JSON string.
+ * Null when no pattern conversion is active — Mirror/Classic don't convert.
+ */
+export function conversionCvtFlag(
+  mods: string | null | undefined,
+): string | null {
+  const parsed = parseScoreMods(mods);
+  const parts = [
+    parsed.invert ? "IN" : null,
+    parsed.holdOff ? "HO" : null,
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(",") : null;
+}
+
+function sunnyFromText(
+  osuText: string,
+  speedRate: number,
+  cvtFlag: string | null,
+): TosuLiveSunny {
   try {
-    const result = runDanielEstimatorFromText(osuText, { speedRate });
+    const result = runDanielEstimatorFromText(osuText, { speedRate, cvtFlag });
     return {
       sunnyStar: result.star,
       estDiff: result.estDiff,
@@ -255,7 +275,8 @@ export async function analyzeLiveMap(
       ? beatmap.rate
       : 1;
 
-  const sunny = sunnyFromText(osuText, speedRate);
+  const cvtFlag = conversionCvtFlag(beatmap.mods);
+  const sunny = sunnyFromText(osuText, speedRate, cvtFlag);
 
   let pattern: TosuLivePattern | null;
   let patternDetail: ManiaPatternDetail | null;

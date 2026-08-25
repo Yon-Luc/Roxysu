@@ -309,6 +309,23 @@ export async function fetchBeatmapPreview(id: string, mods?: string[]) {
   );
 }
 
+/** Sunny dan for an explicit pattern-mod / playback-rate combo. */
+export async function fetchBeatmapSunnyDan(
+  id: string,
+  mods?: string[],
+  rate?: number,
+) {
+  return unwrap(
+    await api.api.beatmaps({ id })["sunny-dan"].get({
+      query: {
+        mods: mods && mods.length > 0 ? mods.join(",") : undefined,
+        rate: rate != null && rate !== 1 ? String(rate) : undefined,
+      },
+    }),
+    `/api/beatmaps/${id}/sunny-dan`,
+  );
+}
+
 export async function fetchScoreReplay(id: string) {
   return unwrap(
     await api.api.scores({ id }).replay.get(),
@@ -959,6 +976,10 @@ export type BeatmapPreview = Exclude<
   Awaited<ReturnType<typeof fetchBeatmapPreview>>,
   { error: string }
 >;
+export type BeatmapSunnyDan = Exclude<
+  Awaited<ReturnType<typeof fetchBeatmapSunnyDan>>,
+  { error: string }
+>["sunnyDan"];
 export type ScoreReplay = Exclude<
   Awaited<ReturnType<typeof fetchScoreReplay>>,
   { error: string }

@@ -164,3 +164,63 @@ describe("GET /beatmaps/:id/preview mods", () => {
     expect(payload.notes.every((n) => n.endMs <= n.startMs)).toBe(true);
   });
 });
+
+describe("GET /beatmaps/:id/sunny-dan mods", () => {
+  async function getSunnyDan(mods?: string, rate?: number) {
+    const search = new URLSearchParams();
+    if (mods) search.set("mods", mods);
+    if (rate != null) search.set("rate", String(rate));
+    const qs = search.toString();
+    const res = await app.handle(
+      new Request(`http://localhost/beatmaps/${MAP_ID}/sunny-dan${qs ? `?${qs}` : ""}`),
+    );
+    return (await res.json()) as {
+      sunnyDan?: {
+        sunnyStar: number | null;
+        lnRatio: number | null;
+        columnCount: number | null;
+        estDiff: string | null;
+        error: string | null;
+      } | null;
+      error?: string;
+    };
+  }
+
+  test("base combo returns a rated map", async () => {
+    const { sunnyDan, error } = await getSunnyDan();
+    expect(error).toBeUndefined();
+    expect(sunnyDan?.error).toBeNull();
+    expect(sunnyDan?.columnCount).toBe(4);
+    expect(sunnyDan?.estDiff).toBeTruthy();
+    expect(sunnyDan?.lnRatio).toBeLessThan(0.2);
+  });
+
+  test("mods=IN rates the full-LN conversion", async () => {
+    const { sunnyDan } = await getSunnyDan("IN");
+    expect(sunnyDan?.error).toBeNull();
+    // Fixture converts every remaining note to an LN → LN table label.
+    expect(sunnyDan?.lnRatio).toBe(1);
+    expect(sunnyDan?.sunnyStar).not.toBeNull();
+  });
+
+  test("mods=IN,HO nets back to rice rating", async () => {
+    const { sunnyDan } = await getSunnyDan("IN,HO");
+    expect(sunnyDan?.error).toBeNull();
+    expect(sunnyDan?.lnRatio).toBeLessThan(0.2);
+  });
+
+  test("unknown acronyms are ignored (NM-equivalent)", async () => {
+    const base = await getSunnyDan();
+    const dtHd = await getSunnyDan("DT,HD");
+    expect(dtHd.sunnyDan?.estDiff).toBe(base.sunnyDan?.estDiff);
+  });
+
+  test("missing beatmap 404s", async () => {
+    const res = await app.handle(
+      new Request(
+        "http://localhost/beatmaps/00000000-0000-0000-0000-00000000dead/sunny-dan",
+      ),
+    );
+    expect(res.status).toBe(404);
+  });
+});

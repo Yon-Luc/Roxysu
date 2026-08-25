@@ -7,7 +7,7 @@ import {
   useState,
   type FormEvent,
 } from "react";
-import { fetchBeatmapPreview, type BeatmapPreview } from "../lib/api";
+import { fetchBeatmapPreview, fetchBeatmapSunnyDan, type BeatmapPreview } from "../lib/api";
 import { AudioClock, sampleAudioClock } from "../lib/audioClock";
 import { clamp, formatAccuracy, formatClock } from "../lib/format";
 import { useStdSkin } from "../lib/stdSkin";
@@ -135,6 +135,18 @@ export function BeatmapPreviewModal({
     staleTime: 5 * 60_000,
     refetchOnMount: true,
   });
+
+  // Mod-aware Sunny dan: recomputed for the selected pattern mods + rate so
+  // e.g. an IN preview shows the full-LN dan instead of the NM one.
+  const isManiaMap = data?.rulesetShortName === "mania";
+  const sunnyDanQuery = useQuery({
+    queryKey: ["beatmap-sunny-dan", beatmapId, previewModsKey, prefs.rate],
+    queryFn: () => fetchBeatmapSunnyDan(beatmapId, previewMods, prefs.rate),
+    enabled: Boolean(data?.supported) && isManiaMap,
+    staleTime: 5 * 60_000,
+    placeholderData: (prev) => prev,
+  });
+  const sunnyDan = sunnyDanQuery.data?.sunnyDan ?? null;
 
   const audioUrl = localBeatmapAudioUrl(data?.audioFileHash);
   const bgUrl =
@@ -1272,6 +1284,21 @@ export function BeatmapPreviewModal({
                         );
                       })}
                     </div>
+                  ) : null}
+
+                  {isMania && (sunnyDan || sunnyDanQuery.error) ? (
+                    <span
+                      className="shrink-0 whitespace-nowrap text-xs text-on-media-muted"
+                      title="Sunny dan for the selected mods"
+                    >
+                      <span className="mr-1">Sunny</span>
+                      <span className="text-on-media">
+                        {sunnyDan?.estDiff ?? "—"}
+                        {sunnyDan?.sunnyStar != null
+                          ? ` · ${sunnyDan.sunnyStar.toFixed(2)}★`
+                          : ""}
+                      </span>
+                    </span>
                   ) : null}
 
                   {isMania ? (

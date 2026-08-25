@@ -25,6 +25,7 @@ touches:
   - apps/server/public/lib/maniaSkinImport.ts
   - apps/server/public/components/ManiaSkinImportModal.tsx
   - apps/server/public/components/ManiaSkinDropHost.tsx
+  - apps/server/public/lib/api.ts
   - apps/server/public/lib/stdSkin.ts
   - apps/server/public/lib/taikoSkin.ts
   - apps/server/public/lib/catchSkin.ts
@@ -125,6 +126,17 @@ Playfield = the visual layer for that ruleset (notefield, 512×384, or taiko lan
     `routes/scores.ts` mania branch, `routes/beatmaps.ts` `/:id/preview`,
     `replay/mods.ts:parsePatternModQuery` — status: verified by
     `patternMods.test.ts`, `mods.test.ts`.
+
+11. The preview modal shows a **mod-aware Sunny dan** chip next to the mod
+    pills, fed by `GET /api/beatmaps/:id/sunny-dan?mods=&rate=`. Base combos
+    (rate 1, no IN/HO) read the Sunny dan ratings store; modded combos prefer a
+    persisted dan difficulty variants row and otherwise estimate ephemerally.
+    Ephemeral results are never persisted — variant rows are written only by
+    the background job.
+    **Source:** `map-analysis/computeSunnyDan.ts:getSunnyDanForPatternMods`,
+    `routes/beatmaps.ts` `/:id/sunny-dan`, `BeatmapPreviewModal.tsx` Sunny chip,
+    `lib/api.ts:fetchBeatmapSunnyDan` — status: verified by
+    `beatmapsPreview.test.ts`.
 
 ## Security rules
 

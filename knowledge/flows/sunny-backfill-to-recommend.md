@@ -4,6 +4,8 @@ confidence: verified
 touches:
   - apps/server/src/map-analysis/sunnyDanJob.ts
   - apps/server/src/map-analysis/danVariantJob.ts
+  - apps/server/src/map-analysis/computeSunnyDan.ts
+  - apps/server/src/tosu/analyze.ts
   - apps/server/src/analytics/recommend
   - packages/sunny-dan
 ---
@@ -43,6 +45,20 @@ persist beatmap_dan_rating_variants (sunny + daniel for 4K)
     ↓
 skill axes / band plays / dashboard read variant stars per play
 ```
+
+## Flow: mod-aware dan reads (preview / live analysis)
+
+```
+BeatmapPreviewModal pills or tosu snapshot mods (MR/IN/HO + rate)
+    ↓
+GET /api/beatmaps/:id/sunny-dan?mods=&rate=   |   analyze.ts sunnyFromText(cvtFlag)
+    ↓
+base combo → Sunny dan ratings store          | conversionCvtFlag → estimator { speedRate, cvtFlag }
+modded combo → variant row if persisted, else ephemeral estimate (never persisted)
+```
+
+Single-map request paths may compute; `GET /api/practice`, `GET /api/search`,
+and `GET /api/practice/recommend` still never do.
 
 ## Business guarantee
 

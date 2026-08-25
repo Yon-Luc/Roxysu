@@ -174,9 +174,29 @@ function mergeByHead(a, b) {
     return result;
 }
 
-function preprocessDaniel(osuText, speedRate, _odFlag) {
+function preprocessDaniel(osuText, speedRate, _odFlag, cvtFlag) {
     const parser = new OsuFileParser(osuText);
     parser.process();
+
+    // Pattern-conversion mods, same order and semantics as the Sunny port:
+    // Invert first, then Hold Off; conversion failures keep the original chart.
+    if (cvtFlag) {
+        if (String(cvtFlag).includes("IN")) {
+            try {
+                parser.modIN();
+            } catch {
+                // keep original on convert error
+            }
+        }
+        if (String(cvtFlag).includes("HO")) {
+            try {
+                parser.modHO();
+            } catch {
+                // keep original on convert error
+            }
+        }
+    }
+
     const parsed = parser.getParsedData();
 
     const lnRatio = Number(parsed.lnRatio) || 0;
@@ -718,6 +738,7 @@ function smoothDForGraph(allCorners, DAll, noteSeq) {
 
 export function calculateDaniel(osuText, speedRate = 1.0, odFlag = null, options = {}) {
     const withGraph = options?.withGraph === true;
+    const cvtFlag = options?.cvtFlag ?? null;
 
     const {
         status,
@@ -728,7 +749,7 @@ export function calculateDaniel(osuText, speedRate = 1.0, odFlag = null, options
         noteSeqByColumn,
         lnRatio,
         columnCount,
-    } = preprocessDaniel(osuText, speedRate, odFlag);
+    } = preprocessDaniel(osuText, speedRate, odFlag, cvtFlag);
 
     if (status === "Fail") return -1;
     if (status === "NotMania") return -2;

@@ -70,6 +70,7 @@ export function runDanielEstimatorFromText(
 
   const danielResult = calculateDaniel(osuText, speedRate, odFlag, {
     withGraph: false,
+    cvtFlag: options.cvtFlag ?? null,
   });
 
   if (danielResult === -3) {

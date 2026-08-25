@@ -7,6 +7,8 @@ import {
   getOsuDataPath,
   resolveLazerFilePath,
 } from "../shared/lazer-files";
+import { danVariantKey } from "../replay/mods";
+import { loadDanVariantRatingsSync } from "./computeDanVariants";
 import { runSunnyEstimatorFromText } from "./sunnyEstimator";
 import { estDiff } from "./estDiff";
 import { toIso as toIsoNullable } from "../shared/serialize";
@@ -462,11 +464,139 @@ export function ensureSunnyDanForIdsSync(
   return out;
 }
 
+export type PatternModSunnyOptions = {
+  /** Invert (IN): rice converted to LNs before estimating. */
+  invert: boolean;
+  /** Hold Off (HO): LNs flattened to rice before estimating. */
+  holdOff: boolean;
+  /** Playback rate applied by the estimator (1 = nominal map time). */
+  speedRate: number;
+};
+
+/** Quantize a playback rate the same way as dan variant rows (2 decimals). */
+function quantizeVariantRate(rate: number): number {
+  return Math.round(rate * 100) / 100;
+}
+
+/**
+ * Sunny dan rating for an explicit pattern-mod / rate combo.
+ * Base combos read the Sunny dan ratings store; modded combos prefer a
+ * persisted dan difficulty variants row and otherwise estimate ephemerally.
+ * Ephemeral results are never persisted — variant rows are written only by
+ * the background job.
+ */
+export async function getSunnyDanForPatternMods(
+  db: Db,
+  beatmapId: string,
+  options: PatternModSunnyOptions,
+): Promise<SunnyDanRating | null> {
+  const [beatmap] = await db
+    .select({
+      id: beatmaps.id,
+      hash: beatmaps.hash,
+      rulesetShortName: beatmaps.rulesetShortName,
+    })
+    .from(beatmaps)
+    .where(eq(beatmaps.id, beatmapId))
+    .limit(1);
+
+  if (!beatmap) return null;
+
+  const speedRate =
+    Number.isFinite(options.speedRate) && options.speedRate > 0
+      ? options.speedRate
+      : 1;
+  const rate = quantizeVariantRate(speedRate);
+
+  if (rate === 1 && !options.invert && !options.holdOff) {
+    return getOrComputeSunnyDan(db, beatmapId);
+  }
+
+  const now = toIsoNullable(new Date()) ?? new Date().toISOString();
+
+  const fail = (message: string): SunnyDanRating => ({
+    algorithm: SUNNY_ALGORITHM,
+    beatmapHash: beatmap.hash,
+    sunnyStar: null,
+    lnRatio: null,
+    columnCount: null,
+    estDiff: null,
+    error: message,
+    updatedAt: now,
+    cached: false,
+  });
+
+  if (beatmap.rulesetShortName !== "mania") {
+    return fail("Not a mania beatmap");
+  }
+
+  if (!beatmap.hash) {
+    return fail("Beatmap hash missing");
+  }
+
+  const filePath = resolveLazerFilePath(beatmap.hash, getOsuDataPath());
+  if (!filePath) {
+    return fail("Could not resolve lazer file path");
+  }
+
+  let osuText: string;
+  try {
+    osuText = readFileSync(filePath, "utf8");
+  } catch {
+    return fail("Beatmap file not found in lazer files store");
+  }
+
+  // Prefer a persisted dan difficulty variants row when the combo is exactly
+  // one (Invert-only plays are what the variants store rates).
+  if (options.invert && !options.holdOff) {
+    const stored = loadDanVariantRatingsSync(db, [beatmapId], SUNNY_ALGORITHM).get(
+      danVariantKey(beatmapId, { rate, lnOnly: true }),
+    );
+    if (stored) {
+      return {
+        algorithm: SUNNY_ALGORITHM,
+        beatmapHash: stored.beatmapHash,
+        sunnyStar: stored.star,
+        lnRatio: stored.lnRatio,
+        columnCount: stored.columnCount,
+        estDiff: stored.estDiff,
+        error: null,
+        updatedAt: now,
+        cached: true,
+      };
+    }
+  }
+
+  const cvtParts = [
+    options.invert ? "IN" : null,
+    options.holdOff ? "HO" : null,
+  ].filter(Boolean);
+
+  try {
+    const result = runSunnyEstimatorFromText(osuText, {
+      speedRate: rate,
+      cvtFlag: cvtParts.length > 0 ? cvtParts.join(",") : null,
+    });
+    return {
+      algorithm: SUNNY_ALGORITHM,
+      beatmapHash: beatmap.hash,
+      sunnyStar: result.star,
+      lnRatio: result.lnRatio,
+      columnCount: result.columnCount,
+      estDiff: result.estDiff,
+      error: null,
+      updatedAt: now,
+      cached: false,
+    };
+  } catch (err) {
+    return fail(err instanceof Error ? err.message : String(err));
+  }
+}
+
 /**
  * Re-apply current RC/LN label rules to cached Sunny ratings (no .osu re-read).
  * Used after threshold/rule changes (e.g. 20% LN split).
- */
-export function relabelSunnyDanSync(db: Db): number {
+ */export function relabelSunnyDanSync(db: Db): number {
   const rows = db.$client
     .query(
       `

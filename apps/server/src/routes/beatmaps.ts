@@ -14,7 +14,10 @@ import {
   resolveScoresUsernames,
   scoresUsernameCondition,
 } from "../analytics/scoreUsername";
-import { getOrComputeSunnyDan } from "../map-analysis/computeSunnyDan";
+import {
+  getOrComputeSunnyDan,
+  getSunnyDanForPatternMods,
+} from "../map-analysis/computeSunnyDan";
 import { getOrComputeDanielDan } from "../map-analysis/computeDanielDan";
 import {
   getOrComputePatternAnalysis,
@@ -560,6 +563,39 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
     {
       params: t.Object({
         id: t.String(),
+      }),
+    },
+  )
+  .get(
+    "/:id/sunny-dan",
+    async ({ db, params, query, set }) => {
+      const patternMods = parsePatternModQuery(query?.mods);
+      const rawRate = Number(query?.rate);
+      // Modal rate presets run 0.5–1.5; keep a little headroom either way.
+      const speedRate =
+        Number.isFinite(rawRate) && rawRate > 0
+          ? Math.min(3, Math.max(0.5, rawRate))
+          : 1;
+
+      const sunnyDan = await getSunnyDanForPatternMods(db, params.id, {
+        invert: patternMods.invert,
+        holdOff: patternMods.holdOff,
+        speedRate,
+      });
+
+      if (!sunnyDan) {
+        set.status = 404;
+        return { error: "Beatmap not found" };
+      }
+      return { sunnyDan };
+    },
+    {
+      params: t.Object({
+        id: t.String(),
+      }),
+      query: t.Object({
+        mods: t.Optional(t.String()),
+        rate: t.Optional(t.String()),
       }),
     },
   )

@@ -15,5 +15,5 @@ export declare function calculateDaniel(
   osuText: string,
   speedRate?: number,
   odFlag?: string | number | null,
-  options?: { withGraph?: boolean },
+  options?: { withGraph?: boolean; cvtFlag?: string | null },
 ): DanielCalculateResult;

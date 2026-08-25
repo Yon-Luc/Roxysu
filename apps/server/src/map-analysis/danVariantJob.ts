@@ -204,11 +204,43 @@ function handleEvent(db: Db, importId?: number): void {
 }
 
 /**
+ * One-time repair: rows with algorithm='daniel' AND ln_only=1 written before
+ * the Daniel estimator learned the Invert/Hold Off conversions were rated on
+ * the unconverted chart. Drop them once so the boot full scan recomputes them.
+ */
+function invalidatePreConversionDanielVariants(db: Db): void {
+  const flag = "dan_variants.daniel_cvt_recompute";
+  try {
+    const done = db.$client
+      .query(`SELECT value FROM settings WHERE key = ?`)
+      .get(flag) as { value: string } | null;
+    if (done?.value === "1") return;
+    db.$client
+      .query(
+        `DELETE FROM beatmap_dan_rating_variants WHERE algorithm = 'daniel' AND ln_only = 1`,
+      )
+      .run();
+    db.$client
+      .query(
+        `INSERT INTO settings (key, value) VALUES (?, '1')
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      )
+      .run(flag);
+  } catch (err) {
+    console.error(
+      "[dan-variants] daniel conversion invalidation failed",
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
+/**
  * Subscribe to import events and lazily compute dan difficulty variants for
  * modded plays. Runs fully in the background — never on a request path.
  */
 export function startDanVariantJob(db: Db): () => void {
   job.db = db;
+  invalidatePreConversionDanielVariants(db);
   const latest = db.$client
     .query(`SELECT COALESCE(MAX(id), 0) AS n FROM imports WHERE status = 'success'`)
     .get() as { n: number } | null;

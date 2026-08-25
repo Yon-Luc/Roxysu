@@ -29,7 +29,7 @@ While song-selecting or playing, open **Now selected** (optionally `#/now-select
 1. **tosu live** is the selection source — not scores. Realm extraction remains authoritative for plays.
 2. The Current session **Now selected** panel stays as a compact hub; this page is the rich companion.
 3. Preview auto-starts when the map is matched in the local mirror and in-game play is not active (configurable). Pause while `play.active` avoids doubling game audio.
-4. Preview position syncs with tosu `beatmap.time.live`: while tosu samples are fresh (≤1.5s old), `BeatmapPreviewEmbed` drives its playfield clock from the live time (interpolated at the tosu rate) and hard-corrects local audio when it drifts >350ms; otherwise it falls back to independent playback from the preview point.
+4. Preview position syncs with tosu `beatmap.time.live`: while tosu samples are fresh (≤1.5s old), `BeatmapPreviewEmbed` drives its playfield clock from the live time (interpolated at the tosu rate); small transport-latency offsets are ignored — the clock keeps gliding — and clock + audio hard-resync only when drift exceeds ~2s; otherwise it falls back to independent playback from the preview point.
 5. Pattern weights / density / hotspots use the same `ManiaPatternDetail` path as the practice profile (unrated chart).
 6. Maps not in the local mirror still show identity + ephemeral mania analysis from tosu `.osu` text; preview is skipped.
 7. Widget visibility and order are page-local (`localStorage` key `roxysu:now-selected-layout`), not the Settings HTTP store.

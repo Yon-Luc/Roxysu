@@ -39,8 +39,11 @@ export function clampPreviewEmbedHeightRem(value: number): number {
   );
 }
 
-/** Hard-correct local audio when it drifts this far from the tosu time. */
-const SYNC_CORRECT_MS = 350;
+/**
+ * Hard-resync clock + audio only when local time drifts this far from the tosu
+ * time — smaller offsets are transport latency and must not cause jumps.
+ */
+const SYNC_RESYNC_MS = 2000;
 /** A tosu sample older than this is stale — fall back to the local clock. */
 const SYNC_FRESH_MS = 1500;
 
@@ -378,16 +381,23 @@ export function BeatmapPreviewEmbed({
     const playing = prev == null || syncTimeMs > prev.ms + 20;
     const rate = syncRate != null && syncRate > 0 ? syncRate : 1;
     liveSyncSampleRef.current = { ms: syncTimeMs, at: now, playing };
-    clockRef.current.set(syncTimeMs, {
-      playing,
-      rate: playing ? rate : clockRef.current.playbackRate,
-    });
-    setCurrentMs(syncTimeMs);
+
+    // Tosu samples always arrive a little late; snapping to each one makes the
+    // preview stutter. Glide on the local clock and only jump when the gap is
+    // too large to be transport latency.
+    const localMs = clockRef.current.nowMs();
+    if (Math.abs(localMs - syncTimeMs) > SYNC_RESYNC_MS) {
+      clockRef.current.set(syncTimeMs, { playing, rate });
+      setCurrentMs(syncTimeMs);
+    } else {
+      clockRef.current.set(localMs, { playing, rate });
+      setCurrentMs(localMs);
+    }
 
     const audio = audioRef.current;
     if (!audio) return;
     const atMs = (audio.currentTime || 0) * 1000;
-    if (Math.abs(atMs - syncTimeMs) <= SYNC_CORRECT_MS) return;
+    if (Math.abs(atMs - syncTimeMs) <= SYNC_RESYNC_MS) return;
     desiredMsRef.current = syncTimeMs;
     seekGuardUntilRef.current = now + 400;
     try {

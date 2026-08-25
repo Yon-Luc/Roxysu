@@ -15,6 +15,8 @@ let mainWindow = null;
 let serverChild = null;
 /** @type {import("node:child_process").ChildProcess | null} */
 let realmChild = null;
+/** @type {import("node:child_process").ChildProcess | null} */
+let overlayChild = null;
 /** @type {number[]} */
 const childLogFds = [];
 let shuttingDown = false;
@@ -338,6 +340,55 @@ function spawnRealmReader(paths, sharedEnv) {
 }
 
 /**
+ * Optional In-game overlay host (Wayland wlr-layer-shell). Bundled by the Nix
+ * packages into resources/overlay; dev falls back to a locally built
+ * apps/overlay/roxysu-overlay. HTTP-only consumer of GET /api/overlay — never
+ * touches Realm or the local mirror. Skipped on Windows (no layer-shell).
+ * @param {ReturnType<typeof resolveDesktopPaths>} paths
+ */
+function resolveOverlayBin(paths) {
+  const envBin = process.env.ROXYSU_OVERLAY_BIN?.trim();
+  if (envBin) return fs.existsSync(envBin) ? envBin : null;
+  const candidates = [
+    path.join(paths.resourcesDir, "overlay", "roxysu-overlay"),
+    paths.repoRoot ? path.join(paths.repoRoot, "apps", "overlay", "roxysu-overlay") : null,
+  ].filter(Boolean);
+  return candidates.find((candidate) => fs.existsSync(candidate)) || null;
+}
+
+/**
+ * @param {ReturnType<typeof resolveDesktopPaths>} paths
+ */
+function spawnOverlayHost(paths) {
+  if (process.platform !== "linux") return;
+  if (!process.env.WAYLAND_DISPLAY) {
+    desktopLog("overlay host skipped — no Wayland session");
+    return;
+  }
+  const bin = resolveOverlayBin(paths);
+  if (!bin) {
+    desktopLog("overlay host not bundled — skipping");
+    return;
+  }
+  const { fd } = openChildLogFd(paths.dataDir, "overlay");
+  // Host pre-splits every argv token on '=' (--key=value style); passing the
+  // URL as a separate value would split at 'bg=clear'. Single token is safe.
+  const url = `--url=http://${HOST}:${PORT}/#/overlay?bg=clear`;
+  desktopLog(`spawn overlay bin=${bin}`);
+  overlayChild = spawn(bin, [url], {
+    env: process.env,
+    stdio: ["ignore", fd, fd],
+    windowsHide: true,
+    shell: false,
+  });
+  overlayChild.on("exit", (code, signal) => {
+    if (!shuttingDown) {
+      desktopLog(`overlay exited code=${code} signal=${signal}`);
+    }
+  });
+}
+
+/**
  * @param {string} text
  * @param {{ animateDots?: boolean }} [opts]
  */
@@ -395,8 +446,10 @@ function closeChildLogs() {
 async function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
+  stopChild(overlayChild, "overlay");
   stopChild(realmChild, "realm-reader");
   stopChild(serverChild, "server");
+  overlayChild = null;
   realmChild = null;
   serverChild = null;
   closeChildLogs();
@@ -516,6 +569,9 @@ if (!gotLock) {
 
     // Defer Realm until the UI is up; extract archive lazily (shrink AV scan at install).
     spawnRealmReader(paths, sharedEnv);
+
+    // Optional Wayland in-game overlay host (bundled on NixOS packages).
+    spawnOverlayHost(paths);
 
     // NSIS installs only — check after UI is up so startup is not blocked.
     startAutoUpdate({ log: desktopLog });

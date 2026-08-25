@@ -5,6 +5,10 @@ touches:
   - apps/overlay/main.c
   - apps/overlay/build.sh
   - flake.nix
+  - nix/overlay.nix
+  - nix/prebuilt.nix
+  - nix/package.nix
+  - apps/desktop/main.js
 ---
 
 # In-game overlay
@@ -63,6 +67,18 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
 11. Focus tracking uses its own Wayland event queue + GSource on the GDK
    connection; protocol C code is generated at build time by wayland-scanner
    from wlr-protocols into `apps/overlay/gen/` (gitignored).
+12. **Desktop bundling** (NixOS packages): `nix/overlay.nix` builds the host as
+   a self-contained derivation (autoPatchelf bakes GTK4/WebKitGTK RPATHs into
+   the binary); `nix/prebuilt.nix` / `nix/package.nix` symlink it to
+   `resources/overlay/roxysu-overlay`. The Electron shell (`spawnOverlayHost`
+   in `apps/desktop/main.js`) spawns it after server readiness — Linux +
+   Wayland session only, skipped with a log line otherwise. Override/dev
+   path: `ROXYSU_OVERLAY_BIN` or a locally built `apps/overlay/roxysu-overlay`.
+   Data rules unchanged: HTTP-only consumer.
+13. **Arg form**: the host pre-splits every argv token on `=` into
+   `--key value`, so values containing `=` must be passed as a single
+   `--key=value` token. Electron passes `--url=http://…?bg=clear`; passing
+   the URL as a separate argv value breaks parsing (`unknown option 'clear'`).
 
 ## Main flow
 
@@ -73,14 +89,19 @@ apps/overlay (C: GTK4 + gtk4-layer-shell + WebKitGTK 6)
 client app server → GET /api/overlay (live session / recent scores)
 ```
 
-Build: `nix develop` → `./apps/overlay/build.sh` (wayland-scanner generates
-protocol code) → `./roxysu-overlay`
+Launch paths:
+- Standalone: `nix develop` → `./apps/overlay/build.sh` → `./roxysu-overlay`
+- NixOS desktop package: bundled by the flake, spawned automatically by
+  `apps/desktop/main.js` (see business rule 12)
+
 (flags: `--url --anchor --margin --width --height --opacity --output
---match-app-id --follow-focus --list-windows`).
+--match-app-id --follow-focus --list-windows`; values with `=` must use
+`--key=value` form — rule 13).
 
 ## Important symbols
 
 - `apps/overlay/main.c` — host entry point
+- `nix/overlay.nix` — self-contained host derivation (`nix build .#roxysu-overlay`)
 - `apps/server/public/features/overlay/OverlayPage.tsx` — rendered HUD page
 - `apps/server/src/routes/overlay.ts` — `/api/overlay`
 
@@ -88,6 +109,7 @@ protocol code) → `./roxysu-overlay`
 
 - [dashboard/](dashboard/index.md) — owns the `/api/overlay` endpoint
 - [tosu-live/](tosu-live/index.md) — live-session detection behind that payload
+- [desktop/](../desktop/index.md) — spawns the bundled host on NixOS packages
 - external: wlr-layer-shell compositor, WebKitGTK
 
 ## Depended on by

@@ -18,6 +18,8 @@
   cacert,
   # Set after first build: nix build .#roxysu 2>&1 | … got: sha256-…
   bunDepsHash ? "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+  # In-game overlay host derivation (nix/overlay.nix); null skips bundling.
+  overlayBin ? null,
 }: let
   pname = "roxysu";
   version = "0.1.13";
@@ -352,6 +354,15 @@ in
       cp -a apps/desktop/stage/server "$resources/server"
       cp -a apps/desktop/stage/realm-reader "$resources/realm-reader"
       cp apps/desktop/stage/splash.html "$resources/splash.html"
+
+      # Optional in-game overlay host (Wayland). Symlink keeps store sharing;
+      # its RPATH already points at the GTK/WebKit libs in its own closure.
+      ${lib.optionalString (overlayBin != null) ''
+        mkdir -p "$resources/overlay"
+        ln -sfn "${overlayBin}/bin/roxysu-overlay" \
+          "$resources/overlay/roxysu-overlay"
+        test -e "$resources/overlay/roxysu-overlay"
+      ''}
 
       if [ -f apps/server/public/icons/icon-512.png ]; then
         cp apps/server/public/icons/icon-512.png \

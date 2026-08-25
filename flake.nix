@@ -41,7 +41,7 @@
 
     # After changing bun.lock, rebuild once, then paste the printed sha256 here:
     #   nix build .#roxysu-from-source
-    bunDepsHash = "sha256-5tfW9/T7DB56qgtLIV4/IAWa2FjLZpovc9fDzP3lfVg=";
+    bunDepsHash = "sha256-HLkHrhkUdQPFc1M1MNYOPoiJJN3d5MQGXm5SR14cnlw=";
 
     resourcesRoot =
       if builtins.pathExists (linux-resources + "/roxysu")
@@ -60,12 +60,18 @@
         else "0.0.0";
 
     roxysuFromSource = pkgs.callPackage ./nix/package.nix {
-      inherit electron bunDepsHash;
+      inherit electron bunDepsHash overlayBin;
       nodejs_24 = pkgs.nodejs_24;
     };
 
+    # In-game overlay host (apps/overlay) — built once, bundled into the
+    # desktop packages below; also buildable standalone: nix build .#roxysu-overlay
+    overlayBin = pkgs.callPackage ./nix/overlay.nix {
+      version = resourcesVersion;
+    };
+
     roxysuPrebuilt = pkgs.callPackage ./nix/prebuilt.nix {
-      inherit electron;
+      inherit electron overlayBin;
       src = resourcesRoot;
       version = resourcesVersion;
     };
@@ -78,6 +84,7 @@
       inherit roxysu;
       roxysu-prebuilt = roxysuPrebuilt;
       roxysu-from-source = roxysuFromSource;
+      roxysu-overlay = overlayBin;
     };
 
     apps.${system}.default = {

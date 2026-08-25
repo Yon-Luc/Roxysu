@@ -9,6 +9,8 @@
   zlib,
   openssl,
   icu,
+  # In-game overlay host derivation (nix/overlay.nix); null skips bundling.
+  overlayBin ? null,
   # Path to the unpacked `roxysu/` app root (main.js, resources/, …).
   src,
   version,
@@ -75,6 +77,15 @@ in
         cp "$resources/public/icons/icon-512.png" \
           "$out/share/icons/hicolor/512x512/apps/${pname}.png"
       fi
+
+      # Optional in-game overlay host (Wayland). Symlink keeps store sharing;
+      # its RPATH already points at the GTK/WebKit libs in its own closure.
+      ${lib.optionalString (overlayBin != null) ''
+        mkdir -p "$resources/overlay"
+        ln -sfn "${overlayBin}/bin/roxysu-overlay" \
+          "$resources/overlay/roxysu-overlay"
+        test -e "$resources/overlay/roxysu-overlay"
+      ''}
 
       # Prefer bundled Node (ABI-matched natives from CI). Do not set
       # ROXYSU_NODE_BIN — paths.js will use resources/node/node.

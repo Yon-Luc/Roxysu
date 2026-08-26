@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseV2Frame, rateFromMods } from "./live";
+import { keysFromCs, parseV2Frame, rateFromMods } from "./live";
 
 describe("rateFromMods", () => {
   test("custom DT speed_change wins", () => {
@@ -21,6 +21,20 @@ describe("rateFromMods", () => {
   });
 });
 
+describe("keysFromCs", () => {
+  test("reads a bare number", () => {
+    expect(keysFromCs(7)).toBe(7);
+  });
+
+  test("prefers converted when it is a 1–10 key count", () => {
+    expect(keysFromCs({ original: 7, converted: 4 })).toBe(4);
+  });
+
+  test("falls back to original when converted is 0 / unused", () => {
+    expect(keysFromCs({ original: 7, converted: 0 })).toBe(7);
+  });
+});
+
 describe("parseV2Frame", () => {
   test("maps beatmap + mods fields", () => {
     const frame = parseV2Frame(
@@ -28,6 +42,8 @@ describe("parseV2Frame", () => {
         state: { number: 7, name: "songSelect" },
         beatmap: {
           checksum: "abc123 ",
+          title: "Song",
+          version: "7K",
           mode: { number: 3, name: "osumania" },
           stats: { cs: 7 },
           time: { live: 42_500 },
@@ -48,10 +64,66 @@ describe("parseV2Frame", () => {
     expect(frame.acronyms).toEqual(["MR", "DT"]);
     expect(frame.rate).toBe(1.1);
     expect(frame.timeLiveMs).toBe(42_500);
+    expect(frame.title).toBe("Song");
+    expect(frame.version).toBe("7K");
+  });
+
+  test("reads stats.cs object shape from current tosu v2", () => {
+    const frame = parseV2Frame(
+      JSON.stringify({
+        beatmap: {
+          checksum: "deadbeef",
+          title: "circles!",
+          version: "7K",
+          mode: { number: 3, name: "mania" },
+          stats: { cs: { original: 7, converted: 0 } },
+          time: { live: 2197 },
+        },
+        play: {
+          mods: {
+            name: "MR",
+            array: [{ acronym: "MR" }],
+            rate: 1,
+          },
+        },
+      }),
+    );
+    if (!frame) throw new Error("expected frame");
+    expect(frame.keys).toBe(7);
+    expect(frame.checksum).toBe("deadbeef");
+    expect(frame.title).toBe("circles!");
+    expect(frame.version).toBe("7K");
+    expect(frame.acronyms).toEqual(["MR"]);
+  });
+
+  test("maps legacy menu.bm /json shape", () => {
+    const frame = parseV2Frame(
+      JSON.stringify({
+        menu: {
+          gameMode: 3,
+          mods: { str: "MR" },
+          bm: {
+            md5: "legacy",
+            time: { current: 1200 },
+            stats: { CS: 4 },
+            metadata: { title: "Old", difficulty: "4K" },
+          },
+        },
+      }),
+    );
+    if (!frame) throw new Error("expected frame");
+    expect(frame.checksum).toBe("legacy");
+    expect(frame.keys).toBe(4);
+    expect(frame.modeNumber).toBe(3);
+    expect(frame.acronyms).toEqual(["MR"]);
+    expect(frame.timeLiveMs).toBe(1200);
+    expect(frame.title).toBe("Old");
+    expect(frame.version).toBe("4K");
   });
 
   test("returns null on garbage / error payloads", () => {
     expect(parseV2Frame("not json")).toBeNull();
     expect(parseV2Frame(JSON.stringify({ error: "x" }))).toBeNull();
+    expect(parseV2Frame(JSON.stringify({ error: "not_ready" }))).toBeNull();
   });
 });

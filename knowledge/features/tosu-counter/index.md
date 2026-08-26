@@ -6,6 +6,7 @@ touches:
   - apps/tosu-counter/src/main.ts
   - apps/tosu-counter/src/live.ts
   - apps/tosu-counter/src/chart.ts
+  - apps/tosu-counter/src/chartLoad.ts
   - apps/tosu-counter/src/settings.ts
   - apps/tosu-counter/src/tosuSettings.ts
   - apps/tosu-counter/src/folderSkin.ts
@@ -113,25 +114,26 @@ mania notefield synced to the live in-game time.
     inflate silently truncated this stream).
 
  13. **Live feed (`/websocket/v2`)** is global in tosu — it broadcasts to every
-     connected client and only returns `{error:"not_ready"}` when osu! isn't
-     running, so a counter on the same host as a working counter must receive
-     frames too. The v2 `beatmap.stats.cs` is an **object** `{original,
-     converted}` (not a bare number), so keymode detection reads both shapes.
-     The status line is diagnostic: in song select it shows `Song select`
-     (plus `feed Ns stale` / `no frames` / `N ws err` when the live link is
-     down) instead of a misleading "Waiting for osu!", so a dead socket vs. an
-     idle game is distinguishable at a glance. `connectLiveSocket` negotiates
-     the v2 structure by rotating `?v=` candidates (`7→6→5→""`); if a variant
-     delivers no frame within 4s it closes and tries the next, because an
-     unversioned connection can fall back to tosu's *first* v2 version whose
-     shape our parser drops (a socket that opens but stays silent). Dropped
-     frames that still look like v2 are `console.warn`-ed for debugging.
+     connected client. Current tosu does **not** use `?v=`; when osu! isn't
+     hooked the socket stays open and sends **nothing** (HTTP `/json/v2`
+     returns `{error:"not_ready"}`). A 4s silent-socket close / version
+     rotation was killing that idle connection and leaving the counter on
+     `Song select (no osu link) · no frames`. `connectLiveSocket` now keeps
+     `/websocket/v2` open and polls `/json/v2` until the websocket delivers.
+     The v2 `beatmap.stats.cs` is an **object** `{original, converted}` (not a
+     bare number); converted wins when it is a 1–10 key count. Title/version
+     come from the live frame, not v1 `/json`. Chart identity (`loadedChecksum`)
+     is committed only after a successful parse so a 4K→7K switch that briefly
+     404s or still serves the old `.osu` can retry; a keys mismatch against
+     `stats.cs` also reloads. Repeating frames must not reset the 250ms chart
+     debounce (tosu polls ~100ms). An empty checksum idles only after ~500ms,
+     not on a single blank frame during a map switch.
 
 ## Main flows
 
 ```
-tosu /websocket/v2 frame
-  ↓ checksum change (debounced 250ms)
+tosu /websocket/v2 frame (HTTP /json/v2 fallback if WS silent)
+  ↓ checksum / flags / keys change (debounced 250ms; checksum committed on success)
 GET /files/beatmap/file → OsuFileParser → modIN/modHO → Mirror flip → notes
   ↓ rAF loop on interpolated beatmap.time.live
 paintManiaNotefield(canvas, sprites: folder pack > IndexedDB import > none)
@@ -147,8 +149,9 @@ paintManiaNotefield(canvas, sprites: folder pack > IndexedDB import > none)
 
 ## Important symbols
 
-- `apps/tosu-counter/src/live.ts` — reconnecting WS + v2 frame mapping
+- `apps/tosu-counter/src/live.ts` — reconnecting WS + `/json/v2` fallback + v2 frame mapping
 - `apps/tosu-counter/src/chart.ts` — mania parse + IN/HO/MR flags
+- `apps/tosu-counter/src/chartLoad.ts` — when to (re)fetch the current `.osu`
 - `apps/tosu-counter/src/folderSkin.ts` — `skin/skin-pack.json` loader +
   validation (the OBS path; no file pickers there)
 - `apps/server/public/lib/paintManiaNotefield.ts` — shared painter (now owns

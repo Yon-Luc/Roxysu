@@ -15,11 +15,14 @@ type TosuV2Payload = {
     time?: { live?: number };
   };
   play?: {
-    mods?: { array?: ModEntry[] | string[]; rate?: number | string };
+    mods?: {
+      array?: ModEntry[] | string[];
+      rate?: number | string;
+      name?: string;
+    };
   };
 };
 
-// Legacy lazer tosu shape (what /json and the v2 socket actually send for lazer)
 type TosuLegacyPayload = {
   error?: string;
   menu?: {
@@ -45,7 +48,7 @@ type TosuLegacyPayload = {
     };
   };
   play?: {
-    mods?: { array?: ModEntry[] | string[]; rate?: number | string };
+    mods?: { array?: ModEntry[] | string[]; rate?: number | string; name?: string };
   };
 };
 
@@ -56,10 +59,29 @@ export type LiveFrame = {
   acronyms: string[];
   rate: number;
   timeLiveMs: number | null;
+  title: string | null;
+  version: string | null;
 };
 
 function asFinite(n: unknown): number | null {
   return typeof n === "number" && Number.isFinite(n) ? n : null;
+}
+
+/** Mania key count from v2 `stats.cs` (object or number). Prefer converted when it's 1–10. */
+export function keysFromCs(cs: unknown): number | null {
+  if (typeof cs === "number") return asFinite(cs);
+  if (!cs || typeof cs !== "object") return null;
+  const o = cs as { original?: unknown; converted?: unknown };
+  const converted = asFinite(o.converted);
+  if (
+    converted != null &&
+    Number.isInteger(converted) &&
+    converted >= 1 &&
+    converted <= 10
+  ) {
+    return converted;
+  }
+  return asFinite(o.original);
 }
 
 /**
@@ -90,7 +112,7 @@ export function rateFromMods(mods: unknown): number {
 
 function acronymsFromMods(mods: unknown): string[] {
   if (!mods || typeof mods !== "object") return [];
-  const m = mods as { array?: ModEntry[] | string[] };
+  const m = mods as { array?: ModEntry[] | string[]; name?: string };
   const arr = Array.isArray(m.array) ? m.array : [];
   const out: string[] = [];
   for (const entry of arr) {
@@ -104,7 +126,16 @@ function acronymsFromMods(mods: unknown): string[] {
       out.push(entry.acronym.trim());
     }
   }
-  return out;
+  if (out.length > 0) return out;
+  const name = typeof m.name === "string" ? m.name.trim() : "";
+  if (!name || name === "NM") return [];
+  if (name.includes(",")) {
+    return name
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+  return acronymsFromModString(name);
 }
 
 /**
@@ -114,7 +145,6 @@ function acronymsFromMods(mods: unknown): string[] {
 function acronymsFromModString(str: string): string[] {
   if (!str) return [];
   const out: string[] = [];
-  // Standard two-char osu! mod acronyms
   for (let i = 0; i + 1 < str.length; i += 2) {
     out.push(str.slice(i, i + 2).toUpperCase());
   }
@@ -133,73 +163,87 @@ function rateFromModString(str: string): number {
   return 1;
 }
 
-/**
- * Parse a tosu `/websocket/v2` JSON message into the fields the counter uses.
- * Handles two payload shapes:
- *  - Legacy / lazer tosu: top-level `menu` object (same as /json endpoint)
- *  - Modern v2 (stable tosu): top-level `beatmap` / `play` objects
- */
-export function parseV2Frame(raw: string): LiveFrame | null {
-  let data: TosuV2Payload & TosuLegacyPayload;
-  try {
-    data = JSON.parse(raw) as TosuV2Payload & TosuLegacyPayload;
-  } catch {
-    return null;
-  }
-  if (data.error) return null;
+export function parseV2Data(data: unknown): LiveFrame | null {
+  if (!data || typeof data !== "object") return null;
+  const payload = data as TosuV2Payload & TosuLegacyPayload;
+  if (payload.error) return null;
 
-  // ── Legacy / lazer shape ─────────────────────────────────────────────────
-  // Detected by the presence of `menu.bm` (the /json structure).
-  if (data.menu?.bm) {
-    const bm = data.menu.bm;
+  if (payload.menu?.bm) {
+    const bm = payload.menu.bm;
     const checksum = bm.md5?.trim() || null;
-    const keys = asFinite(bm.stats?.CS);
-    const modsStr = data.menu.mods?.str ?? "";
+    const modsStr = payload.menu.mods?.str ?? "";
+    const meta = bm.metadata;
     return {
       checksum,
-      modeNumber: asFinite(data.menu.gameMode),
-      keys,
+      modeNumber: asFinite(payload.menu.gameMode),
+      keys: asFinite(bm.stats?.CS),
       acronyms: acronymsFromModString(modsStr),
       rate: rateFromModString(modsStr),
       timeLiveMs: asFinite(bm.time?.current),
+      title: meta?.title?.trim() ? meta.title.trim() : null,
+      version: meta?.difficulty?.trim() ? meta.difficulty.trim() : null,
     };
   }
 
-  // ── Modern v2 shape ──────────────────────────────────────────────────────
-  // tosu v2 reports mania columns as `stats.cs: { original, converted }`
-  // (an object), not a bare number — read both shapes so keymode detection
-  // from the live feed works.
-  const bm = data.beatmap;
+  const bm = payload.beatmap;
   const checksum = bm?.checksum?.trim() ? bm.checksum.trim() : null;
-  const cs = bm?.stats?.cs;
-  const csObj =
-    cs && typeof cs === "object"
-      ? (cs as { original?: unknown; converted?: unknown })
-      : null;
-  const keys =
-    asFinite(csObj?.original) ?? asFinite(csObj?.converted) ?? asFinite(cs);
+  const title = bm?.title?.trim() ? bm.title.trim() : null;
+  const version = bm?.version?.trim() ? bm.version.trim() : null;
 
   return {
     checksum,
     modeNumber: asFinite(bm?.mode?.number),
-    keys,
-    acronyms: acronymsFromMods(data.play?.mods),
-    rate: rateFromMods(data.play?.mods),
+    keys: keysFromCs(bm?.stats?.cs),
+    acronyms: acronymsFromMods(payload.play?.mods),
+    rate: rateFromMods(payload.play?.mods),
     timeLiveMs: asFinite(bm?.time?.live),
+    title,
+    version,
   };
 }
 
+/**
+ * Parse a tosu `/websocket/v2` JSON message into the fields the counter uses.
+ * Handles two payload shapes:
+ *  - Legacy / lazer tosu: top-level `menu` object (same as /json endpoint)
+ *  - Modern v2: top-level `beatmap` / `play` objects
+ */
+export function parseV2Frame(raw: string): LiveFrame | null {
+  let data: unknown;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  return parseV2Data(data);
+}
+
 export type LiveStatus = "connecting" | "connected" | "disconnected";
+
+const HTTP_FALLBACK_MS = 200;
+const HTTP_STALE_MS = 1000;
+
+async function decodeWsData(data: unknown): Promise<string | null> {
+  if (typeof data === "string") return data;
+  if (data instanceof ArrayBuffer) return new TextDecoder().decode(data);
+  if (typeof Blob !== "undefined" && data instanceof Blob) {
+    try {
+      return await data.text();
+    } catch {
+      return null;
+    }
+  }
+  if (data == null) return null;
+  return String(data);
+}
 
 /**
  * Reconnecting WebSocket to tosu `/websocket/v2`. Host is derived from
  * `window.location` — the counter is always served by tosu itself.
  *
- * tosu negotiates the v2 structure by an optional `?v=` query: with no `v` it
- * falls back to the *first* v2 version, whose shape can differ from the
- * current docs and yield frames our parser drops (a socket that opens but
- * never delivers usable data). We try a set of versions and, if none deliver
- * a frame within a few seconds, rotate to the next candidate.
+ * Current tosu ignores `?v=`; a silent socket means osu! is not hooked yet,
+ * not a version mismatch. Keep the connection open and poll `/json/v2` until
+ * the websocket starts delivering.
  */
 export function connectLiveSocket(opts: {
   onFrame: (frame: LiveFrame) => void;
@@ -209,11 +253,9 @@ export function connectLiveSocket(opts: {
   let stopped = false;
   let ws: WebSocket | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  let frameWatch: ReturnType<typeof setTimeout> | null = null;
+  let httpTimer: ReturnType<typeof setInterval> | null = null;
   let attempt = 0;
-  let variant = 0;
-  // Pinned versions first (modern shape), then unversioned (tosu's latest).
-  const variants = ["?v=7", "?v=6", "?v=5", ""];
+  let lastWsFrameAt = 0;
 
   const clearReconnect = () => {
     if (reconnectTimer) {
@@ -222,29 +264,43 @@ export function connectLiveSocket(opts: {
     }
   };
 
-  const clearFrameWatch = () => {
-    if (frameWatch) {
-      clearTimeout(frameWatch);
-      frameWatch = null;
-    }
-  };
-
   const scheduleReconnect = () => {
     if (stopped) return;
     clearReconnect();
     const delay = Math.min(30_000, 1_000 * 2 ** Math.min(attempt, 5));
     attempt += 1;
-    variant = (variant + 1) % variants.length;
     reconnectTimer = setTimeout(open, delay);
+  };
+
+  const handleFrame = (frame: LiveFrame, fromWs: boolean) => {
+    if (fromWs) lastWsFrameAt = performance.now();
+    opts.onFrame(frame);
+  };
+
+  const pollHttp = () => {
+    if (stopped) return;
+    if (lastWsFrameAt && performance.now() - lastWsFrameAt < HTTP_STALE_MS) {
+      return;
+    }
+    void (async () => {
+      try {
+        const res = await fetch("/json/v2", {
+          signal: AbortSignal.timeout(4_000),
+        });
+        if (!res.ok || stopped) return;
+        const frame = parseV2Frame(await res.text());
+        if (frame && !stopped) handleFrame(frame, false);
+      } catch {
+        // HTTP is a fallback; ignore failures
+      }
+    })();
   };
 
   const open = () => {
     if (stopped) return;
     clearReconnect();
-    clearFrameWatch();
     ws = null;
-    const base = `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/websocket/v2`;
-    const url = base + variants[variant]!;
+    const url = `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/websocket/v2`;
     try {
       ws = new WebSocket(url);
     } catch {
@@ -256,42 +312,24 @@ export function connectLiveSocket(opts: {
     ws.addEventListener("open", () => {
       attempt = 0;
       opts.onStatus("connected");
-      // If this variant never yields a usable frame, rotate to the next one.
-      clearFrameWatch();
-      frameWatch = setTimeout(() => {
-        if (ws && ws.readyState <= 1) {
-          try {
-            ws.close();
-          } catch {
-            // ignore
-          }
-        }
-      }, 4000);
     });
 
     ws.addEventListener("message", (event) => {
-      const text =
-        typeof event.data === "string"
-          ? event.data
-          : event.data instanceof ArrayBuffer
-            ? new TextDecoder().decode(event.data)
-            : String(event.data);
-      const frame = parseV2Frame(text);
-      if (frame) {
-        clearFrameWatch();
-        opts.onFrame(frame);
-      } else if (
-        text.includes("beatmap") ||
-        text.includes("menu") ||
-        text.includes("error")
-      ) {
-        // Frame arrived but our parser rejected it — surface it for debugging
-        // (structure/version mismatch vs. a silent/empty socket).
-        console.warn(
-          `[roxysu] v2 frame (variant "${variants[variant]}") dropped:`,
-          text.slice(0, 200),
-        );
-      }
+      void (async () => {
+        const text = await decodeWsData(event.data);
+        if (text == null || stopped) return;
+        const frame = parseV2Frame(text);
+        if (frame) {
+          handleFrame(frame, true);
+          return;
+        }
+        try {
+          const parsed = JSON.parse(text) as { error?: unknown };
+          if (parsed && typeof parsed === "object" && parsed.error) return;
+        } catch {
+          // not json
+        }
+      })();
     });
 
     ws.addEventListener("close", () => {
@@ -301,19 +339,22 @@ export function connectLiveSocket(opts: {
 
     ws.addEventListener("error", () => {
       opts.onError?.();
-      // Some environments fire `error` then `close`; only reconnect if the
-      // socket is actually gone.
       if (ws && ws.readyState >= 2) scheduleReconnect();
     });
   };
 
   open();
+  pollHttp();
+  httpTimer = setInterval(pollHttp, HTTP_FALLBACK_MS);
 
   return {
     stop: () => {
       stopped = true;
       clearReconnect();
-      clearFrameWatch();
+      if (httpTimer) {
+        clearInterval(httpTimer);
+        httpTimer = null;
+      }
       try {
         ws?.close();
       } catch {

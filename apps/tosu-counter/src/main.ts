@@ -34,6 +34,11 @@ import {
 import { clamp } from "../../server/public/lib/clamp";
 import { modsFlagsFromAcronyms, parseManiaNotes } from "./chart";
 import {
+  emptyChecksumShouldIdle,
+  flagsKey,
+  shouldScheduleChartLoad,
+} from "./chartLoad";
+import {
   connectLiveSocket,
   type LiveFrame,
   type LiveStatus,
@@ -305,18 +310,21 @@ function main(): void {
 
   // --- chart loading ---------------------------------------------------------
 
-  let pendingChecksum: string | null = null;
   let loadedChecksum: string | null = null;
   let loadedFlags: string | null = null;
+  let inFlightChecksum: string | null = null;
+  let inFlightFlags: string | null = null;
+  let pendingChecksum: string | null = null;
+  let pendingAcronyms: string[] = [];
+  let emptyChecksumSince: number | null = null;
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   let loadToken = 0;
 
-  function flagsKey(acronyms: string[]): string {
-    return [...acronyms].sort().join(",");
-  }
-
-  async function loadChart(acronyms: string[]): Promise<void> {
+  async function loadChart(checksum: string, acronyms: string[]): Promise<void> {
     const token = ++loadToken;
+    const key = flagsKey(acronyms);
+    inFlightChecksum = checksum;
+    inFlightFlags = key;
     chart = { kind: "loading" };
     refreshStatus();
     try {
@@ -328,11 +336,19 @@ function main(): void {
       if (!text.trim()) throw new Error("empty file");
       const result = parseManiaNotes(text, modsFlagsFromAcronyms(acronyms));
       if (token !== loadToken) return;
+      inFlightChecksum = null;
+      inFlightFlags = null;
       if (!result.ok) {
         chart = result.kind === "not-mania"
           ? { kind: "not-mania" }
           : { kind: "error", message: "failed to parse" };
+        if (result.kind === "not-mania") {
+          loadedChecksum = checksum;
+          loadedFlags = key;
+        }
       } else {
+        loadedChecksum = checksum;
+        loadedFlags = key;
         chart = {
           kind: "ready",
           columnCount: result.chart.columnCount,
@@ -344,6 +360,8 @@ function main(): void {
       }
     } catch (err) {
       if (token !== loadToken) return;
+      inFlightChecksum = null;
+      inFlightFlags = null;
       chart = {
         kind: "error",
         message: err instanceof Error ? err.message : String(err),
@@ -353,25 +371,25 @@ function main(): void {
   }
 
   function scheduleChartLoad(checksum: string, acronyms: string[]): void {
-    pendingChecksum = checksum;
     const key = flagsKey(acronyms);
+    const samePending =
+      pendingChecksum === checksum && flagsKey(pendingAcronyms) === key;
+    pendingChecksum = checksum;
+    pendingAcronyms = acronyms;
+    // Repeating frames must not reset the debounce — tosu polls ~100ms and
+    // a 250ms timer that restarts every frame never fires.
+    if (samePending && debounceTimer) return;
     if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
       debounceTimer = null;
-      if (
-        pendingChecksum === loadedChecksum &&
-        key === loadedFlags &&
-        chart.kind === "ready"
-      ) {
-        return;
-      }
-      loadedChecksum = pendingChecksum;
-      loadedFlags = key;
-      void loadChart(acronyms);
+      const cs = pendingChecksum;
+      if (!cs) return;
+      void loadChart(cs, pendingAcronyms);
     }, CHART_DEBOUNCE_MS);
   }
 
   function onFrame(frame: LiveFrame): void {
+    const firstFrame = lastFrameAt === 0;
     lastFrameAt = performance.now();
     if (frame.timeLiveMs != null) {
       lastSample = {
@@ -380,17 +398,44 @@ function main(): void {
         rate: frame.rate > 0 ? frame.rate : 1,
       };
     }
-    if (frame.checksum && frame.checksum !== loadedChecksum) {
-      scheduleChartLoad(frame.checksum, frame.acronyms);
-    } else if (!frame.checksum && chart.kind !== "idle") {
-      chart = { kind: "idle" };
-      loadedChecksum = null;
-      refreshStatus();
-      loop?.invalidate();
-    } else {
-      // Any frame (even without time/checksum) proves the live feed is alive.
-      refreshStatus();
+    if (frame.title || frame.version) {
+      mapMeta = {
+        title: frame.title ?? mapMeta?.title ?? "",
+        version: frame.version ?? mapMeta?.version ?? "",
+      };
     }
+    if (frame.checksum) {
+      emptyChecksumSince = null;
+      const key = flagsKey(frame.acronyms);
+      if (
+        shouldScheduleChartLoad({
+          checksum: frame.checksum,
+          flagsKey: key,
+          keys: frame.keys,
+          loadedChecksum,
+          loadedFlags,
+          inFlightChecksum,
+          inFlightFlags,
+          chartKind: chart.kind,
+          columnCount: chart.kind === "ready" ? chart.columnCount : null,
+        })
+      ) {
+        scheduleChartLoad(frame.checksum, frame.acronyms);
+      }
+    } else {
+      if (emptyChecksumSince == null) emptyChecksumSince = lastFrameAt;
+      if (
+        emptyChecksumShouldIdle(emptyChecksumSince, lastFrameAt) &&
+        chart.kind !== "idle"
+      ) {
+        chart = { kind: "idle" };
+        loadedChecksum = null;
+        loadedFlags = null;
+        loop?.invalidate();
+      }
+    }
+    if (firstFrame) loop?.invalidate();
+    refreshStatus();
   }
 
   function onStatus(next: LiveStatus): void {
@@ -406,34 +451,6 @@ function main(): void {
       refreshStatus();
     },
   });
-
-  // --- meta line from /json (title/version for the status line) --------------
-
-  interface MetaJson {
-    beatmap?: {
-      title?: string;
-      version?: string;
-      time?: { live?: number };
-      mode?: { number?: number };
-    };
-  }
-  async function pollMetaOnce(): Promise<void> {
-    try {
-      const res = await fetch("/json", { signal: AbortSignal.timeout(4_000) });
-      if (!res.ok) return;
-      const data = (await res.json()) as MetaJson;
-      const bm = data.beatmap;
-      if (!bm) return;
-      if (bm.title || bm.version) {
-        mapMeta = { title: bm.title ?? "", version: bm.version ?? "" };
-        refreshStatus();
-      }
-    } catch {
-      // meta is cosmetic; ignore failures
-    }
-  }
-  setInterval(pollMetaOnce, 5_000);
-  void pollMetaOnce();
 
   // --- render loop -------------------------------------------------------------
 

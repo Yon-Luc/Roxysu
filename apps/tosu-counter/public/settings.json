@@ -33,5 +33,12 @@
 		"title": "Roxysu watermark",
 		"description": "Draw the Roxysu logo + wordmark on the notefield",
 		"value": true
+	},
+	{
+		"uniqueID": "idlePreview",
+		"type": "checkbox",
+		"title": "Song-select preview",
+		"description": "Show the playfield preview while in song select (no map)",
+		"value": true
 	}
 ]

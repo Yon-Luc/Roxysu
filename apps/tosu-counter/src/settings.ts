@@ -21,6 +21,8 @@ export type CounterSettings = {
   transparentBg: boolean;
   /** "Roxysu" watermark stamp on the canvas. */
   showWatermark: boolean;
+  /** Show the empty playfield preview while in song select (no map). */
+  idlePreview: boolean;
 };
 
 export function defaultCounterSettings(): CounterSettings {
@@ -30,6 +32,7 @@ export function defaultCounterSettings(): CounterSettings {
     laneCover: 0,
     transparentBg: false,
     showWatermark: true,
+    idlePreview: true,
   };
 }
 

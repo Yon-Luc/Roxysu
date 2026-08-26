@@ -11,6 +11,7 @@ touches:
   - apps/tosu-counter/src/folderSkin.ts
   - apps/tosu-counter/src/watermark.ts
   - apps/tosu-counter/src/pngShrink.ts
+  - apps/server/public/lib/playfieldRaf.ts
   - apps/tosu-counter/public/index.html
   - apps/tosu-counter/public/metadata.txt
   - apps/tosu-counter/public/settings.json
@@ -74,7 +75,35 @@ mania notefield synced to the live in-game time.
     ("Failed to parse counter settings") and sync never delivers values.
     Dashboard values win over URL params and localStorage once received; the
     in-page ⚙ panel stays as a standalone fallback and mirrors received
-    values.
+    values. The `getSettings` request is re-sent on a 1.5s retry until the
+    first reply lands, because tosu may drop the request sent immediately on
+    socket open — without the retry, saved dashboard values never reach the
+    counter on load and the user must poke the dashboard to apply them.
+12. **Idle / song-select preview**: the notefield also renders while no
+    beatmap is loaded (`chart.kind !== "ready"`) when `idlePreview` is on
+    (default), drawing the empty playfield — receptors, lane cover, imported
+    skin — so the skin is visible in song select instead of a blank
+    "Waiting for osu!". The preview uses `lastColumnCount` (last loaded
+    keymode, default 4). Toggle via dashboard setting, ⚙ panel checkbox, or
+    localStorage (`roxysu:tosu-counter-settings`). Rendering is driven by
+    `apps/server/public/lib/playfieldRaf.ts`, which paints on a `requestAnimation
+    Frame` loop **plus** a ~30fps `setInterval` heartbeat that paints
+    **unconditionally** (not change-gated) and paints synchronously on
+    `invalidate()` + one forced paint at startup. The heartbeat must paint every
+    tick rather than only on change: in idle (no live data) nothing changes, so
+    a change-gated repaint would only fire once (while the embedded iframe may
+    still be invisible) and never refresh once tosu shows it — the only thing
+    forcing a repaint was a dashboard settings update. Unconditional heartbeat
+    + startup paint keeps the canvas live inside embedded iframes (tosu dashboard
+    preview reports `document.hidden` while visible, which otherwise
+    throttles/pauses rAF). The counter also repaints on activation events
+    (`load`, `pageshow`, `focus`, `resize`, `visibilitychange`) because the
+    loop is suspended in tosu's embedded preview until the iframe is shown;
+    and `connectTosuSettings` **always** repaints (`touchSkin`) on any
+    dashboard frame for this counter — not only when values changed — since
+    applying saved settings on load (the `getSettings` retry) removed the
+    change that previously forced the repaint, leaving the canvas blank until
+    a manual nudge.
 11. **Roxysu watermark** ("like force export replay"): bottom-left logo +
     wordmark stamp drawn on the canvas after the notefield, mirroring the
     replay-video-export footer mark. On by default; toggleable via dashboard
@@ -82,6 +111,21 @@ mania notefield synced to the live in-game time.
     1024px source art to `roxy-small.png` (64px) at build time using the pure
     TS PNG codec in `src/pngShrink.ts` (node:zlib inflate/deflate — fflate's
     inflate silently truncated this stream).
+
+ 13. **Live feed (`/websocket/v2`)** is global in tosu — it broadcasts to every
+     connected client and only returns `{error:"not_ready"}` when osu! isn't
+     running, so a counter on the same host as a working counter must receive
+     frames too. The v2 `beatmap.stats.cs` is an **object** `{original,
+     converted}` (not a bare number), so keymode detection reads both shapes.
+     The status line is diagnostic: in song select it shows `Song select`
+     (plus `feed Ns stale` / `no frames` / `N ws err` when the live link is
+     down) instead of a misleading "Waiting for osu!", so a dead socket vs. an
+     idle game is distinguishable at a glance. `connectLiveSocket` negotiates
+     the v2 structure by rotating `?v=` candidates (`7→6→5→""`); if a variant
+     delivers no frame within 4s it closes and tries the next, because an
+     unversioned connection can fall back to tosu's *first* v2 version whose
+     shape our parser drops (a socket that opens but stays silent). Dropped
+     frames that still look like v2 are `console.warn`-ed for debugging.
 
 ## Main flows
 

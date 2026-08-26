@@ -102,7 +102,9 @@ export function connectTosuSettings(opts: {
   let stopped = false;
   let ws: WebSocket | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
   let attempt = 0;
+  let received = false;
   const name = counterName();
   const encoded = encodeURIComponent(name);
 
@@ -113,11 +115,36 @@ export function connectTosuSettings(opts: {
     }
   };
 
+  const clearRetry = () => {
+    if (retryTimer) {
+      clearTimeout(retryTimer);
+      retryTimer = null;
+    }
+  };
+
   const scheduleReconnect = () => {
     if (stopped) return;
     clearReconnect();
     attempt += 1;
     reconnectTimer = setTimeout(open, Math.min(30_000, 2_000 * attempt));
+  };
+
+  // The initial `getSettings` is sent on open; tosu may not be ready to answer
+  // it yet, so re-request until the first reply lands. Without this, saved
+  // dashboard values never reach the counter on load and the user must poke
+  // the dashboard to apply them.
+  const scheduleRetry = () => {
+    if (stopped || received) return;
+    clearRetry();
+    retryTimer = setTimeout(() => {
+      if (stopped || received) return;
+      try {
+        ws?.send(`getSettings:${encoded}`);
+      } catch {
+        // retry on next tick
+      }
+      scheduleRetry();
+    }, 1500);
   };
 
   const open = () => {
@@ -137,8 +164,10 @@ export function connectTosuSettings(opts: {
 
     ws.addEventListener("open", () => {
       attempt = 0;
+      received = false;
       try {
         ws?.send(`getSettings:${encoded}`);
+        scheduleRetry();
       } catch {
         // retry on next reconnect
       }
@@ -154,10 +183,17 @@ export function connectTosuSettings(opts: {
         }
       }
       const values = parseSettingsFrame(parsed, name);
-      if (values) opts.onValues(values);
+      if (values) {
+        received = true;
+        clearRetry();
+        opts.onValues(values);
+      }
     });
 
-    ws.addEventListener("close", () => scheduleReconnect());
+    ws.addEventListener("close", () => {
+      received = false;
+      scheduleReconnect();
+    });
     ws.addEventListener("error", () => {});
   };
 
@@ -167,6 +203,7 @@ export function connectTosuSettings(opts: {
     stop: () => {
       stopped = true;
       clearReconnect();
+      clearRetry();
       try {
         ws?.close();
       } catch {

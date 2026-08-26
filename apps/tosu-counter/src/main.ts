@@ -134,12 +134,25 @@ function main(): void {
           changed = true;
         }
       }
+      if (typeof values["idlePreview"] === "boolean") {
+        if (values["idlePreview"] !== settings.idlePreview) {
+          settings.idlePreview = values["idlePreview"];
+          changed = true;
+        }
+      }
       if (changed) {
         saveCounterSettings(settings);
         applySettingsToSkin(settings);
         panel.syncFrom();
-        touchSkin();
       }
+      // Always repaint on a dashboard frame for this counter — even when the
+      // delivered values equal what we already have. In tosu's embedded
+      // preview the render loop is suspended until the iframe is activated
+      // (focus/visibility), so a settings interaction was the only thing that
+      // ever forced a repaint; applying values on load (getSettings retry)
+      // removed that trigger, leaving the canvas blank. Forcing a repaint here
+      // restores "save settings → preview updates" regardless of change.
+      touchSkin();
     },
   });
 
@@ -238,6 +251,8 @@ function main(): void {
 
 
   let status_: LiveStatus = "connecting";
+  let liveErrorCount = 0;
+  let lastFrameAt = 0;
   let mapMeta: { title: string; version: string } | null = null;
   let chart: ChartState = { kind: "idle" };
   let lastSample: { ms: number; at: number; rate: number } | null = null;
@@ -257,7 +272,21 @@ function main(): void {
     if (status_ !== "connected") return "tosu: " + status_;
     const skin = skinLabel();
     const suffix = skin ? ` · ${skin}` : "";
-    if (!mapMeta && !lastSample) return "Waiting for osu!…" + suffix;
+    // Live-feed health: how long since the last v2 frame / socket error count.
+    // Surfaces connection problems that would otherwise look like a freeze.
+    const sinceFrame = lastFrameAt ? Math.round((performance.now() - lastFrameAt) / 1000) : null;
+    const feed = sinceFrame == null
+      ? "no frames"
+      : sinceFrame > 3
+        ? `feed ${sinceFrame}s stale`
+        : "";
+    const feedTag = feed ? ` · ${feed}` : liveErrorCount ? ` · ${liveErrorCount} ws err` : "";
+    if (!mapMeta && !lastSample) {
+      if (settings.idlePreview) {
+        return (sinceFrame == null ? "Song select (no osu link)" : "Song select") + suffix + feedTag;
+      }
+      return "Waiting for osu!…" + suffix + feedTag;
+    }
     if (chart.kind === "loading") return "Loading chart…" + suffix;
     if (chart.kind === "not-mania") return "Not an osu!mania map" + suffix;
     if (chart.kind === "error") return `Chart error — ${chart.message}${suffix}`;
@@ -309,6 +338,7 @@ function main(): void {
           columnCount: result.chart.columnCount,
           notes: result.chart.notes,
         };
+        lastColumnCount = result.chart.columnCount;
         ensureIdbSprites(result.chart.columnCount);
         loop?.invalidate();
       }
@@ -342,6 +372,7 @@ function main(): void {
   }
 
   function onFrame(frame: LiveFrame): void {
+    lastFrameAt = performance.now();
     if (frame.timeLiveMs != null) {
       lastSample = {
         ms: frame.timeLiveMs,
@@ -356,6 +387,9 @@ function main(): void {
       loadedChecksum = null;
       refreshStatus();
       loop?.invalidate();
+    } else {
+      // Any frame (even without time/checksum) proves the live feed is alive.
+      refreshStatus();
     }
   }
 
@@ -364,7 +398,14 @@ function main(): void {
     refreshStatus();
   }
 
-  connectLiveSocket({ onFrame, onStatus });
+  connectLiveSocket({
+    onFrame,
+    onStatus,
+    onError: () => {
+      liveErrorCount += 1;
+      refreshStatus();
+    },
+  });
 
   // --- meta line from /json (title/version for the status line) --------------
 
@@ -411,9 +452,35 @@ function main(): void {
   applySettingsToSkin(settings);
 
   let scrollSpeed = settings.scrollSpeed;
+  let lastColumnCount = 4;
 
   const ctx = canvas.getContext("2d");
   let loop: ReturnType<typeof startPlayfieldRaf> | null = null;
+
+  function paintNotefield(tMs: number, columnCount: number, notes: PreviewNote[] | null): void {
+    paintManiaNotefield({
+      ctx: ctx!,
+      width: canvas.clientWidth,
+      height: canvas.clientHeight,
+      tMs,
+      columnCount,
+      notes: notes ?? [],
+      scrollSpeed,
+      playbackRate: currentRate(),
+      skin: skinFor(columnCount),
+      hitPosition: clamp(
+        getPreviewSkin().hitPosition,
+        HIT_POSITION_MIN,
+        HIT_POSITION_MAX,
+      ),
+      laneCover: clamp(
+        getPreviewSkin().laneCover,
+        LANE_COVER_MIN,
+        LANE_COVER_MAX,
+      ),
+      sprites: currentSpritesFor(columnCount),
+    });
+  }
 
   if (ctx) {
     function resize() {
@@ -429,39 +496,24 @@ function main(): void {
       snapshot: () => [
         canvas.clientWidth,
         canvas.clientHeight,
-        chart.kind === "ready" ? chart.columnCount : 0,
+        chart.kind === "ready" ? chart.columnCount : lastColumnCount,
         chart.kind === "ready" ? chart.notes : null,
         scrollSpeed,
         currentRate(),
         getPreviewSkin(),
         skinVersion,
         watermarkSettled(),
+        settings.idlePreview,
       ],
       paint: (tMs) => {
         ctx!.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
         if (chart.kind === "ready") {
-          paintManiaNotefield({
-            ctx: ctx!,
-            width: canvas.clientWidth,
-            height: canvas.clientHeight,
-            tMs,
-            columnCount: chart.columnCount,
-            notes: chart.notes,
-            scrollSpeed,
-            playbackRate: currentRate(),
-            skin: skinFor(chart.columnCount),
-            hitPosition: clamp(
-              getPreviewSkin().hitPosition,
-              HIT_POSITION_MIN,
-              HIT_POSITION_MAX,
-            ),
-            laneCover: clamp(
-              getPreviewSkin().laneCover,
-              LANE_COVER_MIN,
-              LANE_COVER_MAX,
-            ),
-            sprites: currentSpritesFor(chart.columnCount),
-          });
+          paintNotefield(tMs, chart.columnCount, chart.notes);
+        } else if (settings.idlePreview) {
+          // Song-select / idle preview: show the playfield (receptors, lane
+          // cover, imported skin) with no notes so the skin is visible before
+          // a beatmap is loaded.
+          paintNotefield(tMs, lastColumnCount, null);
         }
         if (settings.showWatermark) {
           drawWatermark(ctx!, canvas.clientWidth, canvas.clientHeight);
@@ -587,6 +639,22 @@ function main(): void {
       if (document.activeElement !== wmCb) wmCb.checked = settings.showWatermark;
     });
 
+    const idleRow = el("label", root);
+    idleRow.className = "row";
+    const idleCb = el("input", idleRow);
+    idleCb.type = "checkbox";
+    const idleSpan = el("span", idleRow);
+    idleSpan.textContent = "Song-select preview";
+    idleCb.checked = settings.idlePreview;
+    idleCb.addEventListener("change", () => {
+      settings.idlePreview = idleCb.checked;
+      saveCounterSettings(settings);
+      loop?.invalidate();
+    });
+    syncers.push(() => {
+      if (document.activeElement !== idleCb) idleCb.checked = settings.idlePreview;
+    });
+
     const skinRow = el("div", root);
     skinRow.className = "row";
     const importBtn = el("button", skinRow);
@@ -655,6 +723,21 @@ function main(): void {
   });
 
   refreshStatus();
+  // Force an immediate paint so the idle/song-select preview is visible as
+  // soon as tosu shows the counter — don't wait for a heartbeat or a
+  // dashboard settings update (both of which were the only things that
+  // repainted before).
+  loop?.invalidate();
+
+  // In tosu's embedded preview the render loop (rAF + interval) is often
+  // suspended until the iframe is actually shown/activated. Repaint on the
+  // events that mean "now visible/active" so the preview appears without a
+  // manual nudge.
+  const repaintNow = () => loop?.invalidate();
+  for (const ev of ["load", "pageshow", "focus", "resize"] as const) {
+    window.addEventListener(ev, repaintNow);
+  }
+  document.addEventListener("visibilitychange", repaintNow);
 }
 
 main();

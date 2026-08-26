@@ -1,4 +1,4 @@
 Name: Roxysu Preview
-Author: Roxysu
+Author: Noy
 Version: 0.1.0
 Resolution: 512 x 720

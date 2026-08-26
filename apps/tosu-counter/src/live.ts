@@ -61,10 +61,23 @@ export type LiveFrame = {
   timeLiveMs: number | null;
   title: string | null;
   version: string | null;
+  /** True when tosu reports gameplay (state 2 / name "play"). */
+  playing: boolean;
 };
 
 function asFinite(n: unknown): number | null {
   return typeof n === "number" && Number.isFinite(n) ? n : null;
+}
+
+/** osu! gameplay is tosu GameState.play = 2. */
+export function isPlayingState(
+  state: { number?: number; name?: string } | undefined,
+  menuState?: number,
+): boolean {
+  if (typeof menuState === "number") return menuState === 2;
+  if (asFinite(state?.number) === 2) return true;
+  const name = state?.name;
+  return typeof name === "string" && name.toLowerCase() === "play";
 }
 
 /** Mania key count from v2 `stats.cs` (object or number). Prefer converted when it's 1–10. */
@@ -182,6 +195,7 @@ export function parseV2Data(data: unknown): LiveFrame | null {
       timeLiveMs: asFinite(bm.time?.current),
       title: meta?.title?.trim() ? meta.title.trim() : null,
       version: meta?.difficulty?.trim() ? meta.difficulty.trim() : null,
+      playing: isPlayingState(undefined, payload.menu.state),
     };
   }
 
@@ -199,6 +213,7 @@ export function parseV2Data(data: unknown): LiveFrame | null {
     timeLiveMs: asFinite(bm?.time?.live),
     title,
     version,
+    playing: isPlayingState(payload.state),
   };
 }
 

@@ -44,7 +44,8 @@ mania notefield synced to the live in-game time.
    older than ~1.5s are treated as stale and the clock freezes (no audio, so
    no hard-resync path is needed).
 5. Settings persist in browser localStorage (`roxysu:tosu-counter-settings`),
-   overridable by URL params (`scroll`, `hitpos`, `cover`, `transparent`) so
+    overridable by URL params (`scroll`, `hitpos`, `cover`, `transparent`,
+    `scale`, `hideplay`, `wm`) so
    OBS browser sources can pin a layout.
 6. Rendering reuses the client app's pure paint modules
    (`paintManiaNotefield`, `previewSkin` defaults, `playfieldRaf`,
@@ -80,6 +81,12 @@ mania notefield synced to the live in-game time.
     first reply lands, because tosu may drop the request sent immediately on
     socket open — without the retry, saved dashboard values never reach the
     counter on load and the user must poke the dashboard to apply them.
+    Extra dashboard fields: **playfield size** (`playfieldScale`, 20–100%),
+    **hide while playing** (`hideWhilePlaying` — hides the notefield when
+    tosu state is play), **import .osk** (`skinOskUrl` text — tosu has no
+    file picker, so this is a URL or counter-relative path; drop on the
+    preview still works), and **reset imported skin** (checkbox, rising
+    edge). URL params `?scale=80&hideplay=1` pin size / hide-while-playing.
 12. **Idle / song-select preview**: the notefield also renders while no
     beatmap is loaded (`chart.kind !== "ready"`) when `idlePreview` is on
     (default), drawing the empty playfield — receptors, lane cover, imported

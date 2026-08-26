@@ -44,6 +44,10 @@ import {
   type LiveStatus,
 } from "./live";
 import {
+  PLAYFIELD_SCALE_MAX,
+  PLAYFIELD_SCALE_MIN,
+  coerceBoolean,
+  coerceNumber,
   loadCounterSettings,
   saveCounterSettings,
   type CounterSettings,
@@ -80,6 +84,7 @@ function main(): void {
   const settings: CounterSettings = loadCounterSettings();
 
   document.body.classList.toggle("transparent", settings.transparentBg);
+  applyPlayfieldScale(settings.playfieldScale);
 
   const stage = el("div", document.body);
   stage.className = "stage";
@@ -106,8 +111,9 @@ function main(): void {
   connectTosuSettings({
     onValues: (values) => {
       let changed = false;
-      if (typeof values["scrollSpeed"] === "number") {
-        const v = Math.round(values["scrollSpeed"]);
+      const scroll = coerceNumber(values["scrollSpeed"]);
+      if (scroll != null) {
+        const v = Math.round(scroll);
         if (v !== settings.scrollSpeed) {
           settings.scrollSpeed = v;
           scrollSpeed = v;
@@ -118,31 +124,53 @@ function main(): void {
         ["hitPosition", "hitPosition"],
         ["laneCover", "laneCover"],
       ] as const) {
-        if (typeof values[id] === "number") {
-          const frac = values[id] > 1 ? values[id] / 100 : values[id];
+        const raw = coerceNumber(values[id]);
+        if (raw != null) {
+          const frac = raw > 1 ? raw / 100 : raw;
           if (frac !== settings[key]) {
             settings[key] = frac;
             changed = true;
           }
         }
       }
-      if (typeof values["transparentBg"] === "boolean") {
-        if (values["transparentBg"] !== settings.transparentBg) {
-          settings.transparentBg = values["transparentBg"];
-          document.body.classList.toggle("transparent", settings.transparentBg);
+      const scale = coerceNumber(values["playfieldScale"]);
+      if (scale != null) {
+        const v = clamp(Math.round(scale), PLAYFIELD_SCALE_MIN, PLAYFIELD_SCALE_MAX);
+        if (v !== settings.playfieldScale) {
+          settings.playfieldScale = v;
+          applyPlayfieldScale(v);
           changed = true;
         }
       }
-      if (typeof values["showWatermark"] === "boolean") {
-        if (values["showWatermark"] !== settings.showWatermark) {
-          settings.showWatermark = values["showWatermark"];
+      for (const [id, key] of [
+        ["transparentBg", "transparentBg"],
+        ["showWatermark", "showWatermark"],
+        ["idlePreview", "idlePreview"],
+        ["hideWhilePlaying", "hideWhilePlaying"],
+      ] as const) {
+        const v = coerceBoolean(values[id]);
+        if (v != null && v !== settings[key]) {
+          settings[key] = v;
+          if (key === "transparentBg") {
+            document.body.classList.toggle("transparent", v);
+          }
+          if (key === "hideWhilePlaying") applyHiddenPlay();
           changed = true;
         }
       }
-      if (typeof values["idlePreview"] === "boolean") {
-        if (values["idlePreview"] !== settings.idlePreview) {
-          settings.idlePreview = values["idlePreview"];
-          changed = true;
+      const resetSkin = coerceBoolean(values["resetImportedSkin"]);
+      if (resetSkin === true && !resetSkinLatched) {
+        resetSkinLatched = true;
+        lastSkinOskUrl = "";
+        void resetImportedSkin();
+      } else if (resetSkin === false) {
+        resetSkinLatched = false;
+      }
+      if (typeof values["skinOskUrl"] === "string") {
+        const url = values["skinOskUrl"].trim();
+        if (url && url !== lastSkinOskUrl) {
+          lastSkinOskUrl = url;
+          void importSkinFromUrl(url);
         }
       }
       if (changed) {
@@ -254,6 +282,36 @@ function main(): void {
     touchSkin();
   }
 
+  async function importSkinFromUrl(url: string): Promise<void> {
+    try {
+      status.textContent = "Importing skin…";
+      status.style.display = "";
+      const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const name = url.split("/").pop()?.split("?")[0] || "skin.osk";
+      const file = new File([blob], name, {
+        type: blob.type || "application/zip",
+      });
+      await importSkinFiles([file]);
+    } catch (err) {
+      status.textContent = `Skin import failed — ${err instanceof Error ? err.message : String(err)}`;
+      setTimeout(refreshStatus, 4000);
+    }
+  }
+
+  function applyPlayfieldScale(scale: number): void {
+    const pct = clamp(Math.round(scale), PLAYFIELD_SCALE_MIN, PLAYFIELD_SCALE_MAX);
+    document.documentElement.style.setProperty("--playfield-scale", `${pct}%`);
+  }
+
+  function applyHiddenPlay(): void {
+    document.body.classList.toggle(
+      "hidden-play",
+      settings.hideWhilePlaying && playing,
+    );
+  }
+
 
   let status_: LiveStatus = "connecting";
   let liveErrorCount = 0;
@@ -261,6 +319,9 @@ function main(): void {
   let mapMeta: { title: string; version: string } | null = null;
   let chart: ChartState = { kind: "idle" };
   let lastSample: { ms: number; at: number; rate: number } | null = null;
+  let playing = false;
+  let lastSkinOskUrl = "";
+  let resetSkinLatched = false;
 
   function currentRate(): number {
     return lastSample?.rate ?? 1;
@@ -391,6 +452,11 @@ function main(): void {
   function onFrame(frame: LiveFrame): void {
     const firstFrame = lastFrameAt === 0;
     lastFrameAt = performance.now();
+    if (frame.playing !== playing) {
+      playing = frame.playing;
+      applyHiddenPlay();
+      loop?.invalidate();
+    }
     if (frame.timeLiveMs != null) {
       lastSample = {
         ms: frame.timeLiveMs,
@@ -521,9 +587,13 @@ function main(): void {
         skinVersion,
         watermarkSettled(),
         settings.idlePreview,
+        settings.hideWhilePlaying,
+        playing,
+        settings.playfieldScale,
       ],
       paint: (tMs) => {
         ctx!.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+        if (settings.hideWhilePlaying && playing) return;
         if (chart.kind === "ready") {
           paintNotefield(tMs, chart.columnCount, chart.notes);
         } else if (settings.idlePreview) {
@@ -623,6 +693,20 @@ function main(): void {
         loop?.invalidate();
       },
     );
+    slider(
+      "Playfield size",
+      PLAYFIELD_SCALE_MIN,
+      PLAYFIELD_SCALE_MAX,
+      1,
+      () => Math.round(settings.playfieldScale),
+      (v) => `${v}%`,
+      (v) => {
+        settings.playfieldScale = v;
+        saveCounterSettings(settings);
+        applyPlayfieldScale(v);
+        loop?.invalidate();
+      },
+    );
 
     const transparentRow = el("label", root);
     transparentRow.className = "row";
@@ -670,6 +754,25 @@ function main(): void {
     });
     syncers.push(() => {
       if (document.activeElement !== idleCb) idleCb.checked = settings.idlePreview;
+    });
+
+    const hideRow = el("label", root);
+    hideRow.className = "row";
+    const hideCb = el("input", hideRow);
+    hideCb.type = "checkbox";
+    const hideSpan = el("span", hideRow);
+    hideSpan.textContent = "Hide while playing";
+    hideCb.checked = settings.hideWhilePlaying;
+    hideCb.addEventListener("change", () => {
+      settings.hideWhilePlaying = hideCb.checked;
+      saveCounterSettings(settings);
+      applyHiddenPlay();
+      loop?.invalidate();
+    });
+    syncers.push(() => {
+      if (document.activeElement !== hideCb) {
+        hideCb.checked = settings.hideWhilePlaying;
+      }
     });
 
     const skinRow = el("div", root);

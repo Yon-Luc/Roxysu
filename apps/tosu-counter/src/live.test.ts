@@ -66,6 +66,24 @@ describe("parseV2Frame", () => {
     expect(frame.timeLiveMs).toBe(42_500);
     expect(frame.title).toBe("Song");
     expect(frame.version).toBe("7K");
+    expect(frame.playing).toBe(false);
+  });
+
+  test("marks playing from v2 state 2 / name play", () => {
+    const byNumber = parseV2Frame(
+      JSON.stringify({
+        state: { number: 2, name: "Play" },
+        beatmap: { checksum: "x", time: { live: 1 } },
+      }),
+    );
+    const byName = parseV2Frame(
+      JSON.stringify({
+        state: { name: "play" },
+        beatmap: { checksum: "x", time: { live: 1 } },
+      }),
+    );
+    expect(byNumber?.playing).toBe(true);
+    expect(byName?.playing).toBe(true);
   });
 
   test("reads stats.cs object shape from current tosu v2", () => {
@@ -101,6 +119,7 @@ describe("parseV2Frame", () => {
       JSON.stringify({
         menu: {
           gameMode: 3,
+          state: 2,
           mods: { str: "MR" },
           bm: {
             md5: "legacy",
@@ -119,6 +138,7 @@ describe("parseV2Frame", () => {
     expect(frame.timeLiveMs).toBe(1200);
     expect(frame.title).toBe("Old");
     expect(frame.version).toBe("4K");
+    expect(frame.playing).toBe(true);
   });
 
   test("returns null on garbage / error payloads", () => {

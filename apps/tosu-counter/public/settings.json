@@ -21,6 +21,13 @@
 		"value": 0
 	},
 	{
+		"uniqueID": "playfieldScale",
+		"type": "number",
+		"title": "Playfield size (%)",
+		"description": "Notefield size as percent of the overlay (20–100)",
+		"value": 100
+	},
+	{
 		"uniqueID": "transparentBg",
 		"type": "checkbox",
 		"title": "Transparent background",
@@ -40,5 +47,33 @@
 		"title": "Song-select preview",
 		"description": "Show the playfield preview while in song select (no map)",
 		"value": true
+	},
+	{
+		"uniqueID": "hideWhilePlaying",
+		"type": "checkbox",
+		"title": "Hide while playing",
+		"description": "Hide the notefield during gameplay; still show in song select",
+		"value": false
+	},
+	{
+		"uniqueID": "skinHeader",
+		"type": "header",
+		"title": "Skin",
+		"description": "",
+		"value": ""
+	},
+	{
+		"uniqueID": "skinOskUrl",
+		"type": "text",
+		"title": "Import .osk (URL or path)",
+		"description": "tosu has no file picker here. Paste a URL or a path relative to this counter (put the .osk in the RoxysuPreview folder, e.g. ./myskin.osk) and save. You can also drop an .osk onto the preview.",
+		"value": ""
+	},
+	{
+		"uniqueID": "resetImportedSkin",
+		"type": "checkbox",
+		"title": "Reset imported skin",
+		"description": "Turn on and save to remove the imported .osk, then turn it off again",
+		"value": false
 	}
 ]

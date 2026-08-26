@@ -13,6 +13,10 @@ import {
 
 const STORAGE_KEY = "roxysu:tosu-counter-settings";
 
+export const PLAYFIELD_SCALE_MIN = 20;
+export const PLAYFIELD_SCALE_MAX = 100;
+export const PLAYFIELD_SCALE_DEFAULT = 100;
+
 export type CounterSettings = {
   scrollSpeed: number;
   hitPosition: number;
@@ -23,7 +27,27 @@ export type CounterSettings = {
   showWatermark: boolean;
   /** Show the empty playfield preview while in song select (no map). */
   idlePreview: boolean;
+  /** Hide the notefield while osu! is in the play state. */
+  hideWhilePlaying: boolean;
+  /** Notefield size as percent of the overlay (20–100). */
+  playfieldScale: number;
 };
+
+export function coerceBoolean(v: unknown): boolean | null {
+  if (typeof v === "boolean") return v;
+  if (v === 1 || v === "1" || v === "true") return true;
+  if (v === 0 || v === "0" || v === "false") return false;
+  return null;
+}
+
+export function coerceNumber(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string" && v.trim() !== "") {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
 
 export function defaultCounterSettings(): CounterSettings {
   return {
@@ -33,6 +57,8 @@ export function defaultCounterSettings(): CounterSettings {
     transparentBg: false,
     showWatermark: true,
     idlePreview: true,
+    hideWhilePlaying: false,
+    playfieldScale: PLAYFIELD_SCALE_DEFAULT,
   };
 }
 
@@ -47,7 +73,7 @@ function readStored(): Partial<CounterSettings> {
 
 /**
  * Settings resolve stored JSON → URL params (`scroll`, `hitpos`, `cover`,
- * `transparent`). URL wins so OBS sources can pin a layout.
+ * `transparent`, `scale`, `hideplay`, `wm`). URL wins so OBS sources can pin a layout.
  */
 export function loadCounterSettings(): CounterSettings {
   const base = { ...defaultCounterSettings(), ...readStored() };
@@ -79,11 +105,24 @@ export function loadCounterSettings(): CounterSettings {
   );
   base.laneCover = clamp(base.laneCover, LANE_COVER_MIN, LANE_COVER_MAX);
 
+  const scale = num("scale");
+  if (scale != null) base.playfieldScale = scale;
+  base.playfieldScale = clamp(
+    base.playfieldScale,
+    PLAYFIELD_SCALE_MIN,
+    PLAYFIELD_SCALE_MAX,
+  );
+
   const transparent = params.get("transparent");
   if (transparent != null) base.transparentBg = transparent !== "0" && transparent !== "false";
 
   const wm = params.get("wm");
   if (wm != null) base.showWatermark = wm !== "0" && wm !== "false";
+
+  const hideplay = params.get("hideplay");
+  if (hideplay != null) {
+    base.hideWhilePlaying = hideplay !== "0" && hideplay !== "false";
+  }
 
   return base;
 }

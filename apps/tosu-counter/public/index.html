@@ -18,6 +18,17 @@
 			body.transparent .stage {
 				background: transparent !important;
 			}
+			html.hidden-play,
+			html.hidden-play body,
+			html.hidden-play body .stage {
+				background: transparent !important;
+			}
+			html.hidden-play body .stage,
+			html.hidden-play body .status,
+			html.hidden-play body .panel-toggle,
+			html.hidden-play body .panel {
+				display: none !important;
+			}
 			.stage {
 				position: fixed;
 				left: 50%;
@@ -26,11 +37,6 @@
 				height: var(--playfield-scale, 100%);
 				transform: translate(-50%, -50%);
 				background: #121212;
-			}
-			body.hidden-play .stage,
-			body.hidden-play .status,
-			body.hidden-play .panel-toggle {
-				visibility: hidden;
 			}
 			.notefield {
 				display: block;

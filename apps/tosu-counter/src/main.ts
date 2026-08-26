@@ -306,10 +306,9 @@ function main(): void {
   }
 
   function applyHiddenPlay(): void {
-    document.body.classList.toggle(
-      "hidden-play",
-      settings.hideWhilePlaying && playing,
-    );
+    const hidden = settings.hideWhilePlaying && playing;
+    document.documentElement.classList.toggle("hidden-play", hidden);
+    document.body.classList.toggle("hidden-play", hidden);
   }
 
 

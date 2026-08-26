@@ -84,7 +84,13 @@ export function decodePng(bytes: Uint8Array): RgbaImage {
   if (!width || !height) throw new Error("missing IHDR");
   if (bitDepth !== 8) throw new Error(`unsupported bit depth ${bitDepth}`);
   if (interlace !== 0) throw new Error("interlaced png unsupported");
-  const channelsByType: Record<number, number> = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 };
+  const channelsByType: Record<number, number> = {
+    0: 1,
+    2: 3,
+    3: 1,
+    4: 2,
+    6: 4,
+  };
   const channels = channelsByType[colorType];
   if (!channels) throw new Error(`unsupported color type ${colorType}`);
 
@@ -112,8 +118,7 @@ export function decodePng(bytes: Uint8Array): RgbaImage {
       const v = raw[row + x]!;
       const left = x >= bpp ? raw[row + x - bpp]! : 0;
       const up = y > 0 ? raw[prev + x]! : 0;
-      const upLeft =
-        y > 0 && x >= bpp ? raw[prev + x - bpp]! : 0;
+      const upLeft = y > 0 && x >= bpp ? raw[prev + x - bpp]! : 0;
       let out = v;
       if (filter === 1) out = v + left;
       else if (filter === 2) out = v + up;

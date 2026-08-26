@@ -82,8 +82,10 @@ mania notefield synced to the live in-game time.
     socket open — without the retry, saved dashboard values never reach the
     counter on load and the user must poke the dashboard to apply them.
     Extra dashboard fields: **playfield size** (`playfieldScale`, 20–100%),
-    **hide while playing** (`hideWhilePlaying` — hides the notefield when
-    tosu state is play), **import .osk** (`skinOskUrl` text — tosu has no
+    **hide while playing** (`hideWhilePlaying` — when tosu state is play,
+    the page is fully transparent: html/body/stage backgrounds cleared and
+    the notefield is `display:none`, otherwise a dark box remains in OBS),
+    **import .osk** (`skinOskUrl` text — tosu has no
     file picker, so this is a URL or counter-relative path; drop on the
     preview still works), and **reset imported skin** (checkbox, rising
     edge). URL params `?scale=80&hideplay=1` pin size / hide-while-playing.

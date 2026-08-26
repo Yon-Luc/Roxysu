@@ -52,7 +52,7 @@
 		"uniqueID": "hideWhilePlaying",
 		"type": "checkbox",
 		"title": "Hide while playing",
-		"description": "Hide the notefield during gameplay; still show in song select",
+		"description": "Fully hide the overlay during gameplay (transparent page). Enable transparent background on the OBS browser source too.",
 		"value": false
 	},
 	{

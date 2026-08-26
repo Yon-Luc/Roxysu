@@ -1,11 +1,13 @@
 ---
-last_verified: 2026-08
+last_verified: 2026-08-26
 confidence: verified
 touches:
   - apps/realm-reader/src/index.ts
   - apps/realm-reader/src/sync.ts
+  - apps/realm-reader/src/upsert.ts
   - apps/realm-reader/src/syncRealmCollections.ts
   - packages/db/src/failStaleRunningImports.ts
+  - packages/db/src/settings-keys.ts
   - apps/server/src/sse.ts
   - apps/server/src/analytics/pipeline.ts
 ---
@@ -26,13 +28,19 @@ Continuously extract Realm beatmaps and scores into the local mirror; surface Sy
 4. Stuck pause cleared on server/reader startup (`clearStuckRealmReaderPause`). Stale `running` imports are marked failed (`failStaleRunningImports`).
 5. Collection write-back sets `sync.realm_reader_paused` for the duration of the write.
 6. Realm collection extract is isolated from the score/beatmap write; a bad collection cannot fail the import.
+7. Extraction is **streamed** (`upsert.ts`): rows are mapped and upserted in bounded batches — never materialize a whole class of Realm objects in memory (see [decisions/stream-extraction-stall-breaker.md](../../decisions/stream-extraction-stall-breaker.md)).
+8. Missed-row healing runs on reconcile only; incremental cycles import their watermark delta without count-gate catch-up scans.
+9. Reconcile catch-up stops after 3 fruitless rounds against an unshrinkable row-count gap (`sync.catchup_stalled`), and resets when an incremental imports rows again.
+10. Failed cycles back off exponentially (`REALM_RETRY_MS` base, `REALM_RETRY_MAX_MS` cap) instead of retrying flat every 10 s.
 
 ## Important symbols
 
 - `apps/realm-reader/src/index.ts`
 - `apps/realm-reader/src/sync.ts`
+- `apps/realm-reader/src/upsert.ts` — batch upserts + `streamMappedUpsert`
 - `apps/realm-reader/src/syncRealmCollections.ts`
 - `packages/db/src/failStaleRunningImports.ts`
+- `packages/db/src/settings-keys.ts` — `SYNC_CATCHUP_STALLED_KEY`
 - `apps/server/src/sse.ts` — poll `imports` + `MAX(played_at)` (no `COUNT(*)`); SSE `: ping` heartbeat ~20s
 
 ## Dependencies
@@ -51,5 +59,6 @@ Continuously extract Realm beatmaps and scores into the local mirror; surface Sy
 - [vocabulary.md](../../vocabulary.md) — Realm extraction, Import
 - [flows/realm-extraction-to-ui.md](../../flows/realm-extraction-to-ui.md)
 - [business/realm-read-only.md](../../business/realm-read-only.md)
+- [decisions/stream-extraction-stall-breaker.md](../../decisions/stream-extraction-stall-breaker.md)
 
 **In code:** feature folder `live-sync/`, module `sync.ts`.

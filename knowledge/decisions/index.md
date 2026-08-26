@@ -11,3 +11,4 @@ Constraints agents must not accidentally violate. Terms: [vocabulary.md](../voca
 | Hub is a separate process | [hub-separate-process.md](hub-separate-process.md) |
 | Hub search base index + killable edge cache | [hub-search-base-index.md](hub-search-base-index.md) |
 | Release tags include the linux-resources lock | [release-tag-includes-linux-resources.md](release-tag-includes-linux-resources.md) |
+| Streamed extraction + reconcile-only catch-up | [stream-extraction-stall-breaker.md](stream-extraction-stall-breaker.md) |

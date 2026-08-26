@@ -13,6 +13,15 @@ export const SYNC_PAUSE_WHEN_UNFOCUSED_KEY = "sync.pause_when_unfocused";
 export const SYNC_REALM_READER_PAUSED_KEY = "sync.realm_reader_paused";
 
 /**
+ * Reconcile catch-up stall breaker (integer string, default "0").
+ * realm-reader bumps it when a reconcile finds a Realm/SQLite row-count gap
+ * its catch-up pass cannot close (rows that can never mirror, e.g. a Beatmap
+ * whose BeatmapSet link is gone). At >= the reader's stall limit, reconcile
+ * stops retrying catch-up until a successful incremental moves rows again.
+ */
+export const SYNC_CATCHUP_STALLED_KEY = "sync.catchup_stalled";
+
+/**
  * Score username filter preference.
  * - missing / "auto" → most common `user_username` among scores
  * - "*" → show all usernames (including downloaded replays)

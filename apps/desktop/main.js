@@ -122,8 +122,9 @@ function resolveTsx(repoRoot, serverDir, realmDir) {
  * @param {string} cwd
  * @param {NodeJS.ProcessEnv} extraEnv
  * @param {string} label
+ * @param {string[]} [nodeArgs] optional Node CLI args prepended to the entry
  */
-function spawnNodeEntry(paths, entry, cwd, extraEnv, label) {
+function spawnNodeEntry(paths, entry, cwd, extraEnv, label, nodeArgs = []) {
   const env = { ...process.env, ...extraEnv };
 
   if (paths.isPackaged || entry.endsWith(".js")) {
@@ -131,7 +132,7 @@ function spawnNodeEntry(paths, entry, cwd, extraEnv, label) {
     const nodeBin = paths.nodeBin;
     if (nodeBin && fs.existsSync(nodeBin)) {
       desktopLog(`spawn ${label} via nodeBin=${nodeBin}`);
-      return spawn(nodeBin, [entry], {
+      return spawn(nodeBin, [...nodeArgs, entry], {
         cwd,
         env,
         stdio: ["ignore", fd, fd],
@@ -141,7 +142,7 @@ function spawnNodeEntry(paths, entry, cwd, extraEnv, label) {
     }
     // Fallback: Electron as Node (dev packs / missing bundled node).
     desktopLog(`spawn ${label} via ELECTRON_RUN_AS_NODE exec=${process.execPath}`);
-    return spawn(process.execPath, [entry], {
+    return spawn(process.execPath, [...nodeArgs, entry], {
       cwd,
       env: {
         ...env,
@@ -331,12 +332,23 @@ function spawnRealmReader(paths, sharedEnv) {
     return;
   }
   desktopLog(`spawn realm-reader dir=${paths.realmDir}`);
+  // Opt-in heap guardrail: REALM_MAX_OLD_SPACE_MB=1536 caps V8 old space for
+  // the reader only (server keeps defaults). Unset = no flag, as before.
+  const realmHeapMb = Number(process.env.REALM_MAX_OLD_SPACE_MB || 0);
+  const realmNodeArgs =
+    Number.isFinite(realmHeapMb) && realmHeapMb > 0
+      ? [`--max-old-space-size=${Math.floor(realmHeapMb)}`]
+      : [];
+  if (realmNodeArgs.length > 0) {
+    desktopLog(`realm-reader heap cap: ${realmNodeArgs[0]}`);
+  }
   realmChild = spawnNodeEntry(
     paths,
     paths.realmEntry,
     paths.realmDir,
     sharedEnv,
     "realm-reader",
+    realmNodeArgs,
   );
   realmChild.on("exit", (code, signal) => {
     if (!shuttingDown) {

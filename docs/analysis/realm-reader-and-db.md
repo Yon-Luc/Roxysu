@@ -80,13 +80,22 @@ forever, blocking *all* score extraction.
 
 ## M2. Whole-library materialization in memory during full sync / catch-up
 
-**Severity: medium** — `sync.ts:327-383` (`collectMappedRows`: all scores/
-beatmaps/sets mapped to JS objects kept alive for the whole cycle),
-`:386-423` + `:1247` (`collectRealmIdSets` builds 3 more full UUID sets;
-`sqliteIdSet` loads all SQLite IDs). ~6 simultaneous full-library sets on large
-libraries → spiky multi-hundred-MB RSS in a long-lived process.
+**Status: addressed 2026-08-26** — extraction is now streamed
+(`apps/realm-reader/src/upsert.ts` `streamMappedUpsert`: map → bounded batch →
+upsert, never all rows at once), the replay-hash backfill streams the same way,
+and the inline per-incremental catch-up scan was removed (healing happens on
+reconcile only, with a stall breaker for unmirrorable rows —
+`knowledge/decisions/stream-extraction-stall-breaker.md`). The remaining ID-set
+diffs (`collectRealmIdSets` / `sqliteIdSet`) run on reconcile turns only and are
+bounded by the stall breaker.
 
-**Fix:** Page through Realm filtered snapshots; free batch references; reuse count-gates instead of ID-set diffs where possible.
+**Severity was: medium** — `collectMappedRows` mapped all scores/beatmaps/sets
+to JS objects kept alive for the whole cycle; `collectRealmIdSets` built 3 more
+full UUID sets and `sqliteIdSet` loaded all SQLite IDs — ~6 simultaneous
+full-library sets on large libraries → spiky multi-hundred-MB RSS in a
+long-lived process.
+
+**Implemented fix:** streamed mapping/upserting + reconcile-only healing (above).
 
 ## M3. Missing index for the per-poll watermark query
 

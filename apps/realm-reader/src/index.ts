@@ -26,6 +26,7 @@ import { resolveRealmPathFromDb } from "./osu-paths";
 export { SYNC_REALM_READER_PAUSED_KEY };
 
 const RETRY_MS = Number(process.env.REALM_RETRY_MS ?? 10_000);
+const RETRY_MAX_MS = Number(process.env.REALM_RETRY_MAX_MS ?? 120_000);
 const RESYNC_MS = Number(process.env.REALM_RESYNC_MS ?? 60_000);
 const PAUSE_POLL_MS = Number(process.env.REALM_PAUSE_POLL_MS ?? 2_000);
 const FULL_EVERY_N = Number(process.env.REALM_FULL_EVERY_N ?? 10);
@@ -33,6 +34,30 @@ let forceFull = process.env.REALM_FULL_SYNC === "1";
 
 let shuttingDown = false;
 let wakeSleep: (() => void) | null = null;
+/** Doubles on consecutive failures, resets on success — keeps a broken sync from hot-looping. */
+let retryDelayMs = RETRY_MS;
+
+function mb(bytes: number): number {
+  return Math.round(bytes / 1024 / 1024);
+}
+
+function logMemoryUsage(label: string) {
+  if (process.env.REALM_DEBUG_MEM !== "1") return;
+  const m = process.memoryUsage();
+  console.log(
+    `mem ${label} rss=${mb(m.rss)}MB heapUsed=${mb(m.heapUsed)}MB heapTotal=${mb(m.heapTotal)}MB external=${mb(m.external)}MB arrayBuffers=${mb(m.arrayBuffers)}MB`,
+  );
+}
+
+async function sleepAfterFailure(context: string, err?: unknown) {
+  const detail = err instanceof Error ? err.message : "";
+  console.warn(
+    `${context}${detail ? ` (${detail})` : ""} — retrying in ${Math.round(retryDelayMs / 1000)}s`,
+  );
+  logMemoryUsage(`after-failure ${context}`);
+  if (!shuttingDown) await sleep(retryDelayMs);
+  retryDelayMs = Math.min(RETRY_MAX_MS, retryDelayMs * 2);
+}
 
 function sleep(ms: number) {
   return new Promise<void>((resolve) => {
@@ -153,6 +178,7 @@ async function main() {
 
   const db = ensureDb(dbPath);
   console.log("SQLite ready (migrations applied)");
+  logMemoryUsage("startup");
 
   if (clearStuckRealmReaderPause(db)) {
     console.log(
@@ -198,6 +224,7 @@ async function main() {
         lockLogged = false;
         cycle += 1;
         lastSyncAt = Date.now();
+        retryDelayMs = RETRY_MS;
 
         const del =
           result.scoresDeleted || result.beatmapsDeleted || result.beatmapSetsDeleted
@@ -206,15 +233,16 @@ async function main() {
         console.log(
           `sync ${result.kind} — rulesets=${result.rulesetsUpserted} sets=${result.beatmapSetsUpserted} beatmaps=${result.beatmapsUpserted} scores=${result.scoresUpserted} changed=${result.rowsChanged}${del} (realm v${result.realmSchemaVersion})`,
         );
+        logMemoryUsage(`post-${result.kind}`);
       } catch (err) {
         if (err instanceof RealmLockedError) {
           if (!lockLogged) {
             console.warn(
-              `realm locked (osu!lazer open?) — retrying every ${RETRY_MS}ms`,
+              `realm locked (osu!lazer open?) — retrying every ${RETRY_MS / 1000}s at first, then backing off`,
             );
             lockLogged = true;
           }
-          if (!shuttingDown) await sleep(RETRY_MS);
+          await sleepAfterFailure("realm locked");
           continue;
         }
 
@@ -223,8 +251,7 @@ async function main() {
           process.exit(1);
         }
 
-        console.error("sync failed:", err);
-        if (!shuttingDown) await sleep(RETRY_MS);
+        await sleepAfterFailure("sync failed", err);
       }
     }
   } finally {

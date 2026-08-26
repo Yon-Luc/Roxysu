@@ -7,6 +7,7 @@ touches:
   - apps/tosu-counter/src/live.ts
   - apps/tosu-counter/src/chart.ts
   - apps/tosu-counter/src/settings.ts
+  - apps/tosu-counter/src/tosuSettings.ts
   - apps/tosu-counter/src/folderSkin.ts
   - apps/tosu-counter/src/watermark.ts
   - apps/tosu-counter/src/pngShrink.ts
@@ -54,17 +55,26 @@ mania notefield synced to the live in-game time.
    relative to `skin/`). Exists because OBS browser sources cannot open file
    pickers and have isolated IndexedDB. The panel's **Export skin pack**
    button generates it from an in-browser `.osk` import via
-   `exportImportedSpriteDataUrls()`.
+   `exportImportedSpriteDataUrls()`. The build ships a placeholder `{}` pack
+   so the boot probe gets a 200 — tosu otherwise logs an ENOENT error line
+   for the missing optional file; `{}` validates as "no pack" (validation
+   requires at least one sprite), and a real exported pack replaces it.
 9. Browser import: drop an `.osk`/skin folder anywhere on the page or use
    **Import .osk** — same `maniaSkinImport` path as the client app, applied to
    all supported keymodes, persisted in IndexedDB on the tosu origin.
 10. **tosu dashboard settings**: shipping `settings.json` registers scroll
     speed / hit position / lane cover / transparent background in the tosu
     dashboard. Values are read over `/websocket/commands`
-    (`getSettings:<path>` with `?l=` identifying the counter) and live-updated
-    on dashboard saves (`updateSettings` broadcasts). Dashboard values win
-    over URL params and localStorage once received; the in-page ⚙ panel stays
-    as a standalone fallback and mirrors received values.
+    (`getSettings:<name>` with `?l=` identifying the counter) and live-updated
+    on dashboard saves (`updateSettings` broadcasts). The identifier is the
+    counter's **bare folder name** (`RoxysuPreview`, no slashes): tosu joins
+    it into `<config>/settings/<name>.values.json`, so a slashed URL path
+    (`/RoxysuPreview/`) silently becomes a non-existent `<name>/.values.json`
+    sub-path — every settings read fails with an ENOENT log line from tosu
+    ("Failed to parse counter settings") and sync never delivers values.
+    Dashboard values win over URL params and localStorage once received; the
+    in-page ⚙ panel stays as a standalone fallback and mirrors received
+    values.
 11. **Roxysu watermark** ("like force export replay"): bottom-left logo +
     wordmark stamp drawn on the canvas after the notefield, mirroring the
     replay-video-export footer mark. On by default; toggleable via dashboard

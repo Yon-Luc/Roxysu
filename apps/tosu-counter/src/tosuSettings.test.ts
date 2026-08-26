@@ -6,7 +6,7 @@ describe("parseSettingsFrame", () => {
     expect(
       parseSettingsFrame(
         { command: "getSettings", message: { scrollSpeed: 24 } },
-        "/RoxysuPreview/",
+        "RoxysuPreview",
       ),
     ).toEqual({ scrollSpeed: 24 });
   });
@@ -15,23 +15,23 @@ describe("parseSettingsFrame", () => {
     expect(
       parseSettingsFrame(
         { command: "getSettings", message: { error: "Wrong overlay" } },
-        "/RoxysuPreview/",
+        "RoxysuPreview",
       ),
     ).toBeNull();
     expect(
       parseSettingsFrame(
         { command: "getBeatmapFile", message: {} },
-        "/RoxysuPreview/",
+        "RoxysuPreview",
       ),
     ).toBeNull();
   });
 
   test("parses updateSettings broadcast frames (array payload)", () => {
-    const frame = `updateSettings:/RoxysuPreview/:${JSON.stringify([
+    const frame = `updateSettings:RoxysuPreview:${JSON.stringify([
       { uniqueID: "scrollSpeed", value: 30 },
       { uniqueID: "transparentBg", value: true },
     ])}`;
-    expect(parseSettingsFrame(frame, "/RoxysuPreview/")).toEqual({
+    expect(parseSettingsFrame(frame, "RoxysuPreview")).toEqual({
       scrollSpeed: 30,
       transparentBg: true,
     });
@@ -40,8 +40,8 @@ describe("parseSettingsFrame", () => {
   test("parses updateSettings record payloads", () => {
     expect(
       parseSettingsFrame(
-        `updateSettings:/RoxysuPreview/:${JSON.stringify({ laneCover: 20 })}`,
-        "/RoxysuPreview/",
+        `updateSettings:RoxysuPreview:${JSON.stringify({ laneCover: 20 })}`,
+        "RoxysuPreview",
       ),
     ).toEqual({ laneCover: 20 });
   });
@@ -50,10 +50,19 @@ describe("parseSettingsFrame", () => {
     expect(
       parseSettingsFrame(
         `updateSettings:/Other/:${JSON.stringify([{ uniqueID: "a", value: 1 }])}`,
-        "/RoxysuPreview/",
+        "RoxysuPreview",
       ),
     ).toBeNull();
-    expect(parseSettingsFrame("random text", "/RoxysuPreview/")).toBeNull();
-    expect(parseSettingsFrame(null, "/RoxysuPreview/")).toBeNull();
+    expect(parseSettingsFrame("random text", "RoxysuPreview")).toBeNull();
+    expect(parseSettingsFrame(null, "RoxysuPreview")).toBeNull();
+  });
+
+  test("slashed counter paths never match (tosu joins names into file paths)", () => {
+    expect(
+      parseSettingsFrame(
+        `updateSettings:/RoxysuPreview/:${JSON.stringify([{ uniqueID: "a", value: 1 }])}`,
+        "RoxysuPreview",
+      ),
+    ).toBeNull();
   });
 });

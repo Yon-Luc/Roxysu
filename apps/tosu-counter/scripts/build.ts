@@ -59,6 +59,14 @@ for (const rel of ["index.html", "metadata.txt", "settings.json"]) {
   await Bun.write(path.join(outDir, rel), text);
 }
 
+// Placeholder folder-skin pack: the counter probes ./skin/skin-pack.json on
+// every boot, and tosu logs an ENOENT error line when the file is missing.
+// An empty object validates as "no pack" (folderSkin.validateSkinPack needs
+// at least one sprite), so behavior is identical to a missing file — minus
+// the log noise. A real exported pack replaces this file.
+mkdirSync(path.join(outDir, "skin"), { recursive: true });
+await Bun.write(path.join(outDir, "skin", "skin-pack.json"), "{}\n");
+
 const jsEntry = result.outputs.find(
   (o) => o.kind === "entry-point" && o.path.endsWith(".js"),
 );
@@ -76,6 +84,7 @@ for (const rel of [
   "settings.json",
   "bundle.js",
   "roxy-small.png",
+  "skin/skin-pack.json",
 ]) {
   files[`RoxysuPreview/${rel}`] = new Uint8Array(
     readFileSync(path.join(outDir, rel)),

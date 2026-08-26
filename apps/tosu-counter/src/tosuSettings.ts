@@ -2,12 +2,16 @@
  * tosu dashboard settings integration.
  *
  * Protocol (reverse-engineered from tosuapp/tosu packages/server):
- * - Connect to `ws://<host>/websocket/commands?l=<encodeURIComponent(counterPath)>`
- *   where counterPath is the URL folder, e.g. `/RoxysuPreview/`.
- * - Send text frame `getSettings:<same encoded path>`; the reply arrives as
+ * - Connect to `ws://<host>/websocket/commands?l=<encodeURIComponent(counterName)>`
+ *   where counterName is the counter's bare folder name, e.g. `RoxysuPreview`
+ *   (no slashes — tosu joins this string into its values-file path
+ *   `<config>/settings/<name>.values.json`, so a slashed URL path like
+ *   `/RoxysuPreview/` becomes a bogus `<name>/.values.json` subdirectory and
+ *   every settings read/write fails with ENOENT).
+ * - Send text frame `getSettings:<same encoded name>`; the reply arrives as
  *   JSON `{ command: "getSettings", message: Record<uniqueID, value> }`
  *   (message values come from tosu's saved `settings.values.json`).
- * - Dashboard edits are broadcast as `updateSettings:<path>:<payload>` text
+ * - Dashboard edits are broadcast as `updateSettings:<name>:<payload>` text
  *   frames, payload being a `{uniqueID, value}[]` array or a values record.
  */
 
@@ -16,14 +20,14 @@ export type TosuSettingsFrame = Record<string, unknown>;
 /** Pure parser for both reply shapes — unit-tested. */
 export function parseSettingsFrame(
   data: unknown,
-  counterPath: string,
+  counterName: string,
 ): TosuSettingsFrame | null {
   if (typeof data === "string") {
     if (!data.startsWith("updateSettings:")) return null;
     const rest = data.slice("updateSettings:".length);
     const sep = rest.indexOf(":");
     const overlay = sep >= 0 ? rest.slice(0, sep) : rest;
-    if (decodeURIComponent(overlay) !== decodeURIComponent(counterPath)) {
+    if (decodeURIComponent(overlay) !== decodeURIComponent(counterName)) {
       return null;
     }
     const payload = sep >= 0 ? rest.slice(sep + 1) : "";
@@ -82,6 +86,16 @@ export function counterPath(): string {
   return `${pathname}/`;
 }
 
+/**
+ * Bare folder name tosu expects in the commands websocket (`?l=`) and
+ * updateSettings frames. Never contains slashes: tosu concatenates it into
+ * `settings/<name>.values.json`, so `/RoxysuPreview/` would turn into a
+ * non-existent `<name>/.values.json` sub-path and fail with ENOENT.
+ */
+export function counterName(): string {
+  return counterPath().replace(/^\/+|\/+$/g, "");
+}
+
 export function connectTosuSettings(opts: {
   onValues: (values: TosuSettingsFrame) => void;
 }): { stop: () => void } {
@@ -89,8 +103,8 @@ export function connectTosuSettings(opts: {
   let ws: WebSocket | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let attempt = 0;
-  const path = counterPath();
-  const encoded = encodeURIComponent(path);
+  const name = counterName();
+  const encoded = encodeURIComponent(name);
 
   const clearReconnect = () => {
     if (reconnectTimer) {
@@ -139,7 +153,7 @@ export function connectTosuSettings(opts: {
           parsed = event.data; // updateSettings frames are raw strings
         }
       }
-      const values = parseSettingsFrame(parsed, path);
+      const values = parseSettingsFrame(parsed, name);
       if (values) opts.onValues(values);
     });
 

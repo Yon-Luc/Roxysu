@@ -29,6 +29,7 @@ SERVER_PKG="$ROOT/apps/server/package.json"
 NIX_PACKAGE="$ROOT/nix/package.nix"
 FLAKE_NIX="$ROOT/flake.nix"
 STABLE_ASSET="Roxysu-linux-x64-resources.tar.gz"
+TOSU_COUNTER_ZIP="$ROOT/apps/tosu-counter/dist/RoxysuPreview.zip"
 
 DRY_RUN=0
 SKIP_TESTS=0
@@ -284,7 +285,22 @@ release_notes() {
     echo
     echo
     echo "Windows installers and the Linux resources archive are attached by CI."
+    echo "RoxysuPreview.zip (standalone Tosu counter) is attached by publish.sh."
   }
+}
+
+upload_tosu_counter_zip() {
+  local tag="$1"
+  require_cmd bun
+  log "Building Tosu counter zip…"
+  run bun run tosu-counter
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "dry-run: gh release upload $tag $TOSU_COUNTER_ZIP --clobber"
+    return
+  fi
+  [[ -f "$TOSU_COUNTER_ZIP" ]] || die "missing $TOSU_COUNTER_ZIP after build"
+  log "Uploading RoxysuPreview.zip to $tag…"
+  gh release upload "$tag" "$TOSU_COUNTER_ZIP" --clobber
 }
 
 # --- flake-only path ----------------------------------------------------------
@@ -392,6 +408,7 @@ if [[ "$SKIP_PUSH" -eq 0 ]]; then
       gh release create "$TAG" --title "Roxysu v${VERSION}" --notes-file "$NOTES_FILE" --verify-tag
     fi
   fi
+  upload_tosu_counter_zip "$TAG"
 else
   log "Skipped push. Next: git push origin HEAD && git push origin $TAG"
 fi

@@ -13,6 +13,7 @@
     "t": "bun run --parallel tosu desktop overlay",
     "dev": "concurrently \"bun run --cwd apps/server dev\" \"bun run --filter '@roxysu/realm-reader' dev\" \"tosu\"",
     "desktop": "bun run --cwd apps/desktop dev",
+    "tosu-counter": "bun run --cwd apps/tosu-counter build",
     "overlay": "./apps/overlay/roxysu-overlay --output=DP-4",
     "overlay:build": "nix develop -c bash apps/overlay/build.sh",
     "desktop:pack": "bun run --cwd apps/desktop pack",

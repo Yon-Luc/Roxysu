@@ -20,6 +20,7 @@ touches:
   - apps/server/public/lib/paintManiaNotefield.ts
   - apps/server/public/lib/clamp.ts
   - apps/server/public/lib/maniaSkinImport.ts
+  - publish.sh
 ---
 
 # Standalone tosu counter (mania notefield)
@@ -152,6 +153,8 @@ paintManiaNotefield(canvas, sprites: folder pack > IndexedDB import > none)
 
 - Build: `bun run --cwd apps/tosu-counter build` →
   `apps/tosu-counter/dist/RoxysuPreview/` + `RoxysuPreview.zip`.
+- `publish.sh` builds that zip and attaches `RoxysuPreview.zip` to each `v*`
+  GitHub release (`releases/download/vX.Y.Z/RoxysuPreview.zip`).
 - Users copy the folder into tosu's `static/` directory and open it from the
   tosu dashboard; the zip can also be hosted for tosu's dashboard downloader
   (`/api/counters/download/<url>`).

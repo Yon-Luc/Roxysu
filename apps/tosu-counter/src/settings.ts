@@ -19,6 +19,8 @@ export type CounterSettings = {
   laneCover: number;
   /** Transparent page background (for OBS browser source transparency). */
   transparentBg: boolean;
+  /** "Roxysu" watermark stamp on the canvas. */
+  showWatermark: boolean;
 };
 
 export function defaultCounterSettings(): CounterSettings {
@@ -27,6 +29,7 @@ export function defaultCounterSettings(): CounterSettings {
     hitPosition: 0.88,
     laneCover: 0,
     transparentBg: false,
+    showWatermark: true,
   };
 }
 
@@ -75,6 +78,9 @@ export function loadCounterSettings(): CounterSettings {
 
   const transparent = params.get("transparent");
   if (transparent != null) base.transparentBg = transparent !== "0" && transparent !== "false";
+
+  const wm = params.get("wm");
+  if (wm != null) base.showWatermark = wm !== "0" && wm !== "false";
 
   return base;
 }

@@ -1,0 +1,37 @@
+[
+	{
+		"uniqueID": "scrollSpeed",
+		"type": "number",
+		"title": "Scroll speed",
+		"description": "osu!mania scroll speed (1–40)",
+		"value": 20
+	},
+	{
+		"uniqueID": "hitPosition",
+		"type": "number",
+		"title": "Hit position (%)",
+		"description": "Receptor position as percent of playfield height (55–95)",
+		"value": 88
+	},
+	{
+		"uniqueID": "laneCover",
+		"type": "number",
+		"title": "Lane cover (%)",
+		"description": "Black cover from the top as percent of height (0–70)",
+		"value": 0
+	},
+	{
+		"uniqueID": "transparentBg",
+		"type": "checkbox",
+		"title": "Transparent background",
+		"description": "Transparent page background for OBS browser sources",
+		"value": false
+	},
+	{
+		"uniqueID": "showWatermark",
+		"type": "checkbox",
+		"title": "Roxysu watermark",
+		"description": "Draw the Roxysu logo + wordmark on the notefield",
+		"value": true
+	}
+]

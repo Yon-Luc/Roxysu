@@ -8,8 +8,11 @@ touches:
   - apps/tosu-counter/src/chart.ts
   - apps/tosu-counter/src/settings.ts
   - apps/tosu-counter/src/folderSkin.ts
+  - apps/tosu-counter/src/watermark.ts
+  - apps/tosu-counter/src/pngShrink.ts
   - apps/tosu-counter/public/index.html
   - apps/tosu-counter/public/metadata.txt
+  - apps/tosu-counter/public/settings.json
   - apps/tosu-counter/scripts/build.ts
   - apps/server/public/lib/paintManiaNotefield.ts
   - apps/server/public/lib/clamp.ts
@@ -55,6 +58,20 @@ mania notefield synced to the live in-game time.
 9. Browser import: drop an `.osk`/skin folder anywhere on the page or use
    **Import .osk** — same `maniaSkinImport` path as the client app, applied to
    all supported keymodes, persisted in IndexedDB on the tosu origin.
+10. **tosu dashboard settings**: shipping `settings.json` registers scroll
+    speed / hit position / lane cover / transparent background in the tosu
+    dashboard. Values are read over `/websocket/commands`
+    (`getSettings:<path>` with `?l=` identifying the counter) and live-updated
+    on dashboard saves (`updateSettings` broadcasts). Dashboard values win
+    over URL params and localStorage once received; the in-page ⚙ panel stays
+    as a standalone fallback and mirrors received values.
+11. **Roxysu watermark** ("like force export replay"): bottom-left logo +
+    wordmark stamp drawn on the canvas after the notefield, mirroring the
+    replay-video-export footer mark. On by default; toggleable via dashboard
+    setting, ⚙ panel checkbox, or `?wm=0`. The build script downscales the
+    1024px source art to `roxy-small.png` (64px) at build time using the pure
+    TS PNG codec in `src/pngShrink.ts` (node:zlib inflate/deflate — fflate's
+    inflate silently truncated this stream).
 
 ## Main flows
 

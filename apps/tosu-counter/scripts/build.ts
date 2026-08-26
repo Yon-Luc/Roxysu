@@ -7,6 +7,7 @@
 import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { zipSync } from "fflate";
+import { boxResize, decodePng, encodePng } from "../src/pngShrink";
 
 const root = path.resolve(import.meta.dir, "..");
 const outDir = path.join(root, "dist", "RoxysuPreview");
@@ -35,8 +36,25 @@ if (!result.success) {
   process.exit(1);
 }
 
-// Static counter files.
-for (const rel of ["index.html", "metadata.txt"]) {
+// Static counter files. The watermark logo is downscaled to 64px at build
+// time — the source art is 1024px/1.6MB and the counter draws it at ≤32px.
+{
+  const logoBytes = readFileSync(path.join(root, "public", "roxy.png"));
+  try {
+    const small = encodePng(boxResize(decodePng(logoBytes), 64, 64));
+    await Bun.write(path.join(outDir, "roxy-small.png"), small);
+    console.log(
+      `[tosu-counter] logo shrunk: ${(logoBytes.length / 1024).toFixed(0)} KiB → ${(small.length / 1024).toFixed(1)} KiB`,
+    );
+  } catch (err) {
+    console.warn(
+      "[tosu-counter] logo shrink failed, shipping original:",
+      err instanceof Error ? err.message : String(err),
+    );
+    await Bun.write(path.join(outDir, "roxy-small.png"), logoBytes);
+  }
+}
+for (const rel of ["index.html", "metadata.txt", "settings.json"]) {
   const text = readFileSync(path.join(root, "public", rel), "utf8");
   await Bun.write(path.join(outDir, rel), text);
 }
@@ -52,7 +70,13 @@ if (jsEntry) {
 
 // Zip for distribution / tosu dashboard install.
 const files: Record<string, Uint8Array> = {};
-for (const rel of ["index.html", "metadata.txt", "bundle.js"]) {
+for (const rel of [
+  "index.html",
+  "metadata.txt",
+  "settings.json",
+  "bundle.js",
+  "roxy-small.png",
+]) {
   files[`RoxysuPreview/${rel}`] = new Uint8Array(
     readFileSync(path.join(outDir, rel)),
   );

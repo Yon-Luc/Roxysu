@@ -43,6 +43,12 @@ import {
   saveCounterSettings,
   type CounterSettings,
 } from "./settings";
+import { connectTosuSettings } from "./tosuSettings";
+import {
+  drawWatermark,
+  loadWatermarkLogo,
+  watermarkSettled,
+} from "./watermark";
 
 /** A tosu time sample older than this is stale — freeze the clock. */
 const SAMPLE_FRESH_MS = 1500;
@@ -88,6 +94,53 @@ function main(): void {
 
   panelToggle.addEventListener("click", () => {
     panel.root.classList.toggle("open");
+  });
+
+  // Dashboard-editable settings via tosu's counter settings API. These win
+  // over URL params / localStorage once received — explicit user intent.
+  connectTosuSettings({
+    onValues: (values) => {
+      let changed = false;
+      if (typeof values["scrollSpeed"] === "number") {
+        const v = Math.round(values["scrollSpeed"]);
+        if (v !== settings.scrollSpeed) {
+          settings.scrollSpeed = v;
+          scrollSpeed = v;
+          changed = true;
+        }
+      }
+      for (const [id, key] of [
+        ["hitPosition", "hitPosition"],
+        ["laneCover", "laneCover"],
+      ] as const) {
+        if (typeof values[id] === "number") {
+          const frac = values[id] > 1 ? values[id] / 100 : values[id];
+          if (frac !== settings[key]) {
+            settings[key] = frac;
+            changed = true;
+          }
+        }
+      }
+      if (typeof values["transparentBg"] === "boolean") {
+        if (values["transparentBg"] !== settings.transparentBg) {
+          settings.transparentBg = values["transparentBg"];
+          document.body.classList.toggle("transparent", settings.transparentBg);
+          changed = true;
+        }
+      }
+      if (typeof values["showWatermark"] === "boolean") {
+        if (values["showWatermark"] !== settings.showWatermark) {
+          settings.showWatermark = values["showWatermark"];
+          changed = true;
+        }
+      }
+      if (changed) {
+        saveCounterSettings(settings);
+        applySettingsToSkin(settings);
+        panel.syncFrom();
+        touchSkin();
+      }
+    },
   });
 
   // --- skin sources (folder pack > browser import > procedural) ------------
@@ -382,65 +435,80 @@ function main(): void {
         currentRate(),
         getPreviewSkin(),
         skinVersion,
+        watermarkSettled(),
       ],
       paint: (tMs) => {
         ctx!.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
-        if (chart.kind !== "ready") return;
-        paintManiaNotefield({
-          ctx: ctx!,
-          width: canvas.clientWidth,
-          height: canvas.clientHeight,
-          tMs,
-          columnCount: chart.columnCount,
-          notes: chart.notes,
-          scrollSpeed,
-          playbackRate: currentRate(),
-          skin: skinFor(chart.columnCount),
-          hitPosition: clamp(
-            getPreviewSkin().hitPosition,
-            HIT_POSITION_MIN,
-            HIT_POSITION_MAX,
-          ),
-          laneCover: clamp(
-            getPreviewSkin().laneCover,
-            LANE_COVER_MIN,
-            LANE_COVER_MAX,
-          ),
-          sprites: currentSpritesFor(chart.columnCount),
-        });
+        if (chart.kind === "ready") {
+          paintManiaNotefield({
+            ctx: ctx!,
+            width: canvas.clientWidth,
+            height: canvas.clientHeight,
+            tMs,
+            columnCount: chart.columnCount,
+            notes: chart.notes,
+            scrollSpeed,
+            playbackRate: currentRate(),
+            skin: skinFor(chart.columnCount),
+            hitPosition: clamp(
+              getPreviewSkin().hitPosition,
+              HIT_POSITION_MIN,
+              HIT_POSITION_MAX,
+            ),
+            laneCover: clamp(
+              getPreviewSkin().laneCover,
+              LANE_COVER_MIN,
+              LANE_COVER_MAX,
+            ),
+            sprites: currentSpritesFor(chart.columnCount),
+          });
+        }
+        if (settings.showWatermark) {
+          drawWatermark(ctx!, canvas.clientWidth, canvas.clientHeight);
+        }
       },
     });
   }
 
   function buildPanel(current: CounterSettings): {
     root: HTMLDivElement;
+    syncFrom: () => void;
   } {
     const root = el("div", document.body);
     root.className = "panel";
+    const syncers: Array<() => void> = [];
 
     function slider(
       label: string,
       min: number,
       max: number,
       step: number,
-      value: number,
+      get: () => number,
       format: (v: number) => string,
       onInput: (v: number) => void,
     ): void {
       const row = el("label", root);
       row.className = "row";
       const span = el("span", row);
-      span.textContent = `${label}: ${format(value)}`;
       const input = el("input", row);
       input.type = "range";
       input.min = String(min);
       input.max = String(max);
       input.step = String(step);
-      input.value = String(value);
+      const render = () => {
+        span.textContent = `${label}: ${format(Number(input.value))}`;
+      };
+      input.value = String(get());
+      render();
       input.addEventListener("input", () => {
-        const v = Number(input.value);
-        span.textContent = `${label}: ${format(v)}`;
-        onInput(v);
+        render();
+        onInput(Number(input.value));
+      });
+      syncers.push(() => {
+        if (document.activeElement !== input) {
+          input.value = String(get());
+        }
+        render();
       });
     }
 
@@ -449,7 +517,7 @@ function main(): void {
       1,
       40,
       1,
-      current.scrollSpeed,
+      () => settings.scrollSpeed,
       (v) => String(v),
       (v) => {
         scrollSpeed = v;
@@ -463,7 +531,7 @@ function main(): void {
       Math.round(HIT_POSITION_MIN * 100),
       Math.round(HIT_POSITION_MAX * 100),
       1,
-      Math.round(current.hitPosition * 100),
+      () => Math.round(settings.hitPosition * 100),
       (v) => `${v}%`,
       (v) => {
         settings.hitPosition = v / 100;
@@ -477,7 +545,7 @@ function main(): void {
       Math.round(LANE_COVER_MIN * 100),
       Math.round(LANE_COVER_MAX * 100),
       1,
-      Math.round(current.laneCover * 100),
+      () => Math.round(settings.laneCover * 100),
       (v) => `${v}%`,
       (v) => {
         settings.laneCover = v / 100;
@@ -491,13 +559,32 @@ function main(): void {
     transparentRow.className = "row";
     const cb = el("input", transparentRow);
     cb.type = "checkbox";
-    cb.checked = current.transparentBg;
     const cbSpan = el("span", transparentRow);
     cbSpan.textContent = "Transparent background";
+    cb.checked = settings.transparentBg;
     cb.addEventListener("change", () => {
       settings.transparentBg = cb.checked;
       saveCounterSettings(settings);
       document.body.classList.toggle("transparent", cb.checked);
+    });
+    syncers.push(() => {
+      if (document.activeElement !== cb) cb.checked = settings.transparentBg;
+    });
+
+    const wmRow = el("label", root);
+    wmRow.className = "row";
+    const wmCb = el("input", wmRow);
+    wmCb.type = "checkbox";
+    const wmSpan = el("span", wmRow);
+    wmSpan.textContent = "Roxysu watermark";
+    wmCb.checked = settings.showWatermark;
+    wmCb.addEventListener("change", () => {
+      settings.showWatermark = wmCb.checked;
+      saveCounterSettings(settings);
+      loop?.invalidate();
+    });
+    syncers.push(() => {
+      if (document.activeElement !== wmCb) wmCb.checked = settings.showWatermark;
     });
 
     const skinRow = el("div", root);
@@ -532,9 +619,14 @@ function main(): void {
     const hint = el("small", root);
     hint.className = "hint";
     hint.textContent =
-      "Drop an .osk or skin folder anywhere on this page. A skin/skin-pack.json next to the counter overrides everything (for OBS).";
+      "Drop an .osk or skin folder anywhere. Settings live in the tosu dashboard (after a refresh) and here; URL params ?scroll=24&hitpos=88&cover=30&transparent=1 also work.";
 
-    return { root };
+    return {
+      root,
+      syncFrom: () => {
+        for (const sync of syncers) sync();
+      },
+    };
   }
 
   // --- boot ------------------------------------------------------------------
@@ -545,6 +637,8 @@ function main(): void {
     if (e.dataTransfer) void draftFromDataTransfer(e.dataTransfer).then(applyDraft).catch(() => {});
   });
   window.addEventListener("roxysu:mania-imported-skin", () => touchSkin());
+
+  loadWatermarkLogo();
 
   void loadFolderSkin().then((result) => {
     if (result.ok) {

@@ -7,7 +7,7 @@
 import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { zipSync } from "fflate";
-import { boxResize, decodePng, encodePng } from "../src/pngShrink";
+import { shrinkPng } from "../src/pngShrink";
 
 const root = path.resolve(import.meta.dir, "..");
 const outDir = path.join(root, "dist", "RoxysuPreview");
@@ -41,7 +41,7 @@ if (!result.success) {
 {
   const logoBytes = readFileSync(path.join(root, "public", "roxy.png"));
   try {
-    const small = encodePng(boxResize(decodePng(logoBytes), 64, 64));
+    const small = await shrinkPng(logoBytes, 64, 64);
     await Bun.write(path.join(outDir, "roxy-small.png"), small);
     console.log(
       `[tosu-counter] logo shrunk: ${(logoBytes.length / 1024).toFixed(0)} KiB → ${(small.length / 1024).toFixed(1)} KiB`,

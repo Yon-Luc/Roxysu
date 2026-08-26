@@ -8,6 +8,7 @@ export function OverlayHostSection({ data }: { data: SettingsPayload }) {
   const queryClient = useQueryClient();
   const { dict } = useAppDict();
   const hostUrl = data.overlay.hostUrl;
+  const enabled = data.overlay.enabled;
   const [draft, setDraft] = useState(hostUrl ?? "");
 
   useEffect(() => {
@@ -15,8 +16,8 @@ export function OverlayHostSection({ data }: { data: SettingsPayload }) {
   }, [hostUrl]);
 
   const urlMut = useMutation({
-    mutationFn: (overlayHostUrl: string | null) =>
-      patchSettings({ overlayHostUrl }),
+    mutationFn: (body: { overlayHostUrl?: string | null; overlayEnabled?: boolean }) =>
+      patchSettings(body),
     onSuccess: (next) => {
       if ("error" in next) return;
       queryClient.setQueryData(["settings"], next);
@@ -39,6 +40,25 @@ export function OverlayHostSection({ data }: { data: SettingsPayload }) {
           "URL loaded by the desktop app's in-game overlay host. Include ?profile=<name> to pick a saved layout from the overlay editor. Saving restarts the overlay within a few seconds."}
       </p>
 
+      <label className="mt-4 flex cursor-pointer gap-3 rounded-xl bg-elevated/50 px-4 py-3">
+        <input
+          type="checkbox"
+          checked={enabled}
+          disabled={urlMut.isPending}
+          onChange={(e) => urlMut.mutate({ overlayEnabled: e.target.checked })}
+          className="mt-1 accent-[var(--color-accent)]"
+        />
+        <div>
+          <div className="font-bold text-ink">
+            {dict?.settings.overlayEnable ?? "Enable in-game overlay"}
+          </div>
+          <div className="mt-0.5 text-sm text-muted">
+            {dict?.settings.overlayEnableDesc ??
+              "Desktop app spawns the Wayland overlay window. Turning this off stops it within a few seconds."}
+          </div>
+        </div>
+      </label>
+
       <label className="mt-4 block">
         <span className="text-xs font-semibold uppercase tracking-wide text-faint">
           {dict?.settings.overlayHostLabel ?? "HUD URL"}
@@ -60,7 +80,7 @@ export function OverlayHostSection({ data }: { data: SettingsPayload }) {
           type="button"
           className="rx-btn-primary"
           disabled={urlMut.isPending || !dirty || !draft.trim()}
-          onClick={() => urlMut.mutate(draft.trim())}
+          onClick={() => urlMut.mutate({ overlayHostUrl: draft.trim() })}
         >
           {urlMut.isPending
             ? dict?.settings.saving ?? "Saving…"
@@ -70,7 +90,7 @@ export function OverlayHostSection({ data }: { data: SettingsPayload }) {
           type="button"
           className="rx-btn"
           disabled={urlMut.isPending || hostUrl == null}
-          onClick={() => urlMut.mutate(null)}
+          onClick={() => urlMut.mutate({ overlayHostUrl: null })}
         >
           {dict?.settings.overlayHostClear ?? "Use default"}
         </button>

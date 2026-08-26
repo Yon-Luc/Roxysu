@@ -411,10 +411,11 @@ const OVERLAY_SETTINGS_POLL_MS = 4000;
 const OVERLAY_RESPAWN_GAP_MS = 15000;
 
 /**
- * Read `overlay.hostUrl` from the client app settings store. Resolves null
- * when unset and undefined when unknown (fetch failed — keep current).
+ * Read the In-game overlay host settings from the client app settings store
+ * (`overlay.enabled` + `overlay.hostUrl`). Resolves null when unreachable
+ * (fetch failed — keep current state).
  */
-function fetchOverlayHostUrl() {
+function fetchOverlaySettings() {
   return new Promise((resolve) => {
     const req = http.get(
       { host: HOST, port: PORT, path: "/api/settings", timeout: 2000 },
@@ -425,36 +426,59 @@ function fetchOverlayHostUrl() {
         });
         res.on("end", () => {
           try {
-            const hostUrl = JSON.parse(raw)?.overlay?.hostUrl ?? null;
-            resolve(typeof hostUrl === "string" && hostUrl.trim() ? hostUrl.trim() : null);
+            const overlay = JSON.parse(raw)?.overlay ?? {};
+            const hostUrl =
+              typeof overlay.hostUrl === "string" && overlay.hostUrl.trim()
+                ? overlay.hostUrl.trim()
+                : null;
+            resolve({ enabled: overlay.enabled !== false, hostUrl });
           } catch {
             resolve(null);
           }
         });
       },
     );
-    req.on("error", () => resolve(undefined));
+    req.on("error", () => resolve(null));
     req.on("timeout", () => {
       req.destroy();
-      resolve(undefined);
+      resolve(null);
     });
   });
 }
 
 /**
- * Watch the overlay.host_url setting; spawn/restart the host child whenever
- * it changes (first tick performs the initial spawn). Polls plain client-app
- * HTTP — no private IPC (see decisions/no-ipc-between-processes).
+ * Watch the overlay.host_enabled / overlay.host_url settings; spawn/restart
+ * the host child whenever they change (first tick performs the initial
+ * spawn), and stop + hold the child while the toggle is off (also suppresses
+ * the liveness respawn). Polls plain client-app HTTP — no private IPC (see
+ * decisions/no-ipc-between-processes).
  * @param {ReturnType<typeof resolveDesktopPaths>} paths
  */
 function watchOverlayHostSetting(paths) {
   if (process.platform !== "linux" || !process.env.WAYLAND_DISPLAY) return;
   if (!resolveOverlayBin(paths)) return;
 
+  /** Enable flag applied to the running setup (setting default is on). */
+  let appliedEnabled = false;
+
   const apply = async () => {
     if (shuttingDown) return;
-    const hostUrl = await fetchOverlayHostUrl();
-    if (hostUrl === undefined || shuttingDown) return;
+    const overlaySettings = await fetchOverlaySettings();
+    if (!overlaySettings || shuttingDown) return;
+    const { enabled, hostUrl } = overlaySettings;
+
+    if (!enabled) {
+      if (appliedEnabled || overlayChild) {
+        desktopLog("overlay disabled by setting — stopping host");
+        stopChild(overlayChild, "overlay");
+        overlayChild = null;
+        overlayAppliedUrlArg = null;
+        appliedEnabled = false;
+      }
+      return;
+    }
+    appliedEnabled = true;
+
     // Host pre-splits argv on '=', so the URL rides in one --url=… token.
     const nextArg =
       hostUrl === null ? OVERLAY_URL_DEFAULT : `--url=${hostUrl}`;
@@ -663,7 +687,8 @@ if (!gotLock) {
     spawnRealmReader(paths, sharedEnv);
 
     // Optional Wayland in-game overlay host (bundled on NixOS packages):
-    // spawns from the overlay.host_url setting and restarts on changes.
+    // spawns from the overlay.host_enabled / overlay.host_url settings and
+    // restarts/stops on changes.
     watchOverlayHostSetting(paths);
 
     // NSIS installs only — check after UI is up so startup is not blocked.

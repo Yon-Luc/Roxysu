@@ -1,4 +1,3 @@
-import type { BeatmapPreview } from "./api";
 import { layoutManiaPlayfield, OSU_MANIA_HEIGHT } from "./osuSkinIni";
 import {
   orientationDegrees,
@@ -10,7 +9,7 @@ import {
   type NoteOrientation,
   type NoteShape,
 } from "./previewSkin";
-import { clamp } from "./format";
+import { clamp } from "./clamp";
 
 export type PaintContext2D =
   | CanvasRenderingContext2D
@@ -28,7 +27,14 @@ const BASE_TAP_HEIGHT = 14;
 /** Max fraction of column width used for circle/arrow noteheads. */
 const SHAPED_WIDTH_CAP = 0.85;
 
-type Note = BeatmapPreview["notes"][number];
+/** One mania note in map time — structurally the preview API's note rows. */
+export type PreviewNote = {
+  column: number;
+  startMs: number;
+  endMs: number;
+};
+
+type Note = PreviewNote;
 
 export type ReplayJudgmentResult =
   | "perfect"

@@ -1,5 +1,6 @@
 import { settings } from "@roxysu/db/schema";
 import {
+  OVERLAY_HOST_ENABLED_KEY,
   OVERLAY_HOST_URL_KEY,
   SCORES_GAMEMODE_FILTER_KEY,
   SCORES_USERNAME_FILTER_KEY,
@@ -91,6 +92,15 @@ async function readOverlayHostUrl(db: Db): Promise<string | null> {
   return row?.value?.trim() ? row.value.trim() : null;
 }
 
+async function readOverlayHostEnabled(db: Db): Promise<boolean> {
+  const [row] = await db
+    .select()
+    .from(settings)
+    .where(eq(settings.key, OVERLAY_HOST_ENABLED_KEY))
+    .limit(1);
+  return row?.value !== "0";
+}
+
 async function buildSettingsResponse(db: Db) {
   const formulaId = await getActiveFormulaId(db);
   const [pauseRow] = await db
@@ -103,6 +113,7 @@ async function buildSettingsResponse(db: Db) {
   const tosu = await readTosuSettings(db);
   const maniaRatingExecutables = await readAllExecutablePaths(db);
   const overlayHostUrl = await readOverlayHostUrl(db);
+  const overlayHostEnabled = await readOverlayHostEnabled(db);
   const [scoresUsername, scoresGamemode] = await Promise.all([
     buildScoresUsernameSettings(db),
     buildScoresGamemodeSettings(db),
@@ -124,6 +135,7 @@ async function buildSettingsResponse(db: Db) {
     gamemode: scoresGamemode,
     paths,
     overlay: {
+      enabled: overlayHostEnabled,
       hostUrl: overlayHostUrl,
     },
     tosu: {
@@ -256,6 +268,14 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
         }
       }
 
+      if (body.overlayEnabled !== undefined) {
+        await upsertSetting(
+          db,
+          OVERLAY_HOST_ENABLED_KEY,
+          body.overlayEnabled ? "1" : "0",
+        );
+      }
+
       if (body.overlayHostUrl !== undefined) {
         const trimmed = body.overlayHostUrl?.trim() ?? "";
         if (!trimmed) {
@@ -352,6 +372,8 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
          * reset to the default (#/overlay?bg=clear).
          */
         overlayHostUrl: t.Optional(t.Union([t.String(), t.Null()])),
+        /** Enable/disable the desktop in-game overlay host (Wayland). */
+        overlayEnabled: t.Optional(t.Boolean()),
         tosuEnabled: t.Optional(t.Boolean()),
         tosuHost: t.Optional(t.String()),
         /** Absolute path to tosu binary, or null/"" to clear. */

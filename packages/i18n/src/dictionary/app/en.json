@@ -363,6 +363,8 @@
     "pauseWhenUnfocusedDesc": "When enabled, imports resume after you focus this window again.",
     "overlayHost": "In-game overlay",
     "overlayHostDesc": "URL loaded by the desktop app's in-game overlay host (Wayland). Include ?profile=<name> to pick a saved layout from the overlay editor. Saving restarts the overlay within a few seconds.",
+    "overlayEnable": "Enable in-game overlay",
+    "overlayEnableDesc": "Desktop app spawns the Wayland overlay window. Turning this off stops it within a few seconds.",
     "overlayHostLabel": "HUD URL",
     "overlayHostSave": "Save URL",
     "overlayHostClear": "Use default",

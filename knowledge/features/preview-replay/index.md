@@ -207,6 +207,10 @@ Imported mania skin:
 - Skin stores consumed by playfields, preview/rewatch modals, embed, and editors.
 - [replay-video-export/](../replay-video-export/index.md)
 - [now-selected/](../now-selected/index.md)
+- [tosu-counter/](../tosu-counter/index.md) — standalone counter reuses the
+  mania painter + skin defaults; the paint modules are dependency-free pure
+  modules (`clamp` lives in `lib/clamp.ts`, `PreviewNote` is local to
+  `paintManiaNotefield.ts`) so they bundle without React or `lib/api.ts`.
 
 ## Related knowledge
 

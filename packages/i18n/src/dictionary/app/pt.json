@@ -363,6 +363,8 @@
     "pauseWhenUnfocusedDesc": "Quando ligado, os imports voltam depois que você focar essa janela de novo.",
     "overlayHost": "Overlay in-game",
     "overlayHostDesc": "URL carregada pelo host do overlay in-game do app desktop (Wayland). Inclua ?profile=<nome> para escolher um layout salvo no editor de overlay. Ao salvar, o overlay reinicia em alguns segundos.",
+    "overlayEnable": "Ativar overlay in-game",
+    "overlayEnableDesc": "O app desktop cria a janela de overlay no Wayland. Desativar isso encerra a janela em alguns segundos.",
     "overlayHostLabel": "URL do HUD",
     "overlayHostSave": "Salvar URL",
     "overlayHostClear": "Usar padrão",

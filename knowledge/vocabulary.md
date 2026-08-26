@@ -375,6 +375,22 @@ visible.
 
 ---
 
+### Tosu counter
+
+A static overlay page served by **tosu** from its `static/` directory,
+connecting to tosu's own WebSocket/HTTP endpoints (`/websocket/v2`,
+`/files/beatmap/file`). Roxysu's counter shows the mania notefield standalone —
+no client app required.
+
+**Not:** the **tosu live** adapter (client-app process), **In-game overlay**
+(Wayland host), OBS `/overlay` page
+
+**In code:** `apps/tosu-counter/`
+
+**See:** [features/tosu-counter/](features/tosu-counter/index.md)
+
+---
+
 ### Now selected
 
 Client-app page that displays the in-game selected beatmap from **tosu live**, with optional embedded beatmap preview and mania pattern detail (pattern weights, density over time). Supports a Focus layout for a second monitor.

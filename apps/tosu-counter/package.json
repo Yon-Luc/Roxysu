@@ -1,0 +1,18 @@
+{
+  "name": "@roxysu/tosu-counter",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun run scripts/build.ts",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@roxysu/osu-chart": "workspace:*",
+    "fflate": "^0.8.3"
+  },
+  "devDependencies": {
+    "bun-types": "^1.3.14",
+    "fflate": "^0.8.3"
+  }
+}

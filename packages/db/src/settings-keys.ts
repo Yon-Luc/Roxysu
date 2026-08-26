@@ -66,3 +66,10 @@ export const OVERLAY_SKINS_KEY = "overlay.skins";
  * polls GET /api/settings and restarts the overlay child when this changes.
  */
 export const OVERLAY_HOST_URL_KEY = "overlay.host_url";
+
+/**
+ * In-game overlay host enable flag: "1" enabled (default when missing),
+ * "0" disabled. When "0", the desktop Electron shell stops the overlay child
+ * and suppresses its liveness respawn until re-enabled.
+ */
+export const OVERLAY_HOST_ENABLED_KEY = "overlay.host_enabled";

@@ -133,9 +133,7 @@ function chartDayParts(
   };
 }
 
-export function clamp(n: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, n));
-}
+export { clamp } from "./clamp";
 
 /** `m:ss` clock label for seek bars and timestamps. */
 export function formatClock(ms: number): string {

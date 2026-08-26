@@ -9,6 +9,9 @@ touches:
   - nix/prebuilt.nix
   - nix/package.nix
   - apps/desktop/main.js
+  - apps/server/src/routes/settings.ts
+  - apps/server/public/features/settings/sections/OverlayHostSection.tsx
+  - packages/db/src/settings-keys.ts
 ---
 
 # In-game overlay
@@ -82,12 +85,16 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
 14. **Host URL setting**: `settings` key `overlay.host_url` holds the full HUD
    URL (Settings page → In-game overlay section). Missing/empty → default
    `#/overlay?bg=clear`; non-http(s) values are rejected by the PATCH handler.
-   The Electron shell polls `GET /api/settings` (~4s) and stop/spawn-restarts
-   the host child whenever the value changes — plain client-app HTTP, no IPC.
-   The same poll is also the liveness respawner: if the host child exits on
-   its own (crash or watchdog), it is respawned within ~4s, rate-limited to
-   one auto-respawn per 15s (`OVERLAY_RESPAWN_GAP_MS`) so a crashing binary
-   cannot spin the poll. Settings-change restarts bypass that gap.
+   **Enable toggle**: `settings` key `overlay.host_enabled` (`"1"`/`"0"`,
+   missing = enabled) turns the host off entirely — the Electron shell stops
+   the child and suppresses the liveness respawn while off.
+   The Electron shell polls `GET /api/settings` (~4s) and applies both keys:
+   stop/spawn-restart of the host child whenever they change — plain
+   client-app HTTP, no IPC. The same poll is also the liveness respawner: if
+   the host child exits on its own (crash or watchdog), it is respawned
+   within ~4s, rate-limited to one auto-respawn per 15s
+   (`OVERLAY_RESPAWN_GAP_MS`) so a crashing binary cannot spin the poll.
+   Settings-change restarts bypass that gap.
 15. **Resource watchdog**: the host self-terminates before driver state
    degrades. Every 20s it sums RSS over its process tree (WebKit children)
    and takes the max open-fd count; measured on NVIDIA 595.84 + WebKitGTK,

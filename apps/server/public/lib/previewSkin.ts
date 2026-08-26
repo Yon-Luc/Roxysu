@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { clamp } from "./format";
+import { clamp } from "./clamp";
 
 export type NoteShape = "flat" | "arrow" | "circle";
 

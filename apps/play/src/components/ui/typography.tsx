@@ -37,7 +37,7 @@ export function Text({
           textAlign: align,
           whiteSpace: truncate ? "nowrap" : undefined,
           textOverflow: truncate ? "ellipsis" : undefined,
-          lineHeight: typography.lineHeights.normal,
+          lineHeight: typography.fontSizes[size] * typography.lineHeights.normal,
         },
         style,
       )}
@@ -70,7 +70,7 @@ export const Heading = forwardRef<React.ElementRef<"text">, HeadingProps>(
             fontSize: typography.fontSizes[HEADING_SIZES[level]],
             fontWeight: typography.fontWeights[weight],
             color: color ?? colors.foreground,
-            lineHeight: typography.lineHeights.tight,
+            lineHeight: typography.fontSizes[HEADING_SIZES[level]] * typography.lineHeights.tight,
           },
           style,
         )}

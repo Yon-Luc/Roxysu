@@ -53,7 +53,7 @@ export const Textarea = forwardRef<React.ElementRef<"textarea">, TextareaProps>(
         maxHeight: maxRows * 22 + spacing.md,
         paddingTop: spacing.sm,
         paddingBottom: spacing.sm,
-        lineHeight: 1.5,
+        lineHeight: 21,
         whiteSpace: "normal",
         overflow: "auto",
       },

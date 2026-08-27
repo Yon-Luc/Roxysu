@@ -151,7 +151,7 @@ export function DialogTitle({ children, style }: { children?: React.ReactNode; s
 
 export function DialogDescription({ children, style }: { children?: React.ReactNode; style?: StyleDesc }) {
   return (
-    <text style={mergeStyles({ fontSize: 13, color: colors.mutedForeground, lineHeight: 1.4 }, style)}>
+    <text style={mergeStyles({ fontSize: 13, color: colors.mutedForeground, lineHeight: 18 }, style)}>
       {children}
     </text>
   );

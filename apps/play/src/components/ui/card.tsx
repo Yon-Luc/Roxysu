@@ -59,7 +59,7 @@ export const CardTitle = forwardRef<React.ElementRef<"text">, Omit<CardProps, "c
       <text
         ref={ref as React.Ref<any>}
         style={mergeStyles(
-          { fontSize: 18, fontWeight: 700, color: colors.foreground, lineHeight: 1.2 },
+          { fontSize: 18, fontWeight: 700, color: colors.foreground, lineHeight: 22 },
           style,
         )}
         testId={testId}
@@ -76,7 +76,7 @@ export const CardDescription = forwardRef<React.ElementRef<"text">, Omit<CardPro
       <text
         ref={ref as React.Ref<any>}
         style={mergeStyles(
-          { fontSize: 13, color: colors.mutedForeground, lineHeight: 1.4 },
+          { fontSize: 13, color: colors.mutedForeground, lineHeight: 18 },
           style,
         )}
         testId={testId}

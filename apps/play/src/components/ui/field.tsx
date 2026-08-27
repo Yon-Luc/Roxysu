@@ -31,13 +31,13 @@ export const Field = forwardRef<React.ElementRef<"div">, FieldProps>(
         ) : null}
 
         {description != null ? (
-          <text style={{ fontSize: 11, color: "#8b95a8", lineHeight: 1.4 }}>{description}</text>
+          <text style={{ fontSize: 11, color: "#8b95a8", lineHeight: 15 }}>{description}</text>
         ) : null}
 
         {children}
 
         {error != null ? (
-          <text style={{ fontSize: 11, color: "#ef4444", lineHeight: 1.4 }}>{error}</text>
+          <text style={{ fontSize: 11, color: "#ef4444", lineHeight: 15 }}>{error}</text>
         ) : null}
       </div>
     );

@@ -20,7 +20,7 @@ export const badgeVariants = variants({
     borderRadius: radius.sm,
     fontWeight: 600,
     fontSize: 11,
-    lineHeight: 1,
+    lineHeight: 15,
     paddingTop: spacing.xs,
     paddingBottom: spacing.xs,
     paddingLeft: spacing.sm,

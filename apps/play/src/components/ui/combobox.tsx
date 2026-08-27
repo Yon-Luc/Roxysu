@@ -20,15 +20,61 @@ import type {
   ComboboxTriggerProps,
 } from "@gpuix/react";
 import type { StyleDesc } from "@gpuix/react";
-import { colors, radius, spacing } from "./theme";
+import { colors, radius, shadows, spacing } from "./theme";
 import { mergeStyles } from "./lib/merge-styles";
 
 export const Combobox = GpuixCombobox;
-export const ComboboxContent = GpuixComboboxContent;
+export const ComboboxContent = forwardRef<
+  React.ElementRef<"div">,
+  React.ComponentPropsWithoutRef<typeof GpuixComboboxContent>
+>(function ComboboxContent({ style, ...rest }, ref) {
+  return (
+    <GpuixComboboxContent
+      {...rest}
+      ref={ref as React.Ref<any>}
+      style={mergeStyles(
+        {
+          display: "flex",
+          flexDirection: "column",
+          gap: spacing.sm,
+          minWidth: 220,
+          padding: spacing.sm,
+          backgroundColor: colors.popover,
+          color: colors.popoverForeground,
+          borderRadius: radius.md,
+          borderWidth: 1,
+          borderColor: colors.border,
+          boxShadow: shadows.md,
+        },
+        style,
+      )}
+    />
+  );
+});
 export const ComboboxEmpty = GpuixComboboxEmpty;
 export const ComboboxGroup = GpuixComboboxGroup;
 export const ComboboxLabel = GpuixComboboxLabel;
-export const ComboboxList = GpuixComboboxList;
+export const ComboboxList = forwardRef<
+  React.ElementRef<"div">,
+  React.ComponentPropsWithoutRef<typeof GpuixComboboxList>
+>(function ComboboxList({ style, ...rest }, ref) {
+  return (
+    <GpuixComboboxList
+      {...rest}
+      ref={ref as React.Ref<any>}
+      style={mergeStyles(
+        {
+          display: "flex",
+          flexDirection: "column",
+          gap: 4,
+          maxHeight: 240,
+          overflow: "scroll",
+        },
+        style,
+      )}
+    />
+  );
+});
 export const ComboboxSeparator = GpuixComboboxSeparator;
 export const ComboboxValue = GpuixComboboxValue;
 

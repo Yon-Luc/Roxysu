@@ -96,6 +96,9 @@ export function Playground() {
   const [notes, setNotes] = useState("");
   const [difficulty, setDifficulty] = useState("hard");
   const [fruit, setFruit] = useState<string | null>(null);
+  const [tipOpen, setTipOpen] = useState(false);
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   return (
     <TooltipProvider>
@@ -291,14 +294,18 @@ export function Playground() {
 
           <Section title="Overlays">
             <HStack gap="md" align="center">
-              <Tooltip>
+              <Tooltip open={tipOpen} onOpenChange={setTipOpen}>
                 <TooltipTrigger>
                   <Button variant="secondary">Hover for tooltip</Button>
                 </TooltipTrigger>
                 <TooltipContent>Tooltip anchored to trigger</TooltipContent>
               </Tooltip>
 
-              <Popover>
+              <Button variant="outline" onClick={() => setTipOpen((o) => !o)}>
+                Toggle tooltip
+              </Button>
+
+              <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
                 <PopoverTrigger>
                   <Button variant="secondary">Open popover</Button>
                 </PopoverTrigger>
@@ -312,8 +319,11 @@ export function Playground() {
                   </VStack>
                 </PopoverContent>
               </Popover>
+              <Button variant="outline" onClick={() => setPopoverOpen((o) => !o)}>
+                Toggle popover
+              </Button>
 
-              <Dialog>
+              <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
                 <DialogTrigger>
                   <Button variant="secondary">Open dialog</Button>
                 </DialogTrigger>
@@ -327,6 +337,9 @@ export function Playground() {
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
+              <Button variant="outline" onClick={() => setDialogOpen((o) => !o)}>
+                Toggle dialog
+              </Button>
             </HStack>
           </Section>
 

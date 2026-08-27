@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo } from "react";
+import React, { createContext, useContext, useMemo, useRef } from "react";
 import type { EventPayload, StyleDesc } from "@gpuix/react";
 import { mergeStyles } from "./lib/merge-styles";
 import { useControllableState, renderSlot } from "./lib/utils";
@@ -8,6 +8,8 @@ import type { UiBaseProps } from "./lib/types";
 interface PopoverContextValue {
   open: boolean;
   setOpen: (open: boolean) => void;
+  triggerPressed: React.MutableRefObject<boolean>;
+  dismissOutside: React.MutableRefObject<boolean>;
 }
 
 const PopoverContext = createContext<PopoverContextValue | null>(null);
@@ -36,9 +38,12 @@ export function Popover({ children, open, defaultOpen = false, onOpenChange }: P
     onChange: onOpenChange,
   });
 
+  const triggerPressed = useRef(false);
+  const dismissOutside = useRef(false);
+
   const context = useMemo<PopoverContextValue>(
-    () => ({ open: value, setOpen: (next) => setValue(next) }),
-    [value, setValue],
+    () => ({ open: value, setOpen: (next) => setValue(next), triggerPressed, dismissOutside }),
+    [value, setValue, triggerPressed, dismissOutside],
   );
 
   return (
@@ -53,17 +58,30 @@ export interface PopoverTriggerProps extends UiBaseProps {
   children?: React.ReactNode;
 }
 
-export function PopoverTrigger({ asChild, children, onClick, ...rest }: PopoverTriggerProps) {
-  const { open, setOpen } = usePopoverContext("PopoverTrigger");
+export function PopoverTrigger({ asChild, children, onClick, onMouseDown, ...rest }: PopoverTriggerProps) {
+  const { open, setOpen, triggerPressed, dismissOutside } = usePopoverContext("PopoverTrigger");
 
   return renderSlot({
     asChild,
     children,
     props: {
       ...rest,
+      onMouseDown: (event: EventPayload) => {
+        onMouseDown?.(event);
+        triggerPressed.current = open;
+      },
       onClick: (event: EventPayload) => {
         onClick?.(event);
-        setOpen(!open);
+        if (dismissOutside.current) {
+          dismissOutside.current = false;
+          return;
+        }
+        if (triggerPressed.current) {
+          triggerPressed.current = false;
+          setOpen(false);
+        } else {
+          setOpen(true);
+        }
       },
     },
   });
@@ -85,7 +103,7 @@ export function PopoverContent({
   onMouseDownOutside,
   onKeyDown,
 }: PopoverContentProps) {
-  const { open, setOpen } = usePopoverContext("PopoverContent");
+  const { open, setOpen, dismissOutside } = usePopoverContext("PopoverContent");
 
   if (!open) {
     return null;
@@ -96,9 +114,15 @@ export function PopoverContent({
       side={side}
       align={align}
       sideOffset={sideOffset}
+      tabIndex={0}
+      autoFocus
       style={mergeStyles({ minWidth: 200, padding: 12 }, style)}
       onMouseDownOutside={(event: EventPayload) => {
         onMouseDownOutside?.(event);
+        dismissOutside.current = true;
+        queueMicrotask(() => {
+          dismissOutside.current = false;
+        });
         setOpen(false);
       }}
       onKeyDown={(event: EventPayload) => {

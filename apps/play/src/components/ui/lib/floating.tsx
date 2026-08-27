@@ -1,4 +1,6 @@
+import React, { forwardRef } from "react";
 import type { EventPayload, StyleDesc } from "@gpuix/react";
+import { colors, radius, shadows } from "../theme";
 import { mergeStyles } from "./merge-styles";
 
 export type FloatingSide = "top" | "right" | "bottom" | "left";
@@ -11,6 +13,8 @@ export interface FloatingContentProps {
   align?: FloatingAlign;
   alignOffset?: number;
   collisionPadding?: number;
+  tabIndex?: number;
+  autoFocus?: boolean;
   style?: StyleDesc;
   onMouseDownOutside?: (event: EventPayload) => void;
   onKeyDown?: (event: EventPayload) => void;
@@ -24,39 +28,33 @@ export interface FloatingContentProps {
  * renderer, so there are no DOM portals, `getBoundingClientRect`, or CSS
  * dependencies.
  */
-export function FloatingLayer({
-  side = "bottom",
-  align = "start",
-  sideOffset = 0,
-  alignOffset = 0,
-  collisionPadding = 8,
-  children,
-  style,
-  onMouseDownOutside,
-  onKeyDown,
-}: FloatingContentProps) {
+/**
+ * Mirrors `@gpuix/react`'s internal FloatingLayer exactly (the one `Select` and
+ * `Combobox` use successfully). The `anchored` element is positioned by the
+ * native renderer; `props` are spread onto the inner surface so `style`,
+ * `onMouseDownOutside`, `onKeyDown` and `ref` all reach it.
+ */
+export const FloatingLayer = forwardRef<
+  React.ElementRef<"div">,
+  FloatingContentProps
+>(function FloatingLayer(
+  { side = "bottom", align = "start", sideOffset = 0, alignOffset = 0, collisionPadding = 8, children, style, onMouseDownOutside, onKeyDown, ...rest },
+  ref,
+) {
   const offset =
     side === "top" || side === "bottom"
       ? { x: alignOffset, y: 0 }
       : { x: 0, y: alignOffset };
 
-  const surfaceStyle = mergeStyles(
-    {
-      backgroundColor: "#151922",
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: "#252b36",
-      padding: 8,
-      boxShadow: {
-        offsetX: 0,
-        offsetY: 4,
-        blurRadius: 12,
-        spreadRadius: 0,
-        color: "rgba(0,0,0,0.45)",
-      },
-    } satisfies StyleDesc,
-    style,
-  );
+  const surfaceStyle: StyleDesc = {
+    backgroundColor: colors.popover,
+    color: colors.popoverForeground,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 8,
+    boxShadow: shadows.md,
+  };
 
   return (
     <anchored
@@ -71,7 +69,9 @@ export function FloatingLayer({
       occlude
     >
       <div
-        style={surfaceStyle}
+        {...rest}
+        ref={ref as React.Ref<any>}
+        style={mergeStyles(surfaceStyle, style)}
         onMouseDownOutside={onMouseDownOutside}
         onKeyDown={onKeyDown}
       >
@@ -79,7 +79,7 @@ export function FloatingLayer({
       </div>
     </anchored>
   );
-}
+});
 
 /** Wrapper style that makes a floating root establish a positioning context. */
 export function floatingRootStyle(style?: StyleDesc): StyleDesc {

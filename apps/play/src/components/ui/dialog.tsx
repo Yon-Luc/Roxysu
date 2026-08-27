@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo, useRef } from "react";
+import React, { createContext, useContext, useMemo, useRef, isValidElement } from "react";
 import type { EventPayload, StyleDesc } from "@gpuix/react";
 import { colors, radius, shadows } from "./theme";
 import { mergeStyles } from "./lib/merge-styles";
@@ -57,9 +57,10 @@ export interface DialogTriggerProps extends UiBaseProps {
 
 export function DialogTrigger({ asChild, children, onClick, onMouseDown, ...rest }: DialogTriggerProps) {
   const { open, setOpen, triggerPressed, dismissOutside } = useDialogContext("DialogTrigger");
+  const asChildResolved = asChild ?? (isValidElement(children) ? true : false);
 
   return renderSlot({
-    asChild,
+    asChild: asChildResolved,
     children,
     props: {
       ...rest,

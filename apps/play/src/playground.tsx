@@ -332,8 +332,8 @@ export function Playground() {
                     <DialogTitle>Confirm action</DialogTitle>
                   </DialogHeader>
                   <DialogFooter>
-                    <Button variant="outline">Cancel</Button>
-                    <Button>Confirm</Button>
+                    <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+                    <Button onClick={() => setDialogOpen(false)}>Confirm</Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo, useRef } from "react";
+import React, { createContext, useContext, useMemo, useRef, isValidElement } from "react";
 import type { EventPayload, StyleDesc } from "@gpuix/react";
 import { mergeStyles } from "./lib/merge-styles";
 import { useControllableState, renderSlot } from "./lib/utils";
@@ -60,9 +60,10 @@ export interface PopoverTriggerProps extends UiBaseProps {
 
 export function PopoverTrigger({ asChild, children, onClick, onMouseDown, ...rest }: PopoverTriggerProps) {
   const { open, setOpen, triggerPressed, dismissOutside } = usePopoverContext("PopoverTrigger");
+  const asChildResolved = asChild ?? (isValidElement(children) ? true : false);
 
   return renderSlot({
-    asChild,
+    asChild: asChildResolved,
     children,
     props: {
       ...rest,

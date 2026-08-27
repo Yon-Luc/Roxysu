@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useMemo, useRef, isValidElement } from "react";
-import { useWindowSize } from "@gpuix/react";
+import { useWindowSize, useGpuix } from "@gpuix/react";
 import type { EventPayload, StyleDesc } from "@gpuix/react";
 import { colors, radius, shadows } from "./theme";
 import { mergeStyles } from "./lib/merge-styles";
@@ -9,12 +9,20 @@ import type { UiBaseProps } from "./lib/types";
 
 export type SheetSide = "left" | "right" | "top" | "bottom";
 
+interface SheetRect {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
 interface SheetContextValue {
   open: boolean;
   setOpen: (open: boolean) => void;
   side: SheetSide;
   triggerPressed: React.MutableRefObject<boolean>;
   dismissOutside: React.MutableRefObject<boolean>;
+  triggerRect: React.MutableRefObject<SheetRect | null>;
 }
 
 const SheetContext = createContext<SheetContextValue | null>(null);
@@ -46,10 +54,11 @@ export function Sheet({ children, open, defaultOpen = false, onOpenChange, side 
 
   const triggerPressed = useRef(false);
   const dismissOutside = useRef(false);
+  const triggerRect = useRef<SheetRect | null>(null);
 
   const context = useMemo<SheetContextValue>(
-    () => ({ open: value, setOpen: (next) => setValue(next), side, triggerPressed, dismissOutside }),
-    [value, setValue, side, triggerPressed, dismissOutside],
+    () => ({ open: value, setOpen: (next) => setValue(next), side, triggerPressed, dismissOutside, triggerRect }),
+    [value, setValue, side, triggerPressed, dismissOutside, triggerRect],
   );
 
   return <SheetContext.Provider value={context}>{children}</SheetContext.Provider>;
@@ -61,8 +70,21 @@ export interface SheetTriggerProps extends UiBaseProps {
 }
 
 export function SheetTrigger({ asChild, children, onClick, onMouseDown, ...rest }: SheetTriggerProps) {
-  const { open, setOpen, triggerPressed, dismissOutside } = useSheetContext("SheetTrigger");
+  const { open, setOpen, triggerPressed, dismissOutside, triggerRect } = useSheetContext("SheetTrigger");
+  const { renderer } = useGpuix();
   const asChildResolved = asChild ?? (isValidElement(children) ? true : false);
+
+  const capture = (event: EventPayload) => {
+    const bounds = (renderer as { getElementBounds?: (id: number) => number[] | null } | null)?.getElementBounds?.(
+      event.elementId,
+    );
+    if (bounds && bounds.length >= 4) {
+      const [x, y, w, h] = bounds;
+      triggerRect.current = { left: x, top: y, right: x + w, bottom: y + h };
+    } else {
+      triggerRect.current = null;
+    }
+  };
 
   return renderSlot({
     asChild: asChildResolved,
@@ -83,6 +105,7 @@ export function SheetTrigger({ asChild, children, onClick, onMouseDown, ...rest 
           triggerPressed.current = false;
           setOpen(false);
         } else {
+          capture(event);
           setOpen(true);
         }
       },
@@ -96,7 +119,7 @@ export interface SheetContentProps extends UiBaseProps {
 }
 
 export function SheetContent({ side, style, children, testId }: SheetContentProps) {
-  const { open, setOpen, side: contextSide, dismissOutside } = useSheetContext("SheetContent");
+  const { open, setOpen, side: contextSide, dismissOutside, triggerRect } = useSheetContext("SheetContent");
   const windowSize = useWindowSize();
   const winW = windowSize?.width ?? 820;
   const winH = windowSize?.height ?? 860;
@@ -111,14 +134,31 @@ export function SheetContent({ side, style, children, testId }: SheetContentProp
     ? { width: 340, height: winH, flexDirection: "column" as const }
     : { width: winW, height: 340, flexDirection: "column" as const };
 
+  const rect = triggerRect.current;
+  let offset: { x: number; y: number } | undefined;
+  if (rect) {
+    const panelW = edge ? 340 : winW;
+    const panelH = edge ? winH : 340;
+    if (resolvedSide === "left") {
+      offset = { x: panelW - rect.left, y: -rect.top };
+    } else if (resolvedSide === "right") {
+      offset = { x: winW - panelW - rect.right, y: -rect.top };
+    } else if (resolvedSide === "top") {
+      offset = { x: -rect.left, y: panelH - rect.top };
+    } else {
+      offset = { x: -rect.left, y: winH - panelH - rect.bottom };
+    }
+  }
+
   return (
     <FloatingLayer
       side={resolvedSide}
       align="start"
       sideOffset={0}
+      offset={offset}
       tabIndex={0}
       autoFocus
-      style={mergeStyles({ padding: 0, backgroundColor: "transparent", borderWidth: 0, boxShadow: undefined }, style)}
+      style={mergeStyles({ padding: 0, backgroundColor: undefined, borderWidth: 0, boxShadow: undefined }, style)}
       onMouseDownOutside={(event: EventPayload) => {
         dismissOutside.current = true;
         queueMicrotask(() => {

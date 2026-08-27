@@ -109,66 +109,73 @@ export function DialogContent({
     return null;
   }
 
+  const surfaceStyle: StyleDesc = {
+    backgroundColor: undefined,
+    borderWidth: 0,
+    borderRadius: 0,
+    padding: 0,
+    boxShadow: undefined,
+  };
+
+  const outside = (event: EventPayload) => {
+    if (closeOnScrim) {
+      dismissOutside.current = true;
+      queueMicrotask(() => {
+        dismissOutside.current = false;
+      });
+      setOpen(false);
+    }
+  };
+  const onKey = (event: EventPayload) => {
+    if (event.key === "escape") {
+      setOpen(false);
+    }
+  };
+
+  if (fullscreen) {
+    return (
+      <FloatingLayer
+        side="bottom"
+        align="center"
+        sideOffset={0}
+        tabIndex={0}
+        autoFocus
+        style={mergeStyles(surfaceStyle, style)}
+        onMouseDownOutside={outside}
+        onKeyDown={onKey}
+      >
+        {children}
+      </FloatingLayer>
+    );
+  }
+
   return (
     <FloatingLayer
       side="bottom"
       align="center"
-      sideOffset={fullscreen ? 0 : 12}
+      sideOffset={12}
       tabIndex={0}
       autoFocus
-      style={mergeStyles(
-        {
-          backgroundColor: "transparent",
-          borderWidth: 0,
-          borderRadius: 0,
-          padding: 0,
-          boxShadow: undefined,
-        },
-        style,
-      )}
-      onMouseDownOutside={(event: EventPayload) => {
-        if (closeOnScrim) {
-          dismissOutside.current = true;
-          queueMicrotask(() => {
-            dismissOutside.current = false;
-          });
-          setOpen(false);
-        }
-      }}
-      onKeyDown={(event: EventPayload) => {
-        if (event.key === "escape") {
-          setOpen(false);
-        }
-      }}
+      style={mergeStyles(surfaceStyle, style)}
+      onMouseDownOutside={outside}
+      onKeyDown={onKey}
     >
       <div
         style={mergeStyles(
-          fullscreen
-            ? {
-                display: "flex",
-                flexDirection: "column",
-                width: winW - 32,
-                height: winH - 32,
-                backgroundColor: "transparent",
-                borderRadius: 0,
-                borderWidth: 0,
-                boxShadow: undefined,
-                overflow: "hidden",
-              }
-            : {
-                display: "flex",
-                flexDirection: "column",
-                backgroundColor: colors.card,
-                color: colors.cardForeground,
-                borderRadius: radius.lg,
-                borderWidth: 1,
-                borderColor: colors.border,
-                boxShadow: shadows.lg,
-                minWidth: 320,
-                maxWidth: 520,
-                maxHeight: "90%",
-                overflow: "hidden",
-              },
+          {
+            display: "flex",
+            flexDirection: "column",
+            backgroundColor: colors.card,
+            color: colors.cardForeground,
+            borderRadius: radius.lg,
+            borderWidth: 1,
+            borderColor: colors.border,
+            boxShadow: shadows.lg,
+            minWidth: 320,
+            maxWidth: 520,
+            maxHeight: "90%",
+            overflow: "hidden",
+          },
           style,
         )}
         testId={testId}

@@ -136,12 +136,12 @@ export function ToastViewport({ toasts, onDismiss }: ToastViewportProps) {
                 </text>
               ) : null}
               <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                <text
+                <div
                   onClick={() => onDismiss(item.id)}
                   style={{ fontSize: 12, color: colors.primary, cursor: "pointer", userSelect: "none" }}
                 >
                   Dismiss
-                </text>
+                </div>
               </div>
             </div>
           );

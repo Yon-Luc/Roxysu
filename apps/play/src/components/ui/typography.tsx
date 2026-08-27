@@ -1,12 +1,13 @@
 import React, { forwardRef } from "react";
-import type { StyleDesc } from "@gpuix/react";
+import type { EventPayload, StyleDesc } from "@gpuix/react";
 import { colors, typography } from "./theme";
 import { mergeStyles } from "./lib/merge-styles";
+import type { UiEventProps } from "./lib/types";
 
 export type TextSize = keyof typeof typography.fontSizes;
 export type TextWeight = keyof typeof typography.fontWeights;
 
-export interface TextProps {
+export interface TextProps extends UiEventProps {
   size?: TextSize;
   weight?: TextWeight;
   color?: string;
@@ -25,10 +26,20 @@ export function Text({
   truncate,
   align,
   style,
+  onClick,
+  onMouseDown,
+  onMouseUp,
+  onMouseEnter,
+  onMouseLeave,
   children,
 }: TextProps) {
   return (
     <text
+      onClick={onClick}
+      onMouseDown={onMouseDown}
+      onMouseUp={onMouseUp}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       style={mergeStyles(
         {
           fontSize: typography.fontSizes[size],

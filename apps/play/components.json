@@ -1,0 +1,8 @@
+{
+  "components": "./src/components/ui",
+  "theme": "./src/components/ui/theme",
+  "aliases": {
+    "ui": "@/components/ui",
+    "theme": "@/components/ui/theme"
+  }
+}

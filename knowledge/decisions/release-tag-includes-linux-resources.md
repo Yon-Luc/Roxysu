@@ -25,7 +25,8 @@ The prebuilt client app version comes from the tarball (`package.json` / `resour
 - `publish.sh` force-moves the tag to HEAD after the linux-resources lock commit (and `--flake-only` does the same).
 - Pin `linux-resources` to a **versioned** GitHub asset URL (`releases/download/vX.Y.Z/…`), never `releases/latest`. Nix caches tarballs by URL (`tarball-ttl`); `nix flake update linux-resources` against `latest` can keep or even downgrade to the previous payload.
 - Consumers of `github:Yon-Luc/Roxysu` should `nix flake update --refresh` then rebuild — not update `linux-resources` in isolation.
-- Desktop CI must not rebuild on a tag force-move (`github.event.created` only). Replacing the tarball at the same versioned URL would invalidate `flake.lock`.
+- Linux-resources CI must not rebuild on a tag force-move (`github.event.created` only). Replacing the tarball at the same versioned URL would invalidate `flake.lock`.
+- Windows CI **must** rebuild on tag force-move (no `github.event.created` guard). `publish.sh` retargets the tag after the linux tarball upload; cancelling the first build and skipping the retarget left releases without a Windows installer.
 
 ## Relevant implementation
 

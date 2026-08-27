@@ -1097,7 +1097,7 @@ function ManiaPlayfield({
 }
 // ─── App ────────────────────────────────────────────────────────────────────
 
-function App() {
+function BenchmarkApp() {
   const [preset, setPreset] = useState<PresetName>("Dense");
 
   const [targetFps, setTargetFps] = useState(240);
@@ -1113,7 +1113,9 @@ function App() {
   return (
     <div
       style={{
-        height: "100%",
+        flexGrow: 1,
+        flexBasis: 0,
+        minHeight: 0,
         backgroundColor: BG,
         display: "flex",
         flexDirection: "column",
@@ -1155,13 +1157,83 @@ function App() {
 // to a React-updated FPS counter when measuring renderer performance.
 //
 
-render(<App />, {
+// ─── Root (mode switch) ──────────────────────────────────────────────────────
+
+import { Playground } from "./playground";
+
+function Root() {
+  const [mode, setMode] = useState<"benchmark" | "playground">("benchmark");
+
+  return (
+    <div style={{ height: "100%", backgroundColor: BG, display: "flex", flexDirection: "column" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: 8,
+          paddingLeft: 16,
+          backgroundColor: PANEL,
+          borderColor: BORDER,
+          borderBottomWidth: 1,
+        }}
+      >
+        <text style={{ color: ACCENT, fontSize: 11, fontWeight: 700, marginRight: 8 }}>
+          ROXYSU / PLAY
+        </text>
+
+        <div
+          onClick={() => setMode("benchmark")}
+          style={{
+            padding: 7,
+            borderRadius: 6,
+            backgroundColor: mode === "benchmark" ? ACCENT : PANEL_HOVER,
+            cursor: "pointer",
+          }}
+        >
+          <text style={{ color: mode === "benchmark" ? BG : TEXT, fontSize: 10, fontWeight: 600 }}>
+            BENCHMARK
+          </text>
+        </div>
+
+        <div
+          onClick={() => setMode("playground")}
+          style={{
+            padding: 7,
+            borderRadius: 6,
+            backgroundColor: mode === "playground" ? ACCENT : PANEL_HOVER,
+            cursor: "pointer",
+          }}
+        >
+          <text style={{ color: mode === "playground" ? BG : TEXT, fontSize: 10, fontWeight: 600 }}>
+            DESIGN SYSTEM
+          </text>
+        </div>
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          flexGrow: 1,
+          flexBasis: 0,
+          minHeight: 0,
+          overflow: "hidden",
+        }}
+      >
+        {mode === "benchmark" ? <BenchmarkApp /> : <Playground />}
+      </div>
+    </div>
+  );
+}
+
+render(<Root />, {
   title: "Roxysu VSRG Benchmark",
 
   appName: "Roxysu VSRG Benchmark",
 
-  width: 760,
-  height: 820,
+  width: 820,
+  height: 860,
 
   titlebarTransparent: true,
 

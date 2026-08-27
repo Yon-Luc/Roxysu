@@ -22,7 +22,9 @@ concurrency:
 jobs:
   build:
     name: Build Windows installer
-    if: github.event_name == 'workflow_dispatch' || github.event.created
+    # Unlike desktop-linux-resources, run on tag force-moves too. publish.sh
+    # retargets vX.Y.Z onto the flake.lock commit after the linux tarball upload;
+    # skipping non-created tag pushes left no Windows installer on the release.
     runs-on: windows-latest
     timeout-minutes: 90
 

@@ -32,4 +32,15 @@ export * from "./combobox";
 
 export * from "./tabs";
 
+export * from "./alert";
+export * from "./progress";
+export * from "./accordion";
+export * from "./scroll-area";
+export * from "./table";
+export * from "./sidebar";
+export * from "./dropdown-menu";
+export * from "./context-menu";
+export * from "./command";
+export * from "./toast";
+
 export * from "./skeleton";

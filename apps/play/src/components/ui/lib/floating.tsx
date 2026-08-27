@@ -13,6 +13,9 @@ export interface FloatingContentProps {
   align?: FloatingAlign;
   alignOffset?: number;
   collisionPadding?: number;
+  occlude?: boolean;
+  /** Explicit translate from the snapped anchor (e.g. cursor position). Overrides the side-derived offset. */
+  offset?: { x: number; y: number };
   tabIndex?: number;
   autoFocus?: boolean;
   style?: StyleDesc;
@@ -38,13 +41,12 @@ export const FloatingLayer = forwardRef<
   React.ElementRef<"div">,
   FloatingContentProps
 >(function FloatingLayer(
-  { side = "bottom", align = "start", sideOffset = 0, alignOffset = 0, collisionPadding = 8, children, style, onMouseDownOutside, onKeyDown, ...rest },
+  { side = "bottom", align = "start", sideOffset = 0, alignOffset = 0, collisionPadding = 8, occlude = true, offset, children, style, onMouseDownOutside, onKeyDown, ...rest },
   ref,
 ) {
-  const offset =
-    side === "top" || side === "bottom"
-      ? { x: alignOffset, y: 0 }
-      : { x: 0, y: alignOffset };
+  const resolvedOffset =
+    offset ??
+    (side === "top" || side === "bottom" ? { x: alignOffset, y: 0 } : { x: 0, y: alignOffset });
 
   const surfaceStyle: StyleDesc = {
     backgroundColor: colors.popover,
@@ -61,12 +63,12 @@ export const FloatingLayer = forwardRef<
       side={side}
       align={align}
       gap={sideOffset}
-      offset={offset}
       fit="snap"
       snapMargin={collisionPadding}
       deferred
       priority={1}
-      occlude
+      occlude={occlude}
+      offset={resolvedOffset}
     >
       <div
         {...rest}

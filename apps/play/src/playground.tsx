@@ -57,6 +57,48 @@ import {
   TooltipTrigger,
   VStack,
 } from "./components/ui";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+  Alert,
+  colors,
+  Command,
+  CommandDialog,
+  CommandEmpty,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  Progress,
+  ScrollArea,
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarHeader,
+  SidebarItem,
+  SidebarLabel,
+  SidebarSeparator,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  ToastProvider,
+  useToast,
+} from "./components/ui";
 
 const BUTTON_VARIANTS: ButtonVariant[] = [
   "default",
@@ -70,6 +112,34 @@ const BUTTON_VARIANTS: ButtonVariant[] = [
 const BUTTON_SIZES: ButtonSize[] = ["sm", "md", "lg", "icon"];
 
 const BADGE_VARIANTS = ["default", "secondary", "destructive", "success", "outline"] as const;
+
+const COMMANDS = ["Profile", "Settings", "Log out", "New project", "Open recent"];
+
+function ToastDemo() {
+  const { toast } = useToast();
+
+  return (
+    <HStack gap="sm" align="center">
+      <Button size="sm" onClick={() => toast({ title: "Default toast", description: "Hello from GPUIX UI" })}>
+        Default
+      </Button>
+      <Button
+        size="sm"
+        variant="secondary"
+        onClick={() => toast({ title: "Saved", description: "Changes applied", variant: "success" })}
+      >
+        Success
+      </Button>
+      <Button
+        size="sm"
+        variant="destructive"
+        onClick={() => toast({ title: "Error", description: "Something failed", variant: "destructive" })}
+      >
+        Destructive
+      </Button>
+    </HStack>
+  );
+}
 
 function Section({
   title,
@@ -99,10 +169,15 @@ export function Playground() {
   const [tipOpen, setTipOpen] = useState(false);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [progress, setProgress] = useState(40);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
+  const [lastAction, setLastAction] = useState("");
 
   return (
-    <TooltipProvider>
-      <div
+    <ToastProvider>
+      <TooltipProvider>
+        <div
         style={{
           flexGrow: 1,
           flexBasis: 0,
@@ -119,7 +194,7 @@ export function Playground() {
           <VStack gap="sm" align="center">
             <Heading level={1}>GPUIX UI — Test Page</Heading>
             <Text muted>Exercise every component in the design system</Text>
-            <Badge variant="success">v0.1</Badge>
+            <Badge variant="success">v0.2</Badge>
           </VStack>
 
           <Section title="Buttons">
@@ -367,8 +442,243 @@ export function Playground() {
               <Spacer />
             </VStack>
           </Section>
+        <Section title="Alert">
+          <VStack gap="sm">
+            <Alert variant="default" title="Heads up">
+              This is an informational alert.
+            </Alert>
+            <Alert variant="success" title="Saved">
+              Your changes were saved.
+            </Alert>
+            <Alert variant="destructive" title="Something went wrong">
+              The operation failed.
+            </Alert>
+            <Alert variant="warning" title="Careful">
+              This action cannot be undone.
+            </Alert>
+          </VStack>
+        </Section>
+
+        <Section title="Progress">
+          <VStack gap="sm">
+            <Progress value={progress} />
+            <HStack gap="sm" align="center">
+              <Button size="sm" variant="outline" onClick={() => setProgress((p) => Math.max(0, p - 10))}>
+                -
+              </Button>
+              <Text size="sm" muted>
+                {progress}%
+              </Text>
+              <Button size="sm" variant="outline" onClick={() => setProgress((p) => Math.min(100, p + 10))}>
+                +
+              </Button>
+            </HStack>
+            <Progress value={33} indicatorColor="#6ee7b7" />
+            <Progress value={66} indicatorColor="#fbbf24" />
+          </VStack>
+        </Section>
+
+        <Section title="Accordion">
+          <Accordion type="single" collapsible defaultValue="a">
+            <AccordionItem value="a">
+              <AccordionTrigger>
+                <Button variant="ghost" style={{ width: "100%", justifyContent: "flex-start" }}>
+                  What is GPUIX UI?
+                </Button>
+              </AccordionTrigger>
+              <AccordionContent>
+                A shadcn-style component system built natively on GPUIX.
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="b">
+              <AccordionTrigger>
+                <Button variant="ghost" style={{ width: "100%", justifyContent: "flex-start" }}>
+                  Is it headless?
+                </Button>
+              </AccordionTrigger>
+              <AccordionContent>
+                Behavior comes from GPUIX primitives; styling is composed per component.
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="c">
+              <AccordionTrigger>
+                <Button variant="ghost" style={{ width: "100%", justifyContent: "flex-start" }}>
+                  Can I customize?
+                </Button>
+              </AccordionTrigger>
+              <AccordionContent>
+                Yes — every component is source-first and owned by your app.
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </Section>
+
+        <Section title="ScrollArea">
+          <ScrollArea style={{ height: 160, flexGrow: 0, flexBasis: 160 }}>
+            <VStack gap="xs" style={{ padding: 12 }}>
+              {Array.from({ length: 20 }).map((_, i) => (
+                <Text key={i} size="sm">
+                  Scrollable row {i + 1}
+                </Text>
+              ))}
+            </VStack>
+          </ScrollArea>
+        </Section>
+
+        <Section title="Table">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Difficulty</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {[
+                ["Blue Zenith", "Insane", "Live"],
+                ["Genryuu", "Expert", "Stored"],
+                ["Fracture", "Hard", "Local"],
+              ].map(([name, diff, status]) => (
+                <TableRow key={name}>
+                  <TableCell>{name}</TableCell>
+                  <TableCell>{diff}</TableCell>
+                  <TableCell>{status}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Section>
+
+        <Section title="Sidebar">
+          <HStack gap="md" align="start" style={{ width: "100%", height: 280 }}>
+            <Sidebar collapsed={sidebarCollapsed}>
+              <SidebarHeader>
+                <Text weight="bold">Roxysu</Text>
+              </SidebarHeader>
+              <SidebarContent>
+                <SidebarItem active icon={<Text>▦</Text>}>
+                  <SidebarLabel>Dashboard</SidebarLabel>
+                </SidebarItem>
+                <SidebarItem icon={<Text>▤</Text>}>
+                  <SidebarLabel>Library</SidebarLabel>
+                </SidebarItem>
+                <SidebarItem icon={<Text>◎</Text>}>
+                  <SidebarLabel>Analyzer</SidebarLabel>
+                </SidebarItem>
+                <SidebarSeparator />
+                <SidebarItem icon={<Text>⚙</Text>}>
+                  <SidebarLabel>Settings</SidebarLabel>
+                </SidebarItem>
+              </SidebarContent>
+              <SidebarFooter>
+                <SidebarItem onClick={() => setSidebarCollapsed((c) => !c)} icon={<Text>{sidebarCollapsed ? "»" : "«"}</Text>}>
+                  <SidebarLabel>{sidebarCollapsed ? "Expand" : "Collapse"}</SidebarLabel>
+                </SidebarItem>
+              </SidebarFooter>
+            </Sidebar>
+            <VStack gap="md" style={{ flexGrow: 1 }}>
+              <Text muted>Content area beside the sidebar. Toggle collapse in the footer.</Text>
+              <Text size="sm" muted>
+                Collapsed: {sidebarCollapsed ? "yes" : "no"}
+              </Text>
+            </VStack>
+          </HStack>
+        </Section>
+
+        <Section title="DropdownMenu">
+          <VStack gap="sm" align="start">
+            <DropdownMenu>
+              <DropdownMenuTrigger>
+                <Button variant="secondary">Open menu</Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                <DropdownMenuItem onSelect={() => setLastAction("edit")}>
+                  <Text>Edit</Text>
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setLastAction("duplicate")}>
+                  <Text>Duplicate</Text>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => setLastAction("delete")}>
+                  <Text>Destructive</Text>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Text size="sm" muted>
+              Last action: {lastAction || "(none)"}
+            </Text>
+          </VStack>
+        </Section>
+
+        <Section title="ContextMenu">
+          <VStack gap="sm" align="start">
+            <ContextMenu>
+              <ContextMenuTrigger>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    height: 120,
+                    width: "100%",
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    borderRadius: 8,
+                    color: colors.mutedForeground,
+                  }}
+                >
+                  <Text>Right-click (or click) here</Text>
+                </div>
+              </ContextMenuTrigger>
+              <ContextMenuContent>
+                <ContextMenuItem onSelect={() => setLastAction("copy")}>
+                  <Text>Copy</Text>
+                </ContextMenuItem>
+                <ContextMenuItem onSelect={() => setLastAction("paste")}>
+                  <Text>Paste</Text>
+                </ContextMenuItem>
+                <ContextMenuSeparator />
+                <ContextMenuItem onSelect={() => setLastAction("rename")}>
+                  <Text>Rename</Text>
+                </ContextMenuItem>
+              </ContextMenuContent>
+            </ContextMenu>
+            <Text size="sm" muted>
+              Last action: {lastAction || "(none)"}
+            </Text>
+          </VStack>
+        </Section>
+
+        <Section title="Command">
+          <VStack gap="sm" align="start">
+            <Button variant="secondary" onClick={() => setCommandOpen(true)}>
+              Open command palette
+            </Button>
+            <CommandDialog open={commandOpen} onOpenChange={setCommandOpen}>
+              <Command items={COMMANDS} onValueChange={() => setCommandOpen(false)}>
+                <CommandInput placeholder="Type a command..." />
+                <CommandList>
+                  {(item) => (
+                    <CommandItem key={item} value={item}>
+                      {item}
+                    </CommandItem>
+                  )}
+                </CommandList>
+                <CommandEmpty>No results found.</CommandEmpty>
+              </Command>
+            </CommandDialog>
+          </VStack>
+        </Section>
+
+        <Section title="Toast">
+          <ToastDemo />
+        </Section>
+
         </VStack>
       </div>
-    </TooltipProvider>
+      </TooltipProvider>
+    </ToastProvider>
   );
 }

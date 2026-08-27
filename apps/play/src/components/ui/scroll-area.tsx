@@ -16,8 +16,7 @@ export interface ScrollAreaProps extends UiBaseProps {
  */
 export const ScrollArea = forwardRef<React.ElementRef<"div">, ScrollAreaProps>(
   function ScrollArea({ orientation = "vertical", style, children, ...rest }, ref) {
-    const overflow =
-      orientation === "vertical" ? "scroll" : orientation === "horizontal" ? "scroll" : "scroll";
+    const overflow = orientation === "horizontal" ? "scroll" : "scroll";
 
     return (
       <div
@@ -25,8 +24,7 @@ export const ScrollArea = forwardRef<React.ElementRef<"div">, ScrollAreaProps>(
         ref={ref as React.Ref<any>}
         style={mergeStyles(
           {
-            display: "flex",
-            flexDirection: orientation === "horizontal" ? "row" : "column",
+            display: "block",
             minHeight: 0,
             minWidth: 0,
             flexGrow: 1,
@@ -34,6 +32,7 @@ export const ScrollArea = forwardRef<React.ElementRef<"div">, ScrollAreaProps>(
             overflow,
             overflowX: orientation === "horizontal" ? "scroll" : "hidden",
             overflowY: orientation === "vertical" ? "scroll" : "hidden",
+            pointerEvents: "auto",
             borderRadius: radius.md,
             borderWidth: 1,
             borderColor: colors.border,

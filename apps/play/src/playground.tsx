@@ -7,6 +7,7 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
   Checkbox,
@@ -90,6 +91,13 @@ import {
   SidebarItem,
   SidebarLabel,
   SidebarSeparator,
+  Sheet,
+  SheetContent,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetTrigger,
   Table,
   TableBody,
   TableCell,
@@ -173,6 +181,9 @@ export function Playground() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const [lastAction, setLastAction] = useState("");
+  const [fullscreenOpen, setFullscreenOpen] = useState(false);
+  const [sheetLeftOpen, setSheetLeftOpen] = useState(false);
+  const [sheetRightOpen, setSheetRightOpen] = useState(false);
 
   return (
     <ToastProvider>
@@ -418,7 +429,80 @@ export function Playground() {
             </HStack>
           </Section>
 
-          <Section title="Layout & feedback">
+          <Section title="Modal & Sheet">
+          <VStack gap="md" align="start">
+            <HStack gap="md" align="center">
+              <Dialog open={fullscreenOpen} onOpenChange={setFullscreenOpen}>
+                <DialogTrigger>
+                  <Button variant="secondary">Fullscreen modal</Button>
+                </DialogTrigger>
+                <DialogContent size="fullscreen">
+                  <div
+                    style={{
+                      display: "flex",
+                      flexGrow: 1,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Card style={{ width: 420 }}>
+                      <CardHeader>
+                        <CardTitle>Fullscreen modal</CardTitle>
+                        <CardDescription>
+                          Transparent, window-sized surface (GPUIX has no backdrop blur).
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <Text muted>Click outside or press Escape to close.</Text>
+                      </CardContent>
+                      <CardFooter>
+                        <Button variant="outline" onClick={() => setFullscreenOpen(false)}>
+                          Close
+                        </Button>
+                      </CardFooter>
+                    </Card>
+                  </div>
+                </DialogContent>
+              </Dialog>
+
+              <Sheet side="left" open={sheetLeftOpen} onOpenChange={setSheetLeftOpen}>
+                <SheetTrigger>
+                  <Button variant="outline">Left sheet</Button>
+                </SheetTrigger>
+                <SheetContent side="left">
+                  <SheetHeader>
+                    <SheetTitle>Left sheet</SheetTitle>
+                    <SheetDescription>Slide-over anchored to the trigger edge.</SheetDescription>
+                  </SheetHeader>
+                  <SheetFooter>
+                    <Button variant="outline" onClick={() => setSheetLeftOpen(false)}>
+                      Close
+                    </Button>
+                  </SheetFooter>
+                </SheetContent>
+              </Sheet>
+
+              <Sheet side="right" open={sheetRightOpen} onOpenChange={setSheetRightOpen}>
+                <SheetTrigger>
+                  <Button variant="outline">Right sheet</Button>
+                </SheetTrigger>
+                <SheetContent side="right">
+                  <SheetHeader>
+                    <SheetTitle>Right sheet</SheetTitle>
+                    <SheetDescription>Another edge variant.</SheetDescription>
+                  </SheetHeader>
+                  <SheetFooter>
+                    <Button variant="outline" onClick={() => setSheetRightOpen(false)}>
+                      Close
+                    </Button>
+                  </SheetFooter>
+                </SheetContent>
+              </Sheet>
+            </HStack>
+          </VStack>
+        </Section>
+
+        <Section title="Layout & feedback">
             <VStack gap="md">
               <Grid columns={3} gap="md">
                 {[1, 2, 3, 4, 5, 6].map((n) => (

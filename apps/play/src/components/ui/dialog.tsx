@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useMemo, useRef, isValidElement } from "react";
+import { useWindowSize } from "@gpuix/react";
 import type { EventPayload, StyleDesc } from "@gpuix/react";
 import { colors, radius, shadows } from "./theme";
 import { mergeStyles } from "./lib/merge-styles";
@@ -87,16 +88,22 @@ export function DialogTrigger({ asChild, children, onClick, onMouseDown, ...rest
 
 export interface DialogContentProps extends UiBaseProps {
   closeOnScrim?: boolean;
+  size?: "default" | "fullscreen";
   children?: React.ReactNode;
 }
 
 export function DialogContent({
   closeOnScrim = true,
+  size = "default",
   style,
   children,
   testId,
 }: DialogContentProps) {
   const { open, setOpen, dismissOutside } = useDialogContext("DialogContent");
+  const windowSize = useWindowSize();
+  const winW = windowSize?.width ?? 820;
+  const winH = windowSize?.height ?? 860;
+  const fullscreen = size === "fullscreen";
 
   if (!open) {
     return null;
@@ -106,7 +113,7 @@ export function DialogContent({
     <FloatingLayer
       side="bottom"
       align="center"
-      sideOffset={12}
+      sideOffset={fullscreen ? 0 : 12}
       tabIndex={0}
       autoFocus
       style={mergeStyles(
@@ -136,20 +143,32 @@ export function DialogContent({
     >
       <div
         style={mergeStyles(
-          {
-            display: "flex",
-            flexDirection: "column",
-            backgroundColor: colors.card,
-            color: colors.cardForeground,
-            borderRadius: radius.lg,
-            borderWidth: 1,
-            borderColor: colors.border,
-            boxShadow: shadows.lg,
-            minWidth: 320,
-            maxWidth: 520,
-            maxHeight: "90%",
-            overflow: "hidden",
-          },
+          fullscreen
+            ? {
+                display: "flex",
+                flexDirection: "column",
+                width: winW - 32,
+                height: winH - 32,
+                backgroundColor: "transparent",
+                borderRadius: 0,
+                borderWidth: 0,
+                boxShadow: undefined,
+                overflow: "hidden",
+              }
+            : {
+                display: "flex",
+                flexDirection: "column",
+                backgroundColor: colors.card,
+                color: colors.cardForeground,
+                borderRadius: radius.lg,
+                borderWidth: 1,
+                borderColor: colors.border,
+                boxShadow: shadows.lg,
+                minWidth: 320,
+                maxWidth: 520,
+                maxHeight: "90%",
+                overflow: "hidden",
+              },
           style,
         )}
         testId={testId}

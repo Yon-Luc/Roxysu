@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mania Preview (Tosu) — Roxysu</title>
+    <meta
+      name="description"
+      content="Roxysu Preview is a standalone Tosu counter that draws a live osu!mania notefield. Install it like any other counter, then import a .osk skin from the Tosu dashboard."
+    />
+    <meta name="theme-color" content="#0c0c0c" />
+    <link rel="icon" href="assets/icon-192.png" type="image/png" />
+    <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
+    <link rel="canonical" href="https://yon-luc.github.io/Roxysu/tosu.html" />
+    <meta property="og:site_name" content="Roxysu" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://yon-luc.github.io/Roxysu/tosu.html" />
+    <meta property="og:title" content="Mania Preview (Tosu) — Roxysu" />
+    <meta
+      property="og:description"
+      content="A standalone Tosu counter for a live osu!mania notefield — install into Tosu’s static folder and import a .osk skin from the dashboard."
+    />
+    <meta property="og:image" content="https://yon-luc.github.io/Roxysu/assets/og.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="Roxysu Preview — mania notefield overlay for Tosu"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Mania Preview (Tosu) — Roxysu" />
+    <meta
+      name="twitter:description"
+      content="A standalone Tosu counter for a live osu!mania notefield. Put it in Tosu’s static folder like any other counter."
+    />
+    <meta name="twitter:image" content="https://yon-luc.github.io/Roxysu/assets/og.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Outfit:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <div class="bg-glow" aria-hidden="true"></div>
+
+    <header class="site-header">
+      <nav class="nav" aria-label="Primary">
+        <a class="brand" href="index.html">
+          <img src="assets/roxy.png" alt="" width="32" height="32" />
+          Roxysu
+        </a>
+        <ul class="nav-links">
+          <li><a href="index.html#features">Features</a></li>
+          <li><a href="index.html#query">Query language</a></li>
+          <li>
+            <a href="https://github.com/Yon-Luc/Roxysu" rel="noopener noreferrer"
+              >GitHub</a
+            >
+          </li>
+        </ul>
+        <a class="nav-preview" href="tosu.html" aria-current="page">Mania Preview (Tosu)</a>
+        <a class="nav-cta nav-cta-start" href="index.html#start">Get started</a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="hero page-hero">
+        <p class="eyebrow">Tosu counter</p>
+        <h1>Mania Preview</h1>
+        <p class="hero-lead">
+          Roxysu Preview is a standalone mania notefield overlay for
+          <a href="https://tosu.app/" rel="noopener noreferrer">Tosu</a>.
+          It follows the map you’re playing in osu! — no Roxysu app install required.
+        </p>
+        <div class="hero-actions">
+          <a
+            class="btn btn-primary"
+            href="https://github.com/Yon-Luc/Roxysu/releases/tag/v0.1.14"
+            rel="noopener noreferrer"
+            >Download RoxysuPreview</a
+          >
+          <a class="btn btn-ghost" href="#install">How to install</a>
+        </div>
+        <div class="hero-shot">
+          <figure class="shot-frame">
+            <img
+              src="screenshots/tosu-preview.png"
+              alt="Roxysu Preview in the Tosu dashboard, showing a 7K mania notefield"
+              width="1600"
+              height="900"
+              fetchpriority="high"
+            />
+          </figure>
+        </div>
+      </section>
+
+      <section class="section" id="about" aria-labelledby="about-title">
+        <div class="section-head center reveal">
+          <p class="eyebrow">What it is</p>
+          <h2 id="about-title">A live mania preview, served by Tosu</h2>
+          <p>
+            The counter talks only to Tosu: it reads the live map and paints a
+            mania playfield — receptors, notes, lane cover, and your imported
+            skin. Use it in the Tosu dashboard or as an OBS browser source at
+            <code>/RoxysuPreview/</code>.
+          </p>
+        </div>
+        <div class="pillars">
+          <article class="pillar reveal">
+            <h3>Osu!mania only</h3>
+            <p>Only the osu!mania game mode is supported. Other game modes are not currently supported.</p>
+          </article>
+          <article class="pillar reveal">
+            <h3>Live clock</h3>
+            <p>Scrolls with in-game time, including Invert, Hold Off, and Mirror.</p>
+          </article>
+          <article class="pillar reveal">
+            <h3>OBS-ready</h3>
+            <p>Transparent background, playfield scale, and hide-while-playing for browser sources.</p>
+          </article>
+          <article class="pillar reveal">
+            <h3>Your skin</h3>
+            <p>Drop a <code>.osk</code> next to the counter and name it in the Tosu dashboard settings.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="install" aria-labelledby="install-title">
+        <div class="section-head reveal">
+          <p class="eyebrow">Install</p>
+          <h2 id="install-title">Same as any other Tosu counter</h2>
+          <p>
+            Tosu loads counters from its <code>static</code> folder. Roxysu Preview
+            is just another folder you drop in there.
+          </p>
+        </div>
+
+        <article class="start-path reveal" aria-labelledby="install-steps">
+          <p class="start-path-label">Setup</p>
+          <h3 id="install-steps">Put RoxysuPreview in Tosu’s static folder</h3>
+          <ol class="steps">
+            <li>
+              Download
+              <code>RoxysuPreview.zip</code> from the
+              <a
+                href="https://github.com/Yon-Luc/Roxysu/releases/tag/v0.1.14"
+                rel="noopener noreferrer"
+                >v0.1.14 release</a
+              >.
+            </li>
+            <li>Unzip it. You should have a folder named <code>RoxysuPreview</code>.</li>
+            <li>
+              Copy that folder into Tosu’s <code>static</code> directory — the same
+              place every other Tosu counter lives.
+            </li>
+            <li>
+              Open the Tosu dashboard. <strong>Roxysu Preview</strong> appears as a
+              counter you can enable, with its own Settings button.
+            </li>
+          </ol>
+          <p class="start-note">
+            After install, the overlay URL is <code>/RoxysuPreview/</code> (512×720).
+            Point an OBS browser source at it if you want it on stream.
+          </p>
+        </article>
+      </section>
+
+      <section class="section" id="settings" aria-labelledby="settings-title">
+        <article class="feature reverse reveal">
+          <div class="feature-copy">
+            <p class="eyebrow">Settings</p>
+            <h2 id="settings-title">Tune the notefield from the Tosu dashboard</h2>
+            <p>
+              Open RoxysuPreview → Settings. Values save in Tosu and apply live.
+              You can also use the gear on the preview itself as a fallback.
+            </p>
+          </div>
+          <div class="feature-media">
+            <figure class="shot-frame shot-panel">
+              <img
+                src="screenshots/roxysu-preview-settings-general.png"
+                alt="RoxysuPreview general settings in the Tosu dashboard: scroll speed, hit position, lane cover, playfield size, and overlay toggles"
+                loading="lazy"
+                width="900"
+                height="1100"
+              />
+            </figure>
+          </div>
+        </article>
+
+        <div class="setting-grid">
+          <article class="setting-card reveal">
+            <h3>Scroll speed</h3>
+            <p>osu!mania scroll speed, from 1 to 40.</p>
+          </article>
+          <article class="setting-card reveal">
+            <h3>Hit position (%)</h3>
+            <p>Receptor line as a percent of playfield height (55–95).</p>
+          </article>
+          <article class="setting-card reveal">
+            <h3>Lane cover (%)</h3>
+            <p>Black cover from the top of the playfield (0–70).</p>
+          </article>
+          <article class="setting-card reveal">
+            <h3>Playfield size (%)</h3>
+            <p>Notefield size relative to the overlay (20–100).</p>
+          </article>
+          <article class="setting-card reveal">
+            <h3>Transparent background</h3>
+            <p>Clear the page background so OBS can key the overlay.</p>
+          </article>
+          <article class="setting-card reveal">
+            <h3>Roxysu watermark</h3>
+            <p>Draw the Roxysu logo and wordmark on the notefield.</p>
+          </article>
+          <article class="setting-card reveal">
+            <h3>Song-select preview</h3>
+            <p>Keep the playfield visible in song select when no map is loaded.</p>
+          </article>
+          <article class="setting-card reveal">
+            <h3>Hide while playing</h3>
+            <p>
+              Fully hide the overlay during gameplay. Enable transparent
+              background on the OBS browser source too.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="skin" aria-labelledby="skin-title">
+        <article class="feature reveal">
+          <div class="feature-copy">
+            <p class="eyebrow">Skin</p>
+            <h2 id="skin-title">Import a .osk into the overlay</h2>
+            <p>
+              Tosu’s dashboard has no file picker, so the skin file has to sit
+              next to the counter. Then you type the filename in settings.
+            </p>
+            <ol class="steps">
+              <li>
+                Place the <code>.osk</code> inside Tosu’s
+                <code>static/RoxysuPreview/</code> folder — the same folder you
+                copied in during install.
+              </li>
+              <li>
+                In the Tosu Dashboard, open <strong>RoxysuPreview</strong> →
+                Settings → Skin.
+              </li>
+              <li>
+                Put the filename in <strong>Import .osk</strong> — for example
+                <code>myskin.osk</code> or <code>./myskin.osk</code>.
+              </li>
+              <li>Click <strong>Update settings</strong>.</li>
+            </ol>
+            <p class="start-note">
+              To remove a skin, turn on <strong>Reset imported skin</strong>, save,
+              then turn it off again. You can also drop an <code>.osk</code> onto
+              the preview itself when you’re not in OBS.
+            </p>
+          </div>
+          <div class="feature-media">
+            <figure class="shot-frame shot-panel">
+              <img
+                src="screenshots/roxysu-preview-settings-skin.png"
+                alt="RoxysuPreview Skin settings: Import .osk path field set to ./7kk.osk and Reset imported skin checkbox"
+                loading="lazy"
+                width="900"
+                height="700"
+              />
+            </figure>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="footer-inner">
+        <p>Roxysu — local-first osu!lazer practice companion.</p>
+        <div class="footer-links">
+          <a href="index.html">Home</a>
+          <a href="https://github.com/Yon-Luc/Roxysu" rel="noopener noreferrer"
+            >GitHub</a
+          >
+          <a
+            href="https://github.com/Yon-Luc/Roxysu/releases/tag/v0.1.14"
+            rel="noopener noreferrer"
+            >v0.1.14 release</a
+          >
+        </div>
+      </div>
+    </footer>
+
+    <dialog class="lightbox" id="lightbox" aria-label="Screenshot fullscreen">
+      <button type="button" class="lightbox-close" id="lightbox-close" aria-label="Close">
+        ×
+      </button>
+      <div class="lightbox-inner">
+        <img id="lightbox-img" src="" alt="" />
+      </div>
+      <p class="lightbox-hint">Esc or click outside to close</p>
+    </dialog>
+
+    <script src="script.js"></script>
+  </body>
+</html>

@@ -24,3 +24,4 @@ One subdirectory per product surface. Terms: [vocabulary.md](../vocabulary.md).
 | Preview, rewatch & playfield skins | [preview-replay/](preview-replay/index.md) |
 | Replay video export | [replay-video-export/](replay-video-export/index.md) |
 | Standalone tosu counter (mania notefield) | [tosu-counter/](tosu-counter/index.md) |
+| Roxysu Play (GPUIX native UI playground) | [roxysu-play/](roxysu-play/index.md) |

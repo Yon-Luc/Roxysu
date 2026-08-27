@@ -24,6 +24,7 @@ Record the intentional dual-runtime stack and UI/API choices.
 | Local mirror | Drizzle schema in `packages/db`; `client.bun` vs `client.node` |
 | Hub | Separate Elysia app (`apps/hub`, port 4322) |
 | Desktop | Electron (`apps/desktop`) |
+| Roxysu Play | Bun + `@gpuix/react` → GPUI (`apps/play`); NixOS needs flake `gpuixRuntimeDeps` on `LD_LIBRARY_PATH` |
 | Dev env | Nix flake / direnv for native modules on NixOS |
 
 ## Why two runtimes

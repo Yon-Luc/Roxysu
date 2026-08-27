@@ -391,6 +391,21 @@ no client app required.
 
 ---
 
+### Roxysu Play
+
+Experimental native desktop shell for Roxysu UI experiments, built with
+**GPUIX** (React reconciler → Zed's GPUI). Renders via Metal / DirectX /
+Vulkan — no Electron and no web view. Lives in `apps/play`; not part of the
+client app process model yet.
+
+**Not:** `apps/desktop` (Electron shell), client app React UI in `apps/server/public`
+
+**In code:** `apps/play/`, `@gpuix/react`
+
+**See:** [features/roxysu-play/](features/roxysu-play/index.md)
+
+---
+
 ### Now selected
 
 Client-app page that displays the in-game selected beatmap from **tosu live**, with optional embedded beatmap preview and mania pattern detail (pattern weights, density over time). Supports a Focus layout for a second monitor.

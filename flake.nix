@@ -30,6 +30,31 @@
       icu # realm-js uses ICU for string/collation handling
     ];
 
+    # Runtime libs for @gpuix/native (GPUI / Zed stack) used by apps/play.
+    # The .node only DT_NEEDs libxkbcommon; Wayland/Vulkan/X11 are dlopened.
+    # Without these on LD_LIBRARY_PATH, init panics with NoWaylandLib on NixOS.
+    gpuixRuntimeDeps = with pkgs; [
+      wayland
+      libxkbcommon
+      vulkan-loader
+      libGL
+      libglvnd
+      libx11
+      libxcursor
+      libxrandr
+      libxi
+      libxext
+      libxcb
+      fontconfig
+      freetype
+      alsa-lib
+      zlib
+      openssl
+      libffi
+    ];
+
+    runtimeLibraryPath = pkgs.lib.makeLibraryPath (nativeDeps ++ gpuixRuntimeDeps);
+
     # Prefer a newer Electron major when available. The wrapped
     # `${electron}/bin/electron` must be used on NixOS — the raw
     # `libexec/electron/electron` binary often SIGILL's without the wrapper.
@@ -97,7 +122,7 @@
     nixosModules.default = import ./nix/module.nix {inherit self;};
     nixosModules.roxysu = self.nixosModules.default;
 
-    # nix develop — toolchain for hacking (Bun server + Electron smoke).
+    # nix develop — toolchain for hacking (Bun server + Electron smoke + GPUIX play).
     # nix build / nix run / nix profile install — packaged desktop app (prebuilt).
     # Refresh a github:Yon-Luc/Roxysu input: nix flake update --refresh
     # From GitHub (once pushed): nix run github:Yon-Luc/Roxysu
@@ -105,6 +130,7 @@
     #   or on NixOS: programs.roxysu.enable (see nixosModules above).
     devShells.${system}.default = pkgs.mkShell {
       # GTK/webkit/layer-shell: builds apps/overlay (roxysu-overlay host).
+      # gpuixRuntimeDeps: dlopen targets for apps/play (@gpuix/native).
       buildInputs =
         [
           pkgs.bun
@@ -118,7 +144,8 @@
           pkgs.wayland-scanner
           pkgs.wlr-protocols
         ]
-        ++ nativeDeps;
+        ++ nativeDeps
+        ++ gpuixRuntimeDeps;
 
       # Fallback build toolchain for node-gyp, in case a package's
       # prebuilt binary doesn't match the installed Node/Bun ABI.
@@ -130,7 +157,11 @@
       ];
 
       NIX_LD = "${pkgs.stdenv.cc.libc}/lib/ld-linux-x86-64.so.2";
-      NIX_LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath nativeDeps;
+      NIX_LD_LIBRARY_PATH = runtimeLibraryPath;
+      # Bun/napi dlopen does not consult NIX_LD alone — export LD_LIBRARY_PATH too.
+      LD_LIBRARY_PATH = runtimeLibraryPath;
+      # libxkbcommon defaults to /usr/share/X11/xkb (missing on NixOS).
+      XKB_CONFIG_ROOT = "/etc/X11/xkb";
 
       # Skip npm's Electron binary download. Prefer the nixpkgs *wrapper*
       # via PATH / ELECTRON_PATH — do not point tools at libexec directly.
@@ -142,6 +173,7 @@
         echo "Packaged app (prebuilt ${resourcesVersion}): nix build .#roxysu && nix run .#roxysu"
         echo "Refresh a github:Yon-Luc/Roxysu input: nix flake update --refresh"
         echo "From-source fallback: nix build .#roxysu-from-source"
+        echo "Roxysu Play (GPUIX): bun run play"
       '';
     };
   };

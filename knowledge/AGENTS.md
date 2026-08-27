@@ -22,4 +22,5 @@
 | Shared schema | `packages/db/` |
 | Hub | `apps/hub/` |
 | Desktop shell | `apps/desktop/` |
+| Roxysu Play (GPUIX) | `apps/play/` |
 | Canonical architecture notes | `docs/architecture.md` |

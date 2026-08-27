@@ -29,6 +29,7 @@ Offline-first practice analytics for osu!lazer. Source of truth for **how** is t
 | `packages/osu-chart`, `mania-judge`, `mania-pattern-analysis`, `pattern-7k`, `timing-analysis` | Chart/analysis libraries |
 | `packages/i18n`, `hub-client` | i18n + typed hub client |
 | `apps/tosu-counter` | Standalone mania notefield **Tosu counter** (no client app needed) |
+| `apps/play` | **Roxysu Play** — experimental GPUIX native UI (no Electron) |
 
 ## Bootstrap note
 

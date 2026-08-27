@@ -51,6 +51,7 @@
       zlib
       openssl
       libffi
+      python3
     ];
 
     runtimeLibraryPath = pkgs.lib.makeLibraryPath (nativeDeps ++ gpuixRuntimeDeps);
@@ -73,16 +74,15 @@
       then linux-resources + "/roxysu"
       else linux-resources;
 
-    resourcesVersion =
-      let
-        manifestPath = resourcesRoot + "/resources/manifest.json";
-        pkgPath = resourcesRoot + "/package.json";
-      in
-        if builtins.pathExists manifestPath
-        then (builtins.fromJSON (builtins.readFile manifestPath)).version
-        else if builtins.pathExists pkgPath
-        then (builtins.fromJSON (builtins.readFile pkgPath)).version
-        else "0.0.0";
+    resourcesVersion = let
+      manifestPath = resourcesRoot + "/resources/manifest.json";
+      pkgPath = resourcesRoot + "/package.json";
+    in
+      if builtins.pathExists manifestPath
+      then (builtins.fromJSON (builtins.readFile manifestPath)).version
+      else if builtins.pathExists pkgPath
+      then (builtins.fromJSON (builtins.readFile pkgPath)).version
+      else "0.0.0";
 
     roxysuFromSource = pkgs.callPackage ./nix/package.nix {
       inherit electron bunDepsHash overlayBin;

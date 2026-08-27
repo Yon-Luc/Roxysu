@@ -1,0 +1,4 @@
+1- Port map loading ( read sqlite db ?)
+2- Skin loading 
+3- Remake of advanced playfield with options baked in directly
+4- 

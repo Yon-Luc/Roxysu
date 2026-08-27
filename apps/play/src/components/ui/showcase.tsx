@@ -27,6 +27,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  selectItemStyle,
   SelectTrigger,
   SelectValue,
   Separator,
@@ -99,9 +100,9 @@ export function Showcase() {
                     <SelectValue placeholder="Select difficulty" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="easy">Easy</SelectItem>
-                    <SelectItem value="hard">Hard</SelectItem>
-                    <SelectItem value="expert">Expert</SelectItem>
+                    <SelectItem value="easy" style={selectItemStyle}>Easy</SelectItem>
+                    <SelectItem value="hard" style={selectItemStyle}>Hard</SelectItem>
+                    <SelectItem value="expert" style={selectItemStyle}>Expert</SelectItem>
                   </SelectContent>
                 </Select>
               </Field>

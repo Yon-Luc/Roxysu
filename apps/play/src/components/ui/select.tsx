@@ -11,7 +11,6 @@ import {
 } from "@gpuix/react";
 import type {
   SelectContentProps,
-  SelectItemProps,
   SelectItemState,
   SelectProps,
   SelectTriggerProps,
@@ -84,34 +83,25 @@ export const SelectContent = forwardRef<React.ElementRef<"div">, SelectContentPr
   },
 );
 
-export const SelectItem = forwardRef<React.ElementRef<"div">, SelectItemProps>(
-  function SelectItem({ style, ...rest }, ref) {
-    return (
-      <GpuixSelectItem
-        {...rest}
-        ref={ref as React.Ref<any>}
-        style={(state: SelectItemState) =>
-          mergeStyles(
-            {
-              display: "flex",
-              alignItems: "center",
-              height: 34,
-              paddingLeft: spacing.sm,
-              paddingRight: spacing.sm,
-              borderRadius: radius.sm,
-              color: colors.foreground,
-              fontSize: 13,
-              cursor: "pointer",
-              userSelect: "none",
-              backgroundColor: state.highlighted ? colors.secondary : "transparent",
-              opacity: state.disabled ? 0.5 : 1,
-            },
-            typeof style === "function" ? style(state) : style,
-          )
-        }
-      />
-    );
-  },
-);
+// NOTE: `SelectItem` MUST remain the native reference. The headless `Select`
+// collects its options by identity-checking `child.type === SelectItem`, so a
+// styled wrapper component would not be recognized and selection would be a
+// no-op. Apply styling via the `style` prop using `selectItemStyle` below.
+export const SelectItem = GpuixSelectItem;
+
+export const selectItemStyle = (state: SelectItemState): StyleDesc => ({
+  display: "flex",
+  alignItems: "center",
+  height: 34,
+  paddingLeft: spacing.sm,
+  paddingRight: spacing.sm,
+  borderRadius: radius.sm,
+  color: colors.foreground,
+  fontSize: 13,
+  cursor: "pointer",
+  userSelect: "none",
+  backgroundColor: state.highlighted ? colors.secondary : "transparent",
+  opacity: state.disabled ? 0.5 : 1,
+});
 
 export type { SelectProps };

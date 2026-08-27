@@ -36,6 +36,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  selectItemStyle,
   SelectTrigger,
   SelectValue,
   Separator,
@@ -233,10 +234,10 @@ export function Playground() {
                     <SelectValue placeholder="Select difficulty" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="easy">Easy</SelectItem>
-                    <SelectItem value="hard">Hard</SelectItem>
-                    <SelectItem value="expert">Expert</SelectItem>
-                    <SelectItem value="insane">Insane</SelectItem>
+                    <SelectItem value="easy" style={selectItemStyle}>Easy</SelectItem>
+                    <SelectItem value="hard" style={selectItemStyle}>Hard</SelectItem>
+                    <SelectItem value="expert" style={selectItemStyle}>Expert</SelectItem>
+                    <SelectItem value="insane" style={selectItemStyle}>Insane</SelectItem>
                   </SelectContent>
                 </Select>
               </Field>
@@ -257,7 +258,7 @@ export function Playground() {
                   <ComboboxContent>
                     <ComboboxInput placeholder="Search..." />
                     <ComboboxList>
-                      {(item) => <ComboboxItem key={item} value={item} />}
+                      {(item) => <ComboboxItem key={item} value={item}>{item}</ComboboxItem>}
                     </ComboboxList>
                   </ComboboxContent>
                 </Combobox>

@@ -7,18 +7,6 @@ import {
 } from "../components/ui";
 import type { Game } from "../game/Game";
 
-const LANE_COLORS = [
-  "#7dd3fc",
-  "#93c5fd",
-  "#6ee7b7",
-  "#67e8f9",
-  "#a78bfa",
-  "#f9a8d4",
-  "#fcd34d",
-];
-
-const RECEPTOR_HEIGHT = 22;
-
 type PlayViewProps = {
   game: Game;
   frameVersion: number;
@@ -40,6 +28,7 @@ export function PlayView({
 }: PlayViewProps) {
   void frameVersion;
   const snapshot = game.playfield.getSnapshot();
+  const skin = game.getPlayfieldSkin();
 
   const laneBackgrounds = useMemo(
     () =>
@@ -52,11 +41,20 @@ export function PlayView({
             top: 0,
             width: snapshot.laneWidth,
             height: snapshot.receptorY,
-            backgroundColor: lane % 2 === 0 ? "#0b0e13" : "#0e1117",
+            backgroundColor:
+              lane % 2 === 0
+                ? skin.laneBackgroundEven
+                : skin.laneBackgroundOdd,
           }}
         />
       )),
-    [snapshot.lanes, snapshot.laneWidth, snapshot.receptorY],
+    [
+      snapshot.lanes,
+      snapshot.laneWidth,
+      snapshot.receptorY,
+      skin.laneBackgroundEven,
+      skin.laneBackgroundOdd,
+    ],
   );
 
   const laneSeparators = useMemo(
@@ -87,13 +85,13 @@ export function PlayView({
             left: lane * snapshot.laneWidth + 7,
             top: snapshot.receptorY + 10,
             width: snapshot.laneWidth - 14,
-            height: RECEPTOR_HEIGHT,
+            height: skin.receptorHeight,
             borderRadius: 5,
-            backgroundColor: "#252d3a",
+            backgroundColor: skin.receptorFill,
           }}
         />
       )),
-    [snapshot.lanes, snapshot.laneWidth, snapshot.receptorY],
+    [snapshot.lanes, snapshot.laneWidth, snapshot.receptorY, skin],
   );
 
   const notes = [];
@@ -108,12 +106,12 @@ export function PlayView({
         key={`note-${i}-${Math.round(y)}`}
         style={{
           position: "absolute",
-          left: lane * snapshot.laneWidth + 4,
+          left: lane * snapshot.laneWidth + skin.notePadding,
           top: y,
-          width: snapshot.laneWidth - 8,
+          width: snapshot.laneWidth - skin.notePadding * 2,
           height,
-          borderRadius: 4,
-          backgroundColor: LANE_COLORS[lane % LANE_COLORS.length],
+          borderRadius: skin.noteBorderRadius,
+          backgroundColor: skin.laneColors[lane % skin.laneColors.length],
           opacity: alpha,
         }}
       />,
@@ -169,7 +167,7 @@ export function PlayView({
           height: snapshot.playfieldHeight,
           borderRadius: 12,
           overflow: "hidden",
-          backgroundColor: "#080a0e",
+          backgroundColor: skin.playfieldBackground,
           borderWidth: 1,
           borderColor: colors.border,
         }}
@@ -184,7 +182,7 @@ export function PlayView({
             top: snapshot.receptorY,
             width: snapshot.width,
             height: snapshot.playfieldHeight - snapshot.receptorY,
-            backgroundColor: "#11151d",
+            backgroundColor: skin.belowReceptorBackground,
           }}
         />
 
@@ -195,21 +193,21 @@ export function PlayView({
             top: snapshot.receptorY,
             width: snapshot.width,
             height: 3,
-            backgroundColor: colors.primary,
+            backgroundColor: skin.judgmentLineColor,
           }}
         />
 
         {receptors}
         {notes}
 
-        {game.judgmentEffects.getPopups().map((popup) => (
+        {game.judgmentEffects.getPopups(skin).map((popup) => (
           <text
             key={popup.id}
             style={{
               position: "absolute",
               left: popup.lane * snapshot.laneWidth + 8,
               top: snapshot.receptorY - 28,
-              color: colors.primary,
+              color: popup.color,
               fontSize: 11,
               fontWeight: 700,
             }}

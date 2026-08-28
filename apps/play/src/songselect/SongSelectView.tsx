@@ -21,6 +21,11 @@ import {
 import type { CollectionSummary } from "../database/types";
 import type { Game } from "../game/Game";
 import type { SongSelectEntry } from "../songselect/SongSelect";
+import {
+  DEFAULT_SONG_SORT,
+  SONG_SORT_OPTIONS,
+  type SongSort,
+} from "../songselect/SongSort";
 import { BeatmapInsightsPanel } from "../songselect/BeatmapInsightsPanel";
 
 function formatEntry(entry: SongSelectEntry): string {
@@ -62,8 +67,9 @@ export function SongSelectView({
     null,
   );
   const selectedCollection = findCollection(collections, collectionKeyValue);
+  const [sort, setSort] = useState<SongSort>(DEFAULT_SONG_SORT);
   const [page, setPage] = useState(() =>
-    game.searchSongSelect({ collection: selectedCollection }),
+    game.searchSongSelect({ collection: selectedCollection, sort }),
   );
   const [insights, setInsights] = useState(() =>
     selectedBeatmapId ? game.getBeatmapInsights(selectedBeatmapId) : null,
@@ -80,11 +86,12 @@ export function SongSelectView({
         game.searchSongSelect({
           query,
           collection: selectedCollection,
+          sort,
         }),
       );
     }, 200);
     return () => clearTimeout(handle);
-  }, [game, query, selectedCollection]);
+  }, [game, query, selectedCollection, sort]);
 
   useEffect(() => {
     if (!selectedBeatmapId) {
@@ -111,6 +118,45 @@ export function SongSelectView({
               value={query}
               onValueChange={setQuery}
             />
+
+            <Stack gap="xs">
+              <Text size="sm" weight="semibold">
+                Sort
+              </Text>
+              <HStack gap="sm">
+                <Select
+                  value={sort.by}
+                  onValueChange={(value) =>
+                    setSort((current) => ({
+                      ...current,
+                      by: value as SongSort["by"],
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Sort by" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SONG_SORT_OPTIONS.map((option) => (
+                      <SelectItem key={option.by} value={option.by}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    setSort((current) => ({
+                      ...current,
+                      dir: current.dir === "asc" ? "desc" : "asc",
+                    }))
+                  }
+                >
+                  {sort.dir === "asc" ? "Ascending" : "Descending"}
+                </Button>
+              </HStack>
+            </Stack>
 
             <Stack gap="xs">
               <Text size="sm" weight="semibold">
@@ -188,6 +234,7 @@ export function SongSelectView({
                     game.searchSongSelect({
                       query,
                       collection: selectedCollection,
+                      sort,
                       offset: Math.max(0, page.offset - page.limit),
                     }),
                   )
@@ -207,6 +254,7 @@ export function SongSelectView({
                     game.searchSongSelect({
                       query,
                       collection: selectedCollection,
+                      sort,
                       offset: page.offset + page.limit,
                     }),
                   )

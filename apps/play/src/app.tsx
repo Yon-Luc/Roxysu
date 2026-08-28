@@ -167,7 +167,7 @@ function App() {
               Roxysu Play
             </Text>
             <Text size="sm" muted>
-              M4 — settings, preview, countdown, set difficulties
+              M6 — song sort, default skin, persisted settings
             </Text>
           </Stack>
 

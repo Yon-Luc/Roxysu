@@ -59,6 +59,7 @@ bun --hot apps/play/src/app.tsx
 ## Implementation
 
 - Entry: `apps/play/src/app.tsx` — must end with `render()` (idempotent under `--hot`).
+- M6: song select sort (last played, stars, title, artist, BPM, length); default playfield skin (colors/judgments decoupled from PlayView).
 - M4: settings (persisted), keybinds, audio lead-in, last beatmap restore, preview, countdown.
 - M4 audio: native playback via miniaudio_node (OGG/MP3/FLAC from lazer files/), timeline fallback when unavailable.
 - M5: Roxysu catalog integration — mastery, pattern analysis, mania ratings, collections, score history.
@@ -89,6 +90,8 @@ bun --hot apps/play/src/app.tsx
 - `apps/play/src/songselect/BeatmapInsightsPanel.tsx` — Roxysu insights card
 - `apps/play/src/results/ResultsView.tsx` — post-play results screen
 - `apps/play/src/effects/JudgmentEffects.ts` — hit/miss popups from game events
+- `apps/play/src/songselect/SongSort.ts` — song select sort options
+- `apps/play/src/skin/defaultSkin.ts` — default playfield skin data
 - `apps/play/src/database/RoxysuDatabase.ts` — shared SQLite open + availability detection
 - `apps/play/src/assets/LazerAssetResolver.ts` — hash → lazer `files/` path resolution
 - `apps/play/src/test.tsx` — legacy VSRG benchmark (preserved)

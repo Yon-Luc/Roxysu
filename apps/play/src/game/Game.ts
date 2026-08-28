@@ -34,6 +34,8 @@ import {
 } from "../settings/PlaySettings";
 import type { KeyBindings } from "../input/KeyBindings";
 import { PlayfieldRenderer } from "../playfield/PlayfieldRenderer";
+import { DEFAULT_PLAYFIELD_SKIN } from "../skin/defaultSkin";
+import type { PlayfieldSkin } from "../skin/PlayfieldSkin";
 import { buildPlayResult } from "../results/buildPlayResult";
 import type { PlayResult } from "../results/PlayResult";
 import type { RoxysuCatalog } from "../roxysu/RoxysuCatalog";
@@ -82,6 +84,8 @@ export class Game {
     height: PLAYFIELD_HEIGHT,
     scrollSpeed: 400,
   });
+
+  private playfieldSkin: PlayfieldSkin = DEFAULT_PLAYFIELD_SKIN;
 
   readonly settings = new SettingsStore();
 
@@ -134,6 +138,10 @@ export class Game {
 
   getKeyBindingsHint(): string {
     return formatKeyBindingsHint(this.settings.get().laneKeys);
+  }
+
+  getPlayfieldSkin(): PlayfieldSkin {
+    return this.playfieldSkin;
   }
 
   getSettings(): PlaySettings {

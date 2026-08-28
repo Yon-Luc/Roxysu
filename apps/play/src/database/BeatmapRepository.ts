@@ -11,6 +11,29 @@ import {
   type Db,
 } from "../integrations/roxysu-db";
 import type { BeatmapSearchFilters, BeatmapSummary } from "./types";
+import type { SongSortBy, SongSortDir } from "../songselect/SongSort";
+
+function orderByClause(sortBy: SongSortBy = "lastPlayed", sortDir: SongSortDir = "desc") {
+  const direction = sortDir === "asc" ? asc : desc;
+
+  switch (sortBy) {
+    case "title":
+      return [direction(beatmaps.title), direction(beatmaps.starRating)];
+    case "artist":
+      return [direction(beatmaps.artist), direction(beatmaps.title)];
+    case "stars":
+      return [direction(beatmaps.starRating), direction(beatmaps.title)];
+    case "bpm":
+      return [direction(beatmaps.bpm), direction(beatmaps.starRating)];
+    case "length":
+      return [direction(beatmaps.length), direction(beatmaps.starRating)];
+    case "lastPlayed":
+    default:
+      return sortDir === "asc"
+        ? [asc(beatmaps.lastPlayed), asc(beatmaps.starRating)]
+        : [desc(beatmaps.lastPlayed), desc(beatmaps.starRating)];
+  }
+}
 
 function toSummary(row: typeof beatmaps.$inferSelect): BeatmapSummary {
   return {
@@ -97,7 +120,7 @@ export class BeatmapRepository {
     const query = this.db
       .select()
       .from(beatmaps)
-      .orderBy(desc(beatmaps.lastPlayed), desc(beatmaps.starRating))
+      .orderBy(...orderByClause(filters.sortBy, filters.sortDir))
       .limit(limit)
       .offset(offset);
 

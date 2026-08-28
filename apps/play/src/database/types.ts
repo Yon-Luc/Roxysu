@@ -1,3 +1,5 @@
+import type { SongSortBy, SongSortDir } from "../songselect/SongSort";
+
 export type BeatmapSummary = {
   id: string;
   setId: string;
@@ -20,6 +22,8 @@ export type BeatmapSearchFilters = {
   keys?: number;
   query?: string;
   beatmapIds?: string[];
+  sortBy?: SongSortBy;
+  sortDir?: SongSortDir;
   limit?: number;
   offset?: number;
 };

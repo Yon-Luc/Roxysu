@@ -3,6 +3,10 @@ import type { BeatmapRepository } from "../database/BeatmapRepository";
 import type { CollectionSummary } from "../database/types";
 import type { RoxysuCatalog } from "../roxysu/RoxysuCatalog";
 import type { BeatmapSearchFilters, BeatmapSummary } from "../database/types";
+import {
+  DEFAULT_SONG_SORT,
+  type SongSort,
+} from "./SongSort";
 
 export type SongSelectEntry = BeatmapSummary & {
   beatmapAvailable: boolean;
@@ -13,6 +17,7 @@ export type SongSelectQuery = {
   offset?: number;
   limit?: number;
   collection?: CollectionSummary | null;
+  sort?: SongSort;
 };
 
 export type SongSelectPage = {
@@ -42,11 +47,14 @@ export class SongSelect {
       collection == null || this.catalog.canFilterCollection(collection);
     const beatmapIds = this.resolveBeatmapIds(collection);
 
+    const sort = query.sort ?? DEFAULT_SONG_SORT;
     const baseFilters: BeatmapSearchFilters = {
       ruleset: "mania",
       keys: this.keys,
       query: query.query,
       beatmapIds: beatmapIds ?? undefined,
+      sortBy: sort.by,
+      sortDir: sort.dir,
     };
 
     const entries = this.beatmaps

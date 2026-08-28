@@ -37,7 +37,7 @@ import {
 } from "../settings/PlaySettings";
 import type { KeyBindings } from "../input/KeyBindings";
 import { PlayfieldRenderer } from "../playfield/PlayfieldRenderer";
-import { clearNotesLayerSpriteCache } from "../playfield/HoldBodiesLayer";
+import { clearNotesLayerSpriteCache } from "../playfield/HoldNotesLayer";
 import {
   clearSpriteRgbaCache,
   collectSkinSpritePaths,

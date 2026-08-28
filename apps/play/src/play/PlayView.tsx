@@ -6,12 +6,13 @@ import {
   colors,
 } from "../components/ui";
 import type { Game } from "../game/Game";
-import type { PlayfieldColumnSnapshot } from "../playfield/PlayfieldTypes";
 import {
-  HoldBodiesLayer,
-  type HoldBodiesLayerContent,
-} from "../playfield/HoldBodiesLayer";
+  HoldNotesLayer,
+  type HoldNotesLayerContent,
+} from "../playfield/HoldNotesLayer";
 import type { HoldBodyDraw } from "../playfield/holdBodyTiled";
+import type { SpriteDraw } from "../playfield/playfieldRaster";
+import { loadSpriteRgbaSync } from "../playfield/spriteRgbaCache";
 import { toSkinAssetUrl } from "../skin/skinFileLookup";
 import { buildPlayfieldSkinLayout, spriteDestHeight } from "../skin/skinLayout";
 import { OSU_MANIA_HEIGHT } from "../integrations/osu-skin-ini";
@@ -19,6 +20,7 @@ import {
   HIT_POSITION_DEFAULT,
   type PlaySettings,
 } from "../settings/PlaySettings";
+import type { PlayfieldColumnSnapshot } from "../playfield/PlayfieldTypes";
 
 type PlayViewProps = {
   game: Game;
@@ -42,16 +44,14 @@ type SpriteStyle = {
 function SkinSprite({
   src,
   style,
-  objectFit = "fill",
 }: {
   src: string;
   style: SpriteStyle;
-  objectFit?: "fill" | "contain" | "cover" | "scaleDown" | "none";
 }) {
   return (
     <img
       src={toSkinAssetUrl(src)}
-      objectFit={objectFit}
+      objectFit="fill"
       style={{
         position: "absolute",
         left: style.left,
@@ -100,10 +100,9 @@ function holdNoteLayout(args: {
   const bodyHeight = Math.max(0, bottomCenter - bodyTop);
 
   return {
-    topCenter,
-    bottomCenter,
     bodyTop,
     bodyHeight,
+    bottomCenter,
     headTop: startCenterY - tapH / 2,
     tailTop: topCenter - tailH * 0.15,
     tailH,
@@ -156,41 +155,7 @@ export function PlayView({
 
   const columns =
     snapshot.columns.length > 0 ? snapshot.columns : layout.columns;
-  const receptorY = snapshot.receptorY;
-
-  const stageSprites = useMemo(() => {
-    if (!sprites) return null;
-    const items = [];
-    if (sprites.stageLeft && layout.stageLeft) {
-      items.push(
-        <SkinSprite
-          key="stage-left"
-          src={sprites.stageLeft}
-          style={{
-            left: layout.stageLeft.x,
-            top: layout.stageLeft.y,
-            width: layout.stageLeft.w,
-            height: layout.stageLeft.h,
-          }}
-        />,
-      );
-    }
-    if (sprites.stageRight && layout.stageRight) {
-      items.push(
-        <SkinSprite
-          key="stage-right"
-          src={sprites.stageRight}
-          style={{
-            left: layout.stageRight.x,
-            top: layout.stageRight.y,
-            width: layout.stageRight.w,
-            height: layout.stageRight.h,
-          }}
-        />,
-      );
-    }
-    return items;
-  }, [sprites, layout.stageLeft, layout.stageRight]);
+  const receptorY = layout.receptorY;
 
   const laneBackgrounds = useMemo(
     () =>
@@ -240,8 +205,18 @@ export function PlayView({
     () =>
       layout.columns.map((column, lane) => {
         const keySprite = sprites?.keysUp[lane];
+        const noteW = column.w;
         const tapH = column.tapHeight;
-        const top = receptorY - tapH;
+        const keyH = Math.max(
+          tapH,
+          Math.min(
+            spriteDestHeight(
+              keySprite ? skin.spriteSizes[keySprite] : null,
+              noteW,
+            ),
+            snapshot.playfieldHeight - receptorY,
+          ),
+        );
 
         if (keySprite) {
           return (
@@ -250,9 +225,9 @@ export function PlayView({
               src={keySprite}
               style={{
                 left: column.x,
-                top,
-                width: column.w,
-                height: tapH,
+                top: receptorY,
+                width: noteW,
+                height: keyH,
               }}
             />
           );
@@ -264,22 +239,31 @@ export function PlayView({
             style={{
               position: "absolute",
               left: column.x + 7,
-              top: receptorY - tapH + 4,
+              top: receptorY - tapH * 0.5,
               width: Math.max(8, column.w - 14),
-              height: Math.max(8, tapH - 8),
+              height: skin.receptorHeight,
               borderRadius: 5,
               backgroundColor: skin.receptorFill,
             }}
           />
         );
       }),
-    [layout.columns, receptorY, skin.receptorFill, skin.receptorHeight, sprites],
+    [
+      layout.columns,
+      receptorY,
+      skin.receptorFill,
+      skin.receptorHeight,
+      skin.spriteSizes,
+      snapshot.playfieldHeight,
+      sprites,
+    ],
   );
 
-  const holdBodiesContent = useMemo((): HoldBodiesLayerContent => {
+  const holdNotesContent = useMemo((): HoldNotesLayerContent => {
     const holdBodies: HoldBodyDraw[] = [];
+    const tails: SpriteDraw[] = [];
 
-    if (!sprites) return { holdBodies };
+    if (!sprites) return { holdBodies, tails };
 
     for (let i = 0; i < snapshot.visibleCount; i += 1) {
       if (snapshot.isHold[i] !== 1) continue;
@@ -290,28 +274,45 @@ export function PlayView({
       const column = columnForLane(columns, lane);
       const bodyPath = sprites.bodies[lane];
       const headPath = sprites.notes[lane];
-      if (!bodyPath || bodyPath === headPath) continue;
+      const tailSprite = sprites.tails[lane];
 
       const layoutHold = holdNoteLayout({
         startCenterY: centerY,
         endCenterY: snapshot.holdEndCenterY[i]!,
         column,
-        tailPath: sprites.tails[lane],
+        tailPath: tailSprite,
         spriteSizes: skin.spriteSizes,
       });
-      if (layoutHold.bodyHeight <= 0) continue;
 
-      holdBodies.push({
-        spritePath: bodyPath,
-        x: column.x + column.w * 0.08,
-        yBottom: layoutHold.bottomCenter,
-        width: column.w * 0.84,
-        height: layoutHold.bodyHeight,
-        alpha: alpha * 0.95,
-      });
+      if (
+        bodyPath &&
+        bodyPath !== headPath &&
+        layoutHold.bodyHeight > 0 &&
+        loadSpriteRgbaSync(bodyPath)
+      ) {
+        holdBodies.push({
+          spritePath: bodyPath,
+          x: column.x + column.w * 0.08,
+          yBottom: layoutHold.bottomCenter,
+          width: column.w * 0.84,
+          height: layoutHold.bodyHeight,
+          alpha: alpha * 0.95,
+        });
+      }
+
+      if (tailSprite && layoutHold.tailH > 0 && loadSpriteRgbaSync(tailSprite)) {
+        tails.push({
+          spritePath: tailSprite,
+          x: column.x,
+          y: layoutHold.tailTop,
+          width: column.w,
+          height: layoutHold.tailH,
+          alpha,
+        });
+      }
     }
 
-    return { holdBodies };
+    return { holdBodies, tails };
   }, [snapshot, sprites, columns, skin.spriteSizes, frameVersion]);
 
   const notes = [];
@@ -326,7 +327,6 @@ export function PlayView({
     const headTop = centerY - tapH / 2;
     const headSprite = sprites?.notes[lane];
     const bodyPath = sprites?.bodies[lane];
-    const tailSprite = sprites?.tails[lane];
     const useBodySprite =
       isHold && bodyPath != null && bodyPath !== headSprite;
 
@@ -335,11 +335,14 @@ export function PlayView({
         startCenterY: centerY,
         endCenterY: snapshot.holdEndCenterY[i]!,
         column,
-        tailPath: tailSprite,
+        tailPath: sprites?.tails[lane],
         spriteSizes: skin.spriteSizes,
       });
 
-      if (!useBodySprite && layoutHold.bodyHeight > 0) {
+      const bodyInLayer =
+        useBodySprite && bodyPath != null && loadSpriteRgbaSync(bodyPath) != null;
+
+      if (!bodyInLayer && layoutHold.bodyHeight > 0) {
         notes.push(
           <div
             key={`hold-body-${noteId}`}
@@ -352,22 +355,6 @@ export function PlayView({
               borderRadius: skin.noteBorderRadius,
               backgroundColor: skin.laneColors[lane % skin.laneColors.length],
               opacity: alpha * 0.85,
-            }}
-          />,
-        );
-      }
-
-      if (tailSprite && layoutHold.tailH > 0) {
-        notes.push(
-          <SkinSprite
-            key={`hold-tail-${noteId}`}
-            src={tailSprite}
-            style={{
-              left: column.x,
-              top: layoutHold.tailTop,
-              width: column.w,
-              height: layoutHold.tailH,
-              opacity: alpha,
             }}
           />,
         );
@@ -459,7 +446,6 @@ export function PlayView({
           borderColor: colors.border,
         }}
       >
-        {stageSprites}
         {laneBackgrounds}
         {laneSeparators}
 
@@ -474,10 +460,10 @@ export function PlayView({
           }}
         />
 
-        <HoldBodiesLayer
+        <HoldNotesLayer
           width={snapshot.width}
           height={snapshot.playfieldHeight}
-          content={holdBodiesContent}
+          content={holdNotesContent}
           frameVersion={frameVersion}
         />
 

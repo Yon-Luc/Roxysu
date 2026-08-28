@@ -108,3 +108,67 @@ export function drawSpriteRgba(
     draw.alpha,
   );
 }
+
+export type RgbaColor = readonly [number, number, number, number];
+
+export function parseCssColor(color: string): RgbaColor {
+  const trimmed = color.trim();
+  if (trimmed.startsWith("#")) {
+    const hex = trimmed.slice(1);
+    if (hex.length === 3) {
+      const r = Number.parseInt(hex[0]! + hex[0]!, 16);
+      const g = Number.parseInt(hex[1]! + hex[1]!, 16);
+      const b = Number.parseInt(hex[2]! + hex[2]!, 16);
+      return [r, g, b, 255];
+    }
+    if (hex.length >= 6) {
+      const r = Number.parseInt(hex.slice(0, 2), 16);
+      const g = Number.parseInt(hex.slice(2, 4), 16);
+      const b = Number.parseInt(hex.slice(4, 6), 16);
+      return [r, g, b, 255];
+    }
+  }
+  return [180, 180, 180, 255];
+}
+
+export function fillRectRgba(
+  target: Uint8ClampedArray,
+  targetWidth: number,
+  targetHeight: number,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  color: RgbaColor,
+  alpha = 1,
+): void {
+  if (width <= 0 || height <= 0 || alpha <= 0) return;
+
+  const x0 = Math.max(0, Math.floor(x));
+  const y0 = Math.max(0, Math.floor(y));
+  const x1 = Math.min(targetWidth, Math.ceil(x + width));
+  const y1 = Math.min(targetHeight, Math.ceil(y + height));
+  if (x0 >= x1 || y0 >= y1) return;
+
+  const [r, g, b, a] = color;
+  const srcA = (a / 255) * alpha;
+  if (srcA <= 0) return;
+
+  for (let row = y0; row < y1; row += 1) {
+    for (let col = x0; col < x1; col += 1) {
+      const dstIndex = (row * targetWidth + col) * 4;
+      if (srcA >= 1) {
+        target[dstIndex] = r;
+        target[dstIndex + 1] = g;
+        target[dstIndex + 2] = b;
+        target[dstIndex + 3] = 255;
+        continue;
+      }
+      const inv = 1 - srcA;
+      target[dstIndex] = r * srcA + target[dstIndex]! * inv;
+      target[dstIndex + 1] = g * srcA + target[dstIndex + 1]! * inv;
+      target[dstIndex + 2] = b * srcA + target[dstIndex + 2]! * inv;
+      target[dstIndex + 3] = Math.min(255, a * alpha + target[dstIndex + 3]! * inv);
+    }
+  }
+}

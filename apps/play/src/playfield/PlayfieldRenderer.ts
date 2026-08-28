@@ -10,7 +10,8 @@ import type {
   PlayfieldRenderSnapshot,
 } from "./PlayfieldTypes";
 
-const MAX_VISIBLE = 128;
+const INITIAL_VISIBLE_CAPACITY = 256;
+const MAX_VISIBLE_CAPACITY = 512;
 
 function computeMaxHoldSpanMs(chart: PlayfieldChart): number {
   let maxSpan = 0;
@@ -30,13 +31,14 @@ export class PlayfieldRenderer {
   private height: number;
   private lanes: number;
 
-  private readonly visibleLane = new Uint8Array(MAX_VISIBLE);
-  private readonly visibleY = new Float64Array(MAX_VISIBLE);
-  private readonly visibleHoldEndCenterY = new Float64Array(MAX_VISIBLE);
-  private readonly visibleHeight = new Float32Array(MAX_VISIBLE);
-  private readonly visibleAlpha = new Float32Array(MAX_VISIBLE);
-  private readonly visibleIsHold = new Uint8Array(MAX_VISIBLE);
-  private readonly visibleNoteIndex = new Uint32Array(MAX_VISIBLE);
+  private visibleCapacity = INITIAL_VISIBLE_CAPACITY;
+  private visibleLane = new Uint8Array(INITIAL_VISIBLE_CAPACITY);
+  private visibleY = new Float64Array(INITIAL_VISIBLE_CAPACITY);
+  private visibleHoldEndCenterY = new Float64Array(INITIAL_VISIBLE_CAPACITY);
+  private visibleHeight = new Float32Array(INITIAL_VISIBLE_CAPACITY);
+  private visibleAlpha = new Float32Array(INITIAL_VISIBLE_CAPACITY);
+  private visibleIsHold = new Uint8Array(INITIAL_VISIBLE_CAPACITY);
+  private visibleNoteIndex = new Uint32Array(INITIAL_VISIBLE_CAPACITY);
   private visibleCount = 0;
   private hidden = new Uint8Array(0);
   private maxHoldSpanMs = 0;
@@ -73,6 +75,9 @@ export class PlayfieldRenderer {
     this.hidden = new Uint8Array(chart.noteCount);
     this.maxHoldSpanMs = computeMaxHoldSpanMs(chart);
     this.visibleCount = 0;
+    this.ensureVisibleCapacity(
+      Math.min(chart.noteCount, MAX_VISIBLE_CAPACITY),
+    );
   }
 
   setHiddenMask(hidden: Uint8Array): void {
@@ -101,6 +106,25 @@ export class PlayfieldRenderer {
     this.height = height;
     this.resetColumns(this.lanes, width);
     this.update();
+  }
+
+  private ensureVisibleCapacity(required: number): void {
+    if (required <= this.visibleCapacity) {
+      return;
+    }
+
+    const next = Math.min(
+      MAX_VISIBLE_CAPACITY,
+      Math.max(required, this.visibleCapacity * 2),
+    );
+    this.visibleCapacity = next;
+    this.visibleLane = new Uint8Array(next);
+    this.visibleY = new Float64Array(next);
+    this.visibleHoldEndCenterY = new Float64Array(next);
+    this.visibleHeight = new Float32Array(next);
+    this.visibleAlpha = new Float32Array(next);
+    this.visibleIsHold = new Uint8Array(next);
+    this.visibleNoteIndex = new Uint32Array(next);
   }
 
   private resetColumns(lanes: number, width: number): void {
@@ -139,7 +163,7 @@ export class PlayfieldRenderer {
       this.maxHoldSpanMs,
     );
 
-    for (let i = begin; i < end && this.visibleCount < MAX_VISIBLE; i += 1) {
+    for (let i = begin; i < end; i += 1) {
       const startMs = chart.startTime[i]!;
       const endMs = chart.endTime[i]!;
       if (endMs < songTimeMs - lookBehindMs) {
@@ -159,6 +183,10 @@ export class PlayfieldRenderer {
 
       if (!isNoteVisible(bounds.top, bounds.height, this.height)) {
         continue;
+      }
+
+      if (this.visibleCount >= this.visibleCapacity) {
+        break;
       }
 
       const index = this.visibleCount;

@@ -11,12 +11,17 @@ export interface ScrollAreaProps extends UiBaseProps {
 /**
  * GPUIX-native scroll container.
  *
- * `overflow: "scroll"` is required (the renderer treats `"auto"` as no
- * scroll), and a flex child must also set `minHeight: 0` so it can shrink.
+ * - `overflow: "scroll"` is required (`"auto"` does not scroll).
+ * - Flex children need `minHeight: 0` / `minWidth: 0` to shrink.
+ * - **Do not nest** another vertical scroller inside — see GPUIX_CONSTRAINTS.md.
+ * - For long content inside an existing scroll parent, use {@link Expandable}.
  */
 export const ScrollArea = forwardRef<React.ElementRef<"div">, ScrollAreaProps>(
   function ScrollArea({ orientation = "vertical", style, children, ...rest }, ref) {
-    const overflow = orientation === "horizontal" ? "scroll" : "scroll";
+    const overflowX =
+      orientation === "vertical" ? "hidden" : "scroll";
+    const overflowY =
+      orientation === "horizontal" ? "hidden" : "scroll";
 
     return (
       <div
@@ -29,9 +34,9 @@ export const ScrollArea = forwardRef<React.ElementRef<"div">, ScrollAreaProps>(
             minWidth: 0,
             flexGrow: 1,
             flexBasis: 0,
-            overflow,
-            overflowX: orientation === "horizontal" ? "scroll" : "hidden",
-            overflowY: orientation === "vertical" ? "scroll" : "hidden",
+            overflow: orientation === "both" ? "scroll" : "hidden",
+            overflowX,
+            overflowY,
             pointerEvents: "auto",
             borderRadius: radius.md,
             borderWidth: 1,

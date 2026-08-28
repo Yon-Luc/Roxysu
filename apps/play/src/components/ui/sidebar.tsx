@@ -120,7 +120,7 @@ export function SidebarLabel({ children, style }: { children?: React.ReactNode; 
   }
 
   return (
-    <text style={mergeStyles({ fontSize: 13, fontWeight: 500, color: "inherit", lineHeight: 18 }, style)}>
+    <text style={mergeStyles({ fontSize: 13, fontWeight: 500, lineHeight: 18 }, style)}>
       {children}
     </text>
   );

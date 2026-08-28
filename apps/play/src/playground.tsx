@@ -87,6 +87,7 @@ import {
   DropdownMenuTrigger,
   Progress,
   ScrollArea,
+  Expandable,
   Sidebar,
   SidebarContent,
   SidebarFooter,
@@ -620,7 +621,29 @@ export function Playground() {
           </Accordion>
         </Section>
 
-        <Section title="ScrollArea">
+        <Section title="Expandable (avoid nested scroll)">
+          <Expandable
+            testId="expandable-demo"
+            preview={
+              <Text size="sm" muted>
+                Long beatmap notes are collapsed here. GPUIX does not support a scroll viewport inside another scroller.
+              </Text>
+            }
+          >
+            <VStack gap="xs">
+              {Array.from({ length: 12 }).map((_, i) => (
+                <Text key={i} size="sm">
+                  Note line {i + 1}: timing adjustment for measure {i + 4}
+                </Text>
+              ))}
+            </VStack>
+          </Expandable>
+        </Section>
+
+        <Section title="ScrollArea (sole vertical scroller)">
+          <Text size="sm" muted style={{ marginBottom: 8 }}>
+            Use as the only vertical scroll parent in a subtree — not inside this page scroll.
+          </Text>
           <ScrollArea style={{ height: 160, flexGrow: 0, flexBasis: 160 }}>
             <VStack gap="xs" style={{ padding: 12 }}>
               {Array.from({ length: 20 }).map((_, i) => (

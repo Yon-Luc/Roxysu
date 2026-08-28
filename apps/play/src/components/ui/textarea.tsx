@@ -55,7 +55,8 @@ export const Textarea = forwardRef<React.ElementRef<"textarea">, TextareaProps>(
         paddingBottom: spacing.sm,
         lineHeight: 21,
         whiteSpace: "normal",
-        overflow: "auto",
+        // Native textarea editor scrolls internally; avoid wrapping it in ScrollArea.
+        overflow: "scroll",
       },
       focused ? { borderColor: colors.ring, boxShadow: shadows.focus } : undefined,
       disabled || readOnly

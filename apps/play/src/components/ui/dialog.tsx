@@ -270,7 +270,17 @@ export function DialogBody({ children, style }: { children?: React.ReactNode; st
   return (
     <div
       style={mergeStyles(
-        { display: "flex", flexDirection: "column", gap: 4, padding: 20, paddingTop: 0, flexGrow: 1, minHeight: 0, overflow: "auto" },
+        {
+          display: "flex",
+          flexDirection: "column",
+          gap: 4,
+          padding: 20,
+          paddingTop: 0,
+          flexGrow: 1,
+          minHeight: 0,
+          // GPUIX: use "scroll", not "auto". Do not nest another vertical scroller inside.
+          overflow: "scroll",
+        },
         style,
       )}
     >

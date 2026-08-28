@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { render } from "@gpuix/react";
+import { gpuixRenderOptions } from "./components/ui";
 
 // ─── Palette ────────────────────────────────────────────────────────────────
 
@@ -1227,7 +1228,7 @@ function Root() {
   );
 }
 
-render(<Root />, {
+render(<Root />, gpuixRenderOptions({
   title: "Roxysu VSRG Benchmark",
 
   appName: "Roxysu VSRG Benchmark",
@@ -1240,4 +1241,4 @@ render(<Root />, {
   windowBackground: "opaque",
 
   debugFrameOverlay: "full",
-});
+}));

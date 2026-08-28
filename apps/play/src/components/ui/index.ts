@@ -4,6 +4,8 @@ export * from "./lib/merge-styles";
 export * from "./lib/variants";
 export * from "./lib/utils";
 export * from "./lib/floating";
+export * from "./lib/render-options";
+export * from "./lib/types";
 
 export * from "./button";
 export * from "./icon-button";
@@ -46,3 +48,6 @@ export * from "./sheet";
 
 export * from "./skeleton";
 export * from "./graph";
+
+export * from "./expandable";
+export * from "./multiline-text";

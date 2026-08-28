@@ -5,6 +5,7 @@ import React, {
   useCallback,
   useState,
 } from "react";
+import { mergeStyles } from "./merge-styles";
 
 /**
  * State that can be either controlled (parent owns `value`) or uncontrolled
@@ -139,15 +140,10 @@ function mergeSlotStyle(
   childStyle: unknown,
   slotStyle: unknown,
 ): unknown {
-  if (!childStyle) {
-    return slotStyle;
-  }
-
-  if (!slotStyle) {
-    return childStyle;
-  }
-
-  return { ...(childStyle as object), ...(slotStyle as object) };
+  return mergeStyles(
+    childStyle as never,
+    slotStyle as never,
+  );
 }
 
 export { forwardRef };

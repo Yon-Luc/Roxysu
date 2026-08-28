@@ -10,7 +10,7 @@ import type {
   PlayfieldRenderSnapshot,
 } from "./PlayfieldTypes";
 
-const MAX_VISIBLE = 512;
+const MAX_VISIBLE = 128;
 
 function computeMaxHoldSpanMs(chart: PlayfieldChart): number {
   let maxSpan = 0;
@@ -32,6 +32,7 @@ export class PlayfieldRenderer {
 
   private readonly visibleLane = new Uint8Array(MAX_VISIBLE);
   private readonly visibleY = new Float64Array(MAX_VISIBLE);
+  private readonly visibleHoldEndCenterY = new Float64Array(MAX_VISIBLE);
   private readonly visibleHeight = new Float32Array(MAX_VISIBLE);
   private readonly visibleAlpha = new Float32Array(MAX_VISIBLE);
   private readonly visibleIsHold = new Uint8Array(MAX_VISIBLE);
@@ -162,7 +163,15 @@ export class PlayfieldRenderer {
 
       const index = this.visibleCount;
       this.visibleLane[index] = lane;
-      this.visibleY[index] = bounds.top;
+      if (isHold) {
+        const holdBounds = bounds as ReturnType<PlayfieldGeometry["hold"]>;
+        this.visibleY[index] = holdBounds.startCenterY;
+        this.visibleHoldEndCenterY[index] = holdBounds.endCenterY;
+      } else {
+        const tapBoundsResult = bounds as ReturnType<PlayfieldGeometry["tap"]>;
+        this.visibleY[index] = tapBoundsResult.centerY;
+        this.visibleHoldEndCenterY[index] = tapBoundsResult.centerY;
+      }
       this.visibleHeight[index] = bounds.height;
       this.visibleIsHold[index] = isHold ? 1 : 0;
       this.visibleNoteIndex[index] = i;
@@ -178,6 +187,7 @@ export class PlayfieldRenderer {
       visibleCount: this.visibleCount,
       lane: this.visibleLane,
       y: this.visibleY,
+      holdEndCenterY: this.visibleHoldEndCenterY,
       noteHeight: this.visibleHeight,
       isHold: this.visibleIsHold,
       noteIndex: this.visibleNoteIndex,

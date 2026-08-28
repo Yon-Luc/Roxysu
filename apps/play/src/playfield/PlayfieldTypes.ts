@@ -30,7 +30,10 @@ export type PlayfieldColumnSnapshot = {
 export type PlayfieldRenderSnapshot = {
   visibleCount: number;
   lane: Uint8Array;
+  /** Head / tap center Y (mania note center line). */
   y: Float64Array;
+  /** Hold tail center Y; equals `y` for tap notes. */
+  holdEndCenterY: Float64Array;
   noteHeight: Float32Array;
   isHold: Uint8Array;
   alpha: Float32Array;

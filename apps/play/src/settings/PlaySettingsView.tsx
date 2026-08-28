@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import path from "node:path";
 import {
   Button,
   Card,
@@ -67,21 +68,30 @@ const DEFAULT_SKIN_VALUE = "__default__";
 export function PlaySettingsView({ game, settings }: PlaySettingsViewProps) {
   const installedSkins = useMemo(() => game.listSkins(), [game]);
   const skinNotice = game.getSkinNotice();
+  const [skinRevision, setSkinRevision] = useState(0);
+  void skinRevision;
   const activeSkin = game.getPlayfieldSkin();
   const [customSkinPath, setCustomSkinPath] = useState(settings.skinPath ?? "");
   const [skinBrowseError, setSkinBrowseError] = useState<string | null>(null);
   const [browsingSkin, setBrowsingSkin] = useState(false);
 
   useEffect(() => {
+    return game.subscribe(() => {
+      setSkinRevision((value) => value + 1);
+    });
+  }, [game]);
+
+  useEffect(() => {
     setCustomSkinPath(settings.skinPath ?? "");
   }, [settings.skinPath]);
 
-  const selectedSkinValue =
-    !settings.skinPath
-      ? DEFAULT_SKIN_VALUE
-      : installedSkins.some((skin) => skin.path === settings.skinPath)
-        ? settings.skinPath
-        : DEFAULT_SKIN_VALUE;
+  const importedSkin =
+    settings.skinPath &&
+    !installedSkins.some(
+      (skin) => path.resolve(skin.path) === path.resolve(settings.skinPath!),
+    );
+
+  const selectedSkinValue = settings.skinPath ?? DEFAULT_SKIN_VALUE;
 
   const browseForSkin = () => {
     if (browsingSkin) return;
@@ -136,6 +146,11 @@ export function PlaySettingsView({ game, settings }: PlaySettingsViewProps) {
                     {skin.name}
                   </SelectItem>
                 ))}
+                {importedSkin && settings.skinPath ? (
+                  <SelectItem value={settings.skinPath}>
+                    {activeSkin.name} (imported)
+                  </SelectItem>
+                ) : null}
               </SelectContent>
             </Select>
             <Text size="sm" muted>

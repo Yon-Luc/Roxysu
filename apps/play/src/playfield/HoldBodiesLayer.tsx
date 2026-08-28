@@ -3,32 +3,35 @@ import path from "node:path";
 import { useMemo } from "react";
 import { toSkinAssetUrl } from "../skin/skinFileLookup";
 import { drawHoldBodyTiledRgba, type HoldBodyDraw } from "./holdBodyTiled";
-import { decodePngRgba, writePngRgbaFile, type RgbaImage } from "./pngRgba";
+import { writePngRgbaFile } from "./pngRgba";
+import { loadSpriteRgbaSync } from "./spriteRgbaCache";
 
-const LAYER_PATH = path.join(os.tmpdir(), "roxysu-play-hold-bodies.png");
+export type HoldBodiesLayerContent = {
+  holdBodies: readonly HoldBodyDraw[];
+};
 
-const spriteCache = new Map<string, RgbaImage | null>();
-
-function loadSprite(filePath: string): RgbaImage | null {
-  const cached = spriteCache.get(filePath);
-  if (cached !== undefined) return cached;
-  const decoded = decodePngRgba(filePath);
-  spriteCache.set(filePath, decoded);
-  return decoded;
+function layerPathForFrame(frameVersion: number): string {
+  return path.join(
+    os.tmpdir(),
+    `roxysu-play-hold-bodies-${frameVersion % 2}.png`,
+  );
 }
 
 export function renderHoldBodiesLayer(
   width: number,
   height: number,
-  draws: HoldBodyDraw[],
+  content: HoldBodiesLayerContent,
+  frameVersion: number,
 ): string | null {
-  if (draws.length === 0) return null;
+  if (width <= 0 || height <= 0 || content.holdBodies.length === 0) {
+    return null;
+  }
 
   const rgba = new Uint8ClampedArray(width * height * 4);
   let drewAny = false;
 
-  for (const draw of draws) {
-    const sprite = loadSprite(draw.spritePath);
+  for (const draw of content.holdBodies) {
+    const sprite = loadSpriteRgbaSync(draw.spritePath);
     if (!sprite) continue;
     drawHoldBodyTiledRgba(
       rgba,
@@ -46,34 +49,34 @@ export function renderHoldBodiesLayer(
 
   if (!drewAny) return null;
 
-  writePngRgbaFile(LAYER_PATH, width, height, rgba);
-  return LAYER_PATH;
+  const outPath = layerPathForFrame(frameVersion);
+  writePngRgbaFile(outPath, width, height, rgba);
+  return outPath;
 }
 
 type HoldBodiesLayerProps = {
   width: number;
   height: number;
-  draws: HoldBodyDraw[];
+  content: HoldBodiesLayerContent;
   frameVersion: number;
 };
 
 export function HoldBodiesLayer({
   width,
   height,
-  draws,
+  content,
   frameVersion,
 }: HoldBodiesLayerProps) {
-  void frameVersion;
-
   const layerPath = useMemo(
-    () => renderHoldBodiesLayer(width, height, draws),
-    [width, height, draws, frameVersion],
+    () => renderHoldBodiesLayer(width, height, content, frameVersion),
+    [width, height, content, frameVersion],
   );
 
   if (!layerPath) return null;
 
   return (
     <img
+      key={`hold-bodies-${frameVersion}`}
       src={toSkinAssetUrl(layerPath)}
       style={{
         position: "absolute",
@@ -87,6 +90,5 @@ export function HoldBodiesLayer({
   );
 }
 
-export function clearHoldBodySpriteCache(): void {
-  spriteCache.clear();
-}
+/** @deprecated */
+export function clearNotesLayerSpriteCache(): void {}

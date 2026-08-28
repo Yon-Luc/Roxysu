@@ -14,7 +14,9 @@
     "@roxysu/mania-judge": "workspace:*",
     "@roxysu/osu-chart": "workspace:*",
     "@roxysu/osu-paths": "workspace:*",
+    "fast-png": "^8.0.0",
     "fflate": "^0.8.3",
+    "jpeg-js": "^0.4.4",
     "miniaudio_node": "^1.6.3",
     "react": "^19.1.0"
   },

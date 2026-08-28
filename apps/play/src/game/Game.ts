@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { AssetResolver } from "../assets/AssetResolver";
 import type { AudioEngine } from "../audio/AudioEngine";
 import { AudioClock } from "../audio/AudioClock";
@@ -28,6 +29,7 @@ import { InputManager } from "../input/InputManager";
 import { PreviewController } from "../preview/PreviewController";
 import { SettingsStore } from "../settings/SettingsStore";
 import {
+  clampPlaySettings,
   DEFAULT_PLAY_SETTINGS,
   formatKeyBindingsHint,
   HIT_POSITION_DEFAULT,
@@ -35,7 +37,12 @@ import {
 } from "../settings/PlaySettings";
 import type { KeyBindings } from "../input/KeyBindings";
 import { PlayfieldRenderer } from "../playfield/PlayfieldRenderer";
-import { clearHoldBodySpriteCache } from "../playfield/HoldBodiesLayer";
+import { clearNotesLayerSpriteCache } from "../playfield/HoldBodiesLayer";
+import {
+  clearSpriteRgbaCache,
+  collectSkinSpritePaths,
+  preloadSkinSpritePaths,
+} from "../playfield/spriteRgbaCache";
 import { DEFAULT_PLAYFIELD_SKIN } from "../skin/defaultSkin";
 import type { PlayfieldSkin } from "../skin/PlayfieldSkin";
 import { SkinLoader, type SkinCatalogEntry } from "../skin/SkinLoader";
@@ -76,6 +83,11 @@ type GameListener = (snapshot: GameStateSnapshot) => void;
 const PLAYFIELD_WIDTH = 700;
 const PLAYFIELD_HEIGHT = 680;
 const LANES = 7;
+
+function normalizeSkinPath(skinPath: string | null | undefined): string | null {
+  if (!skinPath?.trim()) return null;
+  return path.resolve(skinPath.trim());
+}
 
 export class Game {
   readonly loop = new GameLoop();
@@ -161,6 +173,7 @@ export class Game {
   }
 
   setSkin(skinPath: string | null): PlaySettings {
+    this.lastAppliedSkinPath = undefined;
     return this.updateSettings({ skinPath });
   }
 
@@ -169,8 +182,9 @@ export class Game {
   }
 
   updateSettings(partial: Partial<PlaySettings>): PlaySettings {
-    const next = this.settings.update(partial);
+    const next = clampPlaySettings({ ...this.settings.get(), ...partial });
     this.applySettings(next);
+    this.settings.replace(next);
     return next;
   }
 
@@ -285,6 +299,10 @@ export class Game {
     const osuFilesAvailable = osuPathStatus.exists && osuPathStatus.hasFiles;
     if (!this.skinLoader) {
       this.skinLoader = new SkinLoader(osuDataPath);
+    }
+
+    if (this.lastAppliedSkinPath === undefined) {
+      this.applySettings(this.settings.get());
     }
 
     this.environment = {
@@ -581,9 +599,10 @@ export class Game {
     this.audio.setVolume(settings.masterVolume);
     this.preview?.setVolume(settings.masterVolume);
     this.input.setBindings({ laneKeys: settings.laneKeys });
-    const skinChanged = settings.skinPath !== this.lastAppliedSkinPath;
+    const resolvedSkinPath = normalizeSkinPath(settings.skinPath);
+    const skinChanged = resolvedSkinPath !== this.lastAppliedSkinPath;
     if (skinChanged) {
-      this.applySkinFromSettings(settings.skinPath);
+      this.applySkinFromSettings(resolvedSkinPath);
     }
     this.syncPlayfieldLayout(settings);
   }
@@ -611,15 +630,17 @@ export class Game {
   }
 
   private applySkinFromSettings(skinPath: string | null): void {
-    this.lastAppliedSkinPath = skinPath;
-    clearHoldBodySpriteCache();
+    clearSpriteRgbaCache();
+    clearNotesLayerSpriteCache();
     if (!this.skinLoader) {
+      this.lastAppliedSkinPath = skinPath;
       this.playfieldSkin = { ...DEFAULT_PLAYFIELD_SKIN };
       this.skinNotice = null;
       return;
     }
 
     const result = this.skinLoader.load(skinPath, LANES);
+    this.lastAppliedSkinPath = skinPath;
     if (!result.ok) {
       this.playfieldSkin = { ...DEFAULT_PLAYFIELD_SKIN };
       this.skinNotice = result.error;
@@ -629,6 +650,17 @@ export class Game {
 
     this.playfieldSkin = result.skin;
     this.skinNotice = result.warnings[0] ?? null;
+    void this.preloadCurrentSkinSprites();
+    this.syncPlayfieldLayout(this.settings.get());
+    this.patch({ frameVersion: this.state.frameVersion + 1 });
+  }
+
+  private async preloadCurrentSkinSprites(): Promise<void> {
+    const paths = collectSkinSpritePaths(this.playfieldSkin.sprites);
+    if (paths.length === 0) return;
+
+    await preloadSkinSpritePaths(paths);
+    this.syncPlayfieldLayout(this.settings.get());
     this.patch({ frameVersion: this.state.frameVersion + 1 });
   }
 

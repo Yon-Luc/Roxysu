@@ -1,28 +1,29 @@
-export function noteHeadY(
-  noteStartMs: number,
+/** Y coordinate of a note at `noteTimeMs` — osu! mania uses the note center line. */
+export function noteCenterY(
+  noteTimeMs: number,
   songTimeMs: number,
   receptorY: number,
   pixelsPerMs: number,
 ): number {
-  return receptorY - (noteStartMs - songTimeMs) * pixelsPerMs;
+  return receptorY - (noteTimeMs - songTimeMs) * pixelsPerMs;
 }
 
-export function receptorHitTop(receptorY: number, tapHeight: number): number {
-  return receptorY - tapHeight;
-}
-
-/** Once a note reaches its hit time, pin it on the receptor instead of scrolling past. */
-export function clampNoteTopAtReceptor(
-  rawTop: number,
+/** Once a note reaches its hit time, pin its center on the receptor instead of scrolling past. */
+export function clampNoteCenterAtReceptor(
+  rawCenter: number,
   hitTimeMs: number,
   songTimeMs: number,
   receptorY: number,
   tapHeight: number,
 ): number {
   if (songTimeMs < hitTimeMs) {
-    return rawTop;
+    return rawCenter;
   }
-  return Math.min(rawTop, receptorHitTop(receptorY, tapHeight));
+  return Math.min(rawCenter, receptorY - tapHeight / 2);
+}
+
+export function receptorHitTop(receptorY: number, tapHeight: number): number {
+  return receptorY - tapHeight;
 }
 
 export function tapBounds(
@@ -31,16 +32,21 @@ export function tapBounds(
   receptorY: number,
   pixelsPerMs: number,
   tapHeight: number,
-): { top: number; height: number } {
-  const rawTop = noteHeadY(noteStartMs, songTimeMs, receptorY, pixelsPerMs);
-  const top = clampNoteTopAtReceptor(
-    rawTop,
+): { centerY: number; top: number; height: number } {
+  const rawCenter = noteCenterY(
+    noteStartMs,
+    songTimeMs,
+    receptorY,
+    pixelsPerMs,
+  );
+  const centerY = clampNoteCenterAtReceptor(
+    rawCenter,
     noteStartMs,
     songTimeMs,
     receptorY,
     tapHeight,
   );
-  return { top, height: tapHeight };
+  return { centerY, top: centerY - tapHeight / 2, height: tapHeight };
 }
 
 export function holdBodyBounds(
@@ -50,12 +56,43 @@ export function holdBodyBounds(
   receptorY: number,
   pixelsPerMs: number,
   tapHeight: number,
-): { top: number; height: number } {
-  const headTop = noteHeadY(noteStartMs, songTimeMs, receptorY, pixelsPerMs);
-  const tailTop = noteHeadY(noteEndMs, songTimeMs, receptorY, pixelsPerMs);
-  const top = Math.min(headTop, tailTop);
-  const bottom = Math.max(headTop, tailTop) + tapHeight;
-  return { top, height: Math.max(tapHeight, bottom - top) };
+): {
+  startCenterY: number;
+  endCenterY: number;
+  topCenter: number;
+  bottomCenter: number;
+  top: number;
+  height: number;
+} {
+  const rawStartCenter = noteCenterY(
+    noteStartMs,
+    songTimeMs,
+    receptorY,
+    pixelsPerMs,
+  );
+  const startCenterY = clampNoteCenterAtReceptor(
+    rawStartCenter,
+    noteStartMs,
+    songTimeMs,
+    receptorY,
+    tapHeight,
+  );
+  const endCenterY = noteCenterY(
+    noteEndMs,
+    songTimeMs,
+    receptorY,
+    pixelsPerMs,
+  );
+  const topCenter = Math.min(startCenterY, endCenterY);
+  const bottomCenter = Math.max(startCenterY, endCenterY);
+  return {
+    startCenterY,
+    endCenterY,
+    topCenter,
+    bottomCenter,
+    top: topCenter - tapHeight / 2,
+    height: bottomCenter - topCenter + tapHeight,
+  };
 }
 
 export function isNoteVisible(
@@ -105,7 +142,7 @@ export class PlayfieldGeometry {
   }
 
   headY(noteStartMs: number, songTimeMs: number, pixelsPerMs: number): number {
-    return noteHeadY(noteStartMs, songTimeMs, this.receptorY, pixelsPerMs);
+    return noteCenterY(noteStartMs, songTimeMs, this.receptorY, pixelsPerMs);
   }
 
   tap(noteStartMs: number, songTimeMs: number, pixelsPerMs: number, lane = 0) {

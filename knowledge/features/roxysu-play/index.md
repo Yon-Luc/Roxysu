@@ -4,6 +4,9 @@ confidence: verified
 touches:
   - apps/play/
   - apps/play/src/app.tsx
+  - apps/play/src/game/
+  - apps/play/src/database/
+  - apps/play/src/assets/
   - apps/play/package.json
   - apps/play/scripts/dev.sh
   - flake.nix
@@ -27,7 +30,9 @@ until explicitly promoted.
 
 1. Play is optional developer tooling — not required to run the client app.
 2. Play must not write Realm or the local mirror until a verified design says so.
-3. On NixOS, launch from the flake dev shell so GPUIX can `dlopen` Wayland /
+3. Play opens the shared Roxysu SQLite catalog in **read-only** mode (M1); score/settings writes come later.
+4. Play resolves osu!lazer binary assets via SHA-256 hashes through a lazer asset resolver — it does not duplicate the `files/` store.
+5. On NixOS, launch from the flake dev shell so GPUIX can `dlopen` Wayland /
    Vulkan / X11 (see Implementation).
 
 ## Security rules
@@ -54,14 +59,21 @@ bun --hot apps/play/src/app.tsx
 ## Implementation
 
 - Entry: `apps/play/src/app.tsx` — must end with `render()` (idempotent under `--hot`).
+- M1 foundation (in progress): `game/`, `database/`, `assets/`, `integrations/` under `apps/play/src/`.
+- Legacy benchmark preserved as `apps/play/src/test.tsx` (renamed from `app.tsx`).
 - TypeScript requires `"jsxImportSource": "@gpuix/react"`.
 - Flake: `gpuixRuntimeDeps` + `LD_LIBRARY_PATH` / `NIX_LD_LIBRARY_PATH` /
   `XKB_CONFIG_ROOT=/etc/X11/xkb` so prebuilt `@gpuix/native` resolves libs on NixOS.
 - Root script: `bun run play`.
+- Monorepo packages are consumed only through `integrations/` wrappers (`@roxysu/db`, `@roxysu/osu-paths`).
 
 ## Important symbols
 
-- `apps/play/src/app.tsx` — `render(<App />, { title: "Roxysu Play", ... })`
+- `apps/play/src/app.tsx` — M1 shell; `render(<App />, gpuixRenderOptions({ title: "Roxysu Play", ... }))`
+- `apps/play/src/game/Game.ts` — lifecycle orchestrator (BOOT → SONG_SELECT → …)
+- `apps/play/src/database/RoxysuDatabase.ts` — shared SQLite open + availability detection
+- `apps/play/src/assets/LazerAssetResolver.ts` — hash → lazer `files/` path resolution
+- `apps/play/src/test.tsx` — legacy VSRG benchmark (preserved)
 - `flake.nix` — `gpuixRuntimeDeps`, `runtimeLibraryPath`
 
 ## UI component architecture

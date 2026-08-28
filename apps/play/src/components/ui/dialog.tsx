@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useMemo, useRef, isValidElement } from "react";
-import { useWindowSize } from "@gpuix/react";
 import type { EventPayload, StyleDesc } from "@gpuix/react";
 import { colors, radius, shadows } from "./theme";
 import { mergeStyles } from "./lib/merge-styles";
@@ -86,10 +85,120 @@ export function DialogTrigger({ asChild, children, onClick, onMouseDown, ...rest
   });
 }
 
+export type DialogSize = "default" | "sm" | "lg" | "fullscreen";
+
 export interface DialogContentProps extends UiBaseProps {
   closeOnScrim?: boolean;
-  size?: "default" | "fullscreen";
+  size?: DialogSize;
   children?: React.ReactNode;
+}
+
+/**
+ * Full-window positioning surface. The anchored `FloatingLayer` here is used as
+ * a centered viewport (not an anchored popover): it stretches to the window and
+ * centers its children. `onMouseDownOutside` still closes when a click lands
+ * outside the anchored region, while scrim clicks are handled by `DialogBackdrop`.
+ */
+function DialogViewport({
+  children,
+  onMouseDownOutside,
+  onKeyDown,
+}: {
+  children: React.ReactNode;
+  onMouseDownOutside: (event: EventPayload) => void;
+  onKeyDown: (event: EventPayload) => void;
+}) {
+  return (
+    <FloatingLayer
+      side="bottom"
+      align="center"
+      sideOffset={0}
+      tabIndex={0}
+      autoFocus
+      style={{
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 0,
+        backgroundColor: "transparent",
+        borderWidth: 0,
+        boxShadow: undefined,
+      }}
+      onMouseDownOutside={onMouseDownOutside}
+      onKeyDown={onKeyDown}
+    >
+      {children}
+    </FloatingLayer>
+  );
+}
+
+/**
+ * Dimmed scrim behind the modal surface. Kept as its own primitive so a future
+ * `blurred` variant can become an implementation detail here without changing the
+ * dialog's internal structure.
+ */
+function DialogBackdrop({ onMouseDown }: { onMouseDown?: (event: EventPayload) => void }) {
+  return (
+    <div
+      onMouseDown={onMouseDown}
+      style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: "rgba(0, 0, 0, 0.55)",
+      }}
+    />
+  );
+}
+
+/** The modal surface itself — a normal opaque/translucent card, never the blur layer. */
+function DialogSurface({
+  size,
+  style,
+  testId,
+  children,
+}: {
+  size: DialogSize;
+  style?: StyleDesc;
+  testId?: string;
+  children?: React.ReactNode;
+}) {
+  const surfaceStyle: StyleDesc =
+    size === "fullscreen"
+      ? {
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          borderRadius: 0,
+          borderWidth: 0,
+          backgroundColor: colors.background,
+        }
+      : {
+          position: "relative",
+          display: "flex",
+          flexDirection: "column",
+          backgroundColor: colors.card,
+          color: colors.cardForeground,
+          borderRadius: radius.lg,
+          borderWidth: 1,
+          borderColor: colors.border,
+          boxShadow: shadows.lg,
+          minWidth: size === "sm" ? 320 : 420,
+          maxWidth: size === "lg" ? 720 : 520,
+          maxHeight: "90%",
+          overflow: "hidden",
+        };
+
+  return (
+    <div testId={testId} style={mergeStyles(surfaceStyle, style)}>
+      {children}
+    </div>
+  );
 }
 
 export function DialogContent({
@@ -100,95 +209,58 @@ export function DialogContent({
   testId,
 }: DialogContentProps) {
   const { open, setOpen, dismissOutside } = useDialogContext("DialogContent");
-  const windowSize = useWindowSize();
-  const winW = windowSize?.width ?? 820;
-  const winH = windowSize?.height ?? 860;
   const fullscreen = size === "fullscreen";
 
   if (!open) {
     return null;
   }
 
-  const surfaceStyle: StyleDesc = {
-    backgroundColor: undefined,
-    borderWidth: 0,
-    borderRadius: 0,
-    padding: 0,
-    boxShadow: undefined,
+  const outside = (event: EventPayload) => {
+    if (!closeOnScrim) {
+      return;
+    }
+
+    dismissOutside.current = true;
+
+    queueMicrotask(() => {
+      dismissOutside.current = false;
+    });
+
+    setOpen(false);
   };
 
-  const outside = (event: EventPayload) => {
-    if (closeOnScrim) {
-      dismissOutside.current = true;
-      queueMicrotask(() => {
-        dismissOutside.current = false;
-      });
-      setOpen(false);
-    }
-  };
   const onKey = (event: EventPayload) => {
     if (event.key === "escape") {
       setOpen(false);
     }
   };
 
-  if (fullscreen) {
-    return (
-      <FloatingLayer
-        side="bottom"
-        align="center"
-        sideOffset={0}
-        tabIndex={0}
-        autoFocus
-        style={mergeStyles(surfaceStyle, style)}
-        onMouseDownOutside={outside}
-        onKeyDown={onKey}
-      >
-        {children}
-      </FloatingLayer>
-    );
-  }
-
   return (
-    <FloatingLayer
-      side="bottom"
-      align="center"
-      sideOffset={12}
-      tabIndex={0}
-      autoFocus
-      style={mergeStyles(surfaceStyle, style)}
-      onMouseDownOutside={outside}
-      onKeyDown={onKey}
-    >
-      <div
-        style={mergeStyles(
-          {
-            display: "flex",
-            flexDirection: "column",
-            backgroundColor: colors.card,
-            color: colors.cardForeground,
-            borderRadius: radius.lg,
-            borderWidth: 1,
-            borderColor: colors.border,
-            boxShadow: shadows.lg,
-            minWidth: 320,
-            maxWidth: 520,
-            maxHeight: "90%",
-            overflow: "hidden",
-          },
-          style,
-        )}
-        testId={testId}
-      >
+    <DialogViewport onMouseDownOutside={outside} onKeyDown={onKey}>
+      {!fullscreen && <DialogBackdrop onMouseDown={closeOnScrim ? outside : undefined} />}
+      <DialogSurface size={size} style={style} testId={testId}>
         {children}
-      </div>
-    </FloatingLayer>
+      </DialogSurface>
+    </DialogViewport>
   );
 }
 
 export function DialogHeader({ children, style }: { children?: React.ReactNode; style?: StyleDesc }) {
   return (
     <div style={mergeStyles({ display: "flex", flexDirection: "column", gap: 4, padding: 20 }, style)}>
+      {children}
+    </div>
+  );
+}
+
+export function DialogBody({ children, style }: { children?: React.ReactNode; style?: StyleDesc }) {
+  return (
+    <div
+      style={mergeStyles(
+        { display: "flex", flexDirection: "column", gap: 4, padding: 20, paddingTop: 0, flexGrow: 1, minHeight: 0, overflow: "auto" },
+        style,
+      )}
+    >
       {children}
     </div>
   );

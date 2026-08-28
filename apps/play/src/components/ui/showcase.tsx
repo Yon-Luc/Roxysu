@@ -187,14 +187,35 @@ export function Showcase() {
           </TabsContent>
 
           <TabsContent value="loading">
-            <HStack gap="lg" align="center">
-              <Spinner />
-              <Skeleton width={160} height={14} />
-              <Skeleton width={120} height={14} />
-            </HStack>
+            <VStack gap="md">
+              <HStack gap="lg" align="center">
+                <Spinner />
+                <Spinner size={24} />
+                <Spinner size={32} />
+              </HStack>
+              <LoadingButtonDemo />
+              <HStack gap="lg">
+                <Skeleton width={160} height={14} />
+                <Skeleton width={120} height={14} />
+              </HStack>
+            </VStack>
           </TabsContent>
         </Tabs>
       </VStack>
     </div>
+  );
+}
+
+function LoadingButtonDemo() {
+  const [loading, setLoading] = useState(false);
+  return (
+    <HStack gap="md" align="center">
+      <Button loading={loading} onClick={() => { setLoading(true); setTimeout(() => setLoading(false), 2000); }}>
+        {loading ? "Loading..." : "Click to Load"}
+      </Button>
+      <Button variant="outline" loading={loading} onClick={() => { setLoading(true); setTimeout(() => setLoading(false), 2000); }}>
+        {loading ? "Working..." : "Outline Loading"}
+      </Button>
+    </HStack>
   );
 }

@@ -64,6 +64,32 @@ bun --hot apps/play/src/app.tsx
 - `apps/play/src/app.tsx` — `render(<App />, { title: "Roxysu Play", ... })`
 - `flake.nix` — `gpuixRuntimeDeps`, `runtimeLibraryPath`
 
+## UI component architecture
+
+`apps/play/src/components/ui/dialog.tsx` is the reference pattern for window-level
+surfaces (Dialog, Sheet, CommandDialog). Structure:
+
+```
+DialogViewport (FloatingLayer, sideOffset 0, full-window flex-centered)
+├── DialogBackdrop (absolute dim scrim, optional for fullscreen)
+└── DialogSurface (the card / fullscreen surface)
+```
+
+- `FloatingLayer` is reused as a **centered viewport**, not an anchored popover. The
+  anchored layer is stretched to the window and centered via flex; it is not
+  positioned relative to the trigger.
+- Scrim-click-to-close is wired on `DialogBackdrop`'s `onMouseDown`, **not** on the
+  `FloatingLayer`'s `onMouseDownOutside`. A click on the scrim is a descendant of the
+  anchored layer, so `onMouseDownOutside` never fires for it. Do not "simplify" this
+  back to `onMouseDownOutside` — it will silently break `closeOnScrim`.
+- The modal surface is always an opaque/translucent card. Backdrop blur is **not**
+  designed into the Dialog API: GPUIX may expose native window vibrancy later, but it
+  is treated as an optional primitive, not a Dialog requirement.
+- `size` variants: `default | sm | lg | fullscreen`. `fullscreen` renders a full-window
+  opaque surface with no scrim (not a transparent popover).
+- Public parts: `Dialog`, `DialogTrigger`, `DialogContent`, `DialogHeader`, `DialogBody`,
+  `DialogFooter`, `DialogTitle`, `DialogDescription`.
+
 ## Dependencies
 
 - `@gpuix/react` / `@gpuix/native` (npm)

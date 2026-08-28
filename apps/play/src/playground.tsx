@@ -24,6 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogBody,
   Field,
   Grid,
   Heading,
@@ -417,6 +418,9 @@ export function Playground() {
                   <DialogHeader>
                     <DialogTitle>Confirm action</DialogTitle>
                   </DialogHeader>
+                  <DialogBody>
+                    <Text muted>This action cannot be undone.</Text>
+                  </DialogBody>
                   <DialogFooter>
                     <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
                     <Button onClick={() => setDialogOpen(false)}>Confirm</Button>
@@ -449,7 +453,7 @@ export function Playground() {
                       <CardHeader>
                         <CardTitle>Fullscreen modal</CardTitle>
                         <CardDescription>
-                          Transparent, window-sized surface (GPUIX has no backdrop blur).
+                          Full-window surface — GPUIX has no backdrop blur.
                         </CardDescription>
                       </CardHeader>
                       <CardContent>

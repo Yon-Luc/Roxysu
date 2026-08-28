@@ -1,4 +1,4 @@
-import React, { forwardRef, useState } from "react";
+import React, { forwardRef, useEffect, useState } from "react";
 import type { EventPayload, StyleDesc } from "@gpuix/react";
 import { colors, radius, shadows, spacing } from "./theme";
 import { mergeStyles } from "./lib/merge-styles";
@@ -137,20 +137,50 @@ export interface SpinnerProps {
   style?: StyleDesc;
 }
 
+const DOT_COUNT = 3;
+
 export function Spinner({ size = 16, color = colors.foreground, style }: SpinnerProps) {
+  const [phase, setPhase] = useState(0);
+  const dotSize = Math.max(4, Math.round(size / 4));
+  const gap = Math.max(2, Math.round(dotSize / 2));
+
+  useEffect(() => {
+    const id = setInterval(() => setPhase((p) => (p + 1) % DOT_COUNT), 300);
+    return () => clearInterval(id);
+  }, []);
+
   return (
     <div
       style={mergeStyles(
         {
+          display: "flex",
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "center",
+          gap,
           width: size,
           height: size,
-          borderRadius: size,
-          borderWidth: Math.max(2, Math.round(size / 8)),
-          borderColor: color,
-          backgroundColor: "transparent",
         },
         style,
       )}
-    />
+    >
+      {Array.from({ length: DOT_COUNT }, (_, i) => (
+        <div
+          key={i}
+          style={{
+            width: dotSize,
+            height: dotSize,
+            borderRadius: dotSize,
+            backgroundColor: color,
+            opacity: i === phase ? 1 : 0.25,
+          }}
+          motion={
+            i === phase
+              ? { initial: { opacity: 0.25 }, animate: { opacity: 1 }, transition: { duration: 0.25 } }
+              : { initial: { opacity: 1 }, animate: { opacity: 0.25 }, transition: { duration: 0.25 } }
+          }
+        />
+      ))}
+    </div>
   );
 }

@@ -6,6 +6,7 @@ import {
   colors,
 } from "../components/ui";
 import type { Game } from "../game/Game";
+import { toSkinAssetUrl } from "../skin/skinFileLookup";
 
 type PlayViewProps = {
   game: Game;
@@ -16,6 +17,30 @@ type PlayViewProps = {
   accuracy: number;
   phase: "PLAYING" | "PAUSED";
 };
+
+type SpriteStyle = {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  opacity?: number;
+};
+
+function SkinSprite({ src, style }: { src: string; style: SpriteStyle }) {
+  return (
+    <img
+      src={toSkinAssetUrl(src)}
+      style={{
+        position: "absolute",
+        left: style.left,
+        top: style.top,
+        width: style.width,
+        height: style.height,
+        opacity: style.opacity ?? 1,
+      }}
+    />
+  );
+}
 
 export function PlayView({
   game,
@@ -29,6 +54,42 @@ export function PlayView({
   void frameVersion;
   const snapshot = game.playfield.getSnapshot();
   const skin = game.getPlayfieldSkin();
+  const sprites = skin.sprites;
+
+  const stageSprites = useMemo(() => {
+    if (!sprites) return null;
+    const items = [];
+    if (sprites.stageLeft) {
+      items.push(
+        <SkinSprite
+          key="stage-left"
+          src={sprites.stageLeft}
+          style={{
+            left: 0,
+            top: 0,
+            width: Math.min(96, snapshot.width * 0.12),
+            height: snapshot.receptorY,
+          }}
+        />,
+      );
+    }
+    if (sprites.stageRight) {
+      const width = Math.min(96, snapshot.width * 0.12);
+      items.push(
+        <SkinSprite
+          key="stage-right"
+          src={sprites.stageRight}
+          style={{
+            left: snapshot.width - width,
+            top: 0,
+            width,
+            height: snapshot.receptorY,
+          }}
+        />,
+      );
+    }
+    return items;
+  }, [sprites, snapshot.receptorY, snapshot.width]);
 
   const laneBackgrounds = useMemo(
     () =>
@@ -77,21 +138,39 @@ export function PlayView({
 
   const receptors = useMemo(
     () =>
-      Array.from({ length: snapshot.lanes }, (_, lane) => (
-        <div
-          key={`receptor-${lane}`}
-          style={{
-            position: "absolute",
-            left: lane * snapshot.laneWidth + 7,
-            top: snapshot.receptorY + 10,
-            width: snapshot.laneWidth - 14,
-            height: skin.receptorHeight,
-            borderRadius: 5,
-            backgroundColor: skin.receptorFill,
-          }}
-        />
-      )),
-    [snapshot.lanes, snapshot.laneWidth, snapshot.receptorY, skin],
+      Array.from({ length: snapshot.lanes }, (_, lane) => {
+        const left = lane * snapshot.laneWidth + 7;
+        const top = snapshot.receptorY + 10;
+        const width = snapshot.laneWidth - 14;
+        const height = skin.receptorHeight;
+        const keySprite = sprites?.keysUp[lane];
+
+        if (keySprite) {
+          return (
+            <SkinSprite
+              key={`receptor-${lane}`}
+              src={keySprite}
+              style={{ left, top, width, height }}
+            />
+          );
+        }
+
+        return (
+          <div
+            key={`receptor-${lane}`}
+            style={{
+              position: "absolute",
+              left,
+              top,
+              width,
+              height,
+              borderRadius: 5,
+              backgroundColor: skin.receptorFill,
+            }}
+          />
+        );
+      }),
+    [snapshot.lanes, snapshot.laneWidth, snapshot.receptorY, skin, sprites],
   );
 
   const notes = [];
@@ -100,21 +179,32 @@ export function PlayView({
     const y = snapshot.y[i]!;
     const height = snapshot.noteHeight[i]!;
     const alpha = snapshot.alpha[i]!;
+    const left = lane * snapshot.laneWidth + skin.notePadding;
+    const width = snapshot.laneWidth - skin.notePadding * 2;
+    const noteSprite = sprites?.notes[lane];
 
     notes.push(
-      <div
-        key={`note-${i}-${Math.round(y)}`}
-        style={{
-          position: "absolute",
-          left: lane * snapshot.laneWidth + skin.notePadding,
-          top: y,
-          width: snapshot.laneWidth - skin.notePadding * 2,
-          height,
-          borderRadius: skin.noteBorderRadius,
-          backgroundColor: skin.laneColors[lane % skin.laneColors.length],
-          opacity: alpha,
-        }}
-      />,
+      noteSprite ? (
+        <SkinSprite
+          key={`note-${i}-${Math.round(y)}`}
+          src={noteSprite}
+          style={{ left, top: y, width, height, opacity: alpha }}
+        />
+      ) : (
+        <div
+          key={`note-${i}-${Math.round(y)}`}
+          style={{
+            position: "absolute",
+            left,
+            top: y,
+            width,
+            height,
+            borderRadius: skin.noteBorderRadius,
+            backgroundColor: skin.laneColors[lane % skin.laneColors.length],
+            opacity: alpha,
+          }}
+        />
+      ),
     );
   }
 
@@ -172,6 +262,7 @@ export function PlayView({
           borderColor: colors.border,
         }}
       >
+        {stageSprites}
         {laneBackgrounds}
         {laneSeparators}
 
@@ -197,8 +288,8 @@ export function PlayView({
           }}
         />
 
-        {receptors}
         {notes}
+        {receptors}
 
         {game.judgmentEffects.getPopups(skin).map((popup) => (
           <text
@@ -218,7 +309,7 @@ export function PlayView({
       </div>
 
       <text style={{ color: colors.mutedForeground, fontSize: 10 }}>
-        Keys: {game.getKeyBindingsHint()}
+        Keys: {game.getKeyBindingsHint()} · Skin: {skin.name}
       </text>
 
       <HStack gap="sm">

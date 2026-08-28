@@ -1,5 +1,13 @@
 import type { JudgmentResult } from "../integrations/mania-judge";
 
+export type PlayfieldSkinSprites = {
+  notes: readonly (string | null)[];
+  keysUp: readonly (string | null)[];
+  keysDown: readonly (string | null)[];
+  stageLeft: string | null;
+  stageRight: string | null;
+};
+
 export type PlayfieldSkin = {
   id: string;
   name: string;
@@ -15,4 +23,8 @@ export type PlayfieldSkin = {
   notePadding: number;
   judgmentColors: Partial<Record<JudgmentResult, string>>;
   judgmentMissColor: string;
+  /** Absolute image paths resolved from the skin folder; null uses procedural colors. */
+  sprites: PlayfieldSkinSprites | null;
+  /** Folder or `.osk` path the skin was loaded from. */
+  sourcePath: string | null;
 };

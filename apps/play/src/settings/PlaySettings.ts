@@ -13,6 +13,8 @@ export type PlaySettings = {
   laneKeys: string[];
   /** Last beatmap selected in song select (restored on launch). */
   lastBeatmapId: string | null;
+  /** Last selected osu! skin folder or `.osk` path; null = built-in default. */
+  skinPath: string | null;
 };
 
 export const DEFAULT_LANE_KEYS = [...DEFAULT_7K_BINDINGS.laneKeys];
@@ -24,6 +26,7 @@ export const DEFAULT_PLAY_SETTINGS: PlaySettings = {
   userOffsetMs: 0,
   laneKeys: DEFAULT_LANE_KEYS,
   lastBeatmapId: null,
+  skinPath: null,
 };
 
 export const DEFAULT_LANE_KEYS_JSON = JSON.stringify(DEFAULT_LANE_KEYS);
@@ -66,6 +69,7 @@ export function clampPlaySettings(settings: PlaySettings): PlaySettings {
     userOffsetMs: Math.max(-500, Math.min(500, settings.userOffsetMs)),
     laneKeys: parseLaneKeysJson(JSON.stringify(settings.laneKeys)),
     lastBeatmapId: settings.lastBeatmapId?.trim() || null,
+    skinPath: settings.skinPath?.trim() || null,
   };
 }
 

@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import {
   Button,
   Card,
@@ -7,10 +8,17 @@ import {
   CardTitle,
   HStack,
   Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Stack,
   Text,
+  colors,
 } from "../components/ui";
 import type { Game } from "../game/Game";
+import { DEFAULT_PLAYFIELD_SKIN } from "../skin/defaultSkin";
 import {
   DEFAULT_LANE_KEYS,
   formatKeyLabel,
@@ -49,8 +57,25 @@ function NumberField({
 }
 
 const LANE_LABELS = ["1", "2", "3", "4", "5", "6", "7"];
+const DEFAULT_SKIN_VALUE = "__default__";
 
 export function PlaySettingsView({ game, settings }: PlaySettingsViewProps) {
+  const installedSkins = useMemo(() => game.listSkins(), [game]);
+  const skinNotice = game.getSkinNotice();
+  const activeSkin = game.getPlayfieldSkin();
+  const [customSkinPath, setCustomSkinPath] = useState(settings.skinPath ?? "");
+
+  useEffect(() => {
+    setCustomSkinPath(settings.skinPath ?? "");
+  }, [settings.skinPath]);
+
+  const selectedSkinValue =
+    !settings.skinPath
+      ? DEFAULT_SKIN_VALUE
+      : installedSkins.some((skin) => skin.path === settings.skinPath)
+        ? settings.skinPath
+        : DEFAULT_SKIN_VALUE;
+
   const updateLaneKey = (lane: number, raw: string) => {
     const next = [...settings.laneKeys];
     next[lane] = normalizeLaneKey(raw);
@@ -65,6 +90,54 @@ export function PlaySettingsView({ game, settings }: PlaySettingsViewProps) {
       </CardHeader>
       <CardContent>
         <Stack gap="md">
+          <Stack gap="xs">
+            <Text size="sm" weight="semibold">
+              Skin
+            </Text>
+            <Select
+              value={selectedSkinValue}
+              onValueChange={(value) =>
+                game.setSkin(value === DEFAULT_SKIN_VALUE ? null : value)
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select a skin" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={DEFAULT_SKIN_VALUE}>
+                  {DEFAULT_PLAYFIELD_SKIN.name}
+                </SelectItem>
+                {installedSkins.map((skin) => (
+                  <SelectItem key={skin.id} value={skin.path}>
+                    {skin.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Text size="sm" muted>
+              Active: {activeSkin.name}
+              {activeSkin.sourcePath ? ` · ${activeSkin.sourcePath}` : ""}
+            </Text>
+            {skinNotice ? (
+              <Text size="sm" color={colors.destructive}>
+                {skinNotice}
+              </Text>
+            ) : null}
+            <HStack gap="sm">
+              <Input
+                placeholder="Custom skin folder or .osk path"
+                value={customSkinPath}
+                onValueChange={setCustomSkinPath}
+              />
+              <Button
+                variant="outline"
+                onClick={() => game.setSkin(customSkinPath.trim() || null)}
+              >
+                Apply
+              </Button>
+            </HStack>
+          </Stack>
+
           <NumberField
             label="Scroll speed (px/s)"
             value={settings.scrollSpeed}

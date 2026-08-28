@@ -17,6 +17,7 @@ function toSettings(row: typeof playSettings.$inferSelect): PlaySettings {
     userOffsetMs: row.userOffsetMs,
     laneKeys: parseLaneKeysJson(row.laneKeysJson),
     lastBeatmapId: row.lastBeatmapId,
+    skinPath: row.skinPath,
   });
 }
 
@@ -48,6 +49,7 @@ export class PlaySettingsRepository {
         userOffsetMs: values.userOffsetMs,
         laneKeysJson: JSON.stringify(values.laneKeys),
         lastBeatmapId: values.lastBeatmapId,
+        skinPath: values.skinPath,
         updatedAt,
       })
       .onConflictDoUpdate({
@@ -59,6 +61,7 @@ export class PlaySettingsRepository {
           userOffsetMs: values.userOffsetMs,
           laneKeysJson: JSON.stringify(values.laneKeys),
           lastBeatmapId: values.lastBeatmapId,
+          skinPath: values.skinPath,
           updatedAt,
         },
       })

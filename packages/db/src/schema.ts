@@ -487,6 +487,8 @@ export const playSettings = sqliteTable("play_settings", {
     .notNull()
     .default('["s","d","f","space","j","k","l"]'),
   lastBeatmapId: text("last_beatmap_id"),
+  /** Absolute path to an osu! skin folder or `.osk` archive; null = built-in default. */
+  skinPath: text("skin_path"),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });
 

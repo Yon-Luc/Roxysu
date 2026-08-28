@@ -36,6 +36,7 @@ import type { KeyBindings } from "../input/KeyBindings";
 import { PlayfieldRenderer } from "../playfield/PlayfieldRenderer";
 import { DEFAULT_PLAYFIELD_SKIN } from "../skin/defaultSkin";
 import type { PlayfieldSkin } from "../skin/PlayfieldSkin";
+import { SkinLoader, type SkinCatalogEntry } from "../skin/SkinLoader";
 import { buildPlayResult } from "../results/buildPlayResult";
 import type { PlayResult } from "../results/PlayResult";
 import type { RoxysuCatalog } from "../roxysu/RoxysuCatalog";
@@ -86,6 +87,9 @@ export class Game {
   });
 
   private playfieldSkin: PlayfieldSkin = DEFAULT_PLAYFIELD_SKIN;
+  private skinLoader: SkinLoader | null = null;
+  private skinNotice: string | null = null;
+  private lastAppliedSkinPath: string | null | undefined;
 
   readonly settings = new SettingsStore();
 
@@ -142,6 +146,18 @@ export class Game {
 
   getPlayfieldSkin(): PlayfieldSkin {
     return this.playfieldSkin;
+  }
+
+  getSkinNotice(): string | null {
+    return this.skinNotice;
+  }
+
+  listSkins(): SkinCatalogEntry[] {
+    return this.skinLoader?.listInstalled() ?? [];
+  }
+
+  setSkin(skinPath: string | null): PlaySettings {
+    return this.updateSettings({ skinPath });
   }
 
   getSettings(): PlaySettings {
@@ -245,11 +261,12 @@ export class Game {
 
     if (availability.status === "ready") {
       this.settings.bindRepository(this.config.database.getPlaySettings());
-      this.applySettings(this.settings.get());
       const settingsOverride = this.config.database
         .getSettings()
         .getOsuDataPathOverride();
       this.assets = this.config.createAssets(settingsOverride);
+      this.skinLoader = new SkinLoader(this.assets.getOsuDataPath());
+      this.applySettings(this.settings.get());
       this.catalog = this.config.database.getCatalog();
       this.songSelect = new SongSelect(
         this.config.database.getBeatmaps(),
@@ -262,6 +279,9 @@ export class Game {
     const osuDataPath = this.assets.getOsuDataPath();
     const osuPathStatus = this.assets.getOsuPathStatus();
     const osuFilesAvailable = osuPathStatus.exists && osuPathStatus.hasFiles;
+    if (!this.skinLoader) {
+      this.skinLoader = new SkinLoader(osuDataPath);
+    }
 
     this.environment = {
       availability,
@@ -557,6 +577,30 @@ export class Game {
     this.audio.setVolume(settings.masterVolume);
     this.preview?.setVolume(settings.masterVolume);
     this.input.setBindings({ laneKeys: settings.laneKeys });
+    if (settings.skinPath !== this.lastAppliedSkinPath) {
+      this.applySkinFromSettings(settings.skinPath);
+    }
+  }
+
+  private applySkinFromSettings(skinPath: string | null): void {
+    this.lastAppliedSkinPath = skinPath;
+    if (!this.skinLoader) {
+      this.playfieldSkin = { ...DEFAULT_PLAYFIELD_SKIN };
+      this.skinNotice = null;
+      return;
+    }
+
+    const result = this.skinLoader.load(skinPath, LANES);
+    if (!result.ok) {
+      this.playfieldSkin = { ...DEFAULT_PLAYFIELD_SKIN };
+      this.skinNotice = result.error;
+      this.patch({ frameVersion: this.state.frameVersion + 1 });
+      return;
+    }
+
+    this.playfieldSkin = result.skin;
+    this.skinNotice = result.warnings[0] ?? null;
+    this.patch({ frameVersion: this.state.frameVersion + 1 });
   }
 
   private syncPlaybackToChartStart(): void {

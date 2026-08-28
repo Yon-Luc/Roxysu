@@ -29,4 +29,6 @@ export const DEFAULT_PLAYFIELD_SKIN: PlayfieldSkin = {
     meh: "#fb923c",
   },
   judgmentMissColor: "#f87171",
+  sprites: null,
+  sourcePath: null,
 };

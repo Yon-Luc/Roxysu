@@ -1,6 +1,6 @@
 import { NoteType } from "../beatmap/BeatmapChart";
 import { createEmptyPlayfieldChart } from "./PlayfieldChart";
-import { clipToPlayfield, PlayfieldGeometry } from "./PlayfieldGeometry";
+import { PlayfieldGeometry, isNoteVisible } from "./PlayfieldGeometry";
 import { PlayfieldTiming } from "./PlayfieldTiming";
 import { findVisibleNoteRange } from "./PlayfieldVisibility";
 import type {
@@ -10,7 +10,7 @@ import type {
   PlayfieldRenderSnapshot,
 } from "./PlayfieldTypes";
 
-const MAX_VISIBLE = 4096;
+const MAX_VISIBLE = 512;
 
 function computeMaxHoldSpanMs(chart: PlayfieldChart): number {
   let maxSpan = 0;
@@ -35,6 +35,7 @@ export class PlayfieldRenderer {
   private readonly visibleHeight = new Float32Array(MAX_VISIBLE);
   private readonly visibleAlpha = new Float32Array(MAX_VISIBLE);
   private readonly visibleIsHold = new Uint8Array(MAX_VISIBLE);
+  private readonly visibleNoteIndex = new Uint32Array(MAX_VISIBLE);
   private visibleCount = 0;
   private hidden = new Uint8Array(0);
   private maxHoldSpanMs = 0;
@@ -155,16 +156,16 @@ export class PlayfieldRenderer {
         ? this.geometry.hold(startMs, endMs, songTimeMs, pixelsPerMs, lane)
         : this.geometry.tap(startMs, songTimeMs, pixelsPerMs, lane);
 
-      const clipped = clipToPlayfield(bounds.top, bounds.height, receptorY);
-      if (!clipped) {
+      if (!isNoteVisible(bounds.top, bounds.height, this.height)) {
         continue;
       }
 
       const index = this.visibleCount;
       this.visibleLane[index] = lane;
-      this.visibleY[index] = clipped.top;
-      this.visibleHeight[index] = clipped.height;
+      this.visibleY[index] = bounds.top;
+      this.visibleHeight[index] = bounds.height;
       this.visibleIsHold[index] = isHold ? 1 : 0;
+      this.visibleNoteIndex[index] = i;
       this.visibleAlpha[index] = 1;
       this.visibleCount += 1;
     }
@@ -179,6 +180,7 @@ export class PlayfieldRenderer {
       y: this.visibleY,
       noteHeight: this.visibleHeight,
       isHold: this.visibleIsHold,
+      noteIndex: this.visibleNoteIndex,
       alpha: this.visibleAlpha,
       lanes: this.lanes,
       width: this.width,

@@ -115,6 +115,10 @@ export function PlayView({
     snapshot.lanes,
   ]);
 
+  const columns =
+    snapshot.columns.length > 0 ? snapshot.columns : layout.columns;
+  const receptorY = snapshot.receptorY;
+
   const stageSprites = useMemo(() => {
     if (!sprites) return null;
     const items = [];
@@ -159,7 +163,7 @@ export function PlayView({
             left: column.x,
             top: 0,
             width: column.w,
-            height: layout.receptorY,
+            height: receptorY,
             backgroundColor:
               lane % 2 === 0
                 ? skin.laneBackgroundEven
@@ -169,7 +173,7 @@ export function PlayView({
       )),
     [
       layout.columns,
-      layout.receptorY,
+      receptorY,
       skin.laneBackgroundEven,
       skin.laneBackgroundOdd,
     ],
@@ -185,12 +189,12 @@ export function PlayView({
             left: x - 1,
             top: 0,
             width: 2,
-            height: layout.receptorY,
+            height: receptorY,
             backgroundColor: colors.border,
           }}
         />
       )),
-    [layout.lines, layout.receptorY],
+    [layout.lines, receptorY],
   );
 
   const receptors = useMemo(
@@ -198,7 +202,7 @@ export function PlayView({
       layout.columns.map((column, lane) => {
         const keySprite = sprites?.keysUp[lane];
         const tapH = column.tapHeight;
-        const top = layout.receptorY - tapH;
+        const top = receptorY - tapH;
 
         if (keySprite) {
           return (
@@ -230,78 +234,64 @@ export function PlayView({
           />
         );
       }),
-    [layout.columns, layout.receptorY, skin.receptorFill, skin.receptorHeight, sprites],
+    [layout.columns, receptorY, skin.receptorFill, skin.receptorHeight, sprites],
   );
 
   const notes = [];
   for (let i = 0; i < snapshot.visibleCount; i += 1) {
+    const noteId = snapshot.noteIndex[i]!;
     const lane = snapshot.lane[i]!;
-    const column = columnForLane(layout.columns, lane);
-    const y = snapshot.y[i]!;
+    const column = columnForLane(columns, lane);
     const totalHeight = snapshot.noteHeight[i]!;
     const alpha = snapshot.alpha[i]!;
     const isHold = snapshot.isHold[i] === 1;
     const tapH = column.tapHeight;
+    const headY = isHold ? snapshot.y[i]! + totalHeight - tapH : snapshot.y[i]!;
     const headSprite = sprites?.notes[lane];
-    const bodySprite = sprites?.bodies[lane];
+    const bodyTop = snapshot.y[i]! + tapH;
+    const bodyHeight = Math.max(0, headY - bodyTop);
 
-    if (isHold && totalHeight > tapH) {
-      const bodyHeight = totalHeight - tapH;
-      if (bodySprite) {
-        notes.push(
-          <SkinSprite
-            key={`hold-body-${i}-${Math.round(y)}`}
-            src={bodySprite}
-            style={{
-              left: column.x,
-              top: y + tapH,
-              width: column.w,
-              height: bodyHeight,
-              opacity: alpha,
-            }}
-          />,
-        );
-      } else {
-        notes.push(
-          <div
-            key={`hold-body-${i}-${Math.round(y)}`}
-            style={{
-              position: "absolute",
-              left: column.x + skin.notePadding,
-              top: y + tapH,
-              width: Math.max(4, column.w - skin.notePadding * 2),
-              height: bodyHeight,
-              borderRadius: skin.noteBorderRadius,
-              backgroundColor: skin.laneColors[lane % skin.laneColors.length],
-              opacity: alpha * 0.85,
-            }}
-          />,
-        );
-      }
+    // Hold bodies use divs — tiled <img> elements exhaust the GPUI texture atlas.
+    if (isHold && bodyHeight > 0) {
+      notes.push(
+        <div
+          key={`hold-body-${noteId}`}
+          style={{
+            position: "absolute",
+            left: column.x + skin.notePadding,
+            top: bodyTop,
+            width: Math.max(4, column.w - skin.notePadding * 2),
+            height: bodyHeight,
+            borderRadius: skin.noteBorderRadius,
+            backgroundColor: skin.laneColors[lane % skin.laneColors.length],
+            opacity: alpha * 0.85,
+          }}
+        />,
+      );
     }
 
     notes.push(
       headSprite ? (
         <SkinSprite
-          key={`note-${i}-${Math.round(y)}`}
+          key={`note-${noteId}`}
           src={headSprite}
           style={{
             left: column.x,
-            top: y,
+            top: headY,
             width: column.w,
-            height: Math.min(tapH, totalHeight),
+            height: tapH,
             opacity: alpha,
           }}
         />
       ) : (
         <div
-          key={`note-${i}-${Math.round(y)}`}
+          key={`note-${noteId}`}
           style={{
             position: "absolute",
             left: column.x + skin.notePadding,
-            top: y,
+            top: headY,
             width: Math.max(4, column.w - skin.notePadding * 2),
-            height: Math.min(tapH, totalHeight),
+            height: tapH,
             borderRadius: skin.noteBorderRadius,
             backgroundColor: skin.laneColors[lane % skin.laneColors.length],
             opacity: alpha,
@@ -373,9 +363,9 @@ export function PlayView({
           style={{
             position: "absolute",
             left: 0,
-            top: layout.receptorY,
+            top: receptorY,
             width: snapshot.width,
-            height: snapshot.playfieldHeight - layout.receptorY,
+            height: snapshot.playfieldHeight - receptorY,
             backgroundColor: skin.belowReceptorBackground,
           }}
         />
@@ -384,7 +374,7 @@ export function PlayView({
           style={{
             position: "absolute",
             left: 0,
-            top: layout.receptorY,
+            top: receptorY,
             width: snapshot.width,
             height: 3,
             backgroundColor: skin.judgmentLineColor,
@@ -395,14 +385,14 @@ export function PlayView({
         {receptors}
 
         {game.judgmentEffects.getPopups(skin).map((popup) => {
-          const column = columnForLane(layout.columns, popup.lane);
+          const column = columnForLane(columns, popup.lane);
           return (
             <text
               key={popup.id}
               style={{
                 position: "absolute",
                 left: column.x + 8,
-                top: layout.receptorY - 28,
+                top: receptorY - 28,
                 color: popup.color,
                 fontSize: 11,
                 fontWeight: 700,

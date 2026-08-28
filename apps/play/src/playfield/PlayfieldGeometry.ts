@@ -58,6 +58,14 @@ export function holdBodyBounds(
   return { top, height: Math.max(tapHeight, bottom - top) };
 }
 
+export function isNoteVisible(
+  top: number,
+  height: number,
+  playfieldHeight: number,
+): boolean {
+  return top + height > 0 && top < playfieldHeight;
+}
+
 export function clipToPlayfield(
   top: number,
   height: number,

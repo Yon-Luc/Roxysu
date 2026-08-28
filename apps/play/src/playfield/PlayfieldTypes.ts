@@ -34,6 +34,8 @@ export type PlayfieldRenderSnapshot = {
   noteHeight: Float32Array;
   isHold: Uint8Array;
   alpha: Float32Array;
+  /** Chart note index — stable key for retained GPU elements. */
+  noteIndex: Uint32Array;
   lanes: number;
   width: number;
   playfieldHeight: number;

@@ -16,11 +16,10 @@ export class TimelineAudioEngine implements AudioEngine {
     if (!(await file.exists())) {
       throw new Error(`Audio file not found: ${path}`);
     }
-    this.markTimelineReady();
+    this.prepareEmpty();
   }
 
-  /** Enable timeline tracking without decoding audio (M2 fallback). */
-  markTimelineReady(): void {
+  prepareEmpty(): void {
     this.loaded = true;
     this.offsetMs = 0;
     this.playing = false;
@@ -63,5 +62,11 @@ export class TimelineAudioEngine implements AudioEngine {
 
   isLoaded(): boolean {
     return this.loaded;
+  }
+
+  dispose(): void {
+    this.loaded = false;
+    this.playing = false;
+    this.offsetMs = 0;
   }
 }

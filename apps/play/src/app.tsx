@@ -86,6 +86,12 @@ function AvailabilityCard({ environment }: { environment: GameEnvironment }) {
           >
             {osuFilesAvailable ? "files/ available" : "files/ unavailable"}
           </Text>
+          <Text size="sm" muted>
+            Audio:{" "}
+            {environment.audioBackend === "native"
+              ? "native (miniaudio)"
+              : "timeline only (no sound)"}
+          </Text>
         </Stack>
       </CardContent>
     </Card>

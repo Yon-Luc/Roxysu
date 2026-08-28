@@ -1,5 +1,10 @@
 import type { AssetResolver } from "../assets/AssetResolver";
+import type { AudioEngine } from "../audio/AudioEngine";
 import { AudioClock } from "../audio/AudioClock";
+import {
+  bootstrapAudioEngine,
+  type AudioBackend,
+} from "../audio/createAudioEngine";
 import { TimelineAudioEngine } from "../audio/TimelineAudioEngine";
 import {
   loadBeatmapForPlay,
@@ -38,6 +43,7 @@ export type GameEnvironment = {
   availability: RoxysuAvailability;
   osuDataPath: string;
   osuFilesAvailable: boolean;
+  audioBackend: AudioBackend;
 };
 
 export type GameConfig = {
@@ -68,7 +74,7 @@ export class Game {
   private songSelect: SongSelect | null = null;
   private catalog: RoxysuCatalog | null = null;
   private clock: GameClock;
-  private readonly audio = new TimelineAudioEngine();
+  private audio: AudioEngine = new TimelineAudioEngine();
   private state = createInitialGameState();
   private readonly listeners = new Set<GameListener>();
   private environment: GameEnvironment | null = null;
@@ -132,6 +138,11 @@ export class Game {
   }
 
   async bootstrap(): Promise<GameEnvironment> {
+    const { engine, backend } = await bootstrapAudioEngine();
+    this.audio.dispose();
+    this.audio = engine;
+    this.clock = new AudioClock(this.audio);
+
     const availability = this.config.database.open();
 
     if (availability.status === "ready") {
@@ -155,6 +166,7 @@ export class Game {
       availability,
       osuDataPath,
       osuFilesAvailable,
+      audioBackend: backend,
     };
 
     this.transition("SONG_SELECT");
@@ -218,7 +230,7 @@ export class Game {
         return;
       }
     } else {
-      this.audio.markTimelineReady();
+      this.audio.prepareEmpty();
     }
 
     this.audio.seek(0);
@@ -334,6 +346,7 @@ export class Game {
     this.stopLoop();
     this.clock.pause();
     this.audio.stop();
+    this.audio.dispose();
     this.playfield.destroy();
     this.events.clear();
     this.judgmentEffects.reset();

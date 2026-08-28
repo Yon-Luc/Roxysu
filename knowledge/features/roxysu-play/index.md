@@ -59,6 +59,7 @@ bun --hot apps/play/src/app.tsx
 ## Implementation
 
 - Entry: `apps/play/src/app.tsx` — must end with `render()` (idempotent under `--hot`).
+- M4 audio: native playback via miniaudio_node (OGG/MP3/FLAC from lazer files/), timeline fallback when unavailable.
 - M5: Roxysu catalog integration — mastery, pattern analysis, mania ratings, collections, score history.
 - M3/M4: judged notes hidden, judgment popups, searchable song select, results screen.
 - Legacy benchmark preserved as `apps/play/src/test.tsx` (renamed from `app.tsx`).
@@ -75,7 +76,9 @@ bun --hot apps/play/src/app.tsx
 - `apps/play/src/beatmap/BeatmapLoader.ts` — hash → `.osu` → generic chart
 - `apps/play/src/gameplay/GameplayEngine.ts` — headless mania judgment loop
 - `apps/play/src/playfield/PlayfieldRenderer.ts` — typed-array VSRG renderer
-- `apps/play/src/roxysu/RoxysuCatalog.ts` — read-only Roxysu metadata facade
+- `apps/play/src/audio/NativeAudioEngine.ts` — miniaudio-backed AudioEngine
+- `apps/play/src/audio/createAudioEngine.ts` — native vs timeline backend selection
+- `apps/play/src/integrations/miniaudio.ts` — miniaudio_node wrapper
 - `apps/play/src/database/BeatmapInsightsRepository.ts` — mastery, patterns, ratings
 - `apps/play/src/database/CollectionRepository.ts` — smart + Realm collections
 - `apps/play/src/songselect/BeatmapInsightsPanel.tsx` — Roxysu insights card

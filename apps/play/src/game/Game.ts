@@ -226,16 +226,22 @@ export class Game {
     this.clock.pause();
     this.clock.seek(0);
     this.audio.stop();
+    this.audio.seek(0);
     this.input.reset();
     if (this.loadedBeatmap) {
       this.gameplay.load(this.loadedBeatmap.chart);
     }
-    this.transition("COUNTDOWN");
-    this.transition("PLAYING");
-    this.clock.start();
+
+    const wasPlaying = this.state.phase === "PLAYING";
     this.playfield.setSongTime(0);
-    this.playfield.setPlaying(true);
-    this.ensureLoop();
+    this.playfield.setPlaying(wasPlaying);
+
+    if (wasPlaying) {
+      this.clock.start();
+      this.audio.play();
+      this.ensureLoop();
+    }
+
     this.patch({
       songTimeMs: 0,
       combo: 0,

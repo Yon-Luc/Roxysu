@@ -9,6 +9,7 @@ import {
   CardHeader,
   CardTitle,
   HStack,
+  ScrollArea,
   Stack,
   Text,
   colors,
@@ -172,11 +173,19 @@ function App() {
       style={{
         width: "100%",
         height: "100%",
+        display: "flex",
+        flexDirection: "column",
         backgroundColor: colors.background,
-        padding: 24,
       }}
     >
-      <Stack gap="lg" style={{ maxWidth: 960, alignItems: "stretch" }}>
+      <ScrollArea
+        style={{
+          flexGrow: 1,
+          borderWidth: 0,
+          backgroundColor: colors.background,
+        }}
+      >
+        <Stack gap="lg" style={{ maxWidth: 960, alignItems: "stretch", padding: 24 }}>
         <Stack gap="xs">
           <Text size="2xl" weight="bold">
             Roxysu Play
@@ -333,7 +342,8 @@ function App() {
             </CardContent>
           </Card>
         ) : null}
-      </Stack>
+        </Stack>
+      </ScrollArea>
     </div>
   );
 }

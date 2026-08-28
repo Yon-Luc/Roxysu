@@ -1,35 +1,53 @@
-export function findVisibleRange(
+export function findFirstIndexAtLeast(
+  values: Float64Array,
+  threshold: number,
+): number {
+  let begin = 0;
+  let end = values.length;
+
+  while (begin < end) {
+    const mid = (begin + end) >> 1;
+    if (values[mid]! < threshold) {
+      begin = mid + 1;
+    } else {
+      end = mid;
+    }
+  }
+
+  return begin;
+}
+
+export function findFirstIndexGreaterThan(
+  values: Float64Array,
+  threshold: number,
+): number {
+  let begin = 0;
+  let end = values.length;
+
+  while (begin < end) {
+    const mid = (begin + end) >> 1;
+    if (values[mid]! <= threshold) {
+      begin = mid + 1;
+    } else {
+      end = mid;
+    }
+  }
+
+  return begin;
+}
+
+export function findVisibleNoteRange(
   startTimes: Float64Array,
+  endTimes: Float64Array,
   songTimeMs: number,
   lookAheadMs: number,
   lookBehindMs: number,
 ): { begin: number; end: number } {
-  const minTime = songTimeMs - lookBehindMs;
-  const maxTime = songTimeMs + lookAheadMs;
+  const minEndMs = songTimeMs - lookBehindMs;
+  const maxStartMs = songTimeMs + lookAheadMs;
 
-  let begin = 0;
-  let end = startTimes.length;
+  const begin = findFirstIndexAtLeast(endTimes, minEndMs);
+  const end = findFirstIndexGreaterThan(startTimes, maxStartMs);
 
-  while (begin < end) {
-    const mid = (begin + end) >> 1;
-    if (startTimes[mid]! < minTime) {
-      begin = mid + 1;
-    } else {
-      end = mid;
-    }
-  }
-
-  const rangeStart = begin;
-  end = startTimes.length;
-
-  while (begin < end) {
-    const mid = (begin + end) >> 1;
-    if (startTimes[mid]! <= maxTime) {
-      begin = mid + 1;
-    } else {
-      end = mid;
-    }
-  }
-
-  return { begin: rangeStart, end: begin };
+  return { begin, end };
 }

@@ -53,6 +53,43 @@ export function PlayView({
     [snapshot.lanes, snapshot.laneWidth, snapshot.receptorY],
   );
 
+  const laneSeparators = useMemo(
+    () =>
+      Array.from({ length: snapshot.lanes - 1 }, (_, lane) => (
+        <div
+          key={`sep-${lane}`}
+          style={{
+            position: "absolute",
+            left: (lane + 1) * snapshot.laneWidth - 1,
+            top: 0,
+            width: 2,
+            height: snapshot.receptorY,
+            backgroundColor: colors.border,
+          }}
+        />
+      )),
+    [snapshot.lanes, snapshot.laneWidth, snapshot.receptorY],
+  );
+
+  const receptors = useMemo(
+    () =>
+      Array.from({ length: snapshot.lanes }, (_, lane) => (
+        <div
+          key={`receptor-${lane}`}
+          style={{
+            position: "absolute",
+            left: lane * snapshot.laneWidth + 7,
+            top: snapshot.receptorY + 10,
+            width: snapshot.laneWidth - 14,
+            height: RECEPTOR_HEIGHT,
+            borderRadius: 5,
+            backgroundColor: "#252d3a",
+          }}
+        />
+      )),
+    [snapshot.lanes, snapshot.laneWidth, snapshot.receptorY],
+  );
+
   const notes = [];
   for (let i = 0; i < snapshot.visibleCount; i += 1) {
     const lane = snapshot.lane[i]!;
@@ -132,22 +169,7 @@ export function PlayView({
         }}
       >
         {laneBackgrounds}
-
-        {Array.from({ length: snapshot.lanes - 1 }, (_, lane) => (
-          <div
-            key={`sep-${lane}`}
-            style={{
-              position: "absolute",
-              left: (lane + 1) * snapshot.laneWidth - 1,
-              top: 0,
-              width: 2,
-              height: snapshot.receptorY,
-              backgroundColor: colors.border,
-            }}
-          />
-        ))}
-
-        {notes}
+        {laneSeparators}
 
         <div
           style={{
@@ -155,13 +177,24 @@ export function PlayView({
             left: 0,
             top: snapshot.receptorY,
             width: snapshot.width,
-            height: RECEPTOR_HEIGHT,
-            backgroundColor: "rgba(125, 211, 252, 0.12)",
-            borderTopWidth: +2,
-            borderBottomWidth: 2,
-            borderColor: colors.primary,
+            height: snapshot.playfieldHeight - snapshot.receptorY,
+            backgroundColor: "#11151d",
           }}
         />
+
+        <div
+          style={{
+            position: "absolute",
+            left: 0,
+            top: snapshot.receptorY,
+            width: snapshot.width,
+            height: 3,
+            backgroundColor: colors.primary,
+          }}
+        />
+
+        {receptors}
+        {notes}
       </div>
 
       <text style={{ color: colors.mutedForeground, fontSize: 10 }}>

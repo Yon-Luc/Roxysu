@@ -1,7 +1,8 @@
+import { NoteType } from "../beatmap/BeatmapChart";
 import { createEmptyPlayfieldChart } from "./PlayfieldChart";
-import { PlayfieldGeometry } from "./PlayfieldGeometry";
+import { clipToPlayfield, PlayfieldGeometry } from "./PlayfieldGeometry";
 import { PlayfieldTiming } from "./PlayfieldTiming";
-import { findVisibleRange } from "./PlayfieldVisibility";
+import { findVisibleNoteRange } from "./PlayfieldVisibility";
 import type {
   PlayfieldChart,
   PlayfieldRendererOptions,
@@ -71,12 +72,13 @@ export class PlayfieldRenderer {
 
     const songTimeMs = this.timing.getSongTime();
     const pixelsPerMs = this.timing.pixelsPerMs();
-    const lookAheadMs = (this.geometry.getReceptorY() / pixelsPerMs) + 500;
-    const lookBehindMs =
-      ((this.height - this.geometry.getReceptorY()) / pixelsPerMs) + 500;
+    const receptorY = this.geometry.getReceptorY();
+    const lookAheadMs = receptorY / pixelsPerMs + 250;
+    const lookBehindMs = (this.height - receptorY) / pixelsPerMs + 250;
 
-    const { begin, end } = findVisibleRange(
+    const { begin, end } = findVisibleNoteRange(
       chart.startTime,
+      chart.endTime,
       songTimeMs,
       lookAheadMs,
       lookBehindMs,
@@ -85,17 +87,21 @@ export class PlayfieldRenderer {
     for (let i = begin; i < end && this.visibleCount < MAX_VISIBLE; i += 1) {
       const startMs = chart.startTime[i]!;
       const endMs = chart.endTime[i]!;
-      const y = this.geometry.headY(startMs, songTimeMs, pixelsPerMs);
-      const height = this.geometry.height(startMs, endMs, pixelsPerMs);
+      const isHold = chart.type[i] === NoteType.Hold;
 
-      if (y + height < -height || y > this.height + height) {
+      const bounds = isHold
+        ? this.geometry.hold(startMs, endMs, songTimeMs, pixelsPerMs)
+        : this.geometry.tap(startMs, songTimeMs, pixelsPerMs);
+
+      const clipped = clipToPlayfield(bounds.top, bounds.height, receptorY);
+      if (!clipped) {
         continue;
       }
 
       const index = this.visibleCount;
       this.visibleLane[index] = chart.lane[i]!;
-      this.visibleY[index] = y;
-      this.visibleHeight[index] = height;
+      this.visibleY[index] = clipped.top;
+      this.visibleHeight[index] = clipped.height;
       this.visibleAlpha[index] = 1;
       this.visibleCount += 1;
     }

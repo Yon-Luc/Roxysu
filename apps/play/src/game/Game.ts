@@ -27,8 +27,12 @@ import { GameplayEngine } from "../gameplay/GameplayEngine";
 import { InputManager } from "../input/InputManager";
 import { PreviewController } from "../preview/PreviewController";
 import { SettingsStore } from "../settings/SettingsStore";
-import type { PlaySettings } from "../settings/PlaySettings";
-import { DEFAULT_PLAY_SETTINGS } from "../settings/PlaySettings";
+import {
+  DEFAULT_PLAY_SETTINGS,
+  formatKeyBindingsHint,
+  type PlaySettings,
+} from "../settings/PlaySettings";
+import type { KeyBindings } from "../input/KeyBindings";
 import { PlayfieldRenderer } from "../playfield/PlayfieldRenderer";
 import { buildPlayResult } from "../results/buildPlayResult";
 import type { PlayResult } from "../results/PlayResult";
@@ -94,6 +98,7 @@ export class Game {
   private loadedBeatmap: LoadedBeatmap | null = null;
   private countdownEndsAt = 0;
   private previewRequestId = 0;
+  private audioLeadInMs = 0;
 
   constructor(private readonly config: GameConfig) {
     this.assets = config.assets;
@@ -116,7 +121,19 @@ export class Game {
   }
 
   getSongTimeMs(): number {
-    return this.clock.getTime() + this.settings.get().userOffsetMs;
+    return (
+      this.clock.getTime() -
+      this.audioLeadInMs +
+      this.settings.get().userOffsetMs
+    );
+  }
+
+  getKeyBindings(): KeyBindings {
+    return { laneKeys: this.settings.get().laneKeys };
+  }
+
+  getKeyBindingsHint(): string {
+    return formatKeyBindingsHint(this.settings.get().laneKeys);
   }
 
   getSettings(): PlaySettings {
@@ -231,6 +248,7 @@ export class Game {
         this.catalog,
         this.assets,
       );
+      this.restoreLastBeatmapSelection();
     }
 
     const osuDataPath = this.assets.getOsuDataPath();
@@ -251,6 +269,7 @@ export class Game {
   selectBeatmap(beatmapId: string): void {
     if (this.state.phase !== "SONG_SELECT") return;
     this.patch({ selectedBeatmapId: beatmapId, error: null, playResult: null });
+    this.updateSettings({ lastBeatmapId: beatmapId });
     void this.previewSelectedBeatmap(beatmapId);
   }
 
@@ -343,8 +362,8 @@ export class Game {
       this.loadedBeatmap = loaded;
     }
 
+    this.syncPlaybackToChartStart();
     this.transition("PLAYING");
-    this.clock.seek(0);
     this.clock.start();
     this.playfield.setPlaying(true);
     this.patch({
@@ -379,9 +398,7 @@ export class Game {
     }
 
     this.clock.pause();
-    this.clock.seek(0);
-    this.audio.stop();
-    this.audio.seek(0);
+    this.syncPlaybackToChartStart();
     this.input.reset();
     this.judgmentEffects.reset();
     if (this.loadedBeatmap) {
@@ -395,7 +412,6 @@ export class Game {
 
     if (wasPlaying) {
       this.clock.start();
-      this.audio.play();
       this.ensureLoop();
     }
 
@@ -414,7 +430,7 @@ export class Game {
       return;
     }
 
-    const gameplay = this.gameplay.getSnapshot(this.clock.getTime());
+    const gameplay = this.gameplay.getSnapshot(this.getSongTimeMs());
     const playResult =
       this.loadedBeatmap != null
         ? buildPlayResult(this.loadedBeatmap.summary, gameplay)
@@ -445,6 +461,7 @@ export class Game {
     this.playfield.setSongTime(0);
     this.input.reset();
     this.judgmentEffects.reset();
+    this.audioLeadInMs = 0;
     this.loadedBeatmap = null;
     this.stopLoop();
     this.stopPreview();
@@ -492,7 +509,7 @@ export class Game {
 
       if (this.state.phase !== "PLAYING") return;
 
-      const timeMs = this.clock.getTime();
+      const timeMs = this.getSongTimeMs();
       const inputEvents = this.input.drain();
       this.gameplay.update(timeMs, inputEvents, this.events);
       this.playfield.setHiddenMask(this.gameplay.getHiddenMask());
@@ -531,6 +548,33 @@ export class Game {
     this.playfield.setScrollSpeed(settings.scrollSpeed);
     this.audio.setVolume(settings.masterVolume);
     this.preview?.setVolume(settings.masterVolume);
+    this.input.setBindings({ laneKeys: settings.laneKeys });
+  }
+
+  private syncPlaybackToChartStart(): void {
+    const leadIn = this.loadedBeatmap?.general.audioLeadInMs ?? 0;
+    this.audioLeadInMs = leadIn;
+    this.clock.seek(leadIn);
+    if (this.audio.isLoaded()) {
+      this.audio.seek(leadIn);
+    }
+  }
+
+  private restoreLastBeatmapSelection(): void {
+    const { lastBeatmapId } = this.settings.get();
+    if (!lastBeatmapId) return;
+
+    const beatmap = this.config.database.getBeatmaps().getById(lastBeatmapId);
+    if (
+      !beatmap ||
+      beatmap.rulesetShortName !== "mania" ||
+      beatmap.keyCount !== LANES
+    ) {
+      return;
+    }
+
+    this.patch({ selectedBeatmapId: lastBeatmapId });
+    void this.previewSelectedBeatmap(lastBeatmapId);
   }
 
   private transition(phase: GamePhase): void {

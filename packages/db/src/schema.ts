@@ -482,6 +482,11 @@ export const playSettings = sqliteTable("play_settings", {
   masterVolume: real("master_volume").notNull().default(0.85),
   countdownSeconds: integer("countdown_seconds").notNull().default(3),
   userOffsetMs: integer("user_offset_ms").notNull().default(0),
+  /** JSON string array of lane key names, e.g. `["s","d","f","space","j","k","l"]`. */
+  laneKeysJson: text("lane_keys_json")
+    .notNull()
+    .default('["s","d","f","space","j","k","l"]'),
+  lastBeatmapId: text("last_beatmap_id"),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });
 

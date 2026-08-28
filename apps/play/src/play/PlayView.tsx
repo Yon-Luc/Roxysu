@@ -220,7 +220,7 @@ export function PlayView({
       </div>
 
       <text style={{ color: colors.mutedForeground, fontSize: 10 }}>
-        Keys: S D F Space J K L
+        Keys: {game.getKeyBindingsHint()}
       </text>
 
       <HStack gap="sm">

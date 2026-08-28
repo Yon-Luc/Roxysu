@@ -11,7 +11,12 @@ import {
   Text,
 } from "../components/ui";
 import type { Game } from "../game/Game";
-import type { PlaySettings } from "../settings/PlaySettings";
+import {
+  DEFAULT_LANE_KEYS,
+  formatKeyLabel,
+  normalizeLaneKey,
+  type PlaySettings,
+} from "../settings/PlaySettings";
 
 type PlaySettingsViewProps = {
   game: Game;
@@ -43,7 +48,15 @@ function NumberField({
   );
 }
 
+const LANE_LABELS = ["1", "2", "3", "4", "5", "6", "7"];
+
 export function PlaySettingsView({ game, settings }: PlaySettingsViewProps) {
+  const updateLaneKey = (lane: number, raw: string) => {
+    const next = [...settings.laneKeys];
+    next[lane] = normalizeLaneKey(raw);
+    game.updateSettings({ laneKeys: next });
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -74,12 +87,38 @@ export function PlaySettingsView({ game, settings }: PlaySettingsViewProps) {
             value={settings.userOffsetMs}
             onChange={(userOffsetMs) => game.updateSettings({ userOffsetMs })}
           />
+
+          <Stack gap="xs">
+            <Text size="sm" weight="semibold">
+              7K key bindings
+            </Text>
+            <HStack gap="sm">
+              {settings.laneKeys.map((key, lane) => (
+                <Stack key={lane} gap="xs">
+                  <Text size="sm" muted>
+                    {LANE_LABELS[lane]}
+                  </Text>
+                  <Input
+                    value={formatKeyLabel(key)}
+                    onValueChange={(value) => updateLaneKey(lane, value)}
+                  />
+                </Stack>
+              ))}
+            </HStack>
+          </Stack>
+
           <HStack gap="sm">
             <Button
               variant="outline"
               onClick={() => game.updateSettings({ scrollSpeed: 400 })}
             >
               Reset scroll
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => game.updateSettings({ laneKeys: DEFAULT_LANE_KEYS })}
+            >
+              Reset keys
             </Button>
             <Button variant="outline" onClick={() => game.resetSettings()}>
               Reset all

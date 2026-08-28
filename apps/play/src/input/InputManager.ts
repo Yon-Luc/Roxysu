@@ -1,6 +1,10 @@
 import type { EventPayload } from "@gpuix/react";
 import { InputState } from "./InputState";
-import { DEFAULT_7K_BINDINGS, laneForKey, type KeyBindings } from "./KeyBindings";
+import {
+  DEFAULT_7K_BINDINGS,
+  laneForKey,
+  type KeyBindings,
+} from "./KeyBindings";
 
 export type InputEvent =
   | { type: "press"; lane: number; timeMs: number }
@@ -8,11 +12,20 @@ export type InputEvent =
 
 export class InputManager {
   readonly state = new InputState();
-  private readonly bindings: KeyBindings;
+  private bindings: KeyBindings;
   private readonly queue: InputEvent[] = [];
 
   constructor(bindings: KeyBindings = DEFAULT_7K_BINDINGS) {
     this.bindings = bindings;
+  }
+
+  setBindings(bindings: KeyBindings): void {
+    this.bindings = bindings;
+    this.reset();
+  }
+
+  getBindings(): KeyBindings {
+    return this.bindings;
   }
 
   handleKeyDown(event: EventPayload, timeMs: number): void {

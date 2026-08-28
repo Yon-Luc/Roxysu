@@ -1,7 +1,9 @@
 import { eq, playSettings, type Db } from "../integrations/roxysu-db";
 import {
   clampPlaySettings,
+  DEFAULT_LANE_KEYS_JSON,
   DEFAULT_PLAY_SETTINGS,
+  parseLaneKeysJson,
   type PlaySettings,
 } from "../settings/PlaySettings";
 
@@ -13,6 +15,8 @@ function toSettings(row: typeof playSettings.$inferSelect): PlaySettings {
     masterVolume: row.masterVolume,
     countdownSeconds: row.countdownSeconds,
     userOffsetMs: row.userOffsetMs,
+    laneKeys: parseLaneKeysJson(row.laneKeysJson),
+    lastBeatmapId: row.lastBeatmapId,
   });
 }
 
@@ -42,6 +46,8 @@ export class PlaySettingsRepository {
         masterVolume: values.masterVolume,
         countdownSeconds: values.countdownSeconds,
         userOffsetMs: values.userOffsetMs,
+        laneKeysJson: JSON.stringify(values.laneKeys),
+        lastBeatmapId: values.lastBeatmapId,
         updatedAt,
       })
       .onConflictDoUpdate({
@@ -51,6 +57,8 @@ export class PlaySettingsRepository {
           masterVolume: values.masterVolume,
           countdownSeconds: values.countdownSeconds,
           userOffsetMs: values.userOffsetMs,
+          laneKeysJson: JSON.stringify(values.laneKeys),
+          lastBeatmapId: values.lastBeatmapId,
           updatedAt,
         },
       })

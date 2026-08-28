@@ -59,7 +59,7 @@ bun --hot apps/play/src/app.tsx
 ## Implementation
 
 - Entry: `apps/play/src/app.tsx` — must end with `render()` (idempotent under `--hot`).
-- M4: settings store, song-select preview, countdown phase, set difficulties, user offset.
+- M4: settings (persisted), keybinds, audio lead-in, last beatmap restore, preview, countdown.
 - M4 audio: native playback via miniaudio_node (OGG/MP3/FLAC from lazer files/), timeline fallback when unavailable.
 - M5: Roxysu catalog integration — mastery, pattern analysis, mania ratings, collections, score history.
 - M3/M4: judged notes hidden, judgment popups, searchable song select, results screen.

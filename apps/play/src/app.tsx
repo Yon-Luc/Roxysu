@@ -18,8 +18,11 @@ import { createGame } from "./game/createGame";
 import type { GameEnvironment } from "./game/Game";
 import type { GameStateSnapshot } from "./game/GameState";
 import { PlayView } from "./play/PlayView";
+import { CountdownView } from "./play/CountdownView";
 import { ResultsView } from "./results/ResultsView";
+import { PlaySettingsView } from "./settings/PlaySettingsView";
 import { SongSelectView } from "./songselect/SongSelectView";
+import type { PlaySettings } from "./settings/PlaySettings";
 
 function AvailabilityCard({ environment }: { environment: GameEnvironment }) {
   const { availability, osuDataPath, osuFilesAvailable } = environment;
@@ -106,6 +109,13 @@ function App() {
   );
   const [bootError, setBootError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const [playSettings, setPlaySettings] = useState<PlaySettings>(() =>
+    game.getSettings(),
+  );
+
+  useEffect(() => {
+    return game.settings.subscribe(setPlaySettings);
+  }, [game]);
 
   useEffect(() => {
     const unsubscribe = game.subscribe(setSnapshot);
@@ -157,7 +167,7 @@ function App() {
               Roxysu Play
             </Text>
             <Text size="sm" muted>
-              M5 — Roxysu catalog integration (mastery, patterns, collections)
+              M4 — settings, preview, countdown, set difficulties
             </Text>
           </Stack>
 
@@ -190,14 +200,24 @@ function App() {
 
           {snapshot.phase === "SONG_SELECT" &&
           environment?.availability.status === "ready" ? (
-            <SongSelectView
-              game={game}
-              selectedBeatmapId={snapshot.selectedBeatmapId}
-              starting={starting}
-              onStart={() => {
-                setStarting(true);
-                void game.start().finally(() => setStarting(false));
-              }}
+            <>
+              <PlaySettingsView game={game} settings={playSettings} />
+              <SongSelectView
+                game={game}
+                selectedBeatmapId={snapshot.selectedBeatmapId}
+                starting={starting}
+                onStart={() => {
+                  setStarting(true);
+                  void game.start().finally(() => setStarting(false));
+                }}
+              />
+            </>
+          ) : null}
+
+          {snapshot.phase === "COUNTDOWN" ? (
+            <CountdownView
+              remainingMs={snapshot.countdownRemainingMs ?? 0}
+              title={snapshot.loadedBeatmapTitle}
             />
           ) : null}
 

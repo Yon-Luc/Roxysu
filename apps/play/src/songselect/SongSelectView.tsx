@@ -68,6 +68,11 @@ export function SongSelectView({
   const [insights, setInsights] = useState(() =>
     selectedBeatmapId ? game.getBeatmapInsights(selectedBeatmapId) : null,
   );
+  const difficulties = useMemo(
+    () =>
+      selectedBeatmapId ? game.getSetDifficulties(selectedBeatmapId) : [],
+    [game, selectedBeatmapId],
+  );
 
   useEffect(() => {
     const handle = setTimeout(() => {
@@ -220,6 +225,31 @@ export function SongSelectView({
           </Stack>
         </CardContent>
       </Card>
+
+      {difficulties.length > 1 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Difficulties</CardTitle>
+            <CardDescription>Other 7K maps in this set</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <HStack gap="sm" style={{ flexWrap: "wrap" }}>
+              {difficulties.map((entry) => {
+                const selected = selectedBeatmapId === entry.id;
+                return (
+                  <Button
+                    key={entry.id}
+                    variant={selected ? "default" : "outline"}
+                    onClick={() => game.selectBeatmap(entry.id)}
+                  >
+                    {entry.difficultyName ?? "?"} · ★{entry.starRating.toFixed(2)}
+                  </Button>
+                );
+              })}
+            </HStack>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <BeatmapInsightsPanel insights={insights} />
     </Stack>

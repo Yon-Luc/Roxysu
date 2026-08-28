@@ -21,6 +21,7 @@ export type GameStateSnapshot = {
   frameVersion: number;
   loadedBeatmapTitle: string | null;
   playResult: PlayResult | null;
+  countdownRemainingMs: number | null;
 };
 
 export function createInitialGameState(): GameStateSnapshot {
@@ -36,6 +37,7 @@ export function createInitialGameState(): GameStateSnapshot {
     frameVersion: 0,
     loadedBeatmapTitle: null,
     playResult: null,
+    countdownRemainingMs: null,
   };
 }
 

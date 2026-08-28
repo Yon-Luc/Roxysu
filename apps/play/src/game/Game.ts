@@ -3,15 +3,18 @@ import type { AudioEngine } from "../audio/AudioEngine";
 import { AudioClock } from "../audio/AudioClock";
 import {
   bootstrapAudioEngine,
+  createAudioEngine,
   type AudioBackend,
 } from "../audio/createAudioEngine";
 import { TimelineAudioEngine } from "../audio/TimelineAudioEngine";
 import {
   loadBeatmapForPlay,
+  loadBeatmapPreview,
   type LoadedBeatmap,
 } from "../beatmap/BeatmapLoader";
 import type {
   BeatmapInsights,
+  BeatmapSummary,
   CollectionSummary,
   RoxysuAvailability,
   ScoreSummary,
@@ -21,6 +24,10 @@ import { JudgmentEffects } from "../effects/JudgmentEffects";
 import { GameEventBus } from "../events/GameEventBus";
 import { GameplayEngine } from "../gameplay/GameplayEngine";
 import { InputManager } from "../input/InputManager";
+import { PreviewController } from "../preview/PreviewController";
+import { SettingsStore } from "../settings/SettingsStore";
+import type { PlaySettings } from "../settings/PlaySettings";
+import { DEFAULT_PLAY_SETTINGS } from "../settings/PlaySettings";
 import { PlayfieldRenderer } from "../playfield/PlayfieldRenderer";
 import { buildPlayResult } from "../results/buildPlayResult";
 import type { PlayResult } from "../results/PlayResult";
@@ -71,8 +78,11 @@ export class Game {
     scrollSpeed: 400,
   });
 
+  readonly settings = new SettingsStore();
+
   private songSelect: SongSelect | null = null;
   private catalog: RoxysuCatalog | null = null;
+  private preview: PreviewController | null = null;
   private clock: GameClock;
   private audio: AudioEngine = new TimelineAudioEngine();
   private state = createInitialGameState();
@@ -81,6 +91,8 @@ export class Game {
   private removeLoopTick: (() => void) | null = null;
   private assets: AssetResolver;
   private loadedBeatmap: LoadedBeatmap | null = null;
+  private countdownEndsAt = 0;
+  private previewRequestId = 0;
 
   constructor(private readonly config: GameConfig) {
     this.assets = config.assets;
@@ -103,7 +115,62 @@ export class Game {
   }
 
   getSongTimeMs(): number {
-    return this.clock.getTime();
+    return this.clock.getTime() + this.settings.get().userOffsetMs;
+  }
+
+  getSettings(): PlaySettings {
+    return this.settings.get();
+  }
+
+  updateSettings(partial: Partial<PlaySettings>): PlaySettings {
+    const next = this.settings.update(partial);
+    this.applySettings(next);
+    return next;
+  }
+
+  resetSettings(): PlaySettings {
+    return this.updateSettings(DEFAULT_PLAY_SETTINGS);
+  }
+
+  getSetDifficulties(beatmapId: string): BeatmapSummary[] {
+    const beatmap = this.config.database.getBeatmaps().getById(beatmapId);
+    if (!beatmap) return [];
+
+    return this.config.database
+      .getBeatmaps()
+      .getDifficulties(beatmap.setId)
+      .filter(
+        (entry) =>
+          entry.rulesetShortName === "mania" && entry.keyCount === LANES,
+      );
+  }
+
+  async previewSelectedBeatmap(beatmapId: string): Promise<void> {
+    if (!this.preview || this.state.phase !== "SONG_SELECT") return;
+
+    const requestId = ++this.previewRequestId;
+    const beatmap = this.config.database.getBeatmaps().getById(beatmapId);
+    if (!beatmap) return;
+
+    const preview = await loadBeatmapPreview(beatmap, this.assets);
+    if (requestId !== this.previewRequestId || this.state.phase !== "SONG_SELECT") {
+      return;
+    }
+    if ("kind" in preview || !preview.audioPath) {
+      this.preview.stop();
+      return;
+    }
+
+    try {
+      await this.preview.play(preview.audioPath, preview.previewTimeMs);
+    } catch {
+      this.preview.stop();
+    }
+  }
+
+  stopPreview(): void {
+    this.previewRequestId += 1;
+    this.preview?.stop();
   }
 
   searchSongSelect(query: SongSelectQuery = {}): SongSelectPage {
@@ -142,6 +209,8 @@ export class Game {
     this.audio.dispose();
     this.audio = engine;
     this.clock = new AudioClock(this.audio);
+    this.preview = new PreviewController(createAudioEngine(backend));
+    this.applySettings(this.settings.get());
 
     const availability = this.config.database.open();
 
@@ -176,6 +245,7 @@ export class Game {
   selectBeatmap(beatmapId: string): void {
     if (this.state.phase !== "SONG_SELECT") return;
     this.patch({ selectedBeatmapId: beatmapId, error: null, playResult: null });
+    void this.previewSelectedBeatmap(beatmapId);
   }
 
   async start(): Promise<void> {
@@ -192,8 +262,9 @@ export class Game {
     }
 
     this.transition("LOADING");
-    this.patch({ error: null, playResult: null });
+    this.patch({ error: null, playResult: null, countdownRemainingMs: null });
     this.judgmentEffects.reset();
+    this.stopPreview();
 
     const beatmap = this.config.database
       .getBeatmaps()
@@ -234,21 +305,51 @@ export class Game {
     }
 
     this.audio.seek(0);
-    this.transition("COUNTDOWN");
-    this.transition("PLAYING");
+    this.beginCountdown(loaded);
+  }
 
-    this.clock.seek(0);
-    this.clock.start();
-    this.playfield.setPlaying(true);
-    this.ensureLoop();
+  private beginCountdown(loaded: LoadedBeatmap): void {
+    const settings = this.settings.get();
+    const countdownMs = settings.countdownSeconds * 1000;
+
+    if (countdownMs <= 0) {
+      this.transition("COUNTDOWN");
+      this.beginPlaying(loaded);
+      return;
+    }
+
+    this.transition("COUNTDOWN");
+    this.countdownEndsAt = performance.now() + countdownMs;
     this.patch({
       loadedBeatmapTitle: `${loaded.summary.artist ?? "?"} — ${loaded.summary.title ?? "?"}`,
+      countdownRemainingMs: countdownMs,
       songTimeMs: 0,
       combo: 0,
       maxCombo: 0,
       score: 0,
       accuracy: 1,
     });
+    this.ensureLoop();
+  }
+
+  private beginPlaying(loaded?: LoadedBeatmap): void {
+    if (loaded) {
+      this.loadedBeatmap = loaded;
+    }
+
+    this.transition("PLAYING");
+    this.clock.seek(0);
+    this.clock.start();
+    this.playfield.setPlaying(true);
+    this.patch({
+      countdownRemainingMs: null,
+      songTimeMs: 0,
+      combo: 0,
+      maxCombo: 0,
+      score: 0,
+      accuracy: 1,
+    });
+    this.ensureLoop();
   }
 
   pause(): void {
@@ -330,6 +431,7 @@ export class Game {
     this.judgmentEffects.reset();
     this.loadedBeatmap = null;
     this.stopLoop();
+    this.stopPreview();
     this.transition("SONG_SELECT");
     this.patch({
       songTimeMs: 0,
@@ -339,6 +441,7 @@ export class Game {
       accuracy: 1,
       loadedBeatmapTitle: null,
       playResult: null,
+      countdownRemainingMs: null,
     });
   }
 
@@ -347,6 +450,8 @@ export class Game {
     this.clock.pause();
     this.audio.stop();
     this.audio.dispose();
+    this.preview?.dispose();
+    this.preview = null;
     this.playfield.destroy();
     this.events.clear();
     this.judgmentEffects.reset();
@@ -358,6 +463,16 @@ export class Game {
     if (this.removeLoopTick) return;
 
     this.removeLoopTick = this.loop.addTick(() => {
+      if (this.state.phase === "COUNTDOWN") {
+        const remaining = Math.max(0, this.countdownEndsAt - performance.now());
+        if (remaining <= 0) {
+          this.beginPlaying();
+        } else {
+          this.patch({ countdownRemainingMs: remaining });
+        }
+        return;
+      }
+
       if (this.state.phase !== "PLAYING") return;
 
       const timeMs = this.clock.getTime();
@@ -393,6 +508,12 @@ export class Game {
       this.removeLoopTick = null;
     }
     this.loop.stop();
+  }
+
+  private applySettings(settings: PlaySettings): void {
+    this.playfield.setScrollSpeed(settings.scrollSpeed);
+    this.audio.setVolume(settings.masterVolume);
+    this.preview?.setVolume(settings.masterVolume);
   }
 
   private transition(phase: GamePhase): void {

@@ -59,6 +59,7 @@ bun --hot apps/play/src/app.tsx
 ## Implementation
 
 - Entry: `apps/play/src/app.tsx` — must end with `render()` (idempotent under `--hot`).
+- M4: settings store, song-select preview, countdown phase, set difficulties, user offset.
 - M4 audio: native playback via miniaudio_node (OGG/MP3/FLAC from lazer files/), timeline fallback when unavailable.
 - M5: Roxysu catalog integration — mastery, pattern analysis, mania ratings, collections, score history.
 - M3/M4: judged notes hidden, judgment popups, searchable song select, results screen.
@@ -76,7 +77,9 @@ bun --hot apps/play/src/app.tsx
 - `apps/play/src/beatmap/BeatmapLoader.ts` — hash → `.osu` → generic chart
 - `apps/play/src/gameplay/GameplayEngine.ts` — headless mania judgment loop
 - `apps/play/src/playfield/PlayfieldRenderer.ts` — typed-array VSRG renderer
-- `apps/play/src/audio/NativeAudioEngine.ts` — miniaudio-backed AudioEngine
+- `apps/play/src/preview/PreviewController.ts` — isolated preview audio path
+- `apps/play/src/settings/SettingsStore.ts` — in-memory play settings
+- `apps/play/src/beatmap/BeatmapMetadata.ts` — PreviewTime / lead-in from `.osu`
 - `apps/play/src/audio/createAudioEngine.ts` — native vs timeline backend selection
 - `apps/play/src/integrations/miniaudio.ts` — miniaudio_node wrapper
 - `apps/play/src/database/BeatmapInsightsRepository.ts` — mastery, patterns, ratings

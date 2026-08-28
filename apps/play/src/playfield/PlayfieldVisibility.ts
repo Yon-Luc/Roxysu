@@ -38,15 +38,15 @@ export function findFirstIndexGreaterThan(
 
 export function findVisibleNoteRange(
   startTimes: Float64Array,
-  endTimes: Float64Array,
   songTimeMs: number,
   lookAheadMs: number,
   lookBehindMs: number,
+  maxHoldSpanMs: number,
 ): { begin: number; end: number } {
-  const minEndMs = songTimeMs - lookBehindMs;
+  const minVisibleStartMs = songTimeMs - lookBehindMs - maxHoldSpanMs;
   const maxStartMs = songTimeMs + lookAheadMs;
 
-  const begin = findFirstIndexAtLeast(endTimes, minEndMs);
+  const begin = findFirstIndexAtLeast(startTimes, minVisibleStartMs);
   const end = findFirstIndexGreaterThan(startTimes, maxStartMs);
 
   return { begin, end };

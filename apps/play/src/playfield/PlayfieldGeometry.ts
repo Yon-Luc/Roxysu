@@ -51,24 +51,10 @@ export function holdBodyBounds(
   pixelsPerMs: number,
   tapHeight: number,
 ): { top: number; height: number } {
-  const rawHeadTop = noteHeadY(noteStartMs, songTimeMs, receptorY, pixelsPerMs);
-  const rawTailTop = noteHeadY(noteEndMs, songTimeMs, receptorY, pixelsPerMs);
-  const headTop = clampNoteTopAtReceptor(
-    rawHeadTop,
-    noteStartMs,
-    songTimeMs,
-    receptorY,
-    tapHeight,
-  );
-  const tailTop = clampNoteTopAtReceptor(
-    rawTailTop,
-    noteEndMs,
-    songTimeMs,
-    receptorY,
-    tapHeight,
-  );
-  const top = Math.min(tailTop, headTop);
-  const bottom = headTop + tapHeight;
+  const headTop = noteHeadY(noteStartMs, songTimeMs, receptorY, pixelsPerMs);
+  const tailTop = noteHeadY(noteEndMs, songTimeMs, receptorY, pixelsPerMs);
+  const top = Math.min(headTop, tailTop);
+  const bottom = Math.max(headTop, tailTop) + tapHeight;
   return { top, height: Math.max(tapHeight, bottom - top) };
 }
 

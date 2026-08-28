@@ -18,6 +18,7 @@ import {
   colors,
 } from "../components/ui";
 import type { Game } from "../game/Game";
+import { pickSkinArchivePathAsync } from "../integrations/native-file-dialog";
 import { DEFAULT_PLAYFIELD_SKIN } from "../skin/defaultSkin";
 import {
   DEFAULT_LANE_KEYS,
@@ -64,6 +65,8 @@ export function PlaySettingsView({ game, settings }: PlaySettingsViewProps) {
   const skinNotice = game.getSkinNotice();
   const activeSkin = game.getPlayfieldSkin();
   const [customSkinPath, setCustomSkinPath] = useState(settings.skinPath ?? "");
+  const [skinBrowseError, setSkinBrowseError] = useState<string | null>(null);
+  const [browsingSkin, setBrowsingSkin] = useState(false);
 
   useEffect(() => {
     setCustomSkinPath(settings.skinPath ?? "");
@@ -75,6 +78,23 @@ export function PlaySettingsView({ game, settings }: PlaySettingsViewProps) {
       : installedSkins.some((skin) => skin.path === settings.skinPath)
         ? settings.skinPath
         : DEFAULT_SKIN_VALUE;
+
+  const browseForSkin = () => {
+    if (browsingSkin) return;
+
+    setSkinBrowseError(null);
+    setBrowsingSkin(true);
+    void pickSkinArchivePathAsync().then(({ path, error }) => {
+      setBrowsingSkin(false);
+      if (error) {
+        setSkinBrowseError(error);
+        return;
+      }
+      if (!path) return;
+      setCustomSkinPath(path);
+      game.setSkin(path);
+    });
+  };
 
   const updateLaneKey = (lane: number, raw: string) => {
     const next = [...settings.laneKeys];
@@ -123,19 +143,37 @@ export function PlaySettingsView({ game, settings }: PlaySettingsViewProps) {
                 {skinNotice}
               </Text>
             ) : null}
-            <HStack gap="sm">
+            <Text size="sm" muted>
+              Drag-and-drop is not available in the GPUIX window yet — browse for a
+              .osk or paste a skin folder path.
+            </Text>
+            <Stack gap="sm">
               <Input
                 placeholder="Custom skin folder or .osk path"
                 value={customSkinPath}
                 onValueChange={setCustomSkinPath}
               />
-              <Button
-                variant="outline"
-                onClick={() => game.setSkin(customSkinPath.trim() || null)}
-              >
-                Apply
-              </Button>
-            </HStack>
+              <HStack gap="sm">
+                <Button
+                  variant="outline"
+                  loading={browsingSkin}
+                  onClick={browseForSkin}
+                >
+                  Browse .osk
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => game.setSkin(customSkinPath.trim() || null)}
+                >
+                  Apply
+                </Button>
+              </HStack>
+            </Stack>
+            {skinBrowseError ? (
+              <Text size="sm" color={colors.destructive}>
+                {skinBrowseError}
+              </Text>
+            ) : null}
           </Stack>
 
           <NumberField

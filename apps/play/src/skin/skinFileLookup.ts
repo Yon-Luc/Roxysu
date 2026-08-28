@@ -111,9 +111,11 @@ export function resolveNamedSkinImage(
   return null;
 }
 
-import { pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
+/** GPUIX `<img src>` expects an absolute filesystem path, not a `file://` URL. */
 export function toSkinAssetUrl(filePath: string): string {
   if (filePath.startsWith("data:")) return filePath;
-  return pathToFileURL(filePath).href;
+  if (filePath.startsWith("file://")) return fileURLToPath(filePath);
+  return path.resolve(filePath);
 }

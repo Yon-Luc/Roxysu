@@ -143,6 +143,7 @@
           pkgs.wayland
           pkgs.wayland-scanner
           pkgs.wlr-protocols
+          pkgs.zenity
         ]
         ++ nativeDeps
         ++ gpuixRuntimeDeps;

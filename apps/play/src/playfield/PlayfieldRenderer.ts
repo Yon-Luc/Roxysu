@@ -11,6 +11,16 @@ import type {
 
 const MAX_VISIBLE = 4096;
 
+function computeMaxHoldSpanMs(chart: PlayfieldChart): number {
+  let maxSpan = 0;
+  for (let i = 0; i < chart.noteCount; i += 1) {
+    if (chart.type[i] !== NoteType.Hold) continue;
+    const span = chart.endTime[i]! - chart.startTime[i]!;
+    if (span > maxSpan) maxSpan = span;
+  }
+  return maxSpan;
+}
+
 export class PlayfieldRenderer {
   private chart: PlayfieldChart = createEmptyPlayfieldChart();
   private readonly timing = new PlayfieldTiming();
@@ -25,6 +35,7 @@ export class PlayfieldRenderer {
   private readonly visibleAlpha = new Float32Array(MAX_VISIBLE);
   private visibleCount = 0;
   private hidden = new Uint8Array(0);
+  private maxHoldSpanMs = 0;
 
   constructor(options: PlayfieldRendererOptions) {
     this.lanes = options.lanes;
@@ -40,6 +51,7 @@ export class PlayfieldRenderer {
   loadChart(chart: PlayfieldChart): void {
     this.chart = chart;
     this.hidden = new Uint8Array(chart.noteCount);
+    this.maxHoldSpanMs = computeMaxHoldSpanMs(chart);
     this.visibleCount = 0;
   }
 
@@ -87,19 +99,23 @@ export class PlayfieldRenderer {
 
     const { begin, end } = findVisibleNoteRange(
       chart.startTime,
-      chart.endTime,
       songTimeMs,
       lookAheadMs,
       lookBehindMs,
+      this.maxHoldSpanMs,
     );
 
     for (let i = begin; i < end && this.visibleCount < MAX_VISIBLE; i += 1) {
+      const startMs = chart.startTime[i]!;
+      const endMs = chart.endTime[i]!;
+      if (endMs < songTimeMs - lookBehindMs) {
+        continue;
+      }
+
       if (this.hidden[i] === 1) {
         continue;
       }
 
-      const startMs = chart.startTime[i]!;
-      const endMs = chart.endTime[i]!;
       const isHold = chart.type[i] === NoteType.Hold;
 
       const bounds = isHold

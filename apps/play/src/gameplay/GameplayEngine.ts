@@ -261,10 +261,13 @@ export class GameplayEngine {
   }
 
   private updateNoteVisibility(note: NoteState): void {
-    const hidden = note.isHold
-      ? note.headJudged && note.tailJudged
-      : note.headJudged;
-    this.hidden[note.index] = hidden ? 1 : 0;
+    if (note.isHold) {
+      // Holds scroll off when the tail passes the receptor — not on head judgment.
+      this.hidden[note.index] = 0;
+      return;
+    }
+
+    this.hidden[note.index] = note.headJudged ? 1 : 0;
   }
 
   private flushRemainingMisses(timeMs: number, events: GameEventBus): void {

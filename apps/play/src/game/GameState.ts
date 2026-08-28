@@ -11,6 +11,13 @@ export type GameStateSnapshot = {
   phase: GamePhase;
   selectedBeatmapId: string | null;
   error: string | null;
+  songTimeMs: number;
+  combo: number;
+  maxCombo: number;
+  score: number;
+  accuracy: number;
+  frameVersion: number;
+  loadedBeatmapTitle: string | null;
 };
 
 export function createInitialGameState(): GameStateSnapshot {
@@ -18,6 +25,13 @@ export function createInitialGameState(): GameStateSnapshot {
     phase: "BOOT",
     selectedBeatmapId: null,
     error: null,
+    songTimeMs: 0,
+    combo: 0,
+    maxCombo: 0,
+    score: 0,
+    accuracy: 1,
+    frameVersion: 0,
+    loadedBeatmapTitle: null,
   };
 }
 

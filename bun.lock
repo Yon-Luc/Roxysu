@@ -51,6 +51,8 @@
       "dependencies": {
         "@gpuix/react": "^0.5.1",
         "@roxysu/db": "workspace:*",
+        "@roxysu/mania-judge": "workspace:*",
+        "@roxysu/osu-chart": "workspace:*",
         "@roxysu/osu-paths": "workspace:*",
         "react": "^19.1.0",
       },

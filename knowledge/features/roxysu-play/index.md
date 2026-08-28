@@ -59,18 +59,22 @@ bun --hot apps/play/src/app.tsx
 ## Implementation
 
 - Entry: `apps/play/src/app.tsx` — must end with `render()` (idempotent under `--hot`).
-- M1 foundation (in progress): `game/`, `database/`, `assets/`, `integrations/` under `apps/play/src/`.
+- M2 vertical slice: beatmap load/parse, timeline audio clock, input, gameplay judging, playfield renderer.
 - Legacy benchmark preserved as `apps/play/src/test.tsx` (renamed from `app.tsx`).
 - TypeScript requires `"jsxImportSource": "@gpuix/react"`.
 - Flake: `gpuixRuntimeDeps` + `LD_LIBRARY_PATH` / `NIX_LD_LIBRARY_PATH` /
   `XKB_CONFIG_ROOT=/etc/X11/xkb` so prebuilt `@gpuix/native` resolves libs on NixOS.
 - Root script: `bun run play`.
-- Monorepo packages are consumed only through `integrations/` wrappers (`@roxysu/db`, `@roxysu/osu-paths`).
+- Monorepo packages are consumed only through `integrations/` wrappers (`@roxysu/db`, `@roxysu/osu-paths`, `@roxysu/osu-chart`, `@roxysu/mania-judge`).
 
 ## Important symbols
 
-- `apps/play/src/app.tsx` — M1 shell; `render(<App />, gpuixRenderOptions({ title: "Roxysu Play", ... }))`
-- `apps/play/src/game/Game.ts` — lifecycle orchestrator (BOOT → SONG_SELECT → …)
+- `apps/play/src/app.tsx` — play shell; `render(<App />, gpuixRenderOptions({ title: "Roxysu Play", ... }))`
+- `apps/play/src/game/Game.ts` — lifecycle orchestrator wiring load → play → results
+- `apps/play/src/beatmap/BeatmapLoader.ts` — hash → `.osu` → generic chart
+- `apps/play/src/gameplay/GameplayEngine.ts` — headless mania judgment loop
+- `apps/play/src/playfield/PlayfieldRenderer.ts` — typed-array VSRG renderer
+- `apps/play/src/play/PlayView.tsx` — GPUIX presentation shell
 - `apps/play/src/database/RoxysuDatabase.ts` — shared SQLite open + availability detection
 - `apps/play/src/assets/LazerAssetResolver.ts` — hash → lazer `files/` path resolution
 - `apps/play/src/test.tsx` — legacy VSRG benchmark (preserved)

@@ -12,6 +12,7 @@ export type BeatmapSummary = {
   audioFileHash: string | null;
   backgroundFileHash: string | null;
   keyCount: number | null;
+  overallDifficulty: number | null;
 };
 
 export type BeatmapSearchFilters = {

@@ -26,6 +26,7 @@ function toSummary(row: typeof beatmaps.$inferSelect): BeatmapSummary {
     audioFileHash: row.audioFileHash,
     backgroundFileHash: row.backgroundFileHash,
     keyCount: row.circleSize,
+    overallDifficulty: row.overallDifficulty,
   };
 }
 

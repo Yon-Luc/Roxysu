@@ -5,16 +5,24 @@ import {
   defaultDbPath,
   type Db,
 } from "../integrations/roxysu-db";
+import { BeatmapInsightsRepository } from "./BeatmapInsightsRepository";
 import { BeatmapRepository } from "./BeatmapRepository";
+import { CollectionRepository } from "./CollectionRepository";
+import { MasteryRepository } from "./MasteryRepository";
 import { ScoreRepository } from "./ScoreRepository";
 import { SettingsRepository } from "./SettingsRepository";
 import type { RoxysuAvailability } from "./types";
+import { RoxysuCatalog } from "../roxysu/RoxysuCatalog";
 
 export class RoxysuDatabase {
   private db: Db | null = null;
   private beatmaps: BeatmapRepository | null = null;
   private scores: ScoreRepository | null = null;
   private settings: SettingsRepository | null = null;
+  private mastery: MasteryRepository | null = null;
+  private insights: BeatmapInsightsRepository | null = null;
+  private collections: CollectionRepository | null = null;
+  private catalog: RoxysuCatalog | null = null;
   private availability: RoxysuAvailability | null = null;
 
   constructor(private readonly dbPath: string = defaultDbPath()) {}
@@ -43,6 +51,14 @@ export class RoxysuDatabase {
       this.beatmaps = new BeatmapRepository(this.db);
       this.scores = new ScoreRepository(this.db);
       this.settings = new SettingsRepository(this.db);
+      this.mastery = new MasteryRepository(this.db);
+      this.insights = new BeatmapInsightsRepository(this.db);
+      this.collections = new CollectionRepository(this.db);
+      this.catalog = new RoxysuCatalog(
+        this.scores,
+        this.insights,
+        this.collections,
+      );
     } catch {
       this.availability = {
         status: "unavailable",
@@ -81,7 +97,16 @@ export class RoxysuDatabase {
   }
 
   requireOpen(): void {
-    if (!this.db || !this.beatmaps || !this.scores || !this.settings) {
+    if (
+      !this.db ||
+      !this.beatmaps ||
+      !this.scores ||
+      !this.settings ||
+      !this.mastery ||
+      !this.insights ||
+      !this.collections ||
+      !this.catalog
+    ) {
       throw new Error("RoxysuDatabase is not open");
     }
   }
@@ -101,6 +126,11 @@ export class RoxysuDatabase {
     return this.settings!;
   }
 
+  getCatalog(): RoxysuCatalog {
+    this.requireOpen();
+    return this.catalog!;
+  }
+
   close(): void {
     if (this.db) {
       closeDb(this.db);
@@ -108,6 +138,10 @@ export class RoxysuDatabase {
       this.beatmaps = null;
       this.scores = null;
       this.settings = null;
+      this.mastery = null;
+      this.insights = null;
+      this.collections = null;
+      this.catalog = null;
       this.availability = null;
     }
   }

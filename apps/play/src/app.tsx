@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { render } from "@gpuix/react";
 import {
   Badge,
-  Button,
   Card,
   CardContent,
   CardDescription,
@@ -15,35 +14,12 @@ import {
   colors,
   gpuixRenderOptions,
 } from "./components/ui";
-import type { SampleBeatmap } from "./game/Game";
 import { createGame } from "./game/createGame";
 import type { GameEnvironment } from "./game/Game";
 import type { GameStateSnapshot } from "./game/GameState";
 import { PlayView } from "./play/PlayView";
-
-function formatBeatmap(beatmap: SampleBeatmap): string {
-  const title = beatmap.title ?? "Unknown title";
-  const artist = beatmap.artist ?? "Unknown artist";
-  const diff = beatmap.difficultyName ?? "?";
-  return `${artist} — ${title} [${diff}]`;
-}
-
-function assetBadge(beatmap: SampleBeatmap) {
-  if (!beatmap.hash) {
-    return <Badge variant="destructive">no hash</Badge>;
-  }
-  if (!beatmap.beatmapAsset) {
-    return <Badge variant="secondary">unknown</Badge>;
-  }
-  if (beatmap.beatmapAsset.status === "available") {
-    return <Badge variant="default">.osu available</Badge>;
-  }
-  return (
-    <Badge variant="destructive">
-      missing ({beatmap.beatmapAsset.reason})
-    </Badge>
-  );
-}
+import { ResultsView } from "./results/ResultsView";
+import { SongSelectView } from "./songselect/SongSelectView";
 
 function AvailabilityCard({ environment }: { environment: GameEnvironment }) {
   const { availability, osuDataPath, osuFilesAvailable } = environment;
@@ -90,33 +66,25 @@ function AvailabilityCard({ environment }: { environment: GameEnvironment }) {
       <CardHeader>
         <CardTitle>Library ready</CardTitle>
         <CardDescription>
-          Shared Roxysu catalog loaded in read-only mode.
+          Shared Roxysu catalog · read-only
         </CardDescription>
       </CardHeader>
       <CardContent>
         <Stack gap="sm">
           <HStack gap="sm">
             <Badge variant="secondary">{availability.beatmapCount} beatmaps</Badge>
-            <Badge variant="secondary">
-              {availability.maniaBeatmapCount} mania
-            </Badge>
             <Badge variant="default">
               {availability.mania7kBeatmapCount} mania 7K
             </Badge>
           </HStack>
           <Text size="sm" muted>
-            Database: {availability.dbPath}
-          </Text>
-          <Text size="sm" muted>
-            osu!lazer data: {osuDataPath}
+            osu!lazer: {osuDataPath}
           </Text>
           <Text
             size="sm"
             color={osuFilesAvailable ? colors.success : colors.destructive}
           >
-            {osuFilesAvailable
-              ? "files/ store available"
-              : "files/ store unavailable"}
+            {osuFilesAvailable ? "files/ available" : "files/ unavailable"}
           </Text>
         </Stack>
       </CardContent>
@@ -140,9 +108,7 @@ function App() {
     game
       .bootstrap()
       .then((env) => {
-        if (!cancelled) {
-          setEnvironment(env);
-        }
+        if (!cancelled) setEnvironment(env);
       })
       .catch((error: unknown) => {
         if (!cancelled) {
@@ -159,14 +125,8 @@ function App() {
     };
   }, [game]);
 
-  const selectedBeatmap = environment?.sampleBeatmaps.find(
-    (beatmap) => beatmap.id === snapshot.selectedBeatmapId,
-  );
-
-  const inPlay =
-    snapshot.phase === "PLAYING" ||
-    snapshot.phase === "PAUSED" ||
-    snapshot.phase === "RESULTS";
+  const playing =
+    snapshot.phase === "PLAYING" || snapshot.phase === "PAUSED";
 
   return (
     <div
@@ -186,162 +146,78 @@ function App() {
         }}
       >
         <Stack gap="lg" style={{ maxWidth: 960, alignItems: "stretch", padding: 24 }}>
-        <Stack gap="xs">
-          <Text size="2xl" weight="bold">
-            Roxysu Play
-          </Text>
-          <Text size="sm" muted>
-            M2 vertical slice — load, play, judge, render mania 7K
-          </Text>
-        </Stack>
+          <Stack gap="xs">
+            <Text size="2xl" weight="bold">
+              Roxysu Play
+            </Text>
+            <Text size="sm" muted>
+              M5 — Roxysu catalog integration (mastery, patterns, collections)
+            </Text>
+          </Stack>
 
-        {bootError ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Bootstrap failed</CardTitle>
-              <CardDescription>{bootError}</CardDescription>
-            </CardHeader>
-          </Card>
-        ) : environment ? (
-          <AvailabilityCard environment={environment} />
-        ) : (
-          <Card>
-            <CardHeader>
-              <CardTitle>Booting</CardTitle>
-              <CardDescription>Opening Roxysu database…</CardDescription>
-            </CardHeader>
-          </Card>
-        )}
+          {bootError ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Bootstrap failed</CardTitle>
+                <CardDescription>{bootError}</CardDescription>
+              </CardHeader>
+            </Card>
+          ) : environment ? (
+            <AvailabilityCard environment={environment} />
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle>Booting</CardTitle>
+                <CardDescription>Opening Roxysu database…</CardDescription>
+              </CardHeader>
+            </Card>
+          )}
 
-        {snapshot.error ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Error</CardTitle>
-              <CardDescription>{snapshot.error}</CardDescription>
-            </CardHeader>
-          </Card>
-        ) : null}
+          {snapshot.error ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Error</CardTitle>
+                <CardDescription>{snapshot.error}</CardDescription>
+              </CardHeader>
+            </Card>
+          ) : null}
 
-        {inPlay ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                {snapshot.loadedBeatmapTitle ?? "Playing"}
-              </CardTitle>
-              <CardDescription>Phase: {snapshot.phase}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Stack gap="md">
-                <PlayView
-                  game={game}
-                  frameVersion={snapshot.frameVersion}
-                  songTimeMs={snapshot.songTimeMs}
-                  combo={snapshot.combo}
-                  score={snapshot.score}
-                  accuracy={snapshot.accuracy}
-                />
-                <HStack gap="sm">
-                  <Button
-                    variant="secondary"
-                    disabled={snapshot.phase !== "PLAYING"}
-                    onClick={() => game.pause()}
-                  >
-                    Pause
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    disabled={snapshot.phase !== "PAUSED"}
-                    onClick={() => game.resume()}
-                  >
-                    Resume
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    disabled={snapshot.phase !== "PLAYING"}
-                    onClick={() => game.restart()}
-                  >
-                    Restart
-                  </Button>
-                  <Button variant="outline" onClick={() => game.returnToSongSelect()}>
-                    Song select
-                  </Button>
-                </HStack>
-                {snapshot.phase === "RESULTS" ? (
-                  <Text size="sm" muted>
-                    Finished — max combo {snapshot.maxCombo}, score{" "}
-                    {snapshot.score.toLocaleString()}, accuracy{" "}
-                    {(snapshot.accuracy * 100).toFixed(2)}%
-                  </Text>
-                ) : null}
-              </Stack>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card>
-            <CardHeader>
-              <CardTitle>Game lifecycle</CardTitle>
-              <CardDescription>
-                Phase: {snapshot.phase}
-                {selectedBeatmap ? ` — ${formatBeatmap(selectedBeatmap)}` : ""}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Text size="sm" muted>
-                Select a mania 7K map and press Start to play.
-              </Text>
-            </CardContent>
-          </Card>
-        )}
+          {snapshot.phase === "SONG_SELECT" &&
+          environment?.availability.status === "ready" ? (
+            <SongSelectView
+              game={game}
+              selectedBeatmapId={snapshot.selectedBeatmapId}
+              starting={starting}
+              onStart={() => {
+                setStarting(true);
+                void game.start().finally(() => setStarting(false));
+              }}
+            />
+          ) : null}
 
-        {environment?.availability.status === "ready" && !inPlay ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Sample mania 7K maps</CardTitle>
-              <CardDescription>
-                Loads chart + audio timeline from Roxysu and osu!lazer files/.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Stack gap="sm">
-                {environment.sampleBeatmaps.length === 0 ? (
-                  <Text size="sm" muted>
-                    No synchronized mania 7K maps found.
-                  </Text>
-                ) : (
-                  environment.sampleBeatmaps.map((beatmap) => {
-                    const selected = snapshot.selectedBeatmapId === beatmap.id;
+          {playing ? (
+            <PlayView
+              game={game}
+              frameVersion={snapshot.frameVersion}
+              songTimeMs={snapshot.songTimeMs}
+              combo={snapshot.combo}
+              score={snapshot.score}
+              accuracy={snapshot.accuracy}
+              phase={snapshot.phase === "PAUSED" ? "PAUSED" : "PLAYING"}
+            />
+          ) : null}
 
-                    return (
-                      <HStack key={beatmap.id} gap="sm">
-                        <Button
-                          variant={selected ? "default" : "outline"}
-                          onClick={() => game.selectBeatmap(beatmap.id)}
-                        >
-                          {formatBeatmap(beatmap)}
-                        </Button>
-                        {assetBadge(beatmap)}
-                        <Button
-                          variant="secondary"
-                          disabled={
-                            !selected ||
-                            snapshot.phase !== "SONG_SELECT" ||
-                            starting
-                          }
-                          onClick={() => {
-                            setStarting(true);
-                            void game.start().finally(() => setStarting(false));
-                          }}
-                        >
-                          {starting ? "Loading…" : "Start"}
-                        </Button>
-                      </HStack>
-                    );
-                  })
-                )}
-              </Stack>
-            </CardContent>
-          </Card>
-        ) : null}
+          {snapshot.phase === "RESULTS" && snapshot.playResult ? (
+            <ResultsView
+              game={game}
+              result={snapshot.playResult}
+              onRetry={() => {
+                setStarting(true);
+                void game.start().finally(() => setStarting(false));
+              }}
+              onSongSelect={() => game.returnToSongSelect()}
+            />
+          ) : null}
         </Stack>
       </ScrollArea>
     </div>

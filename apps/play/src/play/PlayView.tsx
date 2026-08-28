@@ -1,6 +1,10 @@
 import { useMemo } from "react";
 import type { EventPayload } from "@gpuix/react";
-import { colors } from "../components/ui";
+import {
+  Button,
+  HStack,
+  colors,
+} from "../components/ui";
 import type { Game } from "../game/Game";
 
 const LANE_COLORS = [
@@ -22,6 +26,7 @@ type PlayViewProps = {
   combo: number;
   score: number;
   accuracy: number;
+  phase: "PLAYING" | "PAUSED";
 };
 
 export function PlayView({
@@ -31,6 +36,7 @@ export function PlayView({
   combo,
   score,
   accuracy,
+  phase,
 }: PlayViewProps) {
   void frameVersion;
   const snapshot = game.playfield.getSnapshot();
@@ -195,11 +201,54 @@ export function PlayView({
 
         {receptors}
         {notes}
+
+        {game.judgmentEffects.getPopups().map((popup) => (
+          <text
+            key={popup.id}
+            style={{
+              position: "absolute",
+              left: popup.lane * snapshot.laneWidth + 8,
+              top: snapshot.receptorY - 28,
+              color: colors.primary,
+              fontSize: 11,
+              fontWeight: 700,
+            }}
+          >
+            {popup.label}
+          </text>
+        ))}
       </div>
 
       <text style={{ color: colors.mutedForeground, fontSize: 10 }}>
         Keys: S D F Space J K L
       </text>
+
+      <HStack gap="sm">
+        <Button
+          variant="secondary"
+          disabled={phase !== "PLAYING"}
+          onClick={() => game.pause()}
+        >
+          Pause
+        </Button>
+        <Button
+          variant="secondary"
+          disabled={phase !== "PAUSED"}
+          onClick={() => game.resume()}
+        >
+          Resume
+        </Button>
+        <Button
+          variant="secondary"
+          disabled={phase !== "PLAYING"}
+          onClick={() => game.restart()}
+        >
+          Restart
+        </Button>
+        <Button variant="outline" onClick={() => game.finish()}>
+          End
+        </Button>
+      </HStack>
     </div>
   );
 }

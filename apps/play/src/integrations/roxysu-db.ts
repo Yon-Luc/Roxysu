@@ -12,9 +12,22 @@ export {
   asc,
   count,
   sql,
+  inArray,
 } from "@roxysu/db/client.bun";
 
-export { beatmaps, beatmapSets, scores, settings } from "@roxysu/db/schema";
+export {
+  beatmaps,
+  beatmapSets,
+  scores,
+  settings,
+  mastery,
+  collections,
+  realmCollections,
+  realmCollectionHashes,
+  beatmapManiaRatings,
+  beatmapPatternAnalysis,
+  beatmapDanRatings,
+} from "@roxysu/db/schema";
 
 export { defaultDbPath, defaultDataDir } from "@roxysu/db/path";
 

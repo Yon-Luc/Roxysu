@@ -4,6 +4,7 @@ import {
   count,
   desc,
   eq,
+  inArray,
   like,
   or,
   beatmaps,
@@ -39,6 +40,14 @@ function buildWhere(filters: BeatmapSearchFilters = {}) {
 
   if (filters.keys != null) {
     clauses.push(eq(beatmaps.circleSize, filters.keys));
+  }
+
+  if (filters.beatmapIds != null) {
+    if (filters.beatmapIds.length === 0) {
+      clauses.push(eq(beatmaps.id, "__no_matches__"));
+    } else {
+      clauses.push(inArray(beatmaps.id, filters.beatmapIds));
+    }
   }
 
   const query = filters.query?.trim();

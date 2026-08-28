@@ -1,17 +1,30 @@
 import type { AssetResolver } from "../assets/AssetResolver";
-import type { AssetAvailability } from "../assets/AssetResolver";
 import { AudioClock } from "../audio/AudioClock";
 import { TimelineAudioEngine } from "../audio/TimelineAudioEngine";
 import {
   loadBeatmapForPlay,
   type LoadedBeatmap,
 } from "../beatmap/BeatmapLoader";
-import type { BeatmapSummary, RoxysuAvailability } from "../database/types";
+import type {
+  BeatmapInsights,
+  CollectionSummary,
+  RoxysuAvailability,
+  ScoreSummary,
+} from "../database/types";
 import type { RoxysuDatabase } from "../database/RoxysuDatabase";
+import { JudgmentEffects } from "../effects/JudgmentEffects";
 import { GameEventBus } from "../events/GameEventBus";
 import { GameplayEngine } from "../gameplay/GameplayEngine";
 import { InputManager } from "../input/InputManager";
 import { PlayfieldRenderer } from "../playfield/PlayfieldRenderer";
+import { buildPlayResult } from "../results/buildPlayResult";
+import type { PlayResult } from "../results/PlayResult";
+import type { RoxysuCatalog } from "../roxysu/RoxysuCatalog";
+import {
+  SongSelect,
+  type SongSelectPage,
+  type SongSelectQuery,
+} from "../songselect/SongSelect";
 import type { GameClock } from "./GameClock";
 import { GameLoop } from "./GameLoop";
 import {
@@ -21,15 +34,10 @@ import {
   type GameStateSnapshot,
 } from "./GameState";
 
-export type SampleBeatmap = BeatmapSummary & {
-  beatmapAsset: AssetAvailability | null;
-};
-
 export type GameEnvironment = {
   availability: RoxysuAvailability;
   osuDataPath: string;
   osuFilesAvailable: boolean;
-  sampleBeatmaps: SampleBeatmap[];
 };
 
 export type GameConfig = {
@@ -49,6 +57,7 @@ export class Game {
   readonly events = new GameEventBus();
   readonly input = new InputManager();
   readonly gameplay = new GameplayEngine();
+  readonly judgmentEffects = new JudgmentEffects();
   readonly playfield = new PlayfieldRenderer({
     lanes: LANES,
     width: PLAYFIELD_WIDTH,
@@ -56,6 +65,8 @@ export class Game {
     scrollSpeed: 400,
   });
 
+  private songSelect: SongSelect | null = null;
+  private catalog: RoxysuCatalog | null = null;
   private clock: GameClock;
   private readonly audio = new TimelineAudioEngine();
   private state = createInitialGameState();
@@ -68,6 +79,9 @@ export class Game {
   constructor(private readonly config: GameConfig) {
     this.assets = config.assets;
     this.clock = new AudioClock(this.audio);
+    this.events.subscribe((event) => {
+      this.judgmentEffects.handle(event, this.getSongTimeMs());
+    });
   }
 
   getSnapshot(): GameStateSnapshot {
@@ -86,6 +100,32 @@ export class Game {
     return this.clock.getTime();
   }
 
+  searchSongSelect(query: SongSelectQuery = {}): SongSelectPage {
+    if (!this.songSelect) {
+      throw new Error("Song select is not ready");
+    }
+    return this.songSelect.search(query);
+  }
+
+  listCollections(): CollectionSummary[] {
+    return this.getCatalog().listCollections();
+  }
+
+  getBeatmapInsights(beatmapId: string): BeatmapInsights {
+    return this.getCatalog().getBeatmapInsights(beatmapId);
+  }
+
+  getScoreHistory(beatmapId: string, limit = 10): ScoreSummary[] {
+    return this.getCatalog().getScoreHistory(beatmapId, limit);
+  }
+
+  getCatalog(): RoxysuCatalog {
+    if (!this.catalog) {
+      throw new Error("Roxysu catalog is not ready");
+    }
+    return this.catalog;
+  }
+
   subscribe(listener: GameListener): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -99,30 +139,22 @@ export class Game {
         .getSettings()
         .getOsuDataPathOverride();
       this.assets = this.config.createAssets(settingsOverride);
+      this.catalog = this.config.database.getCatalog();
+      this.songSelect = new SongSelect(
+        this.config.database.getBeatmaps(),
+        this.catalog,
+        this.assets,
+      );
     }
 
     const osuDataPath = this.assets.getOsuDataPath();
     const osuPathStatus = this.assets.getOsuPathStatus();
     const osuFilesAvailable = osuPathStatus.exists && osuPathStatus.hasFiles;
 
-    let sampleBeatmaps: SampleBeatmap[] = [];
-    if (availability.status === "ready") {
-      sampleBeatmaps = this.config.database
-        .getBeatmaps()
-        .search({ ruleset: "mania", keys: 7, limit: 8 })
-        .map((beatmap) => ({
-          ...beatmap,
-          beatmapAsset: beatmap.hash
-            ? this.assets.resolveBeatmap(beatmap.hash)
-            : null,
-        }));
-    }
-
     this.environment = {
       availability,
       osuDataPath,
       osuFilesAvailable,
-      sampleBeatmaps,
     };
 
     this.transition("SONG_SELECT");
@@ -131,7 +163,7 @@ export class Game {
 
   selectBeatmap(beatmapId: string): void {
     if (this.state.phase !== "SONG_SELECT") return;
-    this.patch({ selectedBeatmapId: beatmapId, error: null });
+    this.patch({ selectedBeatmapId: beatmapId, error: null, playResult: null });
   }
 
   async start(): Promise<void> {
@@ -140,12 +172,16 @@ export class Game {
       return;
     }
 
-    if (this.state.phase !== "SONG_SELECT" || !this.state.selectedBeatmapId) {
+    if (
+      (this.state.phase !== "SONG_SELECT" && this.state.phase !== "RESULTS") ||
+      !this.state.selectedBeatmapId
+    ) {
       return;
     }
 
     this.transition("LOADING");
-    this.patch({ error: null });
+    this.patch({ error: null, playResult: null });
+    this.judgmentEffects.reset();
 
     const beatmap = this.config.database
       .getBeatmaps()
@@ -228,8 +264,10 @@ export class Game {
     this.audio.stop();
     this.audio.seek(0);
     this.input.reset();
+    this.judgmentEffects.reset();
     if (this.loadedBeatmap) {
       this.gameplay.load(this.loadedBeatmap.chart);
+      this.playfield.loadChart(this.loadedBeatmap.playfield);
     }
 
     const wasPlaying = this.state.phase === "PLAYING";
@@ -248,6 +286,7 @@ export class Game {
       maxCombo: 0,
       score: 0,
       accuracy: 1,
+      playResult: null,
     });
   }
 
@@ -256,11 +295,18 @@ export class Game {
       return;
     }
 
+    const gameplay = this.gameplay.getSnapshot(this.clock.getTime());
+    const playResult =
+      this.loadedBeatmap != null
+        ? buildPlayResult(this.loadedBeatmap.summary, gameplay)
+        : null;
+
     this.clock.pause();
     this.audio.pause();
     this.playfield.setPlaying(false);
     this.stopLoop();
     this.transition("RESULTS");
+    this.patch({ playResult });
   }
 
   returnToSongSelect(): void {
@@ -269,6 +315,7 @@ export class Game {
     this.playfield.setPlaying(false);
     this.playfield.setSongTime(0);
     this.input.reset();
+    this.judgmentEffects.reset();
     this.loadedBeatmap = null;
     this.stopLoop();
     this.transition("SONG_SELECT");
@@ -279,6 +326,7 @@ export class Game {
       score: 0,
       accuracy: 1,
       loadedBeatmapTitle: null,
+      playResult: null,
     });
   }
 
@@ -288,6 +336,7 @@ export class Game {
     this.audio.stop();
     this.playfield.destroy();
     this.events.clear();
+    this.judgmentEffects.reset();
     this.config.database.close();
     this.listeners.clear();
   }
@@ -301,7 +350,9 @@ export class Game {
       const timeMs = this.clock.getTime();
       const inputEvents = this.input.drain();
       this.gameplay.update(timeMs, inputEvents, this.events);
+      this.playfield.setHiddenMask(this.gameplay.getHiddenMask());
       this.playfield.setSongTime(timeMs);
+      this.judgmentEffects.prune(timeMs);
 
       const gameplay = this.gameplay.getSnapshot(timeMs);
       this.patch({

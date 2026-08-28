@@ -3,6 +3,7 @@ import type { JudgmentResult } from "../integrations/mania-judge";
 export type GameEvent =
   | { type: "NoteHit"; noteIndex: number; lane: number; result: JudgmentResult; timeMs: number }
   | { type: "NoteMiss"; noteIndex: number; lane: number; timeMs: number }
+  | { type: "HoldStarted"; noteIndex: number; lane: number; timeMs: number }
   | { type: "HoldCompleted"; noteIndex: number; lane: number; result: JudgmentResult; timeMs: number }
   | { type: "ComboChanged"; combo: number }
   | { type: "SongFinished"; timeMs: number };

@@ -24,6 +24,7 @@ export class PlayfieldRenderer {
   private readonly visibleHeight = new Float32Array(MAX_VISIBLE);
   private readonly visibleAlpha = new Float32Array(MAX_VISIBLE);
   private visibleCount = 0;
+  private hidden = new Uint8Array(0);
 
   constructor(options: PlayfieldRendererOptions) {
     this.lanes = options.lanes;
@@ -38,7 +39,15 @@ export class PlayfieldRenderer {
 
   loadChart(chart: PlayfieldChart): void {
     this.chart = chart;
+    this.hidden = new Uint8Array(chart.noteCount);
     this.visibleCount = 0;
+  }
+
+  setHiddenMask(hidden: Uint8Array): void {
+    if (this.hidden.length !== hidden.length) {
+      this.hidden = new Uint8Array(hidden.length);
+    }
+    this.hidden.set(hidden);
   }
 
   setSongTime(timeMs: number): void {
@@ -85,6 +94,10 @@ export class PlayfieldRenderer {
     );
 
     for (let i = begin; i < end && this.visibleCount < MAX_VISIBLE; i += 1) {
+      if (this.hidden[i] === 1) {
+        continue;
+      }
+
       const startMs = chart.startTime[i]!;
       const endMs = chart.endTime[i]!;
       const isHold = chart.type[i] === NoteType.Hold;

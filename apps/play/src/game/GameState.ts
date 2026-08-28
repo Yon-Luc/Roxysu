@@ -1,3 +1,5 @@
+import type { PlayResult } from "../results/PlayResult";
+
 export type GamePhase =
   | "BOOT"
   | "SONG_SELECT"
@@ -18,6 +20,7 @@ export type GameStateSnapshot = {
   accuracy: number;
   frameVersion: number;
   loadedBeatmapTitle: string | null;
+  playResult: PlayResult | null;
 };
 
 export function createInitialGameState(): GameStateSnapshot {
@@ -32,6 +35,7 @@ export function createInitialGameState(): GameStateSnapshot {
     accuracy: 1,
     frameVersion: 0,
     loadedBeatmapTitle: null,
+    playResult: null,
   };
 }
 

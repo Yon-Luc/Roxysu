@@ -19,8 +19,57 @@ export type BeatmapSearchFilters = {
   ruleset?: string;
   keys?: number;
   query?: string;
+  beatmapIds?: string[];
   limit?: number;
   offset?: number;
+};
+
+export type MasterySummary = {
+  beatmapId: string;
+  level: number;
+  playCount: number;
+  bestAccuracy: number | null;
+  bestPp: number | null;
+  lastPlayedAt: Date | null;
+  formulaId: string;
+};
+
+export type PatternAnalysisSummary = {
+  beatmapId: string;
+  dominantPattern: string | null;
+  secondaryPattern: string | null;
+  confidence: number | null;
+};
+
+export type ManiaRatingSummary = {
+  beatmapId: string;
+  starRating: number | null;
+  starRatingSs: number | null;
+  ppSs: number | null;
+};
+
+export type DanRatingSummary = {
+  beatmapId: string;
+  estDiff: string | null;
+  sunnyStar: number | null;
+};
+
+export type BeatmapInsights = {
+  beatmapId: string;
+  mastery: MasterySummary | null;
+  pattern: PatternAnalysisSummary | null;
+  maniaRating: ManiaRatingSummary | null;
+  danRating: DanRatingSummary | null;
+};
+
+export type CollectionKind = "smart" | "realm";
+
+export type CollectionSummary = {
+  kind: CollectionKind;
+  id: string;
+  name: string;
+  mapCount: number | null;
+  query?: string;
 };
 
 export type ScoreSummary = {

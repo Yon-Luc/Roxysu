@@ -45,6 +45,7 @@ export class GameplayEngine {
   private overallDifficulty = 8;
   private finished = false;
   private lastNoteEndMs = 0;
+  private hidden = new Uint8Array(0);
 
   load(chart: BeatmapChart): void {
     this.columnCount = chart.columnCount;
@@ -66,6 +67,7 @@ export class GameplayEngine {
     this.score = 0;
     this.finished = false;
     this.lastNoteEndMs = 0;
+    this.hidden = new Uint8Array(chart.noteCount);
 
     for (let i = 0; i < chart.noteCount; i += 1) {
       const isHold = chart.type[i] === NoteType.Hold;
@@ -106,6 +108,14 @@ export class GameplayEngine {
     }
   }
 
+  getHiddenMask(): Uint8Array {
+    return this.hidden;
+  }
+
+  isNoteHidden(noteIndex: number): boolean {
+    return this.hidden[noteIndex] === 1;
+  }
+
   getSnapshot(timeMs: number): GameplaySnapshot {
     return {
       songTimeMs: timeMs,
@@ -127,11 +137,18 @@ export class GameplayEngine {
     note.headJudged = true;
     if (note.isHold && result !== "miss") {
       note.holding = true;
+      events.emit({
+        type: "HoldStarted",
+        noteIndex: note.index,
+        lane: note.column,
+        timeMs,
+      });
     } else if (note.isHold) {
       note.tailJudged = true;
     }
 
     this.applyJudgment(note.index, note.column, result, timeMs, false, events);
+    this.updateNoteVisibility(note);
   }
 
   private onRelease(lane: number, timeMs: number, events: GameEventBus): void {
@@ -147,6 +164,7 @@ export class GameplayEngine {
     }
 
     this.applyJudgment(note.index, note.column, result, timeMs, true, events);
+    this.updateNoteVisibility(note);
   }
 
   private applyJudgment(
@@ -204,6 +222,7 @@ export class GameplayEngine {
         note.headJudged = true;
         if (note.isHold) note.tailJudged = true;
         this.applyJudgment(note.index, note.column, "miss", timeMs, false, events);
+        this.updateNoteVisibility(note);
         h += 1;
         continue;
       }
@@ -235,9 +254,17 @@ export class GameplayEngine {
           note.tailJudged = true;
           note.holding = false;
           this.applyJudgment(note.index, note.column, "miss", timeMs, true, events);
+          this.updateNoteVisibility(note);
         }
       }
     }
+  }
+
+  private updateNoteVisibility(note: NoteState): void {
+    const hidden = note.isHold
+      ? note.headJudged && note.tailJudged
+      : note.headJudged;
+    this.hidden[note.index] = hidden ? 1 : 0;
   }
 
   private flushRemainingMisses(timeMs: number, events: GameEventBus): void {
@@ -245,10 +272,12 @@ export class GameplayEngine {
       if (!note.headJudged) {
         note.headJudged = true;
         this.applyJudgment(note.index, note.column, "miss", timeMs, false, events);
+        this.updateNoteVisibility(note);
       }
       if (note.isHold && !note.tailJudged) {
         note.tailJudged = true;
         this.applyJudgment(note.index, note.column, "miss", timeMs, true, events);
+        this.updateNoteVisibility(note);
       }
     }
   }

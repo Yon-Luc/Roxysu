@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import {
   closeDb,
-  createDb,
+  ensureDb,
   defaultDbPath,
   type Db,
 } from "../integrations/roxysu-db";
@@ -9,6 +9,8 @@ import { BeatmapInsightsRepository } from "./BeatmapInsightsRepository";
 import { BeatmapRepository } from "./BeatmapRepository";
 import { CollectionRepository } from "./CollectionRepository";
 import { MasteryRepository } from "./MasteryRepository";
+import { PlaySessionRepository } from "./PlaySessionRepository";
+import { PlaySettingsRepository } from "./PlaySettingsRepository";
 import { ScoreRepository } from "./ScoreRepository";
 import { SettingsRepository } from "./SettingsRepository";
 import type { RoxysuAvailability } from "./types";
@@ -19,6 +21,8 @@ export class RoxysuDatabase {
   private beatmaps: BeatmapRepository | null = null;
   private scores: ScoreRepository | null = null;
   private settings: SettingsRepository | null = null;
+  private playSettings: PlaySettingsRepository | null = null;
+  private playSessions: PlaySessionRepository | null = null;
   private mastery: MasteryRepository | null = null;
   private insights: BeatmapInsightsRepository | null = null;
   private collections: CollectionRepository | null = null;
@@ -47,10 +51,12 @@ export class RoxysuDatabase {
     }
 
     try {
-      this.db = createDb(this.dbPath);
+      this.db = ensureDb(this.dbPath);
       this.beatmaps = new BeatmapRepository(this.db);
       this.scores = new ScoreRepository(this.db);
       this.settings = new SettingsRepository(this.db);
+      this.playSettings = new PlaySettingsRepository(this.db);
+      this.playSessions = new PlaySessionRepository(this.db);
       this.mastery = new MasteryRepository(this.db);
       this.insights = new BeatmapInsightsRepository(this.db);
       this.collections = new CollectionRepository(this.db);
@@ -58,6 +64,7 @@ export class RoxysuDatabase {
         this.scores,
         this.insights,
         this.collections,
+        this.playSessions,
       );
     } catch {
       this.availability = {
@@ -102,6 +109,8 @@ export class RoxysuDatabase {
       !this.beatmaps ||
       !this.scores ||
       !this.settings ||
+      !this.playSettings ||
+      !this.playSessions ||
       !this.mastery ||
       !this.insights ||
       !this.collections ||
@@ -126,6 +135,16 @@ export class RoxysuDatabase {
     return this.settings!;
   }
 
+  getPlaySettings(): PlaySettingsRepository {
+    this.requireOpen();
+    return this.playSettings!;
+  }
+
+  getPlaySessions(): PlaySessionRepository {
+    this.requireOpen();
+    return this.playSessions!;
+  }
+
   getCatalog(): RoxysuCatalog {
     this.requireOpen();
     return this.catalog!;
@@ -138,6 +157,8 @@ export class RoxysuDatabase {
       this.beatmaps = null;
       this.scores = null;
       this.settings = null;
+      this.playSettings = null;
+      this.playSessions = null;
       this.mastery = null;
       this.insights = null;
       this.collections = null;

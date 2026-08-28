@@ -19,6 +19,7 @@ import type {
   RoxysuAvailability,
   ScoreSummary,
 } from "../database/types";
+import type { PlaySessionSummary } from "../database/PlaySessionRepository";
 import type { RoxysuDatabase } from "../database/RoxysuDatabase";
 import { JudgmentEffects } from "../effects/JudgmentEffects";
 import { GameEventBus } from "../events/GameEventBus";
@@ -192,6 +193,10 @@ export class Game {
     return this.getCatalog().getScoreHistory(beatmapId, limit);
   }
 
+  getPlaySessions(beatmapId: string, limit = 10): PlaySessionSummary[] {
+    return this.getCatalog().getPlaySessions(beatmapId, limit);
+  }
+
   getCatalog(): RoxysuCatalog {
     if (!this.catalog) {
       throw new Error("Roxysu catalog is not ready");
@@ -210,11 +215,12 @@ export class Game {
     this.audio = engine;
     this.clock = new AudioClock(this.audio);
     this.preview = new PreviewController(createAudioEngine(backend));
-    this.applySettings(this.settings.get());
 
     const availability = this.config.database.open();
 
     if (availability.status === "ready") {
+      this.settings.bindRepository(this.config.database.getPlaySettings());
+      this.applySettings(this.settings.get());
       const settingsOverride = this.config.database
         .getSettings()
         .getOsuDataPathOverride();
@@ -420,6 +426,16 @@ export class Game {
     this.stopLoop();
     this.transition("RESULTS");
     this.patch({ playResult });
+
+    if (playResult) {
+      try {
+        this.config.database
+          .getPlaySessions()
+          .insert(playResult.chartId, playResult);
+      } catch {
+        // Non-fatal: results screen still shows the in-memory play result.
+      }
+    }
   }
 
   returnToSongSelect(): void {
@@ -455,6 +471,7 @@ export class Game {
     this.playfield.destroy();
     this.events.clear();
     this.judgmentEffects.reset();
+    this.settings.flush();
     this.config.database.close();
     this.listeners.clear();
   }

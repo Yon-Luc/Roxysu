@@ -3,18 +3,21 @@ import type {
   CollectionRepository,
   CollectionFilter,
 } from "../database/CollectionRepository";
+import type { PlaySessionRepository } from "../database/PlaySessionRepository";
 import type { ScoreRepository } from "../database/ScoreRepository";
 import type {
   BeatmapInsights,
   CollectionSummary,
   ScoreSummary,
 } from "../database/types";
+import type { PlaySessionSummary } from "../database/PlaySessionRepository";
 
 export class RoxysuCatalog {
   constructor(
     private readonly scores: ScoreRepository,
     private readonly insights: BeatmapInsightsRepository,
     private readonly collections: CollectionRepository,
+    private readonly playSessions: PlaySessionRepository,
   ) {}
 
   listCollections(): CollectionSummary[] {
@@ -41,5 +44,9 @@ export class RoxysuCatalog {
 
   getScoreHistory(beatmapId: string, limit = 10): ScoreSummary[] {
     return this.scores.getByBeatmapId(beatmapId, limit);
+  }
+
+  getPlaySessions(beatmapId: string, limit = 10): PlaySessionSummary[] {
+    return this.playSessions.getByBeatmapId(beatmapId, limit);
   }
 }

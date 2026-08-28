@@ -29,8 +29,8 @@ until explicitly promoted.
 ## Business rules
 
 1. Play is optional developer tooling — not required to run the client app.
-2. Play must not write Realm or the local mirror until a verified design says so.
-3. Play opens the shared Roxysu SQLite catalog in **read-only** mode (M1); score/settings writes come later.
+2. Play must not write Realm or Roxysu-owned sync/analytics tables; it may write dedicated `play_*` tables in the local mirror.
+3. Play opens the shared Roxysu SQLite catalog for catalog reads; gameplay settings and local play sessions persist to `play_settings` / `play_sessions`.
 4. Play resolves osu!lazer binary assets via SHA-256 hashes through a lazer asset resolver — it does not duplicate the `files/` store.
 5. On NixOS, launch from the flake dev shell so GPUIX can `dlopen` Wayland /
    Vulkan / X11 (see Implementation).
@@ -78,7 +78,9 @@ bun --hot apps/play/src/app.tsx
 - `apps/play/src/gameplay/GameplayEngine.ts` — headless mania judgment loop
 - `apps/play/src/playfield/PlayfieldRenderer.ts` — typed-array VSRG renderer
 - `apps/play/src/preview/PreviewController.ts` — isolated preview audio path
-- `apps/play/src/settings/SettingsStore.ts` — in-memory play settings
+- `apps/play/src/database/PlaySettingsRepository.ts` — persisted play settings singleton
+- `apps/play/src/database/PlaySessionRepository.ts` — local play results (`play_sessions`)
+- `packages/db/src/schema.ts` — `play_settings`, `play_sessions` tables
 - `apps/play/src/beatmap/BeatmapMetadata.ts` — PreviewTime / lead-in from `.osu`
 - `apps/play/src/audio/createAudioEngine.ts` — native vs timeline backend selection
 - `apps/play/src/integrations/miniaudio.ts` — miniaudio_node wrapper

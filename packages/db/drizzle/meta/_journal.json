@@ -127,6 +127,13 @@
       "when": 1787587665330,
       "tag": "0017_dan_rating_variants",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1787587666000,
+      "tag": "0018_play_tables",
+      "breakpoints": true
     }
   ]
 }

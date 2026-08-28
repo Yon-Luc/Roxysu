@@ -470,3 +470,44 @@ export const beatmapPatternAnalysis = sqliteTable(
     pk: primaryKey({ columns: [t.beatmapId, t.algorithm] }),
   }),
 );
+
+// ---------------------------------------------------------------------------
+// Roxysu Play tables — written only by apps/play
+// ---------------------------------------------------------------------------
+
+/** Singleton gameplay preferences for Roxysu Play (row id is always 1). */
+export const playSettings = sqliteTable("play_settings", {
+  id: integer("id").primaryKey(),
+  scrollSpeed: real("scroll_speed").notNull().default(400),
+  masterVolume: real("master_volume").notNull().default(0.85),
+  countdownSeconds: integer("countdown_seconds").notNull().default(3),
+  userOffsetMs: integer("user_offset_ms").notNull().default(0),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+});
+
+/** Local play results recorded by Roxysu Play (not lazer-imported scores). */
+export const playSessions = sqliteTable(
+  "play_sessions",
+  {
+    id: text("id").primaryKey(),
+    beatmapId: text("beatmap_id")
+      .notNull()
+      .references(() => beatmaps.id),
+    totalScore: integer("total_score").notNull(),
+    accuracy: real("accuracy").notNull(),
+    maxCombo: integer("max_combo").notNull(),
+    perfect: integer("perfect").notNull().default(0),
+    great: integer("great").notNull().default(0),
+    good: integer("good").notNull().default(0),
+    ok: integer("ok").notNull().default(0),
+    meh: integer("meh").notNull().default(0),
+    miss: integer("miss").notNull().default(0),
+    playedAt: integer("played_at", { mode: "timestamp_ms" })
+      .notNull()
+      .default(sql`(unixepoch() * 1000)`),
+  },
+  (t) => ({
+    beatmapIdx: index("play_sessions_beatmap_id_idx").on(t.beatmapId),
+    playedAtIdx: index("play_sessions_played_at_idx").on(t.playedAt),
+  }),
+);

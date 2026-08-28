@@ -48,7 +48,7 @@ export function PlaySettingsView({ game, settings }: PlaySettingsViewProps) {
     <Card>
       <CardHeader>
         <CardTitle>Settings</CardTitle>
-        <CardDescription>Session settings (not persisted yet)</CardDescription>
+        <CardDescription>Stored in the shared Roxysu local mirror</CardDescription>
       </CardHeader>
       <CardContent>
         <Stack gap="md">

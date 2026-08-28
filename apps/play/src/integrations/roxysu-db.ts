@@ -3,6 +3,7 @@
  */
 export {
   createDb,
+  ensureDb,
   closeDb,
   eq,
   and,
@@ -27,6 +28,8 @@ export {
   beatmapManiaRatings,
   beatmapPatternAnalysis,
   beatmapDanRatings,
+  playSettings,
+  playSessions,
 } from "@roxysu/db/schema";
 
 export { defaultDbPath, defaultDataDir } from "@roxysu/db/path";

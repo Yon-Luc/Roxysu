@@ -13,6 +13,7 @@ import {
 } from "../components/ui";
 import type { Game } from "../game/Game";
 import type { PlayResult } from "../results/PlayResult";
+import type { PlaySessionSummary } from "../database/PlaySessionRepository";
 import type { ScoreSummary } from "../database/types";
 import { BeatmapInsightsPanel } from "../songselect/BeatmapInsightsPanel";
 
@@ -42,6 +43,12 @@ function formatScoreRow(score: ScoreSummary): string {
   return `${date} · ${accuracy} · ${score.totalScore.toLocaleString()} · ${score.maxCombo}x`;
 }
 
+function formatPlaySessionRow(session: PlaySessionSummary): string {
+  const date = session.playedAt.toLocaleDateString();
+  const accuracy = `${(session.accuracy * 100).toFixed(2)}%`;
+  return `${date} · ${accuracy} · ${session.totalScore.toLocaleString()} · ${session.maxCombo}x · Play`;
+}
+
 export function ResultsView({
   game,
   result,
@@ -55,6 +62,10 @@ export function ResultsView({
   );
   const scoreHistory = useMemo(
     () => game.getScoreHistory(result.chartId, 8),
+    [game, result.chartId],
+  );
+  const playSessions = useMemo(
+    () => game.getPlaySessions(result.chartId, 8),
     [game, result.chartId],
   );
 
@@ -100,9 +111,33 @@ export function ResultsView({
 
       <Card>
         <CardHeader>
-          <CardTitle>Score history</CardTitle>
+          <CardTitle>Play sessions</CardTitle>
           <CardDescription>
-            Recent plays from your Roxysu local mirror
+            Local results recorded by Roxysu Play
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {playSessions.length === 0 ? (
+            <Text size="sm" muted>
+              No Play sessions saved for this map yet.
+            </Text>
+          ) : (
+            <Stack gap="xs">
+              {playSessions.map((session) => (
+                <Text key={session.id} size="sm">
+                  {formatPlaySessionRow(session)}
+                </Text>
+              ))}
+            </Stack>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Imported scores</CardTitle>
+          <CardDescription>
+            Recent plays synced from osu!lazer via Roxysu
           </CardDescription>
         </CardHeader>
         <CardContent>

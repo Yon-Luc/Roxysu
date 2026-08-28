@@ -92,10 +92,7 @@ export function BeatmapInsightsPanel({
 
             {pattern?.dominantPattern ? (
               <HStack gap="sm">
-                <InsightRow
-                  label="Pattern"
-                  value={pattern.dominantPattern}
-                />
+                <InsightRow label="Pattern" value={pattern.dominantPattern} />
                 {pattern.secondaryPattern ? (
                   <Badge variant="secondary">{pattern.secondaryPattern}</Badge>
                 ) : null}
@@ -110,10 +107,7 @@ export function BeatmapInsightsPanel({
             ) : null}
 
             {maniaRating?.ppSs != null ? (
-              <InsightRow
-                label="SS PP"
-                value={maniaRating.ppSs.toFixed(0)}
-              />
+              <InsightRow label="SS PP" value={maniaRating.ppSs.toFixed(0)} />
             ) : null}
 
             {danRating?.estDiff ? (

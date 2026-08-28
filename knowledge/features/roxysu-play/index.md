@@ -75,9 +75,13 @@ DialogViewport (FloatingLayer, sideOffset 0, full-window flex-centered)
 └── DialogSurface (the card / fullscreen surface)
 ```
 
-- `FloatingLayer` is reused as a **centered viewport**, not an anchored popover. The
-  anchored layer is stretched to the window and centered via flex; it is not
-  positioned relative to the trigger.
+- `FloatingLayer` is **not** used for the dialog viewport. `DialogViewport` renders the
+  native `anchored` element directly and pins it to the window via an explicit
+  `position={{ x: 0, y: 0 }}` + `anchor="topLeft"`, sized to the live window from
+  `useWindowSize()`. This centers the modal on the window regardless of trigger
+  position. `FloatingLayer` only anchors to a trigger sibling, so it cannot do this.
+  (A dedicated `OverlayLayer` is the eventual home for this; until then, `anchored`
+  with explicit `position` is the window-level primitive.)
 - Scrim-click-to-close is wired on `DialogBackdrop`'s `onMouseDown`, **not** on the
   `FloatingLayer`'s `onMouseDownOutside`. A click on the scrim is a descendant of the
   anchored layer, so `onMouseDownOutside` never fires for it. Do not "simplify" this

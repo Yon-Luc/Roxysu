@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useMemo, useRef, isValidElement } from "react";
+import { useWindowSize } from "@gpuix/react";
 import type { EventPayload, StyleDesc } from "@gpuix/react";
 import { colors, radius, shadows } from "./theme";
 import { mergeStyles } from "./lib/merge-styles";
 import { useControllableState, renderSlot } from "./lib/utils";
-import { FloatingLayer } from "./lib/floating";
 import type { UiBaseProps } from "./lib/types";
 
 interface DialogContextValue {
@@ -94,10 +94,12 @@ export interface DialogContentProps extends UiBaseProps {
 }
 
 /**
- * Full-window positioning surface. The anchored `FloatingLayer` here is used as
- * a centered viewport (not an anchored popover): it stretches to the window and
- * centers its children. `onMouseDownOutside` still closes when a click lands
- * outside the anchored region, while scrim clicks are handled by `DialogBackdrop`.
+ * Full-window positioning surface. Uses the native `anchored` layer directly
+ * (not `FloatingLayer`, which only anchors to a trigger sibling) and pins it to
+ * the window's top-left via an explicit `position`, sized to the live window
+ * from `useWindowSize()`. This keeps the modal centered on the window regardless
+ * of where its trigger sits. Scrim clicks are handled by `DialogBackdrop` (a
+ * descendant of this layer, so `onMouseDownOutside` never fires for them).
  */
 function DialogViewport({
   children,
@@ -108,29 +110,40 @@ function DialogViewport({
   onMouseDownOutside: (event: EventPayload) => void;
   onKeyDown: (event: EventPayload) => void;
 }) {
+  const { width, height } = useWindowSize();
+  const winW = width || 820;
+  const winH = height || 860;
+
   return (
-    <FloatingLayer
-      side="bottom"
-      align="center"
-      sideOffset={0}
-      tabIndex={0}
-      autoFocus
-      style={{
-        width: "100%",
-        height: "100%",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 0,
-        backgroundColor: "transparent",
-        borderWidth: 0,
-        boxShadow: undefined,
-      }}
-      onMouseDownOutside={onMouseDownOutside}
-      onKeyDown={onKeyDown}
+    <anchored
+      position={{ x: 0, y: 0 }}
+      anchor="topLeft"
+      fit="snap"
+      deferred
+      priority={1}
+      occlude={true}
     >
-      {children}
-    </FloatingLayer>
+      <div
+        tabIndex={0}
+        autoFocus
+        onMouseDownOutside={onMouseDownOutside}
+        onKeyDown={onKeyDown}
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          width: winW,
+          height: winH,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 0,
+          backgroundColor: "transparent",
+        }}
+      >
+        {children}
+      </div>
+    </anchored>
   );
 }
 

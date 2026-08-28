@@ -5,6 +5,7 @@ import { PlayfieldTiming } from "./PlayfieldTiming";
 import { findVisibleNoteRange } from "./PlayfieldVisibility";
 import type {
   PlayfieldChart,
+  PlayfieldColumnSnapshot,
   PlayfieldRendererOptions,
   PlayfieldRenderSnapshot,
 } from "./PlayfieldTypes";
@@ -33,9 +34,11 @@ export class PlayfieldRenderer {
   private readonly visibleY = new Float64Array(MAX_VISIBLE);
   private readonly visibleHeight = new Float32Array(MAX_VISIBLE);
   private readonly visibleAlpha = new Float32Array(MAX_VISIBLE);
+  private readonly visibleIsHold = new Uint8Array(MAX_VISIBLE);
   private visibleCount = 0;
   private hidden = new Uint8Array(0);
   private maxHoldSpanMs = 0;
+  private columns: PlayfieldColumnSnapshot[] = [];
 
   constructor(options: PlayfieldRendererOptions) {
     this.lanes = options.lanes;
@@ -43,9 +46,24 @@ export class PlayfieldRenderer {
     this.height = options.height;
     const receptorY = options.receptorY ?? this.height - 55;
     this.geometry = new PlayfieldGeometry(receptorY);
+    this.resetColumns(options.lanes, options.width);
     if (options.scrollSpeed != null) {
       this.timing.setScrollSpeed(options.scrollSpeed);
     }
+  }
+
+  setColumnLayout(columns: readonly PlayfieldColumnSnapshot[]): void {
+    this.columns = columns.map((column) => ({ ...column }));
+    this.geometry.setColumnTapHeights(columns.map((column) => column.tapHeight));
+    if (columns.length > 0) {
+      this.geometry.setReceptorY(this.geometry.getReceptorY());
+    }
+    this.update();
+  }
+
+  setReceptorY(receptorY: number): void {
+    this.geometry.setReceptorY(receptorY);
+    this.update();
   }
 
   loadChart(chart: PlayfieldChart): void {
@@ -79,8 +97,22 @@ export class PlayfieldRenderer {
   resize(width: number, height: number): void {
     this.width = width;
     this.height = height;
-    this.geometry.setReceptorY(height - 55);
+    this.resetColumns(this.lanes, width);
     this.update();
+  }
+
+  private resetColumns(lanes: number, width: number): void {
+    const laneWidth = width / Math.max(1, lanes);
+    this.columns = Array.from({ length: lanes }, (_, lane) => ({
+      x: lane * laneWidth,
+      w: laneWidth,
+      tapHeight: 18,
+    }));
+    this.geometry.setColumnTapHeights(this.columns.map((column) => column.tapHeight));
+    if (this.columns.length > 0) {
+      const fallbackReceptorY = this.height - 55;
+      this.geometry.setReceptorY(fallbackReceptorY);
+    }
   }
 
   update(): void {
@@ -116,11 +148,12 @@ export class PlayfieldRenderer {
         continue;
       }
 
+      const lane = chart.lane[i]!;
       const isHold = chart.type[i] === NoteType.Hold;
 
       const bounds = isHold
-        ? this.geometry.hold(startMs, endMs, songTimeMs, pixelsPerMs)
-        : this.geometry.tap(startMs, songTimeMs, pixelsPerMs);
+        ? this.geometry.hold(startMs, endMs, songTimeMs, pixelsPerMs, lane)
+        : this.geometry.tap(startMs, songTimeMs, pixelsPerMs, lane);
 
       const clipped = clipToPlayfield(bounds.top, bounds.height, receptorY);
       if (!clipped) {
@@ -128,26 +161,31 @@ export class PlayfieldRenderer {
       }
 
       const index = this.visibleCount;
-      this.visibleLane[index] = chart.lane[i]!;
+      this.visibleLane[index] = lane;
       this.visibleY[index] = clipped.top;
       this.visibleHeight[index] = clipped.height;
+      this.visibleIsHold[index] = isHold ? 1 : 0;
       this.visibleAlpha[index] = 1;
       this.visibleCount += 1;
     }
   }
 
   getSnapshot(): PlayfieldRenderSnapshot {
+    const laneWidth =
+      this.columns[0]?.w ?? this.width / Math.max(1, this.lanes);
     return {
       visibleCount: this.visibleCount,
       lane: this.visibleLane,
       y: this.visibleY,
       noteHeight: this.visibleHeight,
+      isHold: this.visibleIsHold,
       alpha: this.visibleAlpha,
       lanes: this.lanes,
       width: this.width,
       playfieldHeight: this.height,
       receptorY: this.geometry.getReceptorY(),
-      laneWidth: this.width / this.lanes,
+      columns: this.columns,
+      laneWidth,
     };
   }
 

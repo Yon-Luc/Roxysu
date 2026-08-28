@@ -76,32 +76,38 @@ export function clipToPlayfield(
 export class PlayfieldGeometry {
   constructor(
     private receptorY: number,
-    private tapHeight = 18,
+    private columnTapHeights: readonly number[] = [],
+    private defaultTapHeight = 18,
   ) {}
 
   setReceptorY(value: number): void {
     this.receptorY = value;
   }
 
+  setColumnTapHeights(heights: readonly number[]): void {
+    this.columnTapHeights = heights;
+  }
+
   getReceptorY(): number {
     return this.receptorY;
   }
 
-  getTapHeight(): number {
-    return this.tapHeight;
+  tapHeightFor(lane: number): number {
+    return this.columnTapHeights[lane] ?? this.defaultTapHeight;
   }
 
   headY(noteStartMs: number, songTimeMs: number, pixelsPerMs: number): number {
     return noteHeadY(noteStartMs, songTimeMs, this.receptorY, pixelsPerMs);
   }
 
-  tap(noteStartMs: number, songTimeMs: number, pixelsPerMs: number) {
+  tap(noteStartMs: number, songTimeMs: number, pixelsPerMs: number, lane = 0) {
+    const tapHeight = this.tapHeightFor(lane);
     return tapBounds(
       noteStartMs,
       songTimeMs,
       this.receptorY,
       pixelsPerMs,
-      this.tapHeight,
+      tapHeight,
     );
   }
 
@@ -110,14 +116,16 @@ export class PlayfieldGeometry {
     noteEndMs: number,
     songTimeMs: number,
     pixelsPerMs: number,
+    lane = 0,
   ) {
+    const tapHeight = this.tapHeightFor(lane);
     return holdBodyBounds(
       noteStartMs,
       noteEndMs,
       songTimeMs,
       this.receptorY,
       pixelsPerMs,
-      this.tapHeight,
+      tapHeight,
     );
   }
 }

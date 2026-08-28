@@ -30,6 +30,7 @@ import { SettingsStore } from "../settings/SettingsStore";
 import {
   DEFAULT_PLAY_SETTINGS,
   formatKeyBindingsHint,
+  HIT_POSITION_DEFAULT,
   type PlaySettings,
 } from "../settings/PlaySettings";
 import type { KeyBindings } from "../input/KeyBindings";
@@ -37,6 +38,8 @@ import { PlayfieldRenderer } from "../playfield/PlayfieldRenderer";
 import { DEFAULT_PLAYFIELD_SKIN } from "../skin/defaultSkin";
 import type { PlayfieldSkin } from "../skin/PlayfieldSkin";
 import { SkinLoader, type SkinCatalogEntry } from "../skin/SkinLoader";
+import { buildPlayfieldSkinLayout } from "../skin/skinLayout";
+import { OSU_MANIA_HEIGHT } from "../integrations/osu-skin-ini";
 import { buildPlayResult } from "../results/buildPlayResult";
 import type { PlayResult } from "../results/PlayResult";
 import type { RoxysuCatalog } from "../roxysu/RoxysuCatalog";
@@ -577,9 +580,33 @@ export class Game {
     this.audio.setVolume(settings.masterVolume);
     this.preview?.setVolume(settings.masterVolume);
     this.input.setBindings({ laneKeys: settings.laneKeys });
-    if (settings.skinPath !== this.lastAppliedSkinPath) {
+    const skinChanged = settings.skinPath !== this.lastAppliedSkinPath;
+    if (skinChanged) {
       this.applySkinFromSettings(settings.skinPath);
     }
+    this.syncPlayfieldLayout(settings);
+  }
+
+  private syncPlayfieldLayout(settings: PlaySettings): void {
+    const hitPosition =
+      settings.hitPosition ??
+      (this.playfieldSkin.maniaLayout
+        ? this.playfieldSkin.maniaLayout.hitPositionPx / OSU_MANIA_HEIGHT
+        : HIT_POSITION_DEFAULT);
+
+    const layout = buildPlayfieldSkinLayout({
+      width: PLAYFIELD_WIDTH,
+      height: PLAYFIELD_HEIGHT,
+      keys: LANES,
+      maniaLayout: this.playfieldSkin.maniaLayout,
+      sprites: this.playfieldSkin.sprites,
+      spriteSizes: this.playfieldSkin.spriteSizes,
+      align: settings.playfieldAlign,
+      hitPosition,
+    });
+
+    this.playfield.setColumnLayout(layout.columns);
+    this.playfield.setReceptorY(layout.receptorY);
   }
 
   private applySkinFromSettings(skinPath: string | null): void {

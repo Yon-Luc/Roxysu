@@ -148,6 +148,20 @@
       "when": 1787587668000,
       "tag": "0020_play_settings_skin",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1787587669000,
+      "tag": "0021_play_settings_layout",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1787587669100,
+      "tag": "0022_play_settings_hit_position",
+      "breakpoints": true
     }
   ]
 }

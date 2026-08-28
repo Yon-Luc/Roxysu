@@ -6,10 +6,18 @@ import {
   colors,
 } from "../components/ui";
 import type { Game } from "../game/Game";
+import type { PlayfieldColumnSnapshot } from "../playfield/PlayfieldTypes";
 import { toSkinAssetUrl } from "../skin/skinFileLookup";
+import { buildPlayfieldSkinLayout } from "../skin/skinLayout";
+import { OSU_MANIA_HEIGHT } from "../integrations/osu-skin-ini";
+import {
+  HIT_POSITION_DEFAULT,
+  type PlaySettings,
+} from "../settings/PlaySettings";
 
 type PlayViewProps = {
   game: Game;
+  settings: PlaySettings;
   frameVersion: number;
   songTimeMs: number;
   combo: number;
@@ -26,10 +34,19 @@ type SpriteStyle = {
   opacity?: number;
 };
 
-function SkinSprite({ src, style }: { src: string; style: SpriteStyle }) {
+function SkinSprite({
+  src,
+  style,
+  objectFit = "fill",
+}: {
+  src: string;
+  style: SpriteStyle;
+  objectFit?: "fill" | "contain" | "cover" | "scaleDown" | "none";
+}) {
   return (
     <img
       src={toSkinAssetUrl(src)}
+      objectFit={objectFit}
       style={{
         position: "absolute",
         left: style.left,
@@ -42,8 +59,22 @@ function SkinSprite({ src, style }: { src: string; style: SpriteStyle }) {
   );
 }
 
+function columnForLane(
+  columns: readonly PlayfieldColumnSnapshot[],
+  lane: number,
+): PlayfieldColumnSnapshot {
+  return (
+    columns[lane] ?? {
+      x: 0,
+      w: 0,
+      tapHeight: 18,
+    }
+  );
+}
+
 export function PlayView({
   game,
+  settings,
   frameVersion,
   songTimeMs,
   combo,
@@ -56,52 +87,79 @@ export function PlayView({
   const skin = game.getPlayfieldSkin();
   const sprites = skin.sprites;
 
+  const layout = useMemo(() => {
+    const hitPosition =
+      settings.hitPosition ??
+      (skin.maniaLayout
+        ? skin.maniaLayout.hitPositionPx / OSU_MANIA_HEIGHT
+        : HIT_POSITION_DEFAULT);
+
+    return buildPlayfieldSkinLayout({
+      width: snapshot.width,
+      height: snapshot.playfieldHeight,
+      keys: snapshot.lanes,
+      maniaLayout: skin.maniaLayout,
+      sprites,
+      spriteSizes: skin.spriteSizes,
+      align: settings.playfieldAlign,
+      hitPosition,
+    });
+  }, [
+    settings.hitPosition,
+    settings.playfieldAlign,
+    skin.maniaLayout,
+    skin.spriteSizes,
+    sprites,
+    snapshot.width,
+    snapshot.playfieldHeight,
+    snapshot.lanes,
+  ]);
+
   const stageSprites = useMemo(() => {
     if (!sprites) return null;
     const items = [];
-    if (sprites.stageLeft) {
+    if (sprites.stageLeft && layout.stageLeft) {
       items.push(
         <SkinSprite
           key="stage-left"
           src={sprites.stageLeft}
           style={{
-            left: 0,
-            top: 0,
-            width: Math.min(96, snapshot.width * 0.12),
-            height: snapshot.receptorY,
+            left: layout.stageLeft.x,
+            top: layout.stageLeft.y,
+            width: layout.stageLeft.w,
+            height: layout.stageLeft.h,
           }}
         />,
       );
     }
-    if (sprites.stageRight) {
-      const width = Math.min(96, snapshot.width * 0.12);
+    if (sprites.stageRight && layout.stageRight) {
       items.push(
         <SkinSprite
           key="stage-right"
           src={sprites.stageRight}
           style={{
-            left: snapshot.width - width,
-            top: 0,
-            width,
-            height: snapshot.receptorY,
+            left: layout.stageRight.x,
+            top: layout.stageRight.y,
+            width: layout.stageRight.w,
+            height: layout.stageRight.h,
           }}
         />,
       );
     }
     return items;
-  }, [sprites, snapshot.receptorY, snapshot.width]);
+  }, [sprites, layout.stageLeft, layout.stageRight]);
 
   const laneBackgrounds = useMemo(
     () =>
-      Array.from({ length: snapshot.lanes }, (_, lane) => (
+      layout.columns.map((column, lane) => (
         <div
           key={`lane-bg-${lane}`}
           style={{
             position: "absolute",
-            left: lane * snapshot.laneWidth,
+            left: column.x,
             top: 0,
-            width: snapshot.laneWidth,
-            height: snapshot.receptorY,
+            width: column.w,
+            height: layout.receptorY,
             backgroundColor:
               lane % 2 === 0
                 ? skin.laneBackgroundEven
@@ -110,9 +168,8 @@ export function PlayView({
         />
       )),
     [
-      snapshot.lanes,
-      snapshot.laneWidth,
-      snapshot.receptorY,
+      layout.columns,
+      layout.receptorY,
       skin.laneBackgroundEven,
       skin.laneBackgroundOdd,
     ],
@@ -120,37 +177,40 @@ export function PlayView({
 
   const laneSeparators = useMemo(
     () =>
-      Array.from({ length: snapshot.lanes - 1 }, (_, lane) => (
+      layout.lines.slice(1, -1).map((x, index) => (
         <div
-          key={`sep-${lane}`}
+          key={`sep-${index}`}
           style={{
             position: "absolute",
-            left: (lane + 1) * snapshot.laneWidth - 1,
+            left: x - 1,
             top: 0,
             width: 2,
-            height: snapshot.receptorY,
+            height: layout.receptorY,
             backgroundColor: colors.border,
           }}
         />
       )),
-    [snapshot.lanes, snapshot.laneWidth, snapshot.receptorY],
+    [layout.lines, layout.receptorY],
   );
 
   const receptors = useMemo(
     () =>
-      Array.from({ length: snapshot.lanes }, (_, lane) => {
-        const left = lane * snapshot.laneWidth + 7;
-        const top = snapshot.receptorY + 10;
-        const width = snapshot.laneWidth - 14;
-        const height = skin.receptorHeight;
+      layout.columns.map((column, lane) => {
         const keySprite = sprites?.keysUp[lane];
+        const tapH = column.tapHeight;
+        const top = layout.receptorY - tapH;
 
         if (keySprite) {
           return (
             <SkinSprite
               key={`receptor-${lane}`}
               src={keySprite}
-              style={{ left, top, width, height }}
+              style={{
+                left: column.x,
+                top,
+                width: column.w,
+                height: tapH,
+              }}
             />
           );
         }
@@ -160,45 +220,88 @@ export function PlayView({
             key={`receptor-${lane}`}
             style={{
               position: "absolute",
-              left,
-              top,
-              width,
-              height,
+              left: column.x + 7,
+              top: layout.receptorY + 10,
+              width: Math.max(8, column.w - 14),
+              height: skin.receptorHeight,
               borderRadius: 5,
               backgroundColor: skin.receptorFill,
             }}
           />
         );
       }),
-    [snapshot.lanes, snapshot.laneWidth, snapshot.receptorY, skin, sprites],
+    [layout.columns, layout.receptorY, skin.receptorFill, skin.receptorHeight, sprites],
   );
 
   const notes = [];
   for (let i = 0; i < snapshot.visibleCount; i += 1) {
     const lane = snapshot.lane[i]!;
+    const column = columnForLane(layout.columns, lane);
     const y = snapshot.y[i]!;
-    const height = snapshot.noteHeight[i]!;
+    const totalHeight = snapshot.noteHeight[i]!;
     const alpha = snapshot.alpha[i]!;
-    const left = lane * snapshot.laneWidth + skin.notePadding;
-    const width = snapshot.laneWidth - skin.notePadding * 2;
-    const noteSprite = sprites?.notes[lane];
+    const isHold = snapshot.isHold[i] === 1;
+    const tapH = column.tapHeight;
+    const headSprite = sprites?.notes[lane];
+    const bodySprite = sprites?.bodies[lane];
+
+    if (isHold && totalHeight > tapH) {
+      const bodyHeight = totalHeight - tapH;
+      if (bodySprite) {
+        notes.push(
+          <SkinSprite
+            key={`hold-body-${i}-${Math.round(y)}`}
+            src={bodySprite}
+            style={{
+              left: column.x,
+              top: y + tapH,
+              width: column.w,
+              height: bodyHeight,
+              opacity: alpha,
+            }}
+          />,
+        );
+      } else {
+        notes.push(
+          <div
+            key={`hold-body-${i}-${Math.round(y)}`}
+            style={{
+              position: "absolute",
+              left: column.x + skin.notePadding,
+              top: y + tapH,
+              width: Math.max(4, column.w - skin.notePadding * 2),
+              height: bodyHeight,
+              borderRadius: skin.noteBorderRadius,
+              backgroundColor: skin.laneColors[lane % skin.laneColors.length],
+              opacity: alpha * 0.85,
+            }}
+          />,
+        );
+      }
+    }
 
     notes.push(
-      noteSprite ? (
+      headSprite ? (
         <SkinSprite
           key={`note-${i}-${Math.round(y)}`}
-          src={noteSprite}
-          style={{ left, top: y, width, height, opacity: alpha }}
+          src={headSprite}
+          style={{
+            left: column.x,
+            top: y,
+            width: column.w,
+            height: Math.min(tapH, totalHeight),
+            opacity: alpha,
+          }}
         />
       ) : (
         <div
           key={`note-${i}-${Math.round(y)}`}
           style={{
             position: "absolute",
-            left,
+            left: column.x + skin.notePadding,
             top: y,
-            width,
-            height,
+            width: Math.max(4, column.w - skin.notePadding * 2),
+            height: Math.min(tapH, totalHeight),
             borderRadius: skin.noteBorderRadius,
             backgroundColor: skin.laneColors[lane % skin.laneColors.length],
             opacity: alpha,
@@ -270,9 +373,9 @@ export function PlayView({
           style={{
             position: "absolute",
             left: 0,
-            top: snapshot.receptorY,
+            top: layout.receptorY,
             width: snapshot.width,
-            height: snapshot.playfieldHeight - snapshot.receptorY,
+            height: snapshot.playfieldHeight - layout.receptorY,
             backgroundColor: skin.belowReceptorBackground,
           }}
         />
@@ -281,7 +384,7 @@ export function PlayView({
           style={{
             position: "absolute",
             left: 0,
-            top: snapshot.receptorY,
+            top: layout.receptorY,
             width: snapshot.width,
             height: 3,
             backgroundColor: skin.judgmentLineColor,
@@ -291,21 +394,24 @@ export function PlayView({
         {notes}
         {receptors}
 
-        {game.judgmentEffects.getPopups(skin).map((popup) => (
-          <text
-            key={popup.id}
-            style={{
-              position: "absolute",
-              left: popup.lane * snapshot.laneWidth + 8,
-              top: snapshot.receptorY - 28,
-              color: popup.color,
-              fontSize: 11,
-              fontWeight: 700,
-            }}
-          >
-            {popup.label}
-          </text>
-        ))}
+        {game.judgmentEffects.getPopups(skin).map((popup) => {
+          const column = columnForLane(layout.columns, popup.lane);
+          return (
+            <text
+              key={popup.id}
+              style={{
+                position: "absolute",
+                left: column.x + 8,
+                top: layout.receptorY - 28,
+                color: popup.color,
+                fontSize: 11,
+                fontWeight: 700,
+              }}
+            >
+              {popup.label}
+            </text>
+          );
+        })}
       </div>
 
       <text style={{ color: colors.mutedForeground, fontSize: 10 }}>

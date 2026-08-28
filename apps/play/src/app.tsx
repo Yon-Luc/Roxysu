@@ -224,6 +224,7 @@ function App() {
           {playing ? (
             <PlayView
               game={game}
+              settings={playSettings}
               frameVersion={snapshot.frameVersion}
               songTimeMs={snapshot.songTimeMs}
               combo={snapshot.combo}

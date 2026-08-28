@@ -21,15 +21,24 @@ export interface PlayfieldChart {
   type: Uint8Array;
 }
 
+export type PlayfieldColumnSnapshot = {
+  x: number;
+  w: number;
+  tapHeight: number;
+};
+
 export type PlayfieldRenderSnapshot = {
   visibleCount: number;
   lane: Uint8Array;
   y: Float64Array;
   noteHeight: Float32Array;
+  isHold: Uint8Array;
   alpha: Float32Array;
   lanes: number;
   width: number;
   playfieldHeight: number;
   receptorY: number;
+  columns: readonly PlayfieldColumnSnapshot[];
+  /** @deprecated Use `columns[lane].w` — kept for legacy callers. */
   laneWidth: number;
 };

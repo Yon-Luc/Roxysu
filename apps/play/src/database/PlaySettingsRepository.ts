@@ -18,6 +18,8 @@ function toSettings(row: typeof playSettings.$inferSelect): PlaySettings {
     laneKeys: parseLaneKeysJson(row.laneKeysJson),
     lastBeatmapId: row.lastBeatmapId,
     skinPath: row.skinPath,
+    playfieldAlign: row.playfieldAlign === "left" ? "left" : "center",
+    hitPosition: row.hitPosition,
   });
 }
 
@@ -50,6 +52,8 @@ export class PlaySettingsRepository {
         laneKeysJson: JSON.stringify(values.laneKeys),
         lastBeatmapId: values.lastBeatmapId,
         skinPath: values.skinPath,
+        playfieldAlign: values.playfieldAlign,
+        hitPosition: values.hitPosition,
         updatedAt,
       })
       .onConflictDoUpdate({
@@ -62,6 +66,8 @@ export class PlaySettingsRepository {
           laneKeysJson: JSON.stringify(values.laneKeys),
           lastBeatmapId: values.lastBeatmapId,
           skinPath: values.skinPath,
+          playfieldAlign: values.playfieldAlign,
+          hitPosition: values.hitPosition,
           updatedAt,
         },
       })

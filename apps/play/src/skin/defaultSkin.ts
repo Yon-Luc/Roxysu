@@ -30,5 +30,7 @@ export const DEFAULT_PLAYFIELD_SKIN: PlayfieldSkin = {
   },
   judgmentMissColor: "#f87171",
   sprites: null,
+  maniaLayout: null,
+  spriteSizes: {},
   sourcePath: null,
 };

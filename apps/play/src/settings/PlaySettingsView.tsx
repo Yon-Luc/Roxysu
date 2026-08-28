@@ -20,9 +20,13 @@ import {
 import type { Game } from "../game/Game";
 import { pickSkinArchivePathAsync } from "../integrations/native-file-dialog";
 import { DEFAULT_PLAYFIELD_SKIN } from "../skin/defaultSkin";
+import { OSU_MANIA_HEIGHT } from "../integrations/osu-skin-ini";
 import {
   DEFAULT_LANE_KEYS,
   formatKeyLabel,
+  HIT_POSITION_DEFAULT,
+  HIT_POSITION_MAX,
+  HIT_POSITION_MIN,
   normalizeLaneKey,
   type PlaySettings,
 } from "../settings/PlaySettings";
@@ -174,6 +178,69 @@ export function PlaySettingsView({ game, settings }: PlaySettingsViewProps) {
                 {skinBrowseError}
               </Text>
             ) : null}
+          </Stack>
+
+          <Stack gap="xs">
+            <Text size="sm" weight="semibold">
+              Playfield layout
+            </Text>
+            <Select
+              value={settings.playfieldAlign}
+              onValueChange={(value) =>
+                game.updateSettings({
+                  playfieldAlign: value === "left" ? "left" : "center",
+                })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Alignment" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="center">Center columns</SelectItem>
+                <SelectItem value="left">Left (skin.ini ColumnStart)</SelectItem>
+              </SelectContent>
+            </Select>
+            <Text size="sm" muted>
+              Hit position:{" "}
+              {settings.hitPosition == null
+                ? activeSkin.maniaLayout
+                  ? `skin.ini (${Math.round((activeSkin.maniaLayout.hitPositionPx / OSU_MANIA_HEIGHT) * 100)}%)`
+                  : `default (${Math.round(HIT_POSITION_DEFAULT * 100)}%)`
+                : `${Math.round(settings.hitPosition * 100)}%`}
+            </Text>
+            <HStack gap="sm">
+              <Button
+                variant="outline"
+                onClick={() => game.updateSettings({ hitPosition: null })}
+              >
+                Use skin.ini
+              </Button>
+              <Input
+                value={
+                  settings.hitPosition == null
+                    ? ""
+                    : String(Math.round(settings.hitPosition * 100))
+                }
+                placeholder={`${Math.round(HIT_POSITION_DEFAULT * 100)}`}
+                onValueChange={(next) => {
+                  if (!next.trim()) {
+                    game.updateSettings({ hitPosition: null });
+                    return;
+                  }
+                  const parsed = Number(next);
+                  if (!Number.isFinite(parsed)) return;
+                  game.updateSettings({
+                    hitPosition: Math.max(
+                      HIT_POSITION_MIN,
+                      Math.min(HIT_POSITION_MAX, parsed / 100),
+                    ),
+                  });
+                }}
+              />
+            </HStack>
+            <Text size="sm" muted>
+              Percent of playfield height from the top to the judgment line.
+            </Text>
           </Stack>
 
           <NumberField

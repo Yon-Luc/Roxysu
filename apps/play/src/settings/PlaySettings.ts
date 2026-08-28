@@ -1,5 +1,7 @@
 import { DEFAULT_7K_BINDINGS } from "../input/KeyBindings";
 
+export type PlayfieldAlign = "center" | "left";
+
 export type PlaySettings = {
   /** Playfield scroll speed in pixels per second. */
   scrollSpeed: number;
@@ -15,7 +17,18 @@ export type PlaySettings = {
   lastBeatmapId: string | null;
   /** Last selected osu! skin folder or `.osk` path; null = built-in default. */
   skinPath: string | null;
+  /** Horizontal placement of the mania column block. */
+  playfieldAlign: PlayfieldAlign;
+  /**
+   * Receptor Y as a fraction of playfield height (0.55–0.95).
+   * Null uses skin.ini HitPosition when a skin is loaded, otherwise 0.88.
+   */
+  hitPosition: number | null;
 };
+
+export const HIT_POSITION_DEFAULT = 0.88;
+export const HIT_POSITION_MIN = 0.55;
+export const HIT_POSITION_MAX = 0.95;
 
 export const DEFAULT_LANE_KEYS = [...DEFAULT_7K_BINDINGS.laneKeys];
 
@@ -27,6 +40,8 @@ export const DEFAULT_PLAY_SETTINGS: PlaySettings = {
   laneKeys: DEFAULT_LANE_KEYS,
   lastBeatmapId: null,
   skinPath: null,
+  playfieldAlign: "center",
+  hitPosition: null,
 };
 
 export const DEFAULT_LANE_KEYS_JSON = JSON.stringify(DEFAULT_LANE_KEYS);
@@ -62,6 +77,11 @@ export function parseLaneKeysJson(json: string | null | undefined): string[] {
 }
 
 export function clampPlaySettings(settings: PlaySettings): PlaySettings {
+  const hitPosition =
+    settings.hitPosition == null
+      ? null
+      : Math.max(HIT_POSITION_MIN, Math.min(HIT_POSITION_MAX, settings.hitPosition));
+
   return {
     scrollSpeed: Math.max(100, Math.min(1200, settings.scrollSpeed)),
     masterVolume: Math.max(0, Math.min(1, settings.masterVolume)),
@@ -70,6 +90,8 @@ export function clampPlaySettings(settings: PlaySettings): PlaySettings {
     laneKeys: parseLaneKeysJson(JSON.stringify(settings.laneKeys)),
     lastBeatmapId: settings.lastBeatmapId?.trim() || null,
     skinPath: settings.skinPath?.trim() || null,
+    playfieldAlign: settings.playfieldAlign === "left" ? "left" : "center",
+    hitPosition,
   };
 }
 

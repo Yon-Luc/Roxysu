@@ -1,7 +1,11 @@
 import type { JudgmentResult } from "../integrations/mania-judge";
+import type { ImageDimensions } from "./readImageDimensions";
+import type { ImportedManiaLayout } from "./skinLayout";
 
 export type PlayfieldSkinSprites = {
   notes: readonly (string | null)[];
+  bodies: readonly (string | null)[];
+  tails: readonly (string | null)[];
   keysUp: readonly (string | null)[];
   keysDown: readonly (string | null)[];
   stageLeft: string | null;
@@ -25,6 +29,10 @@ export type PlayfieldSkin = {
   judgmentMissColor: string;
   /** Absolute image paths resolved from the skin folder; null uses procedural colors. */
   sprites: PlayfieldSkinSprites | null;
+  /** Parsed `[Mania]` section for the active key count; null for the built-in skin. */
+  maniaLayout: ImportedManiaLayout | null;
+  /** Pixel dimensions keyed by absolute sprite path. */
+  spriteSizes: Readonly<Record<string, ImageDimensions>>;
   /** Folder or `.osk` path the skin was loaded from. */
   sourcePath: string | null;
 };

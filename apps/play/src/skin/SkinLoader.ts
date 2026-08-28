@@ -19,7 +19,9 @@ import {
 } from "../integrations/osu-skin-ini";
 import { DEFAULT_PLAYFIELD_SKIN } from "./defaultSkin";
 import type { PlayfieldSkin, PlayfieldSkinSprites } from "./PlayfieldSkin";
+import { readImageDimensions } from "./readImageDimensions";
 import { resolveNamedSkinImage } from "./skinFileLookup";
+import { maniaSectionToLayout, type ImportedManiaLayout } from "./skinLayout";
 import {
   listInstalledSkins,
   readSkinDisplayName,
@@ -35,6 +37,30 @@ export type SkinLoadResult =
 type FileMap = Map<string, Uint8Array>;
 
 const LANES = 7;
+
+function indexSpriteSizes(
+  paths: Iterable<string | null | undefined>,
+): Record<string, { w: number; h: number }> {
+  const sizes: Record<string, { w: number; h: number }> = {};
+  for (const filePath of paths) {
+    if (!filePath || sizes[filePath]) continue;
+    const dims = readImageDimensions(filePath);
+    if (dims) sizes[filePath] = dims;
+  }
+  return sizes;
+}
+
+function collectSpriteSizes(sprites: PlayfieldSkinSprites): Record<string, { w: number; h: number }> {
+  return indexSpriteSizes([
+    ...sprites.notes,
+    ...sprites.bodies,
+    ...sprites.tails,
+    ...sprites.keysUp,
+    ...sprites.keysDown,
+    sprites.stageLeft,
+    sprites.stageRight,
+  ]);
+}
 
 function normalizeArchivePath(value: string): string {
   return value.replace(/\\/g, "/").replace(/^\/+/, "");
@@ -167,12 +193,22 @@ function buildSpritesFromDisk(
   );
 
   const notes: (string | null)[] = [];
+  const bodies: (string | null)[] = [];
+  const tails: (string | null)[] = [];
   const keysUp: (string | null)[] = [];
   const keysDown: (string | null)[] = [];
 
   for (let column = 0; column < keys; column += 1) {
     notes.push(
       resolveNamedSkinImage(root, noteImageCandidates(section, column, "")) ??
+        null,
+    );
+    bodies.push(
+      resolveNamedSkinImage(root, noteImageCandidates(section, column, "H")) ??
+        null,
+    );
+    tails.push(
+      resolveNamedSkinImage(root, noteImageCandidates(section, column, "L")) ??
         null,
     );
     keysUp.push(
@@ -196,6 +232,8 @@ function buildSpritesFromDisk(
 
   return {
     notes,
+    bodies,
+    tails,
     keysUp,
     keysDown,
     stageLeft,
@@ -229,11 +267,15 @@ function buildSpritesFromArchive(
   };
 
   const notes: (string | null)[] = [];
+  const bodies: (string | null)[] = [];
+  const tails: (string | null)[] = [];
   const keysUp: (string | null)[] = [];
   const keysDown: (string | null)[] = [];
 
   for (let column = 0; column < keys; column += 1) {
     notes.push(resolve(noteImageCandidates(section, column, "")));
+    bodies.push(resolve(noteImageCandidates(section, column, "H")));
+    tails.push(resolve(noteImageCandidates(section, column, "L")));
     keysUp.push(resolve(keyImageCandidates(section, column, false)));
     keysDown.push(resolve(keyImageCandidates(section, column, true)));
   }
@@ -244,10 +286,26 @@ function buildSpritesFromArchive(
 
   return {
     notes,
+    bodies,
+    tails,
     keysUp,
     keysDown,
     stageLeft: resolve(stageImageCandidates(section, "left")),
     stageRight: resolve(stageImageCandidates(section, "right")),
+  };
+}
+
+function finalizeSkin(
+  partial: Omit<PlayfieldSkin, "spriteSizes"> & {
+    sprites: PlayfieldSkinSprites | null;
+  },
+  maniaLayout: ImportedManiaLayout | null,
+): PlayfieldSkin {
+  const sprites = partial.sprites;
+  return {
+    ...partial,
+    maniaLayout,
+    spriteSizes: sprites ? collectSpriteSizes(sprites) : {},
   };
 }
 
@@ -259,18 +317,22 @@ function loadSkinFromRoot(root: string, keys: number): SkinLoadResult {
   }
 
   const parsed = parseSkinIni(decodeSkinIniBytes(readFileSync(iniPath)));
+  const section = resolveManiaSection(parsed.mania, keys);
   const sprites = buildSpritesFromDisk(root, keys, warnings);
   const name = parsed.name.trim() || readSkinDisplayName(root);
 
   return {
     ok: true,
-    skin: {
-      ...DEFAULT_PLAYFIELD_SKIN,
-      id: root,
-      name,
-      sprites,
-      sourcePath: root,
-    },
+    skin: finalizeSkin(
+      {
+        ...DEFAULT_PLAYFIELD_SKIN,
+        id: root,
+        name,
+        sprites,
+        sourcePath: root,
+      },
+      maniaSectionToLayout(section),
+    ),
     warnings,
   };
 }
@@ -285,17 +347,21 @@ function loadSkinFromOsk(oskPath: string, keys: number): SkinLoadResult {
   }
 
   const parsed = parseSkinIni(decodeSkinIniBytes(files.get(iniPath)!));
+  const section = resolveManiaSection(parsed.mania, keys);
   const sprites = buildSpritesFromArchive(files, iniPath, keys, warnings);
 
   return {
     ok: true,
-    skin: {
-      ...DEFAULT_PLAYFIELD_SKIN,
-      id: path.resolve(oskPath),
-      name: parsed.name.trim() || path.basename(oskPath, ".osk"),
-      sprites,
-      sourcePath: path.resolve(oskPath),
-    },
+    skin: finalizeSkin(
+      {
+        ...DEFAULT_PLAYFIELD_SKIN,
+        id: path.resolve(oskPath),
+        name: parsed.name.trim() || path.basename(oskPath, ".osk"),
+        sprites,
+        sourcePath: path.resolve(oskPath),
+      },
+      maniaSectionToLayout(section),
+    ),
     warnings,
   };
 }

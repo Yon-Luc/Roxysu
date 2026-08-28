@@ -489,6 +489,10 @@ export const playSettings = sqliteTable("play_settings", {
   lastBeatmapId: text("last_beatmap_id"),
   /** Absolute path to an osu! skin folder or `.osk` archive; null = built-in default. */
   skinPath: text("skin_path"),
+  /** `center` or `left` — horizontal placement of the mania column block. */
+  playfieldAlign: text("playfield_align").notNull().default("center"),
+  /** Optional receptor override as a fraction of playfield height; null = skin.ini. */
+  hitPosition: real("hit_position"),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });
 

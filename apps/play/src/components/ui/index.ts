@@ -45,3 +45,4 @@ export * from "./toast";
 export * from "./sheet";
 
 export * from "./skeleton";
+export * from "./graph";

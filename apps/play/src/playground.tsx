@@ -43,6 +43,8 @@ import {
   SelectValue,
   Separator,
   Skeleton,
+  Sparkline,
+  AreaChart,
   Spacer,
   Spinner,
   Stack,
@@ -123,6 +125,11 @@ const BUTTON_SIZES: ButtonSize[] = ["sm", "md", "lg", "icon"];
 const BADGE_VARIANTS = ["default", "secondary", "destructive", "success", "outline"] as const;
 
 const COMMANDS = ["Profile", "Settings", "Log out", "New project", "Open recent"];
+
+const CHART_TREND = [12, 18, 14, 22, 30, 26, 34, 40, 38, 46, 52, 48, 60];
+const CHART_DENSITY = Array.from({ length: 40 }, (_, i) =>
+  Math.round(20 + 30 * Math.abs(Math.sin(i / 3)) + (i % 5) * 4),
+);
 
 function ToastDemo() {
   const { toast } = useToast();
@@ -209,6 +216,14 @@ export function Playground() {
             <Badge variant="success">v0.2</Badge>
           </VStack>
 
+          <Tabs defaultValue="inputs">
+            <TabsList>
+              <TabsTrigger value="inputs">Inputs</TabsTrigger>
+              <TabsTrigger value="overlays">Overlays</TabsTrigger>
+              <TabsTrigger value="data">Layout &amp; Data</TabsTrigger>
+              <TabsTrigger value="menus">Menus</TabsTrigger>
+            </TabsList>
+            <TabsContent value="inputs">
           <Section title="Buttons">
             <VStack gap="md">
               <div>
@@ -379,6 +394,8 @@ export function Playground() {
             </Tabs>
           </Section>
 
+          </TabsContent>
+          <TabsContent value="overlays">
           <Section title="Overlays">
             <HStack gap="md" align="center">
               <Tooltip open={tipOpen} onOpenChange={setTipOpen}>
@@ -506,6 +523,8 @@ export function Playground() {
           </VStack>
         </Section>
 
+          </TabsContent>
+          <TabsContent value="data">
         <Section title="Layout & feedback">
             <VStack gap="md">
               <Grid columns={3} gap="md">
@@ -674,6 +693,34 @@ export function Playground() {
           </HStack>
         </Section>
 
+        <Section title="Charts">
+          <VStack gap="md">
+            <div>
+              <Text size="sm" muted style={{ marginBottom: 8 }}>
+                Sparkline
+              </Text>
+              <HStack gap="md" align="center">
+                <Sparkline data={CHART_TREND} width={160} height={40} />
+                <Sparkline
+                  data={CHART_DENSITY}
+                  width={160}
+                  height={40}
+                  stroke={colors.destructive}
+                  fill="rgba(239, 68, 68, 0.15)"
+                />
+              </HStack>
+            </div>
+            <div>
+              <Text size="sm" muted style={{ marginBottom: 8 }}>
+                Area chart
+              </Text>
+              <AreaChart data={CHART_DENSITY} width={320} height={96} grid />
+            </div>
+          </VStack>
+        </Section>
+
+          </TabsContent>
+          <TabsContent value="menus">
         <Section title="DropdownMenu">
           <VStack gap="sm" align="start">
             <DropdownMenu>
@@ -764,6 +811,8 @@ export function Playground() {
           <ToastDemo />
         </Section>
 
+          </TabsContent>
+        </Tabs>
         </VStack>
       </div>
       </TooltipProvider>

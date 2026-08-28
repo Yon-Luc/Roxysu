@@ -7,6 +7,8 @@ import {
 } from "../components/ui";
 import type { Game } from "../game/Game";
 import type { PlayfieldColumnSnapshot } from "../playfield/PlayfieldTypes";
+import { HoldBodiesLayer } from "../playfield/HoldBodiesLayer";
+import type { HoldBodyDraw } from "../playfield/holdBodyTiled";
 import { toSkinAssetUrl } from "../skin/skinFileLookup";
 import { buildPlayfieldSkinLayout } from "../skin/skinLayout";
 import { OSU_MANIA_HEIGHT } from "../integrations/osu-skin-ini";
@@ -82,7 +84,6 @@ export function PlayView({
   accuracy,
   phase,
 }: PlayViewProps) {
-  void frameVersion;
   const snapshot = game.playfield.getSnapshot();
   const skin = game.getPlayfieldSkin();
   const sprites = skin.sprites;
@@ -237,6 +238,39 @@ export function PlayView({
     [layout.columns, receptorY, skin.receptorFill, skin.receptorHeight, sprites],
   );
 
+  const holdBodyDraws = useMemo(() => {
+    if (!sprites) return [] as HoldBodyDraw[];
+
+    const draws: HoldBodyDraw[] = [];
+    for (let i = 0; i < snapshot.visibleCount; i += 1) {
+      if (snapshot.isHold[i] !== 1) continue;
+
+      const lane = snapshot.lane[i]!;
+      const bodyPath = sprites.bodies[lane];
+      const headPath = sprites.notes[lane];
+      if (!bodyPath || bodyPath === headPath) continue;
+
+      const column = columnForLane(columns, lane);
+      const totalHeight = snapshot.noteHeight[i]!;
+      const tapH = column.tapHeight;
+      const headY = snapshot.y[i]! + totalHeight - tapH;
+      const bodyTop = snapshot.y[i]! + tapH * 0.45;
+      const yBottom = headY + tapH;
+      const bodyHeight = Math.max(0, yBottom - bodyTop);
+      if (bodyHeight <= 0) continue;
+
+      draws.push({
+        spritePath: bodyPath,
+        x: column.x + column.w * 0.08,
+        yBottom,
+        width: column.w * 0.84,
+        height: bodyHeight,
+        alpha: snapshot.alpha[i]!,
+      });
+    }
+    return draws;
+  }, [snapshot, sprites, columns, frameVersion]);
+
   const notes = [];
   for (let i = 0; i < snapshot.visibleCount; i += 1) {
     const noteId = snapshot.noteIndex[i]!;
@@ -248,26 +282,30 @@ export function PlayView({
     const tapH = column.tapHeight;
     const headY = isHold ? snapshot.y[i]! + totalHeight - tapH : snapshot.y[i]!;
     const headSprite = sprites?.notes[lane];
-    const bodyTop = snapshot.y[i]! + tapH;
-    const bodyHeight = Math.max(0, headY - bodyTop);
+    const bodyPath = sprites?.bodies[lane];
+    const useBodySprite =
+      isHold && bodyPath != null && bodyPath !== headSprite;
 
-    // Hold bodies use divs — tiled <img> elements exhaust the GPUI texture atlas.
-    if (isHold && bodyHeight > 0) {
-      notes.push(
-        <div
-          key={`hold-body-${noteId}`}
-          style={{
-            position: "absolute",
-            left: column.x + skin.notePadding,
-            top: bodyTop,
-            width: Math.max(4, column.w - skin.notePadding * 2),
-            height: bodyHeight,
-            borderRadius: skin.noteBorderRadius,
-            backgroundColor: skin.laneColors[lane % skin.laneColors.length],
-            opacity: alpha * 0.85,
-          }}
-        />,
-      );
+    if (isHold && !useBodySprite) {
+      const bodyTop = snapshot.y[i]! + tapH * 0.45;
+      const bodyHeight = Math.max(0, headY + tapH - bodyTop);
+      if (bodyHeight > 0) {
+        notes.push(
+          <div
+            key={`hold-body-${noteId}`}
+            style={{
+              position: "absolute",
+              left: column.x + skin.notePadding,
+              top: bodyTop,
+              width: Math.max(4, column.w - skin.notePadding * 2),
+              height: bodyHeight,
+              borderRadius: skin.noteBorderRadius,
+              backgroundColor: skin.laneColors[lane % skin.laneColors.length],
+              opacity: alpha * 0.85,
+            }}
+          />,
+        );
+      }
     }
 
     notes.push(
@@ -358,6 +396,13 @@ export function PlayView({
         {stageSprites}
         {laneBackgrounds}
         {laneSeparators}
+
+        <HoldBodiesLayer
+          width={snapshot.width}
+          height={snapshot.playfieldHeight}
+          draws={holdBodyDraws}
+          frameVersion={frameVersion}
+        />
 
         <div
           style={{

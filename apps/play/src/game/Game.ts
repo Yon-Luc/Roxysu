@@ -35,6 +35,7 @@ import {
 } from "../settings/PlaySettings";
 import type { KeyBindings } from "../input/KeyBindings";
 import { PlayfieldRenderer } from "../playfield/PlayfieldRenderer";
+import { clearHoldBodySpriteCache } from "../playfield/HoldBodiesLayer";
 import { DEFAULT_PLAYFIELD_SKIN } from "../skin/defaultSkin";
 import type { PlayfieldSkin } from "../skin/PlayfieldSkin";
 import { SkinLoader, type SkinCatalogEntry } from "../skin/SkinLoader";
@@ -611,6 +612,7 @@ export class Game {
 
   private applySkinFromSettings(skinPath: string | null): void {
     this.lastAppliedSkinPath = skinPath;
+    clearHoldBodySpriteCache();
     if (!this.skinLoader) {
       this.playfieldSkin = { ...DEFAULT_PLAYFIELD_SKIN };
       this.skinNotice = null;

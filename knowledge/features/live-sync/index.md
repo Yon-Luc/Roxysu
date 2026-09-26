@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08-26
+last_verified: 2026-09
 confidence: verified
 touches:
   - apps/realm-reader/src/index.ts
@@ -8,7 +8,10 @@ touches:
   - apps/realm-reader/src/syncRealmCollections.ts
   - packages/db/src/failStaleRunningImports.ts
   - packages/db/src/settings-keys.ts
+  - apps/realm-reader/src/schemaMismatch.ts
   - apps/server/src/sse.ts
+  - apps/server/src/routes/system.ts
+  - apps/server/public/components/SchemaOutdatedDialog.tsx
   - apps/server/src/analytics/pipeline.ts
 ---
 
@@ -32,6 +35,7 @@ Continuously extract Realm beatmaps and scores into the local mirror; surface Sy
 8. Missed-row healing runs on reconcile only; incremental cycles import their watermark delta without count-gate catch-up scans.
 9. Reconcile catch-up stops after 3 fruitless rounds against an unshrinkable row-count gap (`sync.catchup_stalled`), and resets when an incremental imports rows again.
 10. Failed cycles back off exponentially (`REALM_RETRY_MS` base, `REALM_RETRY_MAX_MS` cap) instead of retrying flat every 10 s.
+11. When the Realm file schema is newer than the bundled osu schema, extraction writes `sync.schema_outdated` and waits until shutdown (no retry, no exit). The client app shows a non-dismissible notice that a matching Roxysu version is coming, with a link to GitHub. A successful Realm open clears the setting immediately.
 
 ## Important symbols
 
@@ -40,7 +44,9 @@ Continuously extract Realm beatmaps and scores into the local mirror; surface Sy
 - `apps/realm-reader/src/upsert.ts` — batch upserts + `streamMappedUpsert`
 - `apps/realm-reader/src/syncRealmCollections.ts`
 - `packages/db/src/failStaleRunningImports.ts`
-- `packages/db/src/settings-keys.ts` — `SYNC_CATCHUP_STALLED_KEY`
+- `packages/db/src/settings-keys.ts` — `SYNC_CATCHUP_STALLED_KEY`, `SYNC_SCHEMA_OUTDATED_KEY`
+- `apps/realm-reader/src/schemaMismatch.ts` — `toSchemaVersionMismatchError()`
+- `apps/server/public/components/SchemaOutdatedDialog.tsx`
 - `apps/server/src/sse.ts` — poll `imports` + `MAX(played_at)` (no `COUNT(*)`); SSE `: ping` heartbeat ~20s
 
 ## Dependencies

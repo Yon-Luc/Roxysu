@@ -27,6 +27,7 @@ import { formatAppVersionLabel } from "../lib/appVersion";
 import { isDesktopShell } from "../lib/desktop";
 import { useAppDict } from "../lib/i18n";
 import { CommandPalette, useCommandPaletteShortcut } from "./CommandPalette";
+import { SchemaOutdatedDialog } from "./SchemaOutdatedDialog";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { DownloadBatchChrome } from "../features/download/DownloadBatchChrome";
 import { useMirrorBatchJob } from "../features/download/useMirrorBatchJob";
@@ -155,6 +156,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-canvas text-ink">
+      <SchemaOutdatedDialog mismatch={status?.schemaOutdated} />
       <CommandPalette
         open={commandPaletteOpen}
         onOpenChange={setCommandPaletteOpen}

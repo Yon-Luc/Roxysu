@@ -4,6 +4,7 @@ import { count, desc, eq } from "drizzle-orm";
 
 import {
   SYNC_PAUSE_WHEN_UNFOCUSED_KEY,
+  SYNC_SCHEMA_OUTDATED_KEY,
   SYNC_UI_FOCUSED_KEY,
 } from "@roxysu/db/settings-keys";
 import { dbPlugin } from "../db-runtime";
@@ -50,6 +51,26 @@ const HUB_OAUTH_DONE_HTML = `<!DOCTYPE html>
 
 function hubBaseUrl(): string {
   return resolveHubBaseUrl();
+}
+
+function readSchemaOutdated(
+  value: string | null | undefined,
+): { expected: number; actual: number } | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as { expected?: unknown; actual?: unknown };
+    if (parsed == null || typeof parsed !== "object") {
+      return { expected: 0, actual: 0 };
+    }
+    const expected = Number(parsed.expected);
+    const actual = Number(parsed.actual);
+    if (!Number.isInteger(expected) || !Number.isInteger(actual)) {
+      return { expected: 0, actual: 0 };
+    }
+    return { expected, actual };
+  } catch {
+    return { expected: 0, actual: 0 };
+  }
 }
 
 export const systemRoutes = new Elysia({ prefix: "/system" })
@@ -161,6 +182,11 @@ export const systemRoutes = new Elysia({ prefix: "/system" })
       .from(settings)
       .where(eq(settings.key, SYNC_PAUSE_WHEN_UNFOCUSED_KEY))
       .limit(1);
+    const [schemaOutdatedRow] = await db
+      .select()
+      .from(settings)
+      .where(eq(settings.key, SYNC_SCHEMA_OUTDATED_KEY))
+      .limit(1);
 
     return {
       beatmapCount: beatmapCount?.n ?? 0,
@@ -170,6 +196,8 @@ export const systemRoutes = new Elysia({ prefix: "/system" })
       /** True only when pause-when-unfocused is enabled and the web UI reported unfocused. */
       syncPaused:
         pauseWhenUnfocusedRow?.value === "1" && focusRow?.value === "0",
+      /** Set when osu!lazer's Realm schema is newer than this Roxysu build. */
+      schemaOutdated: readSchemaOutdated(schemaOutdatedRow?.value),
       lastImport: lastImport
         ? {
             id: lastImport.id,

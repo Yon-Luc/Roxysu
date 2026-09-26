@@ -22,6 +22,13 @@ export const SYNC_REALM_READER_PAUSED_KEY = "sync.realm_reader_paused";
 export const SYNC_CATCHUP_STALLED_KEY = "sync.catchup_stalled";
 
 /**
+ * Set while Realm's schema version is newer than this Roxysu build.
+ * JSON `{ expected, actual }`. Cleared as soon as a Realm open succeeds.
+ * The client app shows a non-dismissible notice while this row exists.
+ */
+export const SYNC_SCHEMA_OUTDATED_KEY = "sync.schema_outdated";
+
+/**
  * Score username filter preference.
  * - missing / "auto" → most common `user_username` among scores
  * - "*" → show all usernames (including downloaded replays)

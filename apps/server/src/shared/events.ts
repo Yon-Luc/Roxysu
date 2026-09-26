@@ -2,6 +2,7 @@ import type { TosuLivePlay } from "../tosu/types";
 
 export type AppEvent =
   | { type: "sync.finished"; importId: number }
+  | { type: "sync.schema_outdated" }
   | { type: "score.imported"; scoreCount: number }
   | { type: "score.updated" }
   | { type: "session.started"; sessionId: number }

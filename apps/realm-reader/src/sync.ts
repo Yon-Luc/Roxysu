@@ -42,7 +42,16 @@ import {
   upsertBatches,
   withBusyRetry,
 } from "./upsert";
-import { SYNC_CATCHUP_STALLED_KEY } from "@roxysu/db/settings-keys";
+import {
+  SYNC_CATCHUP_STALLED_KEY,
+  SYNC_SCHEMA_OUTDATED_KEY,
+} from "@roxysu/db/settings-keys";
+import {
+  SchemaVersionMismatchError,
+  toSchemaVersionMismatchError,
+} from "./schemaMismatch";
+
+export { SchemaVersionMismatchError, toSchemaVersionMismatchError };
 
 export { defaultDbPath } from "@roxysu/db/path";
 
@@ -61,18 +70,6 @@ export class RealmLockedError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "RealmLockedError";
-  }
-}
-
-export class SchemaVersionMismatchError extends Error {
-  constructor(
-    readonly expected: number,
-    readonly actual: number,
-  ) {
-    super(
-      `Realm schemaVersion mismatch: expected ${expected} (from osu-client.schema.json), got ${actual}. Re-run export-schema and update mappers.`,
-    );
-    this.name = "SchemaVersionMismatchError";
   }
 }
 
@@ -121,6 +118,34 @@ function clearCatchupStallIfSet(db: Db) {
   if (readStallCount(db) > 0) writeStallCount(db, 0);
 }
 
+/** Realm file is newer than this build. The client app reads this row for the notice. */
+export function recordSchemaOutdated(db: Db, err: SchemaVersionMismatchError) {
+  const value = JSON.stringify({ expected: err.expected, actual: err.actual });
+  withBusyRetry(() =>
+    db
+      .insert(settings)
+      .values({ key: SYNC_SCHEMA_OUTDATED_KEY, value })
+      .onConflictDoUpdate({
+        target: settings.key,
+        set: { value },
+      })
+      .run(),
+  );
+}
+
+/** A Realm open succeeded, so this build matches the file schema again. */
+export function clearSchemaOutdated(db: Db) {
+  const existing = db
+    .select({ value: settings.value })
+    .from(settings)
+    .where(eq(settings.key, SYNC_SCHEMA_OUTDATED_KEY))
+    .get();
+  if (!existing) return;
+  withBusyRetry(() =>
+    db.delete(settings).where(eq(settings.key, SYNC_SCHEMA_OUTDATED_KEY)).run(),
+  );
+}
+
 function deleteByIds(
   db: Db,
   table:
@@ -166,16 +191,23 @@ export type SyncResult = {
   realmSchemaVersion: number;
 };
 
-function openRealm(realmPath: string): Realm {
+function openRealm(realmPath: string, db: Db): Realm {
   const { schemaVersion, schema } = loadOsuSchema();
   try {
-    return new Realm({
+    const realm = new Realm({
       path: realmPath,
       schema,
       schemaVersion,
       readOnly: true,
     });
+    // Constructor enforces version equality, so a successful open means this
+    // build matches. Clear before the rest of the cycle so the notice drops
+    // immediately instead of waiting out a long import.
+    clearSchemaOutdated(db);
+    return realm;
   } catch (err) {
+    const mismatch = toSchemaVersionMismatchError(err);
+    if (mismatch) throw mismatch;
     if (isLockError(err)) {
       throw new RealmLockedError(
         err instanceof Error ? err.message : String(err),
@@ -702,7 +734,7 @@ export function runFullSync(db: Db, realmPath: string): SyncResult {
 
   let realm: Realm | undefined;
   try {
-    realm = openRealm(realmPath);
+    realm = openRealm(realmPath, db);
     const actual = assertSchemaVersion(realm);
     setImportSchemaVersion(db, importRow.id, actual);
 
@@ -833,7 +865,7 @@ export function runReconcileSync(db: Db, realmPath: string): SyncResult {
 
   let realm: Realm | undefined;
   try {
-    realm = openRealm(realmPath);
+    realm = openRealm(realmPath, db);
     const actual = assertSchemaVersion(realm);
     setImportSchemaVersion(db, importRow.id, actual);
 
@@ -1061,7 +1093,7 @@ export function runIncrementalSync(db: Db, realmPath: string): SyncResult {
 
   let realm: Realm | undefined;
   try {
-    realm = openRealm(realmPath);
+    realm = openRealm(realmPath, db);
     const actual = assertSchemaVersion(realm);
     setImportSchemaVersion(db, importRow.id, actual);
 

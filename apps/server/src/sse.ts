@@ -1,7 +1,8 @@
 import type { Db } from "@roxysu/db/types";
-import { imports, scores } from "@roxysu/db/schema";
+import { imports, scores, settings } from "@roxysu/db/schema";
+import { SYNC_SCHEMA_OUTDATED_KEY } from "@roxysu/db/settings-keys";
 import { Elysia } from "elysia";
-import { desc, max } from "drizzle-orm";
+import { desc, eq, max } from "drizzle-orm";
 
 import { publish, subscribe, type AppEvent } from "./shared/events";
 
@@ -13,7 +14,15 @@ type PollState = {
   lastImportHasChangedIds: boolean;
   scoreCount: number;
   maxPlayedAt: number | null;
+  schemaOutdated: string | null;
 };
+
+/** Latest mirror flag, so a client that connects after the poll can still hear it. */
+let latestSchemaOutdated = false;
+
+export function currentSchemaOutdated(): boolean {
+  return latestSchemaOutdated;
+}
 
 function playedAtMs(value: Date | number | null | undefined): number | null {
   if (value == null) return null;
@@ -42,6 +51,12 @@ async function readState(db: Db): Promise<PollState> {
     })
     .from(scores);
 
+  const [schemaRow] = await db
+    .select({ value: settings.value })
+    .from(settings)
+    .where(eq(settings.key, SYNC_SCHEMA_OUTDATED_KEY))
+    .limit(1);
+
   const deletes =
     (lastImport?.scoresDeleted ?? 0) +
     (lastImport?.beatmapsDeleted ?? 0) +
@@ -65,6 +80,7 @@ async function readState(db: Db): Promise<PollState> {
     lastImportHasChangedIds: hasChangedIds,
     scoreCount: 0,
     maxPlayedAt: playedAtMs(scoreRow?.maxPlayed),
+    schemaOutdated: schemaRow?.value ?? null,
   };
 }
 
@@ -76,6 +92,11 @@ export function startPollLoop(db: Db, intervalMs = 1500): () => void {
     if (stopped) return;
     try {
       const next = await readState(db);
+      latestSchemaOutdated = next.schemaOutdated != null;
+      const schemaChanged = prev
+        ? next.schemaOutdated !== prev.schemaOutdated
+        : next.schemaOutdated != null;
+      if (schemaChanged) publish({ type: "sync.schema_outdated" });
       if (prev) {
         const importAdvanced =
           next.lastImportId > prev.lastImportId ||
@@ -148,7 +169,9 @@ export const sseRoutes = new Elysia({ prefix: "/api" }).get(
         };
 
         controller.enqueue(
-          encoder.encode(`event: connected\ndata: {"ok":true}\n\n`),
+          encoder.encode(
+            `event: connected\ndata: ${JSON.stringify({ ok: true, schemaOutdated: currentSchemaOutdated() })}\n\n`,
+          ),
         );
 
         unsubscribe = subscribe(send);

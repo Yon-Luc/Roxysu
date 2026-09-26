@@ -15,11 +15,12 @@ import {
 } from "@roxysu/db/settings-keys";
 import {
   RealmLockedError,
-  SchemaVersionMismatchError,
   hasSuccessfulImport,
+  recordSchemaOutdated,
   runFullSync,
   runIncrementalSync,
   runReconcileSync,
+  toSchemaVersionMismatchError,
 } from "./sync";
 import { resolveRealmPathFromDb } from "./osu-paths";
 
@@ -67,6 +68,17 @@ function sleep(ms: number) {
     }, ms);
     wakeSleep = () => {
       clearTimeout(timer);
+      wakeSleep = null;
+      resolve();
+    };
+  });
+}
+
+/** Schema mismatch cannot succeed until this process is replaced. */
+function sleepUntilShutdown() {
+  if (shuttingDown) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    wakeSleep = () => {
       wakeSleep = null;
       resolve();
     };
@@ -195,6 +207,7 @@ async function main() {
 
   let lastRealmPath: string | null = null;
   let lockLogged = false;
+  let schemaOutdatedLogged = false;
   let cycle = 0;
   let lastSyncAt: number | null = null;
 
@@ -222,6 +235,7 @@ async function main() {
         if (forceFull && result.kind === "full") forceFull = false;
 
         lockLogged = false;
+        schemaOutdatedLogged = false;
         cycle += 1;
         lastSyncAt = Date.now();
         retryDelayMs = RETRY_MS;
@@ -246,9 +260,17 @@ async function main() {
           continue;
         }
 
-        if (err instanceof SchemaVersionMismatchError) {
-          console.error(err.message);
-          process.exit(1);
+        const mismatch = toSchemaVersionMismatchError(err);
+        if (mismatch && mismatch.actual > mismatch.expected) {
+          recordSchemaOutdated(db, mismatch);
+          if (!schemaOutdatedLogged) {
+            console.error(
+              `osu!lazer schema v${mismatch.actual} is newer than this Roxysu build (v${mismatch.expected}). A matching update is coming — see the app.`,
+            );
+            schemaOutdatedLogged = true;
+          }
+          await sleepUntilShutdown();
+          continue;
         }
 
         await sleepAfterFailure("sync failed", err);

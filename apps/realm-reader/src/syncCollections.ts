@@ -8,7 +8,12 @@ import {
 import { backupRealmFile } from "@roxysu/realm-backup";
 import Realm from "realm";
 import { loadOsuSchema } from "./schema";
-import { RealmLockedError, SchemaVersionMismatchError } from "./sync";
+import {
+  RealmLockedError,
+  SchemaVersionMismatchError,
+  recordSchemaOutdated,
+  toSchemaVersionMismatchError,
+} from "./sync";
 
 export type {
   CollectionSyncInput,
@@ -54,6 +59,8 @@ function openRealmForWrite(realmPath: string): Realm {
       readOnly: false,
     });
   } catch (err) {
+    const mismatch = toSchemaVersionMismatchError(err);
+    if (mismatch) throw mismatch;
     if (isLockError(err)) {
       throw new RealmLockedError(
         err instanceof Error ? err.message : String(err),
@@ -224,10 +231,12 @@ export function runCollectionSync(
         code: "locked",
       };
     }
-    if (err instanceof SchemaVersionMismatchError) {
+    const mismatch = toSchemaVersionMismatchError(err);
+    if (mismatch) {
+      if (mismatch.actual > mismatch.expected) recordSchemaOutdated(db, mismatch);
       return {
         ok: false,
-        error: err.message,
+        error: mismatch.message,
         code: "schema_mismatch",
       };
     }

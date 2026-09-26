@@ -35,6 +35,12 @@
     "noSyncYet": "Ainda sem sync",
     "scores": "scores",
     "maps": "maps",
+    "schemaOutdated": {
+      "title": "Nova versão a caminho",
+      "body": "Uma nova versão do Roxysu está a caminho para acompanhar o novo esquema do osu!lazer. Vai ficar disponível em breve.",
+      "github": "Consulta o GitHub para mais informações",
+      "versions": "Esquema do osu!lazer {{actual}} · esta versão espera {{expected}}"
+    },
     "status": {
       "running": "Sincronizando",
       "success": "Sincronizado",

@@ -105,6 +105,21 @@ export function connectLiveUpdates(queryClient: QueryClient): () => void {
     }
   };
 
+  const onConnected = (event: Event) => {
+    try {
+      const detail = JSON.parse((event as MessageEvent).data) as {
+        schemaOutdated?: boolean;
+      };
+      if (detail.schemaOutdated) inv(["system", "status"]);
+    } catch {
+      // ignore malformed payload
+    }
+  };
+
+  const onSchemaOutdated = () => {
+    inv(["system", "status"]);
+  };
+
   /** sync.finished: full resync done — refresh everything + preview/replay hashes. */
   const onSyncFinished = () => {
     inv(["dashboard"]);
@@ -175,6 +190,8 @@ export function connectLiveUpdates(queryClient: QueryClient): () => void {
     "mastery.updated": onMasteryUpdated,
     "session.started": onSessionEvent,
     "session.finished": onSessionEvent,
+    connected: onConnected,
+    "sync.schema_outdated": onSchemaOutdated,
     "sync.finished": onSyncFinished,
     "tosu.updated": onTosu,
   };

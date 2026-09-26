@@ -6,6 +6,7 @@ touches:
   - apps/realm-reader/src/sync.ts
   - apps/realm-reader/src/upsert.ts
   - apps/realm-reader/src/syncRealmCollections.ts
+  - apps/realm-reader/schemas/osu-client.schema.json
   - packages/db/src/failStaleRunningImports.ts
   - packages/db/src/settings-keys.ts
   - apps/realm-reader/src/schemaMismatch.ts

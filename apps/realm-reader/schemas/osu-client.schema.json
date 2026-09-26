@@ -1,7 +1,7 @@
 {
-  "exportedAt": "2026-07-18T22:25:56.724Z",
+  "exportedAt": "2026-09-26T19:20:59.330Z",
   "realmPath": "<osu-data>/client.realm",
-  "schemaVersion": 51,
+  "schemaVersion": 52,
   "schema": [
     {
       "name": "Beatmap",
@@ -498,6 +498,25 @@
           "optional": true,
           "indexed": false,
           "mapTo": "Filename"
+        }
+      }
+    },
+    {
+      "name": "RealmOnlineAsset",
+      "embedded": false,
+      "properties": {
+        "File": {
+          "type": "object",
+          "optional": true,
+          "indexed": false,
+          "objectType": "RealmNamedFileUsage",
+          "mapTo": "File"
+        },
+        "LastAccessed": {
+          "type": "date",
+          "optional": false,
+          "indexed": true,
+          "mapTo": "LastAccessed"
         }
       }
     },

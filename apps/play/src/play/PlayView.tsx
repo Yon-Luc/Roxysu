@@ -6,13 +6,6 @@ import {
   colors,
 } from "../components/ui";
 import type { Game } from "../game/Game";
-import {
-  HoldNotesLayer,
-  type HoldNotesLayerContent,
-} from "../playfield/HoldNotesLayer";
-import type { HoldBodyDraw } from "../playfield/holdBodyTiled";
-import type { SpriteDraw } from "../playfield/playfieldRaster";
-import { loadSpriteRgbaSync } from "../playfield/spriteRgbaCache";
 import { toSkinAssetUrl } from "../skin/skinFileLookup";
 import { buildPlayfieldSkinLayout, spriteDestHeight } from "../skin/skinLayout";
 import { OSU_MANIA_HEIGHT } from "../integrations/osu-skin-ini";
@@ -41,7 +34,8 @@ type SpriteStyle = {
   opacity?: number;
 };
 
-function SkinSprite({
+/** Receptor keys only — fixed lane count, safe for `<img>`. Notes use div fallbacks until GPUIX `<surface>`. */
+function ReceptorSprite({
   src,
   style,
 }: {
@@ -102,7 +96,6 @@ function holdNoteLayout(args: {
   return {
     bodyTop,
     bodyHeight,
-    bottomCenter,
     headTop: startCenterY - tapH / 2,
     tailTop: topCenter - tailH * 0.15,
     tailH,
@@ -114,7 +107,7 @@ function holdNoteLayout(args: {
 export function PlayView({
   game,
   settings,
-  frameVersion,
+  frameVersion: _frameVersion,
   songTimeMs,
   combo,
   score,
@@ -220,7 +213,7 @@ export function PlayView({
 
         if (keySprite) {
           return (
-            <SkinSprite
+            <ReceptorSprite
               key={`receptor-${lane}`}
               src={keySprite}
               style={{
@@ -259,62 +252,6 @@ export function PlayView({
     ],
   );
 
-  const holdNotesContent = useMemo((): HoldNotesLayerContent => {
-    const holdBodies: HoldBodyDraw[] = [];
-    const tails: SpriteDraw[] = [];
-
-    if (!sprites) return { holdBodies, tails };
-
-    for (let i = 0; i < snapshot.visibleCount; i += 1) {
-      if (snapshot.isHold[i] !== 1) continue;
-
-      const lane = snapshot.lane[i]!;
-      const alpha = snapshot.alpha[i]!;
-      const centerY = snapshot.y[i]!;
-      const column = columnForLane(columns, lane);
-      const bodyPath = sprites.bodies[lane];
-      const headPath = sprites.notes[lane];
-      const tailSprite = sprites.tails[lane];
-
-      const layoutHold = holdNoteLayout({
-        startCenterY: centerY,
-        endCenterY: snapshot.holdEndCenterY[i]!,
-        column,
-        tailPath: tailSprite,
-        spriteSizes: skin.spriteSizes,
-      });
-
-      if (
-        bodyPath &&
-        bodyPath !== headPath &&
-        layoutHold.bodyHeight > 0 &&
-        loadSpriteRgbaSync(bodyPath)
-      ) {
-        holdBodies.push({
-          spritePath: bodyPath,
-          x: column.x + column.w * 0.08,
-          yBottom: layoutHold.bottomCenter,
-          width: column.w * 0.84,
-          height: layoutHold.bodyHeight,
-          alpha: alpha * 0.95,
-        });
-      }
-
-      if (tailSprite && layoutHold.tailH > 0 && loadSpriteRgbaSync(tailSprite)) {
-        tails.push({
-          spritePath: tailSprite,
-          x: column.x,
-          y: layoutHold.tailTop,
-          width: column.w,
-          height: layoutHold.tailH,
-          alpha,
-        });
-      }
-    }
-
-    return { holdBodies, tails };
-  }, [snapshot, sprites, columns, skin.spriteSizes, frameVersion]);
-
   const notes = [];
   for (let i = 0; i < snapshot.visibleCount; i += 1) {
     const noteId = snapshot.noteIndex[i]!;
@@ -325,10 +262,7 @@ export function PlayView({
     const centerY = snapshot.y[i]!;
     const tapH = column.tapHeight;
     const headTop = centerY - tapH / 2;
-    const headSprite = sprites?.notes[lane];
-    const bodyPath = sprites?.bodies[lane];
-    const useBodySprite =
-      isHold && bodyPath != null && bodyPath !== headSprite;
+    const laneColor = skin.laneColors[lane % skin.laneColors.length]!;
 
     if (isHold) {
       const layoutHold = holdNoteLayout({
@@ -339,10 +273,7 @@ export function PlayView({
         spriteSizes: skin.spriteSizes,
       });
 
-      const bodyInLayer =
-        useBodySprite && bodyPath != null && loadSpriteRgbaSync(bodyPath) != null;
-
-      if (!bodyInLayer && layoutHold.bodyHeight > 0) {
+      if (layoutHold.bodyHeight > 0) {
         notes.push(
           <div
             key={`hold-body-${noteId}`}
@@ -353,8 +284,26 @@ export function PlayView({
               width: Math.max(4, column.w - skin.notePadding * 2),
               height: layoutHold.bodyHeight,
               borderRadius: skin.noteBorderRadius,
-              backgroundColor: skin.laneColors[lane % skin.laneColors.length],
+              backgroundColor: laneColor,
               opacity: alpha * 0.85,
+            }}
+          />,
+        );
+      }
+
+      if (layoutHold.tailH > 0) {
+        notes.push(
+          <div
+            key={`hold-tail-${noteId}`}
+            style={{
+              position: "absolute",
+              left: column.x + skin.notePadding,
+              top: layoutHold.tailTop,
+              width: Math.max(4, column.w - skin.notePadding * 2),
+              height: layoutHold.tailH,
+              borderRadius: skin.noteBorderRadius,
+              backgroundColor: laneColor,
+              opacity: alpha * 0.7,
             }}
           />,
         );
@@ -362,33 +311,19 @@ export function PlayView({
     }
 
     notes.push(
-      headSprite ? (
-        <SkinSprite
-          key={`note-${noteId}`}
-          src={headSprite}
-          style={{
-            left: column.x,
-            top: headTop,
-            width: column.w,
-            height: tapH,
-            opacity: alpha,
-          }}
-        />
-      ) : (
-        <div
-          key={`note-${noteId}`}
-          style={{
-            position: "absolute",
-            left: column.x + skin.notePadding,
-            top: headTop,
-            width: Math.max(4, column.w - skin.notePadding * 2),
-            height: tapH,
-            borderRadius: skin.noteBorderRadius,
-            backgroundColor: skin.laneColors[lane % skin.laneColors.length],
-            opacity: alpha,
-          }}
-        />
-      ),
+      <div
+        key={`note-${noteId}`}
+        style={{
+          position: "absolute",
+          left: column.x + skin.notePadding,
+          top: headTop,
+          width: Math.max(4, column.w - skin.notePadding * 2),
+          height: tapH,
+          borderRadius: skin.noteBorderRadius,
+          backgroundColor: laneColor,
+          opacity: alpha,
+        }}
+      />,
     );
   }
 
@@ -458,13 +393,6 @@ export function PlayView({
             height: snapshot.playfieldHeight - receptorY,
             backgroundColor: skin.belowReceptorBackground,
           }}
-        />
-
-        <HoldNotesLayer
-          width={snapshot.width}
-          height={snapshot.playfieldHeight}
-          content={holdNotesContent}
-          frameVersion={frameVersion}
         />
 
         {notes}

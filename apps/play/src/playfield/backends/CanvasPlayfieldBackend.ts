@@ -1,5 +1,3 @@
-import os from "node:os";
-import path from "node:path";
 import type { PlayfieldSkin } from "../../skin/PlayfieldSkin";
 import type { PlayfieldSkinLayout } from "../../skin/skinLayout";
 import { spriteDestHeight } from "../../skin/skinLayout";
@@ -17,11 +15,6 @@ import type {
 } from "../PlayfieldTypes";
 import { loadSpriteRgbaSync } from "../spriteRgbaCache";
 
-const FRAME_PATHS = [
-  path.join(os.tmpdir(), "roxysu-playfield-a.png"),
-  path.join(os.tmpdir(), "roxysu-playfield-b.png"),
-] as const;
-
 export type CanvasPlayfieldRenderArgs = {
   snapshot: PlayfieldRenderSnapshot;
   skin: PlayfieldSkin;
@@ -30,7 +23,8 @@ export type CanvasPlayfieldRenderArgs = {
   receptorY: number;
   separatorColor: string;
   staticKey: string;
-  frameVersion: number;
+  /** Filesystem path for this frame's PNG — must be a fresh ring slot, never the path currently on screen. */
+  outPath: string;
   /** `notes` draws only scrolling notes on transparency over div underlay. */
   mode?: "full" | "notes";
 };
@@ -96,12 +90,13 @@ export class CanvasPlayfieldBackend {
   private frameWidth = 0;
   private frameHeight = 0;
 
-  render(args: CanvasPlayfieldRenderArgs): string | null {
-    const { snapshot, skin, layout, columns, receptorY, separatorColor } = args;
+  render(args: CanvasPlayfieldRenderArgs): boolean {
+    const { snapshot, skin, layout, columns, receptorY, separatorColor, outPath } =
+      args;
     const mode = args.mode ?? "full";
     const width = snapshot.width;
     const height = snapshot.playfieldHeight;
-    if (width <= 0 || height <= 0) return null;
+    if (width <= 0 || height <= 0 || !outPath) return false;
 
     this.ensureFrameBuffer(width, height);
     const buffer = this.frameBuffer!;
@@ -131,12 +126,11 @@ export class CanvasPlayfieldBackend {
     }
 
     if (mode === "notes" && snapshot.visibleCount === 0) {
-      return null;
+      return false;
     }
 
-    const outPath = FRAME_PATHS[args.frameVersion % 2]!;
     writePngRgbaFile(outPath, width, height, buffer);
-    return outPath;
+    return true;
   }
 
   private ensureFrameBuffer(width: number, height: number): void {
@@ -413,7 +407,7 @@ let sharedBackend: CanvasPlayfieldBackend | null = null;
 
 export function renderPlayfieldCanvas(
   args: CanvasPlayfieldRenderArgs,
-): string | null {
+): boolean {
   if (!sharedBackend) {
     sharedBackend = new CanvasPlayfieldBackend();
   }

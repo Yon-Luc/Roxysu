@@ -78,6 +78,9 @@ bun --hot apps/play/src/app.tsx
 - `apps/play/src/beatmap/BeatmapLoader.ts` — hash → `.osu` → generic chart
 - `apps/play/src/gameplay/GameplayEngine.ts` — headless mania judgment loop
 - `apps/play/src/playfield/PlayfieldRenderer.ts` — typed-array VSRG renderer
+- `apps/play/src/playfield/backends/CanvasPlayfieldBackend.ts` — CPU RGBA compositor (ready for `<surface>` sink)
+- `apps/play/docs/gpuix-surface-pr-spec.md` — upstream PR spec for in-memory RGBA element
+- `apps/play/src/playfield/PlayfieldCanvasLayer.tsx` — PNG ring experiment (not wired to PlayView)
 - `apps/play/src/preview/PreviewController.ts` — isolated preview audio path
 - `apps/play/src/database/PlaySettingsRepository.ts` — persisted play settings singleton
 - `apps/play/src/database/PlaySessionRepository.ts` — local play results (`play_sessions`)

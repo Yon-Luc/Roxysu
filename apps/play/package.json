@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "bash scripts/dev.sh",
+    "dev:texture-test": "bun --hot src/texture-refresh-test.tsx",
     "build": "bun build --compile src/app.tsx --outfile dist/roxysu-play",
     "typecheck": "bunx tsc --noEmit"
   },

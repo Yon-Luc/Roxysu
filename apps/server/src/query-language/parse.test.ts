@@ -232,7 +232,7 @@ describe("compileQuery", () => {
     const compiled = compileQuery(ast);
     expect(compiled.sql).toContain("dr.est_diff");
     expect(compiled.sql).toContain("LIKE");
-    expect(compiled.params).toEqual(["%Reform%"]);
+    expect(compiled.params).toEqual(["%Reform%", "%Reform%"]);
   });
 
   test("compiles sunny star range", () => {

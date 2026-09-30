@@ -30,8 +30,8 @@ const FIELDS: { field: string; meaning: string; example: string }[] = [
   {
     field: "dan",
     meaning:
-      "Dan label — Daniel on 4K when available, otherwise Sunny (RC/Regular if LN&lt;20%, LN dan if LN≥20%). Quote multi-word labels.",
-    example: 'dan:"Alpha Mid" key=4',
+      "Dan label. Matches Sunny tiers (4K Intro/Reform/LN, 7K Regular/LN) and Daniel tiers on 4K (Alpha through Theta). Quote multi-word labels. Use daniel: for Daniel only.",
+    example: 'key=4 dan:"Reform 5"',
   },
   {
     field: "daniel",

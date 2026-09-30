@@ -19,7 +19,7 @@ export type FieldTerm =
   | { type: "played"; never: true }
   | { type: "pp"; op: ComparisonOp; value: number }
   | { type: "text"; value: string }
-  /** Sunny dan label substring (est_diff), e.g. Reform / Alpha / Regular. */
+  /** Sunny or Daniel dan label (est_diff), e.g. Reform / LN / Regular / Alpha. */
   | { type: "dan"; value: string; prefix?: boolean }
   /** Daniel dan label substring (4K RC), e.g. Alpha / Beta. */
   | { type: "daniel"; value: string; prefix?: boolean }

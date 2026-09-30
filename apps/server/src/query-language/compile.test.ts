@@ -34,6 +34,15 @@ describe("dan tier compile", () => {
     const { params } = compileQuery(parseQuery("dan:Regular"));
     expect(params).toEqual(expect.arrayContaining(["%Regular%"]));
   });
+
+  test("4K Reform tiers match Sunny labels, not only Daniel", () => {
+    const { sql, params } = compileQuery(parseQuery('dan:"Reform 5"'));
+    expect(sql).toContain("dr.est_diff");
+    expect(sql).toContain("dr_d.est_diff");
+    expect(params).toEqual(
+      expect.arrayContaining(["%Reform 5 %", "Reform 5"]),
+    );
+  });
 });
 
 describe("LIKE wildcard escaping", () => {

@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08
+last_verified: 2026-09
 confidence: verified
 touches:
   - packages/sunny-dan
@@ -20,7 +20,7 @@ Parse `.osu` charts from lazer storage, run Sunny Rework–style estimates, pers
 1. Estimates live in the Sunny dan ratings store (`beatmap_dan_ratings`); recommendations degrade without backfill.
 2. Backfill is a Settings-started background job. Practice/search list handlers and recommend HTTP handlers do not run Sunny/Daniel/pattern compute on the request path.
 3. Recommendations and skill estimates are for a single mania keymode (`keyCount`, default 7). 4K and 7K pools are never mixed.
-4. Matching uses Sunny stars for both 4K and 7K. Daniel remains a 4K profile / query-language label.
+4. Matching uses Sunny stars for both 4K and 7K. Daniel remains a 4K profile label. `dan:` matches Sunny tiers and Daniel tiers; `daniel:` matches Daniel labels only. A Daniel row does not hide 4K Sunny tiers (Intro / Reform / LN).
 5. Modded plays (speed rate ≠ 1.0 or full-LN Invert) are rated by the **dan difficulty variants** store (`beatmap_dan_rating_variants`), computed lazily per played combo by an import-triggered background job. Skill axes and band plays read variant stars for modded plays; modded plays without a computed variant are excluded from skill until rated. NM-equivalent plays (rate 1.0, no Invert; Mirror/Classic ignored) always read the base store.
 6. Both estimators honor pattern conversions: Daniel applies Invert/Hold Off
    via the same `OsuFileParser.modIN()` / `modHO()` conversions as Sunny

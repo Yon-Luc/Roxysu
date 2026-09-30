@@ -27,10 +27,6 @@ function isDanTierLabel(value: string): boolean {
   return / \d+$/.test(value);
 }
 
-/** Effective dan label: Daniel on 4K when available, otherwise Sunny. */
-const EFFECTIVE_EST_DIFF =
-  "COALESCE(CASE WHEN CAST(b.circle_size AS INTEGER) = 4 THEN dr_d.est_diff END, dr.est_diff)";
-
 /**
  * Match Sunny/Daniel dan labels without crossing tiers — "Regular 1" must not match "Regular 10".
  */
@@ -38,7 +34,7 @@ function compileDanMatch(
   value: string,
   prefix: boolean | undefined,
   push: (value: unknown) => string,
-  estDiffExpr = EFFECTIVE_EST_DIFF,
+  estDiffExpr: string,
 ): string {
   if (prefix && !isDanTierLabel(value)) {
     const pat = push(likePattern(value, true));
@@ -176,8 +172,18 @@ function compileTerm(
       const since = Date.now() - term.days * 24 * 60 * 60 * 1000;
       return `(ps.last_played_at IS NOT NULL AND ps.last_played_at >= ${push(since)})`;
     }
-    case "dan":
-      return compileDanMatch(term.value, term.prefix, push);
+    case "dan": {
+      // Sunny tiers (4K Reform/LN/Intro, 7K Regular/LN) stay searchable even
+      // when a 4K map also has a Daniel label. daniel: is Daniel-only.
+      const sunny = compileDanMatch(term.value, term.prefix, push, "dr.est_diff");
+      const daniel = compileDanMatch(
+        term.value,
+        term.prefix,
+        push,
+        "dr_d.est_diff",
+      );
+      return `(${sunny} OR ${daniel})`;
+    }
     case "daniel":
       return compileDanMatch(term.value, term.prefix, push, "dr_d.est_diff");
     case "sunny": {

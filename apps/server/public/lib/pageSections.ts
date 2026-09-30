@@ -21,6 +21,13 @@ export const PAGE_SECTIONS: PageSectionDef[] = [
     keywords: ["settings", "realm", "osu path", "data path", "client.realm"],
   },
   {
+    id: "in-game-overlay",
+    to: "/settings",
+    pageLabel: "Settings",
+    label: "In-game overlay",
+    keywords: ["settings", "overlay", "hud", "wayland", "host"],
+  },
+  {
     id: "tosu-live-map",
     to: "/settings",
     pageLabel: "Settings",

@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08
+last_verified: 2026-09
 confidence: verified
 touches:
   - apps/server/src/analytics/session.ts
@@ -37,6 +37,8 @@ Live sessions keep the **Current session** label in headings; the generated name
 7. Session detail windows the newest scores (`GET /api/sessions/:id?limit=`, default 50, max 500) with Load more. PB count is for the whole session, not the window.
 8. OBS overlay uses `GET /api/overlay?limit=` (header + last N scores, no PP curves for the rest of the session) and must not poll `["dashboard"]` or full current-session detail.
 9. Up Next samples debounce the query string; recommend/Up Next query keys include excluded beatmap IDs. Shuffle bumps a key instead of double-fetching.
+10. Session score rows whose beatmap was removed from the game (`beatmapId` null after Realm orphan cleanup) display as “Beatmap deleted” / “Removed from the game”, not Untitled/Unknown.
+    **Status:** verified
 
 ## Important symbols
 

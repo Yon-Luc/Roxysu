@@ -285,12 +285,13 @@ const settingsRoute = createRoute({
   path: "/settings",
   validateSearch: (
     search: Record<string, unknown>,
-  ): { section?: string } => ({
+  ): { section?: string; tab?: string } => ({
     section: typeof search.section === "string" ? search.section : undefined,
+    tab: typeof search.tab === "string" ? search.tab : undefined,
   }),
   component: function SettingsRoute() {
-    const { section } = settingsRoute.useSearch();
-    return <SettingsPage section={section} />;
+    const { section, tab } = settingsRoute.useSearch();
+    return <SettingsPage section={section} tab={tab} />;
   },
 });
 
@@ -370,6 +371,12 @@ export const router = createRouter({
   routeTree,
   // Hash history avoids needing server SPA fallback under Bun static/fullstack.
   history: createHashHistory(),
+  // Remember window scroll per path + search so sidebar and back both return
+  // to the same place. A new search still starts at the top.
+  scrollRestoration: true,
+  scrollRestorationBehavior: "instant",
+  getScrollRestorationKey: (location) =>
+    location.pathname + location.searchStr,
 });
 
 declare module "@tanstack/react-router" {

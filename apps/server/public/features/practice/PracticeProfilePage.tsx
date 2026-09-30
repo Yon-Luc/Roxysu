@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useCanGoBack } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { BeatmapCover } from "../../components/BeatmapCover";
 import { BeatmapPreviewButton } from "../../components/BeatmapPreviewButton";
@@ -39,6 +39,18 @@ import {
 import { useAppDict, t } from "../../lib/i18n";
 import roxyIcon from "../../roxy.png";
 
+function MapBackLink() {
+  const canGoBack = useCanGoBack();
+  const { dict } = useAppDict();
+  return (
+    <GoBackLink to="/practice" history>
+      {canGoBack
+        ? (dict?.practice.detail.back ?? "Back")
+        : (dict?.practice.detail.backToPractice ?? "Practice")}
+    </GoBackLink>
+  );
+}
+
 export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
   const { dict } = useAppDict();
   const ratingMode = useRatingDisplayMode();
@@ -51,9 +63,7 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
     return (
       <div className="space-y-8">
         <div>
-          <GoBackLink to="/practice">
-            {dict?.practice.detail.backToPractice}
-          </GoBackLink>
+          <MapBackLink />
           <HeroSkeleton />
         </div>
         <StatGridSkeleton />
@@ -75,9 +85,7 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
   if (error || !data || !("beatmap" in data) || !data.beatmap) {
     return (
       <div className="space-y-3">
-        <GoBackLink to="/practice">
-          {dict?.practice.detail.backToPractice}
-        </GoBackLink>
+        <MapBackLink />
         <p className="text-danger">
           {error?.message ?? dict?.practice.detail.notFound}
         </p>
@@ -179,9 +187,7 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
   return (
     <div className="space-y-8">
       <div>
-        <GoBackLink to="/practice">
-          {dict?.practice.detail.backToPractice ?? "Practice"}
-        </GoBackLink>
+        <MapBackLink />
         <div className="relative mt-4 overflow-hidden rounded-xl">
           <BeatmapCover
             backgroundFileHash={beatmap.backgroundFileHash}

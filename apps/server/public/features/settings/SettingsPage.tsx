@@ -1,11 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import {
   PageHeaderSkeleton,
   PanelSkeleton,
   SkeletonBlock,
 } from "../../components/LoadingSkeleton";
 import { PageTitle } from "../../components/PageTitle";
-import { fetchSettings } from "../../lib/api";
+import { fetchSettings, type SettingsPayload } from "../../lib/api";
 import { useScrollToPageSection } from "../../lib/pageSections";
 import { useAppDict, t } from "../../lib/i18n";
 import { OsuDataFolderSection } from "./sections/OsuDataFolderSection";
@@ -23,9 +24,72 @@ import { ManiaRatingLabSection } from "./sections/ManiaRatingLabSection";
 import { SunnyDanSection } from "./sections/SunnyDanSection";
 import { DanielDanSection } from "./sections/DanielDanSection";
 import { PatternAnalysisSection } from "./sections/PatternAnalysisSection";
+import {
+  SETTINGS_TABS,
+  resolveSettingsTab,
+  type SettingsTabId,
+} from "./settingsTabs";
 
-export function SettingsPage({ section }: { section?: string } = {}) {
+const TAB_FALLBACK: Record<SettingsTabId, string> = {
+  setup: "Setup",
+  practice: "Practice",
+  appearance: "Appearance",
+  jobs: "Jobs",
+};
+
+function SettingsTabPanels({
+  tab,
+  data,
+}: {
+  tab: SettingsTabId;
+  data: SettingsPayload;
+}) {
+  switch (tab) {
+    case "setup":
+      return (
+        <>
+          <OsuDataFolderSection data={data} />
+          <LiveSyncSection data={data} />
+          <OverlayHostSection data={data} />
+          <TosuLiveMapSection data={data} />
+        </>
+      );
+    case "practice":
+      return (
+        <>
+          <MasteryFormulaSection data={data} />
+          <ScoreUsernameSection data={data} />
+          <GamemodeSection data={data} />
+        </>
+      );
+    case "appearance":
+      return (
+        <>
+          <AppearanceSection />
+          <DifficultyDisplaySection />
+          <PreviewSkinSection />
+          <KeybindsSection />
+        </>
+      );
+    case "jobs":
+      return (
+        <>
+          <SunnyDanSection data={data} />
+          <DanielDanSection data={data} />
+          <PatternAnalysisSection data={data} />
+          <ManiaRatingLabSection data={data} />
+        </>
+      );
+  }
+}
+
+export function SettingsPage({
+  section,
+  tab: tabSearch,
+}: { section?: string; tab?: string } = {}) {
   const { dict } = useAppDict();
+  const navigate = useNavigate();
+  const activeTab = resolveSettingsTab(section, tabSearch);
   const { data, isLoading, error } = useQuery({
     queryKey: ["settings"],
     queryFn: fetchSettings,
@@ -33,10 +97,23 @@ export function SettingsPage({ section }: { section?: string } = {}) {
 
   useScrollToPageSection(section, { ready: !isLoading && !!data });
 
+  const selectTab = (next: SettingsTabId) => {
+    void navigate({
+      to: "/settings",
+      search: { tab: next, section: undefined },
+    });
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-8">
         <PageHeaderSkeleton subtitleWidth="w-[32rem]" />
+        <div className="flex flex-wrap gap-2">
+          <SkeletonBlock className="h-10 w-24 rounded-xl" />
+          <SkeletonBlock className="h-10 w-28 rounded-xl" />
+          <SkeletonBlock className="h-10 w-32 rounded-xl" />
+          <SkeletonBlock className="h-10 w-20 rounded-xl" />
+        </div>
         <section className="rx-panel p-5">
           <SkeletonBlock className="h-4 w-40" />
           <SkeletonBlock className="mt-2 h-4 w-full max-w-[36rem]" />
@@ -48,23 +125,6 @@ export function SettingsPage({ section }: { section?: string } = {}) {
             <SkeletonBlock className="h-10 w-32 rounded-xl" />
           </div>
         </section>
-        <section className="rx-panel p-5">
-          <SkeletonBlock className="h-4 w-28" />
-          <SkeletonBlock className="mt-2 h-4 w-full max-w-[34rem]" />
-          <div className="mt-4 space-y-4">
-            <PanelSkeleton lines={2} className="p-4" />
-            <div>
-              <SkeletonBlock className="h-3 w-16" />
-              <SkeletonBlock className="mt-2 h-11 w-full rounded-xl" />
-            </div>
-            <div>
-              <SkeletonBlock className="h-3 w-28" />
-              <SkeletonBlock className="mt-2 h-11 w-full rounded-xl" />
-            </div>
-          </div>
-        </section>
-        <PanelSkeleton lines={4} />
-        <PanelSkeleton lines={4} />
         <PanelSkeleton lines={4} />
       </div>
     );
@@ -87,21 +147,32 @@ export function SettingsPage({ section }: { section?: string } = {}) {
         <p className="rx-subtitle">{dict?.settings.subtitle}</p>
       </div>
 
-      <OsuDataFolderSection data={data} />
-      <OverlayHostSection data={data} />
-      <TosuLiveMapSection data={data} />
-      <MasteryFormulaSection data={data} />
-      <ScoreUsernameSection data={data} />
-      <GamemodeSection data={data} />
-      <LiveSyncSection data={data} />
-      <AppearanceSection />
-      <DifficultyDisplaySection />
-      <PreviewSkinSection />
-      <KeybindsSection />
-      <ManiaRatingLabSection data={data} />
-      <SunnyDanSection data={data} />
-      <DanielDanSection data={data} />
-      <PatternAnalysisSection data={data} />
+      <div
+        className="flex flex-wrap gap-2"
+        role="tablist"
+        aria-label={dict?.settings.pageTitle ?? "Settings"}
+      >
+        {SETTINGS_TABS.map((tabDef) => {
+          const selected = activeTab === tabDef.id;
+          return (
+            <button
+              key={tabDef.id}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              className={selected ? "rx-btn-primary" : "rx-btn"}
+              onClick={() => selectTab(tabDef.id)}
+            >
+              {dict?.settings.tabs?.[tabDef.labelKey] ??
+                TAB_FALLBACK[tabDef.id]}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="space-y-8" role="tabpanel">
+        <SettingsTabPanels tab={activeTab} data={data} />
+      </div>
     </div>
   );
 }

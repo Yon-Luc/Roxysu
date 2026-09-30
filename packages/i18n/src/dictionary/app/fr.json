@@ -63,6 +63,8 @@
     "noScoresYet": "Pas encore de scores. Lancez realm-reader pour synchroniser votre client.realm.",
     "untitled": "Sans titre",
     "unknown": "Inconnu",
+    "beatmapDeleted": "Beatmap supprimée",
+    "removedFromGame": "Retirée du jeu",
     "noDerivedStats": "Pas encore de stats dérivées — le pipeline d'analytique les remplira après la synchro."
   },
   "stats": {
@@ -175,6 +177,7 @@
     "previous": "Précédent",
     "next": "Suivant",
     "detail": {
+      "back": "Retour",
       "backToPractice": "Practice",
       "notFound": "Beatmap introuvable",
       "mappedBy": " · mappé par {{mapper}}",
@@ -267,6 +270,12 @@
   "settings": {
     "pageTitle": "Paramètres",
     "subtitle": "Préférences d'affichage et outils — les formules de maîtrise recalculent tous les niveaux lorsqu'elles changent.",
+    "tabs": {
+      "setup": "Configuration",
+      "practice": "Entraînement",
+      "appearance": "Apparence",
+      "jobs": "Tâches"
+    },
     "failedToLoad": "Échec du chargement des paramètres : {{error}}",
     "saving": "Enregistrement…",
     "stop": "Arrêter",
@@ -604,6 +613,8 @@
     "noPlaysDone": "Aucun play dans cette session.",
     "untitled": "Sans titre",
     "unknownArtist": "Inconnu",
+    "beatmapDeleted": "Beatmap supprimée",
+    "removedFromGame": "Retirée du jeu",
     "pb": "PB",
     "new": "Nouveau",
     "retry": " · essai #{{n}}",

@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08
+last_verified: 2026-09
 confidence: verified
 touches:
   - apps/server/public/features/dashboard/DashboardPage.tsx
@@ -18,6 +18,11 @@ At-a-glance practice library overview: indexed score/beatmap counts, Realm extra
 Landing surface for “is my practice library healthy and what have I been playing?”
 
 The OBS overlay must not poll this dashboard payload. Overlay idle recent scores come from `GET /api/overlay`.
+
+## Business rules
+
+1. Recent scores whose beatmap was removed from the game (`beatmapId` null after Realm orphan cleanup) display as “Beatmap deleted” / “Removed from the game”, not Untitled/Unknown.
+   **Status:** verified
 
 ## Main flows
 

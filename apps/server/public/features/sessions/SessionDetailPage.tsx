@@ -257,6 +257,7 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
               const canPreview =
                 Boolean(score.beatmapId) && previewableRuleset;
               const canRewatch = score.hasReplay && previewableRuleset;
+              const beatmapMissing = !score.beatmapId;
               const main = (
                 <>
                   <BeatmapCover
@@ -269,7 +270,9 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="truncate font-semibold text-ink">
-                        {score.title ?? dict?.session.untitled}
+                        {beatmapMissing
+                          ? (dict?.session.beatmapDeleted ?? "Beatmap deleted")
+                          : (score.title ?? dict?.session.untitled)}
                       </span>
                       {score.isPb ? (
                         <span className="shrink-0 rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-warning">
@@ -284,21 +287,27 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
                     </div>
                     <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5 text-sm text-muted">
                       <span className="truncate">
-                        {score.artist ?? dict?.session.unknownArtist}
-                        {score.difficultyName ? ` · ${score.difficultyName}` : ""}
-                        {" · "}
-                        {formatPrimaryRating({
-                          mode: ratingMode,
-                          starRating: score.starRating,
-                          sunnyEstDiff: score.sunnyEstDiff,
-                          sunnyStar: score.sunnyStar,
-                          danielEstDiff: score.danielEstDiff,
-                          danielStar: score.danielStar,
-                          keyCount: score.keyCount,
-                        })}
-                        {score.retryIndex != null && score.retryIndex > 0
-                          ? t(dict?.session.retry, { n: score.retryIndex })
-                          : ""}
+                        {beatmapMissing ? (
+                          dict?.session.removedFromGame ?? "Removed from the game"
+                        ) : (
+                          <>
+                            {score.artist ?? dict?.session.unknownArtist}
+                            {score.difficultyName ? ` · ${score.difficultyName}` : ""}
+                            {" · "}
+                            {formatPrimaryRating({
+                              mode: ratingMode,
+                              starRating: score.starRating,
+                              sunnyEstDiff: score.sunnyEstDiff,
+                              sunnyStar: score.sunnyStar,
+                              danielEstDiff: score.danielEstDiff,
+                              danielStar: score.danielStar,
+                              keyCount: score.keyCount,
+                            })}
+                            {score.retryIndex != null && score.retryIndex > 0
+                              ? t(dict?.session.retry, { n: score.retryIndex })
+                              : ""}
+                          </>
+                        )}
                       </span>
                       <ModBadges mods={score.mods} />
                     </div>

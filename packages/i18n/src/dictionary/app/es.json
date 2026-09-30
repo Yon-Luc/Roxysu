@@ -63,6 +63,8 @@
     "noScoresYet": "Aún no hay scores. Ejecuta realm-reader para sincronizar tu client.realm.",
     "untitled": "Sin título",
     "unknown": "Desconocido",
+    "beatmapDeleted": "Beatmap eliminada",
+    "removedFromGame": "Eliminada del juego",
     "noDerivedStats": "Aún no hay estadísticas derivadas — el pipeline de análisis las completará tras la sincronización."
   },
   "stats": {
@@ -175,6 +177,7 @@
     "previous": "Anterior",
     "next": "Siguiente",
     "detail": {
+      "back": "Volver",
       "backToPractice": "Entrenamiento",
       "notFound": "Beatmap no encontrada",
       "mappedBy": " · mapeada por {{mapper}}",
@@ -267,6 +270,12 @@
   "settings": {
     "pageTitle": "Ajustes",
     "subtitle": "Preferencias de visualización y herramientas — las fórmulas de maestría recalculan todos los niveles al cambiar.",
+    "tabs": {
+      "setup": "Configuración",
+      "practice": "Entrenamiento",
+      "appearance": "Apariencia",
+      "jobs": "Tareas"
+    },
     "failedToLoad": "Error al cargar los ajustes: {{error}}",
     "saving": "Guardando…",
     "stop": "Detener",
@@ -603,6 +612,8 @@
     "noPlaysDone": "No hay partidas en esta sesión.",
     "untitled": "Sin título",
     "unknownArtist": "Desconocido",
+    "beatmapDeleted": "Beatmap eliminada",
+    "removedFromGame": "Eliminada del juego",
     "pb": "PB",
     "new": "Nuevo",
     "retry": " · reintento #{{n}}",

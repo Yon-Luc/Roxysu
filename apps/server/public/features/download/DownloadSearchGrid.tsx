@@ -5,6 +5,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useElementScrollRestoration } from "@tanstack/react-router";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import type { OnlineBeatmapSet } from "../../lib/api";
 
@@ -48,6 +49,9 @@ export function DownloadSearchGrid({
 
   const cols = Math.max(1, columnCountForWidth(width));
   const rowCount = Math.ceil(items.length / cols);
+  const scrollEntry = useElementScrollRestoration({
+    getElement: () => window,
+  });
 
   const virtualizer = useWindowVirtualizer({
     count: rowCount,
@@ -55,6 +59,7 @@ export function DownloadSearchGrid({
     overscan: 4,
     scrollMargin,
     gap: GAP,
+    initialOffset: scrollEntry?.scrollY,
   });
 
   const virtualRows = virtualizer.getVirtualItems();

@@ -63,6 +63,8 @@
     "noScoresYet": "No scores yet. Run realm-reader to sync your client.realm.",
     "untitled": "Untitled",
     "unknown": "Unknown",
+    "beatmapDeleted": "Beatmap deleted",
+    "removedFromGame": "Removed from the game",
     "noDerivedStats": "No derived stats yet — analytics pipeline will fill this after sync."
   },
   "stats": {
@@ -175,6 +177,7 @@
     "previous": "Previous",
     "next": "Next",
     "detail": {
+      "back": "Back",
       "backToPractice": "Practice",
       "notFound": "Beatmap not found",
       "mappedBy": " · mapped by {{mapper}}",
@@ -267,6 +270,12 @@
   "settings": {
     "pageTitle": "Settings",
     "subtitle": "Display preferences and tools — mastery formulas recompute all levels when changed.",
+    "tabs": {
+      "setup": "Setup",
+      "practice": "Practice",
+      "appearance": "Appearance",
+      "jobs": "Jobs"
+    },
     "failedToLoad": "Failed to load settings: {{error}}",
     "saving": "Saving…",
     "stop": "Stop",
@@ -604,6 +613,8 @@
     "noPlaysDone": "No plays in this session.",
     "untitled": "Untitled",
     "unknownArtist": "Unknown",
+    "beatmapDeleted": "Beatmap deleted",
+    "removedFromGame": "Removed from the game",
     "pb": "PB",
     "new": "New",
     "retry": " · retry #{{n}}",

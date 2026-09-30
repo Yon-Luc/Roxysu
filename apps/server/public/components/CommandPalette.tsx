@@ -45,6 +45,7 @@ const PAGE_LABEL_KEYS: Record<string, keyof Dictionary["app"]["nav"]> = {
 const SETTINGS_SECTION_KEYS: Record<string, keyof Dictionary["app"]["settings"]> =
   {
     "osu-lazer-data-folder": "lazerDataFolder",
+    "in-game-overlay": "overlayHost",
     "tosu-live-map": "tosuLiveMap",
     "mastery-formula": "masteryFormula",
     "score-username": "scoreUsername",

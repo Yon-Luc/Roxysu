@@ -257,6 +257,7 @@ export function DashboardPage() {
         ) : (
           <ul className="space-y-0.5">
             {data.recentScores.map((score) => {
+              const beatmapMissing = !score.beatmapId;
               const body = (
                 <>
                   <BeatmapCover
@@ -268,22 +269,30 @@ export function DashboardPage() {
                   />
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-semibold text-ink">
-                      {score.title ?? dict?.dashboard.untitled ?? "Untitled"}
+                      {beatmapMissing
+                        ? (dict?.dashboard.beatmapDeleted ?? "Beatmap deleted")
+                        : (score.title ?? dict?.dashboard.untitled ?? "Untitled")}
                     </div>
                     <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5 text-sm text-muted">
                       <span className="truncate">
-                        {score.artist ?? dict?.dashboard.unknown ?? "Unknown"}
-                        {score.difficultyName ? ` · ${score.difficultyName}` : ""}
-                        {" · "}
-                        {formatPrimaryRating({
-                          mode: ratingMode,
-                          starRating: score.starRating,
-                          sunnyEstDiff: score.sunnyEstDiff,
-                          sunnyStar: score.sunnyStar,
-                          danielEstDiff: score.danielEstDiff,
-                          danielStar: score.danielStar,
-                          keyCount: score.keyCount,
-                        })}
+                        {beatmapMissing ? (
+                          dict?.dashboard.removedFromGame ?? "Removed from the game"
+                        ) : (
+                          <>
+                            {score.artist ?? dict?.dashboard.unknown ?? "Unknown"}
+                            {score.difficultyName ? ` · ${score.difficultyName}` : ""}
+                            {" · "}
+                            {formatPrimaryRating({
+                              mode: ratingMode,
+                              starRating: score.starRating,
+                              sunnyEstDiff: score.sunnyEstDiff,
+                              sunnyStar: score.sunnyStar,
+                              danielEstDiff: score.danielEstDiff,
+                              danielStar: score.danielStar,
+                              keyCount: score.keyCount,
+                            })}
+                          </>
+                        )}
                       </span>
                       <ModBadges mods={score.mods} />
                     </div>

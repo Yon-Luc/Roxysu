@@ -88,6 +88,13 @@ export function isFourKKeyCount(keyCount: number | null | undefined): boolean {
 /** Which dan estimator is shown for the current map + display mode. */
 export type PrimaryDanSource = "daniel" | "sunny";
 
+/** Daniel out-of-band sentinels like `< Alpha Low` / `> Theta High` — not useful as a display tier. */
+export function isOutOfBandDanLabel(label: string | null | undefined): boolean {
+  if (!label) return false;
+  const trimmed = label.trim();
+  return trimmed.startsWith("<") || trimmed.startsWith(">");
+}
+
 export function primaryDanSource(opts: {
   mode: RatingDisplayMode;
   sunnyEstDiff?: string | null;
@@ -98,7 +105,13 @@ export function primaryDanSource(opts: {
 }): PrimaryDanSource | null {
   if (opts.mode === "osu") return null;
   if (opts.mode === "dan") {
-    if (isFourKKeyCount(opts.keyCount) && opts.danielEstDiff) return "daniel";
+    if (
+      isFourKKeyCount(opts.keyCount) &&
+      opts.danielEstDiff &&
+      !isOutOfBandDanLabel(opts.danielEstDiff)
+    ) {
+      return "daniel";
+    }
     if (opts.sunnyEstDiff) return "sunny";
     return null;
   }
@@ -131,13 +144,20 @@ export function primaryRatingDisplayTitle(
     : (labels.sunnyDan ?? "Sunny dan");
 }
 
-/** Preferred dan label: Daniel on 4K when available, otherwise Sunny. */
+/**
+ * Preferred dan label: Daniel on 4K when it is an in-band Alpha+ tier,
+ * otherwise Sunny (so Reform / Intro / LN are not hidden by `< Alpha Low`).
+ */
 export function primaryDanLabel(opts: {
   sunnyEstDiff?: string | null;
   danielEstDiff?: string | null;
   keyCount?: number | null;
 }): string | null {
-  if (isFourKKeyCount(opts.keyCount) && opts.danielEstDiff) {
+  if (
+    isFourKKeyCount(opts.keyCount) &&
+    opts.danielEstDiff &&
+    !isOutOfBandDanLabel(opts.danielEstDiff)
+  ) {
     return opts.danielEstDiff;
   }
   return opts.sunnyEstDiff ?? null;

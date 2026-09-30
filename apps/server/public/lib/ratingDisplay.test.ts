@@ -18,6 +18,26 @@ describe("primaryDanLabel", () => {
     ).toBe("Beta Mid");
   });
 
+  test("falls back to Sunny on 4K when Daniel is below Alpha", () => {
+    expect(
+      primaryDanLabel({
+        keyCount: 4,
+        danielEstDiff: "< Alpha Low",
+        sunnyEstDiff: "Reform 5 mid",
+      }),
+    ).toBe("Reform 5 mid");
+  });
+
+  test("falls back to Sunny on 4K when Daniel is above top tier", () => {
+    expect(
+      primaryDanLabel({
+        keyCount: 4,
+        danielEstDiff: "> CloverWisp Theta High",
+        sunnyEstDiff: "Reform 10 high",
+      }),
+    ).toBe("Reform 10 high");
+  });
+
   test("uses Sunny on 7K", () => {
     expect(
       primaryDanLabel({
@@ -40,6 +60,18 @@ describe("formatPrimaryRating", () => {
         sunnyEstDiff: "Reform 3 mid",
       }),
     ).toBe("Alpha Low");
+  });
+
+  test("dan mode uses Sunny on 4K when Daniel is out of band", () => {
+    expect(
+      formatPrimaryRating({
+        mode: "dan",
+        starRating: 3,
+        keyCount: 4,
+        danielEstDiff: "< Alpha Low",
+        sunnyEstDiff: "Reform 5 mid",
+      }),
+    ).toBe("Reform 5 mid");
   });
 
   test("sunny mode uses Daniel stars on 4K", () => {
@@ -97,6 +129,17 @@ describe("primaryDanSource", () => {
         sunnyEstDiff: "Reform 5 mid",
       }),
     ).toBe("daniel");
+  });
+
+  test("picks Sunny on 4K in dan mode when Daniel is out of band", () => {
+    expect(
+      primaryDanSource({
+        mode: "dan",
+        keyCount: 4,
+        danielEstDiff: "< Alpha Low",
+        sunnyEstDiff: "Reform 5 mid",
+      }),
+    ).toBe("sunny");
   });
 });
 

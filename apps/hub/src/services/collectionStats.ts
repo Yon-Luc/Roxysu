@@ -132,7 +132,10 @@ export function aggregateCollectionStats(
   };
 }
 
-function diffsFromHinaiPayload(payload: unknown): DiffSample[] {
+function diffsFromHinaiPayload(
+  payload: unknown,
+  allowedBeatmapIds?: Set<number>,
+): DiffSample[] {
   if (!payload || typeof payload !== "object") return [];
   const root = payload as Record<string, unknown>;
   const beatmaps = Array.isArray(root.beatmaps) ? root.beatmaps : [];
@@ -140,6 +143,13 @@ function diffsFromHinaiPayload(payload: unknown): DiffSample[] {
   for (const raw of beatmaps) {
     if (!raw || typeof raw !== "object") continue;
     const row = raw as Record<string, unknown>;
+    const beatmapId = asNumber(row.id);
+    if (
+      allowedBeatmapIds &&
+      (beatmapId == null || !allowedBeatmapIds.has(beatmapId))
+    ) {
+      continue;
+    }
     const stars =
       asNumber(row.difficulty_rating) ?? asNumber(row.difficultyrating);
     if (stars == null || !(stars > 0)) continue;
@@ -154,7 +164,10 @@ function diffsFromHinaiPayload(payload: unknown): DiffSample[] {
   return out;
 }
 
-async function fetchHinaiSetDiffs(setId: number): Promise<DiffSample[]> {
+async function fetchHinaiSetDiffs(
+  setId: number,
+  allowedBeatmapIds?: Set<number>,
+): Promise<DiffSample[]> {
   if (!Number.isSafeInteger(setId) || setId <= 0) return [];
   try {
     const res = await fetch(
@@ -165,22 +178,32 @@ async function fetchHinaiSetDiffs(setId: number): Promise<DiffSample[]> {
       },
     );
     if (!res.ok) return [];
-    return diffsFromHinaiPayload(await res.json());
+    return diffsFromHinaiPayload(await res.json(), allowedBeatmapIds);
   } catch {
     return [];
   }
 }
 
-/** Resolve collection stats from beatmapset IDs via hinai beatmap-info. */
+/**
+ * Resolve collection stats from beatmapset IDs via hinai beatmap-info.
+ * When `beatmapIds` is non-empty, only those difficulties count.
+ */
 export async function computeCollectionStatsFromSetIds(
   setIds: number[],
+  beatmapIds?: number[],
 ): Promise<CollectionPlayStats> {
   const unique = [
     ...new Set(setIds.filter((id) => Number.isSafeInteger(id) && id > 0)),
   ];
+  const allowed =
+    beatmapIds != null && beatmapIds.length > 0
+      ? new Set(beatmapIds.filter((id) => Number.isSafeInteger(id) && id > 0))
+      : undefined;
   const diffs: DiffSample[] = [];
   for (const batch of chunk(unique, FETCH_CONCURRENCY * 2)) {
-    const parts = await mapPool(batch, FETCH_CONCURRENCY, fetchHinaiSetDiffs);
+    const parts = await mapPool(batch, FETCH_CONCURRENCY, (setId) =>
+      fetchHinaiSetDiffs(setId, allowed),
+    );
     for (const list of parts) diffs.push(...list);
   }
   return aggregateCollectionStats(diffs);

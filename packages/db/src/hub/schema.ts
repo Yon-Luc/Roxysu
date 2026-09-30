@@ -84,6 +84,34 @@ export const collectionMaps = sqliteTable(
 export type CollectionMap = typeof collectionMaps.$inferSelect;
 export type NewCollectionMap = typeof collectionMaps.$inferInsert;
 
+/**
+ * Difficulties that belong in a shared collection.
+ * One row per osu beatmap online id. Empty for a collection means legacy
+ * whole-set membership (every difficulty of each set).
+ */
+export const collectionBeatmaps = sqliteTable(
+  "collection_beatmaps",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    collectionId: integer("collection_id")
+      .notNull()
+      .references(() => collections.id, { onDelete: "cascade" }),
+    beatmapsetId: integer("beatmapset_id").notNull(),
+    beatmapId: integer("beatmap_id").notNull(),
+  },
+  (t) => ({
+    collectionIdIdx: index("collection_beatmaps_collection_id_idx").on(
+      t.collectionId,
+    ),
+    collectionBeatmapUnique: uniqueIndex(
+      "collection_beatmaps_collection_beatmap_unique",
+    ).on(t.collectionId, t.beatmapId),
+  }),
+);
+
+export type CollectionBeatmap = typeof collectionBeatmaps.$inferSelect;
+export type NewCollectionBeatmap = typeof collectionBeatmaps.$inferInsert;
+
 // ---------------------------------------------------------------------------
 // Collection tags
 // ---------------------------------------------------------------------------

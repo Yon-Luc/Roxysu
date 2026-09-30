@@ -1,5 +1,6 @@
 import {
   beatmapSets,
+  beatmaps,
   collections,
   hubAddedCollections,
   realmCollectionHashes,
@@ -10,7 +11,7 @@ import { Elysia, t } from "elysia";
 import { createReadStream } from "node:fs";
 import { unlink } from "node:fs/promises";
 import { Readable } from "node:stream";
-import { desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
 
 import { dbPlugin } from "../db-runtime";
 import type { Db } from "../db-runtime";
@@ -19,6 +20,7 @@ import { publish } from "../shared/events";
 import { syncCollectionsToLazer } from "../shared/syncCollections";
 import { diffAgainstLibrary } from "../mirrors";
 import {
+  listCollectionOnlineBeatmaps,
   listDistinctSetIds,
   parseQuery,
   QueryParseError,
@@ -87,10 +89,12 @@ function parseBeatmapsetIdsJson(raw: string): number[] {
 
 function serializeHubAdded(row: typeof hubAddedCollections.$inferSelect) {
   const beatmapsetIds = parseBeatmapsetIdsJson(row.beatmapsetIdsJson);
+  const beatmapIds = parseBeatmapsetIdsJson(row.beatmapIdsJson);
   return {
     hubCollectionId: row.hubCollectionId,
     name: row.name,
     beatmapsetIds,
+    beatmapIds,
     mapCount: beatmapsetIds.length,
     hubUpdatedAt: toIso(row.hubUpdatedAt),
     lazerCollectionId: row.lazerCollectionId,
@@ -154,6 +158,13 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
           ),
         ),
       ];
+      const beatmapIds = [
+        ...new Set(
+          (body.beatmapIds ?? []).filter(
+            (id) => Number.isSafeInteger(id) && id > 0,
+          ),
+        ),
+      ];
       if (beatmapsetIds.length === 0) {
         set.status = 400;
         return { error: "beatmapsetIds is required" };
@@ -172,6 +183,7 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
           hubCollectionId: body.hubCollectionId,
           name: body.name.trim(),
           beatmapsetIdsJson: JSON.stringify(beatmapsetIds),
+          beatmapIdsJson: JSON.stringify(beatmapIds),
           hubUpdatedAt,
           addedAt: now,
           updatedAt: now,
@@ -181,6 +193,7 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
           set: {
             name: body.name.trim(),
             beatmapsetIdsJson: JSON.stringify(beatmapsetIds),
+            beatmapIdsJson: JSON.stringify(beatmapIds),
             hubUpdatedAt,
             updatedAt: now,
           },
@@ -233,6 +246,7 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
         hubCollectionId: t.Number(),
         name: t.String({ minLength: 1, maxLength: 100 }),
         beatmapsetIds: t.Array(t.Number(), { minItems: 1 }),
+        beatmapIds: t.Optional(t.Array(t.Number(), { maxItems: 10_000 })),
         hubUpdatedAt: t.String(),
         syncLazer: t.Optional(t.Boolean()),
       }),
@@ -303,12 +317,48 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
         query.limit != null && Number.isFinite(query.limit) && query.limit > 0
           ? Math.floor(query.limit)
           : null;
+      const difficultyRows =
+        limit != null
+          ? []
+          : await db
+              .select({
+                beatmapsetId: beatmapSets.onlineId,
+                beatmapId: beatmaps.onlineId,
+              })
+              .from(realmCollectionHashes)
+              .innerJoin(
+                beatmaps,
+                sql`lower(${beatmaps.md5Hash}) = lower(${realmCollectionHashes.md5Hash})`,
+              )
+              .innerJoin(beatmapSets, eq(beatmaps.setId, beatmapSets.id))
+              .where(
+                and(
+                  eq(realmCollectionHashes.collectionId, params.id),
+                  gt(beatmaps.onlineId, 0),
+                  gt(beatmapSets.onlineId, 0),
+                  eq(beatmapSets.deletePending, false),
+                ),
+              );
+      const seenBeatmaps = new Set<number>();
+      const collectionBeatmaps: Array<{
+        beatmapsetId: number;
+        beatmapId: number;
+      }> = [];
+      for (const row of difficultyRows) {
+        if (seenBeatmaps.has(row.beatmapId)) continue;
+        seenBeatmaps.add(row.beatmapId);
+        collectionBeatmaps.push({
+          beatmapsetId: row.beatmapsetId,
+          beatmapId: row.beatmapId,
+        });
+      }
 
       return {
         kind: "realm" as const,
         id: col.id,
         name: col.name,
         beatmapsetIds: limit != null ? beatmapsetIds.slice(0, limit) : beatmapsetIds,
+        beatmaps: collectionBeatmaps,
         hashCount: col.hashCount,
         resolvedSetCount: beatmapsetIds.length,
         unresolvedHashCount: Math.max(0, col.hashCount - beatmapsetIds.length),
@@ -399,11 +449,18 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
             const resolved = await resolveSmartSetOnlineIds(db, col.query, {
               limit: query.limit,
             });
+            const fullList =
+              query.limit == null ||
+              !(Number.isFinite(query.limit) && query.limit > 0);
+            const collectionBeatmaps = fullList
+              ? listCollectionOnlineBeatmaps(db, col.query).beatmaps
+              : [];
             return {
               kind: "smart" as const,
               id: col.id,
               name: col.name,
               beatmapsetIds: resolved.beatmapsetIds,
+              beatmaps: collectionBeatmaps,
               unresolvedInternalSets: resolved.unresolvedInternalSets,
               total: resolved.total,
             };

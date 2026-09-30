@@ -1,10 +1,11 @@
 ---
-last_verified: 2026-08
+last_verified: 2026-09
 confidence: verified
 touches:
   - docs/architecture.md
   - packages/collection-sync/src/index.ts
   - apps/realm-reader/src/syncCollections.ts
+  - apps/server/src/shared/syncCollections.ts
   - packages/realm-backup
 ---
 
@@ -22,6 +23,7 @@ touches:
 8. Managed collections missing from payload are deleted.
 9. Hub-added collections may use ids `HUB_SYNC_ID_BASE + hubId`.
 10. Only one write-back may run at a time; a second caller gets HTTP 409 `in_flight`.
+11. A hub-added collection that lists beatmap online ids writes only those beatmaps into Realm. An empty list (collections shared before difficulty membership) writes every difficulty of each beatmapset.
 
 **Status:** verified
 

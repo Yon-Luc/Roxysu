@@ -572,6 +572,48 @@ export function listDistinctSetIds(
   return { setIds: rows.map((r) => r.set_id).filter(Boolean), total };
 }
 
+export type CollectionBeatmapRef = {
+  beatmapsetId: number;
+  beatmapId: number;
+};
+
+/** Difficulties matching a collection query, identified by osu online ids. */
+export function listCollectionOnlineBeatmaps(
+  db: Db,
+  query: string,
+): { beatmaps: CollectionBeatmapRef[] } {
+  const ctx = buildQueryContext(db);
+  const filter = resolveFilter(query, ctx);
+  const from = baseFrom(ctx, filter.usesRetry);
+  const where = baseWhere(ctx, filter.sql);
+  const sql = `
+    SELECT DISTINCT bs.online_id AS beatmapset_id, b.online_id AS beatmap_id
+    ${from}
+    ${where}
+    AND bs.online_id > 0
+    AND b.online_id > 0
+  `;
+  const rows = db.$client
+    .query(sql)
+    .all(...asBindings(filter.params)) as {
+    beatmapset_id: number;
+    beatmap_id: number;
+  }[];
+
+  const seen = new Set<number>();
+  const beatmaps: CollectionBeatmapRef[] = [];
+  for (const row of rows) {
+    const beatmapsetId = Number(row.beatmapset_id);
+    const beatmapId = Number(row.beatmap_id);
+    if (!Number.isSafeInteger(beatmapsetId) || beatmapsetId <= 0) continue;
+    if (!Number.isSafeInteger(beatmapId) || beatmapId <= 0) continue;
+    if (seen.has(beatmapId)) continue;
+    seen.add(beatmapId);
+    beatmaps.push({ beatmapsetId, beatmapId });
+  }
+  return { beatmaps };
+}
+
 function distributionMisses(
   db: Db,
   where: string,

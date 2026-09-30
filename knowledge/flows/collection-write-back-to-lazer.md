@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08
+last_verified: 2026-09
 confidence: verified
 touches:
   - apps/server/src/routes/collections.ts
@@ -18,7 +18,8 @@ Push Roxysu collections into osu!lazer for in-game use.
 ```
 POST /api/collections/sync-lazer
     ↓
-resolve each collection query → MD5 hashes
+resolve each smart-collection query → MD5 hashes
+hub-added rows → MD5s of listed beatmap online ids (or every difficulty of each set when that list is empty)
     ↓
 pause Realm extraction (sync.realm_reader_paused)
     ↓

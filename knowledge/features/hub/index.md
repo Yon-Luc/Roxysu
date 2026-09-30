@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08
+last_verified: 2026-09
 confidence: verified
 touches:
   - apps/hub/src/routes/auth.ts
@@ -21,6 +21,7 @@ touches:
   - apps/hub/src/db.ts
   - apps/hub/drizzle/0003_collection_indexes.sql
   - packages/hub-client
+  - packages/db/src/hub/schema.ts
   - apps/hub/Dockerfile
   - apps/hub/docker-compose.yml
   - knowledge/decisions/hub-search-base-index.md
@@ -65,7 +66,7 @@ Networked collaboration / discovery — not required for offline practice analyt
    **Enforced by:** `apps/hub/src/services/hubEnv.ts:resolveCorsOrigin()` — status: verified
    **Unauthorized result:** process does not bind
 
-8. Collection star/mode/key stats are computed from maps on the Hub; client-supplied stats are not accepted.
+8. Collection star/mode/key stats are computed from maps on the Hub; client-supplied stats are not accepted. When the collection lists beatmap online ids, only those difficulties are sampled; otherwise every difficulty of each beatmapset is sampled.
    **Enforced by:** `apps/hub/src/routes/collections.ts` POST/PUT — status: verified
 
 9. Public `GET /search` returns the hub search index only. Cache miss is empty (`cached: false`); it does not live-proxy Hinamizawa.
@@ -93,7 +94,9 @@ Networked collaboration / discovery — not required for offline practice analyt
 - Community detail: owner or admin can edit/delete; Save calls `GET /collections/:id/export` so `downloadCount` increments
 - Browse mode chip (`q=mode=m`) matches `dominantMode` **or** the corresponding Hub tag (`mania` / `std` / `ctb` / `taiko`)
 - Community Favorites tab uses `GET /collections/me/favorites`
-- List and favorites DTOs omit full `beatmapsetIds` (preview IDs + `mapCount` only). Detail uses `maps[]`; export still returns the full ID list.
+- List and favorites DTOs omit full `beatmapsetIds` (preview IDs + `mapCount` only). Detail uses `maps[]` plus `beatmapIds` (osu beatmap online ids). Export returns both the set id list and `beatmapIds`.
+- A shared collection stores one `collection_maps` row per beatmapset (download / ownership) and one `collection_beatmaps` row per difficulty that was in the source collection. An empty difficulty list is legacy whole-set membership.
+- Publishing a smart or Realm collection sends those beatmap online ids. Saving it locally stores them on the hub-added row and collection write-back includes only those beatmaps.
 - Community Added tab renders from local hub-added rows; ownership uses `POST /api/mirrors/ownership/diff` rather than shipping every owned set ID.
 - OAuth callback accepts only `h=` (handoff id), never a JWT in the URL
 - `apps/hub/src/db.ts` — `bun run db:migrate` and Hub boot both apply Hub store migrations
@@ -126,6 +129,7 @@ mode (`mania` / `std` / `ctb` / `taiko`) and is grouped under a category label
   validation (`VALID_TAGS`), not a DB constraint, so adding tags needs no migration.
 - Hub store indexes: `collections(owner_id)`, `collections(created_at)`,
   `collection_maps(collection_id)`, unique `(collection_id, beatmapset_id)`,
+  `collection_beatmaps(collection_id)`, unique `(collection_id, beatmap_id)`,
   `collection_tags(tag)`, `collection_favorites(collection_id)`.
 - The picker shows grouped chips for a selected mode (`hubTagGroupsForMode`) and
   a flat union for "all".

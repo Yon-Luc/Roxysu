@@ -245,6 +245,11 @@ export const hubAddedCollections = sqliteTable("hub_added_collections", {
   name: text("name").notNull(),
   /** JSON number[] of beatmapset online IDs from the hub export. */
   beatmapsetIdsJson: text("beatmapset_ids_json").notNull().default("[]"),
+  /**
+   * JSON number[] of osu beatmap online IDs (difficulties) to write back.
+   * Empty means every difficulty of the sets (legacy hub collections).
+   */
+  beatmapIdsJson: text("beatmap_ids_json").notNull().default("[]"),
   /** Hub collection `updatedAt` at last save/update (ms). */
   hubUpdatedAt: integer("hub_updated_at", { mode: "timestamp_ms" }).notNull(),
   lazerCollectionId: text("lazer_collection_id"),

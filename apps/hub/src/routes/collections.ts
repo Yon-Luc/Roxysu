@@ -14,6 +14,7 @@ import {
 import { db } from "../db";
 import {
   collections,
+  collectionBeatmaps,
   collectionFavorites,
   collectionMaps,
   collectionTags,
@@ -24,7 +25,12 @@ import {
 import { requireAuth, jwtPlugin, optionalViewerUserId } from "../middleware/auth";
 import { bearer } from "@elysiajs/bearer";
 import { computeCollectionStatsFromSetIds, isHubRuleset } from "../services/collectionStats";
-import { uniqueBeatmapsetIds, uniqueTags } from "../services/collectionWrite";
+import {
+  uniqueBeatmaps,
+  uniqueBeatmapsetIds,
+  type CollectionBeatmapRef,
+  uniqueTags,
+} from "../services/collectionWrite";
 import { hubModeTagForRuleset, parseHubSearchQuery } from "../services/hubSearchQuery";
 import { allowRateLimit } from "../services/rateLimit";
 import { clientIp } from "../services/clientIp";
@@ -76,6 +82,64 @@ async function collectionIdsMatchingAllTags(tags: Tag[]): Promise<number[]> {
     if (matched.size === 0) return [];
   }
   return [...(matched ?? [])];
+}
+
+const BEATMAP_INSERT_CHUNK = 400;
+
+const beatmapBody = t.Optional(
+  t.Array(
+    t.Object({
+      beatmapsetId: t.Number(),
+      beatmapId: t.Number(),
+    }),
+    { maxItems: 10_000 },
+  ),
+);
+
+function listedDifficulties(
+  beatmaps: CollectionBeatmapRef[] | undefined,
+): ReturnType<typeof uniqueBeatmaps> | null {
+  if (beatmaps == null || beatmaps.length === 0) return null;
+  const unique = uniqueBeatmaps(beatmaps);
+  return unique.beatmaps.length > 0 ? unique : null;
+}
+
+/** Keep caller set order, then append sets that only appear on difficulties. */
+function mergeSetIds(
+  listed: { beatmapsetIds: number[]; mapNames: string[] },
+  diffs: { beatmapsetIds: number[] } | null,
+): { beatmapsetIds: number[]; mapNames: string[] } {
+  if (!diffs) return listed;
+  const beatmapsetIds = [...listed.beatmapsetIds];
+  const mapNames = [...listed.mapNames];
+  const seen = new Set(beatmapsetIds);
+  for (const id of diffs.beatmapsetIds) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    beatmapsetIds.push(id);
+    mapNames.push("");
+  }
+  return { beatmapsetIds, mapNames };
+}
+
+async function replaceCollectionBeatmaps(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  collectionId: number,
+  beatmaps: CollectionBeatmapRef[],
+): Promise<void> {
+  await tx
+    .delete(collectionBeatmaps)
+    .where(eq(collectionBeatmaps.collectionId, collectionId));
+  for (let i = 0; i < beatmaps.length; i += BEATMAP_INSERT_CHUNK) {
+    const chunk = beatmaps.slice(i, i + BEATMAP_INSERT_CHUNK);
+    await tx.insert(collectionBeatmaps).values(
+      chunk.map((row) => ({
+        collectionId,
+        beatmapsetId: row.beatmapsetId,
+        beatmapId: row.beatmapId,
+      })),
+    );
+  }
 }
 
 function escapeLike(value: string): string {
@@ -320,15 +384,23 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
         .set({ downloadCount: sql`${collections.downloadCount} + 1` })
         .where(eq(collections.id, params.id));
 
-      const maps = await db
-        .select({ beatmapsetId: collectionMaps.beatmapsetId })
-        .from(collectionMaps)
-        .where(eq(collectionMaps.collectionId, params.id));
+      const [maps, beatmaps] = await Promise.all([
+        db
+          .select({ beatmapsetId: collectionMaps.beatmapsetId })
+          .from(collectionMaps)
+          .where(eq(collectionMaps.collectionId, params.id)),
+        db
+          .select({ beatmapId: collectionBeatmaps.beatmapId })
+          .from(collectionBeatmaps)
+          .where(eq(collectionBeatmaps.collectionId, params.id))
+          .orderBy(collectionBeatmaps.id),
+      ]);
 
       return {
         collectionId: params.id,
         name: col.name,
         beatmapsetIds: maps.map((m) => m.beatmapsetId),
+        beatmapIds: beatmaps.map((m) => m.beatmapId),
       };
     },
     { params: t.Object({ id: t.Numeric() }) }
@@ -403,15 +475,26 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
       const item = await buildCollectionItem(params.id, viewerUserId);
       if (!item) return status(404, { message: "Collection not found" });
 
-      const maps = await db
-        .select({
-          beatmapsetId: collectionMaps.beatmapsetId,
-          mapName: collectionMaps.mapName,
-        })
-        .from(collectionMaps)
-        .where(eq(collectionMaps.collectionId, params.id));
+      const [maps, beatmaps] = await Promise.all([
+        db
+          .select({
+            beatmapsetId: collectionMaps.beatmapsetId,
+            mapName: collectionMaps.mapName,
+          })
+          .from(collectionMaps)
+          .where(eq(collectionMaps.collectionId, params.id)),
+        db
+          .select({ beatmapId: collectionBeatmaps.beatmapId })
+          .from(collectionBeatmaps)
+          .where(eq(collectionBeatmaps.collectionId, params.id))
+          .orderBy(collectionBeatmaps.id),
+      ]);
 
-      return { ...item, maps };
+      return {
+        ...item,
+        maps,
+        beatmapIds: beatmaps.map((m) => m.beatmapId),
+      };
     },
     { params: t.Object({ id: t.Numeric() }) }
   )
@@ -430,12 +513,19 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
         return status(400, { message: `Invalid tags: ${invalidTags.join(", ")}` });
       }
 
-      const maps = uniqueBeatmapsetIds(body.beatmapsetIds, body.mapNames);
+      const diffs = listedDifficulties(body.beatmaps);
+      const maps = mergeSetIds(
+        uniqueBeatmapsetIds(body.beatmapsetIds, body.mapNames),
+        diffs,
+      );
       if (maps.beatmapsetIds.length === 0) {
         return status(400, { message: "At least one beatmapset id is required" });
       }
 
-      const stats = await computeCollectionStatsFromSetIds(maps.beatmapsetIds);
+      const stats = await computeCollectionStatsFromSetIds(
+        maps.beatmapsetIds,
+        diffs?.beatmaps.map((row) => row.beatmapId),
+      );
 
       const created = await db.transaction(async (tx) => {
         const col = await tx
@@ -469,6 +559,10 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
           );
         }
 
+        if (diffs) {
+          await replaceCollectionBeatmaps(tx, col.id, diffs.beatmaps);
+        }
+
         return col;
       });
 
@@ -486,6 +580,7 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
           t.Array(t.String({ maxLength: 200 }), { maxItems: 2000 }),
         ),
         tags: t.Array(t.String(), { maxItems: 32 }),
+        beatmaps: beatmapBody,
       }),
     }
   )
@@ -514,16 +609,25 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
         }
       }
 
+      const diffs = listedDifficulties(body.beatmaps);
       const maps =
-        body.beatmapsetIds != null
-          ? uniqueBeatmapsetIds(body.beatmapsetIds, body.mapNames)
+        body.beatmapsetIds != null || diffs
+          ? mergeSetIds(
+              body.beatmapsetIds != null
+                ? uniqueBeatmapsetIds(body.beatmapsetIds, body.mapNames)
+                : { beatmapsetIds: [], mapNames: [] },
+              diffs,
+            )
           : null;
       if (maps && maps.beatmapsetIds.length === 0) {
         return status(400, { message: "At least one beatmapset id is required" });
       }
 
       const stats = maps
-        ? await computeCollectionStatsFromSetIds(maps.beatmapsetIds)
+        ? await computeCollectionStatsFromSetIds(
+            maps.beatmapsetIds,
+            diffs?.beatmaps.map((row) => row.beatmapId),
+          )
         : null;
 
       await db.transaction(async (tx) => {
@@ -566,6 +670,11 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
               mapName: maps.mapNames[i] ?? "",
             })),
           );
+          await replaceCollectionBeatmaps(
+            tx,
+            params.id,
+            diffs?.beatmaps ?? [],
+          );
         }
       });
 
@@ -583,6 +692,7 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
         mapNames: t.Optional(
           t.Array(t.String({ maxLength: 200 }), { maxItems: 2000 }),
         ),
+        beatmaps: beatmapBody,
       }),
     }
   )

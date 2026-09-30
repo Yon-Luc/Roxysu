@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08
+last_verified: 2026-09
 confidence: verified
 touches:
   - apps/server/src/routes/collections.ts
@@ -25,7 +25,7 @@ Dynamic practice playlists that stay current as the practice library grows; opti
 3. Only collections named with prefix `!Roxysu ` are managed in Realm.
 4. Managed lazer collections absent from the write-back payload are **deleted**.
 5. Write-back requires: pause Realm extraction, lock probe (lazer closed), schema guard, backup (keep last 5), single `realm.write()`.
-6. MD5 lists for smart-collection queries and hub-added set IDs are memoized in-process during write-back (LRU 32 / 10 min TTL; hub keys are a hash of the ID list) and cleared on `sync.finished`.
+6. MD5 lists for smart-collection queries and hub-added ids are memoized in-process during write-back (LRU 32 / 10 min TTL; hub keys are a hash of the ID list) and cleared on `sync.finished`. Hub-added rows with beatmap online ids write back only those difficulties; an empty id list still writes every difficulty of each beatmapset.
 7. Overlapping collection write-back is rejected with HTTP 409 `in_flight`. The pause flag is not shared across concurrent writers.
 
 ## Security rules

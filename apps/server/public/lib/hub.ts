@@ -332,6 +332,8 @@ export type HubCollectionListItem = {
 
 export type HubCollectionDetail = HubCollectionListItem & {
   maps: Array<{ beatmapsetId: number; mapName: string }>;
+  /** osu beatmap online IDs. Empty on collections shared before difficulty membership. */
+  beatmapIds?: number[];
 };
 
 export function fetchHubMe(hubUrl: string, token: string) {
@@ -385,6 +387,7 @@ export function exportHubCollection(hubUrl: string, id: number) {
     collectionId: number;
     name: string;
     beatmapsetIds: number[];
+    beatmapIds?: number[];
   }>(hubUrl, `/collections/${id}/export`);
 }
 
@@ -411,6 +414,7 @@ export function createHubCollection(
     name: string;
     description?: string;
     beatmapsetIds: number[];
+    beatmaps?: Array<{ beatmapsetId: number; beatmapId: number }>;
     tags: string[];
   },
 ) {

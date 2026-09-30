@@ -364,6 +364,7 @@ export function HubDetailPage({ id }: { id: string }) {
         hubCollectionId: collectionId,
         name: c.name,
         beatmapsetIds,
+        beatmapIds: c.beatmapIds ?? [],
         hubUpdatedAt: c.updatedAt,
         syncLazer: true,
       });

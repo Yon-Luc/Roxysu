@@ -393,6 +393,7 @@ export async function fetchSmartCollectionSetIds(
     id: number;
     name: string;
     beatmapsetIds: number[];
+    beatmaps?: Array<{ beatmapsetId: number; beatmapId: number }>;
     unresolvedInternalSets: number;
     total: number;
   };
@@ -413,6 +414,7 @@ export async function fetchRealmCollectionSetIds(
     id: string;
     name: string;
     beatmapsetIds: number[];
+    beatmaps?: Array<{ beatmapsetId: number; beatmapId: number }>;
     hashCount: number;
     resolvedSetCount: number;
     unresolvedHashCount: number;
@@ -712,6 +714,8 @@ export type HubAddedCollectionItem = {
   hubCollectionId: number;
   name: string;
   beatmapsetIds: number[];
+  /** Difficulties to write into the lazer collection. Empty means every difficulty of each set. */
+  beatmapIds: number[];
   mapCount: number;
   hubUpdatedAt: string | null;
   lazerCollectionId: string | null;
@@ -740,6 +744,7 @@ export async function saveHubAddedCollection(body: {
   hubCollectionId: number;
   name: string;
   beatmapsetIds: number[];
+  beatmapIds?: number[];
   hubUpdatedAt: string;
   syncLazer?: boolean;
 }) {

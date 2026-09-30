@@ -18,12 +18,14 @@ export {
   sampleBeatmaps,
   countMatches,
   listCollectionMd5Hashes,
+  listCollectionOnlineBeatmaps,
   listDistinctSetIds,
   executeAst,
   practiceDistribution,
 } from "./execute";
 export type { PatternSummary, PatternSummaryItem, PatternAxis, PatternKeymode } from "./patternSummary";
 export { practicePatternSummary, patternQuery } from "./patternSummary";
+export type { CollectionBeatmapRef } from "./execute";
 export type {
   PracticeCardRow,
   PracticeSortBy,

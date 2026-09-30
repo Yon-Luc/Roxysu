@@ -197,10 +197,12 @@ export function HubSharePage() {
           ? await fetchSmartCollectionSetIds(source.id)
           : await fetchRealmCollectionSetIds(source.id);
       if (full.beatmapsetIds.length === 0) throw new Error(dict?.hub?.noMapsToShareError ?? "No maps to share");
+      const beatmaps = full.beatmaps ?? [];
       return createHubCollection(hubUrl, jwt, {
         name: name.trim(),
         description: description.trim() || undefined,
         beatmapsetIds: full.beatmapsetIds,
+        ...(beatmaps.length > 0 ? { beatmaps } : {}),
         tags,
       });
     },

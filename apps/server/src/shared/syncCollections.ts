@@ -76,11 +76,21 @@ function md5CacheSet(key: string, value: Md5List): void {
   }
 }
 
-function hubMd5CacheKey(ids: number[]): string {
+function hubMd5CacheKey(kind: "set" | "beatmap", ids: number[]): string {
   const digest = createHash("sha1")
     .update(ids.slice().sort((a, b) => a - b).join(","))
     .digest("hex");
-  return `hub:${digest}`;
+  return `hub:${kind}:${digest}`;
+}
+
+const ONLINE_ID_CHUNK = 400;
+
+function chunkIds(ids: number[]): number[][] {
+  const out: number[][] = [];
+  for (let i = 0; i < ids.length; i += ONLINE_ID_CHUNK) {
+    out.push(ids.slice(i, i + ONLINE_ID_CHUNK));
+  }
+  return out;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -194,7 +204,7 @@ export async function md5HashesForSetOnlineIds(
     ...new Set(setOnlineIds.filter((id) => Number.isSafeInteger(id) && id > 0)),
   ];
   if (unique.length === 0) return { hashes: [], skippedNoMd5: 0 };
-  const cacheKey = hubMd5CacheKey(unique);
+  const cacheKey = hubMd5CacheKey("set", unique);
   const cached = md5CacheGet(cacheKey);
   if (cached) return cached;
 
@@ -233,6 +243,58 @@ export async function md5HashesForSetOnlineIds(
   const skippedNoMd5 = unique.filter((id) => !resolved.has(id)).length;
 
   const result = { hashes, skippedNoMd5 };
+  md5CacheSet(cacheKey, result);
+  return result;
+}
+
+/** MD5 hashes for specific beatmap online IDs (one difficulty each). */
+export async function md5HashesForBeatmapOnlineIds(
+  db: Db,
+  beatmapOnlineIds: number[],
+): Promise<{ hashes: string[]; skippedNoMd5: number }> {
+  const unique = [
+    ...new Set(
+      beatmapOnlineIds.filter((id) => Number.isSafeInteger(id) && id > 0),
+    ),
+  ];
+  if (unique.length === 0) return { hashes: [], skippedNoMd5: 0 };
+  const cacheKey = hubMd5CacheKey("beatmap", unique);
+  const cached = md5CacheGet(cacheKey);
+  if (cached) return cached;
+
+  const hashes: string[] = [];
+  const seenHashes = new Set<string>();
+  const resolved = new Set<number>();
+  for (const chunk of chunkIds(unique)) {
+    const rows = await db
+      .select({
+        onlineId: beatmaps.onlineId,
+        md5: beatmaps.md5Hash,
+      })
+      .from(beatmaps)
+      .innerJoin(beatmapSets, eq(beatmaps.setId, beatmapSets.id))
+      .where(
+        and(
+          inArray(beatmaps.onlineId, chunk),
+          eq(beatmapSets.deletePending, false),
+          isNotNull(beatmaps.md5Hash),
+          ne(beatmaps.md5Hash, ""),
+          sql`trim(${beatmaps.md5Hash}) != ''`,
+        ),
+      );
+    for (const row of rows) {
+      if (typeof row.md5 !== "string" || row.md5.length === 0) continue;
+      resolved.add(row.onlineId);
+      if (seenHashes.has(row.md5)) continue;
+      seenHashes.add(row.md5);
+      hashes.push(row.md5);
+    }
+  }
+
+  const result = {
+    hashes,
+    skippedNoMd5: unique.filter((id) => !resolved.has(id)).length,
+  };
   md5CacheSet(cacheKey, result);
   return result;
 }
@@ -326,10 +388,11 @@ async function runCollectionWriteBack(
   const hubRows = await db.select().from(hubAddedCollections);
   for (const col of hubRows) {
     const setIds = parseBeatmapsetIdsJson(col.beatmapsetIdsJson);
-    const { hashes, skippedNoMd5: skipped } = await md5HashesForSetOnlineIds(
-      db,
-      setIds,
-    );
+    const beatmapIds = parseBeatmapsetIdsJson(col.beatmapIdsJson ?? "[]");
+    const { hashes, skippedNoMd5: skipped } =
+      beatmapIds.length > 0
+        ? await md5HashesForBeatmapOnlineIds(db, beatmapIds)
+        : await md5HashesForSetOnlineIds(db, setIds);
     skippedNoMd5 += skipped;
     payloadCollections.push({
       id: hubSyncId(col.hubCollectionId),

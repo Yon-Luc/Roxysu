@@ -43,76 +43,8 @@ export async function fetchSystemStatus() {
   return unwrap(await api.api.system.status.get(), "/api/system/status");
 }
 
-/** Explicit DTO — Eden inference collapses under duplicate drizzle-orm copies. */
-export type RecentScore = {
-  id: string;
-  accuracy: number;
-  pp: number | null;
-  maxCombo: number;
-  mods: string | null;
-  rank: number;
-  totalScore: number;
-  rulesetShortName: string | null;
-  playedAt: string | null;
-  beatmapId: string | null;
-  title: string | null;
-  artist: string | null;
-  difficultyName: string | null;
-  starRating: number | null;
-  keyCount: number | null;
-  sunnyEstDiff: string | null;
-  sunnyStar: number | null;
-  danielEstDiff: string | null;
-  danielStar: number | null;
-  setOnlineId: number | null;
-  backgroundFileHash: string | null;
-};
-
-export type Dashboard = {
-  recentScores: RecentScore[];
-  sync: {
-    beatmapCount: number;
-    scoreCount: number;
-    lastImport: {
-      id: number;
-      kind: "full" | "incremental" | "reconcile";
-      status: "running" | "success" | "failed" | "locked";
-      startedAt: string | null;
-      finishedAt: string | null;
-      beatmapsUpserted: number;
-      scoresUpserted: number;
-      rowsChanged: number;
-      error: string | null;
-    } | null;
-  };
-  weeklyActivity: Array<{
-    weekStart: string;
-    playCount: number;
-    totalPp: number;
-    avgAccuracy: number | null;
-  }>;
-  ppTrend: Array<{
-    day: string;
-    totalPp: number;
-    playCount: number;
-  }>;
-  accuracyTrend: Array<{
-    day: string;
-    avgAccuracy: number | null;
-    playCount: number;
-  }>;
-  currentSession: {
-    id: number;
-    name: string;
-    startedAt: string | null;
-    endedAt: string | null;
-    scoreCount: number;
-    rulesetShortName: string | null;
-  } | null;
-};
-
-export async function fetchDashboard(): Promise<Dashboard> {
-  return unwrap(await api.api.dashboard.get(), "/api/dashboard") as Dashboard;
+export async function fetchDashboard() {
+  return unwrap(await api.api.dashboard.get(), "/api/dashboard");
 }
 
 export async function fetchOverlay(limit?: number, profile?: string) {
@@ -1016,6 +948,7 @@ export async function stopRatingLabJob() {
 }
 
 export type SystemStatus = Awaited<ReturnType<typeof fetchSystemStatus>>;
+export type Dashboard = Awaited<ReturnType<typeof fetchDashboard>>;
 export type PracticeList = Exclude<
   Awaited<ReturnType<typeof fetchPracticeList>>,
   { error: string }
@@ -1058,6 +991,7 @@ export type ScoreReplay = Exclude<
   Awaited<ReturnType<typeof fetchScoreReplay>>,
   { error: string }
 >;
+export type RecentScore = Dashboard["recentScores"][number];
 export type SessionsPayload = Awaited<ReturnType<typeof fetchSessions>>;
 export type SessionDetail = Exclude<
   Awaited<ReturnType<typeof fetchSession>>,

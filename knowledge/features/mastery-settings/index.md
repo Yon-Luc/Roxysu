@@ -31,7 +31,7 @@ Settings UI is tab-grouped on `/settings`:
 | Setup | osu!lazer data folder, live sync, in-game overlay, tosu / live map |
 | Practice | mastery formula, score username, gamemode |
 | Customize | Rice / LN / FLN boundaries |
-| Appearance | appearance, difficulty display, preview skin, keybinds |
+| Appearance | appearance, difficulty display, preview skin, keybinds (columns + playback actions) |
 | Jobs | Sunny dan, Daniel dan, pattern analysis, Mania Rating Lab |
 
 Only the active tab’s panels mount. Deep-links still use `?section=<id>` (Command Palette); optional `?tab=` selects a tab when no section is present. Tab registry: `apps/server/public/features/settings/settingsTabs.ts`.

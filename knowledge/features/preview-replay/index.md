@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08
+last_verified: 2026-10
 confidence: inferred
 touches:
   - apps/server/public/components/BeatmapPreviewModal.tsx
@@ -21,6 +21,7 @@ touches:
   - apps/server/public/lib/playfieldRaf.ts
   - apps/server/public/lib/paintManiaNotefield.ts
   - apps/server/public/lib/previewSkin.ts
+  - apps/server/public/lib/keybinds.ts
   - apps/server/public/lib/osuSkinIni.ts
   - apps/server/public/lib/maniaSkinImport.ts
   - apps/server/public/components/ManiaSkinImportModal.tsx
@@ -29,6 +30,7 @@ touches:
   - apps/server/public/lib/stdSkin.ts
   - apps/server/public/lib/taikoSkin.ts
   - apps/server/public/lib/catchSkin.ts
+  - apps/server/public/features/settings/KeybindModal.tsx
   - apps/server/public/features/settings/SkinColorInput.tsx
   - apps/server/public/features/settings/sections/StandardSkinEditor.tsx
   - apps/server/public/features/settings/sections/TaikoSkinEditor.tsx
@@ -81,6 +83,15 @@ Playfield = the visual layer for that ruleset (notefield, 512×384, or taiko lan
 
 5. Skins are separate stores: `roxysu:preview-skin` (mania), `roxysu:std-skin`,
    `roxysu:taiko-skin`, `roxysu:catch-skin`.
+
+5b. **Keybinds** are browser-local: column keys (`roxysu:keybinds`) per keymode
+    and playback **action keybinds** (`roxysu:action-keybinds`) for preview /
+    play / rewatch (restart, play/pause, seek, enter play, etc.). Escape stays
+    fixed. In Play mode **column keys win** over action shortcuts when a code
+    is bound to a column. Preview and score rewatch open `KeybindModal` in place
+    (no navigate-away); Settings → Appearance → Keybinds uses the same modal.
+    **Source:** `lib/keybinds.ts`, `KeybindModal.tsx`, `BeatmapPreviewModal.tsx`,
+    `ScoreReplayModal.tsx`.
 
 6. An **imported mania skin** can replace the procedural mania skin per keymode.
    Drop an `.osk` or `skin.ini` folder on Skin → Mania, beatmap preview, or score

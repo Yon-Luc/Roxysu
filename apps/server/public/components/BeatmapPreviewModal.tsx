@@ -20,10 +20,15 @@ import {
 } from "../lib/osuUrls";
 import {
   codeToColumn,
+  formatActionCodes,
   formatKeyCode,
+  matchesAction,
   resolveKeybinds,
+  useActionKeybinds,
   useKeybinds,
+  type ActionKeybinds,
 } from "../lib/keybinds";
+import { KeybindModal } from "../features/settings/KeybindModal";
 import {
   LiveManiaPlay,
   type PracticeRange,
@@ -104,7 +109,10 @@ export function BeatmapPreviewModal({
   /** Map time where the current Play / Test session started (R restarts here). */
   const playStartMsRef = useRef(practiceRange?.fromMs ?? 0);
   const keybindsAll = useKeybinds();
+  const actionKeybinds = useActionKeybinds();
   const bindsRef = useRef<string[]>([]);
+  const actionBindsRef = useRef<ActionKeybinds>(actionKeybinds);
+  const keybindModalOpenRef = useRef(false);
   const skin = usePreviewSkin();
   const stdSkin = useStdSkin();
   const taikoSkin = useTaikoSkin();
@@ -120,6 +128,7 @@ export function BeatmapPreviewModal({
   const [liveHeldMask, setLiveHeldMask] = useState(0);
   const [liveJudgments, setLiveJudgments] = useState<NotefieldJudgment[]>([]);
   const [liveSummary, setLiveSummary] = useState<JudgmentSummary>(EMPTY_SUMMARY);
+  const [keybindModalOpen, setKeybindModalOpen] = useState(false);
   /** Pattern-conversion mods applied server-side (mania only). */
   const [previewMods, setPreviewMods] = useState<string[]>(() =>
     initialMods ? PREVIEW_MOD_OPTIONS.filter((m) => initialMods.includes(m)) : [],
@@ -182,6 +191,8 @@ export function BeatmapPreviewModal({
   if (data?.supported && data.columnCount > 0) {
     bindsRef.current = resolveKeybinds(keybindsAll, data.columnCount);
   }
+  actionBindsRef.current = actionKeybinds;
+  keybindModalOpenRef.current = keybindModalOpen;
 
   useEffect(() => {
     try {
@@ -422,6 +433,7 @@ export function BeatmapPreviewModal({
         tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
 
       if (e.key === "Escape") {
+        if (keybindModalOpenRef.current) return;
         e.preventDefault();
         if (modeRef.current === "play") {
           enterPreviewMode();
@@ -430,7 +442,10 @@ export function BeatmapPreviewModal({
         onCloseRef.current();
         return;
       }
+      if (keybindModalOpenRef.current) return;
       if (typing) return;
+
+      const ab = actionBindsRef.current;
 
       if (modeRef.current === "play") {
         if (e.repeat) return;
@@ -444,25 +459,27 @@ export function BeatmapPreviewModal({
           }
           return;
         }
-        if (e.key === " " || e.key === "k" || e.key === "K") {
-          // Space may be a column bind (handled above); otherwise toggle.
+        if (matchesAction(ab, "playPause", e.code)) {
           e.preventDefault();
           togglePlay();
           return;
         }
-        if (e.key === "r" || e.key === "R") {
+        if (matchesAction(ab, "restart", e.code)) {
           e.preventDefault();
           restartPlay();
           return;
         }
-        if (e.key === "f" || e.key === "F") {
+        if (matchesAction(ab, "fullscreen", e.code)) {
           e.preventDefault();
           setPrefs((p) => ({ ...p, fullscreen: !p.fullscreen }));
           return;
         }
-        if (e.key === "[" || e.key === "]") {
+        if (
+          matchesAction(ab, "scrollDown", e.code) ||
+          matchesAction(ab, "scrollUp", e.code)
+        ) {
           e.preventDefault();
-          const dir = e.key === "[" ? -1 : 1;
+          const dir = matchesAction(ab, "scrollDown", e.code) ? -1 : 1;
           setPrefs((p) => ({
             ...p,
             scroll: clamp(
@@ -475,12 +492,12 @@ export function BeatmapPreviewModal({
         return;
       }
 
-      if (e.key === "f" || e.key === "F") {
+      if (matchesAction(ab, "fullscreen", e.code)) {
         e.preventDefault();
         setPrefs((p) => ({ ...p, fullscreen: !p.fullscreen }));
         return;
       }
-      if (e.key === "Enter") {
+      if (matchesAction(ab, "enterPlay", e.code)) {
         e.preventDefault();
         if (
           dataRef.current?.supported &&
@@ -491,7 +508,7 @@ export function BeatmapPreviewModal({
         }
         return;
       }
-      if (e.key === "t" || e.key === "T") {
+      if (matchesAction(ab, "testFromHere", e.code)) {
         e.preventDefault();
         if (
           dataRef.current?.supported &&
@@ -502,33 +519,33 @@ export function BeatmapPreviewModal({
         }
         return;
       }
-      if (e.key === " " || e.key === "k" || e.key === "K") {
+      if (matchesAction(ab, "playPause", e.code)) {
         e.preventDefault();
         togglePlay();
         return;
       }
-      if (e.key === "ArrowLeft" || e.key === "j" || e.key === "J") {
+      if (matchesAction(ab, "seekBack", e.code)) {
         e.preventDefault();
         seekBy(-SKIP_MS);
         return;
       }
-      if (e.key === "ArrowRight" || e.key === "l" || e.key === "L") {
+      if (matchesAction(ab, "seekForward", e.code)) {
         e.preventDefault();
         seekBy(SKIP_MS);
         return;
       }
-      if (e.key === "Home" || e.key === "0") {
+      if (matchesAction(ab, "goStart", e.code)) {
         e.preventDefault();
         seekTo(0);
         return;
       }
-      if (e.key === "p" || e.key === "P") {
+      if (matchesAction(ab, "previewPoint", e.code)) {
         e.preventDefault();
         const pt = previewTimeRef.current;
         if (pt != null && pt > 0) seekTo(pt);
         return;
       }
-      if (e.key === "[") {
+      if (matchesAction(ab, "scrollDown", e.code)) {
         e.preventDefault();
         setPrefs((p) => ({
           ...p,
@@ -536,7 +553,7 @@ export function BeatmapPreviewModal({
         }));
         return;
       }
-      if (e.key === "]") {
+      if (matchesAction(ab, "scrollUp", e.code)) {
         e.preventDefault();
         setPrefs((p) => ({
           ...p,
@@ -544,12 +561,12 @@ export function BeatmapPreviewModal({
         }));
         return;
       }
-      if (e.key === "," || e.key === "<") {
+      if (matchesAction(ab, "rateDown", e.code)) {
         e.preventDefault();
         cycleRate(-1);
         return;
       }
-      if (e.key === "." || e.key === ">") {
+      if (matchesAction(ab, "rateUp", e.code)) {
         e.preventDefault();
         cycleRate(1);
       }
@@ -924,7 +941,8 @@ export function BeatmapPreviewModal({
                       : "text-on-media-muted hover:text-on-media"
                   }`}
                   onClick={enterPlayMode}
-                  title="Play from start (Enter)"
+                   title={`Play from start (${formatActionCodes(actionKeybinds.enterPlay)})`}
+
                 >
                   Play
                 </button>
@@ -1131,7 +1149,7 @@ export function BeatmapPreviewModal({
                         className="rx-btn-primary min-w-[5.5rem]"
                         onClick={togglePlay}
                         disabled={!audioUrl}
-                        title="Play / pause"
+                        title={`Play / pause (${formatActionCodes(actionKeybinds.playPause)})`}
                       >
                         {playing ? "Pause" : "Play"}
                       </button>
@@ -1140,7 +1158,7 @@ export function BeatmapPreviewModal({
                         className="rx-btn"
                         disabled={!audioUrl}
                         onClick={restartPlay}
-                        title="Restart from session start (R)"
+                        title={`Restart from session start (${formatActionCodes(actionKeybinds.restart)})`}
                       >
                         Restart
                       </button>
@@ -1152,7 +1170,7 @@ export function BeatmapPreviewModal({
                         className="rx-btn"
                         disabled={!audioUrl}
                         onClick={() => seekBy(-SKIP_MS)}
-                        title="Skip back 5s (←)"
+                        title={`Skip back 5s (${formatActionCodes(actionKeybinds.seekBack)})`}
                       >
                         −5s
                       </button>
@@ -1161,7 +1179,7 @@ export function BeatmapPreviewModal({
                         className="rx-btn-primary min-w-[5.5rem]"
                         onClick={togglePlay}
                         disabled={!audioUrl}
-                        title="Play / pause (Space)"
+                        title={`Play / pause (${formatActionCodes(actionKeybinds.playPause)})`}
                       >
                         {playing ? "Pause" : "Play"}
                       </button>
@@ -1170,7 +1188,7 @@ export function BeatmapPreviewModal({
                         className="rx-btn"
                         disabled={!audioUrl}
                         onClick={() => seekBy(SKIP_MS)}
-                        title="Skip forward 5s (→)"
+                        title={`Skip forward 5s (${formatActionCodes(actionKeybinds.seekForward)})`}
                       >
                         +5s
                       </button>
@@ -1179,7 +1197,7 @@ export function BeatmapPreviewModal({
                         className="rx-btn"
                         disabled={!audioUrl}
                         onClick={() => seekTo(0)}
-                        title="Restart (Home)"
+                        title={`Restart (${formatActionCodes(actionKeybinds.goStart)})`}
                       >
                         Start
                       </button>
@@ -1189,7 +1207,7 @@ export function BeatmapPreviewModal({
                           className="rx-btn"
                           disabled={!audioUrl}
                           onClick={() => seekTo(previewTime)}
-                          title="Jump to preview point (P)"
+                          title={`Jump to preview point (${formatActionCodes(actionKeybinds.previewPoint)})`}
                         >
                           Preview
                         </button>
@@ -1199,7 +1217,8 @@ export function BeatmapPreviewModal({
                         className="rx-btn-primary"
                         disabled={!audioUrl || !isMania}
                         onClick={enterTestFromHere}
-                        title="Play from here (T)"
+                         title={`Play from here (${formatActionCodes(actionKeybinds.testFromHere)})`}
+
                       >
                         Test
                       </button>
@@ -1404,20 +1423,41 @@ export function BeatmapPreviewModal({
                   {isPlay ? (
                     <>
                       Keys{" "}
-                      {binds.map((c) => formatKeyCode(c)).join(" ")} · R restart
-                      · Esc preview
+                      {binds.map((c) => formatKeyCode(c)).join(" ")} ·{" "}
+                      {formatActionCodes(actionKeybinds.restart)} restart · Esc
+                      preview
                       {" · "}
-                      <a
-                        href="#/settings"
+                      <button
+                        type="button"
                         className="text-on-media-muted underline-offset-2 hover:underline"
+                        onClick={() => setKeybindModalOpen(true)}
                       >
                         Edit keybinds
-                      </a>
+                      </button>
                     </>
                   ) : (
                     <>
-                      Enter play · T test here · Space play · ← → skip 5s · Home
-                      start · P preview · F fullscreen · [ ] scroll · , . rate
+                      {formatActionCodes(actionKeybinds.enterPlay)} play ·{" "}
+                      {formatActionCodes(actionKeybinds.testFromHere)} test
+                      here · {formatActionCodes(actionKeybinds.playPause)} play
+                      · {formatActionCodes(actionKeybinds.seekBack)}{" "}
+                      {formatActionCodes(actionKeybinds.seekForward)} skip ·{" "}
+                      {formatActionCodes(actionKeybinds.goStart)} start ·{" "}
+                      {formatActionCodes(actionKeybinds.previewPoint)} preview
+                      · {formatActionCodes(actionKeybinds.fullscreen)}{" "}
+                      fullscreen ·{" "}
+                      {formatActionCodes(actionKeybinds.scrollDown)}{" "}
+                      {formatActionCodes(actionKeybinds.scrollUp)} scroll ·{" "}
+                      {formatActionCodes(actionKeybinds.rateDown)}{" "}
+                      {formatActionCodes(actionKeybinds.rateUp)} rate
+                      {" · "}
+                      <button
+                        type="button"
+                        className="text-on-media-muted underline-offset-2 hover:underline"
+                        onClick={() => setKeybindModalOpen(true)}
+                      >
+                        Edit keybinds
+                      </button>
                       {" · "}
                       <a
                         href="#/skin"
@@ -1434,6 +1474,11 @@ export function BeatmapPreviewModal({
           ) : null}
         </div>
       </div>
+      <KeybindModal
+        open={keybindModalOpen}
+        onClose={() => setKeybindModalOpen(false)}
+        initialTab={isPlay ? "columns" : "actions"}
+      />
       </ManiaSkinDropHost>
     </div>
   );

@@ -19,10 +19,15 @@ import { usePreviewSkin } from "../lib/previewSkin";
 import { ModBadges } from "./ModBadges";
 import {
   codeToColumn,
+  formatActionCodes,
   formatKeyCode,
+  matchesAction,
   resolveKeybinds,
+  useActionKeybinds,
   useKeybinds,
+  type ActionKeybinds,
 } from "../lib/keybinds";
+import { KeybindModal } from "../features/settings/KeybindModal";
 import { LiveManiaPlay, type PracticeRange } from "../lib/liveManiaPlay";
 import { maniaHitWindows, type JudgmentSummary } from "../lib/maniaWindows";
 import {
@@ -276,7 +281,10 @@ export function ScoreReplayModal({
   /** Map time where the current Play / Test session started (R restarts here). */
   const playStartMsRef = useRef(0);
   const keybindsAll = useKeybinds();
+  const actionKeybinds = useActionKeybinds();
   const bindsRef = useRef<string[]>([]);
+  const actionBindsRef = useRef<ActionKeybinds>(actionKeybinds);
+  const keybindModalOpenRef = useRef(false);
 
   const [prefs, setPrefs] = useState<PreviewPrefs>(() => loadPrefs());
   const prefsRef = useRef(prefs);
@@ -289,6 +297,7 @@ export function ScoreReplayModal({
   const [currentMs, setCurrentMs] = useState(0);
   const [durationMs, setDurationMs] = useState(0);
   const [audioError, setAudioError] = useState<string | null>(null);
+  const [keybindModalOpen, setKeybindModalOpen] = useState(false);
   const [hud, setHud] = useState({
     combo: 0,
     accuracy: 1,
@@ -353,6 +362,8 @@ export function ScoreReplayModal({
   );
   durationMsRef.current = durationMs;
   bindsRef.current = binds;
+  actionBindsRef.current = actionKeybinds;
+  keybindModalOpenRef.current = keybindModalOpen;
 
   useEffect(() => {
     try {
@@ -657,6 +668,7 @@ export function ScoreReplayModal({
 
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
+        if (keybindModalOpenRef.current) return;
         e.preventDefault();
         if (exportOptionsOpenRef.current) {
           setExportOptionsOpen(false);
@@ -670,12 +682,14 @@ export function ScoreReplayModal({
         return;
       }
 
-      // Don't steal keys while the export options dialog is open.
-      if (exportOptionsOpenRef.current) return;
+      // Don't steal keys while the export options or keybind dialog is open.
+      if (exportOptionsOpenRef.current || keybindModalOpenRef.current) return;
 
-      // Space always play/pause in rewatch (even when seek/volume sliders are focused).
+      const ab = actionBindsRef.current;
+
+      // Play/pause in rewatch even when seek/volume sliders are focused.
       if (modeRef.current !== "play") {
-        if (e.key === " " || e.key === "k" || e.key === "K") {
+        if (matchesAction(ab, "playPause", e.code)) {
           if (isTextEntry(e.target)) return;
           e.preventDefault();
           togglePlay();
@@ -697,24 +711,27 @@ export function ScoreReplayModal({
           }
           return;
         }
-        if (e.key === " " || e.key === "k" || e.key === "K") {
+        if (matchesAction(ab, "playPause", e.code)) {
           e.preventDefault();
           togglePlay();
           return;
         }
-        if (e.key === "r" || e.key === "R") {
+        if (matchesAction(ab, "restart", e.code)) {
           e.preventDefault();
           restartPlay();
           return;
         }
-        if (e.key === "f" || e.key === "F") {
+        if (matchesAction(ab, "fullscreen", e.code)) {
           e.preventDefault();
           setPrefs((p) => ({ ...p, fullscreen: !p.fullscreen }));
           return;
         }
-        if (e.key === "[" || e.key === "]") {
+        if (
+          matchesAction(ab, "scrollDown", e.code) ||
+          matchesAction(ab, "scrollUp", e.code)
+        ) {
           e.preventDefault();
-          const dir = e.key === "[" ? -1 : 1;
+          const dir = matchesAction(ab, "scrollDown", e.code) ? -1 : 1;
           setPrefs((p) => ({
             ...p,
             scroll: clamp(
@@ -727,12 +744,12 @@ export function ScoreReplayModal({
         return;
       }
 
-      if (e.key === "f" || e.key === "F") {
+      if (matchesAction(ab, "fullscreen", e.code)) {
         e.preventDefault();
         setPrefs((p) => ({ ...p, fullscreen: !p.fullscreen }));
         return;
       }
-      if (e.key === "Enter") {
+      if (matchesAction(ab, "enterPlay", e.code)) {
         e.preventDefault();
         const replay = dataRef.current;
         if (isLoadedScoreReplay(replay) && replay.beatmap.columnCount > 0) {
@@ -740,32 +757,32 @@ export function ScoreReplayModal({
         }
         return;
       }
-      if (e.key === "t" || e.key === "T") {
+      if (matchesAction(ab, "testFromHere", e.code)) {
         e.preventDefault();
         enterTestFromHere();
         return;
       }
-      if (e.key === "s" || e.key === "S") {
+      if (matchesAction(ab, "stop", e.code)) {
         e.preventDefault();
         stopPlayback();
         return;
       }
-      if (e.key === "ArrowLeft" || e.key === "j" || e.key === "J") {
+      if (matchesAction(ab, "seekBack", e.code)) {
         e.preventDefault();
         seekBy(-SKIP_MS);
         return;
       }
-      if (e.key === "ArrowRight" || e.key === "l" || e.key === "L") {
+      if (matchesAction(ab, "seekForward", e.code)) {
         e.preventDefault();
         seekBy(SKIP_MS);
         return;
       }
-      if (e.key === "Home" || e.key === "0") {
+      if (matchesAction(ab, "goStart", e.code)) {
         e.preventDefault();
         stopPlayback();
         return;
       }
-      if (e.key === "[") {
+      if (matchesAction(ab, "scrollDown", e.code)) {
         e.preventDefault();
         setPrefs((p) => ({
           ...p,
@@ -773,7 +790,7 @@ export function ScoreReplayModal({
         }));
         return;
       }
-      if (e.key === "]") {
+      if (matchesAction(ab, "scrollUp", e.code)) {
         e.preventDefault();
         setPrefs((p) => ({
           ...p,
@@ -1191,7 +1208,8 @@ export function ScoreReplayModal({
                       : "text-on-media-muted hover:text-on-media"
                   }`}
                   onClick={enterPlayMode}
-                  title="Play from start (Enter)"
+                   title={`Play from start (${formatActionCodes(actionKeybinds.enterPlay)})`}
+
                 >
                   Play
                 </button>
@@ -1472,7 +1490,7 @@ export function ScoreReplayModal({
                           className="rx-btn-primary min-w-[5.5rem]"
                           onClick={togglePlay}
                           disabled={!audioUrl}
-                          title="Play / pause"
+                          title={`Play / pause (${formatActionCodes(actionKeybinds.playPause)})`}
                         >
                           {playing ? "Pause" : "Play"}
                         </button>
@@ -1481,7 +1499,7 @@ export function ScoreReplayModal({
                           className="rx-btn"
                           disabled={!audioUrl}
                           onClick={restartPlay}
-                          title="Restart from session start (R)"
+                          title={`Restart from session start (${formatActionCodes(actionKeybinds.restart)})`}
                         >
                           Restart
                         </button>
@@ -1493,7 +1511,7 @@ export function ScoreReplayModal({
                           className="rx-btn"
                           disabled={!audioUrl}
                           onClick={() => seekBy(-SKIP_MS)}
-                          title="Skip back 5s (←)"
+                          title={`Skip back 5s (${formatActionCodes(actionKeybinds.seekBack)})`}
                         >
                           −5s
                         </button>
@@ -1502,7 +1520,7 @@ export function ScoreReplayModal({
                           className="rx-btn-primary min-w-[5.5rem]"
                           onClick={togglePlay}
                           disabled={!audioUrl}
-                          title="Play / pause (Space)"
+                          title={`Play / pause (${formatActionCodes(actionKeybinds.playPause)})`}
                         >
                           {playing ? "Pause" : "Play"}
                         </button>
@@ -1511,7 +1529,7 @@ export function ScoreReplayModal({
                           className="rx-btn"
                           disabled={!audioUrl}
                           onClick={() => seekBy(SKIP_MS)}
-                          title="Skip forward 5s (→)"
+                          title={`Skip forward 5s (${formatActionCodes(actionKeybinds.seekForward)})`}
                         >
                           +5s
                         </button>
@@ -1520,7 +1538,7 @@ export function ScoreReplayModal({
                           className="rx-btn"
                           disabled={!audioUrl}
                           onClick={stopPlayback}
-                          title="Stop (S / Home)"
+                          title={`Stop (${formatActionCodes([...actionKeybinds.stop, ...actionKeybinds.goStart])})`}
                         >
                           Stop
                         </button>
@@ -1530,7 +1548,8 @@ export function ScoreReplayModal({
                             className="rx-btn-primary"
                             disabled={!audioUrl}
                             onClick={enterTestFromHere}
-                            title="Play from here (T)"
+                             title={`Play from here (${formatActionCodes(actionKeybinds.testFromHere)})`}
+
                           >
                             Test
                           </button>
@@ -1640,21 +1659,39 @@ export function ScoreReplayModal({
                   <p className="mt-2 hidden text-[11px] text-on-media-muted sm:block">
                     {isPlay ? (
                       <>
-                        Keys {binds.map((c) => formatKeyCode(c)).join(" ")} · R
-                        restart · Esc rewatch
+                        Keys {binds.map((c) => formatKeyCode(c)).join(" ")} ·{" "}
+                        {formatActionCodes(actionKeybinds.restart)} restart ·
+                        Esc rewatch
                         {" · "}
-                        <a
-                          href="#/settings"
+                        <button
+                          type="button"
                           className="text-on-media-muted underline-offset-2 hover:underline"
+                          onClick={() => setKeybindModalOpen(true)}
                         >
                           Edit keybinds
-                        </a>
+                        </button>
                       </>
                     ) : (
                       <>
-                        Enter play · T test here · Space play · ← → skip 5s · S
-                        stop · F fullscreen · [ ] scroll
+                        {formatActionCodes(actionKeybinds.enterPlay)} play ·{" "}
+                        {formatActionCodes(actionKeybinds.testFromHere)} test
+                        here · {formatActionCodes(actionKeybinds.playPause)}{" "}
+                        play · {formatActionCodes(actionKeybinds.seekBack)}{" "}
+                        {formatActionCodes(actionKeybinds.seekForward)} skip ·{" "}
+                        {formatActionCodes(actionKeybinds.stop)} stop ·{" "}
+                        {formatActionCodes(actionKeybinds.fullscreen)}{" "}
+                        fullscreen ·{" "}
+                        {formatActionCodes(actionKeybinds.scrollDown)}{" "}
+                        {formatActionCodes(actionKeybinds.scrollUp)} scroll
                         {canLivePlay ? " · Esc close" : ""}
+                        {" · "}
+                        <button
+                          type="button"
+                          className="text-on-media-muted underline-offset-2 hover:underline"
+                          onClick={() => setKeybindModalOpen(true)}
+                        >
+                          Edit keybinds
+                        </button>
                       </>
                     )}
                   </p>
@@ -1671,6 +1708,11 @@ export function ScoreReplayModal({
         busy={exporting}
         onClose={() => setExportOptionsOpen(false)}
         onConfirm={(choices) => void startExport(choices)}
+      />
+      <KeybindModal
+        open={keybindModalOpen}
+        onClose={() => setKeybindModalOpen(false)}
+        initialTab={isPlay ? "columns" : "actions"}
       />
       </ManiaSkinDropHost>
     </div>

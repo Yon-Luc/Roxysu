@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import {
   fetchPracticeRecommend,
+  fetchSettings,
   type PracticeRecommend,
   type RecommendFocus,
   type RecommendSkillset,
@@ -133,6 +134,14 @@ export function SessionSevenKRecommend({
     };
   }, []);
 
+  const { data: settings } = useQuery({
+    queryKey: ["settings"],
+    queryFn: fetchSettings,
+    staleTime: 60_000,
+  });
+  const lnPct = Math.round((settings?.axisThresholds?.ln ?? 0.2) * 1000) / 10;
+  const flnPct = Math.round((settings?.axisThresholds?.fln ?? 0.8) * 1000) / 10;
+
   const { data, isLoading, error, isFetching } = useQuery({
     queryKey: [
       "practice-recommend",
@@ -247,8 +256,8 @@ export function SessionSevenKRecommend({
               ))}
             </div>
             <p className="mt-1.5 text-xs text-faint">
-              {dict?.session.lnFlnHint ??
-                "LN is 20–80% long notes; FLN is ≥80% (full LN)."}
+              {t(dict?.session.lnFlnHint, { ln: lnPct, fln: flnPct }) ||
+                `LN is ${lnPct}–${flnPct}% long notes; FLN is ≥${flnPct}% (full LN).`}
             </p>
           </div>
         ) : null}

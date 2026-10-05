@@ -75,6 +75,23 @@ export const PAGE_SECTIONS: PageSectionDef[] = [
     ],
   },
   {
+    id: "axis-thresholds",
+    to: "/settings",
+    pageLabel: "Settings",
+    label: "Rice / LN / FLN boundaries",
+    keywords: [
+      "settings",
+      "customize",
+      "ln",
+      "fln",
+      "rice",
+      "axis",
+      "threshold",
+      "long notes",
+      "skillset",
+    ],
+  },
+  {
     id: "live-sync",
     to: "/settings",
     pageLabel: "Settings",

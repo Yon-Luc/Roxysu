@@ -137,3 +137,25 @@ describe("LIKE wildcard escaping", () => {
     expect(params).toContain("%\\_%");
   });
 });
+
+describe("axis thresholds", () => {
+  test("axis:ln uses [ln, fln) bounds", () => {
+    const { sql, params } = compileQuery(parseQuery("axis:ln"), {
+      axisThresholds: { ln: 0.25, fln: 0.7 },
+    });
+    expect(sql).toContain("dr.ln_ratio >=");
+    expect(sql).toContain("dr.ln_ratio <");
+    expect(params).toEqual([0.25, 0.7]);
+  });
+
+  test("axis:fln and axis:rc use custom bounds", () => {
+    const fln = compileQuery(parseQuery("axis:fln"), {
+      axisThresholds: { ln: 0.1, fln: 0.55 },
+    });
+    const rc = compileQuery(parseQuery("axis:rc"), {
+      axisThresholds: { ln: 0.1, fln: 0.55 },
+    });
+    expect(fln.params).toEqual([0.55]);
+    expect(rc.params).toEqual([0.1]);
+  });
+});

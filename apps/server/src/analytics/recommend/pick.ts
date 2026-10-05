@@ -7,6 +7,10 @@ import {
   loadCandidates,
   type CandidateRow,
 } from "./candidates";
+import {
+  DEFAULT_AXIS_THRESHOLDS,
+  type AxisThresholds,
+} from "./axisThresholds";
 import type { SevenKSkillProfile, SkillAxis } from "./types";
 
 export function pickCandidatesInRange(
@@ -22,9 +26,11 @@ export function pickCandidatesInRange(
     pool: number;
     keyCount: number;
     skillMode?: "comfort" | "peak" | "consistency" | "accuracy";
+    axisThresholds?: AxisThresholds;
   },
 ): { rows: CandidateRow[]; matches: ReturnType<typeof calculateMapMatch>[] } {
   const skillMode = opts.skillMode ?? "comfort";
+  const thresholds = opts.axisThresholds ?? DEFAULT_AXIS_THRESHOLDS;
   const playerSkill = skillForAxis(
     skill,
     opts.axis ?? "overall",
@@ -43,6 +49,7 @@ export function pickCandidatesInRange(
     opts.overlaySql,
     opts.overlayParams,
     opts.keyCount,
+    thresholds,
   );
 
   const rows = loadCandidates(
@@ -64,7 +71,8 @@ export function pickCandidatesInRange(
 
   for (const row of rows) {
     if (row.sunnyStar == null || row.sunnyStar <= 0) continue;
-    if (opts.axis && !mapMatchesAxis(row.lnRatio, opts.axis)) continue;
+    if (opts.axis && !mapMatchesAxis(row.lnRatio, opts.axis, thresholds))
+      continue;
 
     const match = calculateMapMatch(
       {
@@ -78,6 +86,7 @@ export function pickCandidatesInRange(
       skill,
       targetSkillset,
       skillMode,
+      thresholds,
     );
 
     if (

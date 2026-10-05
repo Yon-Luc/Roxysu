@@ -273,6 +273,7 @@
     "tabs": {
       "setup": "Configuration",
       "practice": "Entraînement",
+      "customize": "Personnaliser",
       "appearance": "Apparence",
       "jobs": "Tâches"
     },
@@ -431,7 +432,16 @@
     "recalculatingPatterns": "Recalcul en cours…",
     "openStdSkinEditor": "Modifier le skin standard",
     "openTaikoSkinEditor": "Modifier le skin taiko",
-    "openCatchSkinEditor": "Modifier le skin catch"
+    "openCatchSkinEditor": "Modifier le skin catch",
+    "axisThresholds": "Seuils Rice / LN / FLN",
+    "axisThresholdsDesc": "Choisissez quand une map compte comme Rice, LN ou full LN pour les recommandations, axes de skill, mix stats et filtres axis:. Les labels Sunny dan restent au split RC/LN standard de 20 %.",
+    "axisLnStart": "LN à partir de",
+    "axisLnStartHint": "En dessous de ce % de long notes → Rice ; à partir de → LN (jusqu’à FLN).",
+    "axisFlnStart": "FLN à partir de",
+    "axisFlnStartHint": "À partir de ce % de long notes → full LN (FLN).",
+    "axisThresholdsInvalid": "Le seuil LN doit être strictement inférieur au seuil FLN.",
+    "saveAxisThresholds": "Enregistrer les seuils",
+    "resetToDefaults": "Réinitialiser à {{ln}} % / {{fln}} %"
   },
   "skin": {
     "pageTitle": "Aperçu du skin",
@@ -658,7 +668,7 @@
     "refreshing": "Actualisation…",
     "refresh": "Actualiser",
     "mapsLabel": "Maps",
-    "lnFlnHint": "LN : 20–80 % de notes longues ; FLN : ≥80 % (full LN).",
+    "lnFlnHint": "LN : {{ln}}–{{fln}} % de notes longues ; FLN : ≥{{fln}} % (full LN).",
     "skillFromTop": "Skill issu de vos {{required}} maps évaluées par bande (meilleur play par map ; les {{required}} requises). Modifier sur ⟦STATS⟧.",
     "skillStat": "{{axis}} @ {{acc}}%+",
     "bandNoMaps": "Aucune map dans la bande · {{band}}",

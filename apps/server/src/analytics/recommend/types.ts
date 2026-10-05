@@ -10,10 +10,10 @@ export type RecommendFocus =
 export type RecommendSkillsetFilter = "both" | "rc" | "ln" | "fln";
 
 /**
- * 7K skill axes via Sunny ln_ratio:
- * - rc: &lt;20% LN
- * - ln: 20–80% LN
- * - fln: ≥80% LN (full LN)
+ * Skill axes via Sunny ln_ratio (defaults; user-configurable in Settings → Customize):
+ * - rc: &lt; ln threshold (default 20%)
+ * - ln: [ln, fln) (default 20–80%)
+ * - fln: ≥ fln threshold (default 80%)
  */
 export type SkillAxis = "rc" | "ln" | "fln" | "overall";
 

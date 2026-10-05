@@ -24,6 +24,7 @@ import { ManiaRatingLabSection } from "./sections/ManiaRatingLabSection";
 import { SunnyDanSection } from "./sections/SunnyDanSection";
 import { DanielDanSection } from "./sections/DanielDanSection";
 import { PatternAnalysisSection } from "./sections/PatternAnalysisSection";
+import { AxisThresholdsSection } from "./sections/AxisThresholdsSection";
 import {
   SETTINGS_TABS,
   resolveSettingsTab,
@@ -33,6 +34,7 @@ import {
 const TAB_FALLBACK: Record<SettingsTabId, string> = {
   setup: "Setup",
   practice: "Practice",
+  customize: "Customize",
   appearance: "Appearance",
   jobs: "Jobs",
 };
@@ -62,6 +64,8 @@ function SettingsTabPanels({
           <GamemodeSection data={data} />
         </>
       );
+    case "customize":
+      return <AxisThresholdsSection data={data} />;
     case "appearance":
       return (
         <>
@@ -110,6 +114,7 @@ export function SettingsPage({
         <PageHeaderSkeleton subtitleWidth="w-[32rem]" />
         <div className="flex flex-wrap gap-2">
           <SkeletonBlock className="h-10 w-24 rounded-xl" />
+          <SkeletonBlock className="h-10 w-28 rounded-xl" />
           <SkeletonBlock className="h-10 w-28 rounded-xl" />
           <SkeletonBlock className="h-10 w-32 rounded-xl" />
           <SkeletonBlock className="h-10 w-20 rounded-xl" />

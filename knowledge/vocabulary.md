@@ -169,6 +169,18 @@ Persisted mania difficulty estimates from the Sunny dan backfill job (`beatmap_d
 
 ---
 
+### Axis thresholds
+
+User-configurable `ln_ratio` boundaries that classify mania maps as Rice, LN, or FLN for recommendations, skill axes, stats mix, and `axis:` filters. Defaults: LN starts at 20%, FLN at 80%. Distinct from the fixed 20% used for Sunny dan RC vs LN **label table** selection.
+
+**Not:** "LN percent setting" alone, Sunny dan threshold
+
+**In code:** `recommend.ln_ratio_threshold`, `recommend.fln_ratio_threshold`, `axisThresholds.ts`, `classifyMapAxis`
+
+**See:** [features/mastery-settings/](features/mastery-settings/index.md), [features/sunny-dan-recommendations/](features/sunny-dan-recommendations/index.md)
+
+---
+
 ### Dan difficulty variants
 
 Persisted mod-aware mania difficulty estimates in `beatmap_dan_rating_variants`: one row per (beatmap, estimator, playback rate quantized to 2 decimals, full-LN Invert conversion) actually played. Both estimators apply the Invert/Hold Off conversions before rating. Computed by the dan variant background job after imports — never on request paths (single-map reads may compute ephemerally without persisting). NM plays stay in the Sunny dan ratings store.

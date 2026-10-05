@@ -2,10 +2,6 @@
 import type { Db } from "@roxysu/db/types";
 import { SUNNY_ALGORITHM } from "../../map-analysis/computeSunnyDan";
 import {
-  FLN_RATIO_THRESHOLD,
-  LN_DAN_RATIO_THRESHOLD,
-} from "../../map-analysis/estDiff";
-import {
   resolveScoresGamemodeSync,
   scoresGamemodeSql,
 } from "../scoreGamemode";
@@ -13,6 +9,10 @@ import {
   resolveScoresUsernamesSync,
   scoresUsernameSql,
 } from "../scoreUsername";
+import {
+  DEFAULT_AXIS_THRESHOLDS,
+  type AxisThresholds,
+} from "./axisThresholds";
 
 export type CandidateRow = {
   id: string;
@@ -77,6 +77,7 @@ export function buildBaseKeymodeFilter(
   overlaySql: string | null,
   overlayParams: unknown[],
   keyCount: number,
+  thresholds: AxisThresholds = DEFAULT_AXIS_THRESHOLDS,
 ): { sql: string; params: unknown[] } {
   const params: unknown[] = [];
   const push = (v: unknown) => {
@@ -92,12 +93,12 @@ export function buildBaseKeymodeFilter(
   ];
 
   if (axis === "fln") {
-    parts.push(`COALESCE(dr.ln_ratio, 0) >= ${push(FLN_RATIO_THRESHOLD)}`);
+    parts.push(`COALESCE(dr.ln_ratio, 0) >= ${push(thresholds.fln)}`);
   } else if (axis === "ln") {
-    parts.push(`COALESCE(dr.ln_ratio, 0) >= ${push(LN_DAN_RATIO_THRESHOLD)}`);
-    parts.push(`COALESCE(dr.ln_ratio, 0) < ${push(FLN_RATIO_THRESHOLD)}`);
+    parts.push(`COALESCE(dr.ln_ratio, 0) >= ${push(thresholds.ln)}`);
+    parts.push(`COALESCE(dr.ln_ratio, 0) < ${push(thresholds.fln)}`);
   } else if (axis === "rc") {
-    parts.push(`COALESCE(dr.ln_ratio, 0) < ${push(LN_DAN_RATIO_THRESHOLD)}`);
+    parts.push(`COALESCE(dr.ln_ratio, 0) < ${push(thresholds.ln)}`);
   }
 
   if (overlaySql) {

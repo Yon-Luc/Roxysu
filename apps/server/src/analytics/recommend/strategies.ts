@@ -5,6 +5,10 @@ import { calculateMapMatch } from "./mapMatch";
 import type { CandidateRow } from "./candidates";
 import { axesForFilter, pickCandidatesInRange } from "./pick";
 import { axisLabel } from "./axis";
+import {
+  DEFAULT_AXIS_THRESHOLDS,
+  type AxisThresholds,
+} from "./axisThresholds";
 import { formatSunny } from "./summary";
 import type {
   MapAxis,
@@ -77,6 +81,7 @@ export function recommendPush(
   excludeIds: string[],
   axisFilter: MapAxis | null = null,
   keyCount: number,
+  axisThresholds: AxisThresholds = DEFAULT_AXIS_THRESHOLDS,
 ): RecommendItem[] {
   // Push baseline = average Sunny of 90–95% clears per axis (dan-style).
   // Target slightly above that clear level so suggestions sit in neighboring dans.
@@ -93,6 +98,7 @@ export function recommendPush(
       pool: perAxis * 3,
       keyCount,
       skillMode: "peak",
+      axisThresholds,
     }),
   );
 
@@ -129,6 +135,7 @@ export function recommendAccuracy(
   excludeIds: string[],
   axisFilter: MapAxis | null = null,
   keyCount: number,
+  axisThresholds: AxisThresholds = DEFAULT_AXIS_THRESHOLDS,
 ): RecommendItem[] {
   // Accuracy baseline = average Sunny of 99%+ scores per axis.
   // Suggest maps in that difficulty range to push toward / hold 99%+.
@@ -145,6 +152,7 @@ export function recommendAccuracy(
       pool: perAxis * 3,
       keyCount,
       skillMode: "accuracy",
+      axisThresholds,
     }),
   );
 
@@ -215,6 +223,7 @@ export function recommendConsistency(
   excludeIds: string[],
   axisFilter: MapAxis | null = null,
   keyCount: number,
+  axisThresholds: AxisThresholds = DEFAULT_AXIS_THRESHOLDS,
 ): RecommendItem[] {
   // Consistency baseline = average Sunny of 96–99% scores per axis.
   const axes = axesForFilter(axisFilter);
@@ -230,6 +239,7 @@ export function recommendConsistency(
       pool: perAxis * 3,
       keyCount,
       skillMode: "consistency",
+      axisThresholds,
     }),
   );
 
@@ -301,6 +311,7 @@ export function recommendSkillset(
   overlay: { sql: string | null; params: unknown[] },
   excludeIds: string[],
   keyCount: number,
+  axisThresholds: AxisThresholds = DEFAULT_AXIS_THRESHOLDS,
 ): RecommendItem[] {
   const axes = axesForFilter(axisFilter);
   const perAxis = Math.max(count, Math.ceil(count * 1.5));
@@ -314,6 +325,7 @@ export function recommendSkillset(
       excludeIds,
       pool: perAxis * 3,
       keyCount,
+      axisThresholds,
     }),
   );
 
@@ -343,6 +355,7 @@ export function recommendDeficit(
   overlay: { sql: string | null; params: unknown[] },
   excludeIds: string[],
   keyCount: number,
+  axisThresholds: AxisThresholds = DEFAULT_AXIS_THRESHOLDS,
 ): RecommendItem[] {
   const weak = weakestAxis(skill);
   const weakSkill = skillForAxis(skill, weak);
@@ -359,6 +372,7 @@ export function recommendDeficit(
     excludeIds,
     pool: count * 3,
     keyCount,
+    axisThresholds,
   });
 
   const label = axisLabel(weak);

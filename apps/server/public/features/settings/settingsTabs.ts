@@ -1,6 +1,7 @@
 export const SETTINGS_TAB_IDS = [
   "setup",
   "practice",
+  "customize",
   "appearance",
   "jobs",
 ] as const;
@@ -16,6 +17,7 @@ export type SettingsTabDef = {
 export const SETTINGS_TABS: SettingsTabDef[] = [
   { id: "setup", labelKey: "setup" },
   { id: "practice", labelKey: "practice" },
+  { id: "customize", labelKey: "customize" },
   { id: "appearance", labelKey: "appearance" },
   { id: "jobs", labelKey: "jobs" },
 ];
@@ -31,6 +33,7 @@ export const SECTION_TO_TAB: Record<string, SettingsTabId> = {
   "mastery-formula": "practice",
   "score-username": "practice",
   gamemode: "practice",
+  "axis-thresholds": "customize",
   appearance: "appearance",
   "difficulty-display": "appearance",
   "preview-skin": "appearance",

@@ -6,6 +6,11 @@ import {
   resolveDanVariant,
 } from "../replay/mods";
 import { classifyMapAxis } from "./recommend/axis";
+import {
+  DEFAULT_AXIS_THRESHOLDS,
+  readAxisThresholdsSync,
+  type AxisThresholds,
+} from "./recommend/axisThresholds";
 import type { MapAxis } from "./recommend/types";
 import {
   bestPlayPerMap,
@@ -234,13 +239,18 @@ function playsInDanInterval(
   axis: SkillBandAxis,
   lower: number,
   upper: number,
+  thresholds: AxisThresholds = DEFAULT_AXIS_THRESHOLDS,
 ): EnrichedPlayRow[] {
   const mapAxis = axisFilter(axis);
   return bestPlayPerMap(
     plays.filter((p) => {
       if (p.sunnyStar == null || !(p.sunnyStar > 0)) return false;
       if (p.accuracy < accFloor) return false;
-      if (mapAxis != null && classifyMapAxis(p.lnRatio) !== mapAxis) return false;
+      if (
+        mapAxis != null &&
+        classifyMapAxis(p.lnRatio, thresholds) !== mapAxis
+      )
+        return false;
       return p.sunnyStar >= lower && p.sunnyStar <= upper;
     }),
   ).sort(
@@ -257,6 +267,7 @@ function topEnrichedPlaysInBand(
   accFloor: number,
   topN: number,
   axis?: MapAxis,
+  thresholds: AxisThresholds = DEFAULT_AXIS_THRESHOLDS,
 ): EnrichedPlayRow[] {
   return bestPlayPerMap(
     plays.filter(
@@ -264,7 +275,7 @@ function topEnrichedPlaysInBand(
         p.sunnyStar != null &&
         p.sunnyStar > 0 &&
         p.accuracy >= accFloor &&
-        (axis == null || classifyMapAxis(p.lnRatio) === axis),
+        (axis == null || classifyMapAxis(p.lnRatio, thresholds) === axis),
     ),
   )
     .sort(
@@ -292,6 +303,7 @@ export function getSkillBandPlays(
   const keyCount = parseSkillKeyCount(opts.keyCount ?? DEFAULT_KEY_COUNT);
   const { min: accMin, max: accMax } = skillBandAccRange(band);
   const lnRatioForDan = axisLnRatio(axis);
+  const thresholds = readAxisThresholdsSync(db);
 
   // Cached Sunny ratings only — no request-path backfill.
   const plays = loadEnrichedSevenKPlays(db, keyCount);
@@ -304,7 +316,10 @@ export function getSkillBandPlays(
     lnRatio: p.lnRatio,
   }));
 
-  const skill = estimateSevenKSkillFromPlays(skillRows, { topPlays: topN });
+  const skill = estimateSevenKSkillFromPlays(skillRows, {
+    topPlays: topN,
+    axisThresholds: thresholds,
+  });
   const currentLevel = bandLevelForAxis(skill, band, axis);
 
   const inBandEnriched = topEnrichedPlaysInBand(
@@ -312,6 +327,7 @@ export function getSkillBandPlays(
     accMin,
     topN,
     axisFilter(axis),
+    thresholds,
   );
 
   const currentDanLabel =
@@ -332,6 +348,7 @@ export function getSkillBandPlays(
       axis,
       lower,
       upper,
+      thresholds,
     );
   }
 

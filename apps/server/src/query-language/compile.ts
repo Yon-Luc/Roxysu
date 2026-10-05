@@ -1,6 +1,8 @@
 import type { AstNode, FieldTerm } from "./ast";
-import { LN_DAN_RATIO_THRESHOLD } from "../map-analysis/estDiff";
-import { FLN_RATIO_THRESHOLD } from "@roxysu/sunny-dan";
+import {
+  DEFAULT_AXIS_THRESHOLDS,
+  type AxisThresholds,
+} from "../analytics/recommend/axisThresholds";
 import {
   isOnlineBeatmapStatus,
   statusNameToInt,
@@ -82,6 +84,7 @@ function compileTerm(
   params: unknown[],
   usernames: string[] | null,
   gamemode: string | null,
+  thresholds: AxisThresholds,
 ): string {
   const push = (value: unknown) => {
     params.push(value);
@@ -230,12 +233,12 @@ function compileTerm(
     }
     case "axis": {
       if (term.value === "fln") {
-        return `(dr.ln_ratio IS NOT NULL AND dr.ln_ratio >= ${push(FLN_RATIO_THRESHOLD)})`;
+        return `(dr.ln_ratio IS NOT NULL AND dr.ln_ratio >= ${push(thresholds.fln)})`;
       }
       if (term.value === "ln") {
-        return `(dr.ln_ratio IS NOT NULL AND dr.ln_ratio >= ${push(LN_DAN_RATIO_THRESHOLD)})`;
+        return `(dr.ln_ratio IS NOT NULL AND dr.ln_ratio >= ${push(thresholds.ln)} AND dr.ln_ratio < ${push(thresholds.fln)})`;
       }
-      return `(dr.ln_ratio IS NOT NULL AND dr.ln_ratio < ${push(LN_DAN_RATIO_THRESHOLD)})`;
+      return `(dr.ln_ratio IS NOT NULL AND dr.ln_ratio < ${push(thresholds.ln)})`;
     }
     case "grade": {
       const userFilter = (alias: string) => {
@@ -312,16 +315,21 @@ function compileTerm(
 
 export function compileQuery(
   ast: AstNode,
-  opts?: { username?: string[] | null; gamemode?: string | null },
+  opts?: {
+    username?: string[] | null;
+    gamemode?: string | null;
+    axisThresholds?: AxisThresholds;
+  },
 ): CompiledQuery {
   const params: unknown[] = [];
   const usernames = opts?.username ?? null;
   const gamemode = opts?.gamemode ?? null;
+  const thresholds = opts?.axisThresholds ?? DEFAULT_AXIS_THRESHOLDS;
 
   function compileNode(node: AstNode): string {
     switch (node.type) {
       case "term":
-        return compileTerm(node.term, params, usernames, gamemode);
+        return compileTerm(node.term, params, usernames, gamemode, thresholds);
       case "and":
         return `(${compileNode(node.left)} AND ${compileNode(node.right)})`;
       case "or":

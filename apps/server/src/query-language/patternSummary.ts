@@ -1,6 +1,5 @@
 
 import type { Db } from "@roxysu/db/types";
-import { LN_DAN_RATIO_THRESHOLD } from "../map-analysis/estDiff";
 import { SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
 import { PATTERN_ALGORITHM } from "@roxysu/mania-pattern-analysis";
 import {
@@ -11,6 +10,11 @@ import {
   resolveScoresUsernamesSync,
   scoresUsernameSqlLiteral,
 } from "../analytics/scoreUsername";
+import {
+  DEFAULT_AXIS_THRESHOLDS,
+  readAxisThresholdsSync,
+  type AxisThresholds,
+} from "../analytics/recommend/axisThresholds";
 import type { PracticeCardRow } from "./execute";
 
 export type PatternAxis = "all" | "rc" | "ln";
@@ -166,12 +170,18 @@ function parseKeymode(value: string | number | undefined): PatternKeymode {
 
 type SqlParam = string | number | boolean | null;
 
-function axisSqlClause(axis: PatternAxis, params: SqlParam[]): string | null {
+function axisSqlClause(
+  axis: PatternAxis,
+  params: SqlParam[],
+  thresholds: AxisThresholds = DEFAULT_AXIS_THRESHOLDS,
+): string | null {
   if (axis === "all") return null;
-  params.push(LN_DAN_RATIO_THRESHOLD);
   if (axis === "ln") {
-    return "dr.ln_ratio IS NOT NULL AND dr.ln_ratio >= ?";
+    params.push(thresholds.ln);
+    params.push(thresholds.fln);
+    return "dr.ln_ratio IS NOT NULL AND dr.ln_ratio >= ? AND dr.ln_ratio < ?";
   }
+  params.push(thresholds.ln);
   return "dr.ln_ratio IS NOT NULL AND dr.ln_ratio < ?";
 }
 
@@ -289,6 +299,7 @@ export function practicePatternSummary(
   const axis = parseAxis(opts.axis);
   const keymode = parseKeymode(opts.keymode);
   const scopeWhere = maniaKeymodeWhere(keymode);
+  const thresholds = readAxisThresholdsSync(db);
 
   const samplesPerPattern = Math.max(
     1,
@@ -296,7 +307,7 @@ export function practicePatternSummary(
   );
 
   const axisParams: SqlParam[] = [];
-  const axisClause = axisSqlClause(axis, axisParams);
+  const axisClause = axisSqlClause(axis, axisParams, thresholds);
   const axisFilter = axisClause ? `AND ${axisClause}` : "";
 
   const totalRow = db.$client

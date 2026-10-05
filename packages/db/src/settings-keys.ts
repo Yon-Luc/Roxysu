@@ -75,8 +75,22 @@ export const OVERLAY_SKINS_KEY = "overlay.skins";
 export const OVERLAY_HOST_URL_KEY = "overlay.host_url";
 
 /**
- * In-game overlay host enable flag: "1" enabled (default when missing),
- * "0" disabled. When "0", the desktop Electron shell stops the overlay child
- * and suppresses its liveness respawn until re-enabled.
- */
+  * In-game overlay host enable flag: "1" enabled (default when missing),
+  * "0" disabled. When "0", the desktop Electron shell stops the overlay child
+  * and suppresses its liveness respawn until re-enabled.
+  */
 export const OVERLAY_HOST_ENABLED_KEY = "overlay.host_enabled";
+
+/**
+  * Rice→LN classification boundary (ln_ratio, 0–1). Default 0.2 (20%).
+  * Used for recommend axes, skill estimates, stats mix, and `axis:` filters —
+  * not for Sunny dan RC/LN label table selection.
+  */
+export const RECOMMEND_LN_RATIO_THRESHOLD_KEY = "recommend.ln_ratio_threshold";
+
+/**
+  * LN→FLN classification boundary (ln_ratio, 0–1). Default 0.8 (80%).
+  * Must be strictly greater than {@link RECOMMEND_LN_RATIO_THRESHOLD_KEY}.
+  */
+export const RECOMMEND_FLN_RATIO_THRESHOLD_KEY = "recommend.fln_ratio_threshold";
+

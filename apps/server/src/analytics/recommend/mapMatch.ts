@@ -1,5 +1,9 @@
 import type { SevenKSkillProfile, SkillAxis, MapMatchResult } from "./types";
 import { classifyMapAxis } from "./axis";
+import {
+  DEFAULT_AXIS_THRESHOLDS,
+  type AxisThresholds,
+} from "./axisThresholds";
 import { skillForAxis } from "./sevenKSkill";
 
 const BASE_SUNNY_WEIGHT = 0.6;
@@ -53,11 +57,12 @@ export function calculateMapMatch(
   skill: SevenKSkillProfile,
   targetSkillset: SkillAxis | null = null,
   skillMode: "comfort" | "peak" | "consistency" | "accuracy" = "comfort",
+  thresholds: AxisThresholds = DEFAULT_AXIS_THRESHOLDS,
 ): MapMatchResult {
   const axis: SkillAxis =
     targetSkillset && targetSkillset !== "overall"
       ? targetSkillset
-      : classifyMapAxis(map.lnRatio);
+      : classifyMapAxis(map.lnRatio, thresholds);
 
   const baseSunny = map.sunnyStar;
   const adjustment = performanceAdjustment(map.bestAccuracy, map.playCount);
@@ -85,6 +90,7 @@ export function calculateMapMatch(
 export function mapMatchesAxis(
   lnRatio: number | null,
   axis: "rc" | "ln" | "fln",
+  thresholds: AxisThresholds = DEFAULT_AXIS_THRESHOLDS,
 ): boolean {
-  return classifyMapAxis(lnRatio) === axis;
+  return classifyMapAxis(lnRatio, thresholds) === axis;
 }

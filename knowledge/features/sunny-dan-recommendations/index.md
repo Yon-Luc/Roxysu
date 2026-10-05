@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-09
+last_verified: 2026-10
 confidence: verified
 touches:
   - packages/sunny-dan
@@ -7,6 +7,7 @@ touches:
   - apps/server/src/map-analysis/computeDanVariants.ts
   - apps/server/src/map-analysis/danVariantJob.ts
   - apps/server/src/analytics/recommend
+  - apps/server/src/analytics/recommend/axisThresholds.ts
 ---
 
 # Sunny dan & 4K/7K recommendations
@@ -27,6 +28,13 @@ Parse `.osu` charts from lazer storage, run Sunny Rework–style estimates, pers
    (`calculateDaniel(..., { cvtFlag })`). Single-map read paths (beatmap
    preview dan chip, tosu live analysis) may compute estimates on request —
    ephemeral, never persisted; list/recommend handlers still never compute.
+7. Rice / LN / FLN **map classification** for recommend, skill, stats mix, and
+   `axis:` filters uses user settings (`recommend.ln_ratio_threshold` /
+   `recommend.fln_ratio_threshold`, defaults 0.2 / 0.8). Sunny dan **label
+   table** selection (RC vs LN) stays at the fixed package constant 0.2 —
+   classification settings do not recompute labels.
+   **Enforced by:** `readAxisThresholdsSync` / `classifyMapAxis` in
+   `apps/server/src/analytics/recommend/axisThresholds.ts` + `axis.ts`.
 
 ## Important symbols
 

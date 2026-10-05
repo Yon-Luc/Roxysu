@@ -273,6 +273,7 @@
     "tabs": {
       "setup": "Configuración",
       "practice": "Entrenamiento",
+      "customize": "Personalizar",
       "appearance": "Apariencia",
       "jobs": "Tareas"
     },
@@ -431,7 +432,16 @@
     "recalculatingPatterns": "Recalculando…",
     "openStdSkinEditor": "Editar skin estándar",
     "openTaikoSkinEditor": "Editar skin de taiko",
-    "openCatchSkinEditor": "Editar skin de catch"
+    "openCatchSkinEditor": "Editar skin de catch",
+    "axisThresholds": "Límites Rice / LN / FLN",
+    "axisThresholdsDesc": "Elige cuándo un mapa cuenta como Rice, LN o FLN completo para recomendaciones, ejes de skill, mezcla de stats y filtros axis:. Las etiquetas Sunny dan siguen el 20% RC/LN estándar.",
+    "axisLnStart": "LN empieza en",
+    "axisLnStartHint": "Por debajo de este % de long notes → Rice; en o por encima → LN (hasta FLN).",
+    "axisFlnStart": "FLN empieza en",
+    "axisFlnStartHint": "En o por encima de este % de long notes → LN completa (FLN).",
+    "axisThresholdsInvalid": "El inicio de LN debe ser menor que el de FLN.",
+    "saveAxisThresholds": "Guardar límites",
+    "resetToDefaults": "Restablecer a {{ln}}% / {{fln}}%"
   },
   "skin": {
     "pageTitle": "Skin de vista previa",
@@ -657,7 +667,7 @@
     "refreshing": "Actualizando…",
     "refresh": "Actualizar",
     "mapsLabel": "Maps",
-    "lnFlnHint": "LN es 20–80% de notas largas; FLN es ≥80% (LN completa).",
+    "lnFlnHint": "LN es {{ln}}–{{fln}}% de notas largas; FLN es ≥{{fln}}% (LN completa).",
     "skillFromTop": "Habilidad de tus top {{required}} maps valoradas por banda (mejor partida por map; se requieren las {{required}}). Cambia en ⟦STATS⟧.",
     "skillStat": "{{axis}} @ {{acc}}%+",
     "bandNoMaps": "Sin maps en banda · {{band}}",

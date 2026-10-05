@@ -10,6 +10,11 @@ import {
 } from "../replay/mods";
 import { loadDanVariantRatingsSync } from "../map-analysis/computeDanVariants";
 import { classifyMapAxis } from "./recommend/axis";
+import {
+  DEFAULT_AXIS_THRESHOLDS,
+  readAxisThresholdsSync,
+  type AxisThresholds,
+} from "./recommend/axisThresholds";
 import { classifyScoreGrade, PERFECT_TOTAL_SCORE } from "../query-language/scoreGrade";
 import {
   DEFAULT_SKILL_KEY_COUNT,
@@ -249,6 +254,7 @@ async function getRankDistribution(rows: ManiaAnalyticsRow[]) {
 async function getSkillsetMix(
   rows: ManiaAnalyticsRow[],
   variantOf: (row: ManiaAnalyticsRow) => DanVariantRating | null,
+  thresholds: AxisThresholds = DEFAULT_AXIS_THRESHOLDS,
 ) {
   let rc = 0;
   let ln = 0;
@@ -257,7 +263,7 @@ async function getSkillsetMix(
     if (row.hidden) continue;
     const rating = danRatingFor(row, variantOf);
     if (!rating) continue;
-    const axis = classifyMapAxis(rating.lnRatio);
+    const axis = classifyMapAxis(rating.lnRatio, thresholds);
     if (axis === "fln") fln += 1;
     else if (axis === "ln") ln += 1;
     else rc += 1;
@@ -481,6 +487,7 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
   const curves = loadManiaPpCurvesSync(db);
   const rows = loadManiaAnalyticsRows(db, keyCount);
   const variantOf = loadDanVariantLookup(db, rows);
+  const axisThresholds = readAxisThresholdsSync(db);
 
   const [
     beatmapCountRow,
@@ -522,11 +529,12 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
         rangeDays: range,
         topPlays: skillTopPlays,
         keyCount,
+        axisThresholds,
       });
     }),
     getKeymodeProgression(rows, trendDays, weekCount, curves),
     getRankDistribution(rows),
-    getSkillsetMix(rows, variantOf),
+    getSkillsetMix(rows, variantOf, axisThresholds),
     getPlayTimePatterns(rows),
     getSessionStats(db),
     getTopMappers(rows, curves, 10),

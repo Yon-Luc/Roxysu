@@ -14,12 +14,17 @@ import {
   resolveScoresUsernamesSync,
   scoresUsernameSqlLiteral,
 } from "../analytics/scoreUsername";
+import {
+  readAxisThresholdsSync,
+  type AxisThresholds,
+} from "../analytics/recommend/axisThresholds";
 import { subscribe } from "../shared/events";
 
 /** Resolved settings shared across one logical request. */
 export type QueryContext = {
   usernames: string[] | null;
   gamemode: ScoreGamemodeId | null;
+  axisThresholds: AxisThresholds;
 };
 
 let cachedQueryContext: QueryContext | null = null;
@@ -34,6 +39,7 @@ export function buildQueryContext(db: Db): QueryContext {
   cachedQueryContext = {
     usernames: resolveScoresUsernamesSync(db),
     gamemode: resolveScoresGamemodeSync(db),
+    axisThresholds: readAxisThresholdsSync(db),
   };
   return cachedQueryContext;
 }
@@ -299,6 +305,7 @@ function resolveFilter(
   const compiled = compileQuery(ast, {
     username: ctx.usernames,
     gamemode: ctx.gamemode,
+    axisThresholds: ctx.axisThresholds,
   });
   return {
     sql: compiled.sql,
@@ -342,6 +349,7 @@ export function executeAst(
   const compiled = compileQuery(ast, {
     username: ctx.usernames,
     gamemode: ctx.gamemode,
+    axisThresholds: ctx.axisThresholds,
   });
   return executeFilter(db, compiled.sql, compiled.params, ctx, {
     ...opts,

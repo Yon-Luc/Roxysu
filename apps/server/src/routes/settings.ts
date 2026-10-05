@@ -2,6 +2,8 @@ import { settings } from "@roxysu/db/schema";
 import {
   OVERLAY_HOST_ENABLED_KEY,
   OVERLAY_HOST_URL_KEY,
+  RECOMMEND_FLN_RATIO_THRESHOLD_KEY,
+  RECOMMEND_LN_RATIO_THRESHOLD_KEY,
   SCORES_GAMEMODE_FILTER_KEY,
   SCORES_USERNAME_FILTER_KEY,
 } from "@roxysu/db/settings-keys";
@@ -73,6 +75,12 @@ import {
   restartTosuAdapter,
   upsertSetting,
 } from "../tosu";
+import {
+  DEFAULT_AXIS_THRESHOLDS,
+  readAxisThresholds,
+  serializeAxisThreshold,
+  validateAxisThresholdsInput,
+} from "../analytics/recommend/axisThresholds";
 
 async function readOsuDataOverride(db: Db): Promise<string | null> {
   const [row] = await db
@@ -114,9 +122,10 @@ async function buildSettingsResponse(db: Db) {
   const maniaRatingExecutables = await readAllExecutablePaths(db);
   const overlayHostUrl = await readOverlayHostUrl(db);
   const overlayHostEnabled = await readOverlayHostEnabled(db);
-  const [scoresUsername, scoresGamemode] = await Promise.all([
+  const [scoresUsername, scoresGamemode, axisThresholds] = await Promise.all([
     buildScoresUsernameSettings(db),
     buildScoresGamemodeSettings(db),
+    readAxisThresholds(db),
   ]);
 
   return {
@@ -133,6 +142,14 @@ async function buildSettingsResponse(db: Db) {
     },
     scores: scoresUsername,
     gamemode: scoresGamemode,
+    axisThresholds: {
+      ln: axisThresholds.ln,
+      fln: axisThresholds.fln,
+      defaults: {
+        ln: DEFAULT_AXIS_THRESHOLDS.ln,
+        fln: DEFAULT_AXIS_THRESHOLDS.fln,
+      },
+    },
     paths,
     overlay: {
       enabled: overlayHostEnabled,
@@ -183,6 +200,7 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
     async ({ db, body, set }) => {
       let tosuChanged = false;
       let scoresFilterChanged = false;
+      let axisThresholdsChanged = false;
 
       if (body.masteryFormulaId) {
         try {
@@ -341,11 +359,50 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
         }
       }
 
+      if (
+        body.lnRatioThreshold !== undefined ||
+        body.flnRatioThreshold !== undefined
+      ) {
+        const current = await readAxisThresholds(db);
+        const nextLn =
+          body.lnRatioThreshold !== undefined
+            ? body.lnRatioThreshold
+            : current.ln;
+        const nextFln =
+          body.flnRatioThreshold !== undefined
+            ? body.flnRatioThreshold
+            : current.fln;
+        const validated = validateAxisThresholdsInput(nextLn, nextFln);
+        if (!validated.ok) {
+          set.status = 400;
+          return { error: validated.error };
+        }
+        const prev = current;
+        if (
+          validated.thresholds.ln !== prev.ln ||
+          validated.thresholds.fln !== prev.fln
+        ) {
+          await upsertSetting(
+            db,
+            RECOMMEND_LN_RATIO_THRESHOLD_KEY,
+            serializeAxisThreshold(validated.thresholds.ln),
+          );
+          await upsertSetting(
+            db,
+            RECOMMEND_FLN_RATIO_THRESHOLD_KEY,
+            serializeAxisThreshold(validated.thresholds.fln),
+          );
+          axisThresholdsChanged = true;
+        }
+      }
+
       if (scoresFilterChanged) {
         invalidateQueryContextCache();
         await runAnalyticsPipeline(db, { forceFull: true });
         publish({ type: "dashboard.updated" });
         publish({ type: "mastery.updated" });
+      } else if (axisThresholdsChanged) {
+        invalidateQueryContextCache();
       }
 
       return buildSettingsResponse(db);
@@ -382,6 +439,14 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
         maniaRatingExecutables: t.Optional(
           t.Record(t.String(), t.Union([t.String(), t.Null()])),
         ),
+        /**
+         * Rice→LN classification boundary (ln_ratio 0–1). Must be &lt; fln.
+         */
+        lnRatioThreshold: t.Optional(t.Number()),
+        /**
+         * LN→FLN classification boundary (ln_ratio 0–1). Must be &gt; ln.
+         */
+        flnRatioThreshold: t.Optional(t.Number()),
       }),
     },
   );

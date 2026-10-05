@@ -797,6 +797,8 @@ export async function patchSettings(body: {
   tosuHost?: string;
   tosuExecutablePath?: string | null;
   maniaRatingExecutables?: Record<string, string | null>;
+  lnRatioThreshold?: number;
+  flnRatioThreshold?: number;
 }) {
   return unwrap(await api.api.settings.patch(body), "/api/settings");
 }

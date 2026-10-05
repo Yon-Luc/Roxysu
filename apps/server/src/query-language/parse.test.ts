@@ -274,7 +274,8 @@ describe("compileQuery", () => {
     const ast = parseQuery("axis:ln");
     const compiled = compileQuery(ast);
     expect(compiled.sql).toContain("dr.ln_ratio >=");
-    expect(compiled.params).toEqual([0.2]);
+    expect(compiled.sql).toContain("dr.ln_ratio <");
+    expect(compiled.params).toEqual([0.2, 0.8]);
   });
 
   test("compiles status filter against beatmap set status", () => {

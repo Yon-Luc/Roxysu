@@ -37,6 +37,16 @@ describe("buildBaseKeymodeFilter", () => {
     expect(fln.params).toEqual([7, 2, 8, FLN_RATIO_THRESHOLD]);
   });
 
+  test("uses custom axis thresholds", () => {
+    const t = { ln: 0.25, fln: 0.7 };
+    const ln = buildBaseKeymodeFilter(2, 8, "ln", null, [], 7, t);
+    const fln = buildBaseKeymodeFilter(2, 8, "fln", null, [], 7, t);
+    const rc = buildBaseKeymodeFilter(2, 8, "rc", null, [], 7, t);
+    expect(ln.params).toEqual([7, 2, 8, 0.25, 0.7]);
+    expect(fln.params).toEqual([7, 2, 8, 0.7]);
+    expect(rc.params).toEqual([7, 2, 8, 0.25]);
+  });
+
   test("appends overlay SQL and params", () => {
     const filter = buildBaseKeymodeFilter(
       3,

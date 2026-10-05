@@ -11,6 +11,10 @@ import {
   scoresUsernameSql,
 } from "../scoreUsername";
 import { classifyMapAxis } from "./axis";
+import {
+  DEFAULT_AXIS_THRESHOLDS,
+  type AxisThresholds,
+} from "./axisThresholds";
 import type { MapAxis, SevenKSkillProfile, SkillAxis } from "./types";
 
 /** Min plays before we trust the comfort estimate (else cold-start). */
@@ -84,6 +88,8 @@ export type SkillHistoryOptions = {
   topPlays?: number;
   /** Mania key count — never mixed (default 7). */
   keyCount?: number;
+  /** Rice / LN / FLN classification boundaries. */
+  axisThresholds?: AxisThresholds;
 };
 
 export type SevenKSkillOptions = {
@@ -91,6 +97,8 @@ export type SevenKSkillOptions = {
   topPlays?: number;
   /** Mania key count — never mixed (default 7). */
   keyCount?: number;
+  /** Rice / LN / FLN classification boundaries. */
+  axisThresholds?: AxisThresholds;
 };
 
 /** Default stats / skill keymode. */
@@ -220,6 +228,7 @@ export function topPlaysInBand(
   accFloor: number,
   topN: number,
   axis?: MapAxis,
+  thresholds: AxisThresholds = DEFAULT_AXIS_THRESHOLDS,
 ): SkillPlayRow[] {
   return bestPlayPerMap(
     plays.filter(
@@ -227,7 +236,7 @@ export function topPlaysInBand(
         p.sunnyStar != null &&
         p.sunnyStar > 0 &&
         p.accuracy >= accFloor &&
-        (axis == null || classifyMapAxis(p.lnRatio) === axis),
+        (axis == null || classifyMapAxis(p.lnRatio, thresholds) === axis),
     ),
   )
     .sort(
@@ -315,11 +324,14 @@ function clearLevelFromPlays(
   axis: MapAxis | "all",
   accCenter: number,
   halfWidth: number,
+  thresholds: AxisThresholds = DEFAULT_AXIS_THRESHOLDS,
 ): { level: number; playCount: number } {
   const filtered =
     axis === "all"
       ? bandPlays
-      : bandPlays.filter((p) => classifyMapAxis(p.lnRatio) === axis);
+      : bandPlays.filter(
+          (p) => classifyMapAxis(p.lnRatio, thresholds) === axis,
+        );
 
   if (filtered.length === 0) return { level: 0, playCount: 0 };
 
@@ -349,37 +361,45 @@ function bandLevelsFromPlays(
   topN: number,
   center: number,
   halfWidth: number,
+  thresholds: AxisThresholds = DEFAULT_AXIS_THRESHOLDS,
 ) {
   return {
     all: clearLevelFromPlays(
-      topPlaysInBand(plays, accFloor, topN),
+      topPlaysInBand(plays, accFloor, topN, undefined, thresholds),
       "all",
       center,
       halfWidth,
+      thresholds,
     ),
     rc: clearLevelFromPlays(
-      topPlaysInBand(plays, accFloor, topN, "rc"),
+      topPlaysInBand(plays, accFloor, topN, "rc", thresholds),
       "rc",
       center,
       halfWidth,
+      thresholds,
     ),
     ln: clearLevelFromPlays(
-      topPlaysInBand(plays, accFloor, topN, "ln"),
+      topPlaysInBand(plays, accFloor, topN, "ln", thresholds),
       "ln",
       center,
       halfWidth,
+      thresholds,
     ),
     fln: clearLevelFromPlays(
-      topPlaysInBand(plays, accFloor, topN, "fln"),
+      topPlaysInBand(plays, accFloor, topN, "fln", thresholds),
       "fln",
       center,
       halfWidth,
+      thresholds,
     ),
   };
 }
 
 /** Cold start from best-acc per map in the play list (no DB). */
-function coldStartFromPlays(plays: SkillPlayRow[]): SevenKSkillProfile {
+function coldStartFromPlays(
+  plays: SkillPlayRow[],
+  thresholds: AxisThresholds = DEFAULT_AXIS_THRESHOLDS,
+): SevenKSkillProfile {
   const byMap = new Map<
     string,
     { bestAccuracy: number; sunnyStar: number; lnRatio: number | null }
@@ -410,7 +430,7 @@ function coldStartFromPlays(plays: SkillPlayRow[]): SevenKSkillProfile {
     const weight = Math.max(0.05, accuracyWeight(row.bestAccuracy));
     const point = { value: row.sunnyStar, weight };
     allPoints.push(point);
-    const axis = classifyMapAxis(row.lnRatio);
+    const axis = classifyMapAxis(row.lnRatio, thresholds);
     if (axis === "fln") flnPoints.push(point);
     else if (axis === "ln") lnPoints.push(point);
     else rcPoints.push(point);
@@ -445,7 +465,11 @@ function coldStartFromPlays(plays: SkillPlayRow[]): SevenKSkillProfile {
 }
 
 /** Cold start: best-acc weighted Sunny on played maps for one keymode. */
-function coldStartFromMastery(db: Db, keyCount: number): SevenKSkillProfile {
+function coldStartFromMastery(
+  db: Db,
+  keyCount: number,
+  thresholds: AxisThresholds = DEFAULT_AXIS_THRESHOLDS,
+): SevenKSkillProfile {
   const user = scoresUsernameSql(
     resolveScoresUsernamesSync(db),
     "user_username",
@@ -510,6 +534,7 @@ function coldStartFromMastery(db: Db, keyCount: number): SevenKSkillProfile {
     allPoints.push(point);
     const axis = classifyMapAxis(
       row.lnRatio != null ? Number(row.lnRatio) : null,
+      thresholds,
     );
     if (axis === "fln") flnPoints.push(point);
     else if (axis === "ln") lnPoints.push(point);
@@ -594,10 +619,12 @@ export function estimateSevenKSkillFromPlays(
     coldStartFromPlaysOnly?: boolean;
     /** Optional DB cold-start when play-list cold-start is empty. */
     coldStartFallback?: () => SevenKSkillProfile;
+    axisThresholds?: AxisThresholds;
   },
 ): SevenKSkillProfile {
   const asOfMs = opts?.asOfMs;
   const topN = normalizeTopPlays(opts?.topPlays);
+  const thresholds = opts?.axisThresholds ?? DEFAULT_AXIS_THRESHOLDS;
   const filtered =
     asOfMs != null ? plays.filter((p) => p.playedAt <= asOfMs) : plays;
 
@@ -607,6 +634,7 @@ export function estimateSevenKSkillFromPlays(
     topN,
     PUSH_ACC_CENTER,
     0.025,
+    thresholds,
   );
 
   const farm = bandLevelsFromPlays(
@@ -615,6 +643,7 @@ export function estimateSevenKSkillFromPlays(
     topN,
     CONSISTENCY_ACC_CENTER,
     0.015,
+    thresholds,
   );
 
   const acc = bandLevelsFromPlays(
@@ -623,12 +652,13 @@ export function estimateSevenKSkillFromPlays(
     topN,
     ACCURACY_ACC_CENTER,
     0.01,
+    thresholds,
   );
 
   const withSunny = topRatedPlays(filtered, topN);
 
   if (withSunny.length < MIN_PLAYS_FOR_SKILL) {
-    const fromPlays = coldStartFromPlays(filtered);
+    const fromPlays = coldStartFromPlays(filtered, thresholds);
     if (fromPlays.overall > 0) {
       return applyBandLevels(fromPlays, clear, farm, acc, topN);
     }
@@ -664,7 +694,7 @@ export function estimateSevenKSkillFromPlays(
     const combined = recencyWeight * accuracyWeight(play.accuracy);
     const point = { value: play.sunnyStar!, weight: combined };
     allPoints.push(point);
-    const axis = classifyMapAxis(play.lnRatio);
+    const axis = classifyMapAxis(play.lnRatio, thresholds);
     if (axis === "fln") flnPoints.push(point);
     else if (axis === "ln") lnPoints.push(point);
     else rcPoints.push(point);
@@ -787,10 +817,12 @@ export function estimateSevenKSkill(
   opts?: SevenKSkillOptions,
 ): SevenKSkillProfile {
   const keyCount = parseSkillKeyCount(opts?.keyCount);
+  const thresholds = opts?.axisThresholds ?? DEFAULT_AXIS_THRESHOLDS;
   const plays = loadSevenKPlays(db, keyCount);
   return estimateSevenKSkillFromPlays(plays, {
     topPlays: opts?.topPlays,
-    coldStartFallback: () => coldStartFromMastery(db, keyCount),
+    axisThresholds: thresholds,
+    coldStartFallback: () => coldStartFromMastery(db, keyCount, thresholds),
   });
 }
 
@@ -862,6 +894,7 @@ function skillHistoryFromPlays(
       asOfMs,
       topPlays: opts.topPlays,
       coldStartFromPlaysOnly: true,
+      axisThresholds: opts.axisThresholds,
     });
     points.push({
       at: key,
@@ -914,6 +947,7 @@ export function estimateSevenKSkillWithHistoryFromPlays(
     skill: estimateSevenKSkillFromPlays(plays, {
       topPlays: opts.topPlays,
       coldStartFallback,
+      axisThresholds: opts.axisThresholds,
     }),
     skillHistory: skillHistoryFromPlays(plays, opts, nowMs),
   };
@@ -931,9 +965,13 @@ export function estimateSevenKSkillWithHistory(
   skillHistory: SkillHistoryPoint[];
 } {
   const keyCount = parseSkillKeyCount(opts.keyCount);
+  const thresholds = opts.axisThresholds ?? DEFAULT_AXIS_THRESHOLDS;
   const plays = loadSevenKPlays(db, keyCount);
-  return estimateSevenKSkillWithHistoryFromPlays(plays, opts, nowMs, () =>
-    coldStartFromMastery(db, keyCount),
+  return estimateSevenKSkillWithHistoryFromPlays(
+    plays,
+    { ...opts, axisThresholds: thresholds },
+    nowMs,
+    () => coldStartFromMastery(db, keyCount, thresholds),
   );
 }
 

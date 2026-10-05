@@ -16,6 +16,9 @@ apps/desktop/launcher/win/dist/
 *.suo
 roxysu-calc/
 
+# mania-difficulty upstream worktree (pin with bun run upstream:pin)
+packages/mania-difficulty/.cache/
+
 # local env overrides (see .env.example)
 .env
 .env.local

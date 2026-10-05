@@ -13,7 +13,7 @@
     },
     "apps/desktop": {
       "name": "@roxysu/desktop",
-      "version": "0.1.15",
+      "version": "0.1.16",
       "dependencies": {
         "electron-updater": "^6.6.2",
       },
@@ -85,7 +85,7 @@
     },
     "apps/server": {
       "name": "Roxysu",
-      "version": "0.1.15",
+      "version": "0.1.16",
       "dependencies": {
         "@elysia/eden": "^1.4.10",
         "@elysia/html": "^1.4.1",
@@ -184,6 +184,16 @@
       "peerDependencies": {
         "elysia": "^1.4.29",
         "react": "^19",
+      },
+    },
+    "packages/mania-difficulty": {
+      "name": "@roxysu/mania-difficulty",
+      "version": "0.0.1",
+      "dependencies": {
+        "@roxysu/osu-chart": "workspace:*",
+      },
+      "devDependencies": {
+        "bun-types": "^1.3.14",
       },
     },
     "packages/mania-judge": {
@@ -499,6 +509,8 @@
     "@roxysu/hub-client": ["@roxysu/hub-client@workspace:packages/hub-client"],
 
     "@roxysu/i18n": ["@roxysu/i18n@workspace:packages/i18n"],
+
+    "@roxysu/mania-difficulty": ["@roxysu/mania-difficulty@workspace:packages/mania-difficulty"],
 
     "@roxysu/mania-judge": ["@roxysu/mania-judge@workspace:packages/mania-judge"],
 

@@ -169,6 +169,18 @@ Persisted mania difficulty estimates from the Sunny dan backfill job (`beatmap_d
 
 ---
 
+### Mania difficulty port
+
+Workspace package that maintains a TypeScript port of the WIP osu!mania difficulty rework (`loleur362/osu` branch `mania-difficulty`). Upstream C# is the source of truth; `generated/` is a deterministic Roslyn build artifact. Runtime needs no .NET. Distinct from Sunny/Daniel estimators and from Rating Lab’s C# `mania-rating-calc` binaries (kept for PP/compare).
+
+**Not:** Sunny dan, Daniel, import Realm star rating, Rating Lab experiment version alone
+
+**In code:** `packages/mania-difficulty`, `upstream/revision.json`
+
+**See:** `packages/mania-difficulty/README.md`, `packages/mania-difficulty/docs/dependency-report.md`
+
+---
+
 ### Axis thresholds
 
 User-configurable `ln_ratio` boundaries that classify mania maps as Rice, LN, or FLN for recommendations, skill axes, stats mix, and `axis:` filters. Defaults: LN starts at 20%, FLN at 80%. Distinct from the fixed 20% used for Sunny dan RC vs LN **label table** selection.

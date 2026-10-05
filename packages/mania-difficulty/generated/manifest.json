@@ -1,0 +1,74 @@
+{
+  "upstreamSha": "e6207616bd732c7c00207a060f31cf7729f8390b",
+  "generatorVersion": "0.4.0",
+  "files": [
+    {
+      "path": "osu.Game/Rulesets/Difficulty/Utils/DiffUtils.ts",
+      "sha256": "8dd378bac8b7160d1c6d82eefb3a92201eb2eede554ad4348eb5b7b4428f8871"
+    },
+    {
+      "path": "osu.Game.Rulesets.Mania/Difficulty/Utils/ColumnPatternUtils.ts",
+      "sha256": "7ea75d018ab710616777dfc4ff7a3beb245d9cd4ecd52ea432324f6664291253"
+    },
+    {
+      "path": "osu.Game.Rulesets.Mania/Difficulty/Utils/CrossColumnUtils.ts",
+      "sha256": "6e65f0244791882efe6d331b855975a58f6044667c93f83c0d19625bce490cdc"
+    },
+    {
+      "path": "osu.Game.Rulesets.Mania/Difficulty/Utils/RunDampenUtils.ts",
+      "sha256": "5b5c2ff8e91e36bfc1b12e864fb371520607b8056e366caa02389dc8ed3e4157"
+    },
+    {
+      "path": "osu.Game.Rulesets.Mania/Difficulty/Utils/RootFinding.ts",
+      "sha256": "f2764785f1a7ea5bf5404e28039d489d8118dbdabdb76fc60b06c39501d91367"
+    },
+    {
+      "path": "osu.Game.Rulesets.Mania/Difficulty/Utils/ColumnRunUtils.ts",
+      "sha256": "6b949c0a3a641619eb5c0a0c28a9f0e953b4c7904a6955456390464f5bbd56b9"
+    },
+    {
+      "path": "osu.Game.Rulesets.Mania/Difficulty/Utils/TrillUtils.ts",
+      "sha256": "c53a8fc2e504547cbcc5f04dfb617a8a9be3d74d4b78b6e7b2bacba2e768a1a9"
+    },
+    {
+      "path": "osu.Game.Rulesets.Mania/Difficulty/Utils/ChordUtils.ts",
+      "sha256": "76cbe4839e237225d9c697061aad96ce0f31a63811bb2648a7cfbad7a2c2423b"
+    },
+    {
+      "path": "osu.Game.Rulesets.Mania/Difficulty/Evaluators/SpeedEvaluator.ts",
+      "sha256": "24b7d6b7d5b81cb0348d22be8061bcf12c680ba0e74a4f92c1fa08031890fb6b"
+    },
+    {
+      "path": "osu.Game.Rulesets.Mania/Difficulty/Evaluators/TechnicalEvaluator.ts",
+      "sha256": "43291f9bb0acce3234ce737af2aac6ecc01eeefb773dc0090150590626c53432"
+    },
+    {
+      "path": "osu.Game.Rulesets.Mania/Difficulty/Evaluators/CoordinationEvaluator.ts",
+      "sha256": "66fcb5e73c610129dbf091db8153235c39c5cfc6ad4dcc445fd91c9b32da922a"
+    },
+    {
+      "path": "osu.Game.Rulesets.Mania/Difficulty/Evaluators/Jack/AnchorEvaluator.ts",
+      "sha256": "7a3b72f4a2876d7296b8335cc29338051cc2ccb9e3635c57e7955c1a87237d45"
+    },
+    {
+      "path": "osu.Game.Rulesets.Mania/Difficulty/Evaluators/Jack/FullChordJackEvaluator.ts",
+      "sha256": "002b9616db6a9576cef839c7d5e744eb69c66bf84b1eb3d06ee145d07b00ea84"
+    },
+    {
+      "path": "osu.Game.Rulesets.Mania/Difficulty/Evaluators/Jack/JackSpacingEvaluator.ts",
+      "sha256": "f2e1475d701cd4a53df9aa0179acdec59fc7b402571dc3b2aa8a1d94072752da"
+    },
+    {
+      "path": "osu.Game.Rulesets.Mania/Difficulty/Evaluators/Jack/SpeedjackEvaluator.ts",
+      "sha256": "78645c14a46b037d66218a69a4a2010bffac85bd5629c04354480017bcb333e8"
+    },
+    {
+      "path": "osu.Game.Rulesets.Mania/Difficulty/Evaluators/JackEvaluator.ts",
+      "sha256": "305805d04069b6300e86420b9cfa0147c05b7c871cc4236dc9957fe647186c9d"
+    },
+    {
+      "path": "osu.Game.Rulesets.Mania/Difficulty/Evaluators/ReleaseEvaluator.ts",
+      "sha256": "eb7aa4c5b9913fb2bdf52f6c0b8e4801b7bd8584c9e79b7d30956254aa7a14de"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "name": "@roxysu/mania-difficulty",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "upstream:pin": "bun tools/scripts/pin-upstream.ts",
+    "port:generate": "dotnet run --project tools/Transpiler",
+    "port:ref": "dotnet run --project tools/ReferenceRunner --",
+    "port:verify": "bun tools/scripts/verify-smoke.ts",
+    "port:probe": "bun tools/scripts/probe-unsupported.ts",
+    "port:report": "bun tools/scripts/dependency-report.ts"
+  },
+  "dependencies": {
+    "@roxysu/osu-chart": "workspace:*"
+  },
+  "devDependencies": {
+    "bun-types": "^1.3.14"
+  }
+}

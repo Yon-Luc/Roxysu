@@ -1,0 +1,48 @@
+osu file format v14
+
+[General]
+AudioFilename: virtual.mp3
+Mode: 3
+
+[Editor]
+
+[Metadata]
+Title:Synthetic Dense 7K
+TitleUnicode:Synthetic Dense 7K
+Artist:Roxysu
+ArtistUnicode:Roxysu
+Creator:Roxysu
+Version:dense
+Source:
+Tags:synthetic fixture roxysu
+BeatmapID:0
+BeatmapSetID:-1
+
+[Difficulty]
+HPDrainRate:8
+CircleSize:7
+OverallDifficulty:8
+ApproachRate:8
+SliderMultiplier:1.4
+SliderTickRate:1
+
+[Events]
+
+[TimingPoints]
+0,300,4,2,0,100,1,0
+
+[HitObjects]
+36,192,0,1,0,0:0:0:0:
+73,192,75,1,0,0:0:0:0:
+109,192,150,1,0,0:0:0:0:
+146,192,225,1,0,0:0:0:0:
+182,192,300,1,0,0:0:0:0:
+219,192,375,1,0,0:0:0:0:
+255,192,450,1,0,0:0:0:0:
+36,192,525,1,0,0:0:0:0:
+73,192,600,1,0,0:0:0:0:
+109,192,675,1,0,0:0:0:0:
+146,192,750,1,0,0:0:0:0:
+182,192,825,1,0,0:0:0:0:
+219,192,900,1,0,0:0:0:0:
+255,192,975,1,0,0:0:0:0:

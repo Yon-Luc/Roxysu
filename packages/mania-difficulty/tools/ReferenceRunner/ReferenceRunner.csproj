@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>mania-difficulty-ref</AssemblyName>
+    <RootNamespace>ManiaDifficulty.ReferenceRunner</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(OSU_GAME_PATH)' != ''">
+    <ProjectReference Include="$(OSU_GAME_PATH)/osu.Game/osu.Game.csproj" />
+    <ProjectReference Include="$(OSU_GAME_PATH)/osu.Game.Rulesets.Mania/osu.Game.Rulesets.Mania.csproj" />
+  </ItemGroup>
+</Project>

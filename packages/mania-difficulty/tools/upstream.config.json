@@ -1,0 +1,51 @@
+{
+  "repository": "https://github.com/loleur362/osu",
+  "branch": "mania-difficulty",
+  "entrySymbols": [
+    "osu.Game.Rulesets.Mania.Difficulty.ManiaDifficultyCalculator"
+  ],
+  "generateRoots": [
+    "osu.Game/Rulesets/Difficulty/Utils/DiffUtils.cs",
+    "osu.Game.Rulesets.Mania/Difficulty/Utils/ColumnPatternUtils.cs",
+    "osu.Game.Rulesets.Mania/Difficulty/Utils/CrossColumnUtils.cs",
+    "osu.Game.Rulesets.Mania/Difficulty/Utils/RunDampenUtils.cs",
+    "osu.Game.Rulesets.Mania/Difficulty/Utils/RootFinding.cs",
+    "osu.Game.Rulesets.Mania/Difficulty/Utils/ColumnRunUtils.cs",
+    "osu.Game.Rulesets.Mania/Difficulty/Utils/TrillUtils.cs",
+    "osu.Game.Rulesets.Mania/Difficulty/Utils/ChordUtils.cs",
+    "osu.Game.Rulesets.Mania/Difficulty/Evaluators/SpeedEvaluator.cs",
+    "osu.Game.Rulesets.Mania/Difficulty/Evaluators/TechnicalEvaluator.cs",
+    "osu.Game.Rulesets.Mania/Difficulty/Evaluators/CoordinationEvaluator.cs",
+    "osu.Game.Rulesets.Mania/Difficulty/Evaluators/Jack/AnchorEvaluator.cs",
+    "osu.Game.Rulesets.Mania/Difficulty/Evaluators/Jack/FullChordJackEvaluator.cs",
+    "osu.Game.Rulesets.Mania/Difficulty/Evaluators/Jack/JackSpacingEvaluator.cs",
+    "osu.Game.Rulesets.Mania/Difficulty/Evaluators/Jack/SpeedjackEvaluator.cs",
+    "osu.Game.Rulesets.Mania/Difficulty/Evaluators/JackEvaluator.cs",
+    "osu.Game.Rulesets.Mania/Difficulty/Evaluators/ReleaseEvaluator.cs"
+  ],
+  "generateAllowPrefixes": [
+    "osu.Game.Rulesets.Mania/Difficulty/",
+    "osu.Game/Rulesets/Difficulty/"
+  ],
+  "shimNamespaces": [
+    "osu.Framework",
+    "osu.Game.Beatmaps",
+    "osu.Game.Rulesets.Mods",
+    "osu.Game.Rulesets.Objects",
+    "osu.Game.Rulesets.Scoring",
+    "osu.Game.Utils",
+    "JetBrains.Annotations",
+    "Newtonsoft.Json"
+  ],
+  "outOfScopePrefixes": [
+    "osu.Game.Rulesets.Mania/Difficulty/ManiaPerformance",
+    "osu.Game.Rulesets.Mania/Difficulty/ManiaLegacyScoreSimulator",
+    "osu.Game.Rulesets.Mania/Objects/Drawables/",
+    "osu.Game.Rulesets.Mania/Beatmaps/Patterns/",
+    "osu.Framework.Graphics",
+    "osu.Framework.Audio",
+    "osu.Framework.Input"
+  ],
+  "checkoutDirEnv": "MANIA_DIFFICULTY_UPSTREAM",
+  "defaultCheckoutRelative": ".cache/upstream"
+}

@@ -1,0 +1,8 @@
+{
+  "repository": "https://github.com/loleur362/osu",
+  "branch": "mania-difficulty",
+  "sha": "e6207616bd732c7c00207a060f31cf7729f8390b",
+  "generatorVersion": "0.4.0",
+  "pinnedAt": "2026-10-05",
+  "notes": "WIP mania SR rework. Do not track loleur362/master (ppy tip); use branch mania-difficulty."
+}

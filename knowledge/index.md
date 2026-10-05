@@ -26,6 +26,7 @@ Offline-first practice analytics for osu!lazer. Source of truth for **how** is t
 | `packages/collection-sync` | `!Roxysu` prefix + write-back wire types |
 | `packages/realm-backup` | `client.realm` backup helpers |
 | `packages/sunny-dan` | Mania Sunny/Daniel difficulty estimates |
+| `packages/mania-difficulty` | WIP mania SR rework TypeScript port (generated from pinned C#) |
 | `packages/osu-chart`, `mania-judge`, `mania-pattern-analysis`, `pattern-7k`, `timing-analysis` | Chart/analysis libraries |
 | `packages/i18n`, `hub-client` | i18n + typed hub client |
 | `apps/tosu-counter` | Standalone mania notefield **Tosu counter** (no client app needed) |

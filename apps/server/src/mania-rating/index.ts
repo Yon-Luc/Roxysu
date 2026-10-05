@@ -5,7 +5,10 @@ export {
   executableSettingKey,
   LAZER_MASTER_VERSION,
   ENISSAY_ACCURACY_VERSION,
+  MANIA_DIFFICULTY_TS_VERSION,
   usesImportedRating,
+  usesInProcessCalculator,
+  requiresExecutable,
 } from "./registry";
 export type { ManiaRatingVersion, ManiaRatingSource } from "./registry";
 export {

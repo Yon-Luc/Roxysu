@@ -1,5 +1,10 @@
 import type { Db } from "@roxysu/db/types";
 import { beatmapManiaRatings, beatmaps } from "@roxysu/db/schema";
+import {
+  beatmapFromOsuChart,
+  calculateManiaDifficulty,
+} from "@roxysu/mania-difficulty";
+import { parseOsuChart } from "@roxysu/osu-chart";
 import { readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { and, eq } from "drizzle-orm";
@@ -8,7 +13,11 @@ import {
   getOsuDataPath,
   resolveLazerFilePath,
 } from "../shared/lazer-files";
-import { getVersion, usesImportedRating } from "./registry";
+import {
+  getVersion,
+  usesImportedRating,
+  usesInProcessCalculator,
+} from "./registry";
 import { readExecutablePath } from "./settings";
 import { toIso as toIsoNullable } from "../shared/serialize";
 import {
@@ -119,6 +128,53 @@ function parseCliOutput(stdout: string): CliOutput {
       .map((l) => l.trim())
       .find((l) => l.startsWith("{")) ?? trimmed;
   return JSON.parse(line) as CliOutput;
+}
+
+/** Run the in-repo TypeScript mania difficulty port (SR + attributes, no PP). */
+function runInProcessCalculator(beatmapPath: string): CliOutput {
+  const text = readFileSync(beatmapPath, "utf8");
+  const chart = parseOsuChart(text);
+  if (chart.gameMode !== "3" && chart.status === "NotMania") {
+    throw new Error("Not a mania beatmap");
+  }
+  const odMatch = text.match(/OverallDifficulty:\s*([\d.]+)/i);
+  const od = odMatch ? Number(odMatch[1]) : 8;
+  const input = beatmapFromOsuChart(chart, Number.isFinite(od) ? od : 8);
+  const result = calculateManiaDifficulty(input);
+
+  const attributes: ManiaRatingAttributes = {};
+  if (result.speedDifficulty != null)
+    attributes.speed_difficulty = result.speedDifficulty;
+  if (result.technicalDifficulty != null)
+    attributes.technical_difficulty = result.technicalDifficulty;
+  if (result.jackDifficulty != null)
+    attributes.jack_difficulty = result.jackDifficulty;
+  if (result.coordinationDifficulty != null)
+    attributes.coordination_difficulty = result.coordinationDifficulty;
+  if (result.releaseDifficulty != null)
+    attributes.release_difficulty = result.releaseDifficulty;
+  if (result.variety != null) attributes.variety = result.variety;
+  if (result.lnRatio != null) attributes.ln_ratio = result.lnRatio;
+  if (result.noteCount != null) attributes.note_count = result.noteCount;
+  if (result.holdNoteCount != null)
+    attributes.hold_note_count = result.holdNoteCount;
+  if (result.overallDifficulty != null)
+    attributes.overall_difficulty = result.overallDifficulty;
+  if (result.greatHitWindow != null)
+    attributes.great_hit_window = result.greatHitWindow;
+  if (result.meanManipulation != null)
+    attributes.mean_manip = result.meanManipulation;
+  if (result.upstreamSha) attributes.upstream_sha = result.upstreamSha;
+  if (result.generatorVersion)
+    attributes.generator_version = result.generatorVersion;
+
+  return {
+    starRating: result.starRating,
+    starRatingSs: result.starRatingSs ?? null,
+    ppSs: undefined,
+    ppByAccuracy: null,
+    attributes,
+  };
 }
 
 async function runCalculator(
@@ -252,6 +308,11 @@ function isValidCached(
     return true;
   }
 
+  // In-process TS port: difficulty only (no PP tiers).
+  if (usesInProcessCalculator(versionId)) {
+    return cached.starRating != null;
+  }
+
   return (
     cached.starRating != null &&
     cached.ppSs != null &&
@@ -286,7 +347,9 @@ export async function getOrComputeManiaRating(
   if (!beatmap) return null;
 
   const importBaseline = usesImportedRating(versionId);
-  const requirePp = hasExecutableConfigured(db, versionId);
+  const inProcess = usesInProcessCalculator(versionId);
+  const requirePp =
+    !inProcess && hasExecutableConfigured(db, versionId);
 
   if (!options.force) {
     const [cached] = await db
@@ -326,9 +389,11 @@ export async function getOrComputeManiaRating(
     });
   }
 
-  const executablePath = await readExecutablePath(db, versionId);
+  const executablePath = inProcess
+    ? null
+    : await readExecutablePath(db, versionId);
 
-  if (!executablePath) {
+  if (!inProcess && !executablePath) {
     if (importBaseline) {
       return upsertRating(db, {
         beatmapId,
@@ -448,7 +513,9 @@ export async function getOrComputeManiaRating(
   }
 
   try {
-    const output = await runCalculator(executablePath, filePath, versionId);
+    const output = inProcess
+      ? runInProcessCalculator(filePath)
+      : await runCalculator(executablePath!, filePath, versionId);
     if (output.error) {
       throw new Error(output.error);
     }
@@ -461,8 +528,10 @@ export async function getOrComputeManiaRating(
         ? beatmap.starRating
         : (output.starRating ?? null),
       starRatingSs: output.starRatingSs ?? null,
-      ppSs: output.ppSs ?? null,
-      ppByAccuracyJson: requirePpByAccuracyJson(output.ppByAccuracy),
+      ppSs: inProcess ? null : (output.ppSs ?? null),
+      ppByAccuracyJson: inProcess
+        ? null
+        : requirePpByAccuracyJson(output.ppByAccuracy),
       attributesJson: output.attributes
         ? JSON.stringify(output.attributes)
         : null,
@@ -614,12 +683,41 @@ const MISSING_PP_ACCURACY_SQL = `(
   OR json_extract(mr.pp_by_accuracy_json, '$.93') IS NULL
 )`;
 
+/** Incomplete-row predicate; in-process versions only need star_rating. */
+function missingRatingPredicate(versionId: string): string {
+  if (usesInProcessCalculator(versionId)) {
+    return `(
+      mr.beatmap_id IS NULL
+      OR mr.error IS NOT NULL
+      OR mr.star_rating IS NULL
+      OR (
+        b.hash IS NOT NULL
+        AND mr.beatmap_hash IS NOT NULL
+        AND mr.beatmap_hash != b.hash
+      )
+    )`;
+  }
+  return `(
+    mr.beatmap_id IS NULL
+    OR mr.error IS NOT NULL
+    OR mr.star_rating IS NULL
+    OR mr.pp_ss IS NULL
+    OR ${MISSING_PP_ACCURACY_SQL}
+    OR (
+      b.hash IS NOT NULL
+      AND mr.beatmap_hash IS NOT NULL
+      AND mr.beatmap_hash != b.hash
+    )
+  )`;
+}
+
 function fetchMissingRows(
   db: Db,
   versionId: string,
   limit: number,
   beatmapIds?: string[],
 ): MissingRow[] {
+  const incomplete = missingRatingPredicate(versionId);
   if (beatmapIds && beatmapIds.length > 0) {
     const placeholders = beatmapIds.map(() => "?").join(", ");
     return db.$client
@@ -632,18 +730,7 @@ function fetchMissingRows(
         WHERE b.id IN (${placeholders})
           AND b.hidden = 0
           AND lower(COALESCE(b.ruleset_short_name, '')) = 'mania'
-          AND (
-            mr.beatmap_id IS NULL
-            OR mr.error IS NOT NULL
-            OR mr.star_rating IS NULL
-            OR mr.pp_ss IS NULL
-            OR ${MISSING_PP_ACCURACY_SQL}
-            OR (
-              b.hash IS NOT NULL
-              AND mr.beatmap_hash IS NOT NULL
-              AND mr.beatmap_hash != b.hash
-            )
-          )
+          AND ${incomplete}
         LIMIT ?
       `,
       )
@@ -659,23 +746,7 @@ function fetchMissingRows(
         ON mr.beatmap_id = b.id AND mr.version_id = ?
       WHERE b.hidden = 0
         AND lower(COALESCE(b.ruleset_short_name, '')) = 'mania'
-        AND (
-          mr.beatmap_id IS NULL
-          OR (
-            b.hash IS NOT NULL
-            AND mr.beatmap_hash IS NOT NULL
-            AND mr.beatmap_hash != b.hash
-          )
-          OR (
-            mr.error IS NULL
-            AND (
-              mr.star_rating IS NULL
-              OR mr.pp_ss IS NULL
-              OR ${MISSING_PP_ACCURACY_SQL}
-            )
-          )
-          OR mr.error IS NOT NULL
-        )
+        AND ${incomplete}
       LIMIT ?
     `,
     )
@@ -683,6 +754,7 @@ function fetchMissingRows(
 }
 
 function countRemainingMissing(db: Db, versionId: string): number {
+  const incomplete = missingRatingPredicate(versionId);
   const row = db.$client
     .query(
       `
@@ -692,18 +764,7 @@ function countRemainingMissing(db: Db, versionId: string): number {
         ON mr.beatmap_id = b.id AND mr.version_id = ?
       WHERE b.hidden = 0
         AND lower(COALESCE(b.ruleset_short_name, '')) = 'mania'
-        AND (
-          mr.beatmap_id IS NULL
-          OR (
-            b.hash IS NOT NULL
-            AND mr.beatmap_hash IS NOT NULL
-            AND mr.beatmap_hash != b.hash
-          )
-          OR mr.error IS NOT NULL
-          OR mr.star_rating IS NULL
-          OR mr.pp_ss IS NULL
-          OR ${MISSING_PP_ACCURACY_SQL}
-        )
+        AND ${incomplete}
     `,
     )
     .get(versionId) as { n: number } | null;
@@ -724,6 +785,7 @@ export async function backfillManiaRatings(
   } = {},
 ): Promise<BackfillManiaRatingResult> {
   const importBaseline = usesImportedRating(versionId);
+  const inProcess = usesInProcessCalculator(versionId);
   const limit = options.limit ?? 20;
   const concurrency = options.concurrency ?? CALCULATOR_CONCURRENCY;
   const executablePath = db.$client
@@ -731,7 +793,8 @@ export async function backfillManiaRatings(
     .get(`maniaRating.executable.${versionId}`) as { value: string } | null;
 
   // Import without a binary: nothing to compute (SR comes from Realm).
-  if (!executablePath?.value?.trim()) {
+  // Computed versions need a binary; in-process never does.
+  if (!inProcess && !executablePath?.value?.trim()) {
     return {
       attempted: 0,
       succeeded: 0,
@@ -741,7 +804,7 @@ export async function backfillManiaRatings(
     };
   }
 
-  const exe = executablePath.value.trim();
+  const exe = executablePath?.value?.trim() ?? "";
   const rows =
     options.force && options.beatmapIds && options.beatmapIds.length > 0
       ? fetchRowsByIds(db, options.beatmapIds, limit)
@@ -820,7 +883,9 @@ export async function backfillManiaRatings(
     }
 
     try {
-      const output = await runCalculator(exe, filePath, versionId);
+      const output = inProcess
+        ? runInProcessCalculator(filePath)
+        : await runCalculator(exe, filePath, versionId);
       if (output.error) throw new Error(output.error);
 
       upsertRatingSync(db, {
@@ -831,8 +896,10 @@ export async function backfillManiaRatings(
           ? row.star_rating
           : (output.starRating ?? null),
         starRatingSs: output.starRatingSs ?? null,
-        ppSs: output.ppSs ?? null,
-        ppByAccuracyJson: requirePpByAccuracyJson(output.ppByAccuracy),
+        ppSs: inProcess ? null : (output.ppSs ?? null),
+        ppByAccuracyJson: inProcess
+          ? null
+          : requirePpByAccuracyJson(output.ppByAccuracy),
         attributesJson: output.attributes
           ? JSON.stringify(output.attributes)
           : null,

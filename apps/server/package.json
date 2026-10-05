@@ -19,6 +19,7 @@
     "@roxysu/collection-sync": "workspace:*",
     "@roxysu/db": "workspace:*",
     "@roxysu/i18n": "workspace:*",
+    "@roxysu/mania-difficulty": "workspace:*",
     "@roxysu/mania-judge": "workspace:*",
     "@roxysu/mania-pattern-analysis": "workspace:*",
     "@roxysu/osu-chart": "workspace:*",

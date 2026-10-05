@@ -4,7 +4,17 @@ Compare experimental mania star rating and theoretical PP (custom-accuracy tiers
 
 ## Overview
 
-Roxysu imports official lazer `star_rating` from Realm. Rating Lab recomputes SR and theoretical PP (SS / 99.5% / 97% / 95% / 93% custom accuracy, NM) from local `.osu` files using versioned calculator binaries built from osu!lazer branches.
+Roxysu imports official lazer `star_rating` from Realm. Rating Lab recomputes SR (and, for C# binaries, theoretical PP at SS / 99.5% / 97% / 95% / 93% custom accuracy, NM) from local `.osu` files.
+
+**Versions**
+
+| id | How it runs |
+|---|---|
+| `lazer-master` | Realm import SR; optional C# binary for PP |
+| `enissay-accuracy-change` | External `mania-rating-calc` binary |
+| `mania-difficulty-ts` | In-process `@roxysu/mania-difficulty` (TS port, **SR + skill attrs only**, no PP) |
+
+The TS port needs no .NET install and no Settings executable path.
 
 ## Build calculator binaries
 

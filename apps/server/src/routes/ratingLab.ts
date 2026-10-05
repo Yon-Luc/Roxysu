@@ -9,6 +9,7 @@ import {
   getOrComputeManiaRating,
   getVersion,
   LAZER_MASTER_VERSION,
+  MANIA_DIFFICULTY_TS_VERSION,
   listVersions,
   parseCompareOrder,
   parseCompareSort,
@@ -33,14 +34,17 @@ export const ratingLabRoutes = new Elysia({ prefix: "/rating-lab" })
         gitRef: v.gitRef ?? null,
         source: v.source,
         usesImport: v.source === "import",
-        executableOptional: v.source === "import",
+        executableOptional: v.source === "import" || v.source === "inprocess",
         executableConfigured:
-          v.source === "import" || executables[v.id] != null,
+          v.source === "import" ||
+          v.source === "inprocess" ||
+          executables[v.id] != null,
         executablePath: executables[v.id] ?? null,
       })),
       defaults: {
         baseline: LAZER_MASTER_VERSION,
-        experiment: ENISSAY_ACCURACY_VERSION,
+        // Prefer TS port when comparing difficulty; C# enissay still available.
+        experiment: MANIA_DIFFICULTY_TS_VERSION,
       },
     };
   })

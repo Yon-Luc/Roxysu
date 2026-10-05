@@ -227,12 +227,15 @@ describe("compileQuery", () => {
     expect(compiled.params).toEqual(["mania", 10]);
   });
 
-  test("compiles dan label substring against sunny ratings", () => {
+  test("compiles dan label token match against sunny and daniel ratings", () => {
     const ast = parseQuery("dan:Reform");
     const compiled = compileQuery(ast);
     expect(compiled.sql).toContain("dr.est_diff");
+    expect(compiled.sql).toContain("dr_d.est_diff");
     expect(compiled.sql).toContain("LIKE");
-    expect(compiled.params).toEqual(["%Reform%", "%Reform%"]);
+    expect(compiled.sql).toContain("NOT LIKE '<%'");
+    const tokenParams = ["Reform", "Reform %", "% Reform %", "% Reform"];
+    expect(compiled.params).toEqual([...tokenParams, ...tokenParams]);
   });
 
   test("compiles sunny star range", () => {

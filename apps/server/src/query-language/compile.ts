@@ -27,8 +27,14 @@ function isDanTierLabel(value: string): boolean {
   return / \d+$/.test(value);
 }
 
+function escapeLikeLiteral(value: string): string {
+  return value.replace(/%/g, "\\%").replace(/_/g, "\\_");
+}
+
 /**
  * Match Sunny/Daniel dan labels without crossing tiers — "Regular 1" must not match "Regular 10".
+ * Bare names (Alpha, Gamma, …) match as label tokens, not unconstrained substrings, so
+ * `dan:Alpha` hits "Alpha Low" but not the out-of-band sentinel "< Alpha Low".
  */
 function compileDanMatch(
   value: string,
@@ -42,7 +48,7 @@ function compileDanMatch(
   }
 
   if (isDanTierLabel(value)) {
-    const escaped = value.replace(/%/g, "\\%").replace(/_/g, "\\_");
+    const escaped = escapeLikeLiteral(value);
     const tierSpace = push(`%${escaped} %`);
     const tierExact = push(value);
     return `(${estDiffExpr} IS NOT NULL AND (
@@ -51,8 +57,23 @@ function compileDanMatch(
     ))`;
   }
 
-  const pat = push(likePattern(value, prefix));
-  return `(${estDiffExpr} IS NOT NULL AND lower(${estDiffExpr}) LIKE lower(${pat}) ESCAPE '\\')`;
+  // Token match: starts with tier+band, exact, or tier as a whole word mid/end label
+  // (e.g. Gamma in "Regular Gamma low", Zeta in "Emik Zeta Low").
+  const escaped = escapeLikeLiteral(value);
+  const exact = push(value);
+  const startsBand = push(`${escaped} %`);
+  const midToken = push(`% ${escaped} %`);
+  const endToken = push(`% ${escaped}`);
+  const wantsSentinel = value.startsWith("<") || value.startsWith(">");
+  const sentinelClause = wantsSentinel
+    ? ""
+    : ` AND lower(${estDiffExpr}) NOT LIKE '<%' AND lower(${estDiffExpr}) NOT LIKE '>%'`;
+  return `(${estDiffExpr} IS NOT NULL AND (
+    lower(${estDiffExpr}) = lower(${exact})
+    OR lower(${estDiffExpr}) LIKE lower(${startsBand}) ESCAPE '\\'
+    OR lower(${estDiffExpr}) LIKE lower(${midToken}) ESCAPE '\\'
+    OR lower(${estDiffExpr}) LIKE lower(${endToken}) ESCAPE '\\'
+  )${sentinelClause})`;
 }
 
 /** Positional `?` binders. Alias contract: b=beatmaps, m=mastery, ps=play_stats, rs=retry_stats */

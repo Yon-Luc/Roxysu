@@ -159,3 +159,55 @@ describe("axis thresholds", () => {
     expect(rc.params).toEqual([0.1]);
   });
 });
+
+describe("rework dan fields", () => {
+  test("rework:Alpha matches only the rework label column", () => {
+    const { sql, params } = compileQuery(parseQuery("rework:Alpha"));
+    expect(sql).toContain("dr_r.est_diff");
+    expect(sql).not.toContain("dr_d.est_diff");
+    expect(sql).toContain("NOT LIKE '<%'");
+    expect(params).toEqual(["Alpha", "Alpha %", "% Alpha %", "% Alpha"]);
+  });
+
+  test("rework:LN 14 keeps the tier-number guard", () => {
+    const { sql, params } = compileQuery(parseQuery('rework:"LN 14"'));
+    expect(sql).toContain("dr_r.est_diff");
+    expect(params).toEqual(["%LN 14 %", "LN 14"]);
+  });
+
+  test("rework:^Reg is a prefix match", () => {
+    const { params } = compileQuery(parseQuery("rework:^Reg"));
+    expect(params).toEqual(["Reg%"]);
+  });
+
+  test("rework: excludes out-of-band sentinels unless asked for", () => {
+    const { params } = compileQuery(parseQuery("rework:>Eta"));
+    expect(params[0]).toBe(">Eta");
+  });
+
+  test("reworkstars accepts a range and a comparison", () => {
+    const range = compileQuery(parseQuery("reworkstars:6.5..8"));
+    expect(range.sql).toContain("dr_r.sunny_star BETWEEN");
+    expect(range.params).toEqual([6.5, 8]);
+
+    const cmp = compileQuery(parseQuery("reworkstars:>=10"));
+    expect(cmp.sql).toContain("dr_r.sunny_star >=");
+    expect(cmp.params).toEqual([10]);
+  });
+
+  test("rework fields never read the sunny or daniel columns", () => {
+    for (const query of ["rework:Eta", "reworkstars:5..6"]) {
+      const { sql } = compileQuery(parseQuery(query));
+      expect(sql).not.toContain("dr.sunny_star");
+      expect(sql).not.toContain("dr_d.sunny_star");
+      expect(sql).not.toContain("dr.est_diff");
+    }
+  });
+
+  test("dan: still searches sunny and daniel only", () => {
+    const { sql } = compileQuery(parseQuery("dan:Alpha"));
+    expect(sql).toContain("dr.est_diff");
+    expect(sql).toContain("dr_d.est_diff");
+    expect(sql).not.toContain("dr_r.est_diff");
+  });
+});

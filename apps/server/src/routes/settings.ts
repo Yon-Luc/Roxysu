@@ -43,6 +43,12 @@ import {
   stopDanielDanBackfill,
 } from "../map-analysis/danielDanJob";
 import {
+  getReworkDanJobState,
+  relabelReworkDan,
+  startReworkDanBackfill,
+  stopReworkDanBackfill,
+} from "../map-analysis/reworkDanJob";
+import {
   getPatternAnalysisJobState,
   startPatternAnalysisBackfill,
   startPatternAnalysisRecompute,
@@ -163,6 +169,7 @@ async function buildSettingsResponse(db: Db) {
     },
     sunnyDan: getSunnyDanJobState(db),
     danielDan: getDanielDanJobState(db),
+    reworkDan: getReworkDanJobState(db),
     patternAnalysis: getPatternAnalysisJobState(db),
       maniaRating: {
       versions: listVersions().map((v) => ({
@@ -190,6 +197,12 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
   .get("/daniel-dan", ({ db }) => getDanielDanJobState(db))
   .post("/daniel-dan/start", ({ db }) => startDanielDanBackfill(db))
   .post("/daniel-dan/stop", ({ db }) => stopDanielDanBackfill(db))
+  .get("/rework-dan", ({ db }) => getReworkDanJobState(db))
+  .post("/rework-dan/start", ({ db }) => startReworkDanBackfill(db))
+  .post("/rework-dan/relabel", ({ db }) => ({
+    relabeled: relabelReworkDan(db),
+  }))
+  .post("/rework-dan/stop", ({ db }) => stopReworkDanBackfill(db))
   .get("/pattern-analysis", ({ db }) => getPatternAnalysisJobState(db))
   .post("/pattern-analysis/start", ({ db }) => startPatternAnalysisBackfill(db))
   .post("/pattern-analysis/recompute", ({ db }) =>

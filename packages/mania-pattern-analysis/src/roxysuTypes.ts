@@ -1,17 +1,27 @@
-/** Dominant gameplay pattern families for mania charts (Roxysu query/filter labels). */
-export const PATTERN_LABELS = [
+import { SKILL_LABELS, type SkillLabel, type SkillStar } from "@roxysu/mania-difficulty";
+
+/**
+ * Dominant gameplay skill for a mania chart (Roxysu query/filter labels).
+ * Replaces the retired Interlude pattern families (jack / jumpstream / …).
+ */
+export const PATTERN_LABELS = SKILL_LABELS;
+
+export type PatternLabel = SkillLabel;
+
+/** Retired Interlude labels, kept for reading legacy stored rows. */
+export const PATTERN_LABELS_INTERLUDE = [
   "jack",
+  "chordjack",
+  "delay",
+  "chordstream",
+  "bracket",
   "jumpstream",
   "handstream",
-  "chordjack",
-  "bracket",
-  "chordstream",
   "stream",
-  "delay",
   "mixed",
 ] as const;
 
-/** Legacy v1 heuristic labels (kept for type compatibility). */
+/** Retired 7k heuristic labels (kept for type compatibility). */
 export const PATTERN_LABELS_V1 = [
   "jack",
   "jumpstream",
@@ -22,36 +32,26 @@ export const PATTERN_LABELS_V1 = [
   "mixed",
 ] as const;
 
-/** Labels aligned with Interlude cluster mapping. */
-export const PATTERN_LABELS_V2 = [
-  "jack",
-  "chordjack",
-  "delay",
-  "chordstream",
-  "bracket",
-  "jumpstream",
-  "handstream",
-  "stream",
-  "mixed",
-] as const;
-
 export type PatternLabelV1 = (typeof PATTERN_LABELS_V1)[number];
-export type PatternLabelV2 = (typeof PATTERN_LABELS_V2)[number];
-export type PatternLabel = (typeof PATTERN_LABELS)[number];
+export type PatternLabelV2 = SkillLabel;
 
 export const PATTERN_ALGORITHM_V1 = "7k-heuristic-v1";
 export const PATTERN_ALGORITHM_V2 = "7k-structural-v2";
+/** Retired Interlude/YAVSRG pattern algorithm. */
 export const PATTERN_ALGORITHM_INTERLUDE = "mania-interlude-v1";
+/** Active pattern algorithm: dominant skill from the mania difficulty port. */
+export const PATTERN_ALGORITHM_SKILL = "mania-skill-v1";
 /** Active pattern algorithm used for queries and backfill. */
-export const PATTERN_ALGORITHM = PATTERN_ALGORITHM_INTERLUDE;
+export const PATTERN_ALGORITHM = PATTERN_ALGORITHM_SKILL;
 
 export type { ChartNote } from "@roxysu/osu-chart";
+export type { SkillStar };
 
 export type PatternMetrics = {
   columnCount: number;
   jackDensity: number;
   chordDensity: number;
-  /** Stored in stream_density column (delay density for 7k-style charts). */
+  /** Stored in stream_density column. */
   streamDensity: number;
   bracketDensity: number;
   chordjackScore: number;
@@ -60,7 +60,7 @@ export type PatternMetrics = {
 };
 
 export type PatternAnalysisResult = PatternMetrics & {
-  dominantPattern: PatternLabel;
+  dominantPattern: PatternLabel | null;
   secondaryPattern: PatternLabel | null;
   confidence: number;
 };
@@ -68,14 +68,19 @@ export type PatternAnalysisResult = PatternMetrics & {
 export type PatternSection = {
   startMs: number;
   endMs: number;
-  patterns: Array<{ label: PatternLabelV2; coverage: number }>;
+  patterns: Array<{ label: PatternLabel; coverage: number }>;
 };
 
-export type PatternComposition = Partial<Record<PatternLabelV2, number>>;
+export type PatternComposition = Partial<Record<PatternLabel, number>> & {
+  total?: number;
+};
 
 export type StructuralPatternResult = PatternAnalysisResult & {
-  algorithm: typeof PATTERN_ALGORITHM_INTERLUDE;
+  algorithm: typeof PATTERN_ALGORITHM;
   sections: PatternSection[];
   composition: PatternComposition;
-  interludeCategory: string;
+  /** Every skill's star rating, highest first. */
+  skillStars: SkillStar[];
+  /** Chart star rating the skills came from. */
+  starRating: number;
 };

@@ -342,6 +342,12 @@
         "label": "Sunny star rating",
         "labelDaniel": "Étoiles Daniel",
         "description": "Étoiles Daniel sur 4K quand disponible ; étoiles Sunny rework ailleurs."
+      },
+      "rework": {
+        "label": "Rework dan (difficulté mania)",
+        "labelReworkDan": "Rework dan",
+        "labelReworkStar": "Étoiles rework",
+        "description": "Étoiles et dan du port de difficulté mania. Nécessite le backfill rework dan."
       }
     },
     "lazerDataFolder": "Dossier de données osu!lazer",
@@ -441,12 +447,17 @@
     "sunnyDanDesc": "Calcule les labels Sunny dan des maps mania qui n'ont toujours pas de rating. S'exécute en arrière-plan par petits lots.",
     "danielDan": "Calcul Daniel dan",
     "danielDanDesc": "Calcule les labels Daniel dan pour les maps mania 4K sans rating. Plus précis que Sunny pour le rice 4K.",
+    "reworkDan": "Calcul du rework dan",
+    "reworkDanDesc": "Calcule les étoiles et dan du port de difficulté mania pour tous les modes mania. Les dan viennent de packages/mania-difficulty/dans.json.",
+    "reworkDanRelabel": "Ré-étiqueter depuis dans.json",
+    "reworkDanRelabelHint": "Réapplique les floors actuels aux étoiles enregistrées. Aucune chart n'est relue.",
+    "reworkDanRelabeled": "{{count}} ré-étiquetés depuis dans.json",
     "maps4k": "{{count}} maps 4K",
     "labeledThisRun": "+{{count}} labellisés durant cette exécution",
     "labeled": "+{{count}} labellisés",
     "calculateMissingDans": "Calculer les dans manquants",
     "patternAnalysis": "Analyse de patterns mania",
-    "patternAnalysisDesc": "Classe les maps mania (tous les keymodes) avec l'algorithme Interlude (jack, chordstream, bracket, etc.) pour les filtres de patterns et le navigateur d'entraînement.",
+    "patternAnalysisDesc": "Classe les charts mania (tous keymodes) par skill dominante (speed, jack, coordination, technical, release) du port de difficulté mania, pour les filtres de skills et la bibliothèque.",
     "algorithm": "Algorithme : {{name}}",
     "maps7k": "{{count}} maps mania",
     "classifiedThisRun": "+{{count}} classifiés durant cette exécution",

@@ -210,6 +210,17 @@ function compileTerm(
     }
     case "daniel":
       return compileDanMatch(term.value, term.prefix, push, "dr_d.est_diff");
+    case "rework":
+      return compileDanMatch(term.value, term.prefix, push, "dr_r.est_diff");
+    case "reworkstars": {
+      if (term.min != null && term.max != null) {
+        return `dr_r.sunny_star BETWEEN ${push(term.min)} AND ${push(term.max)}`;
+      }
+      if (term.op != null && term.value != null) {
+        return `dr_r.sunny_star ${term.op} ${push(term.value)}`;
+      }
+      return "dr_r.sunny_star IS NOT NULL";
+    }
     case "sunny": {
       if (term.min != null && term.max != null) {
         return `dr.sunny_star BETWEEN ${push(term.min)} AND ${push(term.max)}`;

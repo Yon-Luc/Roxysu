@@ -1,8 +1,9 @@
 import { useSyncExternalStore } from "react";
 import { estDiff } from "@roxysu/sunny-dan";
+import { reworkDanLabel } from "@roxysu/mania-difficulty/dans";
 import { formatStars } from "./format";
 
-export type RatingDisplayMode = "osu" | "dan" | "sunny";
+export type RatingDisplayMode = "osu" | "dan" | "sunny" | "rework";
 
 /** Skill axes for mapping Sunny ★ → the matching dan table. */
 export type SkillRatingAxis = "overall" | "rc" | "ln" | "fln";
@@ -40,6 +41,12 @@ const OPTIONS: Array<{
     label: "Sunny star rating",
     description: "Daniel stars on 4K when available; Sunny rework stars elsewhere.",
   },
+  {
+    id: "rework",
+    label: "Rework dan (mania difficulty)",
+    description:
+      "Star rating and dan tiers from the mania difficulty port. Needs the rework dan backfill.",
+  },
 ];
 
 export function ratingDisplayOptions() {
@@ -47,7 +54,9 @@ export function ratingDisplayOptions() {
 }
 
 function parseMode(raw: string | null): RatingDisplayMode {
-  if (raw === "dan" || raw === "sunny" || raw === "osu") return raw;
+  if (raw === "dan" || raw === "sunny" || raw === "osu" || raw === "rework") {
+    return raw;
+  }
   return "osu";
 }
 
@@ -86,7 +95,7 @@ export function isFourKKeyCount(keyCount: number | null | undefined): boolean {
 }
 
 /** Which dan estimator is shown for the current map + display mode. */
-export type PrimaryDanSource = "daniel" | "sunny";
+export type PrimaryDanSource = "daniel" | "sunny" | "rework";
 
 /** Daniel out-of-band sentinels like `< Alpha Low` / `> Theta High` — not useful as a display tier. */
 export function isOutOfBandDanLabel(label: string | null | undefined): boolean {
@@ -101,9 +110,15 @@ export function primaryDanSource(opts: {
   danielEstDiff?: string | null;
   sunnyStar?: number | null;
   danielStar?: number | null;
+  reworkEstDiff?: string | null;
+  reworkStar?: number | null;
   keyCount?: number | null;
 }): PrimaryDanSource | null {
   if (opts.mode === "osu") return null;
+  if (opts.mode === "rework") {
+    // The rework estimator covers every key mode, so no 4K fallback is needed.
+    return opts.reworkEstDiff ? "rework" : null;
+  }
   if (opts.mode === "dan") {
     if (
       isFourKKeyCount(opts.keyCount) &&
@@ -125,6 +140,8 @@ export type PrimaryRatingDisplayLabels = {
   sunnyDan?: string;
   danielStar?: string;
   sunnyStar?: string;
+  reworkDan?: string;
+  reworkStar?: string;
 };
 
 /** Title for the active dan/sunny display (e.g. panel heading). */
@@ -134,6 +151,11 @@ export function primaryRatingDisplayTitle(
   labels: PrimaryRatingDisplayLabels = {},
 ): string | null {
   if (mode === "osu" || source == null) return null;
+  if (source === "rework") {
+    return mode === "rework" && labels.reworkStar
+      ? labels.reworkStar
+      : (labels.reworkDan ?? "Rework dan");
+  }
   if (source === "daniel") {
     return mode === "sunny"
       ? (labels.danielStar ?? "Daniel star rating")
@@ -167,12 +189,32 @@ export function primaryDanLabel(opts: {
 export function primaryDanStar(opts: {
   sunnyStar?: number | null;
   danielStar?: number | null;
+  reworkStar?: number | null;
   keyCount?: number | null;
 }): number | null {
+  if (opts.reworkStar != null) return opts.reworkStar;
   if (isFourKKeyCount(opts.keyCount) && opts.danielStar != null) {
     return opts.danielStar;
   }
   return opts.sunnyStar ?? null;
+}
+
+/**
+ * Rework ★ → dan label from `dans.json`, recomputed client-side so a floor edit
+ * shows up without waiting for the server backfill to relabel.
+ */
+export function reworkDanLabelFor(opts: {
+  reworkStar?: number | null;
+  lnRatio?: number | null;
+  keyCount?: number | null;
+}): string | null {
+  if (opts.reworkStar == null || !Number.isFinite(opts.reworkStar)) return null;
+  if (opts.keyCount == null) return null;
+  return reworkDanLabel(
+    opts.reworkStar,
+    opts.lnRatio ?? 0,
+    Math.round(opts.keyCount),
+  );
 }
 
 export function formatPrimaryRating(opts: {
@@ -182,8 +224,17 @@ export function formatPrimaryRating(opts: {
   sunnyStar?: number | null;
   danielEstDiff?: string | null;
   danielStar?: number | null;
+  reworkEstDiff?: string | null;
+  reworkStar?: number | null;
+  lnRatio?: number | null;
   keyCount?: number | null;
 }): string {
+  if (opts.mode === "rework") {
+    const label = reworkDanLabelFor(opts);
+    if (label) return label;
+    return formatStars(opts.starRating);
+  }
+
   const danLabel = primaryDanLabel(opts);
   const danStar = primaryDanStar(opts);
 

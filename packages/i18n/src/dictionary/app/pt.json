@@ -342,6 +342,12 @@
         "label": "Star rating Sunny",
         "labelDaniel": "Star rating Daniel",
         "description": "Stars Daniel no 4K quando disponível; stars Sunny rework no resto."
+      },
+      "rework": {
+        "label": "Rework dan (dificuldade mania)",
+        "labelReworkDan": "Rework dan",
+        "labelReworkStar": "Estrelas rework",
+        "description": "Estrelas e dan do port de dificuldade mania. Requer o backfill de rework dan."
       }
     },
     "lazerDataFolder": "Pasta de dados do osu!lazer",
@@ -441,12 +447,17 @@
     "sunnyDanDesc": "Calcula labels de Sunny dan pras maps de mania que ainda não têm rating. Roda em background em lotes pequenos.",
     "danielDan": "Cálculo de Daniel dan",
     "danielDanDesc": "Calcula labels de Daniel dan pras maps mania 4K sem rating. Mais preciso que Sunny pra rice 4K.",
+    "reworkDan": "Cálculo de rework dan",
+    "reworkDanDesc": "Calcula estrelas e dan do port de dificuldade mania para todos os modos mania. Os dan vêm de packages/mania-difficulty/dans.json.",
+    "reworkDanRelabel": "Rrotular a partir de dans.json",
+    "reworkDanRelabelHint": "Reaplica os floors atuais às estrelas salvas. Nenhum chart é relido.",
+    "reworkDanRelabeled": "{{count}} rotulados a partir de dans.json",
     "maps4k": "{{count}} maps 4K",
     "labeledThisRun": "+{{count}} rotuladas nesta execução",
     "labeled": "+{{count}} rotuladas",
     "calculateMissingDans": "Calcular dans faltando",
     "patternAnalysis": "Análise de pattern mania",
-    "patternAnalysisDesc": "Classifica maps mania (todos os keymodes) com o algoritmo Interlude (jack, chordstream, bracket, etc.) pra filtros de pattern e o browser de treino.",
+    "patternAnalysisDesc": "Classifica charts de mania (todos os keymodes) pela skill dominante (speed, jack, coordination, technical, release) do port de dificuldade mania, para filtros de skills e a biblioteca.",
     "algorithm": "Algoritmo: {{name}}",
     "maps7k": "{{count}} maps mania",
     "classifiedThisRun": "+{{count}} classificadas nesta execução",

@@ -119,14 +119,20 @@ Hub collections carry canonical lowercase tags (`VALID_TAGS` in
 `packages/db/src/hub/schema.ts`, mirrored in `apps/server/public/lib/hub.ts`).
 Tags are **gamemode-scoped**: each secondary tag belongs to exactly one primary
 mode (`mania` / `std` / `ctb` / `taiko`) and is grouped under a category label
-(Keys / Pattern / Style / Difficulty) for the picker UI.
+(Keys / Skill / Style / Difficulty for mania) for the picker UI.
 
-- Mania pattern tags reuse Roxysu's own pattern vocabulary from
-  `packages/mania-pattern-analysis` (`jack`, `minijack`, `longjack`, `chordjack`,
-  `jumpstream`, `handstream`, `chordstream`, `stream`, `delay`, `bracket`).
+- Mania skill tags reuse the **dominant skill** vocabulary from
+  `packages/mania-pattern-analysis` (`speed`, `jack`, `coordination`,
+  `technical`, `release`). `speed` appears once — it is a skill, not a
+  difficulty tag.
 - Mania key tags: `4k` `5k` `6k` `7k` `8k`.
 - Tags are stored as free text in `collection_tags`; the whitelist is app-level
   validation (`VALID_TAGS`), not a DB constraint, so adding tags needs no migration.
+- Retired Interlude pattern tags (`minijack`, `longjack`, `chordjack`,
+  `jumpstream`, `handstream`, `chordstream`, `stream`, `delay`, `bracket`, `tech`)
+  live in `LEGACY_HUB_TAGS`. They stay in `VALID_TAGS` so collections created
+  before the dominant-skill switch keep validating, but the picker no longer
+  offers them. Do not drop them from `VALID_TAGS` without a data migration.
 - Hub store indexes: `collections(owner_id)`, `collections(created_at)`,
   `collection_maps(collection_id)`, unique `(collection_id, beatmapset_id)`,
   `collection_beatmaps(collection_id)`, unique `(collection_id, beatmap_id)`,

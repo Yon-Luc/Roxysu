@@ -9,11 +9,13 @@ import {
 } from "../shared/lazer-files";
 import {
   analyzeManiaFromOsuText,
-  analyzeManiaStructuralNotes,
+  analyzeManiaSkillNotes,
   PATTERN_ALGORITHM,
+  PATTERN_LABELS,
   type PatternLabel,
-  type PatternLabelV2,
+  type PatternSection,
 } from "@roxysu/mania-pattern-analysis";
+import { SKILL_LABELS } from "@roxysu/mania-difficulty";
 import { parseOsuChart, type ChartNote } from "@roxysu/osu-chart";
 import { toIso as toIsoNullable } from "../shared/serialize";
 
@@ -38,17 +40,9 @@ export type PatternAnalysisRating = {
   cached: boolean;
 };
 
-type ManiaPatternBreakdown = Record<
-  | "jack"
-  | "chordjack"
-  | "delay"
-  | "chordstream"
-  | "bracket"
-  | "jumpstream"
-  | "handstream"
-  | "stream",
-  number
->;
+type ManiaPatternBreakdown = Record<PatternLabel, number> & {
+  total: number;
+};
 
 /** @deprecated Use ManiaPatternBreakdown */
 type SevenKPatternBreakdown = ManiaPatternBreakdown;
@@ -60,8 +54,8 @@ export type SevenKDensitySample = {
   noteCount: number;
   notesPerSecond: number;
   peakChordSize: number;
-  dominantPattern: PatternLabelV2 | null;
-  secondaryPattern: PatternLabelV2 | null;
+  dominantPattern: PatternLabel | null;
+  secondaryPattern: PatternLabel | null;
   composition: SevenKPatternBreakdown;
 };
 
@@ -70,8 +64,8 @@ export type SevenKPatternHotspot = {
   endMs: number;
   noteCount: number;
   notesPerSecond: number;
-  dominantPattern: PatternLabelV2 | null;
-  secondaryPattern: PatternLabelV2 | null;
+  dominantPattern: PatternLabel | null;
+  secondaryPattern: PatternLabel | null;
   dominantCoverage: number;
 };
 
@@ -97,32 +91,32 @@ export type ManiaPatternDetail = {
 export type SevenKPatternDetail = ManiaPatternDetail;
 
 const EMPTY_BREAKDOWN: ManiaPatternBreakdown = {
+  speed: 0,
   jack: 0,
-  chordjack: 0,
-  delay: 0,
-  chordstream: 0,
-  bracket: 0,
-  jumpstream: 0,
-  handstream: 0,
-  stream: 0,
+  coordination: 0,
+  technical: 0,
+  release: 0,
+  total: 0,
 };
 
 const DENSITY_SAMPLE_MS = 1000;
 const CHORD_EPS_MS = 8;
 
+/** Overall difficulty from `.osu` metadata; defaults to 8. */
+function overallDifficultyFromMeta(metaData: Record<string, string>): number {
+  const raw = Number(metaData["OverallDifficulty"]);
+  return Number.isFinite(raw) && raw > 0 ? raw : 8;
+}
+
 function normalizeBreakdown(
-  partial?: Partial<Record<PatternLabelV2, number>>,
+  partial?: Partial<Record<PatternLabel, number>>,
 ): ManiaPatternBreakdown {
-  return {
-    jack: partial?.jack ?? 0,
-    chordjack: partial?.chordjack ?? 0,
-    delay: partial?.delay ?? 0,
-    chordstream: partial?.chordstream ?? 0,
-    bracket: partial?.bracket ?? 0,
-    jumpstream: partial?.jumpstream ?? 0,
-    handstream: partial?.handstream ?? 0,
-    stream: partial?.stream ?? 0,
-  };
+  const out: ManiaPatternBreakdown = { ...EMPTY_BREAKDOWN };
+  for (const label of SKILL_LABELS) {
+    out[label] = partial?.[label] ?? 0;
+  }
+  out.total = SKILL_LABELS.reduce((sum, label) => sum + out[label], 0);
+  return out;
 }
 
 function emptyManiaPatternDetail(error: string): ManiaPatternDetail {
@@ -158,11 +152,10 @@ function downsampleDensitySamples(
   return out;
 }
 
-function buildDensitySamples(notes: ChartNote[], sections: Array<{
-  startMs: number;
-  endMs: number;
-  patterns: Array<{ label: PatternLabelV2; coverage: number }>;
-}>): SevenKDensitySample[] {
+function buildDensitySamples(
+  notes: ChartNote[],
+  sections: PatternSection[],
+): SevenKDensitySample[] {
   if (notes.length === 0) return [];
 
   const sorted = [...notes].sort((a, b) => a.startMs - b.startMs);
@@ -199,7 +192,7 @@ function buildDensitySamples(notes: ChartNote[], sections: Array<{
     const composition = normalizeBreakdown(
       Object.fromEntries(
         (section?.patterns ?? []).map((pattern) => [pattern.label, pattern.coverage]),
-      ) as Partial<Record<PatternLabelV2, number>>,
+      ) as Partial<Record<PatternLabel, number>>,
     );
 
     samples.push({
@@ -230,10 +223,7 @@ function buildHotspots(samples: SevenKDensitySample[]): SevenKPatternHotspot[] {
       secondaryPattern: sample.secondaryPattern,
       dominantCoverage:
         sample.dominantPattern != null
-          ? sample.dominantPattern === "mixed"
-            ? 0
-            : (sample.composition[sample.dominantPattern as keyof ManiaPatternBreakdown] ??
-              0)
+          ? (sample.composition[sample.dominantPattern] ?? 0)
           : 0,
     }))
     .sort((a, b) => {
@@ -254,7 +244,11 @@ export function analyzeManiaPatternDetail(osuText: string): ManiaPatternDetail {
     throw new Error("Beatmap parse failed");
   }
 
-  const result = analyzeManiaStructuralNotes(chart.notes, chart.columnCount);
+  const result = analyzeManiaSkillNotes(
+    chart.notes,
+    chart.columnCount,
+    overallDifficultyFromMeta(chart.metaData),
+  );
   const holdCount = chart.notes.filter((note) => note.endMs > note.startMs).length;
   const samples = downsampleDensitySamples(
     buildDensitySamples(chart.notes, result.sections),

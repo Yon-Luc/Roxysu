@@ -57,15 +57,29 @@ function participationRatio(...difficulties: number[]): number {
 }
 
 /**
+ * Per-note skill strain, emitted while the pipeline runs. Used to build the
+ * time-binned skill profile; not needed for a plain star rating.
+ */
+export type SkillStrainSnapshot = {
+  startTime: number;
+  speed: number;
+  technical: number;
+  jack: number;
+  coordination: number;
+  release: number;
+};
+
+/**
  * Full-ish mania difficulty calculation matching CreateDifficultyAttributes flow:
  * processors → skills → Total accuracy curve → star rating.
  * Does not yet include pattern-preprocessor manipulation/endurance factors.
  */
 export function calculateWithSkills(
   beatmap: ManiaBeatmapInput,
-  options?: { clockRate?: number },
+  options?: { clockRate?: number; onObject?: (s: SkillStrainSnapshot) => void },
 ): ManiaDifficultyAttributes {
   const clockRate = options?.clockRate ?? 1;
+  const onObject = options?.onObject;
   const objects = buildHitObjectGraph(
     beatmap.columnCount,
     beatmap.notes,
@@ -148,6 +162,26 @@ export function calculateWithSkills(
     coordSkill.process(obj);
     releaseSkill.process(obj);
     totalSkill.process(obj);
+    if (onObject) {
+      onObject({
+        startTime: obj.StartTime,
+        speed: speedProc.TransformStrainToAccuracyDifficulties(
+          speedProc.CurrentStrain,
+        ).BaseDifficulty,
+        technical: techProc.TransformStrainToAccuracyDifficulties(
+          techProc.CurrentStrain,
+        ).BaseDifficulty,
+        jack: jackProc.TransformStrainToAccuracyDifficulties(
+          jackProc.CurrentStrain,
+        ).BaseDifficulty,
+        coordination: coordProc.TransformStrainToAccuracyDifficulties(
+          coordProc.CurrentStrain,
+        ).BaseDifficulty,
+        release: releaseProc.TransformStrainToAccuracyDifficulties(
+          releaseProc.CurrentStrain,
+        ).BaseDifficulty,
+      });
+    }
   }
 
   const greatHitWindow = greatHitWindowForOd(beatmap.overallDifficulty);

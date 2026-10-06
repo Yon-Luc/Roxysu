@@ -342,6 +342,12 @@
         "label": "Sunny star rating",
         "labelDaniel": "Daniel star rating",
         "description": "Daniel stars on 4K when available; Sunny rework stars elsewhere."
+      },
+      "rework": {
+        "label": "Rework dan (mania difficulty)",
+        "labelReworkDan": "Rework dan",
+        "labelReworkStar": "Rework star rating",
+        "description": "Star rating and dan tiers from the mania difficulty port. Needs the rework dan backfill."
       }
     },
     "lazerDataFolder": "osu!lazer data folder",
@@ -441,12 +447,17 @@
     "sunnyDanDesc": "Compute Sunny dan labels for mania maps that are still missing a rating. Runs in the background in small batches.",
     "danielDan": "Daniel dan calculation",
     "danielDanDesc": "Compute Daniel dan labels for 4K mania maps still missing a rating. More accurate than Sunny for 4K rice.",
+    "reworkDan": "Rework dan calculation",
+    "reworkDanDesc": "Compute mania difficulty port stars and dan tiers for every mania key mode. Tiers come from packages/mania-difficulty/dans.json.",
+    "reworkDanRelabel": "Relabel from dans.json",
+    "reworkDanRelabelHint": "Re-apply the current dan floors to stored star ratings. No chart is re-read.",
+    "reworkDanRelabeled": "{{count}} relabeled from dans.json",
     "maps4k": "{{count}} 4K maps",
     "labeledThisRun": "+{{count}} labeled this run",
     "labeled": "+{{count}} labeled",
     "calculateMissingDans": "Calculate missing dans",
     "patternAnalysis": "Mania pattern analysis",
-    "patternAnalysisDesc": "Classify mania maps (all keymodes) with the Interlude pattern algorithm (jack, chordstream, bracket, etc.) for pattern filters and the practice browser.",
+    "patternAnalysisDesc": "Classify mania maps (all keymodes) by dominant skill (speed, jack, coordination, technical, release) from the mania difficulty port, for skill filters and the practice browser.",
     "algorithm": "Algorithm: {{name}}",
     "maps7k": "{{count}} mania maps",
     "classifiedThisRun": "+{{count}} classified this run",

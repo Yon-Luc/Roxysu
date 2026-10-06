@@ -342,6 +342,12 @@
         "label": "Estrellas Sunny",
         "labelDaniel": "Estrellas Daniel",
         "description": "Estrellas Daniel en 4K cuando estén disponibles; estrellas Sunny rework en el resto."
+      },
+      "rework": {
+        "label": "Rework dan (dificultad mania)",
+        "labelReworkDan": "Rework dan",
+        "labelReworkStar": "Estrellas rework",
+        "description": "Estrellas y dan del port de dificultad mania. Requiere el backfill de rework dan."
       }
     },
     "lazerDataFolder": "Carpeta de datos de osu!lazer",
@@ -441,12 +447,17 @@
     "sunnyDanDesc": "Calcula las etiquetas del dan Sunny para las maps de mania a las que aún les falta un rating. Se ejecuta en segundo plano en lotes pequeños.",
     "danielDan": "Cálculo del dan Daniel",
     "danielDanDesc": "Calcula las etiquetas del dan Daniel para maps mania 4K sin rating. Más preciso que Sunny para rice 4K.",
+    "reworkDan": "Cálculo de rework dan",
+    "reworkDanDesc": "Calcula estrellas y dan del port de dificultad mania para todos los modos mania. Los dan vienen de packages/mania-difficulty/dans.json.",
+    "reworkDanRelabel": "Reetiquetar desde dans.json",
+    "reworkDanRelabelHint": "Vuelve a aplicar los floors actuales a las estrellas guardadas. No relee ningún chart.",
+    "reworkDanRelabeled": "{{count}} reetiquetados desde dans.json",
     "maps4k": "{{count}} maps 4K",
     "labeledThisRun": "+{{count}} etiquetadas esta ejecución",
     "labeled": "+{{count}} etiquetadas",
     "calculateMissingDans": "Calcular dans faltantes",
     "patternAnalysis": "Análisis de patterns mania",
-    "patternAnalysisDesc": "Clasifica maps mania (todos los keymodes) con el algoritmo Interlude (jack, chordstream, bracket, etc.) para los filtros de patterns y el navegador de entrenamiento.",
+    "patternAnalysisDesc": "Clasifica charts de mania (todos los keymodes) por skill dominante (speed, jack, coordination, technical, release) del port de dificultad mania, para filtros de skills y la biblioteca.",
     "algorithm": "Algoritmo: {{name}}",
     "maps7k": "{{count}} maps mania",
     "classifiedThisRun": "+{{count}} clasificadas esta ejecución",

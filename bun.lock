@@ -208,6 +208,7 @@
       "name": "@roxysu/mania-pattern-analysis",
       "version": "0.1.0",
       "dependencies": {
+        "@roxysu/mania-difficulty": "workspace:*",
         "@roxysu/osu-chart": "workspace:*",
       },
       "devDependencies": {

@@ -46,8 +46,19 @@ const FIELDS: { field: string; meaning: string; example: string }[] = [
   {
     field: "pattern / dominant / style",
     meaning:
-      "4K/7K dominant pattern (jack, jumpstream, handstream, chordjack, bracket, chordstream, stream, delay).",
-    example: "pattern:handstream key=4",
+      "Dominant skill (speed, jack, coordination, technical, release). Retired Interlude names still resolve.",
+    example: "pattern:speed key=4",
+  },
+  {
+    field: "rework / reworkdan",
+    meaning:
+      "Rework dan tier from the mania difficulty port (Alpha, LN 14, Regular Zenith).",
+    example: 'rework:"LN 14" key=4',
+  },
+  {
+    field: "reworkstars",
+    meaning: "Rework star rating range.",
+    example: "reworkstars:6.5..9",
   },
   {
     field: "axis / rice / lnmap",
@@ -86,12 +97,14 @@ const EXAMPLES = [
   "key=7 dan:Regular sunny:6..8",
   "pattern:jack",
   "key=7 pattern:jack",
-  "key=7 axis:rc pattern:jumpstream",
-  "key=7 axis:ln pattern:chordstream",
-  "pattern:jumpstream stars:4..6",
-  "pattern:bracket key=7",
-  "pattern:chordjack OR pattern:chordstream",
+  "key=7 axis:rc pattern:speed",
+  "key=7 axis:ln pattern:release",
+  "pattern:speed stars:4..6",
+  "pattern:technical key=7",
+  "pattern:jack OR pattern:coordination",
   "dan:Alpha OR dan:Beta",
+  "rework:Alpha",
+  'rework:"Regular Zenith"',
   "mapper:Lasse OR mapper:Sotarks",
   "(mode:osu OR mode:mania) stars:6..7",
   "acc>98 NOT mods:NF",

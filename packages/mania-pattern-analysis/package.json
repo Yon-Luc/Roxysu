@@ -3,11 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Companella/Interlude osu!mania pattern analysis for all keymodes.",
+  "description": "Dominant-skill mania pattern analysis (rework difficulty port) for all keymodes.",
   "exports": {
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@roxysu/mania-difficulty": "workspace:*",
     "@roxysu/osu-chart": "workspace:*"
   },
   "devDependencies": {

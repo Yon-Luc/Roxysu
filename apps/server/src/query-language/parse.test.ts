@@ -100,15 +100,19 @@ describe("parseQuery", () => {
     });
     expect(parseQuery("dominant:jumpstream")).toEqual({
       type: "term",
-      term: { type: "pattern", value: "jumpstream", prefix: false },
+      term: { type: "pattern", value: "speed", prefix: false },
     });
     expect(parseQuery("style:chordjack")).toEqual({
       type: "term",
-      term: { type: "pattern", value: "chordjack", prefix: false },
+      term: { type: "pattern", value: "coordination", prefix: false },
     });
     expect(parseQuery("pattern:^bracket")).toEqual({
       type: "term",
-      term: { type: "pattern", value: "bracket", prefix: true },
+      term: { type: "pattern", value: "technical", prefix: true },
+    });
+    expect(parseQuery("pattern:release")).toEqual({
+      type: "term",
+      term: { type: "pattern", value: "release", prefix: false },
     });
     expect(parseQuery("axis:rc")).toEqual({
       type: "term",
@@ -251,7 +255,8 @@ describe("compileQuery", () => {
     const compiled = compileQuery(ast);
     expect(compiled.sql).toContain("pa.dominant_pattern");
     expect(compiled.sql).toContain("pa.secondary_pattern");
-    expect(compiled.params).toEqual(["%jumpstream%", "%jumpstream%"]);
+    // retired Interlude name resolves to the skill that replaced it
+    expect(compiled.params).toEqual(["%speed%", "%speed%"]);
     expect((compiled.sql.match(/\?/g) ?? []).length).toBe(compiled.params.length);
   });
 
@@ -259,7 +264,12 @@ describe("compileQuery", () => {
     const ast = parseQuery("key=7 pattern:chordstream");
     const compiled = compileQuery(ast);
     expect((compiled.sql.match(/\?/g) ?? []).length).toBe(compiled.params.length);
-    expect(compiled.params).toEqual(["mania", 7, "%chordstream%", "%chordstream%"]);
+    expect(compiled.params).toEqual([
+      "mania",
+      7,
+      "%coordination%",
+      "%coordination%",
+    ]);
   });
 
   test("compiles axis rc against sunny ln_ratio", () => {

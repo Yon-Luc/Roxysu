@@ -135,7 +135,7 @@ Admin-managed pre-warmed beatmapset results in the Hub store. Each `search_cache
 
 ### Hub tag
 
-One canonical lowercase label from `HUB_TAGS_BY_MODE` / `VALID_TAGS` that a shared collection carries. Every tag belongs to a primary gamemode and is grouped under a category (Keys / Pattern / Style / Difficulty) for the picker. Mania pattern tags reuse Roxysu's pattern vocabulary (`jack`, `jumpstream`, `handstream`, `chordjack`, `bracket`, `chordstream`, `stream`, `delay`).
+One canonical lowercase label from `HUB_TAGS_BY_MODE` / `VALID_TAGS` that a shared collection carries. Every tag belongs to a primary gamemode and is grouped under a category (Keys / Skill / Style / Difficulty) for the picker. Mania skill tags reuse the **dominant skill** vocabulary (`speed`, `jack`, `coordination`, `technical`, `release`). Retired Interlude tags stay valid in `LEGACY_HUB_TAGS` so pre-switch shared collections keep validating, but are no longer offered in the picker.
 
 **Not:** "label", "category", "pattern name" when meaning a tag
 
@@ -178,6 +178,30 @@ Workspace package that maintains a TypeScript port of the WIP osu!mania difficul
 **In code:** `packages/mania-difficulty`, `upstream/revision.json`
 
 **See:** `packages/mania-difficulty/README.md`, `packages/mania-difficulty/docs/dependency-report.md`
+
+---
+
+### Rework dan
+
+Dan tier derived from the **mania difficulty port** star rating. Tiers are floor-based and user-editable in `packages/mania-difficulty/dans.json`; each tier spans from its floor to the next floor and is split into five bands (`low`, `mid/low`, `mid`, `mid/high`, `high`). Stored as estimator id `mania-difficulty` in the **Sunny dan ratings store**. `rework:` and `reworkstars:` query fields and the `rework` rating display mode read it. Recommendations and skill estimates still use Sunny — rework dan is display and search only.
+
+**Not:** Sunny dan, Daniel, osu! star rating, "the new algo" in knowledge documents
+
+**In code:** `packages/mania-difficulty/dans.json`, `reworkDanLabel()`, `apps/server/src/map-analysis/computeReworkDan.ts`
+
+**See:** [features/sunny-dan-recommendations/](features/sunny-dan-recommendations/index.md)
+
+---
+
+### Dominant skill
+
+The one **mania difficulty port** skill a chart leans on hardest (`speed`, `jack`, `coordination`, `technical`, `release`). Replaced the Interlude/YAVSRG pattern families as the active pattern algorithm `mania-skill-v1`. The runner-up becomes the secondary skill when it reaches 85% of the top skill; confidence is the gap between them. `pattern:` / `dominant:` / `style:` query fields match it, and retired Interlude names still resolve to their nearest skill.
+
+**Not:** pattern, pattern label, style tag, skillset (recommendation axis)
+
+**In code:** `packages/mania-difficulty/src/skills.ts`, `skillProfile()`, `packages/mania-pattern-analysis/src/skillAnalysis.ts`
+
+**See:** [features/sunny-dan-recommendations/](features/sunny-dan-recommendations/index.md)
 
 ---
 

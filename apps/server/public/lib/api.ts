@@ -860,6 +860,34 @@ export async function stopDanielDanJob() {
   );
 }
 
+export async function fetchReworkDanJob() {
+  return unwrap(
+    await api.api.settings["rework-dan"].get(),
+    "/api/settings/rework-dan",
+  );
+}
+
+export async function startReworkDanJob() {
+  return unwrap(
+    await api.api.settings["rework-dan"].start.post(),
+    "/api/settings/rework-dan/start",
+  );
+}
+
+export async function relabelReworkDanJob() {
+  return unwrap(
+    await api.api.settings["rework-dan"].relabel.post(),
+    "/api/settings/rework-dan/relabel",
+  );
+}
+
+export async function stopReworkDanJob() {
+  return unwrap(
+    await api.api.settings["rework-dan"].stop.post(),
+    "/api/settings/rework-dan/stop",
+  );
+}
+
 export async function fetchPatternAnalysisJob() {
   return unwrap(
     await api.api.settings["pattern-analysis"].get(),

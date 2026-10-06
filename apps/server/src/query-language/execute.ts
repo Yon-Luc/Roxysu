@@ -79,6 +79,8 @@ export type PracticeCardRow = {
   sunnyStar: number | null;
   /** Daniel dan label when computed (4K RC). */
   danielEstDiff: string | null;
+  reworkEstDiff: string | null;
+  reworkStar: number | null;
   /** Daniel star rating when computed. */
   danielStar: number | null;
   /** Mania key count (circle size). */
@@ -154,6 +156,8 @@ function baseFrom(ctx: QueryContext, includeRetry = false): string {
     ON dr.beatmap_id = b.id AND dr.algorithm = 'sunny'
   LEFT JOIN beatmap_dan_ratings dr_d
     ON dr_d.beatmap_id = b.id AND dr_d.algorithm = 'daniel'
+  LEFT JOIN beatmap_dan_ratings dr_r
+    ON dr_r.beatmap_id = b.id AND dr_r.algorithm = 'mania-difficulty'
   LEFT JOIN beatmap_pattern_analysis pa
     ON pa.beatmap_id = b.id AND pa.algorithm = '${PATTERN_ALGORITHM}'
 `;
@@ -182,7 +186,9 @@ const SELECT_COLS = `
   dr.est_diff AS sunnyEstDiff,
   dr.sunny_star AS sunnyStar,
   dr_d.est_diff AS danielEstDiff,
-  dr_d.sunny_star AS danielStar
+  dr_d.sunny_star AS danielStar,
+  dr_r.est_diff AS reworkEstDiff,
+  dr_r.sunny_star AS reworkStar
 `;
 
 function baseWhere(ctx: QueryContext, extra: string): string {
@@ -327,6 +333,8 @@ function mapRow(r: PracticeCardRow): PracticeCardRow {
     sunnyStar: r.sunnyStar != null ? Number(r.sunnyStar) : null,
     danielEstDiff: r.danielEstDiff ?? null,
     danielStar: r.danielStar != null ? Number(r.danielStar) : null,
+    reworkEstDiff: r.reworkEstDiff ?? null,
+    reworkStar: r.reworkStar != null ? Number(r.reworkStar) : null,
     keyCount: r.keyCount != null ? Number(r.keyCount) : null,
   };
 }

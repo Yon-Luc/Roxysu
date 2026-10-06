@@ -12,18 +12,22 @@ export type { ParsedOsuFile } from "./osuParser.js";
 export {
   analyzeManiaFromOsuText,
   analyzeManiaNotes,
+  analyzeManiaSkillFromOsuText,
+  analyzeManiaSkillNotes,
   analyzeManiaStructuralFromOsuText,
   analyzeManiaStructuralNotes,
   findAllPatternsFromOsuFile,
+  noteDensities,
 } from "./analyze.js";
 export {
   PATTERN_ALGORITHM,
   PATTERN_ALGORITHM_INTERLUDE,
+  PATTERN_ALGORITHM_SKILL,
   PATTERN_ALGORITHM_V1,
   PATTERN_ALGORITHM_V2,
   PATTERN_LABELS,
+  PATTERN_LABELS_INTERLUDE,
   PATTERN_LABELS_V1,
-  PATTERN_LABELS_V2,
 } from "./roxysuTypes.js";
 export type {
   ChartNote,
@@ -34,6 +38,7 @@ export type {
   PatternLabelV2,
   PatternMetrics,
   PatternSection,
+  SkillStar,
   StructuralPatternResult,
 } from "./roxysuTypes.js";
 

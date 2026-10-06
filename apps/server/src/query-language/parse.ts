@@ -108,27 +108,39 @@ function parsePlayed(rest: string): number | null {
   return Number(m[1]);
 }
 
-/** Normalize community pattern synonyms to canonical labels. */
+/**
+ * Normalize pattern synonyms to canonical skill labels.
+ *
+ * Retired Interlude names still resolve, so old searches keep working and land
+ * on the skill that replaced them.
+ */
 function normalizePatternValue(raw: string): string {
   const compact = raw.trim().toLowerCase().replace(/[\s_-]+/g, "");
   const aliases: Record<string, string> = {
+    // current skill labels
+    speed: "speed",
     jack: "jack",
     jacks: "jack",
-    jumpstream: "jumpstream",
-    js: "jumpstream",
-    handstream: "handstream",
-    hs: "handstream",
-    chordjack: "chordjack",
-    cj: "chordjack",
-    bracket: "bracket",
-    brackets: "bracket",
-    chordstream: "chordstream",
-    cs: "chordstream",
-    delay: "delay",
-    delays: "delay",
-    stream: "delay",
-    streams: "delay",
-    mixed: "mixed",
+    coordination: "coordination",
+    chord: "coordination",
+    technical: "technical",
+    tech: "technical",
+    release: "release",
+    // retired Interlude names
+    jumpstream: "speed",
+    js: "speed",
+    handstream: "speed",
+    hs: "speed",
+    chordjack: "coordination",
+    cj: "coordination",
+    chordstream: "coordination",
+    cs: "coordination",
+    bracket: "technical",
+    brackets: "technical",
+    delay: "technical",
+    delays: "technical",
+    stream: "speed",
+    streams: "speed",
   };
   return aliases[compact] ?? raw.trim().toLowerCase();
 }
@@ -307,6 +319,16 @@ function parseFieldTerm(raw: string): FieldTerm {
     case "daniel": {
       if (!value) throw new QueryParseError("Invalid daniel value: empty");
       return { type: "daniel", value, prefix };
+    }
+    case "rework":
+    case "reworkdan": {
+      if (!value) throw new QueryParseError("Invalid rework value: empty");
+      return { type: "rework", value, prefix };
+    }
+    case "reworkstars": {
+      const r = parseRange(value);
+      if (!r) throw new QueryParseError(`Invalid reworkstars value: ${value}`);
+      return { type: "reworkstars", ...r };
     }
     case "sunny":
     case "danstars":

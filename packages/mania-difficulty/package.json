@@ -4,7 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./dans": "./src/dans.ts",
+    "./skills": "./src/skills.ts",
+    "./skill-profile": "./src/skillProfile.ts"
   },
   "scripts": {
     "test": "bun test",

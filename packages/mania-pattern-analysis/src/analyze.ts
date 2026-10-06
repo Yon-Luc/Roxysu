@@ -9,7 +9,13 @@ import {
   chartNotesToHitObjects,
 } from "./adaptRoxysu.js";
 import {
+  analyzeManiaSkillFromOsuText,
+  analyzeManiaSkillNotes,
+  noteDensities,
+} from "./skillAnalysis.js";
+import {
   PATTERN_ALGORITHM,
+  PATTERN_ALGORITHM_INTERLUDE,
   PATTERN_ALGORITHM_V1,
   PATTERN_ALGORITHM_V2,
   type PatternAnalysisResult,
@@ -21,6 +27,9 @@ export {
   analyzeManiaStructuralFromOsuText,
   analyzeManiaStructuralNotes,
   chartNotesToHitObjects,
+  analyzeManiaSkillFromOsuText,
+  analyzeManiaSkillNotes,
+  noteDensities,
 };
 
 /** Convenience helper matching PatternFinder.FindAllPatterns(OsuFile). */
@@ -50,6 +59,7 @@ export function analyzeManiaFromOsuText(
   switch (algorithm) {
     case PATTERN_ALGORITHM_V1:
     case PATTERN_ALGORITHM_V2:
+    case PATTERN_ALGORITHM_INTERLUDE:
       throw new Error(
         `Legacy pattern algorithm ${algorithm} is no longer supported; use ${PATTERN_ALGORITHM}`,
       );
@@ -58,7 +68,7 @@ export function analyzeManiaFromOsuText(
       if (algorithm !== PATTERN_ALGORITHM) {
         throw new Error(`Unknown pattern algorithm: ${algorithm}`);
       }
-      return analyzeManiaStructuralFromOsuText(
+      return analyzeManiaSkillFromOsuText(
         osuText,
         parseManiaChart(osuText).columnCount,
       );
@@ -67,14 +77,15 @@ export function analyzeManiaFromOsuText(
 
 /** Analyze parsed mania chart notes with the active algorithm. */
 export function analyzeManiaNotes(
-  notes: Parameters<typeof analyzeManiaStructuralNotes>[0],
+  notes: Parameters<typeof analyzeManiaSkillNotes>[0],
   keyCount: number,
   algorithm: string = PATTERN_ALGORITHM,
+  overallDifficulty = 8,
 ): PatternAnalysisResult {
   if (algorithm !== PATTERN_ALGORITHM) {
     throw new Error(`Unknown pattern algorithm: ${algorithm}`);
   }
-  return analyzeManiaStructuralNotes(notes, keyCount);
+  return analyzeManiaSkillNotes(notes, keyCount, overallDifficulty);
 }
 
 export type { StructuralPatternResult };

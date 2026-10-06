@@ -10,12 +10,33 @@ import type {
 } from "./types.js";
 import {
   PATTERN_ALGORITHM_INTERLUDE,
-  type PatternComposition,
-  type PatternLabel,
-  type PatternLabelV2,
-  type PatternSection,
-  type StructuralPatternResult,
+  PATTERN_LABELS_INTERLUDE,
+  type PatternMetrics,
 } from "./roxysuTypes.js";
+
+/** Interlude label space, retired — retained for reading legacy stored rows. */
+type PatternLabel = (typeof PATTERN_LABELS_INTERLUDE)[number];
+type PatternLabelV2 = PatternLabel;
+type PatternComposition = Partial<Record<PatternLabel, number>>;
+type PatternSection = {
+  startMs: number;
+  endMs: number;
+  patterns: Array<{ label: PatternLabel; coverage: number }>;
+};
+
+/**
+ * Retired Interlude result shape. Kept so legacy rows stay readable; the active
+ * pattern algorithm is `mania-skill-v1` (see skillAnalysis.ts).
+ */
+export type InterludePatternResult = PatternMetrics & {
+  algorithm: typeof PATTERN_ALGORITHM_INTERLUDE;
+  dominantPattern: PatternLabel;
+  secondaryPattern: PatternLabel | null;
+  confidence: number;
+  sections: PatternSection[];
+  composition: PatternComposition;
+  interludeCategory: string;
+};
 
 const SECTION_MS = 1000;
 const CHORD_EPS_MS = 8;
@@ -314,7 +335,7 @@ function buildSections(
   return sections;
 }
 
-function emptyResult(columnCount: number): StructuralPatternResult {
+function emptyResult(columnCount: number): InterludePatternResult {
   return {
     algorithm: PATTERN_ALGORITHM_INTERLUDE,
     columnCount,
@@ -339,7 +360,7 @@ export function adaptInterludeResult(
   result: InterludeResult,
   notes: ChartNote[],
   keyCount: number,
-): StructuralPatternResult {
+): InterludePatternResult {
   if (!result.success || notes.length === 0) {
     return emptyResult(keyCount);
   }
@@ -399,7 +420,7 @@ export function adaptInterludeResult(
 export function analyzeManiaStructuralNotes(
   notes: ChartNote[],
   keyCount: number,
-): StructuralPatternResult {
+): InterludePatternResult {
   const hitObjects = chartNotesToHitObjects(notes);
   const interlude = findAllPatterns(hitObjects, keyCount);
   return adaptInterludeResult(interlude, notes, keyCount);
@@ -409,7 +430,7 @@ export function analyzeManiaStructuralNotes(
 export function analyzeManiaStructuralFromOsuText(
   osuText: string,
   keyCount: number,
-): StructuralPatternResult {
+): InterludePatternResult {
   const notes = notesFromOsuText(osuText);
   const hitObjects = chartNotesToHitObjects(notes);
   const interlude = findAllPatterns(hitObjects, keyCount);

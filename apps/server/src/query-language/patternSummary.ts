@@ -49,8 +49,13 @@ export type PatternSummary = {
   patterns: PatternSummaryItem[];
 };
 
+/** Skill labels plus retired Interlude names, so legacy rows still render. */
 const PATTERN_DISPLAY: Record<string, string> = {
+  speed: "Speed",
   jack: "Jack",
+  coordination: "Coordination",
+  technical: "Technical",
+  release: "Release",
   jumpstream: "Jumpstream",
   handstream: "Handstream",
   chordjack: "Chordjack",
@@ -61,28 +66,17 @@ const PATTERN_DISPLAY: Record<string, string> = {
   mixed: "Mixed",
 };
 
-/** Interlude labels shown for 4K (hide 7K-specific families). */
-const PATTERNS_4K = [
+/** Skill labels summarised per key mode — the same five for 4K and 7K. */
+const PATTERNS_FOR_KEYMODE: readonly string[] = [
+  "speed",
   "jack",
-  "chordjack",
-  "jumpstream",
-  "handstream",
-  "stream",
-  "mixed",
-] as const;
+  "coordination",
+  "technical",
+  "release",
+];
 
-/** Interlude labels shown for 7K (hide 4K-specific families). */
-const PATTERNS_7K = [
-  "jack",
-  "chordjack",
-  "delay",
-  "chordstream",
-  "bracket",
-  "mixed",
-] as const;
-
-function patternsForKeymode(keymode: PatternKeymode): readonly string[] {
-  return keymode === 4 ? PATTERNS_4K : PATTERNS_7K;
+function patternsForKeymode(_keymode: PatternKeymode): readonly string[] {
+  return PATTERNS_FOR_KEYMODE;
 }
 
 function baseFrom(db: Db): string {

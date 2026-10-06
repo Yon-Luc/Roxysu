@@ -23,6 +23,16 @@ export type FieldTerm =
   | { type: "dan"; value: string; prefix?: boolean }
   /** Daniel dan label substring (4K RC), e.g. Alpha / Beta. */
   | { type: "daniel"; value: string; prefix?: boolean }
+  /** Rework (mania difficulty port) dan label, e.g. Alpha / LN 14 / Regular Zenith. */
+  | { type: "rework"; value: string; prefix?: boolean }
+  /** Rework star rating (numeric). */
+  | {
+      type: "reworkstars";
+      min?: number;
+      max?: number;
+      op?: ComparisonOp;
+      value?: number;
+    }
   /** Sunny rework star rating (numeric). */
   | {
       type: "sunny";
@@ -31,7 +41,7 @@ export type FieldTerm =
       op?: ComparisonOp;
       value?: number;
     }
-  /** 7k dominant pattern label (jack, jumpstream, chordjack, bracket, chordstream, stream). */
+  /** Dominant skill label (speed, jack, coordination, technical, release). */
   | { type: "pattern"; value: string; prefix?: boolean }
   /** RC vs LN map axis from Sunny ln_ratio (20% split, same as dan). */
   | { type: "axis"; value: "rc" | "ln" | "fln" }

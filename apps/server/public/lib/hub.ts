@@ -158,22 +158,11 @@ export const HUB_TAG_GROUPS_BY_MODE = {
   mania: [
     { label: "Keys", tags: ["4k", "5k", "6k", "7k", "8k"] },
     {
-      label: "Pattern",
-      tags: [
-        "jack",
-        "minijack",
-        "longjack",
-        "chordjack",
-        "jumpstream",
-        "handstream",
-        "chordstream",
-        "stream",
-        "delay",
-        "bracket",
-      ],
+      label: "Skill",
+      tags: ["speed", "jack", "coordination", "technical", "release"],
     },
-    { label: "Style", tags: ["ln", "rice", "hybrid", "sv", "tech"] },
-    { label: "Difficulty", tags: ["stamina", "speed", "dan", "beginner"] },
+    { label: "Style", tags: ["ln", "rice", "hybrid", "sv"] },
+    { label: "Difficulty", tags: ["stamina", "dan", "beginner"] },
   ],
   std: [
     {

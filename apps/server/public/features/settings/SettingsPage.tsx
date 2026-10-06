@@ -23,6 +23,7 @@ import { KeybindsSection } from "./sections/KeybindsSection";
 import { ManiaRatingLabSection } from "./sections/ManiaRatingLabSection";
 import { SunnyDanSection } from "./sections/SunnyDanSection";
 import { DanielDanSection } from "./sections/DanielDanSection";
+import { ReworkDanSection } from "./sections/ReworkDanSection";
 import { PatternAnalysisSection } from "./sections/PatternAnalysisSection";
 import { AxisThresholdsSection } from "./sections/AxisThresholdsSection";
 import {
@@ -80,6 +81,7 @@ function SettingsTabPanels({
         <>
           <SunnyDanSection data={data} />
           <DanielDanSection data={data} />
+          <ReworkDanSection data={data} />
           <PatternAnalysisSection data={data} />
           <ManiaRatingLabSection data={data} />
         </>

@@ -18,6 +18,38 @@ export { beatmapFromOsuChart, isEmptyBeatmap } from "./beatmap";
 export { buildHitObjectGraph } from "./adapters/hitObject";
 export type { ManiaDifficultyHitObject, ManiaRow } from "./adapters/hitObject";
 export { calculateWithSkills, greatHitWindowForOd } from "./skills/calculator";
+export type { SkillStrainSnapshot } from "./skills/calculator";
+
+export {
+  expandDanTiers,
+  reworkDanIntervalForStar,
+  reworkDanIntervalTable,
+  reworkDanLabel,
+  reworkDanNextTierName,
+  reworkDanTableKind,
+  reworkDanTierNames,
+  reworkDanTiersFor,
+  validateDanConfig,
+  REWORK_DAN_BANDS,
+  REWORK_LN_RATIO_THRESHOLD,
+  REWORK_OVER_BAND_PREFIX,
+  REWORK_UNDER_BAND_PREFIX,
+  REWORK_UNKNOWN_DAN,
+} from "./dans";
+export type { DanConfig, DanInterval, DanTableKind, DanTierInput } from "./dans";
+
+export {
+  dominantSkill,
+  isSkillLabel,
+  skillStars,
+  skillStarsFromBreakdown,
+  SECONDARY_SKILL_RATIO,
+  SKILL_LABELS,
+} from "./skills";
+export type { DominantSkill, SkillLabel, SkillStar } from "./skills";
+
+export { skillProfile, DEFAULT_SKILL_WINDOW_MS } from "./skillProfile";
+export type { SkillProfile, SkillWindow } from "./skillProfile";
 
 export {
   DiffUtils,

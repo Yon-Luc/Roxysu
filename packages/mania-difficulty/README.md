@@ -9,6 +9,41 @@ TypeScript port of the WIP osu!mania difficulty rework (`loleur362/osu` branch `
 
 This package is **additive** to Rating Lab / `tools/mania-rating-calc` (kept for PP and C# compare).
 
+## Rework dan floors
+
+`dans.json` is the source of truth for dan tiers. Edit it to add or retune a dan;
+no code change is needed.
+
+```jsonc
+{
+  "bands": ["low", "mid/low", "mid", "mid/high", "high"],
+  "tables": {
+    "4": {
+      "rice": [{ "name": "Alpha", "floor": 6.9 }, { "name": "Beta", "floor": 7.2, "ceiling": 7.8 }],
+      "ln":   [{ "name": "LN 13", "floor": 7.2 }]
+    },
+    "7": { "rice": [{ "name": "Regular Gamma", "floor": 8.7 }], "ln": [] }
+  }
+}
+```
+
+- A tier spans its `floor` to the next tier's floor. Only the **last** tier may set `ceiling`.
+- Floors must strictly increase. The config is validated at import — an invalid file throws at boot.
+- Each span is split into `bands`, so `rework:Alpha` still matches all five bands.
+- Below the first floor → `< {name} {lowest band}`. Above the last ceiling → `> {name} {highest band}`.
+- An empty `ln` array falls back to that key count's `rice` tiers.
+- A key count with no table (6K) returns `Unknown difficulty`.
+
+Retuning a floor only needs a **relabel**, not a re-estimate — stored stars are
+re-mapped by `relabelReworkDanSync()` (`POST /api/settings/rework-dan/relabel`).
+
+## Dominant skill
+
+`skillProfile()` bins per-note skill strain into 2000 ms windows and returns the
+whole-chart dominant skill plus a per-window leader. `packages/mania-pattern-analysis`
+uses it for the active `pattern:` algorithm (`mania-skill-v1`), which replaced the
+Interlude pattern families.
+
 ## Public API
 
 ```ts
@@ -17,6 +52,10 @@ import {
   beatmapFromOsuChart,
   DiffUtils,
 } from "@roxysu/mania-difficulty";
+
+// Lean subpath imports (no generated evaluators):
+import { reworkDanLabel } from "@roxysu/mania-difficulty/dans";
+import { skillProfile } from "@roxysu/mania-difficulty/skill-profile";
 ```
 
 `calculateManiaDifficulty` pipeline:
@@ -69,6 +108,10 @@ OSU_GAME_PATH=/path/to/checkout dotnet run --project tools/ReferenceRunner -- \
 | `generated/` | Transpiler output (committed) |
 | `tools/Transpiler` | Constrained Roslyn C#→TS |
 | `tools/ReferenceRunner` | C# difficulty JSON oracle |
+| `dans.json` | Rework dan floors (user-editable) |
+| `src/dans.ts` | Floor loader, validator, label lookup |
+| `src/skills.ts` | Dominant-skill classification |
+| `src/skillProfile.ts` | Time-binned skill profile |
 | `upstream/revision.json` | Pinned repo/branch/SHA |
 | `docs/dependency-report.md` | generate / shim / out-of-scope |
 

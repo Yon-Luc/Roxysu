@@ -6,19 +6,19 @@ import {
 
 export function PatternWeightsPanel({
   composition,
-  keyCount,
   accentColor,
   title,
 }: {
   composition: Record<string, number>;
-  keyCount: number | null;
+  /** Retained for call-site compatibility; the skill list is key-count agnostic. */
+  keyCount?: number | null;
   accentColor: string;
   /** Override title; defaults to practice.detail.patternWeights */
   title?: string;
 }) {
   const { dict } = useAppDict();
   const detail = dict?.practice.detail;
-  const patterns = weightPatternsForKeyCount(keyCount);
+  const patterns = weightPatternsForKeyCount();
   const rows = patterns.map((pattern) => ({
     pattern,
     label: formatPatternLabel(pattern, detail?.patterns),

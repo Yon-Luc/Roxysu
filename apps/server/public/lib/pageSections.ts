@@ -149,11 +149,18 @@ export const PAGE_SECTIONS: PageSectionDef[] = [
     keywords: ["settings", "daniel", "4k", "dan", "labels", "compute"],
   },
   {
+    id: "rework-dan-calculation",
+    to: "/settings",
+    pageLabel: "Settings",
+    label: "Rework dan calculation",
+    keywords: ["settings", "rework", "mania difficulty", "dan", "tiers", "dans.json"],
+  },
+  {
     id: "pattern-analysis",
     to: "/settings",
     pageLabel: "Settings",
-    label: "7K pattern analysis",
-    keywords: ["settings", "7k", "patterns", "chordjack", "bracket"],
+    label: "Dominant skill analysis",
+    keywords: ["settings", "skills", "patterns", "speed", "jack", "coordination"],
   },
   {
     id: "note-shape",

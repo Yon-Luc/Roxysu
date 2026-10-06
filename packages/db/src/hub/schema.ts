@@ -127,22 +127,11 @@ export const HUB_TAG_GROUPS_BY_MODE = {
   mania: [
     { label: "Keys", tags: ["4k", "5k", "6k", "7k", "8k"] },
     {
-      label: "Pattern",
-      tags: [
-        "jack",
-        "minijack",
-        "longjack",
-        "chordjack",
-        "jumpstream",
-        "handstream",
-        "chordstream",
-        "stream",
-        "delay",
-        "bracket",
-      ],
+      label: "Skill",
+      tags: ["speed", "jack", "coordination", "technical", "release"],
     },
-    { label: "Style", tags: ["ln", "rice", "hybrid", "sv", "tech"] },
-    { label: "Difficulty", tags: ["stamina", "speed", "dan", "beginner"] },
+    { label: "Style", tags: ["ln", "rice", "hybrid", "sv"] },
+    { label: "Difficulty", tags: ["stamina", "dan", "beginner"] },
   ],
   std: [
     {
@@ -178,6 +167,23 @@ export const HUB_TAGS_BY_MODE = {
   taiko: HUB_TAG_GROUPS_BY_MODE.taiko.flatMap((g) => g.tags),
 } as const satisfies Record<HubModeTag, readonly string[]>;
 
+/**
+ * Retired mania pattern tags. Kept valid so shared collections created before
+ * the dominant-skill switch keep validating; no longer offered in the picker.
+ */
+export const LEGACY_HUB_TAGS = [
+  "minijack",
+  "longjack",
+  "chordjack",
+  "jumpstream",
+  "handstream",
+  "chordstream",
+  "stream",
+  "delay",
+  "bracket",
+  "tech",
+] as const;
+
 export const VALID_TAGS = [
   ...HUB_MODE_TAGS,
   "multi-mode",
@@ -185,6 +191,7 @@ export const VALID_TAGS = [
   ...HUB_TAGS_BY_MODE.std,
   ...HUB_TAGS_BY_MODE.ctb,
   ...HUB_TAGS_BY_MODE.taiko,
+  ...LEGACY_HUB_TAGS,
 ] as const;
 
 export type Tag = (typeof VALID_TAGS)[number];

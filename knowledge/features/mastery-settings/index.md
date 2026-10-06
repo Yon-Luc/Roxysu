@@ -13,7 +13,7 @@ touches:
 
 ## Purpose
 
-Choose mastery formula (`simple` or `practice`), rating display preference (osu! stars / Sunny dan / Sunny rework stars), paths, background jobs (Sunny/Daniel backfill), and Rice/LN/FLN classification boundaries. Recompute mastery across the practice library when formula changes.
+Choose mastery formula (`simple` or `practice`), rating display preference (osu! stars / dan / Sunny stars / rework dan), paths, background jobs (Sunny, Daniel, rework backfills), and Rice/LN/FLN classification boundaries. Recompute mastery across the practice library when formula changes.
 
 ## Business rules
 
@@ -32,7 +32,7 @@ Settings UI is tab-grouped on `/settings`:
 | Practice | mastery formula, score username, gamemode |
 | Customize | Rice / LN / FLN boundaries |
 | Appearance | appearance, difficulty display, preview skin, keybinds (columns + playback actions) |
-| Jobs | Sunny dan, Daniel dan, pattern analysis, Mania Rating Lab |
+| Jobs | Sunny dan, Daniel dan, rework dan (mania difficulty port), dominant skill analysis, Mania Rating Lab |
 
 Only the active tab’s panels mount. Deep-links still use `?section=<id>` (Command Palette); optional `?tab=` selects a tab when no section is present. Tab registry: `apps/server/public/features/settings/settingsTabs.ts`.
 

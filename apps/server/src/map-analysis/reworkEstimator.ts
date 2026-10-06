@@ -112,15 +112,31 @@ function danValues(
  */
 export function analyzeManiaOnceFromText(
   osuText: string,
-  options: { clockRate?: number; windowMs?: number } = {},
+  options: {
+    clockRate?: number;
+    /** Compute the dominant-skill row too. Default false. */
+    withPattern?: boolean;
+    /**
+     * Bin width for the skill timeline. Only the preview/detail surface sets
+     * this; backfills leave it unset so no per-chart window array is allocated.
+     */
+    windowMs?: number;
+    /** Backfill guard. Omitted for a single on-request read. */
+    shouldContinue?: () => boolean;
+  } = {},
 ): ReworkEstimatorResult {
   const chart = parseManiaChart(osuText);
   const overallDifficulty = overallDifficultyFrom(chart.metaData);
   const beatmap = toInput(chart, overallDifficulty);
+  const withPattern = options.withPattern === true;
 
-  if (options.windowMs == null) {
+  if (!withPattern) {
     // Dan-only path: no per-note snapshots, no profile binning.
-    const profile = skillProfile(beatmap, { clockRate: options.clockRate ?? 1 });
+    const profile = skillProfile(beatmap, {
+      clockRate: options.clockRate ?? 1,
+      windowMs: null,
+      shouldContinue: options.shouldContinue,
+    });
     return {
       ...danValues(
         profile.attributes,
@@ -135,7 +151,9 @@ export function analyzeManiaOnceFromText(
 
   const profile = skillProfile(beatmap, {
     clockRate: options.clockRate ?? 1,
-    windowMs: options.windowMs,
+    // Chart-level classification unless the caller wants the timeline.
+    windowMs: options.windowMs ?? null,
+    shouldContinue: options.shouldContinue,
   });
   const densities = noteDensities(chart.notes);
   return {

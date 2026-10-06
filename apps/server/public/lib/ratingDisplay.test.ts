@@ -97,6 +97,26 @@ describe("formatPrimaryRating", () => {
       }),
     ).toBe("4.20★");
   });
+
+  test("rework mode uses the stored rework dan label", () => {
+    expect(
+      formatPrimaryRating({
+        mode: "rework",
+        starRating: 3,
+        reworkEstDiff: "Keep Me",
+      }),
+    ).toBe("Keep Me");
+  });
+
+  test("rework mode falls back to rework stars, not osu stars", () => {
+    expect(
+      formatPrimaryRating({
+        mode: "rework",
+        starRating: 3,
+        reworkStar: 5.25,
+      }),
+    ).toBe("5.25★");
+  });
 });
 
 describe("primaryRatingDisplayTitle", () => {
@@ -116,6 +136,15 @@ describe("primaryRatingDisplayTitle", () => {
         sunnyDan: "Sunny dan",
       }),
     ).toBe("Sunny dan");
+  });
+
+  test("returns Rework dan when source is rework", () => {
+    expect(
+      primaryRatingDisplayTitle("rework", "rework", {
+        reworkDan: "Rework dan",
+        reworkStar: "Rework star rating",
+      }),
+    ).toBe("Rework dan");
   });
 });
 
@@ -141,6 +170,16 @@ describe("primaryDanSource", () => {
       }),
     ).toBe("sunny");
   });
+
+  test("picks rework when a rework star is present", () => {
+    expect(
+      primaryDanSource({
+        mode: "rework",
+        keyCount: 7,
+        reworkStar: 4.5,
+      }),
+    ).toBe("rework");
+  });
 });
 
 describe("primaryDanStar", () => {
@@ -150,7 +189,20 @@ describe("primaryDanStar", () => {
         keyCount: 4,
         danielStar: 7.1,
         sunnyStar: 5.2,
+        reworkStar: 9.9,
       }),
     ).toBe(7.1);
+  });
+
+  test("uses rework stars only in rework mode", () => {
+    expect(
+      primaryDanStar({
+        mode: "rework",
+        keyCount: 4,
+        danielStar: 7.1,
+        sunnyStar: 5.2,
+        reworkStar: 9.9,
+      }),
+    ).toBe(9.9);
   });
 });

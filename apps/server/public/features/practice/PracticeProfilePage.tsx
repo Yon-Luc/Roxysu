@@ -118,6 +118,16 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
           error: string | null;
         } | null }).danielDan
       : null;
+  const reworkDan =
+    data && "reworkDan" in data
+      ? (data as { reworkDan?: {
+          estDiff: string | null;
+          reworkStar: number | null;
+          columnCount: number | null;
+          lnRatio: number | null;
+          error: string | null;
+        } | null }).reworkDan
+      : null;
   const keyCount =
     beatmap.circleSize != null ? Math.round(beatmap.circleSize) : null;
   const ratingLabels = {
@@ -126,6 +136,11 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
     danielStar:
       dict?.settings.ratingDisplay.dan?.labelDanielStar ?? "Daniel star rating",
     sunnyStar: dict?.settings.ratingDisplay.sunny?.label ?? "Sunny star rating",
+    reworkDan:
+      dict?.settings.ratingDisplay.rework?.labelReworkDan ?? "Rework dan",
+    reworkStar:
+      dict?.settings.ratingDisplay.rework?.labelReworkStar ??
+      "Rework star rating",
   };
   const primarySource = primaryDanSource({
     mode: ratingMode,
@@ -134,6 +149,8 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
     danielStar: danielDan?.danielStar,
     sunnyEstDiff: sunnyDan?.estDiff,
     sunnyStar: sunnyDan?.sunnyStar,
+    reworkEstDiff: reworkDan?.estDiff,
+    reworkStar: reworkDan?.reworkStar,
   });
   const primaryTitle = primaryRatingDisplayTitle(
     ratingMode,
@@ -141,9 +158,11 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
     ratingLabels,
   );
   const primaryStar = primaryDanStar({
+    mode: ratingMode,
     keyCount,
     danielStar: danielDan?.danielStar,
     sunnyStar: sunnyDan?.sunnyStar,
+    reworkStar: reworkDan?.reworkStar,
   });
   const patternAnalysis =
     data && "patternAnalysis" in data
@@ -181,6 +200,9 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
     sunnyStar: sunnyDan?.sunnyStar,
     danielEstDiff: danielDan?.estDiff,
     danielStar: danielDan?.danielStar,
+    reworkEstDiff: reworkDan?.estDiff,
+    reworkStar: reworkDan?.reworkStar,
+    lnRatio: reworkDan?.lnRatio,
     keyCount,
   });
 
@@ -309,13 +331,17 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
           )}
         </div>
         {beatmap.rulesetShortName === "mania" &&
-        (ratingMode === "dan" || ratingMode === "sunny") ? (
+        (ratingMode === "dan" ||
+          ratingMode === "sunny" ||
+          ratingMode === "rework") ? (
           <div className="rx-panel px-5 py-5">
             <h3 className="text-sm font-bold text-ink">
               {primaryTitle ??
                 (ratingMode === "sunny"
                   ? ratingLabels.sunnyStar
-                  : ratingLabels.sunnyDan)}
+                  : ratingMode === "rework"
+                    ? ratingLabels.reworkDan
+                    : ratingLabels.sunnyDan)}
             </h3>
             {displayedRating !== "—" ? (
               <div className="mt-3 space-y-1">
@@ -330,9 +356,14 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
                     {keyCount != null
                       ? t(dict?.practice.detail.columnK, { count: keyCount })
                       : ""}
-                    {sunnyDan?.lnRatio != null && primarySource === "sunny"
+                    {primarySource === "sunny" && sunnyDan?.lnRatio != null
                       ? t(dict?.practice.detail.lnRatio, {
                           pct: (sunnyDan.lnRatio * 100).toFixed(0),
+                        })
+                      : ""}
+                    {primarySource === "rework" && reworkDan?.lnRatio != null
+                      ? t(dict?.practice.detail.lnRatio, {
+                          pct: (reworkDan.lnRatio * 100).toFixed(0),
                         })
                       : ""}
                   </p>
@@ -344,7 +375,8 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
               </div>
             ) : (
               <p className="mt-3 text-sm text-faint">
-                {danielDan?.error ??
+                {reworkDan?.error ??
+                  danielDan?.error ??
                   sunnyDan?.error ??
                   dict?.practice.detail.notAvailable}
               </p>

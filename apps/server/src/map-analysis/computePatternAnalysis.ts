@@ -7,7 +7,9 @@ import {
   getOsuDataPath,
   resolveLazerFilePath,
 } from "../shared/lazer-files";
+import { isChartMemoryError } from "@roxysu/mania-difficulty";
 import {
+  analyzeManiaBackfillFromOsuText,
   analyzeManiaFromOsuText,
   analyzeManiaSkillNotes,
   PATTERN_ALGORITHM,
@@ -16,6 +18,8 @@ import {
   type PatternSection,
 } from "@roxysu/mania-pattern-analysis";
 import { SKILL_LABELS } from "@roxysu/mania-difficulty";
+import { DEFAULT_SKILL_WINDOW_MS } from "./skillWindow";
+import { collectNow, yieldForBackfill } from "./jobYield";
 import { parseOsuChart, type ChartNote } from "@roxysu/osu-chart";
 import { toIso as toIsoNullable } from "../shared/serialize";
 
@@ -101,6 +105,8 @@ const EMPTY_BREAKDOWN: ManiaPatternBreakdown = {
 
 const DENSITY_SAMPLE_MS = 1000;
 const CHORD_EPS_MS = 8;
+/** Cap on preview density samples (2 hours). Bounds malformed-timestamp input. */
+const MAX_DENSITY_SAMPLES = 7200;
 
 /** Overall difficulty from `.osu` metadata; defaults to 8. */
 function overallDifficultyFromMeta(metaData: Record<string, string>): number {
@@ -161,14 +167,24 @@ function buildDensitySamples(
   const sorted = [...notes].sort((a, b) => a.startMs - b.startMs);
   const startMs =
     Math.floor(sorted[0]!.startMs / DENSITY_SAMPLE_MS) * DENSITY_SAMPLE_MS;
-  const endMs =
+  const rawEndMs =
     Math.ceil(sorted[sorted.length - 1]!.startMs / DENSITY_SAMPLE_MS) *
     DENSITY_SAMPLE_MS;
+  // One sample per second across the whole chart, capped so a malformed final
+  // timestamp cannot allocate an unbounded array.
+  const stepMs =
+    (rawEndMs - startMs) / DENSITY_SAMPLE_MS > MAX_DENSITY_SAMPLES
+      ? Math.ceil((rawEndMs - startMs) / MAX_DENSITY_SAMPLES)
+      : 1;
+  const endMs = rawEndMs;
   const samples: SevenKDensitySample[] = [];
   let i = 0;
+  // Sections are contiguous and ordered, so walk a cursor instead of scanning
+  // the whole list for every sample.
+  let sectionCursor = 0;
 
-  for (let t = startMs; t <= endMs; t += DENSITY_SAMPLE_MS) {
-    const windowEnd = t + DENSITY_SAMPLE_MS;
+  for (let t = startMs; t <= endMs; t += DENSITY_SAMPLE_MS * stepMs) {
+    const windowEnd = t + DENSITY_SAMPLE_MS * stepMs;
     while (i < sorted.length && sorted[i]!.startMs < t) i += 1;
     let j = i;
     while (j < sorted.length && sorted[j]!.startMs < windowEnd) j += 1;
@@ -184,11 +200,16 @@ function buildDensitySamples(
       peakChordSize = Math.max(peakChordSize, chordSize);
     }
 
-    const midpointMs = t + DENSITY_SAMPLE_MS / 2;
-    const section = sections.find(
-      (candidate) =>
-        midpointMs >= candidate.startMs && midpointMs < candidate.endMs,
-    );
+    const midpointMs = t + (DENSITY_SAMPLE_MS * stepMs) / 2;
+    while (
+      sectionCursor < sections.length &&
+      midpointMs >= sections[sectionCursor]!.endMs
+    ) {
+      sectionCursor += 1;
+    }
+    const candidate = sections[sectionCursor];
+    const section =
+      candidate != null && midpointMs >= candidate.startMs ? candidate : null;
     const composition = normalizeBreakdown(
       Object.fromEntries(
         (section?.patterns ?? []).map((pattern) => [pattern.label, pattern.coverage]),
@@ -200,7 +221,7 @@ function buildDensitySamples(
       endMs: windowEnd,
       midpointMs,
       noteCount: windowNotes.length,
-      notesPerSecond: windowNotes.length / (DENSITY_SAMPLE_MS / 1000),
+      notesPerSecond: windowNotes.length / ((DENSITY_SAMPLE_MS * stepMs) / 1000),
       peakChordSize,
       dominantPattern: section?.patterns[0]?.label ?? null,
       secondaryPattern: section?.patterns[1]?.label ?? null,
@@ -248,6 +269,8 @@ export function analyzeManiaPatternDetail(osuText: string): ManiaPatternDetail {
     chart.notes,
     chart.columnCount,
     overallDifficultyFromMeta(chart.metaData),
+    // The detail/preview surface renders the timeline, so this path bins.
+    DEFAULT_SKILL_WINDOW_MS,
   );
   const holdCount = chart.notes.filter((note) => note.endMs > note.startMs).length;
   const samples = downsampleDensitySamples(
@@ -557,6 +580,8 @@ async function computeOnePattern(
   }
 
   try {
+    // Request-path fill: unlike the backfill this never runs in bulk, so the
+    // timeline costs nothing and stays available if a caller ever reads it.
     const result = analyzeManiaFromOsuText(osuText, PATTERN_ALGORITHM);
     return upsertRating(db, {
       beatmapId: beatmap.id,
@@ -672,6 +697,7 @@ function computeOnePatternSync(
   hash: string | null,
   rulesetShortName: string | null,
   circleSize: number | null,
+  shouldContinue?: () => boolean,
 ): void {
   const now = Date.now();
 
@@ -764,7 +790,11 @@ function computeOnePatternSync(
   }
 
   try {
-    const result = analyzeManiaFromOsuText(osuText, PATTERN_ALGORITHM);
+    const result = analyzeManiaBackfillFromOsuText(
+      osuText,
+      PATTERN_ALGORITHM,
+      shouldContinue,
+    );
     upsertRatingSync(db, {
       beatmapId,
       beatmapHash: hash,
@@ -801,23 +831,38 @@ function computeOnePatternSync(
       error: message,
       updatedAtMs: now,
     });
+    // The row is recorded as failed so this chart is not retried. The job
+    // still needs the throw so it can collect and pause.
+    if (isChartMemoryError(err)) throw err;
   }
 }
 
 /** Max maps to compute per pattern query so first filter stays responsive. */
 const PATTERN_QUERY_BACKFILL_LIMIT = 120;
 
-export function backfillPatternAnalysisSync(
+/**
+ * Async because rating yields after every map. `busy` in the job guards against
+ * a second batch starting while one is in flight.
+ */
+export async function backfillPatternAnalysis(
   db: Db,
   opts: {
     limit?: number;
     includeFailed?: boolean;
+    /**
+     * Called before each map. Return false to stop early — the job uses this to
+     * pause when memory is tight. Maps already rated stay committed.
+     */
+    shouldContinue?: () => boolean;
   } = {},
-): {
+): Promise<{
   attempted: number;
   succeeded: number;
-  remaining: number;
-} {
+  /** Maps still unrated; null when `shouldContinue` stopped the batch early. */
+  remaining: number | null;
+  /** True when `shouldContinue` stopped the batch early. */
+  stoppedEarly: boolean;
+}> {
   const limit = Math.max(1, Math.min(500, opts.limit ?? 80));
   const includeFailed = opts.includeFailed === true;
 
@@ -875,15 +920,34 @@ export function backfillPatternAnalysisSync(
     circle_size: number | null;
   }>;
 
+  // Yield between maps: each map's note graph is a large object cycle, and a
+  // tight synchronous loop starves the collector until the heap is exhausted.
+  const yieldState = { count: 0 };
   let succeeded = 0;
+  let attempted = 0;
+  let stoppedEarly = false;
   for (const row of missing) {
-    computeOnePatternSync(
-      db,
-      row.id,
-      row.hash,
-      row.ruleset_short_name,
-      row.circle_size,
-    );
+    if (opts.shouldContinue && !opts.shouldContinue()) {
+      stoppedEarly = true;
+      break;
+    }
+    try {
+      computeOnePatternSync(
+        db,
+        row.id,
+        row.hash,
+        row.ruleset_short_name,
+        row.circle_size,
+        opts.shouldContinue,
+      );
+    } catch (err) {
+      if (!isChartMemoryError(err)) throw err;
+      attempted += 1;
+      collectNow();
+      stoppedEarly = true;
+      break;
+    }
+    attempted += 1;
     const updated = db.$client
       .query(
         `
@@ -894,6 +958,13 @@ export function backfillPatternAnalysisSync(
       )
       .get(row.id, PATTERN_ALGORITHM) as { dominantPattern: string | null } | null;
     if (updated?.dominantPattern) succeeded += 1;
+    await yieldForBackfill(yieldState);
+  }
+
+  // Skipped maps are still unrated; recounting them costs a full scan, so the
+  // job resumes on `attempted === 0` instead.
+  if (stoppedEarly) {
+    return { attempted, succeeded, remaining: null, stoppedEarly: true };
   }
 
   const remainingRow = db.$client
@@ -911,9 +982,10 @@ export function backfillPatternAnalysisSync(
     .get(PATTERN_ALGORITHM) as { n: number } | null;
 
   return {
-    attempted: missing.length,
+    attempted,
     succeeded,
     remaining: Number(remainingRow?.n ?? 0),
+    stoppedEarly: false,
   };
 }
 

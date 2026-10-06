@@ -6,6 +6,7 @@ import { beatmapSets, beatmaps, closeDb, ensureDb } from "@roxysu/db/client.bun"
 import type { Db } from "@roxysu/db/types";
 import {
   REWORK_ALGORITHM,
+  backfillReworkDanAsync,
   backfillReworkDanSync,
   countReworkDanMissing,
   computeReworkDanSync,
@@ -341,6 +342,31 @@ describe("backfillReworkDanSync", () => {
 
     // The skill profile must not perturb the rating.
     expect(withPattern).toBe(withoutPattern);
+  });
+
+  test("shouldContinue stops the batch and keeps what was rated", async () => {
+    clearReworkRows();
+    db.$client.query(`DELETE FROM beatmap_dan_ratings`).run();
+    db.$client.query(`DELETE FROM beatmap_pattern_analysis`).run();
+
+    // The job calls this before every map to pause on low memory; the maps it
+    // already rated must stay committed rather than roll back.
+    let checks = 0;
+    const result = await backfillReworkDanAsync(db, {
+      limit: 10,
+      skipRelabel: true,
+      shouldContinue: () => {
+        checks += 1;
+        return checks <= 1;
+      },
+    });
+
+    expect(result.stoppedEarly).toBe(true);
+    expect(result.attempted).toBe(1);
+    const rated = db.$client
+      .query(`SELECT COUNT(*) AS n FROM beatmap_dan_ratings`)
+      .get() as { n: number };
+    expect(Number(rated.n)).toBe(1);
   });
 
   test("skipRelabel leaves cached labels alone", () => {

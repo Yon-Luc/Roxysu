@@ -176,6 +176,11 @@ export function PracticeListPage() {
       dict?.settings.ratingDisplay.dan?.labelDanielStar ?? "Daniel star rating",
     sunnyStar:
       dict?.settings.ratingDisplay.sunny?.label ?? "Sunny star rating",
+    reworkDan:
+      dict?.settings.ratingDisplay.rework?.labelReworkDan ?? "Rework dan",
+    reworkStar:
+      dict?.settings.ratingDisplay.rework?.labelReworkStar ??
+      "Rework star rating",
   };
   const [stored] = useState(readStoredPracticeSearch);
   const [q, setQ] = useState(stored.q);
@@ -534,6 +539,8 @@ export function PracticeListPage() {
                 danielStar: item.danielStar,
                 sunnyEstDiff: item.sunnyEstDiff,
                 sunnyStar: item.sunnyStar,
+                reworkEstDiff: item.reworkEstDiff,
+                reworkStar: item.reworkStar,
               });
               const primaryTitle = primaryRatingDisplayTitle(
                 ratingMode,
@@ -561,7 +568,8 @@ export function PracticeListPage() {
                       className="aspect-[2.2/1] w-full"
                       alt=""
                     />
-                    {ratingMode !== "dan" && danLabel ? (
+                    {(ratingMode === "osu" || ratingMode === "sunny") &&
+                    danLabel ? (
                       <span className="absolute bottom-2 left-2 max-w-[calc(100%-1rem)] truncate rounded bg-canvas/85 px-2 py-1 text-[11px] font-semibold leading-none text-ink shadow-sm ring-1 ring-white/10 backdrop-blur-sm">
                         {danLabel}
                       </span>
@@ -598,6 +606,9 @@ export function PracticeListPage() {
                           sunnyStar: item.sunnyStar,
                           danielEstDiff: item.danielEstDiff,
                           danielStar: item.danielStar,
+                          reworkEstDiff: item.reworkEstDiff,
+                          reworkStar: item.reworkStar,
+                          lnRatio: item.reworkLnRatio,
                           keyCount: item.keyCount,
                         })}
                         {item.mapperUsername ? ` · ${item.mapperUsername}` : ""}

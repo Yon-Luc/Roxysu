@@ -42,6 +42,11 @@ export function statusLabel(
   switch (status) {
     case "running":
       return dict?.settings.jobStatus.running ?? "Running";
+    case "paused":
+      return (
+        dict?.settings.jobStatus.paused ??
+        "Paused — waiting for memory"
+      );
     case "stopping":
       return dict?.settings.jobStatus.stopping ?? "Stopping after current batch";
     case "completed":

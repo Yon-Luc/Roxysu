@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08
+last_verified: 2026-10
 confidence: verified
 touches:
   - apps/server/src/map-analysis/sunnyDanJob.ts
@@ -40,6 +40,9 @@ Settings POST /api/settings/rework-dan/start
 job reads .osu from lazer files  (one batch = one SQLite transaction)
     ↓
 analyzeManiaOnceFromText  — parses once, runs the calculator once
+    (withPattern, windowMs unset → no skill-timeline allocation;
+     every 128 notes, a heap-ceiling trip releases the graph, stores a failed
+     rework row and a failed pattern row, and pauses the job)
     ↓
 reworkDanLabel(star, lnRatio, keys) → tier from dans.json
     ↓
@@ -61,16 +64,20 @@ labels from stored stars without re-reading charts.
 ```
 Settings POST /api/settings/pattern-analysis/start
     ↓
-@roxysu/mania-pattern-analysis  analyzeManiaSkillNotes
+@roxysu/mania-pattern-analysis  analyzeManiaBackfillFromOsuText
+    (windowMs null — chart-level skills only, no timeline;
+     every 128 notes, a heap-ceiling trip releases the graph, stores a failed
+     pattern row, and pauses the job — that chart is skipped until a recompute)
     ↓
-skillProfile() → per-skill stars + 2000 ms windows
-    ↓
-dominant / secondary / confidence + skill sections
+skillProfile() → dominant / secondary / confidence
     ↓
 persist beatmap_pattern_analysis (algorithm = 'mania-skill-v1')
     ↓
 pattern: / dominant: / style: filters + practice browser skill chart
 ```
+
+On-request detail still bins the skill timeline. The backfill does not. A chart
+that would exhaust the heap is a failed row, not a dead server.
 
 ## Flow: modded plays → dan difficulty variants
 

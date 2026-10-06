@@ -21,6 +21,9 @@ export type SessionSuggestMapFields = {
   sunnyStar?: number | null;
   danielEstDiff?: string | null;
   danielStar?: number | null;
+  reworkEstDiff?: string | null;
+  reworkStar?: number | null;
+  reworkLnRatio?: number | null;
   keyCount?: number | null;
   backgroundFileHash: string | null;
   setOnlineId: number | null;
@@ -73,6 +76,9 @@ export function SessionSuggestMapRow({
               sunnyStar: item.sunnyStar,
               danielEstDiff: item.danielEstDiff,
               danielStar: item.danielStar,
+              reworkEstDiff: item.reworkEstDiff,
+              reworkStar: item.reworkStar,
+              lnRatio: item.reworkLnRatio,
               keyCount: item.keyCount,
             })}
             {metaExtra}

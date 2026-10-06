@@ -1,12 +1,19 @@
 
 import type { Db } from "@roxysu/db/types";
 import { PATTERN_ALGORITHM } from "@roxysu/mania-pattern-analysis";
-import { backfillPatternAnalysisSync } from "./computePatternAnalysis";
+import { backfillPatternAnalysis } from "./computePatternAnalysis";
 import { publish } from "../shared/events";
+import {
+  describeMemoryPressure,
+  isInMapMemoryPressure,
+  memoryHeadroom,
+} from "./memoryPressure";
 
 export type PatternAnalysisJobStatus =
   | "idle"
   | "running"
+  /** Waiting for the machine to free memory; resumes automatically. */
+  | "paused"
   | "stopping"
   | "completed"
   | "error";
@@ -33,10 +40,14 @@ export type PatternAnalysisJobState = {
   finishedAt: string | null;
   error: string | null;
   batchSize: number;
+  /** Current memory summary, e.g. "212 MB · 19800 MB free". */
+  memory: string;
 };
 
 const BATCH_SIZE = 40;
 const YIELD_MS = 10;
+/** How often a paused job re-checks for recovered memory. */
+const PAUSE_POLL_MS = 5_000;
 
 let job: {
   status: PatternAnalysisJobStatus;
@@ -48,6 +59,7 @@ let job: {
   error: string | null;
   timer: ReturnType<typeof setTimeout> | null;
   db: Db | null;
+  minHeadroomMb: number | null;
 } = {
   status: "idle",
   mode: "missing",
@@ -58,6 +70,7 @@ let job: {
   error: null,
   timer: null,
   db: null,
+  minHeadroomMb: null,
 };
 
 /** Mania maps still needing a first successful pattern label for the active algorithm. */
@@ -145,6 +158,7 @@ export function getPatternAnalysisJobState(db: Db): PatternAnalysisJobState {
     finishedAt: job.finishedAt?.toISOString() ?? null,
     error: job.error,
     batchSize: BATCH_SIZE,
+    memory: describeMemoryPressure(),
   };
 }
 
@@ -164,15 +178,48 @@ function finish(status: "completed" | "idle" | "error", error?: string): void {
   publish({ type: "dashboard.updated" });
 }
 
-function scheduleNext(): void {
+/**
+ * Refuse to start another batch while the machine is low on memory, so an
+ * unattended backfill cannot push the desktop into swap exhaustion (where the
+ * OOM killer starts taking unrelated processes, e.g. the user's terminal).
+ */
+function memoryGuard(): boolean {
+  if (!noteHeadroom()) return false;
+  if (job.status !== "paused") {
+    job.status = "paused";
+    publish({ type: "dashboard.updated" });
+  }
+  scheduleNext(PAUSE_POLL_MS);
+  return true;
+}
+
+/** Record the lowest free MB seen this run, then report current pressure. */
+function noteHeadroom(): boolean {
+  const { headroomMb } = memoryHeadroom();
+  job.minHeadroomMb =
+    job.minHeadroomMb == null
+      ? headroomMb
+      : Math.min(job.minHeadroomMb, headroomMb);
+  // Tighter than the shared backfill ceiling: this job rates one chart
+  // synchronously, so it must stop before a single graph can reach the limit.
+  return isInMapMemoryPressure();
+}
+
+function scheduleNext(delayMs = YIELD_MS): void {
   clearTimer();
   job.timer = setTimeout(() => {
     job.timer = null;
-    runBatch();
-  }, YIELD_MS);
+    void runBatch();
+  }, delayMs);
 }
 
-function runBatch(): void {
+/**
+ * Async because rating yields after every map. `busy` guards against a second
+ * batch starting while one is in flight.
+ */
+let busy = false;
+
+async function runBatch(): Promise<void> {
   const db = job.db;
   if (!db) {
     finish("error", "Backfill job lost database handle");
@@ -184,15 +231,38 @@ function runBatch(): void {
     return;
   }
 
-  if (job.status !== "running") return;
+  if (job.status === "paused") {
+    // Resume on our own once the machine has room.
+    if (noteHeadroom()) {
+      scheduleNext(PAUSE_POLL_MS);
+      return;
+    }
+    job.status = "running";
+  }
+
+  if (job.status !== "running" || busy) return;
+
+  if (memoryGuard()) return;
+
+  busy = true;
 
   try {
-    const result = backfillPatternAnalysisSync(db, {
+    const result = await backfillPatternAnalysis(db, {
       limit: BATCH_SIZE,
       includeFailed: false,
+      // Checked between maps: a whole synchronous batch can fill the heap
+      // before the next batch-level check ever runs.
+      shouldContinue: () => !noteHeadroom(),
     });
     job.attemptedThisRun += result.attempted;
     job.computedThisRun += result.succeeded;
+
+    if (result.stoppedEarly) {
+      // Low memory: yield the machine and resume on our own shortly.
+      memoryGuard();
+      scheduleNext(PAUSE_POLL_MS);
+      return;
+    }
 
     if (result.attempted === 0 || result.remaining === 0) {
       finish("completed");
@@ -202,6 +272,8 @@ function runBatch(): void {
     scheduleNext();
   } catch (err) {
     finish("error", err instanceof Error ? err.message : String(err));
+  } finally {
+    busy = false;
   }
 }
 

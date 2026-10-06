@@ -55,6 +55,9 @@ export const searchRoutes = new Elysia({ prefix: "/search" })
             sunnyStar: r.sunnyStar ?? null,
             danielEstDiff: r.danielEstDiff ?? null,
             danielStar: r.danielStar ?? null,
+            reworkEstDiff: r.reworkEstDiff ?? null,
+            reworkStar: r.reworkStar ?? null,
+            reworkLnRatio: r.reworkLnRatio ?? null,
             keyCount: r.keyCount ?? null,
           })),
         };

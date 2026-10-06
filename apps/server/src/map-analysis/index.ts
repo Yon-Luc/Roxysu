@@ -57,7 +57,7 @@ export {
   getOrComputePatternAnalysis,
   getManiaPatternDetail,
   analyzeManiaPatternDetail,
-  backfillPatternAnalysisSync,
+  backfillPatternAnalysis,
   ensurePatternAnalysisForIdsSync,
   PATTERN_ALGORITHM,
   PATTERN_QUERY_BACKFILL_LIMIT,

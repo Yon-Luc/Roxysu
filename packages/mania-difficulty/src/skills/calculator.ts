@@ -1,6 +1,13 @@
 import type { ManiaBeatmapInput } from "../types";
 import type { ManiaDifficultyAttributes } from "../types";
-import { buildHitObjectGraph, meanManipulation } from "../adapters/hitObject";
+import {
+  buildHitObjectGraph,
+  ChartMemoryError,
+  GRAPH_CHECK_EVERY,
+  meanManipulation,
+  releaseHitObjectGraph,
+  type ManiaDifficultyHitObject,
+} from "../adapters/hitObject";
 import { DiffUtils } from "../../generated/osu.Game/Rulesets/Difficulty/Utils/DiffUtils";
 import {
   createCoordinationProcessor,
@@ -76,14 +83,26 @@ export type SkillStrainSnapshot = {
  */
 export function calculateWithSkills(
   beatmap: ManiaBeatmapInput,
-  options?: { clockRate?: number; onObject?: (s: SkillStrainSnapshot) => void },
+  options?: {
+    clockRate?: number;
+    onObject?: (s: SkillStrainSnapshot) => void;
+    /**
+     * Backfill guard, called every {@link GRAPH_CHECK_EVERY} notes. Return
+     * false to abandon this chart. Omitted for a single on-request read.
+     */
+    shouldContinue?: () => boolean;
+  },
 ): ManiaDifficultyAttributes {
   const clockRate = options?.clockRate ?? 1;
   const onObject = options?.onObject;
-  const objects = buildHitObjectGraph(
+  const shouldContinue = options?.shouldContinue;
+  let objects: ManiaDifficultyHitObject[] = [];
+  try {
+  objects = buildHitObjectGraph(
     beatmap.columnCount,
     beatmap.notes,
     clockRate,
+    shouldContinue,
   );
 
   if (objects.length === 0) {
@@ -155,7 +174,15 @@ export function calculateWithSkills(
     );
   });
 
-  for (const obj of objects) {
+  for (let n = 0; n < objects.length; n++) {
+    if (
+      shouldContinue &&
+      n % GRAPH_CHECK_EVERY === 0 &&
+      !shouldContinue()
+    ) {
+      throw new ChartMemoryError();
+    }
+    const obj = objects[n]!;
     speedSkill.process(obj);
     techSkill.process(obj);
     jackSkill.process(obj);
@@ -201,6 +228,8 @@ export function calculateWithSkills(
   const starRatingSs =
     scaleToStarRating(ssSkill * consistencyMult) * odMult * lengthBonus;
 
+  const meanManip = meanManipulation(objects);
+
   const holdNoteCount = beatmap.notes.filter((n) => n.endMs > n.startMs).length;
   // Attributes use full beatmap note counts (C# CreateDifficultyAttributes),
   // while skills only process difficulty objects (N-1).
@@ -223,9 +252,14 @@ export function calculateWithSkills(
     ),
     lnRatio: totalNotes > 0 ? holdNoteCount / totalNotes : 0,
     greatHitWindow,
-    meanManipulation: meanManipulation(objects),
+    meanManipulation: meanManip,
     noteCount: totalNotes,
     holdNoteCount,
     overallDifficulty: beatmap.overallDifficulty,
   };
+  } finally {
+    // Sever the graph even when the backfill aborts mid-chart. Otherwise the
+    // note list stays rooted on the way out and the next map inherits it.
+    releaseHitObjectGraph(objects);
+  }
 }

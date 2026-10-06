@@ -117,7 +117,8 @@ export function primaryDanSource(opts: {
   if (opts.mode === "osu") return null;
   if (opts.mode === "rework") {
     // The rework estimator covers every key mode, so no 4K fallback is needed.
-    return opts.reworkEstDiff ? "rework" : null;
+    // Either the stored label or a star is enough to treat the row as rated.
+    return opts.reworkEstDiff || opts.reworkStar != null ? "rework" : null;
   }
   if (opts.mode === "dan") {
     if (
@@ -152,9 +153,8 @@ export function primaryRatingDisplayTitle(
 ): string | null {
   if (mode === "osu" || source == null) return null;
   if (source === "rework") {
-    return mode === "rework" && labels.reworkStar
-      ? labels.reworkStar
-      : (labels.reworkDan ?? "Rework dan");
+    // Rework display mode always shows the dan label as the primary value.
+    return labels.reworkDan ?? "Rework dan";
   }
   if (source === "daniel") {
     return mode === "sunny"
@@ -187,12 +187,13 @@ export function primaryDanLabel(opts: {
 
 /** Preferred dan star: Daniel on 4K when available, otherwise Sunny. */
 export function primaryDanStar(opts: {
+  mode?: RatingDisplayMode;
   sunnyStar?: number | null;
   danielStar?: number | null;
   reworkStar?: number | null;
   keyCount?: number | null;
 }): number | null {
-  if (opts.reworkStar != null) return opts.reworkStar;
+  if (opts.mode === "rework") return opts.reworkStar ?? null;
   if (isFourKKeyCount(opts.keyCount) && opts.danielStar != null) {
     return opts.danielStar;
   }
@@ -230,8 +231,11 @@ export function formatPrimaryRating(opts: {
   keyCount?: number | null;
 }): string {
   if (opts.mode === "rework") {
-    const label = reworkDanLabelFor(opts);
+    // Prefer a client-side label so a dans.json floor edit shows up before
+    // relabel. Fall back to the stored label, then the rework star, then osu.
+    const label = reworkDanLabelFor(opts) ?? opts.reworkEstDiff ?? null;
     if (label) return label;
+    if (opts.reworkStar != null) return formatStars(opts.reworkStar);
     return formatStars(opts.starRating);
   }
 

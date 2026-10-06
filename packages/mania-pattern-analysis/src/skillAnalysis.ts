@@ -152,12 +152,22 @@ function buildSections(
   });
 }
 
-/** Analyze parsed notes: dominant skill, breakdown, and time sections. */
+/**
+ * Analyze parsed notes: dominant skill plus note-structural densities.
+ *
+ * `sections` is empty only when `windowMs` is explicitly `null`. An omitted
+ * argument means "use the default width", which is what the preview/detail
+ * surface wants because it renders the timeline. Backfills must pass `null`:
+ * the bin array is sized by chart duration, so it can be enormous for a
+ * malformed timestamp, and a backfill discards it after persisting the
+ * chart-level result. See `analyzeManiaBackfillFromOsuText`.
+ */
 export function analyzeManiaSkillNotes(
   notes: ChartNote[],
   keyCount: number,
   overallDifficulty = 8,
-  windowMs?: number,
+  windowMs?: number | null,
+  shouldContinue?: () => boolean,
 ): StructuralPatternResult {
   if (notes.length === 0) return emptyResult(keyCount);
 
@@ -171,7 +181,7 @@ export function analyzeManiaSkillNotes(
         endMs: n.endMs,
       })),
     },
-    { windowMs },
+    { windowMs, shouldContinue },
   );
 
   return {
@@ -188,7 +198,12 @@ export function analyzeManiaSkillNotes(
   };
 }
 
-/** Parse `.osu` text and analyze with the dominant-skill algorithm. */
+/**
+ * Parse `.osu` text and analyze with the dominant-skill algorithm.
+ *
+ * Bins the skill timeline at the default width. Fine for a single on-request
+ * read; a backfill should use `analyzeManiaBackfillFromOsuText` instead.
+ */
 export function analyzeManiaSkillFromOsuText(
   osuText: string,
   keyCount?: number,
@@ -211,7 +226,7 @@ export type { SkillLabel, SkillStar };
 export type { PatternAnalysisResult };
 
 /** Overall difficulty from `.osu` metadata; defaults to 8 like the beatmap helper. */
-function overallDifficultyFrom(chart: {
+export function overallDifficultyFrom(chart: {
   metaData: Record<string, string>;
 }): number {
   const raw = Number(chart.metaData["OverallDifficulty"]);

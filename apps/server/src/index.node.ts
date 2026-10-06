@@ -8,6 +8,7 @@ import { startPollLoop } from "./sse";
 import { startAnalyticsPipeline } from "./analytics/pipeline";
 import { startDanVariantJob } from "./map-analysis/danVariantJob";
 import { startCollectionMatchCache } from "./shared/collectionMatchCache";
+import { guardUpgradeSocketErrors } from "./shared/upgradeSocketGuard";
 import { clearStuckMirrorBatchLocks } from "./mirrors";
 import { ensureTosuStarted, stopTosuAdapter } from "./tosu";
 import path from "node:path";
@@ -41,7 +42,10 @@ async function main() {
   // bootstrap, so the snapshot can never be served with uninitialized settings.
   void ensureTosuStarted(db);
 
-  app.listen({ port, hostname });
+  app.listen({ port, hostname }, (info) => {
+    // A client that hangs up mid-upgrade must not take the server with it.
+    guardUpgradeSocketErrors(info);
+  });
   const stopPoll = startPollLoop(db);
   const stopAnalytics = startAnalyticsPipeline(db);
   const stopDanVariants = startDanVariantJob(db);

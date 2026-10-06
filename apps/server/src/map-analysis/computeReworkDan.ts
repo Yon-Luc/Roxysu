@@ -11,8 +11,9 @@ import {
   REWORK_ALGORITHM,
   analyzeManiaOnceFromText,
 } from "./reworkEstimator";
-import { DEFAULT_SKILL_WINDOW_MS } from "./skillWindow";
+import { isChartMemoryError } from "@roxysu/mania-difficulty";
 import { PATTERN_ALGORITHM } from "@roxysu/mania-pattern-analysis";
+import { collectNow, yieldForBackfill } from "./jobYield";
 
 export { REWORK_ALGORITHM };
 export type {
@@ -197,6 +198,8 @@ export type ComputeReworkOptions = {
   withPattern?: boolean;
   /** Skill profile bin width. Only read when `withPattern` is set. */
   windowMs?: number;
+  /** Backfill guard. Omitted for a single on-request read. */
+  shouldContinue?: () => boolean;
 };
 
 /**
@@ -260,12 +263,13 @@ export function computeReworkDanSync(
   }
 
   try {
-    const result = analyzeManiaOnceFromText(
-      osuText,
-      withPattern
-        ? { windowMs: options.windowMs ?? DEFAULT_SKILL_WINDOW_MS }
-        : {},
-    );
+    // `windowMs` is only set by preview/detail callers that need the timeline.
+    // Backfills leave it unset so no per-chart window array is allocated.
+    const result = analyzeManiaOnceFromText(osuText, {
+      withPattern,
+      windowMs: options.windowMs,
+      shouldContinue: options.shouldContinue,
+    });
 
     if (!Number.isFinite(result.star)) throw new Error("Invalid estimator output");
 
@@ -303,7 +307,9 @@ export function computeReworkDanSync(
 
     return rating;
   } catch (err) {
-    return fail(err instanceof Error ? err.message : String(err));
+    const failed = fail(err instanceof Error ? err.message : String(err));
+    if (isChartMemoryError(err)) throw err;
+    return failed;
   }
 }
 
@@ -467,6 +473,156 @@ export function ensureReworkDanForIdsSync(
   return out;
 }
 
+/** Rows still needing a first (or refreshed) rework rating. */
+function selectMissingReworkRows(
+  db: Db,
+  limit: number,
+  includeFailed: boolean,
+): ReworkRow[] {
+  const missingClause = includeFailed
+    ? `
+        (
+          dr.beatmap_id IS NULL
+          OR dr.est_diff IS NULL
+          OR (
+            b.hash IS NOT NULL
+            AND dr.beatmap_hash IS NOT NULL
+            AND dr.beatmap_hash != b.hash
+          )
+        )
+      `
+    : `
+        (
+          dr.beatmap_id IS NULL
+          OR (
+            b.hash IS NOT NULL
+            AND dr.beatmap_hash IS NOT NULL
+            AND dr.beatmap_hash != b.hash
+          )
+        )
+      `;
+
+  return db.$client
+    .query(
+      `
+      SELECT b.id AS id, b.hash AS hash,
+             b.ruleset_short_name AS ruleset_short_name
+      FROM beatmaps b
+      LEFT JOIN beatmap_dan_ratings dr
+        ON dr.beatmap_id = b.id AND dr.algorithm = ?
+      WHERE b.hidden = 0
+        AND lower(COALESCE(b.ruleset_short_name, '')) = 'mania'
+        AND ${missingClause}
+      ORDER BY
+        CASE
+          WHEN dr.beatmap_id IS NULL THEN 0
+          WHEN b.hash IS NOT NULL
+            AND dr.beatmap_hash IS NOT NULL
+            AND dr.beatmap_hash != b.hash THEN 1
+          ELSE 2
+        END,
+        b.id
+      LIMIT ?
+    `,
+    )
+    .all(REWORK_ALGORITHM, limit) as ReworkRow[];
+}
+
+/**
+ * Yielding variant used by the background job.
+ *
+ * Every map's note graph is a large object cycle that is only collectable once
+ * the calculation returns. Rating a whole batch in one synchronous loop starves
+ * the collector, so resident memory climbs until the OS OOM-kills the process.
+ * This yields after each map and forces a collection periodically.
+ */
+export async function backfillReworkDanAsync(
+  db: Db,
+  opts: {
+    limit?: number;
+    includeFailed?: boolean;
+    skipRelabel?: boolean;
+    withPattern?: boolean;
+    /**
+     * Called before each map. Return false to stop early — used to pause when
+     * the machine runs low on memory. Maps already rated stay committed.
+     */
+    shouldContinue?: () => boolean;
+  } = {},
+): Promise<{
+  attempted: number;
+  succeeded: number;
+  remaining: number | null;
+  relabeled: number;
+  computed: number;
+  /** True when `shouldContinue` stopped the batch early. */
+  stoppedEarly: boolean;
+}> {
+  const relabeled = opts.skipRelabel ? 0 : relabelReworkDanSync(db);
+  const limit = Math.max(1, Math.min(500, opts.limit ?? 80));
+  const withPattern = opts.withPattern !== false;
+  const missing = selectMissingReworkRows(db, limit, opts.includeFailed === true);
+
+  if (missing.length === 0) {
+    return {
+      attempted: 0,
+      succeeded: 0,
+      remaining: null,
+      relabeled,
+      computed: 0,
+      stoppedEarly: false,
+    };
+  }
+
+  const yieldState = { count: 0 };
+  let succeeded = 0;
+  let attempted = 0;
+  let stoppedEarly = false;
+
+  db.$client.query("BEGIN").run();
+  try {
+    for (const row of missing) {
+      if (opts.shouldContinue && !opts.shouldContinue()) {
+        stoppedEarly = true;
+        break;
+      }
+      try {
+        const rating = computeReworkDanSync(db, row.id, row.hash, {
+          withPattern,
+          shouldContinue: opts.shouldContinue,
+        });
+        attempted += 1;
+        if (rating.error == null && rating.estDiff) succeeded += 1;
+      } catch (err) {
+        if (!isChartMemoryError(err)) throw err;
+        // fail() already wrote the error row inside this transaction.
+        attempted += 1;
+        collectNow();
+        stoppedEarly = true;
+        break;
+      }
+      await yieldForBackfill(yieldState);
+    }
+    db.$client.query("COMMIT").run();
+  } catch (err) {
+    try {
+      db.$client.query("ROLLBACK").run();
+    } catch {
+      // already unwound
+    }
+    throw err;
+  }
+
+  return {
+    attempted,
+    succeeded,
+    remaining: null,
+    relabeled,
+    computed: attempted,
+    stoppedEarly,
+  };
+}
+
 /** Compute rework dan for mania maps missing a fresh rating. */
 export function backfillReworkDanSync(
   db: Db,
@@ -491,53 +647,7 @@ export function backfillReworkDanSync(
   const includeFailed = opts.includeFailed === true;
   const withPattern = opts.withPattern !== false;
 
-  const missingClause = includeFailed
-    ? `
-        (
-          dr.beatmap_id IS NULL
-          OR dr.est_diff IS NULL
-          OR (
-            b.hash IS NOT NULL
-            AND dr.beatmap_hash IS NOT NULL
-            AND dr.beatmap_hash != b.hash
-          )
-        )
-      `
-    : `
-        (
-          dr.beatmap_id IS NULL
-          OR (
-            b.hash IS NOT NULL
-            AND dr.beatmap_hash IS NOT NULL
-            AND dr.beatmap_hash != b.hash
-          )
-        )
-      `;
-
-  const missing = db.$client
-    .query(
-      `
-      SELECT b.id AS id, b.hash AS hash,
-             b.ruleset_short_name AS ruleset_short_name
-      FROM beatmaps b
-      LEFT JOIN beatmap_dan_ratings dr
-        ON dr.beatmap_id = b.id AND dr.algorithm = ?
-      WHERE b.hidden = 0
-        AND lower(COALESCE(b.ruleset_short_name, '')) = 'mania'
-        AND ${missingClause}
-      ORDER BY
-        CASE
-          WHEN dr.beatmap_id IS NULL THEN 0
-          WHEN b.hash IS NOT NULL
-            AND dr.beatmap_hash IS NOT NULL
-            AND dr.beatmap_hash != b.hash THEN 1
-          ELSE 2
-        END,
-        b.id
-      LIMIT ?
-    `,
-    )
-    .all(REWORK_ALGORITHM, limit) as ReworkRow[];
+  const missing = selectMissingReworkRows(db, limit, includeFailed);
 
   if (missing.length === 0) {
     return {

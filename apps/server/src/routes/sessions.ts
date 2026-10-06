@@ -93,6 +93,9 @@ async function sessionDetailPayload(
       sunnyStar: s.sunnyStar ?? null,
       danielEstDiff: s.danielEstDiff ?? null,
       danielStar: s.danielStar != null ? Number(s.danielStar) : null,
+      reworkEstDiff: s.reworkEstDiff ?? null,
+      reworkStar: s.reworkStar != null ? Number(s.reworkStar) : null,
+      reworkLnRatio: s.reworkLnRatio != null ? Number(s.reworkLnRatio) : null,
       setOnlineId:
         s.setOnlineId != null && s.setOnlineId > 0 ? s.setOnlineId : null,
       backgroundFileHash: s.backgroundFileHash,

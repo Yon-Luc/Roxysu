@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { skillProfile, MAX_SKILL_WINDOWS } from "../../src/skillProfile";
 import {
   expandDanTiers,
   reworkDanIntervalForStar,
@@ -208,5 +209,43 @@ describe("reworkDanNextTierName", () => {
 describe("reworkDanTiersFor", () => {
   test("returns null for an unknown key count", () => {
     expect(reworkDanTiersFor(6, "rice")).toBeNull();
+  });
+});
+describe("window guards", () => {
+  test("skillProfile with windowMs null allocates no windows", () => {
+    const p = skillProfile(
+      {
+        columnCount: 4,
+        overallDifficulty: 8,
+        notes: Array.from({ length: 200 }, (_, i) => ({
+          column: i % 4,
+          startMs: 1000 + i * 70,
+          endMs: 1000 + i * 70,
+        })),
+      },
+      { windowMs: null },
+    );
+    expect(p.windows).toEqual([]);
+    expect(p.dominant).not.toBeNull();
+    expect(p.starRating).toBe(p.attributes.starRating);
+  });
+
+  test("a malformed final timestamp cannot allocate unbounded windows", () => {
+    const notes = Array.from({ length: 50 }, (_, i) => ({
+      column: i % 7,
+      startMs: 1000 + i * 70,
+      endMs: 1000 + i * 70,
+    }));
+    // Note far in the future (corrupt chart / editor junk).
+    notes.push({ column: 3, startMs: 2_147_483_647, endMs: 2_147_483_647 });
+
+    const p = skillProfile(
+      { columnCount: 7, overallDifficulty: 8, notes },
+      { windowMs: 2000 },
+    );
+    expect(p.windows.length).toBeLessThanOrEqual(MAX_SKILL_WINDOWS);
+    expect(p.windows.length).toBeGreaterThan(0);
+    // Chart-level classification still comes from the real skill stars.
+    expect(p.starRating).toBeGreaterThan(0);
   });
 });

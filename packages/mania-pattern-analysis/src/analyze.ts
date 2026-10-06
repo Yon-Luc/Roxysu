@@ -12,6 +12,7 @@ import {
   analyzeManiaSkillFromOsuText,
   analyzeManiaSkillNotes,
   noteDensities,
+  overallDifficultyFrom,
 } from "./skillAnalysis.js";
 import {
   PATTERN_ALGORITHM,
@@ -30,6 +31,7 @@ export {
   analyzeManiaSkillFromOsuText,
   analyzeManiaSkillNotes,
   noteDensities,
+  overallDifficultyFrom,
 };
 
 /** Convenience helper matching PatternFinder.FindAllPatterns(OsuFile). */
@@ -55,7 +57,7 @@ function parseManiaChart(osuText: string) {
 export function analyzeManiaFromOsuText(
   osuText: string,
   algorithm: string = PATTERN_ALGORITHM,
-): PatternAnalysisResult {
+): StructuralPatternResult {
   switch (algorithm) {
     case PATTERN_ALGORITHM_V1:
     case PATTERN_ALGORITHM_V2:
@@ -73,6 +75,33 @@ export function analyzeManiaFromOsuText(
         parseManiaChart(osuText).columnCount,
       );
   }
+}
+
+/**
+ * Backfill entry point: dominant skill plus note-structural densities only.
+ *
+ * Must not bin the skill timeline. `analyzeManiaSkillNotes` treats an omitted
+ * `windowMs` as "use the default width", so the argument is passed as `null`
+ * explicitly here — otherwise every backfilled map allocates a window array it
+ * never stores, and the loop that builds them is the one that can exhaust the
+ * heap. Use `analyzeManiaFromOsuText` directly for the on-request timeline.
+ */
+export function analyzeManiaBackfillFromOsuText(
+  osuText: string,
+  algorithm: string = PATTERN_ALGORITHM,
+  shouldContinue?: () => boolean,
+): StructuralPatternResult {
+  if (algorithm !== PATTERN_ALGORITHM) {
+    throw new Error(`Unknown pattern algorithm: ${algorithm}`);
+  }
+  const chart = parseManiaChart(osuText);
+  return analyzeManiaSkillNotes(
+    chart.notes,
+    chart.columnCount,
+    overallDifficultyFrom(chart),
+    null,
+    shouldContinue,
+  );
 }
 
 /** Analyze parsed mania chart notes with the active algorithm. */

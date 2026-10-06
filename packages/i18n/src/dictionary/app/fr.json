@@ -307,6 +307,7 @@
     },
     "jobStatus": {
       "running": "En cours",
+      "paused": "En pause — en attente de mémoire",
       "stopping": "Arrêt après le lot en cours",
       "completed": "Terminé",
       "error": "Arrêté avec erreur",

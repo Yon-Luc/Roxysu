@@ -5,11 +5,19 @@ touches:
   - packages/sunny-dan
   - packages/mania-difficulty
   - packages/mania-pattern-analysis
+  - apps/server/src/map-analysis/memoryPressure.ts
+  - apps/server/src/map-analysis/jobYield.ts
+  - apps/server/src/map-analysis/patternAnalysisJob.ts
+  - apps/server/src/map-analysis/computePatternAnalysis.ts
+  - apps/desktop/main.js
   - apps/server/src/map-analysis/sunnyDanJob.ts
   - apps/server/src/map-analysis/computeDanVariants.ts
   - apps/server/src/map-analysis/danVariantJob.ts
   - apps/server/src/map-analysis/computeReworkDan.ts
   - apps/server/src/map-analysis/reworkDanJob.ts
+  - apps/server/src/routes/practice.ts
+  - apps/server/src/routes/beatmaps.ts
+  - apps/server/public/lib/ratingDisplay.ts
   - apps/server/src/analytics/recommend
   - apps/server/src/analytics/recommend/axisThresholds.ts
 ---
@@ -63,6 +71,13 @@ Three estimators write to the same store, keyed by `algorithm`: `sunny`, `daniel
    and run automatically when the job starts with nothing missing.
 7. `rework:` matches only `algorithm = 'mania-difficulty'` rows; `dan:` matches
    Sunny and Daniel only. The two never mix.
+8. The `rework` rating display mode is client-side (`roxysu:rating-display`).
+   Practice/search/collection list cards and the beatmap detail panel must pass
+   `reworkStar` / `reworkEstDiff` / `reworkLnRatio` into `formatPrimaryRating`
+   and `primaryDanSource`. The practice list serializer (`mapCard`) and
+   collection/search item maps must include those fields — dropping them makes
+   the mode fall back to osu stars even after a successful backfill. Detail
+   reads `getReworkDan` (persisted only; no on-request compute).
 
 ## Performance rules
 
@@ -90,10 +105,68 @@ Three estimators write to the same store, keyed by `algorithm`: `sunny`, `daniel
    SQLite transaction covers a batch.
 7. Parity is enforced by `tests/parity/baselines.test.ts` against pinned C#
    baselines. Any optimization must keep SR and skill values within tolerance.
+8. **Memory: never size an allocation by chart duration without a cap.** The
+   skill profile bins one entry per `windowMs` across the chart, so a chart with
+   a malformed final note timestamp (editor junk, corrupt file) produced ~1M
+   windows and ~1 GB from a single map. This crashed a full-library backfill with
+   an OOM kill.
+   - `MAX_SKILL_WINDOWS` (3600) caps `skillProfile` binning.
+   - `MAX_DENSITY_SAMPLES` (7200) caps the preview density timeline.
+   - **Backfills must not bin at all — and must say so explicitly.** They persist
+     only dominant/secondary/confidence and the densities, so pass
+     `windowMs: null` (`skillProfile`, `analyzeManiaOnceFromText`). For
+     `analyzeManiaSkillNotes` an omitted argument bins rather than skipping, so
+     the backfill path uses `analyzeManiaBackfillFromOsuText()` (rule 13). Only
+     the preview/detail surface sets a width, because it renders the timeline.
+9. **A note graph is one large object cycle.** `releaseHitObjectGraph()` severs
+   the cross-links after evaluation so a finished map is collectable
+   immediately. Call it once no further evaluation will read the graph.
+10. Backfill loops yield after every map (`jobYield.ts`), forcing a collection
+    every 16 maps. Measured peak RSS is flat across a 600-map run; without the
+    yield the curve rises until a cycle-collection pass catches up.
+11. **Every backfill job is memory-aware, against two ceilings.** `memoryPressure.ts`
+    reads `MemAvailable` + `SwapFree` from `/proc/meminfo` **and** the V8 heap
+    (`node:v8` `getHeapStatistics()`). Either condition pauses the job.
+    - Free RAM below `BACKFILL_MIN_HEADROOM_MB` (512 MB), or
+    - `used_heap_size / heap_size_limit` above `BACKFILL_MAX_HEAP_RATIO` (0.65).
+    - The heap check exists because **a V8 heap abort is fatal and
+      uncatchable**, and free RAM can look healthy while Node has exhausted its
+      own ~4 GB cap (observed: the desktop server died with
+      `FATAL ERROR: Ineffective mark-compacts near heap limit`, exit 134, after
+      ~57 min of rework + pattern work). Do not raise
+      `--max-old-space-size` to "fix" this — it only moves the crash and can
+      hand the machine to the kernel OOM killer.
+    - Paused jobs set status `paused` and re-check every 5 s, resuming on their
+      own. Wired into the rework, Sunny, Daniel and pattern jobs; the rework and
+      pattern jobs check between maps via `shouldContinue`, the Sunny/Daniel
+      jobs between batches. A backfill must never be the process that pushes a
+      busy desktop into swap exhaustion — the OOM killer then takes arbitrary
+      processes (observed: it killed the terminal, not the server). The Settings
+      job panel shows `memory` (RSS · free · heap used/limit) and
+      `minHeadroomMb`.
+12. **A backfill loop must yield per map, on both runtimes.** `jobYield.ts` calls
+    `Bun.gc` when present and falls back to `global.gc`, which Node only exposes
+    under `--expose-gc`. The desktop shell therefore sets
+    `NODE_OPTIONS=--expose-gc` on the **server child only** (Electron must not
+    inherit it), which also reaches dev `tsx` — `spawnNodeEntry` drops
+    positional node args when it launches through `tsx`. Without a collector the
+    loop still yields, but note graphs wait for V8 to choose to collect them.
+    `backfillPatternAnalysis` is async and yields per map for this reason; it was
+    previously a tight 40-map synchronous batch.
+13. **Backfills must pass `windowMs: null`, never omit it.**
+    `analyzeManiaSkillNotes(notes, keys, od, windowMs?)` treats an **omitted**
+    width as "use the default", so it bins; only an explicit `null` skips
+    binning. Omitting it is what made the pattern backfill allocate a timeline it
+    discards. `analyzeManiaBackfillFromOsuText()` wraps the correct call — use it
+    for backfills and `analyzeManiaFromOsuText` only for the on-request
+    timeline. Request-path fills (`computeOnePattern`) stay on the binning call
+    because they never run in bulk. Covered by
+    `computePatternAnalysis.integration.test.ts`.
 
 Benchmarks: `packages/mania-difficulty` `bun run bench` (per-phase calculator),
 `apps/server` `bun run bench:rework` (end-to-end backfill over a synthetic
-library).
+library) and `bun run bench:mem` (RSS growth per map; `BENCH_MODE=sync` shows the
+old non-yielding loop).
 
 ## Dominant skill rules
 
@@ -119,6 +192,10 @@ library).
 - `packages/sunny-dan`
 - `packages/mania-difficulty` — port + `dans.json` + `skills.ts` + `skillProfile.ts`
 - `apps/server/src/map-analysis/sunnyDanJob.ts`
+- `apps/server/src/map-analysis/memoryPressure.ts` — OS headroom **and** V8 heap ratio; `BACKFILL_MIN_HEADROOM_MB`, `BACKFILL_MAX_HEAP_RATIO`
+- `apps/server/src/map-analysis/jobYield.ts` — per-map yield + forced collection (`Bun.gc`, else `global.gc`)
+- `packages/mania-pattern-analysis/src/analyze.ts:analyzeManiaBackfillFromOsuText` — chart-level only, no timeline
+- `apps/server/src/map-analysis/computePatternAnalysis.ts:backfillPatternAnalysis` — async, yields per map, honours `shouldContinue`
 - `apps/server/src/map-analysis/computeDanVariants.ts` — combo collection, backfill, variant lookups
 - `apps/server/src/map-analysis/danVariantJob.ts` — post-import incremental job (also one-time recompute of pre-conversion Daniel variant rows, settings flag `dan_variants.daniel_cvt_recompute`)
 - `apps/server/src/map-analysis/computeSunnyDan.ts:getSunnyDanForPatternMods` — mod-aware single-map reads

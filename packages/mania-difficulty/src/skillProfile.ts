@@ -20,6 +20,16 @@ import {
 export const DEFAULT_SKILL_WINDOW_MS = 2000;
 const MIN_WINDOW_MS = 250;
 
+/**
+ * Hard cap on window count (2 hours at the default width).
+ *
+ * A chart with a bogus end timestamp — editor junk, a note far in the future —
+ * would otherwise allocate millions of windows and exhaust memory, which reads
+ * as a leak rather than bad input. Windows past the cap are folded into the last
+ * one; dominant skill and its star ratings are unaffected either way.
+ */
+export const MAX_SKILL_WINDOWS = 3600;
+
 const SNAPSHOT_KEYS = {
   speed: "speed",
   jack: "jack",
@@ -65,15 +75,24 @@ function pickWindowDominant(skills: SkillStar[]): SkillWindow["dominant"] {
 }
 
 /**
- * Bin per-note skill strain into windows.
+ * Classify a chart's skills, optionally binning them over time.
  *
- * `dominant`/`secondary`/`confidence` describe the whole chart from the real
- * skill star ratings; each window reports its own local peak leader.
+ * `dominant`/`secondary`/`confidence` always describe the whole chart from the
+ * real skill star ratings. Pass `windowMs: null` to skip binning entirely —
+ * backfills only persist the chart-level result, and the bin array is sized by
+ * chart duration, so a malformed timestamp could otherwise allocate millions
+ * of windows.
  */
 export function skillProfile(
   beatmap: ManiaBeatmapInput,
-  options?: { windowMs?: number; clockRate?: number },
+  options?: {
+    windowMs?: number | null;
+    clockRate?: number;
+    /** Backfill guard. Omitted for a single on-request read. */
+    shouldContinue?: () => boolean;
+  },
 ): SkillProfile {
+  const withWindows = options?.windowMs !== null;
   const windowMs = Math.max(
     MIN_WINDOW_MS,
     options?.windowMs ?? DEFAULT_SKILL_WINDOW_MS,
@@ -101,22 +120,52 @@ export function skillProfile(
     };
   }
 
+  if (!withWindows) {
+    // Chart-level classification only: no per-window state at all.
+    const attributes = calculateWithSkills(beatmap, {
+      clockRate: options?.clockRate ?? 1,
+      shouldContinue: options?.shouldContinue,
+    });
+    const classified = dominantSkill(attributes);
+    return {
+      attributes,
+      starRating: attributes.starRating,
+      dominant: classified.dominant,
+      secondary: classified.secondary,
+      confidence: classified.confidence,
+      skills: classified.skills,
+      composition: {},
+      windows: [],
+      windowMs,
+    };
+  }
+
   const first = beatmap.notes[0]!.startMs;
-  // Pre-seed every window across the whole chart so quiet stretches still show.
-  const windowCount =
+  const spanWindows =
     Math.floor(
       (beatmap.notes[beatmap.notes.length - 1]!.startMs - first) / windowMs,
     ) + 1;
+  // Pre-seed every window across the whole chart so quiet stretches still show,
+  // clamped so malformed input cannot blow up memory.
+  const windowCount = Math.max(1, Math.min(spanWindows, MAX_SKILL_WINDOWS));
+  const windowIndexScale = spanWindows / windowCount;
   const peaks: SkillStar[][] = Array.from({ length: windowCount }, () =>
     SKILL_LABELS.map((skill) => ({ skill, star: 0 })),
   );
 
   const attributes = calculateWithSkills(beatmap, {
     clockRate: options?.clockRate ?? 1,
+    shouldContinue: options?.shouldContinue,
     onObject(snapshot) {
+      const raw = Math.floor(
+        (snapshot.startTime - first) / windowMs,
+      );
       const idx = Math.max(
         0,
-        Math.min(windowCount - 1, Math.floor((snapshot.startTime - first) / windowMs)),
+        Math.min(
+          windowCount - 1,
+          windowIndexScale === 1 ? raw : Math.floor(raw * windowIndexScale),
+        ),
       );
       const bucket = peaks[idx]!;
       for (const skill of SKILL_LABELS) {

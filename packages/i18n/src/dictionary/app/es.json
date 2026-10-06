@@ -307,6 +307,7 @@
     },
     "jobStatus": {
       "running": "En ejecución",
+      "paused": "En pausa — esperando memoria",
       "stopping": "Deteniéndose tras el lote actual",
       "completed": "Completado",
       "error": "Detenido con error",

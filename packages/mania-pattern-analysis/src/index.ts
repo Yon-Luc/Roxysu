@@ -10,6 +10,7 @@ export {
 export { parseOsuFile } from "./osuParser.js";
 export type { ParsedOsuFile } from "./osuParser.js";
 export {
+  analyzeManiaBackfillFromOsuText,
   analyzeManiaFromOsuText,
   analyzeManiaNotes,
   analyzeManiaSkillFromOsuText,

@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { buildHitObjectGraph } from "../../src/adapters/hitObject";
+import {
+  buildHitObjectGraph,
+  ChartMemoryError,
+} from "../../src/adapters/hitObject";
+import { calculateWithSkills } from "../../src/skills/calculator";
 import { ColumnPatternUtils } from "../../generated/osu.Game.Rulesets.Mania/Difficulty/Utils/ColumnPatternUtils";
 import { CrossColumnUtils } from "../../generated/osu.Game.Rulesets.Mania/Difficulty/Utils/CrossColumnUtils";
 import { RunDampenUtils } from "../../generated/osu.Game.Rulesets.Mania/Difficulty/Utils/RunDampenUtils";
@@ -120,6 +124,36 @@ describe("calculateManiaDifficulty multi-skill", () => {
     expect(r.technicalDifficulty).toBeGreaterThanOrEqual(0);
     expect(r.jackDifficulty).toBeGreaterThanOrEqual(0);
     expect(r.coordinationDifficulty).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("in-map memory abort", () => {
+  test("shouldContinue false throws without retaining the note list", () => {
+    const notes = Array.from({ length: 400 }, (_, i) => ({
+      column: i % 4,
+      startMs: i * 80,
+      endMs: i * 80,
+    }));
+    let calls = 0;
+    let caught: unknown;
+    try {
+      calculateWithSkills(
+        { columnCount: 4, overallDifficulty: 8, notes },
+        {
+          shouldContinue: () => {
+            calls += 1;
+            return calls < 2;
+          },
+        },
+      );
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(ChartMemoryError);
+    expect(calls).toBe(2);
+    const keys = Object.keys(caught as object);
+    expect(keys).not.toContain("notes");
+    expect(keys).not.toContain("objects");
   });
 });
 

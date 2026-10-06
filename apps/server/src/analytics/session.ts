@@ -11,6 +11,9 @@ import { SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
 import {
   danielEstDiffSelect,
   danielStarSelect,
+  reworkEstDiffSelect,
+  reworkLnRatioSelect,
+  reworkStarSelect,
 } from "../map-analysis/danRatingSelect";
 import {
   resolveScoresGamemode,
@@ -414,6 +417,9 @@ export async function listSessionScores(
       sunnyStar: beatmapDanRatings.sunnyStar,
       danielEstDiff: danielEstDiffSelect(),
       danielStar: danielStarSelect(),
+      reworkEstDiff: reworkEstDiffSelect(),
+      reworkStar: reworkStarSelect(),
+      reworkLnRatio: reworkLnRatioSelect(),
     })
     .from(scoreMetrics)
     .innerJoin(scores, eq(scoreMetrics.scoreId, scores.id))

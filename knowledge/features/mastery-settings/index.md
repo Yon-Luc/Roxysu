@@ -7,6 +7,9 @@ touches:
   - apps/server/src/routes/settings.ts
   - apps/server/public/features/settings
   - packages/db/src/settings-keys.ts
+  - apps/server/src/map-analysis/memoryPressure.ts
+  - apps/server/src/map-analysis/patternAnalysisJob.ts
+  - apps/server/src/map-analysis/reworkDanJob.ts
 ---
 
 # Mastery & settings
@@ -14,6 +17,12 @@ touches:
 ## Purpose
 
 Choose mastery formula (`simple` or `practice`), rating display preference (osu! stars / dan / Sunny stars / rework dan), paths, background jobs (Sunny, Daniel, rework backfills), and Rice/LN/FLN classification boundaries. Recompute mastery across the practice library when formula changes.
+
+Rating display is stored in the browser (`roxysu:rating-display`). The `rework`
+option shows mania-difficulty-port dan labels (and the matching star under the
+detail panel). It needs the rework dan Settings job to have filled
+`beatmap_dan_ratings` rows, and the list/detail UI must receive those fields —
+see `features/sunny-dan-recommendations/` rule 8.
 
 ## Business rules
 
@@ -33,6 +42,23 @@ Settings UI is tab-grouped on `/settings`:
 | Customize | Rice / LN / FLN boundaries |
 | Appearance | appearance, difficulty display, preview skin, keybinds (columns + playback actions) |
 | Jobs | Sunny dan, Daniel dan, rework dan (mania difficulty port), dominant skill analysis, Mania Rating Lab |
+
+Jobs pause themselves when the machine is low on memory (see
+`memoryPressure.ts`) and resume automatically, so they are safe to leave running
+unattended. The `paused` status reads "Paused — waiting for memory". The check
+covers two ceilings, not one: free RAM *and* the V8 heap ratio, because a machine
+with plenty of free RAM can still hit Node's heap cap, and that abort is fatal
+rather than a pause. The panel's `memory` line shows both (RSS · free · heap
+used/limit).
+
+Dominant skill analysis and rework dan rate one chart synchronously, so they
+pause at a tighter heap ratio (`BACKFILL_IN_MAP_MAX_HEAP_RATIO`) than the other
+jobs, and they re-check every 128 notes while the difficulty graph is built.
+Hit-object and row methods are shared prototypes, not one closure set per note.
+If a chart still crosses that ceiling, the graph is released, the map is stored
+as a failed pattern row (and a failed rework row, when that job is the one
+running), and the job pauses until the heap drops. That chart is not retried
+until a recompute. A single on-request read does not use this abort.
 
 Only the active tab’s panels mount. Deep-links still use `?section=<id>` (Command Palette); optional `?tab=` selects a tab when no section is present. Tab registry: `apps/server/public/features/settings/settingsTabs.ts`.
 

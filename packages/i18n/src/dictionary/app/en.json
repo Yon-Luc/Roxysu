@@ -307,6 +307,7 @@
     },
     "jobStatus": {
       "running": "Running",
+      "paused": "Paused — waiting for memory",
       "stopping": "Stopping after current batch",
       "completed": "Complete",
       "error": "Stopped with error",

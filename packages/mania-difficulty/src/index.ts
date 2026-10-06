@@ -15,7 +15,12 @@ export type {
 } from "./types";
 
 export { beatmapFromOsuChart, isEmptyBeatmap } from "./beatmap";
-export { buildHitObjectGraph } from "./adapters/hitObject";
+export {
+  buildHitObjectGraph,
+  ChartMemoryError,
+  isChartMemoryError,
+  GRAPH_CHECK_EVERY,
+} from "./adapters/hitObject";
 export type { ManiaDifficultyHitObject, ManiaRow } from "./adapters/hitObject";
 export { calculateWithSkills, greatHitWindowForOd } from "./skills/calculator";
 export type { SkillStrainSnapshot } from "./skills/calculator";
@@ -48,7 +53,11 @@ export {
 } from "./skills";
 export type { DominantSkill, SkillLabel, SkillStar } from "./skills";
 
-export { skillProfile, DEFAULT_SKILL_WINDOW_MS } from "./skillProfile";
+export {
+  skillProfile,
+  DEFAULT_SKILL_WINDOW_MS,
+  MAX_SKILL_WINDOWS,
+} from "./skillProfile";
 export type { SkillProfile, SkillWindow } from "./skillProfile";
 
 export {

@@ -124,15 +124,206 @@ type MapData = {
   density: (kind: number, index: number, radius: number) => number;
 };
 
+type HitMutable = ManiaDifficultyHitObject & {
+  _all: ManiaDifficultyHitObject[];
+  _col: ManiaDifficultyHitObject[][];
+  _colIdx: number;
+};
+
+/**
+ * Shared row methods. One prototype for every row — a per-row closure captured
+ * the whole row list and was the bulk of a chart's live set.
+ */
+class RowImpl implements ManiaRow {
+  Columns!: number[];
+  StartTime = 0;
+  Size = 0;
+  TotalColumns = 0;
+  GapBefore = Number.POSITIVE_INFINITY;
+  Objects!: ManiaDifficultyHitObject[];
+  RowIndex = 0;
+  Hand: ManiaHand = "Left";
+  IsHandLocal = true;
+  IsChord = false;
+  IsSingleNote = true;
+  IsJump = false;
+  _map: MapData | null = null;
+
+  get LocalPulse(): number {
+    return this._map?.LocalPulseAt(this.RowIndex) ?? Number.POSITIVE_INFINITY;
+  }
+  Previous(skip = 0): ManiaRow | null {
+    return this._map?.RowAt(this.RowIndex - (skip + 1)) ?? null;
+  }
+  Next(skip = 0): ManiaRow | null {
+    return this._map?.RowAt(this.RowIndex + (skip + 1)) ?? null;
+  }
+  Offset(offset: number): ManiaRow | null {
+    return this._map?.RowAt(this.RowIndex + offset) ?? null;
+  }
+  RowsAround(radius: number): ManiaRow[] {
+    let first: ManiaRow = this;
+    while (this.RowIndex - first.RowIndex < radius && first.Previous() != null) {
+      first = first.Previous()!;
+    }
+    const out: ManiaRow[] = [];
+    let cur: ManiaRow | null = first;
+    while (cur && cur.RowIndex <= this.RowIndex + radius) {
+      out.push(cur);
+      cur = cur.Next();
+    }
+    return out;
+  }
+  RowsUpTo(last: ManiaRow): ManiaRow[] {
+    const out: ManiaRow[] = [];
+    let cur: ManiaRow | null = this;
+    while (cur && cur.RowIndex <= last.RowIndex) {
+      out.push(cur);
+      cur = cur.Next();
+    }
+    return out;
+  }
+  RowsWithin(radiusMs: number, center: number): ManiaRow[] {
+    const out: ManiaRow[] = [this];
+    for (
+      let earlier = this.Previous();
+      earlier != null && center - earlier.StartTime <= radiusMs;
+      earlier = earlier.Previous()
+    ) {
+      out.push(earlier);
+    }
+    for (
+      let later = this.Next();
+      later != null && later.StartTime - center <= radiusMs;
+      later = later.Next()
+    ) {
+      out.push(later);
+    }
+    return out;
+  }
+  FirstWithin(radiusMs: number): ManiaRow {
+    let first: ManiaRow = this;
+    while (
+      first.Previous() != null &&
+      this.StartTime - first.Previous()!.StartTime <= radiusMs
+    ) {
+      first = first.Previous()!;
+    }
+    return first;
+  }
+  LastWithin(radiusMs: number): ManiaRow {
+    let last: ManiaRow = this;
+    while (
+      last.Next() != null &&
+      last.Next()!.StartTime - this.StartTime <= radiusMs
+    ) {
+      last = last.Next()!;
+    }
+    return last;
+  }
+  Contains(column: number): boolean {
+    return this.Columns.includes(column);
+  }
+  IsSameRow(other: ManiaRow): boolean {
+    return other.RowIndex === this.RowIndex;
+  }
+  ChordDensity(radius = DEFAULT_DENSITY_RADIUS): number {
+    return this._map?.density(KIND_CHORD, this.RowIndex, radius) ?? 0;
+  }
+  CrossHandDensity(radius = DEFAULT_DENSITY_RADIUS): number {
+    return this._map?.density(KIND_CROSS, this.RowIndex, radius) ?? 0;
+  }
+  SingleHandChordDensity(radius = DEFAULT_DENSITY_RADIUS): number {
+    return (
+      this._map?.density(KIND_SINGLE_HAND_CHORD, this.RowIndex, radius) ?? 0
+    );
+  }
+  LargeChordDensity(radius = DEFAULT_DENSITY_RADIUS): number {
+    return this._map?.density(KIND_LARGE, this.RowIndex, radius) ?? 0;
+  }
+}
+
+/** Shared hit-object methods. One copy for the whole process, not one per note. */
+const hitProto = {
+  Previous(this: HitMutable, skip = 0): ManiaDifficultyHitObject | null {
+    const j = this.Index - (skip + 1);
+    return j >= 0 ? this._all[j]! : null;
+  },
+  PrevInColumn(this: HitMutable, back = 0): ManiaDifficultyHitObject | null {
+    const list = this._col[this.Column]!;
+    const j = this._colIdx - (back + 1);
+    return j >= 0 ? list[j]! : null;
+  },
+  NextInColumn(this: HitMutable, forward = 0): ManiaDifficultyHitObject | null {
+    const list = this._col[this.Column]!;
+    const j = this._colIdx + (forward + 1);
+    return j < list.length ? list[j]! : null;
+  },
+  LastStartTimeInColumn(this: HitMutable, column: number): number {
+    return this.PreviousHitObjects[column]?.StartTime ?? Number.NEGATIVE_INFINITY;
+  },
+  LastEndTimeInColumn(this: HitMutable, column: number): number {
+    return this.PreviousHitObjects[column]?.EndTime ?? Number.NEGATIVE_INFINITY;
+  },
+  ConcurrentlyHeldColumns(this: HitMutable, chordTolerance: number): number {
+    let held = 0;
+    for (let c = 0; c < this.PreviousHitObjects.length; c++) {
+      if (c === this.Column) continue;
+      if (
+        Math.abs(this.LastStartTimeInColumn(c) - this.StartTime) <=
+        chordTolerance
+      ) {
+        continue;
+      }
+      if (this.LastEndTimeInColumn(c) > this.StartTime + chordTolerance) held++;
+    }
+    return held;
+  },
+};
+
+function noteMemory(shouldContinue: (() => boolean) | undefined, index: number): void {
+  if (
+    shouldContinue &&
+    index % GRAPH_CHECK_EVERY === 0 &&
+    !shouldContinue()
+  ) {
+    throw new ChartMemoryError();
+  }
+}
+
 const KIND_CHORD = 0;
 const KIND_CROSS = 1;
 const KIND_SINGLE_HAND_CHORD = 2;
 const KIND_LARGE = 3;
 const DEFAULT_DENSITY_RADIUS = 14;
 
+/** Notes between in-map memory checks. One chunk must not be able to reach the heap limit. */
+export const GRAPH_CHECK_EVERY = 128;
+
+/**
+ * Thrown when a backfill asks the calculator to stop mid-chart.
+ *
+ * The partial graph is released before this is thrown, and the error itself
+ * holds no note list, so the caller can persist a failed row and pause.
+ */
+export class ChartMemoryError extends Error {
+  constructor() {
+    super("Chart exceeded the backfill memory ceiling");
+    this.name = "ChartMemoryError";
+  }
+}
+
+export function isChartMemoryError(err: unknown): err is ChartMemoryError {
+  return (
+    err instanceof ChartMemoryError ||
+    (err instanceof Error && err.name === "ChartMemoryError")
+  );
+}
+
 function buildMapData(
   objects: ManiaDifficultyHitObject[],
   totalColumns: number,
+  shouldContinue?: () => boolean,
 ): MapData {
   const rows: ManiaRow[] = [];
   const data: MapData = {
@@ -169,116 +360,23 @@ function buildMapData(
     const columns = [...new Set(members.map((m) => m.Column))].sort(
       (a, b) => a - b,
     );
+    noteMemory(shouldContinue, rows.length);
     const rowIndex = rows.length;
     const hand = handOf(columns, totalColumns);
 
-    const row: ManiaRow = {
-      Columns: columns,
-      StartTime: rowStart,
-      Size: columns.length,
-      TotalColumns: totalColumns,
-      GapBefore: Number.POSITIVE_INFINITY,
-      Objects: members,
-      RowIndex: rowIndex,
-      Hand: hand,
-      IsHandLocal: hand !== "Both",
-      IsChord: columns.length > 1,
-      IsSingleNote: columns.length === 1,
-      IsJump: columns.length === 2,
-      get LocalPulse() {
-        return data.LocalPulseAt(rowIndex);
-      },
-      Previous(skip = 0) {
-        return data.RowAt(rowIndex - (skip + 1));
-      },
-      Next(skip = 0) {
-        return data.RowAt(rowIndex + (skip + 1));
-      },
-      Offset(offset) {
-        return data.RowAt(rowIndex + offset);
-      },
-      RowsAround(radius) {
-        let first: ManiaRow = row;
-        while (
-          rowIndex - first.RowIndex < radius &&
-          first.Previous() != null
-        ) {
-          first = first.Previous()!;
-        }
-        const out: ManiaRow[] = [];
-        let cur: ManiaRow | null = first;
-        while (cur && cur.RowIndex <= rowIndex + radius) {
-          out.push(cur);
-          cur = cur.Next();
-        }
-        return out;
-      },
-      RowsUpTo(last) {
-        const out: ManiaRow[] = [];
-        let cur: ManiaRow | null = row;
-        while (cur && cur.RowIndex <= last.RowIndex) {
-          out.push(cur);
-          cur = cur.Next();
-        }
-        return out;
-      },
-      RowsWithin(radiusMs, center) {
-        const out: ManiaRow[] = [row];
-        for (
-          let earlier = row.Previous();
-          earlier != null && center - earlier.StartTime <= radiusMs;
-          earlier = earlier.Previous()
-        ) {
-          out.push(earlier);
-        }
-        for (
-          let later = row.Next();
-          later != null && later.StartTime - center <= radiusMs;
-          later = later.Next()
-        ) {
-          out.push(later);
-        }
-        return out;
-      },
-      FirstWithin(radiusMs) {
-        let first: ManiaRow = row;
-        while (
-          first.Previous() != null &&
-          row.StartTime - first.Previous()!.StartTime <= radiusMs
-        ) {
-          first = first.Previous()!;
-        }
-        return first;
-      },
-      LastWithin(radiusMs) {
-        let last: ManiaRow = row;
-        while (
-          last.Next() != null &&
-          last.Next()!.StartTime - row.StartTime <= radiusMs
-        ) {
-          last = last.Next()!;
-        }
-        return last;
-      },
-      Contains(column) {
-        return columns.includes(column);
-      },
-      IsSameRow(other) {
-        return other.RowIndex === rowIndex;
-      },
-      ChordDensity(radius = DEFAULT_DENSITY_RADIUS) {
-        return data.density(KIND_CHORD, rowIndex, radius);
-      },
-      CrossHandDensity(radius = DEFAULT_DENSITY_RADIUS) {
-        return data.density(KIND_CROSS, rowIndex, radius);
-      },
-      SingleHandChordDensity(radius = DEFAULT_DENSITY_RADIUS) {
-        return data.density(KIND_SINGLE_HAND_CHORD, rowIndex, radius);
-      },
-      LargeChordDensity(radius = DEFAULT_DENSITY_RADIUS) {
-        return data.density(KIND_LARGE, rowIndex, radius);
-      },
-    };
+    const row = new RowImpl();
+    row.Columns = columns;
+    row.StartTime = rowStart;
+    row.Size = columns.length;
+    row.TotalColumns = totalColumns;
+    row.Objects = members;
+    row.RowIndex = rowIndex;
+    row.Hand = hand;
+    row.IsHandLocal = hand !== "Both";
+    row.IsChord = columns.length > 1;
+    row.IsSingleNote = columns.length === 1;
+    row.IsJump = columns.length === 2;
+    row._map = data;
 
     for (const m of members) m.Row = row;
     rows.push(row);
@@ -794,23 +892,47 @@ export function buildHitObjectGraph(
   columnCount: number,
   notes: Array<{ column: number; startMs: number; endMs: number }>,
   clockRate = 1,
+  shouldContinue?: () => boolean,
 ): ManiaDifficultyHitObject[] {
   const sorted = [...notes].sort(
     (a, b) => a.startMs - b.startMs || a.column - b.column,
   );
   if (sorted.length < 2) return [];
 
-  type Mutable = ManiaDifficultyHitObject & {
-    _all: ManiaDifficultyHitObject[];
-    _col: ManiaDifficultyHitObject[][];
-    _colIdx: number;
-  };
+  const perColumn: HitMutable[][] = Array.from({ length: columnCount }, () => []);
+  const objects: HitMutable[] = [];
+  const emptyCols = () =>
+    Array.from({ length: columnCount }, () => null as ManiaDifficultyHitObject | null);
 
-  const perColumn: Mutable[][] = Array.from({ length: columnCount }, () => []);
-  const objects: Mutable[] = [];
+  try {
+  return buildHitObjectGraphBody(
+    columnCount,
+    sorted,
+    clockRate,
+    shouldContinue,
+    perColumn,
+    objects,
+    emptyCols,
+  );
+  } catch (err) {
+    releaseHitObjectGraph(objects);
+    throw err;
+  }
+}
+
+function buildHitObjectGraphBody(
+  columnCount: number,
+  sorted: Array<{ column: number; startMs: number; endMs: number }>,
+  clockRate: number,
+  shouldContinue: (() => boolean) | undefined,
+  perColumn: HitMutable[][],
+  objects: HitMutable[],
+  emptyCols: () => Array<ManiaDifficultyHitObject | null>,
+): ManiaDifficultyHitObject[] {
 
   // C#: for i = 1 .. n-1
   for (let i = 1; i < sorted.length; i++) {
+    noteMemory(shouldContinue, i - 1);
     const n = sorted[i]!;
     const last = sorted[i - 1]!;
     const start = n.startMs / clockRate;
@@ -820,9 +942,6 @@ export function buildHitObjectGraph(
     const idx = objects.length;
     const colList = perColumn[n.column]!;
     const colIdx = colList.length;
-
-    const emptyCols = () =>
-      Array.from({ length: columnCount }, () => null as ManiaDifficultyHitObject | null);
 
     let PreviousHitObjects = emptyCols();
     let ChordHitObjects = emptyCols();
@@ -859,7 +978,7 @@ export function buildHitObjectGraph(
       o && o.EndTime > end ? null : o,
     );
 
-    const obj: Mutable = {
+    const obj = Object.assign(Object.create(hitProto), {
       Column: n.column,
       ColumnDelta: 0,
       DeltaTime: start - lastStart,
@@ -880,41 +999,7 @@ export function buildHitObjectGraph(
       _all: objects,
       _col: perColumn,
       _colIdx: colIdx,
-      Previous(skip = 0) {
-        const j = this.Index - (skip + 1);
-        return j >= 0 ? this._all[j]! : null;
-      },
-      PrevInColumn(back = 0) {
-        const list = this._col[this.Column]!;
-        const j = this._colIdx - (back + 1);
-        return j >= 0 ? list[j]! : null;
-      },
-      NextInColumn(forward = 0) {
-        const list = this._col[this.Column]!;
-        const j = this._colIdx + (forward + 1);
-        return j < list.length ? list[j]! : null;
-      },
-      LastStartTimeInColumn(column) {
-        return this.PreviousHitObjects[column]?.StartTime ?? Number.NEGATIVE_INFINITY;
-      },
-      LastEndTimeInColumn(column) {
-        return this.PreviousHitObjects[column]?.EndTime ?? Number.NEGATIVE_INFINITY;
-      },
-      ConcurrentlyHeldColumns(chordTolerance) {
-        let held = 0;
-        for (let c = 0; c < this.PreviousHitObjects.length; c++) {
-          if (c === this.Column) continue;
-          if (
-            Math.abs(this.LastStartTimeInColumn(c) - this.StartTime) <=
-            chordTolerance
-          ) {
-            continue;
-          }
-          if (this.LastEndTimeInColumn(c) > this.StartTime + chordTolerance) held++;
-        }
-        return held;
-      },
-    };
+    }) as HitMutable;
 
     // C#: ColumnDelta = StartTime - PrevInColumn(0)?.StartTime ?? StartTime
     // Precedence: (StartTime - nullable) ?? StartTime — missing prev → ColumnDelta = StartTime (large).
@@ -949,10 +1034,51 @@ export function buildHitObjectGraph(
     colList.push(obj);
   }
 
-  const mapData = buildMapData(objects, columnCount);
+  const mapData = buildMapData(objects, columnCount, shouldContinue);
   applyPatternContext(mapData);
 
   return objects;
+}
+
+/**
+ * Sever the links that make the hit-object graph one large object cycle.
+ *
+ * Every note points at the whole note list (`_all`), the per-column lists
+ * (`_col`), its row (which owns the row list), and up to six sibling arrays.
+ * Nothing outside this graph should still read it once the calculation is done,
+ * so clearing those fields makes a finished map collectable immediately instead
+ * of waiting for a cycle-collection pass.
+ */
+export function releaseHitObjectGraph(
+  objects: ManiaDifficultyHitObject[],
+): void {
+  for (const obj of objects) {
+    const mutable = obj as unknown as {
+      PreviousHitObjects: unknown[];
+      ChordHitObjects: unknown[];
+      HeadOverlappedHolds: unknown[];
+      TailOverlappedHolds: unknown[];
+      TailChordHolds: unknown[];
+      LastConcurrentlyReleasedHolds: unknown[];
+      Row: unknown;
+      _all: unknown;
+      _col: unknown;
+    };
+    const row = obj.Row instanceof RowImpl ? obj.Row : null;
+    mutable.PreviousHitObjects = [];
+    mutable.ChordHitObjects = [];
+    mutable.HeadOverlappedHolds = [];
+    mutable.TailOverlappedHolds = [];
+    mutable.TailChordHolds = [];
+    mutable.LastConcurrentlyReleasedHolds = [];
+    if (row) {
+      row.Objects = [];
+      row._map = null;
+    }
+    mutable.Row = null;
+    mutable._all = [];
+    mutable._col = [];
+  }
 }
 
 export function meanManipulation(objects: ManiaDifficultyHitObject[]): number {

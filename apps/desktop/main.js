@@ -126,6 +126,7 @@ function resolveTsx(repoRoot, serverDir, realmDir) {
  */
 function spawnNodeEntry(paths, entry, cwd, extraEnv, label, nodeArgs = []) {
   const env = { ...process.env, ...extraEnv };
+  if (env.NODE_OPTIONS) desktopLog(`${label} NODE_OPTIONS=${env.NODE_OPTIONS}`);
 
   if (paths.isPackaged || entry.endsWith(".js")) {
     const { fd } = openChildLogFd(paths.dataDir, label);
@@ -653,7 +654,17 @@ if (!gotLock) {
       paths,
       paths.serverEntry,
       paths.serverDir,
-      sharedEnv,
+      // Backfill jobs force a collection between maps to keep note graphs from
+      // accumulating (jobYield.ts). Node only exposes `global.gc` with
+      // --expose-gc; via NODE_OPTIONS it reaches both the packaged binary and
+      // dev `tsx`, which drops positional node args. Scoped to this child —
+      // Electron itself must not get the flag.
+      {
+        ...sharedEnv,
+        NODE_OPTIONS: [process.env.NODE_OPTIONS, "--expose-gc"]
+          .filter(Boolean)
+          .join(" "),
+      },
       "server",
     );
     serverChild.on("exit", (code, signal) => {

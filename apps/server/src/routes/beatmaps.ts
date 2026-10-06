@@ -19,6 +19,7 @@ import {
   getSunnyDanForPatternMods,
 } from "../map-analysis/computeSunnyDan";
 import { getOrComputeDanielDan } from "../map-analysis/computeDanielDan";
+import { getReworkDan } from "../map-analysis/computeReworkDan";
 import {
   getOrComputePatternAnalysis,
   analyzeManiaPatternDetail,
@@ -181,6 +182,7 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
         sessionRows,
         sunnyDan,
         danielDan,
+        reworkDan,
         patternAnalysis,
         osuLoaded,
       ] = await Promise.all([
@@ -229,6 +231,7 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
         is4kMania
           ? getOrComputeDanielDan(db, params.id)
           : Promise.resolve(null),
+        isMania ? Promise.resolve(getReworkDan(db, params.id)) : Promise.resolve(null),
         isMania
           ? getOrComputePatternAnalysis(db, params.id)
           : Promise.resolve(null),
@@ -328,6 +331,7 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
           : null,
         sunnyDan,
         danielDan,
+        reworkDan,
         patternAnalysis,
         sevenKAnalysis,
         timingAnalysis,

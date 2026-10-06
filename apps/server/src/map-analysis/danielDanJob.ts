@@ -4,10 +4,13 @@ import {
   backfillDanielDanSync,
 } from "./computeDanielDan";
 import { publish } from "../shared/events";
+import { isMemoryPressure } from "./memoryPressure";
 
 export type DanielDanJobStatus =
   | "idle"
   | "running"
+  /** Waiting for the machine to free memory; resumes automatically. */
+  | "paused"
   | "stopping"
   | "completed"
   | "error";
@@ -32,6 +35,8 @@ export type DanielDanJobState = {
 
 const BATCH_SIZE = 40;
 const YIELD_MS = 10;
+/** How often a paused job re-checks for recovered memory. */
+const PAUSE_POLL_MS = 5_000;
 
 let job: {
   status: DanielDanJobStatus;
@@ -154,12 +159,27 @@ function finish(status: "completed" | "idle" | "error", error?: string): void {
   publish({ type: "dashboard.updated" });
 }
 
-function scheduleNext(): void {
+/**
+ * Refuse to start another batch while the machine is low on memory, so an
+ * unattended backfill cannot push the desktop into swap exhaustion (where the
+ * OOM killer starts taking unrelated processes, e.g. the user's terminal).
+ */
+function memoryGuard(): boolean {
+  if (!isMemoryPressure()) return false;
+  if (job.status !== "paused") {
+    job.status = "paused";
+    publish({ type: "dashboard.updated" });
+  }
+  scheduleNext(PAUSE_POLL_MS);
+  return true;
+}
+
+function scheduleNext(delayMs = YIELD_MS): void {
   clearTimer();
   job.timer = setTimeout(() => {
     job.timer = null;
     runBatch();
-  }, YIELD_MS);
+  }, delayMs);
 }
 
 function runBatch(): void {
@@ -174,7 +194,18 @@ function runBatch(): void {
     return;
   }
 
+  if (job.status === "paused") {
+    // Resume on our own once the machine has room.
+    if (isMemoryPressure()) {
+      scheduleNext();
+      return;
+    }
+    job.status = "running";
+  }
+
   if (job.status !== "running") return;
+
+  if (memoryGuard()) return;
 
   try {
     const result = backfillDanielDanSync(db, {

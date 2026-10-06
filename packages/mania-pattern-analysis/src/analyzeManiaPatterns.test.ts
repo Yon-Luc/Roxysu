@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { ChartNote } from "@roxysu/osu-chart";
 import { SKILL_LABELS } from "@roxysu/mania-difficulty";
 import {
+  analyzeManiaBackfillFromOsuText,
   analyzeManiaFromOsuText,
   analyzeManiaNotes,
   analyzeManiaSkillNotes,
@@ -76,6 +77,17 @@ describe("analyzeManiaSkillNotes", () => {
     }
   });
 
+  test("an explicit null width skips binning entirely", () => {
+    const binned = analyzeManiaSkillNotes(stream(7, 600, 80), 7, 8, 2000);
+    const result = analyzeManiaSkillNotes(stream(7, 600, 80), 7, 8, null);
+
+    expect(result.sections).toEqual([]);
+    expect(binned.sections.length).toBeGreaterThan(0);
+    // Chart-level results must survive — the backfill persists exactly these.
+    expect(result.dominantPattern).toBe(binned.dominantPattern);
+    expect(result.starRating).toBe(binned.starRating);
+  });
+
   test("composition covers all skills and sums to at most 1", () => {
     const result = analyzeManiaSkillNotes(stream(7, 60, 80), 7);
     for (const skill of SKILL_LABELS) {
@@ -143,6 +155,40 @@ describe("analyzeManiaFromOsuText", () => {
     expect(() => analyzeManiaFromOsuText(osuText, "mania-interlude-v1")).toThrow(
       "no longer supported",
     );
+  });
+});
+
+describe("analyzeManiaBackfillFromOsuText", () => {
+  const samplePath = join(import.meta.dir, "..", "sample.osu");
+  const osuText = readFileSync(samplePath, "utf8");
+
+  test("returns the same chart-level result as the binning path", () => {
+    // The binning pass throws the window array away, so classification must be
+    // identical either way — only `sections` differs.
+    const binned = analyzeManiaFromOsuText(osuText, PATTERN_ALGORITHM);
+    const backfill = analyzeManiaBackfillFromOsuText(
+      osuText,
+      PATTERN_ALGORITHM,
+    );
+
+    expect(backfill.dominantPattern).toBe(binned.dominantPattern);
+    expect(backfill.secondaryPattern).toBe(binned.secondaryPattern);
+    expect(backfill.confidence).toBe(binned.confidence);
+    expect(backfill.starRating).toBe(binned.starRating);
+    expect(backfill.columnCount).toBe(binned.columnCount);
+  });
+
+  test("does not build the timeline a backfill never stores", () => {
+    const result = analyzeManiaBackfillFromOsuText(osuText, PATTERN_ALGORITHM);
+    expect(result.sections).toEqual([]);
+    expect(
+      analyzeManiaFromOsuText(osuText, PATTERN_ALGORITHM).sections.length,
+    ).toBeGreaterThan(0);
+  });
+
+  test("rejects a retired algorithm id", () => {
+    expect(() => analyzeManiaBackfillFromOsuText(osuText, "mania-interlude-v1"))
+      .toThrow("Unknown pattern algorithm");
   });
 });
 

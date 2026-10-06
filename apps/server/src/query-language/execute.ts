@@ -81,6 +81,8 @@ export type PracticeCardRow = {
   danielEstDiff: string | null;
   reworkEstDiff: string | null;
   reworkStar: number | null;
+  /** LN ratio from the rework rating row (for client-side dan floors). */
+  reworkLnRatio: number | null;
   /** Daniel star rating when computed. */
   danielStar: number | null;
   /** Mania key count (circle size). */
@@ -188,7 +190,8 @@ const SELECT_COLS = `
   dr_d.est_diff AS danielEstDiff,
   dr_d.sunny_star AS danielStar,
   dr_r.est_diff AS reworkEstDiff,
-  dr_r.sunny_star AS reworkStar
+  dr_r.sunny_star AS reworkStar,
+  dr_r.ln_ratio AS reworkLnRatio
 `;
 
 function baseWhere(ctx: QueryContext, extra: string): string {
@@ -335,6 +338,7 @@ function mapRow(r: PracticeCardRow): PracticeCardRow {
     danielStar: r.danielStar != null ? Number(r.danielStar) : null,
     reworkEstDiff: r.reworkEstDiff ?? null,
     reworkStar: r.reworkStar != null ? Number(r.reworkStar) : null,
+    reworkLnRatio: r.reworkLnRatio != null ? Number(r.reworkLnRatio) : null,
     keyCount: r.keyCount != null ? Number(r.keyCount) : null,
   };
 }

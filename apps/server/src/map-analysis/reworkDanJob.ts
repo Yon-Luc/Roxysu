@@ -1,14 +1,23 @@
 import type { Db } from "@roxysu/db/types";
 import {
   REWORK_ALGORITHM,
-  backfillReworkDanSync,
+  backfillReworkDanAsync,
   relabelReworkDanSync,
 } from "./computeReworkDan";
+import { collectNow } from "./jobYield";
+import {
+  BACKFILL_MIN_HEADROOM_MB,
+  describeMemoryPressure,
+  isInMapMemoryPressure,
+  memoryHeadroom,
+} from "./memoryPressure";
 import { publish } from "../shared/events";
 
 export type ReworkDanJobStatus =
   | "idle"
   | "running"
+  /** Waiting for the machine to free memory; resumes automatically. */
+  | "paused"
   | "stopping"
   | "completed"
   | "error";
@@ -32,11 +41,19 @@ export type ReworkDanJobState = {
   finishedAt: string | null;
   error: string | null;
   batchSize: number;
+  /** Lowest free MB (RAM + swap) seen this run. */
+  minHeadroomMb: number | null;
+  /** Current memory summary, e.g. "212 MB · 19800 MB free". */
+  memory: string;
+  /** Pause threshold in MB. */
+  minHeadroomLimitMb: number;
 };
 
-// Larger batches: the calculator is now the cost, not SQLite.
+// Batches are re-queried between runs; the per-map yield is what bounds memory.
 const BATCH_SIZE = 200;
 const YIELD_MS = 5;
+/** How often a paused job re-checks for recovered memory. */
+const PAUSE_POLL_MS = 5_000;
 
 let job: {
   status: ReworkDanJobStatus;
@@ -48,6 +65,7 @@ let job: {
   error: string | null;
   timer: ReturnType<typeof setTimeout> | null;
   db: Db | null;
+  minHeadroomMb: number | null;
 } = {
   status: "idle",
   computedThisRun: 0,
@@ -58,6 +76,7 @@ let job: {
   error: null,
   timer: null,
   db: null,
+  minHeadroomMb: null,
 };
 
 export function countReworkDanPending(db: Db): number {
@@ -133,6 +152,9 @@ export function getReworkDanCoverage(db: Db): ReworkDanCoverage {
 export function getReworkDanJobState(db: Db): ReworkDanJobState {
   return {
     status: job.status,
+    minHeadroomMb: job.minHeadroomMb,
+    memory: describeMemoryPressure(),
+    minHeadroomLimitMb: BACKFILL_MIN_HEADROOM_MB,
     coverage: getReworkDanCoverage(db),
     computedThisRun: job.computedThisRun,
     attemptedThisRun: job.attemptedThisRun,
@@ -160,15 +182,44 @@ function finish(status: "completed" | "idle" | "error", error?: string): void {
   publish({ type: "dashboard.updated" });
 }
 
-function scheduleNext(): void {
+function scheduleNext(delayMs = YIELD_MS): void {
   clearTimer();
   job.timer = setTimeout(() => {
     job.timer = null;
-    runBatch();
-  }, YIELD_MS);
+    void runBatch();
+  }, delayMs);
 }
 
-function runBatch(): void {
+/**
+ * Stop starting new work while the machine is low on memory.
+ *
+ * Polls every 5s; resumes on its own once headroom recovers, so an AFK backfill
+ * never has to be babysat.
+ */
+function pauseForMemory(): void {
+  if (job.status !== "paused") {
+    job.status = "paused";
+    publish({ type: "dashboard.updated" });
+  }
+  scheduleNext(PAUSE_POLL_MS);
+}
+
+function noteHeadroom(): boolean {
+  const { headroomMb } = memoryHeadroom();
+  job.minHeadroomMb =
+    job.minHeadroomMb == null ? headroomMb : Math.min(job.minHeadroomMb, headroomMb);
+  // Same tighter ceiling as pattern analysis: this pass builds the difficulty
+  // graph synchronously, so the between-map pause has to match the in-map one.
+  return isInMapMemoryPressure();
+}
+
+/**
+ * Async because rating yields after every map. `busy` guards against a second
+ * batch starting while one is in flight.
+ */
+let busy = false;
+
+async function runBatch(): Promise<void> {
   const db = job.db;
   if (!db) {
     finish("error", "Backfill job lost database handle");
@@ -180,21 +231,46 @@ function runBatch(): void {
     return;
   }
 
-  if (job.status !== "running") return;
+  if (job.status === "paused") {
+    // Resume only once the machine has room again.
+    if (!noteHeadroom()) {
+      job.status = "running";
+    } else {
+      scheduleNext();
+      return;
+    }
+  }
+
+  if (job.status !== "running" || busy) return;
+
+  // Refuse to start a batch while the machine is already tight.
+  if (noteHeadroom()) {
+    pauseForMemory();
+    return;
+  }
+
+  busy = true;
 
   try {
     // Relabel once, on the first batch only, so a floor edit applies before any
-    // new work. Previously this flag was inverted and never relabelled.
+    // new work.
     const shouldRelabel = job.relabeledThisRun === 0;
-    const result = backfillReworkDanSync(db, {
+    const result = await backfillReworkDanAsync(db, {
       limit: BATCH_SIZE,
       includeFailed: false,
       skipRelabel: !shouldRelabel,
       withPattern: true,
+      shouldContinue: () => !noteHeadroom(),
     });
     job.attemptedThisRun += result.attempted;
     job.computedThisRun += result.succeeded;
     job.relabeledThisRun += result.relabeled;
+
+    if (result.stoppedEarly) {
+      // Low memory: yield the machine and resume on its own shortly.
+      pauseForMemory();
+      return;
+    }
 
     if (result.attempted === 0) {
       finish("completed");
@@ -204,6 +280,8 @@ function runBatch(): void {
     scheduleNext();
   } catch (err) {
     finish("error", err instanceof Error ? err.message : String(err));
+  } finally {
+    busy = false;
   }
 }
 
@@ -225,11 +303,13 @@ export function startReworkDanBackfill(db: Db): ReworkDanJobState {
   job.finishedAt = null;
   job.error = null;
   job.db = db;
+  job.minHeadroomMb = null;
 
   if (countReworkDanPending(db) === 0) {
     // Nothing missing, but still refresh labels after a floor edit.
     try {
       job.relabeledThisRun = relabelReworkDanSync(db);
+      collectNow();
     } catch (err) {
       finish("error", err instanceof Error ? err.message : String(err));
       return getReworkDanJobState(db);

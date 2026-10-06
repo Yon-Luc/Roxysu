@@ -28,6 +28,9 @@ import { loadDanVariantRatingsSync } from "../map-analysis/computeDanVariants";
 import {
   danielEstDiffSelect,
   danielStarSelect,
+  reworkEstDiffSelect,
+  reworkLnRatioSelect,
+  reworkStarSelect,
 } from "../map-analysis/danRatingSelect";
 import {
   loadManiaPpCurves,
@@ -68,6 +71,9 @@ export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
         sunnyStar: beatmapDanRatings.sunnyStar,
         danielEstDiff: danielEstDiffSelect(),
         danielStar: danielStarSelect(),
+        reworkEstDiff: reworkEstDiffSelect(),
+        reworkStar: reworkStarSelect(),
+        reworkLnRatio: reworkLnRatioSelect(),
       })
       .from(scores)
       .leftJoin(beatmaps, eq(scores.beatmapId, beatmaps.id))
@@ -178,6 +184,9 @@ export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
         sunnyStar,
         danielEstDiff,
         danielStar,
+        reworkEstDiff: s.reworkEstDiff ?? null,
+        reworkStar: s.reworkStar != null ? Number(s.reworkStar) : null,
+        reworkLnRatio: s.reworkLnRatio != null ? Number(s.reworkLnRatio) : null,
         setOnlineId:
           s.setOnlineId != null && s.setOnlineId > 0 ? s.setOnlineId : null,
         backgroundFileHash: s.backgroundFileHash,

@@ -289,6 +289,9 @@ export function DashboardPage() {
                               sunnyStar: score.sunnyStar,
                               danielEstDiff: score.danielEstDiff,
                               danielStar: score.danielStar,
+                              reworkEstDiff: score.reworkEstDiff,
+                              reworkStar: score.reworkStar,
+                              lnRatio: score.reworkLnRatio,
                               keyCount: score.keyCount,
                             })}
                           </>

@@ -301,6 +301,9 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
                               sunnyStar: score.sunnyStar,
                               danielEstDiff: score.danielEstDiff,
                               danielStar: score.danielStar,
+                              reworkEstDiff: score.reworkEstDiff,
+                              reworkStar: score.reworkStar,
+                              lnRatio: score.reworkLnRatio,
                               keyCount: score.keyCount,
                             })}
                             {score.retryIndex != null && score.retryIndex > 0

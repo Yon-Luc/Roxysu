@@ -276,6 +276,9 @@ function PatternBrowserModal({
                                   sunnyStar: item.sunnyStar,
                                   danielEstDiff: item.danielEstDiff,
                                   danielStar: item.danielStar,
+                                  reworkEstDiff: item.reworkEstDiff,
+                                  reworkStar: item.reworkStar,
+                                  lnRatio: item.reworkLnRatio,
                                   keyCount: item.keyCount,
                                 })}
                               </div>

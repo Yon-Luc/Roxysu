@@ -7,6 +7,7 @@
   "scripts": {
     "test": "bun test",
     "bench:rework": "bun run src/map-analysis/benchReworkBackfill.ts",
+    "bench:mem": "bun run src/map-analysis/benchReworkMemory.ts",
     "dev": "bun run --watch src/index.ts",
     "build:ui": "bun run scripts/build-ui.ts",
     "dev:node": "bun run build:ui && tsx src/index.node.ts"

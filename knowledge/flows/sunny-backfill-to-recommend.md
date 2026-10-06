@@ -37,16 +37,20 @@ query language fields + GET /api/practice/recommend + Session Suggest UI
 ```
 Settings POST /api/settings/rework-dan/start
     ↓
-job reads .osu from lazer files
+job reads .osu from lazer files  (one batch = one SQLite transaction)
     ↓
-@roxysu/mania-difficulty  calculateManiaDifficulty (rate 1.0)
+analyzeManiaOnceFromText  — parses once, runs the calculator once
     ↓
 reworkDanLabel(star, lnRatio, keys) → tier from dans.json
     ↓
 persist beatmap_dan_ratings (algorithm = 'mania-difficulty')
+   + beatmap_pattern_analysis (dominant skill) — same pass
     ↓
-rework: / reworkstars: query fields + `rework` rating display mode
+rework: / reworkstars: / pattern: query fields + `rework` display mode
 ```
+
+The pattern job is still available for maps the dan job has not rated, but a
+full dan backfill also fills the pattern store, so running both is not required.
 
 Recommendations and skill estimates do **not** read these rows. Editing
 `dans.json` only needs `POST /api/settings/rework-dan/relabel`, which rewrites

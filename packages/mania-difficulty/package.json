@@ -17,7 +17,8 @@
     "port:ref": "dotnet run --project tools/ReferenceRunner --",
     "port:verify": "bun tools/scripts/verify-smoke.ts",
     "port:probe": "bun tools/scripts/probe-unsupported.ts",
-    "port:report": "bun tools/scripts/dependency-report.ts"
+    "port:report": "bun tools/scripts/dependency-report.ts",
+    "bench": "bun tools/scripts/bench.ts"
   },
   "dependencies": {
     "@roxysu/osu-chart": "workspace:*"

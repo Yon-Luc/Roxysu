@@ -13,6 +13,8 @@ import {
   relabelReworkDanSync,
 } from "./computeReworkDan";
 import { reworkDanLabel } from "./reworkDan";
+import { PATTERN_ALGORITHM } from "@roxysu/mania-pattern-analysis";
+import { SKILL_LABELS } from "@roxysu/mania-difficulty";
 
 const SET_ID = "00000000-0000-0000-0000-0000000000d1";
 const MAP_4K = "00000000-0000-0000-0000-0000000000d2";
@@ -238,7 +240,8 @@ describe("backfillReworkDanSync", () => {
     expect(result.attempted).toBe(5);
     // 4K, 7K and 6K all rate; 6K stores a star with an unknown dan label.
     expect(result.succeeded).toBe(3);
-    expect(result.remaining).toBe(FAILED);
+    // The full-library COUNT is opt-in so it does not repeat every batch.
+    expect(result.remaining).toBeNull();
 
     for (const id of [MAP_4K, MAP_7K, MAP_6K]) {
       const row = getReworkDan(db, id)!;
@@ -280,6 +283,64 @@ describe("backfillReworkDanSync", () => {
     expect(stale.attempted).toBe(1);
     expect(getReworkDan(db, MAP_4K)!.beatmapHash).toBe(HASH_4K);
     expect(getReworkDan(db, MAP_4K)!.estDiff).toBe(before);
+  });
+
+  test("writes the dominant-skill pattern row in the same pass", () => {
+    clearReworkRows();
+    db.$client
+      .query(`DELETE FROM beatmap_pattern_analysis`)
+      .run();
+
+    backfillReworkDanSync(db, { limit: 10 });
+
+    const rows = db.$client
+      .query(
+        `SELECT beatmap_id AS id, dominant_pattern AS dominant,
+                secondary_pattern AS secondary, algorithm AS algorithm,
+                chord_density AS chordDensity
+         FROM beatmap_pattern_analysis WHERE algorithm = ?`,
+      )
+      .all(PATTERN_ALGORITHM) as Array<{
+      id: string;
+      dominant: string | null;
+      secondary: string | null;
+      algorithm: string;
+      chordDensity: number | null;
+    }>;
+
+    const rated = rows.filter((r) => r.dominant != null);
+    expect(rated.length).toBe(3);
+    for (const row of rated) {
+      expect(row.algorithm).toBe(PATTERN_ALGORITHM);
+      expect(SKILL_LABELS).toContain(row.dominant as never);
+      expect(row.chordDensity).not.toBeNull();
+    }
+  });
+
+  test("withPattern false skips the pattern write", () => {
+    clearReworkRows();
+    db.$client.query(`DELETE FROM beatmap_pattern_analysis`).run();
+
+    backfillReworkDanSync(db, { limit: 10, withPattern: false });
+
+    const n = db.$client
+      .query(`SELECT COUNT(*) AS n FROM beatmap_pattern_analysis`)
+      .get() as { n: number };
+    expect(Number(n.n)).toBe(0);
+  });
+
+  test("a single pass produces the same star the dan-only path would", () => {
+    clearReworkRows();
+    db.$client.query(`DELETE FROM beatmap_pattern_analysis`).run();
+    backfillReworkDanSync(db, { limit: 10, withPattern: false });
+    const withoutPattern = getReworkDan(db, MAP_4K)!.reworkStar;
+
+    clearReworkRows();
+    backfillReworkDanSync(db, { limit: 10, withPattern: true });
+    const withPattern = getReworkDan(db, MAP_4K)!.reworkStar;
+
+    // The skill profile must not perturb the rating.
+    expect(withPattern).toBe(withoutPattern);
   });
 
   test("skipRelabel leaves cached labels alone", () => {

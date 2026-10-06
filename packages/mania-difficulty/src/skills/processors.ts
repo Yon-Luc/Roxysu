@@ -14,6 +14,8 @@ import {
 
 export type DifficultyProcessor = {
   CurrentStrain: number;
+  /** Accuracy multipliers for this skill; fixed for every note. */
+  accuracyMultipliers: readonly number[];
   ProcessStrainFor: (current: ManiaDifficultyHitObject) => void;
   TransformStrainToAccuracyDifficulties: (
     strain: number,
@@ -30,6 +32,7 @@ export function createSpeedProcessor(): DifficultyProcessor {
     get CurrentStrain() {
       return CurrentStrain;
     },
+    accuracyMultipliers: multipliers.AccuracyMultipliers,
     ProcessStrainFor(current) {
       CurrentStrain *= DiffUtils.Pow(strain_decay_base, current.DeltaTime / 1000);
       CurrentStrain += SpeedEvaluator.EvaluateDifficultyOf(current);
@@ -50,6 +53,7 @@ export function createJackProcessor(): DifficultyProcessor {
     get CurrentStrain() {
       return CurrentStrain;
     },
+    accuracyMultipliers: multipliers.AccuracyMultipliers,
     ProcessStrainFor(current) {
       CurrentStrain *= Math.pow(strain_decay_base, current.DeltaTime / 1000);
       CurrentStrain += JackEvaluator.EvaluateDifficultyOf(current);
@@ -70,6 +74,7 @@ export function createCoordinationProcessor(): DifficultyProcessor {
     get CurrentStrain() {
       return CurrentStrain;
     },
+    accuracyMultipliers: multipliers.AccuracyMultipliers,
     ProcessStrainFor(current) {
       CurrentStrain *= Math.pow(strain_decay_base, current.DeltaTime / 1000);
       CurrentStrain += CoordinationEvaluator.EvaluateDifficultyOf(current);
@@ -90,6 +95,7 @@ export function createReleaseProcessor(): DifficultyProcessor {
     get CurrentStrain() {
       return CurrentStrain;
     },
+    accuracyMultipliers: multipliers.AccuracyMultipliers,
     ProcessStrainFor(current) {
       CurrentStrain *= DiffUtils.Pow(strain_decay_base, current.DeltaTime / 1000);
       CurrentStrain += ReleaseEvaluator.EvaluateDifficultyOf(current);
@@ -153,6 +159,7 @@ export function createTechnicalProcessor(): DifficultyProcessor {
     get CurrentStrain() {
       return CurrentStrain;
     },
+    accuracyMultipliers: multipliers.AccuracyMultipliers,
     ProcessStrainFor(current) {
       CurrentStrain *= DiffUtils.Pow(strain_decay_base, current.DeltaTime / 1000);
       if (current.DeltaTime < ChordUtils.CHORD_TOLERANCE_MS) return;

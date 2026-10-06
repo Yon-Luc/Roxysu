@@ -341,6 +341,21 @@ function stepContinuity(gap: number, pulse: number): number {
   return DiffUtils.Smoothstep(gap / pulse, 2.2, 1.5);
 }
 
+/**
+ * Chain summary for one direction out of `seed`.
+ *
+ * Only scalars are accumulated — the previous chain object materialised a row
+ * array and re-summed note counts for every walk, which dominated the
+ * preprocessor. `first`/`last` are the chain bounds.
+ */
+type ChainStats = {
+  first: ManiaRow;
+  last: ManiaRow;
+  length: number;
+  rowCount: number;
+  noteCount: number;
+};
+
 function walkChain(
   seed: ManiaRow,
   backwards: boolean,
@@ -351,11 +366,12 @@ function walkChain(
     from: ManiaRow,
     to: ManiaRow,
   ) => boolean,
-): ManiaChain {
+): ChainStats {
   const pulse = seed.LocalPulse;
   let length = 0;
   let steps = 0;
   let weakestStep = 1.0;
+  let noteCount = seed.Size;
   let cameFrom: ManiaRow | null = null;
   let end = seed;
 
@@ -364,15 +380,42 @@ function walkChain(
     if (next == null || !continues(cameFrom, end, next)) break;
     const step = stepContinuity(Math.abs(next.StartTime - end.StartTime), pulse);
     if (step <= 0) break;
-    weakestStep = Math.min(weakestStep, step);
+    if (step < weakestStep) weakestStep = step;
     length += weakestStep;
+    noteCount += next.Size;
     steps++;
     cameFrom = end;
     end = next;
   }
 
-  return backwards ? makeChain(end, seed, length) : makeChain(seed, end, length);
+  const first = backwards ? end : seed;
+  const last = backwards ? seed : end;
+  return {
+    first,
+    last,
+    length,
+    rowCount: last.RowIndex - first.RowIndex + 1,
+    noteCount,
+  };
 }
+
+/** Merge two opposite-direction walks into one span, as `JoinedWith` did. */
+function joinChainStats(left: ChainStats, right: ChainStats): ChainStats {
+  const f = left.first.RowIndex <= right.first.RowIndex ? left.first : right.first;
+  const l = left.last.RowIndex >= right.last.RowIndex ? left.last : right.last;
+  return {
+    first: f,
+    last: l,
+    length: left.length + right.length,
+    rowCount: l.RowIndex - f.RowIndex + 1,
+    noteCount: left.noteCount + right.noteCount - f.Size,
+  };
+}
+
+/** Continuation predicates hoisted out of the per-row hot path. */
+const continuesHandLocal = (_c: ManiaRow | null, _f: ManiaRow, to: ManiaRow) =>
+  to.IsHandLocal;
+const continuesAlways = () => true;
 
 function plateauOf(row: ManiaRow, onset: number, strength: number): number {
   const offset_ms = 30.0;
@@ -385,7 +428,7 @@ function plateauOf(row: ManiaRow, onset: number, strength: number): number {
 function mashStrength(row: ManiaRow): number {
   if (!row.IsHandLocal) return 0;
   const runWeight = DiffUtils.Smoothstep(
-    walkChain(row, true, Infinity, 64, (_c, _f, to) => to.IsHandLocal).Length,
+    walkChain(row, true, Infinity, 64, continuesHandLocal).length,
     3,
     9,
   );
@@ -399,8 +442,8 @@ function crossHandMashStrength(row: ManiaRow): number {
   const crossHandGate = DiffUtils.Smoothstep(row.CrossHandDensity(), 0.14, 0.32);
   if (crossHandGate <= 0) return 0;
   const runLength =
-    walkChain(row, true, Infinity, 128, () => true).Length +
-    walkChain(row, false, Infinity, 128, () => true).Length;
+    walkChain(row, true, Infinity, 128, continuesAlways).length +
+    walkChain(row, false, Infinity, 128, continuesAlways).length;
   const runWeight = DiffUtils.Smoothstep(runLength, 3, 10);
   if (runWeight <= 0) return 0;
   const largeChordGate = DiffUtils.Smoothstep(row.LargeChordDensity(), 0.16, 0.05);
@@ -450,8 +493,8 @@ function jumptrillStrength(row: ManiaRow): number {
   if (!row.IsHandLocal) return 0;
   const chainLen =
     1 +
-    walkChain(row, true, Infinity, 200, jumptrillContinues).Length +
-    walkChain(row, false, Infinity, 200, jumptrillContinues).Length;
+    walkChain(row, true, Infinity, 200, jumptrillContinues).length +
+    walkChain(row, false, Infinity, 200, jumptrillContinues).length;
   const runWeight = DiffUtils.Smoothstep(chainLen, 3, 8);
   if (runWeight <= 0) return 0;
   const crossHandGate = Math.max(
@@ -559,52 +602,73 @@ function stepRepetitionAround(row: ManiaRow): number {
   const chanceShare = 1.0 / (totalColumns - 1);
   return Math.max(0, (mostUsed / steps - chanceShare) / (1 - chanceShare));
 }
-function directionConsistencyOf(lateral: ManiaChain): number {
+function directionConsistencyOf(lateral: ChainStats): number {
   let directedPairs = 0;
   let sameDirectionPairs = 0;
   let previousDirection = 0;
-  for (const row of lateral.RowsAfterFirst) {
+  // Rows after the first, matching the chain's previous RowsAfterFirst.
+  let row = lateral.first.Next();
+  while (row != null && row.RowIndex <= lateral.last.RowIndex) {
     const prev = row.Previous();
-    if (!prev) continue;
-    const direction = Math.sign(row.Columns[0]! - prev.Columns[0]!);
-    if (previousDirection !== 0) {
-      directedPairs++;
-      if (direction === previousDirection) sameDirectionPairs++;
+    if (prev) {
+      const direction = Math.sign(row.Columns[0]! - prev.Columns[0]!);
+      if (previousDirection !== 0) {
+        directedPairs++;
+        if (direction === previousDirection) sameDirectionPairs++;
+      }
+      previousDirection = direction;
     }
-    previousDirection = direction;
+    row = row.Next();
   }
   return directedPairs > 0 ? sameDirectionPairs / directedPairs : 0;
 }
 function rollStrength(row: ManiaRow): number {
   const run_ramp = 26.0;
   let runWeight = DiffUtils.ReverseLerp(shiftOrRepeatRunLength(row), 0, run_ramp);
-  const lateral = walkChain(row, true, Infinity, 400, rollContinues).JoinedWith(
+  const lateral = joinChainStats(
+    walkChain(row, true, Infinity, 400, rollContinues),
     walkChain(row, false, Infinity, 400, rollContinues),
   );
-  if (lateral.RowCount >= 2) {
+  if (lateral.rowCount >= 2) {
     const rollGate =
       DiffUtils.Smoothstep(directionConsistencyOf(lateral), 0.42, 0.5) *
       DiffUtils.Smoothstep(stepRepetitionAround(row), 0.22, 0.78);
     runWeight = Math.max(
       runWeight,
-      DiffUtils.ReverseLerp(lateral.RowCount, 0, run_ramp) * rollGate,
+      DiffUtils.ReverseLerp(lateral.rowCount, 0, run_ramp) * rollGate,
     );
   }
   runWeight *= DiffUtils.Smoothstep(row.ChordDensity(), 0.34, 0.14);
   return 0.86 * runWeight;
 }
 
+/** Vibro continuation: the walked row must contain `column`. */
+function vibroContinues(
+  column: number,
+  _c: ManiaRow | null,
+  _f: ManiaRow,
+  to: ManiaRow,
+): boolean {
+  return to.Contains(column);
+}
+
 function vibroFactor(row: ManiaRow, column: number): number {
   const onset = 190;
   if (row.GapBefore >= onset) return 1;
-  const continues = (_c: ManiaRow | null, _f: ManiaRow, to: ManiaRow) =>
-    to.Contains(column);
+  const continues = (
+    _c: ManiaRow | null,
+    _f: ManiaRow,
+    to: ManiaRow,
+  ) => vibroContinues(column, _c, _f, to);
   const back = walkChain(row, true, Infinity, 63, continues);
-  const remaining = 64 - back.RowCount;
-  const chain = back.JoinedWith(walkChain(row, false, Infinity, remaining, continues));
-  const runWeight = DiffUtils.Smoothstep(chain.RowCount, 2.5, 5.0);
+  const remaining = 64 - back.rowCount;
+  const chain = joinChainStats(
+    back,
+    walkChain(row, false, Infinity, remaining, continues),
+  );
+  const runWeight = DiffUtils.Smoothstep(chain.rowCount, 2.5, 5.0);
   const rowSizeGate = DiffUtils.Smoothstep(
-    chain.NoteCount / chain.RowCount,
+    chain.noteCount / chain.rowCount,
     2.6,
     1.6,
   );

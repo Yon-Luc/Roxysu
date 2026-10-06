@@ -163,23 +163,15 @@ export function calculateWithSkills(
     releaseSkill.process(obj);
     totalSkill.process(obj);
     if (onObject) {
+      // A processor's BaseDifficulty is its raw strain, so read that directly
+      // instead of building five AccuracyDifficulties per note.
       onObject({
         startTime: obj.StartTime,
-        speed: speedProc.TransformStrainToAccuracyDifficulties(
-          speedProc.CurrentStrain,
-        ).BaseDifficulty,
-        technical: techProc.TransformStrainToAccuracyDifficulties(
-          techProc.CurrentStrain,
-        ).BaseDifficulty,
-        jack: jackProc.TransformStrainToAccuracyDifficulties(
-          jackProc.CurrentStrain,
-        ).BaseDifficulty,
-        coordination: coordProc.TransformStrainToAccuracyDifficulties(
-          coordProc.CurrentStrain,
-        ).BaseDifficulty,
-        release: releaseProc.TransformStrainToAccuracyDifficulties(
-          releaseProc.CurrentStrain,
-        ).BaseDifficulty,
+        speed: speedProc.CurrentStrain,
+        technical: techProc.CurrentStrain,
+        jack: jackProc.CurrentStrain,
+        coordination: coordProc.CurrentStrain,
+        release: releaseProc.CurrentStrain,
       });
     }
   }

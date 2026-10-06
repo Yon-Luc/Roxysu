@@ -6,7 +6,7 @@
  * which skill is hardest in each stretch, and how often each skill leads.
  */
 
-import type { ManiaBeatmapInput } from "./types";
+import type { ManiaBeatmapInput, ManiaDifficultyAttributes } from "./types";
 import { calculateWithSkills, type SkillStrainSnapshot } from "./skills/calculator";
 import {
   dominantSkill,
@@ -40,6 +40,8 @@ export type SkillWindow = {
 };
 
 export type SkillProfile = DominantSkill & {
+  /** Full calculator result, so callers need only one pass. */
+  attributes: ManiaDifficultyAttributes;
   /** Chart star rating the skills came from. */
   starRating: number;
   /** Every skill's star, sorted highest first. */
@@ -79,6 +81,13 @@ export function skillProfile(
 
   if (beatmap.notes.length === 0) {
     return {
+      attributes: {
+        starRating: 0,
+        noteCount: 0,
+        holdNoteCount: 0,
+        overallDifficulty: beatmap.overallDifficulty,
+        lnRatio: 0,
+      },
       starRating: 0,
       dominant: null,
       secondary: null,
@@ -151,6 +160,7 @@ export function skillProfile(
 
   const classified = dominantSkill(attributes);
   return {
+    attributes,
     starRating: attributes.starRating,
     dominant: classified.dominant,
     secondary: classified.secondary,

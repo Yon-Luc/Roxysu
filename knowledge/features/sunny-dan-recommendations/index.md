@@ -64,6 +64,37 @@ Three estimators write to the same store, keyed by `algorithm`: `sunny`, `daniel
 7. `rework:` matches only `algorithm = 'mania-difficulty'` rows; `dan:` matches
    Sunny and Daniel only. The two never mix.
 
+## Performance rules
+
+1. **One calculator pass fills both stores.** The dan row and the dominant-skill
+   row need the same skill values, so `analyzeManiaOnceFromText()` parses the
+   chart once and writes `beatmap_dan_ratings` + `beatmap_pattern_analysis`
+   together. The rework dan job does this by default
+   (`computeReworkDanSync(..., { withPattern: true })`). Never add a second
+   `analyzeManiaSkillNotes` call to a dan code path — that re-parses and re-runs
+   the whole calculator.
+2. **Dan-only callers skip the skill profile.** Omitting `windowMs` skips
+   per-note snapshots and window binning, so preview/live reads stay cheap.
+3. **Star ratings must not depend on the profile.** A single pass with
+   `withPattern` produces the identical star as a dan-only pass — asserted in
+   `computeReworkDan.integration.test.ts`.
+4. **Skills store per-note base difficulty in a `Float64Array`.** Accuracy
+   multipliers are constant per skill. Do not reintroduce per-note
+   `AccuracyDifficulties` objects: the root-finder scans every note ~25 times
+   per skill, so that allocation was the dominant cost.
+5. **Preprocessor walks return scalars.** `walkChain` returns a `ChainStats`
+   (length/rowCount/noteCount plus bounds). Do not rebuild `ManiaChain` row
+   arrays in the preprocessor — every detector calls it per row.
+6. **Backfill stops on `attempted === 0`.** `backfillReworkDanSync` no longer
+   recounts the library every batch (`remaining` is `null` unless asked). One
+   SQLite transaction covers a batch.
+7. Parity is enforced by `tests/parity/baselines.test.ts` against pinned C#
+   baselines. Any optimization must keep SR and skill values within tolerance.
+
+Benchmarks: `packages/mania-difficulty` `bun run bench` (per-phase calculator),
+`apps/server` `bun run bench:rework` (end-to-end backfill over a synthetic
+library).
+
 ## Dominant skill rules
 
 1. Active algorithm is `mania-skill-v1`; `PATTERN_ALGORITHM` points at it. Retired
@@ -75,9 +106,11 @@ Three estimators write to the same store, keyed by `algorithm`: `sunny`, `daniel
    (0.85) of the top skill.
 4. `beatmap_pattern_analysis` density columns stay note-structural and are
    algorithm-independent. `sections` and `composition` are now time-binned skill
-   peaks (`skillProfile()`, 2000 ms windows) instead of Interlude clusters.
+   peaks (`skillProfile()`, `DEFAULT_SKILL_WINDOW_MS` = 2000 ms) instead of
+   Interlude clusters.
 5. Rows written under `mania-interlude-v1` stay in the table but are never joined.
-   The Settings pattern job must be re-run to populate `mania-skill-v1`.
+   The Settings pattern job must be re-run to populate `mania-skill-v1` — though
+   the rework dan job now fills both stores in one pass, so it usually covers it.
 6. Retired Interlude query names still parse and map to the nearest skill
    (`normalizePatternValue`), so saved searches keep working.
 
@@ -89,7 +122,8 @@ Three estimators write to the same store, keyed by `algorithm`: `sunny`, `daniel
 - `apps/server/src/map-analysis/computeDanVariants.ts` — combo collection, backfill, variant lookups
 - `apps/server/src/map-analysis/danVariantJob.ts` — post-import incremental job (also one-time recompute of pre-conversion Daniel variant rows, settings flag `dan_variants.daniel_cvt_recompute`)
 - `apps/server/src/map-analysis/computeSunnyDan.ts:getSunnyDanForPatternMods` — mod-aware single-map reads
-- `apps/server/src/map-analysis/reworkEstimator.ts:runReworkEstimatorFromText`
+- `apps/server/src/map-analysis/reworkEstimator.ts:analyzeManiaOnceFromText` — single pass, both stores
+- `apps/server/src/map-analysis/reworkEstimator.ts:runReworkEstimatorFromText` — dan only, no profile
 - `apps/server/src/map-analysis/computeReworkDan.ts` — persistence + `relabelReworkDanSync`
 - `apps/server/src/map-analysis/reworkDanJob.ts` — Settings-started backfill
 - `resolveDanVariant()` / `danVariantKey()` — `packages/mania-judge`

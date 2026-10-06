@@ -34,8 +34,9 @@ export type ReworkDanJobState = {
   batchSize: number;
 };
 
-const BATCH_SIZE = 25;
-const YIELD_MS = 10;
+// Larger batches: the calculator is now the cost, not SQLite.
+const BATCH_SIZE = 200;
+const YIELD_MS = 5;
 
 let job: {
   status: ReworkDanJobStatus;
@@ -182,16 +183,20 @@ function runBatch(): void {
   if (job.status !== "running") return;
 
   try {
+    // Relabel once, on the first batch only, so a floor edit applies before any
+    // new work. Previously this flag was inverted and never relabelled.
+    const shouldRelabel = job.relabeledThisRun === 0;
     const result = backfillReworkDanSync(db, {
       limit: BATCH_SIZE,
       includeFailed: false,
-      skipRelabel: job.relabeledThisRun === 0,
+      skipRelabel: !shouldRelabel,
+      withPattern: true,
     });
     job.attemptedThisRun += result.attempted;
     job.computedThisRun += result.succeeded;
     job.relabeledThisRun += result.relabeled;
 
-    if (result.attempted === 0 || result.remaining === 0) {
+    if (result.attempted === 0) {
       finish("completed");
       return;
     }

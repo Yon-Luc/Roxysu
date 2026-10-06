@@ -9,11 +9,16 @@ import { toIso as toIsoNullable } from "../shared/serialize";
 import { reworkDanLabel } from "./reworkDan";
 import {
   REWORK_ALGORITHM,
-  runReworkEstimatorFromText,
+  analyzeManiaOnceFromText,
 } from "./reworkEstimator";
+import { DEFAULT_SKILL_WINDOW_MS } from "./skillWindow";
+import { PATTERN_ALGORITHM } from "@roxysu/mania-pattern-analysis";
 
 export { REWORK_ALGORITHM };
-export type { ReworkEstimatorResult } from "./reworkEstimator";
+export type {
+  ReworkEstimatorResult,
+  ReworkPatternValues,
+} from "./reworkEstimator";
 
 export type ReworkDanRating = {
   algorithm: typeof REWORK_ALGORITHM;
@@ -116,6 +121,84 @@ function upsertRatingSync(
   );
 }
 
+function upsertPatternSync(
+  db: Db,
+  values: {
+    beatmapId: string;
+    beatmapHash: string | null;
+    columnCount: number | null;
+    dominantPattern: string | null;
+    secondaryPattern: string | null;
+    confidence: number | null;
+    jackDensity: number | null;
+    chordDensity: number | null;
+    streamDensity: number | null;
+    bracketDensity: number | null;
+    chordjackScore: number | null;
+    jumpstreamScore: number | null;
+    chordstreamScore: number | null;
+    error: string | null;
+    updatedAtMs: number;
+  },
+): void {
+  db.$client
+    .query(
+      `
+      INSERT INTO beatmap_pattern_analysis (
+        beatmap_id, algorithm, beatmap_hash, column_count,
+        dominant_pattern, secondary_pattern, confidence,
+        jack_density, chord_density, stream_density, bracket_density,
+        chordjack_score, jumpstream_score, chordstream_score,
+        error, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(beatmap_id, algorithm) DO UPDATE SET
+        beatmap_hash = excluded.beatmap_hash,
+        column_count = excluded.column_count,
+        dominant_pattern = excluded.dominant_pattern,
+        secondary_pattern = excluded.secondary_pattern,
+        confidence = excluded.confidence,
+        jack_density = excluded.jack_density,
+        chord_density = excluded.chord_density,
+        stream_density = excluded.stream_density,
+        bracket_density = excluded.bracket_density,
+        chordjack_score = excluded.chordjack_score,
+        jumpstream_score = excluded.jumpstream_score,
+        chordstream_score = excluded.chordstream_score,
+        error = excluded.error,
+        updated_at = excluded.updated_at
+    `,
+    )
+    .run(
+      values.beatmapId,
+      PATTERN_ALGORITHM,
+      values.beatmapHash,
+      values.columnCount,
+      values.dominantPattern,
+      values.secondaryPattern,
+      values.confidence,
+      values.jackDensity,
+      values.chordDensity,
+      values.streamDensity,
+      values.bracketDensity,
+      values.chordjackScore,
+      values.jumpstreamScore,
+      values.chordstreamScore,
+      values.error,
+      values.updatedAtMs,
+    );
+}
+
+export type ComputeReworkOptions = {
+  /**
+   * Also write the dominant-skill pattern row from the same calculator pass.
+   * On by default for backfills: both stores need the same skills, so one pass
+   * fills both instead of parsing and rating the chart twice.
+   */
+  withPattern?: boolean;
+  /** Skill profile bin width. Only read when `withPattern` is set. */
+  windowMs?: number;
+};
+
 /**
  * Estimate one map from lazer `.osu` and persist.
  *
@@ -126,10 +209,12 @@ export function computeReworkDanSync(
   db: Db,
   beatmapId: string,
   hash: string | null,
+  options: ComputeReworkOptions = {},
 ): ReworkDanRating {
   const now = Date.now();
+  const withPattern = options.withPattern !== false;
 
-  const fail = (error: string, beatmapHash: string | null = hash) =>
+  const fail = (error: string, beatmapHash: string | null = hash) => {
     upsertRatingSync(db, {
       beatmapId,
       beatmapHash,
@@ -140,6 +225,27 @@ export function computeReworkDanSync(
       error,
       updatedAtMs: now,
     });
+    if (withPattern) {
+      upsertPatternSync(db, {
+        beatmapId,
+        beatmapHash,
+        columnCount: null,
+        dominantPattern: null,
+        secondaryPattern: null,
+        confidence: null,
+        jackDensity: null,
+        chordDensity: null,
+        streamDensity: null,
+        bracketDensity: null,
+        chordjackScore: null,
+        jumpstreamScore: null,
+        chordstreamScore: null,
+        error,
+        updatedAtMs: now,
+      });
+    }
+    return getReworkDan(db, beatmapId)!;
+  };
 
   if (!hash) return fail("Beatmap hash missing", null);
 
@@ -154,8 +260,16 @@ export function computeReworkDanSync(
   }
 
   try {
-    const result = runReworkEstimatorFromText(osuText);
-    return upsertRatingSync(db, {
+    const result = analyzeManiaOnceFromText(
+      osuText,
+      withPattern
+        ? { windowMs: options.windowMs ?? DEFAULT_SKILL_WINDOW_MS }
+        : {},
+    );
+
+    if (!Number.isFinite(result.star)) throw new Error("Invalid estimator output");
+
+    const rating = upsertRatingSync(db, {
       beatmapId,
       beatmapHash: hash,
       reworkStar: result.star,
@@ -165,6 +279,29 @@ export function computeReworkDanSync(
       error: null,
       updatedAtMs: now,
     });
+
+    if (withPattern && result.pattern) {
+      const p = result.pattern;
+      upsertPatternSync(db, {
+        beatmapId,
+        beatmapHash: hash,
+        columnCount: p.columnCount,
+        dominantPattern: p.dominantPattern,
+        secondaryPattern: p.secondaryPattern,
+        confidence: p.confidence,
+        jackDensity: p.jackDensity,
+        chordDensity: p.chordDensity,
+        streamDensity: p.streamDensity,
+        bracketDensity: p.bracketDensity,
+        chordjackScore: p.chordjackScore,
+        jumpstreamScore: p.jumpstreamScore,
+        chordstreamScore: p.chordstreamScore,
+        error: null,
+        updatedAtMs: now,
+      });
+    }
+
+    return rating;
   } catch (err) {
     return fail(err instanceof Error ? err.message : String(err));
   }
@@ -338,17 +475,21 @@ export function backfillReworkDanSync(
     includeFailed?: boolean;
     /** Skip the relabel pass (the job relabels once at start). */
     skipRelabel?: boolean;
+    /** Also write the dominant-skill pattern row in the same pass. */
+    withPattern?: boolean;
   } = {},
 ): {
   attempted: number;
   succeeded: number;
-  remaining: number;
+  /** Maps still unrated. Only counted when `countRemaining` is set. */
+  remaining: number | null;
   relabeled: number;
   computed: number;
 } {
   const relabeled = opts.skipRelabel ? 0 : relabelReworkDanSync(db);
-  const limit = Math.max(1, Math.min(500, opts.limit ?? 80));
+  const limit = Math.max(1, Math.min(1000, opts.limit ?? 80));
   const includeFailed = opts.includeFailed === true;
+  const withPattern = opts.withPattern !== false;
 
   const missingClause = includeFailed
     ? `
@@ -398,25 +539,41 @@ export function backfillReworkDanSync(
     )
     .all(REWORK_ALGORITHM, limit) as ReworkRow[];
 
+  if (missing.length === 0) {
+    return {
+      attempted: 0,
+      succeeded: 0,
+      remaining: null,
+      relabeled,
+      computed: 0,
+    };
+  }
+
+  // One transaction for the whole batch: per-map commits dominated SQLite time
+  // once the calculator got fast.
   let succeeded = 0;
-  for (const row of missing) {
-    computeReworkDanSync(db, row.id, row.hash);
-    const updated = db.$client
-      .query(
-        `
-        SELECT est_diff AS estDiff
-        FROM beatmap_dan_ratings
-        WHERE beatmap_id = ? AND algorithm = ?
-      `,
-      )
-      .get(row.id, REWORK_ALGORITHM) as { estDiff: string | null } | null;
-    if (updated?.estDiff) succeeded += 1;
+  db.$client.query("BEGIN").run();
+  try {
+    for (const row of missing) {
+      const rating = computeReworkDanSync(db, row.id, row.hash, { withPattern });
+      if (rating.error == null && rating.estDiff) succeeded += 1;
+    }
+    db.$client.query("COMMIT").run();
+  } catch (err) {
+    try {
+      db.$client.query("ROLLBACK").run();
+    } catch {
+      // transaction already unwound
+    }
+    throw err;
   }
 
   return {
     attempted: missing.length,
     succeeded,
-    remaining: countReworkDanMissing(db),
+    // Callers stop on `attempted === 0`; the full-library COUNT is only run
+    // when explicitly asked for, so it does not repeat every batch.
+    remaining: null,
     relabeled,
     computed: missing.length,
   };

@@ -18,6 +18,8 @@ touches:
   - apps/server/src/routes/practice.ts
   - apps/server/src/routes/beatmaps.ts
   - apps/server/public/lib/ratingDisplay.ts
+  - apps/server/src/tosu/analyze.ts
+  - apps/server/src/tosu/types.ts
   - apps/server/src/analytics/recommend
   - apps/server/src/analytics/recommend/axisThresholds.ts
 ---
@@ -77,7 +79,10 @@ Three estimators write to the same store, keyed by `algorithm`: `sunny`, `daniel
    and `primaryDanSource`. The practice list serializer (`mapCard`) and
    collection/search item maps must include those fields — dropping them makes
    the mode fall back to osu stars even after a successful backfill. Detail
-   reads `getReworkDan` (persisted only; no on-request compute).
+   reads `getReworkDan` (persisted only; no on-request compute). **tosu live**
+   analysis computes an ephemeral rework estimate (`analysis.rework`, rate via
+   `clockRate` only) so Current session **Now selected** and the `/now-selected`
+   page show Rework dan when that display mode is selected — not Sunny dan.
 
 ## Performance rules
 

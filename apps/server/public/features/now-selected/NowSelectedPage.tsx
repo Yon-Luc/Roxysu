@@ -155,12 +155,14 @@ export function NowSelectedPage({
 
   const beatmap = data?.beatmap;
   const sunny = data?.analysis.sunny;
+  const rework = data?.analysis.rework;
   const hasMap = Boolean(beatmap?.title || beatmap?.checksum);
   const showMania = isManiaBeatmap(beatmap);
   const chip = statusLabel(dict, data);
   const patternDetail = analysisQuery.data?.detail ?? null;
 
-  const keyCount = sunny?.columnCount ?? beatmap?.keys ?? null;
+  const keyCount =
+    sunny?.columnCount ?? rework?.columnCount ?? beatmap?.keys ?? null;
   const isFourK = isFourKKeyCount(keyCount);
   const titleMode = ratingMode === "osu" ? "dan" : ratingMode;
   const ratingLabels = {
@@ -171,6 +173,11 @@ export function NowSelectedPage({
       "Daniel star rating",
     sunnyStar:
       dict?.settings.ratingDisplay.sunny?.label ?? "Sunny star rating",
+    reworkDan:
+      dict?.settings.ratingDisplay.rework?.labelReworkDan ?? "Rework dan",
+    reworkStar:
+      dict?.settings.ratingDisplay.rework?.labelReworkStar ??
+      "Rework star rating",
   };
   const primarySource =
     primaryDanSource({
@@ -180,11 +187,27 @@ export function NowSelectedPage({
       sunnyEstDiff: !isFourK ? sunny?.estDiff : null,
       danielStar: isFourK ? sunny?.sunnyStar : null,
       sunnyStar: !isFourK ? sunny?.sunnyStar : null,
-    }) ?? (isFourK ? "daniel" : keyCount != null ? "sunny" : null);
+      reworkEstDiff: rework?.estDiff,
+      reworkStar: rework?.reworkStar,
+    }) ??
+    (titleMode === "rework"
+      ? null
+      : isFourK
+        ? "daniel"
+        : keyCount != null
+          ? "sunny"
+          : null);
   const analysisLabel =
     primaryRatingDisplayTitle(titleMode, primarySource, ratingLabels) ??
-    dict?.practice.detail.sunnyDan ??
-    "Sunny dan";
+    (titleMode === "rework"
+      ? ratingLabels.reworkDan
+      : (dict?.practice.detail.sunnyDan ?? "Sunny dan"));
+  const analysisEstDiff =
+    primarySource === "rework" ? rework?.estDiff : sunny?.estDiff;
+  const analysisStar =
+    primarySource === "rework" ? rework?.reworkStar : sunny?.sunnyStar;
+  const analysisError =
+    primarySource === "rework" ? rework?.error : sunny?.error;
 
   const bgSources = useMemo(() => liveBackgroundSources(data), [data]);
   const bgKey = `${beatmap?.checksum ?? ""}|${data?.backgroundFileHash ?? ""}|${data?.host ?? ""}`;
@@ -268,11 +291,11 @@ export function NowSelectedPage({
             : ""}
         </div>
         <p className="mt-1 text-sm text-ink">
-          {sunny?.estDiff ?? "—"}
-          {sunny?.sunnyStar != null ? ` · ${sunny.sunnyStar.toFixed(2)}★` : ""}
+          {analysisEstDiff ?? "—"}
+          {analysisStar != null ? ` · ${analysisStar.toFixed(2)}★` : ""}
         </p>
-        {sunny?.error ? (
-          <p className="mt-0.5 text-xs text-danger">{sunny.error}</p>
+        {analysisError ? (
+          <p className="mt-0.5 text-xs text-danger">{analysisError}</p>
         ) : null}
       </div>
     ) : null,

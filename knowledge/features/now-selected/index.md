@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08
+last_verified: 2026-10
 confidence: verified
 touches:
   - apps/server/public/features/now-selected
@@ -10,6 +10,7 @@ touches:
   - apps/server/src/routes/tosu.ts
   - apps/server/src/routes/beatmaps.ts
   - apps/server/public/lib/useTosuLiveQuery.ts
+  - apps/server/public/lib/ratingDisplay.ts
   - apps/server/public/router.tsx
   - apps/server/public/components/AppShell.tsx
 ---
@@ -36,6 +37,7 @@ While song-selecting or playing, open **Now selected** (optionally `#/now-select
 8. Focus layout (`?focus=1`) hides AppShell chrome (sidebar, mobile nav) for a second monitor.
 9. Personal play count / best accuracy / best PP use `GET /api/beatmaps/:id/stats`, not the full practice-profile payload.
 10. Live play ticks patch the tosu live query cache (`tosu.updated` `reason: play`). HTTP poll of `GET /api/tosu/live` runs only when SSE is down.
+11. The rating widget follows Settings difficulty display (`roxysu:rating-display`): `rework` shows ephemeral `analysis.rework` (Rework dan + ★); other modes keep Sunny/Daniel from `analysis.sunny`. Same rule on the Current session **Now selected** panel.
 
 ## Security rules
 
@@ -60,9 +62,11 @@ beatmap.time.live (SSE play ticks) → BeatmapPreviewEmbed clock sync
 - `apps/server/public/features/now-selected/NowSelectedPage.tsx`
 - `apps/server/public/features/now-selected/nowSelectedLayout.ts`
 - `apps/server/public/lib/useTosuLiveQuery.ts`
+- `apps/server/public/lib/ratingDisplay.ts`
 - `apps/server/public/components/BeatmapPreviewEmbed.tsx`
 - `apps/server/public/components/mania-analysis/*`
 - `apps/server/src/tosu/live.ts` — `getTosuLiveSnapshot()`, `getTosuLiveAnalysis()`
+- `apps/server/src/tosu/analyze.ts` — ephemeral sunny + rework estimates
 - `apps/server/src/routes/beatmaps.ts` — `GET /:id/stats`
 - `apps/server/src/map-analysis/computePatternAnalysis.ts` — `analyzeManiaPatternDetail()`
 
@@ -72,6 +76,7 @@ beatmap.time.live (SSE play ticks) → BeatmapPreviewEmbed clock sync
 - `features/preview-replay/` — embedded preview playfield
 - `features/practice-profiles/` — shared mania analysis widgets
 - `features/sessions/` — same tosu live snapshot as Current session panel
+- `features/mastery-settings/` — rating display mode
 
 ## Depended on by
 

@@ -12,6 +12,7 @@ import {
   type ManiaPatternDetail,
 } from "../map-analysis";
 import { runDanielEstimatorFromText } from "../map-analysis/danielEstimator";
+import { runReworkEstimatorFromText } from "../map-analysis/reworkEstimator";
 import {
   getOsuDataPath,
   resolveLazerFilePath,
@@ -20,6 +21,7 @@ import type {
   TosuLiveAnalysis,
   TosuLiveBeatmap,
   TosuLivePattern,
+  TosuLiveRework,
   TosuLiveSunny,
 } from "./types";
 
@@ -143,6 +145,31 @@ function sunnyFromText(
   }
 }
 
+function reworkFromText(osuText: string, speedRate: number): TosuLiveRework {
+  try {
+    // Rework has no dan-variant store; rate is applied via clockRate only
+    // (no Invert/Hold Off conversion on this path).
+    const result = runReworkEstimatorFromText(osuText, { speedRate });
+    return {
+      reworkStar: result.star,
+      estDiff: result.estDiff,
+      lnRatio: result.lnRatio,
+      columnCount: result.columnCount,
+      error: null,
+      source: "osu-text",
+    };
+  } catch (err) {
+    return {
+      reworkStar: null,
+      estDiff: null,
+      lnRatio: null,
+      columnCount: null,
+      error: err instanceof Error ? err.message : String(err),
+      source: "osu-text",
+    };
+  }
+}
+
 function patternFromText(osuText: string): TosuLivePattern {
   try {
     const result = analyzeManiaFromOsuText(osuText);
@@ -218,7 +245,7 @@ function patternDetailFromText(osuText: string): ManiaPatternDetail | null {
   }
 }
 
-/** Resolve the live tosu map to Roxysu analysis (ephemeral; rate-aware Sunny). */
+/** Resolve the live tosu map to Roxysu analysis (ephemeral; rate-aware Sunny + rework). */
 export async function analyzeLiveMap(
   db: Db,
   host: string,
@@ -228,7 +255,7 @@ export async function analyzeLiveMap(
   const empty = {
     matchedBeatmapId: null as string | null,
     backgroundFileHash: null as string | null,
-    analysis: { sunny: null, pattern: null } as Omit<
+    analysis: { sunny: null, rework: null, pattern: null } as Omit<
       TosuLiveAnalysis,
       "analyzing"
     >,
@@ -244,12 +271,12 @@ export async function analyzeLiveMap(
   const matchedBeatmapId = matched?.id ?? null;
   const backgroundFileHash = matched?.backgroundFileHash ?? null;
 
-  // Sunny/pattern analysis is mania-only, but still resolve library id for preview.
+  // Sunny/rework/pattern analysis is mania-only, but still resolve library id for preview.
   if (!isMania && beatmap.modeNumber != null && beatmap.modeNumber !== 3) {
     return {
       matchedBeatmapId,
       backgroundFileHash,
-      analysis: { sunny: null, pattern: null },
+      analysis: { sunny: null, rework: null, pattern: null },
       patternDetail: null,
       osuText: options.osuTextCache ?? null,
     };
@@ -275,6 +302,7 @@ export async function analyzeLiveMap(
 
   const cvtFlag = conversionCvtFlag(beatmap.mods);
   const sunny = sunnyFromText(osuText, speedRate, cvtFlag);
+  const rework = reworkFromText(osuText, speedRate);
 
   let pattern: TosuLivePattern | null;
   let patternDetail: ManiaPatternDetail | null;
@@ -289,11 +317,11 @@ export async function analyzeLiveMap(
       );
       pattern = patternFromDb(fromDb);
       if (!pattern) {
-        const keys = sunny.columnCount ?? beatmap.keys;
+        const keys = sunny.columnCount ?? rework.columnCount ?? beatmap.keys;
         pattern = keys === 7 ? patternFromText(osuText) : null;
       }
     } else {
-      const keys = sunny.columnCount ?? beatmap.keys;
+      const keys = sunny.columnCount ?? rework.columnCount ?? beatmap.keys;
       pattern = keys === 7 ? patternFromText(osuText) : null;
     }
     // Prefer labels from the full structural detail when available.
@@ -312,7 +340,7 @@ export async function analyzeLiveMap(
   return {
     matchedBeatmapId,
     backgroundFileHash,
-    analysis: { sunny, pattern },
+    analysis: { sunny, rework, pattern },
     patternDetail,
     osuText,
   };

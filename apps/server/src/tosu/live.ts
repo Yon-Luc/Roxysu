@@ -29,6 +29,7 @@ let matchedBeatmapId: string | null = null;
 let backgroundFileHash: string | null = null;
 let analyzing = false;
 let sunny: TosuLiveSnapshot["analysis"]["sunny"] = null;
+let rework: TosuLiveSnapshot["analysis"]["rework"] = null;
 let pattern: TosuLiveSnapshot["analysis"]["pattern"] = null;
 /** Full mania pattern detail for the current checksum (not on the lean snapshot). */
 let patternDetail: ManiaPatternDetail | null = null;
@@ -89,6 +90,7 @@ export function getTosuLiveSnapshot(): TosuLiveSnapshot {
     play,
     analysis: {
       sunny,
+      rework,
       pattern,
       analyzing,
     },
@@ -169,6 +171,7 @@ async function runAnalysisForBeatmap(
     matchedBeatmapId = result.matchedBeatmapId;
     backgroundFileHash = result.backgroundFileHash;
     sunny = result.analysis.sunny;
+    rework = result.analysis.rework;
     pattern = result.analysis.pattern;
     if (!opts.sunnyOnly) {
       patternDetail = result.patternDetail;
@@ -182,12 +185,21 @@ async function runAnalysisForBeatmap(
     pendingSunnySignature = null;
   } catch (err) {
     if (token !== analysisToken) return;
+    const message = err instanceof Error ? err.message : String(err);
     sunny = {
       sunnyStar: null,
       estDiff: null,
       lnRatio: null,
       columnCount: null,
-      error: err instanceof Error ? err.message : String(err),
+      error: message,
+      source: "osu-text",
+    };
+    rework = {
+      reworkStar: null,
+      estDiff: null,
+      lnRatio: null,
+      columnCount: null,
+      error: message,
       source: "osu-text",
     };
     if (!opts.sunnyOnly) {
@@ -267,6 +279,7 @@ function onFrame(frame: {
     osuTextCache = null;
     osuTextChecksum = null;
     sunny = null;
+    rework = null;
     pattern = null;
     patternDetail = null;
     patternDetailChecksum = null;
@@ -374,6 +387,7 @@ export async function startTosuAdapter(db: Db): Promise<void> {
     matchedBeatmapId = null;
     backgroundFileHash = null;
     sunny = null;
+    rework = null;
     pattern = null;
     patternDetail = null;
     patternDetailChecksum = null;

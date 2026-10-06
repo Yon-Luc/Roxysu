@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-09
+last_verified: 2026-10
 confidence: verified
 touches:
   - apps/server/src/analytics/session.ts
@@ -38,6 +38,7 @@ Live sessions keep the **Current session** label in headings; the generated name
 8. OBS overlay uses `GET /api/overlay?limit=` (header + last N scores, no PP curves for the rest of the session) and must not poll `["dashboard"]` or full current-session detail.
 9. Up Next samples debounce the query string; recommend/Up Next query keys include excluded beatmap IDs. Shuffle bumps a key instead of double-fetching.
 10. Session score rows whose beatmap was removed from the game (`beatmapId` null after Realm orphan cleanup) display as “Beatmap deleted” / “Removed from the game”, not Untitled/Unknown.
+11. The Current session **Now selected** panel follows Settings difficulty display: when `rework` is selected it shows ephemeral tosu `analysis.rework` (Rework dan), not Sunny dan.
     **Status:** verified
 
 ## Important symbols

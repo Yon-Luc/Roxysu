@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08
+last_verified: 2026-10
 confidence: verified
 touches:
   - apps/server/src/tosu
@@ -24,6 +24,7 @@ Optional WebSocket integration with **tosu** for live in-progress map state (ove
 3. `tosu.updated` SSE is `{ reason: "play" | "full", ... }`. Play ticks (rate-limited to 500ms) patch play + beatmap state + `beatmapTimeMs` (tosu `beatmap.time.live`, ms) in the client cache. Full invalidation is for checksum/status changes.
 4. Client HTTP poll of the lean snapshot is a reconnect fallback only (`useTosuLiveQuery`); it also runs when the cached snapshot reports disabled (slower interval), so a wrongly cached "adapter off" state self-heals instead of wedging. The Current session panel does not poll while hidden.
 5. The adapter must be bootstrapped before `/api/tosu/live` is served — `getTosuLiveSnapshot()` reads module-level settings that only adapter init populates, so an uninitialized read reports `enabled: false`. Both entry points (`src/index.ts` Bun, `src/index.node.ts` Node/desktop) call `void ensureTosuStarted(db)` at boot, and the route awaits the same guarded promise (`ensureTosuStarted` in `src/tosu/live.ts`).
+6. Live mania analysis includes ephemeral Sunny/Daniel (`analysis.sunny`) and rework (`analysis.rework`) estimates from the selected chart’s `.osu` text (rate-aware; never persisted). The rating display mode decides which label the Current session **Now selected** panel and `/now-selected` page show.
 
 ## Important symbols
 

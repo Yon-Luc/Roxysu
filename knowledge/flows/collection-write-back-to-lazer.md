@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-09
+last_verified: 2026-10
 confidence: verified
 touches:
   - apps/server/src/routes/collections.ts

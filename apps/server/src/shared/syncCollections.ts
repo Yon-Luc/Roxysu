@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -111,10 +111,12 @@ function realmReaderDir(): string {
 function realmSyncModulePath(): string {
   const dir = realmReaderDir();
   const packaged = path.join(dir, "syncCollections.js");
-  if (process.env.ROXYSU_REALM_READER_DIR?.trim()) {
-    return packaged;
-  }
-  return path.join(dir, "src", "syncCollections.ts");
+  const fromSrc = path.join(dir, "src", "syncCollections.ts");
+  // Desktop always sets ROXYSU_REALM_READER_DIR (packaged + monorepo). Prefer
+  // the module that exists so Electron-dev can write back without a pack build.
+  if (existsSync(packaged)) return packaged;
+  if (existsSync(fromSrc)) return fromSrc;
+  return process.env.ROXYSU_REALM_READER_DIR?.trim() ? packaged : fromSrc;
 }
 
 /** Node/desktop: call realm-reader in-process (no bunx/tsx). */

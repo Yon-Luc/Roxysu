@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-09
+last_verified: 2026-10
 confidence: verified
 touches:
   - apps/server/src/routes/collections.ts
@@ -43,7 +43,7 @@ Client app API has no auth. Collection write-back is still gated by process-safe
 ## Important symbols
 
 - `apps/server/src/routes/collections.ts` — overlapping write-back → 409 `in_flight`
-- `apps/server/src/shared/syncCollections.ts` — `invalidateCollectionMd5Cache()`
+- `apps/server/src/shared/syncCollections.ts` — `invalidateCollectionMd5Cache()`; Node/desktop loads realm-reader via `realmSyncModulePath()` (packaged `syncCollections.js` or monorepo `src/syncCollections.ts`, whichever exists under `ROXYSU_REALM_READER_DIR`)
 - `apps/server/src/shared/collectionMatchCache.ts` — yields between collections; re-runs if another event arrives mid-pass
 - `apps/realm-reader/src/syncCollections.ts`
 - `packages/collection-sync/src/index.ts` — `LAZER_COLLECTION_PREFIX`, `HUB_SYNC_ID_BASE`

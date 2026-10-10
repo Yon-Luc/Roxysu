@@ -182,9 +182,11 @@ function PbCompareFooter({
 function BeatmapIdentity({
   beatmap,
   badges,
+  meta,
 }: {
   beatmap: ScoreCardBeatmap;
   badges?: ReactNode;
+  meta?: ReactNode;
 }) {
   const { dict } = useAppDict();
   const title = beatmap.missing
@@ -217,6 +219,7 @@ function BeatmapIdentity({
         {badges}
       </div>
       <p className="mt-0.5 truncate text-sm text-muted">{subtitle}</p>
+      {meta}
     </div>
   );
 
@@ -284,8 +287,8 @@ export function ScoreCard({
     </div>
   );
 
-  const metaAndJudgments = (
-    <>
+  const timeModsAndJudgments = (
+    <div className="mt-1 space-y-1">
       <div className="flex flex-wrap items-center gap-1.5 text-sm text-subtle">
         <span>{formatRelativeTime(score.playedAt, dict?.common)}</span>
         <ModBadges mods={score.mods} />
@@ -293,7 +296,7 @@ export function ScoreCard({
       {score.judgments ? (
         <JudgmentStrip judgments={score.judgments} labels={labels} />
       ) : null}
-    </>
+    </div>
   );
 
   const compareFooter =
@@ -313,10 +316,13 @@ export function ScoreCard({
       {isBeatmap ? (
         <div className="space-y-2.5">
           <div className="flex items-start gap-3">
-            <BeatmapIdentity beatmap={beatmap} badges={badges} />
+            <BeatmapIdentity
+              beatmap={beatmap}
+              badges={badges}
+              meta={timeModsAndJudgments}
+            />
             {metrics}
           </div>
-          <div className="space-y-1.5 pl-0 sm:pl-30">{metaAndJudgments}</div>
           {compareFooter}
         </div>
       ) : (
@@ -336,7 +342,7 @@ export function ScoreCard({
                 ) : null}
               </div>
             ) : null}
-            {metaAndJudgments}
+            {timeModsAndJudgments}
             {compareFooter}
           </div>
           {metrics}

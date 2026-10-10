@@ -11,6 +11,7 @@ import {
   readAxisThresholdsSync,
   type AxisThresholds,
 } from "./recommend/axisThresholds";
+import { readFocusSettingsSync } from "./recommend/focusSettings";
 import type { MapAxis } from "./recommend/types";
 import {
   bestPlayPerMap,
@@ -268,6 +269,7 @@ function topEnrichedPlaysInBand(
   topN: number,
   axis?: MapAxis,
   thresholds: AxisThresholds = DEFAULT_AXIS_THRESHOLDS,
+  accCeil?: number | null,
 ): EnrichedPlayRow[] {
   return bestPlayPerMap(
     plays.filter(
@@ -275,6 +277,7 @@ function topEnrichedPlaysInBand(
         p.sunnyStar != null &&
         p.sunnyStar > 0 &&
         p.accuracy >= accFloor &&
+        (accCeil == null || p.accuracy < accCeil) &&
         (axis == null || classifyMapAxis(p.lnRatio, thresholds) === axis),
     ),
   )
@@ -299,9 +302,10 @@ export function getSkillBandPlays(
 ): SkillBandPlaysResult {
   const band = opts.band;
   const axis: SkillBandAxis = opts.axis ?? "all";
-  const topN = normalizeTopPlays(opts.topPlays);
+  const focus = readFocusSettingsSync(db);
+  const topN = normalizeTopPlays(opts.topPlays ?? focus.topPlays);
   const keyCount = parseSkillKeyCount(opts.keyCount ?? DEFAULT_KEY_COUNT);
-  const { min: accMin, max: accMax } = skillBandAccRange(band);
+  const { min: accMin, max: accMax } = skillBandAccRange(band, focus);
   const lnRatioForDan = axisLnRatio(axis);
   const thresholds = readAxisThresholdsSync(db);
 
@@ -319,6 +323,7 @@ export function getSkillBandPlays(
   const skill = estimateSevenKSkillFromPlays(skillRows, {
     topPlays: topN,
     axisThresholds: thresholds,
+    focusSettings: focus,
   });
   const currentLevel = bandLevelForAxis(skill, band, axis);
 
@@ -328,6 +333,7 @@ export function getSkillBandPlays(
     topN,
     axisFilter(axis),
     thresholds,
+    accMax,
   );
 
   const currentDanLabel =

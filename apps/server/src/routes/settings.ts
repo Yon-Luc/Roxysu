@@ -3,6 +3,7 @@ import {
   OVERLAY_HOST_ENABLED_KEY,
   OVERLAY_HOST_URL_KEY,
   RECOMMEND_FLN_RATIO_THRESHOLD_KEY,
+  RECOMMEND_FOCUS_SETTINGS_KEY,
   RECOMMEND_LN_RATIO_THRESHOLD_KEY,
   SCORES_GAMEMODE_FILTER_KEY,
   SCORES_USERNAME_FILTER_KEY,
@@ -87,6 +88,12 @@ import {
   serializeAxisThreshold,
   validateAxisThresholdsInput,
 } from "../analytics/recommend/axisThresholds";
+import {
+  DEFAULT_FOCUS_SETTINGS,
+  readFocusSettings,
+  serializeFocusSettings,
+  validateFocusSettingsInput,
+} from "../analytics/recommend/focusSettings";
 
 async function readOsuDataOverride(db: Db): Promise<string | null> {
   const [row] = await db
@@ -128,11 +135,13 @@ async function buildSettingsResponse(db: Db) {
   const maniaRatingExecutables = await readAllExecutablePaths(db);
   const overlayHostUrl = await readOverlayHostUrl(db);
   const overlayHostEnabled = await readOverlayHostEnabled(db);
-  const [scoresUsername, scoresGamemode, axisThresholds] = await Promise.all([
-    buildScoresUsernameSettings(db),
-    buildScoresGamemodeSettings(db),
-    readAxisThresholds(db),
-  ]);
+  const [scoresUsername, scoresGamemode, axisThresholds, recommendFocus] =
+    await Promise.all([
+      buildScoresUsernameSettings(db),
+      buildScoresGamemodeSettings(db),
+      readAxisThresholds(db),
+      readFocusSettings(db),
+    ]);
 
   return {
     mastery: {
@@ -155,6 +164,10 @@ async function buildSettingsResponse(db: Db) {
         ln: DEFAULT_AXIS_THRESHOLDS.ln,
         fln: DEFAULT_AXIS_THRESHOLDS.fln,
       },
+    },
+    recommendFocus: {
+      ...recommendFocus,
+      defaults: DEFAULT_FOCUS_SETTINGS,
     },
     paths,
     overlay: {
@@ -215,6 +228,7 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
       let tosuChanged = false;
       let scoresFilterChanged = false;
       let axisThresholdsChanged = false;
+      let focusSettingsChanged = false;
 
       if (body.masteryFormulaId) {
         try {
@@ -410,12 +424,26 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
         }
       }
 
+      if (body.recommendFocus !== undefined) {
+        const validated = validateFocusSettingsInput(body.recommendFocus);
+        if (!validated.ok) {
+          set.status = 400;
+          return { error: validated.error };
+        }
+        const prev = await readFocusSettings(db);
+        const nextJson = serializeFocusSettings(validated.settings);
+        if (nextJson !== serializeFocusSettings(prev)) {
+          await upsertSetting(db, RECOMMEND_FOCUS_SETTINGS_KEY, nextJson);
+          focusSettingsChanged = true;
+        }
+      }
+
       if (scoresFilterChanged) {
         invalidateQueryContextCache();
         await runAnalyticsPipeline(db, { forceFull: true });
         publish({ type: "dashboard.updated" });
         publish({ type: "mastery.updated" });
-      } else if (axisThresholdsChanged) {
+      } else if (axisThresholdsChanged || focusSettingsChanged) {
         invalidateQueryContextCache();
       }
 
@@ -461,6 +489,34 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
          * LN→FLN classification boundary (ln_ratio 0–1). Must be &gt; ln.
          */
         flnRatioThreshold: t.Optional(t.Number()),
+        /** Push / Accuracy / Consistency / Deficit recommend focus settings. */
+        recommendFocus: t.Optional(
+          t.Object({
+            push: t.Object({
+              accMin: t.Number(),
+              accMax: t.Number(),
+              targetRatio: t.Number(),
+              tolerance: t.Number(),
+            }),
+            accuracy: t.Object({
+              accMin: t.Number(),
+              accMax: t.Number(),
+              targetRatio: t.Number(),
+              tolerance: t.Number(),
+            }),
+            consistency: t.Object({
+              accMin: t.Number(),
+              accMax: t.Number(),
+              targetRatio: t.Number(),
+              tolerance: t.Number(),
+            }),
+            deficit: t.Object({
+              targetRatio: t.Number(),
+              tolerance: t.Number(),
+            }),
+            topPlays: t.Number(),
+          }),
+        ),
       }),
     },
   );

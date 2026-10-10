@@ -4,8 +4,10 @@ confidence: verified
 touches:
   - apps/server/src/analytics/mastery
   - apps/server/src/analytics/recommend/axisThresholds.ts
+  - apps/server/src/analytics/recommend/focusSettings.ts
   - apps/server/src/routes/settings.ts
   - apps/server/public/features/settings
+  - apps/server/public/features/settings/sections/RecommendFocusSection.tsx
   - packages/db/src/settings-keys.ts
   - apps/server/src/map-analysis/memoryPressure.ts
   - apps/server/src/map-analysis/patternAnalysisJob.ts
@@ -16,7 +18,7 @@ touches:
 
 ## Purpose
 
-Choose mastery formula (`simple` or `practice`), rating display preference (osu! stars / dan / Sunny stars / rework dan), paths, background jobs (Sunny, Daniel, rework backfills), and Rice/LN/FLN classification boundaries. Recompute mastery across the practice library when formula changes.
+Choose mastery formula (`simple` or `practice`), rating display preference (osu! stars / dan / Sunny stars / rework dan), paths, background jobs (Sunny, Daniel, rework backfills), Rice/LN/FLN classification boundaries, and recommendation focus bands (Push / Accuracy / Consistency / Deficit). Recompute mastery across the practice library when formula changes.
 
 Rating display is stored in the browser (`roxysu:rating-display`). The `rework`
 option shows mania-difficulty-port dan labels (and the matching star under the
@@ -30,6 +32,7 @@ see `features/sunny-dan-recommendations/` rule 8.
 2. Path resolution precedence: env → Settings → platform default (`packages/osu-paths`).
 3. Rice / LN / FLN **classification** boundaries are user-configurable (defaults LN start 20%, FLN start 80%). LN start must be strictly less than FLN start. Keys: `recommend.ln_ratio_threshold`, `recommend.fln_ratio_threshold`.
 4. Classification thresholds affect recommend axes, skill estimates, stats skillset mix, and `axis:` query filters. They do **not** change Sunny dan RC/LN **label table** selection (stays package constant 20%).
+5. Recommendation **focus** settings (clear-rate bands, target difficulty, tolerance, topPlays) live in `recommend.focus_settings` and are edited on the Customize tab. Defaults keep Push in a closed 90–95% band near that skill level.
 
 ## Implementation
 
@@ -39,7 +42,7 @@ Settings UI is tab-grouped on `/settings`:
 |---|---|
 | Setup | osu!lazer data folder, live sync, in-game overlay, tosu / live map |
 | Practice | mastery formula, score username, gamemode |
-| Customize | Rice / LN / FLN boundaries |
+| Customize | Rice / LN / FLN boundaries, recommendation focuses |
 | Appearance | appearance, difficulty display, preview skin, keybinds (columns + playback actions) |
 | Jobs | Sunny dan, Daniel dan, rework dan (mania difficulty port), dominant skill analysis, Mania Rating Lab |
 

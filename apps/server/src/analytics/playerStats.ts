@@ -15,6 +15,7 @@ import {
   readAxisThresholdsSync,
   type AxisThresholds,
 } from "./recommend/axisThresholds";
+import { readFocusSettingsSync } from "./recommend/focusSettings";
 import { classifyScoreGrade, PERFECT_TOTAL_SCORE } from "../query-language/scoreGrade";
 import {
   DEFAULT_SKILL_KEY_COUNT,
@@ -488,6 +489,7 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
   const rows = loadManiaAnalyticsRows(db, keyCount);
   const variantOf = loadDanVariantLookup(db, rows);
   const axisThresholds = readAxisThresholdsSync(db);
+  const focusSettings = readFocusSettingsSync(db);
 
   const [
     beatmapCountRow,
@@ -527,9 +529,10 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
       return estimateSevenKSkillWithHistoryFromPlays(plays, {
         granularity,
         rangeDays: range,
-        topPlays: skillTopPlays,
+        topPlays: skillTopPlays || focusSettings.topPlays,
         keyCount,
         axisThresholds,
+        focusSettings,
       });
     }),
     getKeymodeProgression(rows, trendDays, weekCount, curves),

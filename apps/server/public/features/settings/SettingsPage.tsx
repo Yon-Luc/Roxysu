@@ -26,6 +26,7 @@ import { DanielDanSection } from "./sections/DanielDanSection";
 import { ReworkDanSection } from "./sections/ReworkDanSection";
 import { PatternAnalysisSection } from "./sections/PatternAnalysisSection";
 import { AxisThresholdsSection } from "./sections/AxisThresholdsSection";
+import { RecommendFocusSection } from "./sections/RecommendFocusSection";
 import {
   SETTINGS_TABS,
   resolveSettingsTab,
@@ -66,7 +67,12 @@ function SettingsTabPanels({
         </>
       );
     case "customize":
-      return <AxisThresholdsSection data={data} />;
+      return (
+        <>
+          <AxisThresholdsSection data={data} />
+          <RecommendFocusSection data={data} />
+        </>
+      );
     case "appearance":
       return (
         <>

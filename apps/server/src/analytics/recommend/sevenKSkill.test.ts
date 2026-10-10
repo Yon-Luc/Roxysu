@@ -82,7 +82,7 @@ describe("topPlaysInBand", () => {
     expect(top[0]!.beatmapId).toBe("b");
   });
 
-  test("keeps maps when best clear is above the core band", () => {
+  test("without ceil, keeps maps when best clear is above the core band", () => {
     const top = topPlaysInBand(
       [
         play({
@@ -106,6 +106,35 @@ describe("topPlaysInBand", () => {
 
     expect(top).toHaveLength(2);
     expect(top.map((p) => p.beatmapId).sort()).toEqual(["a", "b"]);
+  });
+
+  test("with ceil, excludes clears at or above the band max", () => {
+    const top = topPlaysInBand(
+      [
+        play({
+          beatmapId: "a",
+          playedAt: 1000,
+          accuracy: 0.97,
+          sunnyStar: 8.5,
+          lnRatio: 0.5,
+        }),
+        play({
+          beatmapId: "b",
+          playedAt: 2000,
+          accuracy: 0.92,
+          sunnyStar: 8,
+          lnRatio: 0.5,
+        }),
+      ],
+      PUSH_ACC_MIN,
+      10,
+      undefined,
+      undefined,
+      PUSH_ACC_MAX,
+    );
+
+    expect(top).toHaveLength(1);
+    expect(top[0]!.beatmapId).toBe("b");
   });
 });
 

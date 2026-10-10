@@ -835,6 +835,28 @@ export async function patchSettings(body: {
   maniaRatingExecutables?: Record<string, string | null>;
   lnRatioThreshold?: number;
   flnRatioThreshold?: number;
+  recommendFocus?: {
+    push: {
+      accMin: number;
+      accMax: number;
+      targetRatio: number;
+      tolerance: number;
+    };
+    accuracy: {
+      accMin: number;
+      accMax: number;
+      targetRatio: number;
+      tolerance: number;
+    };
+    consistency: {
+      accMin: number;
+      accMax: number;
+      targetRatio: number;
+      tolerance: number;
+    };
+    deficit: { targetRatio: number; tolerance: number };
+    topPlays: number;
+  };
 }) {
   return unwrap(await api.api.settings.patch(body), "/api/settings");
 }

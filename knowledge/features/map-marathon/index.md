@@ -52,7 +52,6 @@ POST /api/marathon/open-in-osu → save + openOszWithOsu
 
 - `features/practice-library/` — search to add maps
 - `features/sunny-dan-recommendations/` — 4K/7K fill
-- `features/sessions/` — Send to marathon
 - `features/download-mirrors/` — beatmaps folder + open-in-osu
 - `packages/osu-chart`
 

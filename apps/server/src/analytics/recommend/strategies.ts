@@ -9,6 +9,11 @@ import {
   DEFAULT_AXIS_THRESHOLDS,
   type AxisThresholds,
 } from "./axisThresholds";
+import {
+  DEFAULT_FOCUS_SETTINGS,
+  formatAccBandLabel,
+  type RecommendFocusSettings,
+} from "./focusSettings";
 import { formatSunny } from "./summary";
 import type {
   MapAxis,
@@ -82,15 +87,16 @@ export function recommendPush(
   axisFilter: MapAxis | null = null,
   keyCount: number,
   axisThresholds: AxisThresholds = DEFAULT_AXIS_THRESHOLDS,
+  focusSettings: RecommendFocusSettings = DEFAULT_FOCUS_SETTINGS,
 ): RecommendItem[] {
-  // Push baseline = average Sunny of 90–95% clears per axis (dan-style).
-  // Target slightly above that clear level so suggestions sit in neighboring dans.
+  const { targetRatio, tolerance } = focusSettings.push;
+  const bandLabel = formatAccBandLabel(focusSettings.push);
   const axes = axesForFilter(axisFilter);
   const perAxis = Math.max(count, Math.ceil(count * 1.5));
   const pools = axes.map((axis) =>
     pickCandidatesInRange(db, skill, {
-      targetRatio: 1.08,
-      tolerance: 0.14,
+      targetRatio,
+      tolerance,
       axis,
       overlaySql: overlay.sql,
       overlayParams: overlay.params,
@@ -109,20 +115,24 @@ export function recommendPush(
       return a.match.playCount - b.match.playCount;
     }
     return (
-      Math.abs(a.match.relativeDifficulty - 1.08) -
-      Math.abs(b.match.relativeDifficulty - 1.08)
+      Math.abs(a.match.relativeDifficulty - targetRatio) -
+      Math.abs(b.match.relativeDifficulty - targetRatio)
     );
   });
 
   return paired.slice(0, count).map(({ row, match }) => {
     const diffPercent = (match.relativeDifficulty - 1) * 100;
     const dan = row.sunnyEstDiff ? ` · ${row.sunnyEstDiff}` : "";
+    const diffText =
+      Math.abs(diffPercent) < 0.5
+        ? "at"
+        : `${diffPercent >= 0 ? "+" : ""}${diffPercent.toFixed(0)}% vs`;
     return toItem(
       row,
       match,
       "push",
       axisFilter,
-      `Push ${labelForMatch(match)}: ${diffPercent >= 0 ? "+" : ""}${diffPercent.toFixed(0)}% above your 90–95% clear level (${formatSunny(match.sunnyStar)} Sunny${dan})`,
+      `Push ${labelForMatch(match)}: ${diffText} your ${bandLabel} clear level (${formatSunny(match.sunnyStar)} Sunny${dan})`,
     );
   });
 }
@@ -136,15 +146,17 @@ export function recommendAccuracy(
   axisFilter: MapAxis | null = null,
   keyCount: number,
   axisThresholds: AxisThresholds = DEFAULT_AXIS_THRESHOLDS,
+  focusSettings: RecommendFocusSettings = DEFAULT_FOCUS_SETTINGS,
 ): RecommendItem[] {
-  // Accuracy baseline = average Sunny of 99%+ scores per axis.
-  // Suggest maps in that difficulty range to push toward / hold 99%+.
+  const { targetRatio, tolerance, accMin } = focusSettings.accuracy;
+  const bandLabel = formatAccBandLabel(focusSettings.accuracy);
+  const polishFloor = Math.min(accMin, 0.99);
   const axes = axesForFilter(axisFilter);
   const perAxis = Math.max(count, Math.ceil(count * 1.5));
   const pools = axes.map((axis) =>
     pickCandidatesInRange(db, skill, {
-      targetRatio: 1.0,
-      tolerance: 0.12,
+      targetRatio,
+      tolerance,
       axis,
       overlaySql: overlay.sql,
       overlayParams: overlay.params,
@@ -163,15 +175,15 @@ export function recommendAccuracy(
       (p) =>
         p.match.playCount > 0 &&
         p.match.bestAccuracy != null &&
-        p.match.bestAccuracy < 0.99,
+        p.match.bestAccuracy < polishFloor,
     )
     .sort((a, b) => {
       const accA = a.match.bestAccuracy ?? 0;
       const accB = b.match.bestAccuracy ?? 0;
       if (accB !== accA) return accB - accA;
       return (
-        Math.abs(a.match.relativeDifficulty - 1.0) -
-        Math.abs(b.match.relativeDifficulty - 1.0)
+        Math.abs(a.match.relativeDifficulty - targetRatio) -
+        Math.abs(b.match.relativeDifficulty - targetRatio)
       );
     })
     .slice(0, Math.ceil(count / 2));
@@ -181,8 +193,8 @@ export function recommendAccuracy(
     .filter((p) => !taken.has(p.row.id))
     .sort(
       (a, b) =>
-        Math.abs(a.match.relativeDifficulty - 1.0) -
-        Math.abs(b.match.relativeDifficulty - 1.0),
+        Math.abs(a.match.relativeDifficulty - targetRatio) -
+        Math.abs(b.match.relativeDifficulty - targetRatio),
     )
     .slice(0, count - roomToImprove.length);
 
@@ -197,7 +209,7 @@ export function recommendAccuracy(
           match,
           "accuracy",
           axisFilter,
-          `Accuracy ${labelForMatch(match)}: target 99%+ (best ${accPct}% · ${formatSunny(match.sunnyStar)} Sunny${dan})`,
+          `Accuracy ${labelForMatch(match)}: target ${bandLabel} (best ${accPct}% · ${formatSunny(match.sunnyStar)} Sunny${dan})`,
         ),
       );
     } else {
@@ -207,7 +219,7 @@ export function recommendAccuracy(
           match,
           "accuracy",
           axisFilter,
-          `Accuracy ${labelForMatch(match)}: in your 99%+ difficulty range (${formatSunny(match.sunnyStar)} Sunny${dan})`,
+          `Accuracy ${labelForMatch(match)}: in your ${bandLabel} difficulty range (${formatSunny(match.sunnyStar)} Sunny${dan})`,
         ),
       );
     }
@@ -224,14 +236,17 @@ export function recommendConsistency(
   axisFilter: MapAxis | null = null,
   keyCount: number,
   axisThresholds: AxisThresholds = DEFAULT_AXIS_THRESHOLDS,
+  focusSettings: RecommendFocusSettings = DEFAULT_FOCUS_SETTINGS,
 ): RecommendItem[] {
-  // Consistency baseline = average Sunny of 96–99% scores per axis.
+  const { targetRatio, tolerance } = focusSettings.consistency;
+  const bandLabel = formatAccBandLabel(focusSettings.consistency);
+  const polishCeil = focusSettings.accuracy.accMin;
   const axes = axesForFilter(axisFilter);
   const perAxis = Math.max(count, Math.ceil(count * 1.5));
   const pools = axes.map((axis) =>
     pickCandidatesInRange(db, skill, {
-      targetRatio: 1.0,
-      tolerance: 0.12,
+      targetRatio,
+      tolerance,
       axis,
       overlaySql: overlay.sql,
       overlayParams: overlay.params,
@@ -245,21 +260,20 @@ export function recommendConsistency(
 
   const paired = collectPaired(pools);
 
-  // Prefer maps already played with room under 99%, then unplayed at level.
   const played = paired
     .filter(
       (p) =>
         p.match.playCount > 0 &&
         p.match.bestAccuracy != null &&
-        p.match.bestAccuracy < 0.99,
+        p.match.bestAccuracy < polishCeil,
     )
     .sort((a, b) => {
       const accA = a.match.bestAccuracy ?? 0;
       const accB = b.match.bestAccuracy ?? 0;
       if (accB !== accA) return accB - accA;
       return (
-        Math.abs(a.match.relativeDifficulty - 1.0) -
-        Math.abs(b.match.relativeDifficulty - 1.0)
+        Math.abs(a.match.relativeDifficulty - targetRatio) -
+        Math.abs(b.match.relativeDifficulty - targetRatio)
       );
     })
     .slice(0, Math.ceil(count / 2));
@@ -269,8 +283,8 @@ export function recommendConsistency(
     .filter((p) => !playedIds.has(p.row.id))
     .sort(
       (a, b) =>
-        Math.abs(a.match.relativeDifficulty - 1.0) -
-        Math.abs(b.match.relativeDifficulty - 1.0),
+        Math.abs(a.match.relativeDifficulty - targetRatio) -
+        Math.abs(b.match.relativeDifficulty - targetRatio),
     )
     .slice(0, count - played.length);
 
@@ -285,7 +299,7 @@ export function recommendConsistency(
           match,
           "consistency",
           axisFilter,
-          `Consistency ${labelForMatch(match)}: polish toward 99%+ (best ${accPct}% · ${formatSunny(match.sunnyStar)} Sunny${dan})`,
+          `Consistency ${labelForMatch(match)}: polish toward ${formatAccBandLabel(focusSettings.accuracy)} (best ${accPct}% · ${formatSunny(match.sunnyStar)} Sunny${dan})`,
         ),
       );
     } else {
@@ -295,7 +309,7 @@ export function recommendConsistency(
           match,
           "consistency",
           axisFilter,
-          `Consistency ${labelForMatch(match)}: around your 96–99% level (${formatSunny(match.sunnyStar)} Sunny${dan})`,
+          `Consistency ${labelForMatch(match)}: around your ${bandLabel} level (${formatSunny(match.sunnyStar)} Sunny${dan})`,
         ),
       );
     }
@@ -356,16 +370,18 @@ export function recommendDeficit(
   excludeIds: string[],
   keyCount: number,
   axisThresholds: AxisThresholds = DEFAULT_AXIS_THRESHOLDS,
+  focusSettings: RecommendFocusSettings = DEFAULT_FOCUS_SETTINGS,
 ): RecommendItem[] {
   const weak = weakestAxis(skill);
   const weakSkill = skillForAxis(skill, weak);
   const overall = skill.overall;
   const deficit = overall - weakSkill;
-  const targetRatio = weakSkill > 0 ? 1.1 : 0.9;
+  const { targetRatio, tolerance } = focusSettings.deficit;
+  const effectiveRatio = weakSkill > 0 ? targetRatio : Math.min(targetRatio, 0.9);
 
   const { rows, matches } = pickCandidatesInRange(db, skill, {
-    targetRatio,
-    tolerance: 0.15,
+    targetRatio: effectiveRatio,
+    tolerance,
     axis: weak,
     overlaySql: overlay.sql,
     overlayParams: overlay.params,

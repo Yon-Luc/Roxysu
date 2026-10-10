@@ -22,6 +22,8 @@ touches:
   - apps/server/src/tosu/types.ts
   - apps/server/src/analytics/recommend
   - apps/server/src/analytics/recommend/axisThresholds.ts
+  - apps/server/src/analytics/recommend/focusSettings.ts
+  - apps/server/public/features/settings/sections/RecommendFocusSection.tsx
 ---
 
 # Sunny dan & 4K/7K recommendations
@@ -54,6 +56,15 @@ Three estimators write to the same store, keyed by `algorithm`: `sunny`, `daniel
    uses the same fixed 0.2 constant.
    **Enforced by:** `readAxisThresholdsSync` / `classifyMapAxis` in
    `apps/server/src/analytics/recommend/axisThresholds.ts` + `axis.ts`.
+8. Push / Accuracy / Consistency / Deficit **focus definitions** (clear-rate
+   bands, target difficulty ratio, tolerance, topPlays) are user settings
+   (`recommend.focus_settings`, Customize tab). Defaults: Push closed
+   90–95% band targeting 100% ±8% of that band’s skill; Accuracy 99%+;
+   Consistency 96–99%; Deficit at weak-axis comfort skill ±10%.
+   **Enforced by:** `readFocusSettingsSync` / `estimateSevenKSkillFromPlays` /
+   `recommendPush|Accuracy|Consistency|Deficit` in
+   `apps/server/src/analytics/recommend/focusSettings.ts` + `sevenKSkill.ts` +
+   `strategies.ts`.
 
 ## Rework dan rules
 

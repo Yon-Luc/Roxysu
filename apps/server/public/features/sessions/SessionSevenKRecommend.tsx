@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -12,7 +12,7 @@ import {
   formatSkillRating,
   useRatingDisplayMode,
 } from "../../lib/ratingDisplay";
-import { readSkillTopPlays, SKILL_TOP_PLAYS_STORAGE_KEY } from "../../lib/skillTopPlays";
+import { readSkillTopPlays } from "../../lib/skillTopPlays";
 import { useAppDict, t } from "../../lib/i18n";
 import type { Dictionary } from "@roxysu/i18n";
 import { SessionSuggestMapRow } from "./SessionSuggestMapRow";
@@ -37,17 +37,17 @@ const FOCUS_OPTIONS: { id: RecommendFocus; label: string; hint: string }[] = [
   {
     id: "push",
     label: "Push",
-    hint: "Slightly above your 90%+ clear level on rice/LN/FLN (neighboring dans).",
+    hint: "Maps near your configured Push clear-rate band skill (Customize settings).",
   },
   {
     id: "accuracy",
     label: "Accuracy",
-    hint: "Maps in your 99%+ difficulty range — aim for 99%+ on rice/LN/FLN.",
+    hint: "Maps in your configured Accuracy clear-rate band — aim to hold that accuracy.",
   },
   {
     id: "consistency",
     label: "Consistency",
-    hint: "Maps around your 96%+ rice/LN/FLN level (farm / polish dans).",
+    hint: "Maps around your configured Consistency clear-rate band (farm / polish).",
   },
   {
     id: "deficit",
@@ -107,11 +107,9 @@ export function SessionSevenKRecommend({
   excludeBeatmapIds: string[];
 }) {
   const { dict } = useAppDict();
-  const navigate = useNavigate();
   const ratingMode = useRatingDisplayMode();
   const [prefs, setPrefs] = useState<RecPrefs>(() => loadPrefs(keyCount));
   const [shuffleKey, setShuffleKey] = useState(0);
-  const [skillTopPlays, setSkillTopPlays] = useState(() => readSkillTopPlays());
   const excludeKey = useMemo(
     () => [...excludeBeatmapIds].sort().join(","),
     [excludeBeatmapIds],
@@ -121,19 +119,6 @@ export function SessionSevenKRecommend({
     savePrefs(keyCount, prefs);
   }, [keyCount, prefs]);
 
-  useEffect(() => {
-    const syncTopPlays = () => setSkillTopPlays(readSkillTopPlays());
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === SKILL_TOP_PLAYS_STORAGE_KEY) syncTopPlays();
-    };
-    window.addEventListener("focus", syncTopPlays);
-    window.addEventListener("storage", onStorage);
-    return () => {
-      window.removeEventListener("focus", syncTopPlays);
-      window.removeEventListener("storage", onStorage);
-    };
-  }, []);
-
   const { data: settings } = useQuery({
     queryKey: ["settings"],
     queryFn: fetchSettings,
@@ -141,6 +126,8 @@ export function SessionSevenKRecommend({
   });
   const lnPct = Math.round((settings?.axisThresholds?.ln ?? 0.2) * 1000) / 10;
   const flnPct = Math.round((settings?.axisThresholds?.fln ?? 0.8) * 1000) / 10;
+  const skillTopPlays =
+    settings?.recommendFocus?.topPlays ?? readSkillTopPlays();
 
   const { data, isLoading, error, isFetching } = useQuery({
     queryKey: [
@@ -176,22 +163,6 @@ export function SessionSevenKRecommend({
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-center justify-end gap-2">
-        <button
-          type="button"
-          className="rx-btn"
-          disabled={items.length < 2}
-          onClick={() => {
-            void navigate({
-              to: "/marathon",
-              search: {
-                ids: items.map((item) => item.id).join(","),
-                key: keyCount,
-              },
-            });
-          }}
-        >
-          {dict?.session.sendToMarathon ?? "Send to marathon"}
-        </button>
         <button
           type="button"
           className="rx-btn"

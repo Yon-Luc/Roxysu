@@ -34,6 +34,7 @@ export const SECTION_TO_TAB: Record<string, SettingsTabId> = {
   "score-username": "practice",
   gamemode: "practice",
   "axis-thresholds": "customize",
+  "recommend-focus": "customize",
   appearance: "appearance",
   "difficulty-display": "appearance",
   "preview-skin": "appearance",

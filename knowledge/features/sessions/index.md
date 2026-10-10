@@ -51,6 +51,8 @@ Live sessions keep the **Current session** label in headings; the generated name
     - when `isPb` — previous best on that beatmap (`kind: "previous"`), if one exists
     - when not PB — current PB on that beatmap (`kind: "current"`)
     Ranking matches `runRetryEngine` (pp, then accuracy). Lookup is batched per distinct beatmap in the score window.
+17. Current session layout: stats → Now selected → recommendations → score cards at the bottom. 4K/7K recommend does not offer Send to marathon.
+18. Recommendation focus bands (Push / Accuracy / Consistency / Deficit) and topPlays are configured in Settings → Customize (`recommend.focus_settings`); session recommend reads those settings.
     **Status:** verified
 
 ## Important symbols
@@ -100,7 +102,6 @@ On new session insert, `runSessionEngine()` sets `name` immediately after alloca
 
 - `features/dashboard/` — current session summary and last closed session in practice snapshot
 - `features/now-selected/` — shares tosu live snapshot with Current session panel
-- `features/map-marathon/` — Send to marathon from 4K/7K recommend
 
 ## Related knowledge
 

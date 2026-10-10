@@ -22,6 +22,7 @@ import {
 } from "./strategies";
 import { summaryFor } from "./summary";
 import { readAxisThresholdsSync } from "./axisThresholds";
+import { readFocusSettingsSync } from "./focusSettings";
 import type {
   MapAxis,
   RecommendBatch,
@@ -93,7 +94,6 @@ export function recommendSevenK(
   const focus = parseFocus(opts.focus);
   const count = clampCount(opts.count);
   const excludeIds = (opts.excludeIds ?? []).filter(Boolean);
-  const topPlays = parseSkillTopPlays(opts.topPlays);
   const keyCount = parseSkillKeyCount(opts.keyCount);
   let skillset = parseSkillset(opts.skillset);
 
@@ -101,7 +101,16 @@ export function recommendSevenK(
   const needsSunnyBackfill = missingSunny > 0;
 
   const axisThresholds = readAxisThresholdsSync(db);
-  const skill = estimateSevenKSkill(db, { topPlays, keyCount, axisThresholds });
+  const focusSettings = readFocusSettingsSync(db);
+  const topPlays = parseSkillTopPlays(
+    opts.topPlays ?? focusSettings.topPlays,
+  );
+  const skill = estimateSevenKSkill(db, {
+    topPlays,
+    keyCount,
+    axisThresholds,
+    focusSettings,
+  });
 
   let overlaySql: string | null = null;
   let overlayParams: unknown[] = [];
@@ -152,6 +161,7 @@ export function recommendSevenK(
         axisFilter,
         keyCount,
         axisThresholds,
+        focusSettings,
       );
       break;
     case "accuracy":
@@ -164,6 +174,7 @@ export function recommendSevenK(
         axisFilter,
         keyCount,
         axisThresholds,
+        focusSettings,
       );
       break;
     case "deficit": {
@@ -177,6 +188,7 @@ export function recommendSevenK(
         excludeIds,
         keyCount,
         axisThresholds,
+        focusSettings,
       );
       break;
     }
@@ -204,6 +216,7 @@ export function recommendSevenK(
         axisFilter,
         keyCount,
         axisThresholds,
+        focusSettings,
       );
       break;
   }

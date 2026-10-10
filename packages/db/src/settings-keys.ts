@@ -94,3 +94,9 @@ export const RECOMMEND_LN_RATIO_THRESHOLD_KEY = "recommend.ln_ratio_threshold";
   */
 export const RECOMMEND_FLN_RATIO_THRESHOLD_KEY = "recommend.fln_ratio_threshold";
 
+/**
+ * JSON blob for Push / Accuracy / Consistency / Deficit clear-rate bands,
+ * difficulty targeting, and topPlays used by session recommendations + skill.
+ */
+export const RECOMMEND_FOCUS_SETTINGS_KEY = "recommend.focus_settings";
+

@@ -15,6 +15,12 @@ import {
   DEFAULT_AXIS_THRESHOLDS,
   type AxisThresholds,
 } from "./axisThresholds";
+import {
+  DEFAULT_FOCUS_SETTINGS,
+  bandCenter,
+  bandHalfWidth,
+  type RecommendFocusSettings,
+} from "./focusSettings";
 import type { MapAxis, SevenKSkillProfile, SkillAxis } from "./types";
 
 /** Min plays before we trust the comfort estimate (else cold-start). */
@@ -23,20 +29,10 @@ const MIN_PLAYS_FOR_SKILL = 5;
 /** Default number of top-rated plays used for skill bands. */
 export const DEFAULT_SKILL_TOP_PLAYS = 30;
 
-/** Push band: solid clears that are not farm yet. */
-const PUSH_ACC_MIN = 0.9;
-const PUSH_ACC_MAX = 0.95;
-const PUSH_ACC_CENTER = 0.925;
-
-/** Consistency band: high-acc farm / polish level. */
-const CONSISTENCY_ACC_MIN = 0.96;
-const CONSISTENCY_ACC_MAX = 0.99;
-const CONSISTENCY_ACC_CENTER = 0.975;
-
-/** Accuracy band: 99%+ targets. */
-const ACCURACY_ACC_MIN = 0.99;
-const ACCURACY_ACC_MAX = 1.01;
-const ACCURACY_ACC_CENTER = 0.995;
+/** @deprecated Prefer DEFAULT_FOCUS_SETTINGS.push — kept for tests. */
+export const PUSH_ACC_MIN = DEFAULT_FOCUS_SETTINGS.push.accMin;
+/** @deprecated Prefer DEFAULT_FOCUS_SETTINGS.push */
+export const PUSH_ACC_MAX = DEFAULT_FOCUS_SETTINGS.push.accMax;
 
 /** Recency decay per play index (Companella uses 0.95). */
 const RECENCY_DECAY = 0.95;
@@ -90,6 +86,8 @@ export type SkillHistoryOptions = {
   keyCount?: number;
   /** Rice / LN / FLN classification boundaries. */
   axisThresholds?: AxisThresholds;
+  /** Push / Accuracy / Consistency clear-rate bands. */
+  focusSettings?: RecommendFocusSettings;
 };
 
 export type SevenKSkillOptions = {
@@ -99,6 +97,8 @@ export type SevenKSkillOptions = {
   keyCount?: number;
   /** Rice / LN / FLN classification boundaries. */
   axisThresholds?: AxisThresholds;
+  /** Push / Accuracy / Consistency clear-rate bands. */
+  focusSettings?: RecommendFocusSettings;
 };
 
 /** Default stats / skill keymode. */
@@ -108,14 +108,15 @@ export type SkillBandKind = "push" | "accuracy" | "consistency";
 
 export function skillBandAccRange(
   band: SkillBandKind,
+  focus: RecommendFocusSettings = DEFAULT_FOCUS_SETTINGS,
 ): { min: number; max: number } {
   switch (band) {
     case "push":
-      return { min: PUSH_ACC_MIN, max: PUSH_ACC_MAX };
+      return { min: focus.push.accMin, max: focus.push.accMax };
     case "consistency":
-      return { min: CONSISTENCY_ACC_MIN, max: CONSISTENCY_ACC_MAX };
+      return { min: focus.consistency.accMin, max: focus.consistency.accMax };
     case "accuracy":
-      return { min: ACCURACY_ACC_MIN, max: ACCURACY_ACC_MAX };
+      return { min: focus.accuracy.accMin, max: focus.accuracy.accMax };
   }
 }
 
@@ -222,13 +223,18 @@ export function bestPlayPerMap<T extends PlayLike>(plays: T[]): T[] {
   return [...byMap.values()];
 }
 
-/** Highest Sunny maps at or above the band floor (one best play per map). */
+/**
+ * Highest Sunny maps in an accuracy band (one best play per map).
+ * When `accCeil` is set, the band is closed: `[accFloor, accCeil)`.
+ * When omitted, only the floor applies (legacy ≥ floor).
+ */
 export function topPlaysInBand(
   plays: SkillPlayRow[],
   accFloor: number,
   topN: number,
   axis?: MapAxis,
   thresholds: AxisThresholds = DEFAULT_AXIS_THRESHOLDS,
+  accCeil?: number | null,
 ): SkillPlayRow[] {
   return bestPlayPerMap(
     plays.filter(
@@ -236,6 +242,7 @@ export function topPlaysInBand(
         p.sunnyStar != null &&
         p.sunnyStar > 0 &&
         p.accuracy >= accFloor &&
+        (accCeil == null || p.accuracy < accCeil) &&
         (axis == null || classifyMapAxis(p.lnRatio, thresholds) === axis),
     ),
   )
@@ -362,31 +369,32 @@ function bandLevelsFromPlays(
   center: number,
   halfWidth: number,
   thresholds: AxisThresholds = DEFAULT_AXIS_THRESHOLDS,
+  accCeil?: number | null,
 ) {
   return {
     all: clearLevelFromPlays(
-      topPlaysInBand(plays, accFloor, topN, undefined, thresholds),
+      topPlaysInBand(plays, accFloor, topN, undefined, thresholds, accCeil),
       "all",
       center,
       halfWidth,
       thresholds,
     ),
     rc: clearLevelFromPlays(
-      topPlaysInBand(plays, accFloor, topN, "rc", thresholds),
+      topPlaysInBand(plays, accFloor, topN, "rc", thresholds, accCeil),
       "rc",
       center,
       halfWidth,
       thresholds,
     ),
     ln: clearLevelFromPlays(
-      topPlaysInBand(plays, accFloor, topN, "ln", thresholds),
+      topPlaysInBand(plays, accFloor, topN, "ln", thresholds, accCeil),
       "ln",
       center,
       halfWidth,
       thresholds,
     ),
     fln: clearLevelFromPlays(
-      topPlaysInBand(plays, accFloor, topN, "fln", thresholds),
+      topPlaysInBand(plays, accFloor, topN, "fln", thresholds, accCeil),
       "fln",
       center,
       halfWidth,
@@ -620,39 +628,44 @@ export function estimateSevenKSkillFromPlays(
     /** Optional DB cold-start when play-list cold-start is empty. */
     coldStartFallback?: () => SevenKSkillProfile;
     axisThresholds?: AxisThresholds;
+    focusSettings?: RecommendFocusSettings;
   },
 ): SevenKSkillProfile {
   const asOfMs = opts?.asOfMs;
-  const topN = normalizeTopPlays(opts?.topPlays);
+  const focus = opts?.focusSettings ?? DEFAULT_FOCUS_SETTINGS;
+  const topN = normalizeTopPlays(opts?.topPlays ?? focus.topPlays);
   const thresholds = opts?.axisThresholds ?? DEFAULT_AXIS_THRESHOLDS;
   const filtered =
     asOfMs != null ? plays.filter((p) => p.playedAt <= asOfMs) : plays;
 
   const clear = bandLevelsFromPlays(
     filtered,
-    PUSH_ACC_MIN,
+    focus.push.accMin,
     topN,
-    PUSH_ACC_CENTER,
-    0.025,
+    bandCenter(focus.push),
+    bandHalfWidth(focus.push),
     thresholds,
+    focus.push.accMax,
   );
 
   const farm = bandLevelsFromPlays(
     filtered,
-    CONSISTENCY_ACC_MIN,
+    focus.consistency.accMin,
     topN,
-    CONSISTENCY_ACC_CENTER,
-    0.015,
+    bandCenter(focus.consistency),
+    bandHalfWidth(focus.consistency),
     thresholds,
+    focus.consistency.accMax,
   );
 
   const acc = bandLevelsFromPlays(
     filtered,
-    ACCURACY_ACC_MIN,
+    focus.accuracy.accMin,
     topN,
-    ACCURACY_ACC_CENTER,
-    0.01,
+    bandCenter(focus.accuracy),
+    bandHalfWidth(focus.accuracy),
     thresholds,
+    focus.accuracy.accMax,
   );
 
   const withSunny = topRatedPlays(filtered, topN);
@@ -806,9 +819,9 @@ export function loadSevenKPlays(
 /**
  * Estimate mania skill for one keymode:
  * - comfort (overall/rc/ln/fln): recent plays, recency × acc weight
- * - peak*: average Sunny of maps with 90–95% scores (Push base)
- * - accuracy*: average Sunny of maps with 99%+ scores (Accuracy base)
- * - consistency*: average Sunny of maps with 96–99% scores (Consistency base)
+ * - peak*: average Sunny of maps in the configured Push clear-rate band
+ * - accuracy*: average Sunny of maps in the configured Accuracy band
+ * - consistency*: average Sunny of maps in the configured Consistency band
  *
  * Uses cached Sunny ratings only (no request-path backfill).
  */
@@ -822,6 +835,7 @@ export function estimateSevenKSkill(
   return estimateSevenKSkillFromPlays(plays, {
     topPlays: opts?.topPlays,
     axisThresholds: thresholds,
+    focusSettings: opts?.focusSettings,
     coldStartFallback: () => coldStartFromMastery(db, keyCount, thresholds),
   });
 }
@@ -895,6 +909,7 @@ function skillHistoryFromPlays(
       topPlays: opts.topPlays,
       coldStartFromPlaysOnly: true,
       axisThresholds: opts.axisThresholds,
+      focusSettings: opts.focusSettings,
     });
     points.push({
       at: key,
@@ -948,6 +963,7 @@ export function estimateSevenKSkillWithHistoryFromPlays(
       topPlays: opts.topPlays,
       coldStartFallback,
       axisThresholds: opts.axisThresholds,
+      focusSettings: opts.focusSettings,
     }),
     skillHistory: skillHistoryFromPlays(plays, opts, nowMs),
   };
@@ -988,10 +1004,10 @@ export const __testing = {
   bestPlayPerMap,
   PUSH_ACC_MIN,
   PUSH_ACC_MAX,
-  CONSISTENCY_ACC_MIN,
-  CONSISTENCY_ACC_MAX,
-  ACCURACY_ACC_MIN,
-  ACCURACY_ACC_MAX,
+  CONSISTENCY_ACC_MIN: DEFAULT_FOCUS_SETTINGS.consistency.accMin,
+  CONSISTENCY_ACC_MAX: DEFAULT_FOCUS_SETTINGS.consistency.accMax,
+  ACCURACY_ACC_MIN: DEFAULT_FOCUS_SETTINGS.accuracy.accMin,
+  ACCURACY_ACC_MAX: DEFAULT_FOCUS_SETTINGS.accuracy.accMax,
 };
 
 export type SkillMode = "comfort" | "peak" | "consistency" | "accuracy";

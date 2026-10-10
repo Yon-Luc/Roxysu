@@ -92,6 +92,23 @@ export const PAGE_SECTIONS: PageSectionDef[] = [
     ],
   },
   {
+    id: "recommend-focus",
+    to: "/settings",
+    pageLabel: "Settings",
+    label: "Recommendation focuses",
+    keywords: [
+      "settings",
+      "customize",
+      "recommend",
+      "push",
+      "accuracy",
+      "consistency",
+      "deficit",
+      "focus",
+      "clear rate",
+    ],
+  },
+  {
     id: "live-sync",
     to: "/settings",
     pageLabel: "Settings",

@@ -657,6 +657,7 @@
     "noSessionsOnDay": "No hay sesiones este día.",
     "activityCalendar": "Actividad",
     "playsOnDay": "{{day}}: {{count}} partidas",
+    "dayStats": "{{day}}: {{plays}} partidas · {{sessions}} sesiones",
     "activityLess": "Menos",
     "activityMore": "Más",
     "currentSession": "Sesión actual",

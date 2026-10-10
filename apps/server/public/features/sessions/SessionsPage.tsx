@@ -226,16 +226,19 @@ export function SessionsPage() {
 
       <SessionActivityCalendar
         activity={data.activity ?? []}
-        sessionDays={data.items.map((s) => sessionStartedUtcDay(s.startedAt))}
+        sessionDayStats={data.items.map((s) => ({
+          day: sessionStartedUtcDay(s.startedAt),
+          plays: s.scoreCount,
+        }))}
         selectedDay={selectedDay}
         onSelectDay={(day) => {
           setSelectedDay(day);
           if (day) setShowAll(false);
         }}
         title={dict?.session.activityCalendar ?? "Activity"}
-        playsOnDayLabel={(day, count) =>
-          t(dict?.session.playsOnDay, { day, count }) ||
-          `${day}: ${count} plays`
+        dayStatsLabel={(day, plays, sessions) =>
+          t(dict?.session.dayStats, { day, plays, sessions }) ||
+          `${day}: ${plays} plays · ${sessions} sessions`
         }
         lessLabel={dict?.session.activityLess ?? "Less"}
         moreLabel={dict?.session.activityMore ?? "More"}

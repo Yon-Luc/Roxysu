@@ -62,3 +62,23 @@ export async function getWeeklyActivity(db: Db, weeks = 12) {
       avgAccuracy: r.avgAccuracy,
     }));
 }
+
+/** Per-day play counts from daily_stats for contribution calendars (~1 year). */
+export async function getDailyActivity(db: Db, days = 371) {
+  const rows = await db
+    .select({
+      day: dailyStats.day,
+      playCount: dailyStats.playCount,
+    })
+    .from(dailyStats)
+    .orderBy(desc(dailyStats.day))
+    .limit(days);
+
+  return rows
+    .slice()
+    .reverse()
+    .map((r) => ({
+      day: r.day,
+      playCount: r.playCount,
+    }));
+}

@@ -8,6 +8,7 @@ import {
   listSessionScores,
   listSessions,
 } from "../analytics/session";
+import { getDailyActivity } from "../analytics/progression";
 import {
   loadManiaPpCurves,
   resolveScorePp,
@@ -106,11 +107,15 @@ async function sessionDetailPayload(
 export const sessionRoutes = new Elysia({ prefix: "/sessions" })
   .use(dbPlugin)
   .get("/", async ({ db }) => {
-    const items = await listSessions(db, 100);
-    const current = await getCurrentSession(db);
+    const [items, current, activity] = await Promise.all([
+      listSessions(db, 100),
+      getCurrentSession(db),
+      getDailyActivity(db, 371),
+    ]);
     return {
       current: current ? serializeSession(current) : null,
       items: items.map(serializeSession),
+      activity,
     };
   })
   .get(

@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -9,13 +10,32 @@ import { PageTitle } from "../../components/PageTitle";
 import { fetchSessions } from "../../lib/api";
 import { formatRelativeTime } from "../../lib/format";
 import { useAppDict, t } from "../../lib/i18n";
+import {
+  SessionActivityCalendar,
+  sessionStartedUtcDay,
+} from "./SessionActivityCalendar";
+
+const DEFAULT_VISIBLE = 7;
 
 export function SessionsPage() {
   const { dict } = useAppDict();
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
   const { data, isLoading, error } = useQuery({
     queryKey: ["sessions"],
     queryFn: fetchSessions,
   });
+
+  const visibleItems = useMemo(() => {
+    if (!data) return [];
+    if (selectedDay) {
+      return data.items.filter(
+        (s) => sessionStartedUtcDay(s.startedAt) === selectedDay,
+      );
+    }
+    if (showAll) return data.items;
+    return data.items.slice(0, DEFAULT_VISIBLE);
+  }, [data, selectedDay, showAll]);
 
   if (isLoading) {
     return (
@@ -37,6 +57,25 @@ export function SessionsPage() {
     );
   }
 
+  const hasMoreWithoutFilter = !selectedDay && data.items.length > DEFAULT_VISIBLE;
+  const listHeading = selectedDay
+    ? t(dict?.session.sessionsOnDay, { day: selectedDay }) ||
+      `Sessions on ${selectedDay}`
+    : (dict?.session.recentSessions ?? "Recent sessions");
+
+  const handleShowAll = () => {
+    if (selectedDay) {
+      setSelectedDay(null);
+      setShowAll(false);
+      return;
+    }
+    setShowAll(true);
+  };
+
+  const handleShowLess = () => {
+    setShowAll(false);
+  };
+
   return (
     <div className="space-y-8">
       <div>
@@ -55,7 +94,7 @@ export function SessionsPage() {
               <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-accent">
                 <span className="relative flex h-2 w-2">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-accent" />
+                  <span className="relative flex h-2 w-2 rounded-full bg-accent" />
                 </span>
                 {dict?.session.nowPlaying}
               </div>
@@ -105,48 +144,101 @@ export function SessionsPage() {
         </Link>
       )}
 
-      {data.items.length === 0 ? (
-        <p className="text-sm text-muted">{dict?.session.noSessionsYet}</p>
-      ) : (
-        <ul className="space-y-0.5">
-          {data.items.map((s) => {
-            const isOpen = s.endedAt == null;
-            return (
-              <li key={s.id}>
-                <Link
-                  to="/sessions/$sessionId"
-                  params={{
-                    sessionId: isOpen ? "current" : String(s.id),
-                  }}
-                  className="rx-row justify-between"
-                >
-                  <div className="min-w-0">
-                    <div className="font-semibold text-ink">
-                      {isOpen ? dict?.session.currentSession : s.name}
-                      {isOpen ? (
-                        <span className="ml-2 text-xs font-bold text-accent">
-                          {dict?.session.live}
-                        </span>
-                      ) : null}
+      <section>
+        <div className="mb-4 flex items-end justify-between gap-3">
+          <h2 className="font-display text-2xl font-bold tracking-tight text-ink">
+            {listHeading}
+          </h2>
+          {selectedDay ? (
+            <button
+              type="button"
+              onClick={handleShowAll}
+              className="text-sm font-bold text-muted transition hover:text-accent"
+            >
+              {dict?.session.clearDayFilter ?? "Show all"}
+            </button>
+          ) : hasMoreWithoutFilter && !showAll ? (
+            <button
+              type="button"
+              onClick={handleShowAll}
+              className="text-sm font-bold text-muted transition hover:text-accent"
+            >
+              {dict?.session.showAllSessions ?? "Show all"}
+            </button>
+          ) : hasMoreWithoutFilter && showAll ? (
+            <button
+              type="button"
+              onClick={handleShowLess}
+              className="text-sm font-bold text-muted transition hover:text-accent"
+            >
+              {dict?.session.showLessSessions ?? "Show less"}
+            </button>
+          ) : null}
+        </div>
+
+        {data.items.length === 0 ? (
+          <p className="text-sm text-muted">{dict?.session.noSessionsYet}</p>
+        ) : visibleItems.length === 0 ? (
+          <p className="text-sm text-muted">
+            {dict?.session.noSessionsOnDay ?? "No sessions on this day."}
+          </p>
+        ) : (
+          <ul className="space-y-0.5">
+            {visibleItems.map((s) => {
+              const isOpen = s.endedAt == null;
+              return (
+                <li key={s.id}>
+                  <Link
+                    to="/sessions/$sessionId"
+                    params={{
+                      sessionId: isOpen ? "current" : String(s.id),
+                    }}
+                    className="rx-row justify-between"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-semibold text-ink">
+                        {isOpen ? dict?.session.currentSession : s.name}
+                        {isOpen ? (
+                          <span className="ml-2 text-xs font-bold text-accent">
+                            {dict?.session.live}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="mt-0.5 text-sm text-muted">
+                        {isOpen ? `${s.name} · ` : ""}
+                        {formatRelativeTime(s.startedAt, dict?.common)}
+                        {s.endedAt
+                          ? ` → ${formatRelativeTime(s.endedAt, dict?.common)}`
+                          : ""}
+                        {s.rulesetShortName ? ` · ${s.rulesetShortName}` : ""}
+                      </div>
                     </div>
-                    <div className="mt-0.5 text-sm text-muted">
-                      {isOpen ? `${s.name} · ` : ""}
-                      {formatRelativeTime(s.startedAt, dict?.common)}
-                      {s.endedAt
-                        ? ` → ${formatRelativeTime(s.endedAt, dict?.common)}`
-                        : ""}
-                      {s.rulesetShortName ? ` · ${s.rulesetShortName}` : ""}
+                    <div className="shrink-0 text-sm font-semibold tabular-nums text-subtle">
+                      {t(dict?.session.playsCount, { count: s.scoreCount })}
                     </div>
-                  </div>
-                  <div className="shrink-0 text-sm font-semibold tabular-nums text-subtle">
-                    {t(dict?.session.playsCount, { count: s.scoreCount })}
-                  </div>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
+      <SessionActivityCalendar
+        activity={data.activity ?? []}
+        selectedDay={selectedDay}
+        onSelectDay={(day) => {
+          setSelectedDay(day);
+          if (day) setShowAll(false);
+        }}
+        title={dict?.session.activityCalendar ?? "Activity"}
+        playsOnDayLabel={(day, count) =>
+          t(dict?.session.playsOnDay, { day, count }) ||
+          `${day}: ${count} plays`
+        }
+        lessLabel={dict?.session.activityLess ?? "Less"}
+        moreLabel={dict?.session.activityMore ?? "More"}
+      />
     </div>
   );
 }

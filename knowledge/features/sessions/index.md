@@ -3,6 +3,7 @@ last_verified: 2026-10
 confidence: verified
 touches:
   - apps/server/src/analytics/session.ts
+  - apps/server/src/analytics/progression.ts
   - apps/server/src/routes/sessions.ts
   - apps/server/src/routes/overlay.ts
   - apps/server/public/features/sessions
@@ -39,16 +40,22 @@ Live sessions keep the **Current session** label in headings; the generated name
 9. Up Next samples debounce the query string; recommend/Up Next query keys include excluded beatmap IDs. Shuffle bumps a key instead of double-fetching.
 10. Session score rows whose beatmap was removed from the game (`beatmapId` null after Realm orphan cleanup) display as “Beatmap deleted” / “Removed from the game”, not Untitled/Unknown.
 11. The Current session **Now selected** panel follows Settings difficulty display: when `rework` is selected it shows ephemeral tosu `analysis.rework` (Rework dan), not Sunny dan.
+12. Sessions list page keeps the current-session CTA at the top, then recent sessions (default **7**), then a GitHub-style activity calendar from `daily_stats` (~53 weeks UTC).
+13. `GET /api/sessions` returns `{ current, items, activity }` where `activity` is `{ day, playCount }[]` from `getDailyActivity` (missing days = 0 plays in the UI).
+14. Clicking a calendar day filters the list to sessions whose `startedAt` falls on that UTC day (`YYYY-MM-DD`). Clicking the day again or **Show all** clears the filter. With no day selected, **Show all** expands beyond the default 7 (API still caps `items` at 100).
     **Status:** verified
 
 ## Important symbols
 
 - `apps/server/src/analytics/session.ts` — `SESSION_GAP_MS`, `runSessionEngine()` (global gap algorithm; session/metrics writes in one sync transaction callback — required by better-sqlite3 on desktop; name backfill skipped when every name is already capitalized)
-- `apps/server/src/routes/sessions.ts` — `serializeSession()` includes `name`; score window via `limit`
+- `apps/server/src/analytics/progression.ts:getDailyActivity()` — per-day play counts for the list calendar
+- `apps/server/src/routes/sessions.ts` — `serializeSession()` includes `name`; score window via `limit`; list includes `activity`
 - `apps/server/src/routes/overlay.ts` — slim OBS payload
 - `packages/session-names/src/generate.ts` — `generateSessionName(sessionId, taken)`, `capitalizeSessionName()`
 - `packages/session-names/src/terms.json` — character, region, activity, modifier, style word lists
 - `apps/server/public/features/sessions/*`
+- `apps/server/public/features/sessions/SessionsPage.tsx` — list + day filter
+- `apps/server/public/features/sessions/SessionActivityCalendar.tsx` — contribution grid
 - `apps/server/public/features/sessions/SessionSuggest.tsx` — Up Next / 4K / 7K tabs
 - `apps/server/public/features/sessions/SessionSevenKRecommend.tsx` — Sunny recommend panel (`keyCount` 4 or 7)
 

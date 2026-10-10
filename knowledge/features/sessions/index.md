@@ -6,7 +6,10 @@ touches:
   - apps/server/src/analytics/progression.ts
   - apps/server/src/routes/sessions.ts
   - apps/server/src/routes/overlay.ts
+  - apps/server/src/scores/pbCompare.ts
+  - apps/server/src/scores/parseStatistics.ts
   - apps/server/public/features/sessions
+  - apps/server/public/components/ScoreCard.tsx
   - apps/server/public/features/overlay
   - packages/session-names/src/generate.ts
   - packages/session-names/src/terms.json
@@ -43,18 +46,26 @@ Live sessions keep the **Current session** label in headings; the generated name
 12. Sessions list page keeps the current-session CTA at the top, then recent sessions (default **7**), then a GitHub-style activity calendar from `daily_stats` (~53 weeks UTC).
 13. `GET /api/sessions` returns `{ current, items, activity }` where `activity` is `{ day, playCount }[]` from `getDailyActivity` (missing days = 0 plays in the UI).
 14. Clicking a calendar day filters the list to sessions whose `startedAt` falls on that UTC day (`YYYY-MM-DD`). Clicking the day again or **Show all** clears the filter. With no day selected, **Show all** expands beyond the default 7 (API still caps `items` at 100).
+15. Session detail score lists use shared `ScoreCard` (`variant="beatmap"`) with map cover, judgments, and PB comparison.
+16. Each session score may include `judgments` (from `scores.statistics`) and `pbCompare`:
+    - when `isPb` — previous best on that beatmap (`kind: "previous"`), if one exists
+    - when not PB — current PB on that beatmap (`kind: "current"`)
+    Ranking matches `runRetryEngine` (pp, then accuracy). Lookup is batched per distinct beatmap in the score window.
     **Status:** verified
 
 ## Important symbols
 
 - `apps/server/src/analytics/session.ts` — `SESSION_GAP_MS`, `runSessionEngine()` (global gap algorithm; session/metrics writes in one sync transaction callback — required by better-sqlite3 on desktop; name backfill skipped when every name is already capitalized)
 - `apps/server/src/analytics/progression.ts:getDailyActivity()` — per-day play counts for the list calendar
-- `apps/server/src/routes/sessions.ts` — `serializeSession()` includes `name`; score window via `limit`; list includes `activity`
+- `apps/server/src/routes/sessions.ts` — `serializeSession()` includes `name`; score window via `limit`; list includes `activity`; detail attaches `judgments` + `pbCompare`
+- `apps/server/src/scores/pbCompare.ts` — batched top-2 PB ranking for session compare
 - `apps/server/src/routes/overlay.ts` — slim OBS payload
 - `packages/session-names/src/generate.ts` — `generateSessionName(sessionId, taken)`, `capitalizeSessionName()`
 - `packages/session-names/src/terms.json` — character, region, activity, modifier, style word lists
 - `apps/server/public/features/sessions/*`
 - `apps/server/public/features/sessions/SessionsPage.tsx` — list + day filter
+- `apps/server/public/features/sessions/SessionDetailPage.tsx` — score cards via `ScoreCard`
+- `apps/server/public/components/ScoreCard.tsx` — compact (Map Page) and beatmap (session) variants
 - `apps/server/public/features/sessions/SessionActivityCalendar.tsx` — contribution grid
 - `apps/server/public/features/sessions/SessionSuggest.tsx` — Up Next / 4K / 7K tabs
 - `apps/server/public/features/sessions/SessionSevenKRecommend.tsx` — Sunny recommend panel (`keyCount` 4 or 7)
@@ -83,7 +94,7 @@ On new session insert, `runSessionEngine()` sets `name` immediately after alloca
 - `features/practice-library/` — Up Next query language
 - `features/sunny-dan-recommendations/` — 4K/7K recommend
 - `@roxysu/session-names` — display name vocabulary and generator
-- `features/practice-profiles/` — shared `ScoreCard` (Map Page) is the intended score-row component for session detail lists
+- `features/practice-profiles/` — shared `ScoreCard` (`variant="beatmap"` on session detail)
 
 ## Depended on by
 

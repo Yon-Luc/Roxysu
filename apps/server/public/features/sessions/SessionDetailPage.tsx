@@ -1,7 +1,5 @@
-import { Link } from "@tanstack/react-router";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { BeatmapCover } from "../../components/BeatmapCover";
 import { BeatmapPreviewButton } from "../../components/BeatmapPreviewButton";
 import { GoBackLink } from "../../components/GoBackLink";
 import {
@@ -11,15 +9,14 @@ import {
   SkeletonBlock,
   StatGridSkeleton,
 } from "../../components/LoadingSkeleton";
-import { ModBadges } from "../../components/ModBadges";
 import { PageTitle } from "../../components/PageTitle";
-import { ScoreReplayButton } from "../../components/ScoreReplayButton";
-import { fetchSession } from "../../lib/api";
 import {
-  formatAccuracy,
-  formatPp,
-  formatRelativeTime,
-} from "../../lib/format";
+  ScoreCard,
+  type ScoreCardPbCompare,
+  type ScoreJudgmentsView,
+} from "../../components/ScoreCard";
+import { fetchSession } from "../../lib/api";
+import { formatRelativeTime } from "../../lib/format";
 import {
   formatPrimaryRating,
   useRatingDisplayMode,
@@ -246,7 +243,7 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
               : dict?.session.noPlaysDone}
           </p>
         ) : (
-          <ul className="space-y-0.5">
+          <ul className="space-y-2">
             {scores.map((score) => {
               const isFresh = freshIds.has(score.id);
               const previewableRuleset =
@@ -256,24 +253,70 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
                 score.rulesetShortName === "fruits";
               const canPreview =
                 Boolean(score.beatmapId) && previewableRuleset;
-              const canRewatch = score.hasReplay && previewableRuleset;
               const beatmapMissing = !score.beatmapId;
-              const main = (
-                <>
-                  <BeatmapCover
-                    backgroundFileHash={score.backgroundFileHash}
-                    setOnlineId={score.setOnlineId}
-                    size="list"
-                    className="h-12 w-12 shrink-0 rounded shadow-md shadow-black/40"
-                    alt=""
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="truncate font-semibold text-ink">
-                        {beatmapMissing
-                          ? (dict?.session.beatmapDeleted ?? "Beatmap deleted")
-                          : (score.title ?? dict?.session.untitled)}
-                      </span>
+              const ratingLabel = beatmapMissing
+                ? null
+                : [
+                    formatPrimaryRating({
+                      mode: ratingMode,
+                      starRating: score.starRating,
+                      sunnyEstDiff: score.sunnyEstDiff,
+                      sunnyStar: score.sunnyStar,
+                      danielEstDiff: score.danielEstDiff,
+                      danielStar: score.danielStar,
+                      reworkEstDiff: score.reworkEstDiff,
+                      reworkStar: score.reworkStar,
+                      lnRatio: score.reworkLnRatio,
+                      keyCount: score.keyCount,
+                    }),
+                    score.retryIndex != null && score.retryIndex > 0
+                      ? `retry #${score.retryIndex}`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ");
+
+              const judgments =
+                "judgments" in score
+                  ? ((score as { judgments?: ScoreJudgmentsView | null })
+                      .judgments ?? null)
+                  : null;
+              const pbCompare =
+                "pbCompare" in score
+                  ? ((score as { pbCompare?: ScoreCardPbCompare | null })
+                      .pbCompare ?? null)
+                  : null;
+
+              return (
+                <ScoreCard
+                  key={score.id}
+                  variant="beatmap"
+                  highlight={isFresh}
+                  score={{
+                    id: score.id,
+                    accuracy: score.accuracy,
+                    pp: score.pp,
+                    maxCombo: score.maxCombo,
+                    mods: score.mods,
+                    rank: score.rank,
+                    totalScore: score.totalScore,
+                    rulesetShortName: score.rulesetShortName,
+                    hasReplay: score.hasReplay,
+                    playedAt: score.playedAt,
+                    judgments,
+                  }}
+                  beatmap={{
+                    id: score.beatmapId,
+                    title: score.title,
+                    artist: score.artist,
+                    difficultyName: score.difficultyName,
+                    backgroundFileHash: score.backgroundFileHash,
+                    setOnlineId: score.setOnlineId,
+                    ratingLabel,
+                    missing: beatmapMissing,
+                  }}
+                  badges={
+                    <>
                       {score.isPb ? (
                         <span className="shrink-0 rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-warning">
                           {dict?.session.pb}
@@ -284,87 +327,18 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
                           {dict?.session.new}
                         </span>
                       ) : null}
-                    </div>
-                    <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5 text-sm text-muted">
-                      <span className="truncate">
-                        {beatmapMissing ? (
-                          dict?.session.removedFromGame ?? "Removed from the game"
-                        ) : (
-                          <>
-                            {score.artist ?? dict?.session.unknownArtist}
-                            {score.difficultyName ? ` · ${score.difficultyName}` : ""}
-                            {" · "}
-                            {formatPrimaryRating({
-                              mode: ratingMode,
-                              starRating: score.starRating,
-                              sunnyEstDiff: score.sunnyEstDiff,
-                              sunnyStar: score.sunnyStar,
-                              danielEstDiff: score.danielEstDiff,
-                              danielStar: score.danielStar,
-                              reworkEstDiff: score.reworkEstDiff,
-                              reworkStar: score.reworkStar,
-                              lnRatio: score.reworkLnRatio,
-                              keyCount: score.keyCount,
-                            })}
-                            {score.retryIndex != null && score.retryIndex > 0
-                              ? t(dict?.session.retry, { n: score.retryIndex })
-                              : ""}
-                          </>
-                        )}
-                      </span>
-                      <ModBadges mods={score.mods} />
-                    </div>
-                  </div>
-                  <div className="hidden shrink-0 text-right sm:block">
-                    <div className="font-semibold tabular-nums text-ink">
-                      {formatAccuracy(score.accuracy)}
-                    </div>
-                    <div className="text-xs tabular-nums text-muted">
-                      {formatPp(score.pp)} · {score.maxCombo}x ·{" "}
-                      {formatRelativeTime(score.playedAt, dict?.common)}
-                    </div>
-                  </div>
-                </>
-              );
-
-              return (
-                <li
-                  key={score.id}
-                  className={
-                    isFresh
-                      ? "rounded-md bg-accent/10 transition-colors duration-1000"
-                      : undefined
+                    </>
                   }
-                >
-                  <div className="rx-row gap-2">
-                    {score.beatmapId ? (
-                      <Link
-                        to="/practice/$beatmapId"
-                        params={{ beatmapId: score.beatmapId }}
-                        className="flex min-w-0 flex-1 items-center gap-3"
-                      >
-                        {main}
-                      </Link>
-                    ) : (
-                      <div className="flex min-w-0 flex-1 items-center gap-3">
-                        {main}
-                      </div>
-                    )}
-                    <div className="flex shrink-0 items-center gap-2">
-                      {canPreview ? (
-                        <BeatmapPreviewButton
-                          beatmapId={score.beatmapId!}
-                          className="rx-btn !px-2.5 !py-1 text-xs"
-                        />
-                      ) : null}
-                      <ScoreReplayButton
-                        scoreId={score.id}
-                        enabled={canRewatch}
+                  actions={
+                    canPreview ? (
+                      <BeatmapPreviewButton
+                        beatmapId={score.beatmapId!}
                         className="rx-btn !px-2.5 !py-1 text-xs"
                       />
-                    </div>
-                  </div>
-                </li>
+                    ) : null
+                  }
+                  pbCompare={pbCompare}
+                />
               );
             })}
           </ul>

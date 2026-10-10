@@ -404,6 +404,7 @@ export async function listSessionScores(
       rulesetShortName: scores.rulesetShortName,
       replayFileHash: scores.replayFileHash,
       playedAt: scores.playedAt,
+      statistics: scores.statistics,
       isPb: scoreMetrics.isPb,
       retryIndex: scoreMetrics.retryIndex,
       title: beatmaps.title,

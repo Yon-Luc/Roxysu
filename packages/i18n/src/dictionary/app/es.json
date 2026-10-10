@@ -696,6 +696,11 @@
     "pb": "PB",
     "new": "Nuevo",
     "retry": " · reintento #{{n}}",
+    "pbCompare": {
+      "previous": "Mejor anterior",
+      "current": "PB actual",
+      "delta": "{{delta}}"
+    },
     "suggestTitle": "Sugerir maps",
     "suggestionModeAria": "Modo de sugerencia",
     "suggestTabs": {

@@ -1,4 +1,6 @@
+import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
+import { BeatmapCover } from "./BeatmapCover";
 import { ModBadges } from "./ModBadges";
 import { ScoreReplayButton } from "./ScoreReplayButton";
 import {
@@ -6,7 +8,7 @@ import {
   formatPp,
   formatRelativeTime,
 } from "../lib/format";
-import { useAppDict } from "../lib/i18n";
+import { useAppDict, t } from "../lib/i18n";
 
 export type ScoreJudgmentsView = {
   perfect: number;
@@ -31,8 +33,31 @@ export type ScoreCardScore = {
   judgments?: ScoreJudgmentsView | null;
 };
 
+export type ScoreCardBeatmap = {
+  id: string | null;
+  title?: string | null;
+  artist?: string | null;
+  difficultyName?: string | null;
+  backgroundFileHash?: string | null;
+  setOnlineId?: number | null;
+  ratingLabel?: string | null;
+  missing?: boolean;
+};
+
+export type ScoreCardPbCompare = {
+  kind: "previous" | "current";
+  accuracy: number;
+  pp: number | null;
+  maxCombo: number;
+  mods: string | null;
+  playedAt: string | null;
+};
+
 type ScoreCardProps = {
   score: ScoreCardScore;
+  variant?: "compact" | "beatmap";
+  beatmap?: ScoreCardBeatmap;
+  pbCompare?: ScoreCardPbCompare | null;
   /** Cover / map link for multi-map lists (sessions). */
   leading?: ReactNode;
   title?: ReactNode;
@@ -73,7 +98,6 @@ function JudgmentStrip({
   const entries = JUDGMENT_ORDER.filter(
     ({ key }) => judgments[key] > 0 || key === "miss",
   ).filter(({ key }) => {
-    // Always show miss when any judgment exists; otherwise only non-zero.
     if (key === "miss") {
       return (
         judgments.miss > 0 ||
@@ -99,8 +123,129 @@ function JudgmentStrip({
   );
 }
 
+function formatSigned(value: number, suffix: string, digits: number): string {
+  const sign = value > 0 ? "+" : value < 0 ? "" : "";
+  return `${sign}${value.toFixed(digits)}${suffix}`;
+}
+
+function PbCompareFooter({
+  score,
+  compare,
+}: {
+  score: ScoreCardScore;
+  compare: ScoreCardPbCompare;
+}) {
+  const { dict } = useAppDict();
+  const label =
+    compare.kind === "previous"
+      ? (dict?.session.pbCompare?.previous ?? "Previous best")
+      : (dict?.session.pbCompare?.current ?? "Current PB");
+
+  const accDelta = (score.accuracy - compare.accuracy) * 100;
+  const ppDelta =
+    score.pp != null && compare.pp != null ? score.pp - compare.pp : null;
+
+  const deltas: string[] = [];
+  if (Number.isFinite(accDelta) && Math.abs(accDelta) >= 0.005) {
+    deltas.push(formatSigned(accDelta, "%", 2));
+  }
+  if (ppDelta != null && Math.abs(ppDelta) >= 0.05) {
+    deltas.push(formatSigned(ppDelta, "pp", 1));
+  }
+
+  return (
+    <div className="rounded-lg bg-canvas/60 px-2.5 py-1.5 text-xs text-muted">
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <span className="font-semibold uppercase tracking-wide text-faint">
+          {label}
+        </span>
+        <span className="tabular-nums text-subtle">
+          {formatAccuracy(compare.accuracy)} · {formatPp(compare.pp)} ·{" "}
+          {compare.maxCombo}x
+        </span>
+        <ModBadges mods={compare.mods} />
+        <span className="text-faint">
+          {formatRelativeTime(compare.playedAt, dict?.common)}
+        </span>
+      </div>
+      {deltas.length > 0 ? (
+        <p className="mt-0.5 tabular-nums text-accent/90">
+          {t(dict?.session.pbCompare?.delta ?? "{{delta}}", {
+            delta: deltas.join(" · "),
+          })}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function BeatmapIdentity({
+  beatmap,
+  badges,
+}: {
+  beatmap: ScoreCardBeatmap;
+  badges?: ReactNode;
+}) {
+  const { dict } = useAppDict();
+  const title = beatmap.missing
+    ? (dict?.session.beatmapDeleted ?? "Beatmap deleted")
+    : (beatmap.title ?? dict?.session.untitled ?? "Untitled");
+  const subtitle = beatmap.missing
+    ? (dict?.session.removedFromGame ?? "Removed from the game")
+    : [
+        beatmap.artist ?? dict?.session.unknownArtist ?? "Unknown",
+        beatmap.difficultyName,
+        beatmap.ratingLabel,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+
+  const cover = (
+    <BeatmapCover
+      backgroundFileHash={beatmap.backgroundFileHash}
+      setOnlineId={beatmap.setOnlineId}
+      size="card"
+      className="h-24 w-24 shrink-0 rounded-lg shadow-md shadow-black/40 sm:h-28 sm:w-28"
+      alt=""
+    />
+  );
+
+  const text = (
+    <div className="min-w-0 flex-1">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="truncate font-semibold text-ink">{title}</span>
+        {badges}
+      </div>
+      <p className="mt-0.5 truncate text-sm text-muted">{subtitle}</p>
+    </div>
+  );
+
+  if (beatmap.id && !beatmap.missing) {
+    return (
+      <Link
+        to="/practice/$beatmapId"
+        params={{ beatmapId: beatmap.id }}
+        className="flex min-w-0 flex-1 items-start gap-3"
+      >
+        {cover}
+        {text}
+      </Link>
+    );
+  }
+
+  return (
+    <div className="flex min-w-0 flex-1 items-start gap-3">
+      {cover}
+      {text}
+    </div>
+  );
+}
+
 export function ScoreCard({
   score,
+  variant = "compact",
+  beatmap,
+  pbCompare,
   leading,
   title,
   subtitle,
@@ -116,7 +261,44 @@ export function ScoreCard({
     score.hasReplay &&
     score.rulesetShortName != null &&
     PREVIEWABLE.has(score.rulesetShortName);
-  const hasIdentity = title != null || subtitle != null || badges != null;
+  const isBeatmap = variant === "beatmap" && beatmap != null;
+  const hasIdentity =
+    !isBeatmap && (title != null || subtitle != null || badges != null);
+
+  const metrics = (
+    <div className="flex shrink-0 flex-col items-end gap-1.5">
+      <div className="text-right text-sm font-semibold tabular-nums text-ink">
+        <div>{formatAccuracy(score.accuracy)}</div>
+        <div className="text-xs font-medium text-muted">
+          {formatPp(score.pp)} · {score.maxCombo}x
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        {actions}
+        <ScoreReplayButton
+          scoreId={score.id}
+          enabled={canRewatch}
+          className="rx-btn !px-2.5 !py-1 text-xs font-semibold"
+        />
+      </div>
+    </div>
+  );
+
+  const metaAndJudgments = (
+    <>
+      <div className="flex flex-wrap items-center gap-1.5 text-sm text-subtle">
+        <span>{formatRelativeTime(score.playedAt, dict?.common)}</span>
+        <ModBadges mods={score.mods} />
+      </div>
+      {score.judgments ? (
+        <JudgmentStrip judgments={score.judgments} labels={labels} />
+      ) : null}
+    </>
+  );
+
+  const compareFooter =
+    footer ??
+    (pbCompare ? <PbCompareFooter score={score} compare={pbCompare} /> : null);
 
   return (
     <li
@@ -128,52 +310,38 @@ export function ScoreCard({
         .filter(Boolean)
         .join(" ")}
     >
-      <div className="flex items-start gap-3">
-        {leading}
-        <div className="min-w-0 flex-1 space-y-1.5">
-          {hasIdentity ? (
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                {title}
-                {badges}
-              </div>
-              {subtitle != null ? (
-                <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5 text-sm text-muted">
-                  {subtitle}
+      {isBeatmap ? (
+        <div className="space-y-2.5">
+          <div className="flex items-start gap-3">
+            <BeatmapIdentity beatmap={beatmap} badges={badges} />
+            {metrics}
+          </div>
+          <div className="space-y-1.5 pl-0 sm:pl-30">{metaAndJudgments}</div>
+          {compareFooter}
+        </div>
+      ) : (
+        <div className="flex items-start gap-3">
+          {leading}
+          <div className="min-w-0 flex-1 space-y-1.5">
+            {hasIdentity ? (
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  {title}
+                  {badges}
                 </div>
-              ) : null}
-            </div>
-          ) : null}
-
-          <div className="flex flex-wrap items-center gap-1.5 text-sm text-subtle">
-            <span>{formatRelativeTime(score.playedAt, dict?.common)}</span>
-            <ModBadges mods={score.mods} />
+                {subtitle != null ? (
+                  <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5 text-sm text-muted">
+                    {subtitle}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            {metaAndJudgments}
+            {compareFooter}
           </div>
-
-          {score.judgments ? (
-            <JudgmentStrip judgments={score.judgments} labels={labels} />
-          ) : null}
-
-          {footer}
+          {metrics}
         </div>
-
-        <div className="flex shrink-0 flex-col items-end gap-1.5">
-          <div className="text-right text-sm font-semibold tabular-nums text-ink">
-            <div>{formatAccuracy(score.accuracy)}</div>
-            <div className="text-xs font-medium text-muted">
-              {formatPp(score.pp)} · {score.maxCombo}x
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {actions}
-            <ScoreReplayButton
-              scoreId={score.id}
-              enabled={canRewatch}
-              className="rx-btn !px-2.5 !py-1 text-xs font-semibold"
-            />
-          </div>
-        </div>
-      </div>
+      )}
     </li>
   );
 }

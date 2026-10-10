@@ -24,7 +24,7 @@ Per-beatmap deep dive: cover, core stats, recent scores with judgment detail, se
 1. Map Page mini-stats show Plays, Best Acc, and Last played — not Best PP.
 2. Map Page does not surface Mastery or Timing Analysis panels.
 3. Secondary map actions (Export Map, Export Set, View on website) live in a More menu; Preview, Open in osu!, and Copy search stay primary.
-4. Score Timeline uses the shared `ScoreCard`, including judgment counts parsed from local mirror `scores.statistics` when present.
+4. Score Timeline uses the shared `ScoreCard` (`variant="compact"`), including judgment counts parsed from local mirror `scores.statistics` when present. Session detail uses the same component with `variant="beatmap"` (cover + PB compare).
 
 ## Implementation
 
@@ -33,7 +33,7 @@ Mania `GET /api/beatmaps/:id` reads the `.osu` file once for pattern detail. Den
 ## Important symbols
 
 - `apps/server/public/features/practice/PracticeProfilePage.tsx`
-- `apps/server/public/components/ScoreCard.tsx` — shared score row (Session pages are intended consumers)
+- `apps/server/public/components/ScoreCard.tsx` — shared score row (`compact` on Map Page; `beatmap` + `pbCompare` on sessions)
 - `apps/server/public/components/mania-analysis/*` — shared pattern widgets
 - `apps/server/src/routes/beatmaps.ts`
 - `apps/server/src/scores/parseStatistics.ts:parseScoreStatistics()`
@@ -49,7 +49,7 @@ Mania `GET /api/beatmaps/:id` reads the `.osu` file once for pattern detail. Den
 
 - (detail surface from library / sessions)
 - `features/now-selected/` — reuses mania analysis widgets
-- `features/sessions/` — intended adopter of `ScoreCard`
+- `features/sessions/` — session detail score lists use `ScoreCard` beatmap variant
 
 ## Related knowledge
 

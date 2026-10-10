@@ -13,6 +13,11 @@ import {
   loadManiaPpCurves,
   resolveScorePp,
 } from "../mania-rating/estimateScorePp";
+import { parseScoreStatistics } from "../scores/parseStatistics";
+import {
+  loadPbCompareForBeatmaps,
+  pickPbCompare,
+} from "../scores/pbCompare";
 
 function serializeSession(s: {
   id: number;
@@ -54,53 +59,86 @@ async function sessionDetailPayload(
   ]);
   const hasMore = scoreRowsRaw.length > limit;
   const scoreRows = hasMore ? scoreRowsRaw.slice(0, limit) : scoreRowsRaw;
-  const curves = await loadManiaPpCurves(
-    db,
-    scoreRows
-      .map((score) => score.beatmapId)
-      .filter((beatmapId): beatmapId is string => beatmapId != null),
-  );
+  const beatmapIds = scoreRows
+    .map((score) => score.beatmapId)
+    .filter((beatmapId): beatmapId is string => beatmapId != null);
+  const [curves, pbTops] = await Promise.all([
+    loadManiaPpCurves(db, beatmapIds),
+    loadPbCompareForBeatmaps(db, beatmapIds),
+  ]);
 
   return {
     session: serializeSession(session),
     pbCount,
     hasMore,
-    scores: scoreRows.map((s) => ({
-      id: s.id,
-      beatmapId: s.beatmapId,
-      accuracy: s.accuracy,
-      pp: resolveScorePp({
+    scores: scoreRows.map((s) => {
+      const pp = resolveScorePp({
         pp: s.pp,
         accuracy: s.accuracy,
         mods: s.mods,
         rulesetShortName: s.rulesetShortName,
         curve: s.beatmapId ? curves.get(s.beatmapId) : undefined,
-      }),
-      maxCombo: s.maxCombo,
-      mods: s.mods,
-      rank: s.rank,
-      totalScore: s.totalScore,
-      rulesetShortName: s.rulesetShortName,
-      playedAt: toIso(s.playedAt)!,
-      isPb: s.isPb,
-      retryIndex: s.retryIndex,
-      hasReplay: Boolean(s.replayFileHash),
-      title: s.title,
-      artist: s.artist,
-      difficultyName: s.difficultyName,
-      starRating: s.starRating,
-      keyCount: s.keyCount != null ? Math.round(Number(s.keyCount)) : null,
-      sunnyEstDiff: s.sunnyEstDiff ?? null,
-      sunnyStar: s.sunnyStar ?? null,
-      danielEstDiff: s.danielEstDiff ?? null,
-      danielStar: s.danielStar != null ? Number(s.danielStar) : null,
-      reworkEstDiff: s.reworkEstDiff ?? null,
-      reworkStar: s.reworkStar != null ? Number(s.reworkStar) : null,
-      reworkLnRatio: s.reworkLnRatio != null ? Number(s.reworkLnRatio) : null,
-      setOnlineId:
-        s.setOnlineId != null && s.setOnlineId > 0 ? s.setOnlineId : null,
-      backgroundFileHash: s.backgroundFileHash,
-    })),
+      });
+      const rawCompare =
+        s.beatmapId != null
+          ? pickPbCompare({
+              isPb: Boolean(s.isPb),
+              scoreId: s.id,
+              top: pbTops.get(s.beatmapId),
+            })
+          : null;
+      const pbCompare = rawCompare
+        ? {
+            kind: rawCompare.kind,
+            id: rawCompare.id,
+            accuracy: rawCompare.accuracy,
+            pp: resolveScorePp({
+              pp: rawCompare.pp,
+              accuracy: rawCompare.accuracy,
+              mods: rawCompare.mods,
+              rulesetShortName: s.rulesetShortName,
+              curve: s.beatmapId ? curves.get(s.beatmapId) : undefined,
+            }),
+            maxCombo: rawCompare.maxCombo,
+            mods: rawCompare.mods,
+            rank: rawCompare.rank,
+            playedAt: toIso(rawCompare.playedAt)!,
+          }
+        : null;
+
+      return {
+        id: s.id,
+        beatmapId: s.beatmapId,
+        accuracy: s.accuracy,
+        pp,
+        maxCombo: s.maxCombo,
+        mods: s.mods,
+        rank: s.rank,
+        totalScore: s.totalScore,
+        rulesetShortName: s.rulesetShortName,
+        playedAt: toIso(s.playedAt)!,
+        isPb: s.isPb,
+        retryIndex: s.retryIndex,
+        hasReplay: Boolean(s.replayFileHash),
+        judgments: parseScoreStatistics(s.statistics),
+        pbCompare,
+        title: s.title,
+        artist: s.artist,
+        difficultyName: s.difficultyName,
+        starRating: s.starRating,
+        keyCount: s.keyCount != null ? Math.round(Number(s.keyCount)) : null,
+        sunnyEstDiff: s.sunnyEstDiff ?? null,
+        sunnyStar: s.sunnyStar ?? null,
+        danielEstDiff: s.danielEstDiff ?? null,
+        danielStar: s.danielStar != null ? Number(s.danielStar) : null,
+        reworkEstDiff: s.reworkEstDiff ?? null,
+        reworkStar: s.reworkStar != null ? Number(s.reworkStar) : null,
+        reworkLnRatio: s.reworkLnRatio != null ? Number(s.reworkLnRatio) : null,
+        setOnlineId:
+          s.setOnlineId != null && s.setOnlineId > 0 ? s.setOnlineId : null,
+        backgroundFileHash: s.backgroundFileHash,
+      };
+    }),
   };
 }
 

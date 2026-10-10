@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08
+last_verified: 2026-10
 confidence: verified
 touches:
   - packages/db/src/schema.ts
@@ -14,7 +14,7 @@ Roxysu's owned persistent store on the client machine.
 
 ## Business meaning
 
-The local mirror is the SQLite file both processes share. realm-reader **extracts** Realm beatmaps and scores into raw import tables; the client app **persists** derived analytics and user-authored rows (collections, mastery, sessions, settings).
+The local mirror is the SQLite file both processes share. realm-reader **extracts** Realm beatmaps, scores, collections, and skins into raw import tables; the client app **persists** derived analytics and user-authored rows (collections, mastery, sessions, settings).
 
 It is not a temporary cache — it is Roxysu's schema-controlled store alongside read-only Realm.
 

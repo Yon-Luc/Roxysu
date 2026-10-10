@@ -287,6 +287,44 @@ export const realmCollectionHashes = sqliteTable(
   }),
 );
 
+/** Mirrored from lazer Skin (realm-reader owned). */
+export const realmSkins = sqliteTable(
+  "realm_skins",
+  {
+    id: text("id").primaryKey(),
+    name: text("name"),
+    creator: text("creator"),
+    hash: text("hash"),
+    protected: integer("protected", { mode: "boolean" }).notNull().default(false),
+    deletePending: integer("delete_pending", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    instantiationInfo: text("instantiation_info"),
+    hasSkinIni: integer("has_skin_ini", { mode: "boolean" }).notNull().default(false),
+    syncedAt: integer("synced_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => ({
+    importableIdx: index("realm_skins_importable_idx").on(
+      t.deletePending,
+      t.hasSkinIni,
+    ),
+  }),
+);
+
+export const realmSkinFiles = sqliteTable(
+  "realm_skin_files",
+  {
+    skinId: text("skin_id")
+      .notNull()
+      .references(() => realmSkins.id, { onDelete: "cascade" }),
+    filename: text("filename").notNull(),
+    fileHash: text("file_hash").notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.skinId, t.filename] }),
+  }),
+);
+
 export const tags = sqliteTable("tags", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull().unique(),

@@ -35,6 +35,7 @@ import {
 import { loadOsuSchema } from "./schema";
 import { platformDefaultOsuDataPath } from "./osu-paths";
 import { syncRealmCollectionsFromRealm } from "./syncRealmCollections";
+import { syncRealmSkinsFromRealm } from "./syncRealmSkins";
 import {
   BATCH_SIZE,
   chunk,
@@ -338,6 +339,14 @@ function trySyncRealmCollections(
     syncRealmCollectionsFromRealm(db, realm, { rewriteUnchanged });
   } catch (err) {
     console.error("realm collection extract failed:", err);
+  }
+}
+
+function trySyncRealmSkins(db: Db, realm: Realm) {
+  try {
+    syncRealmSkinsFromRealm(db, realm);
+  } catch (err) {
+    console.error("realm skin extract failed:", err);
   }
 }
 
@@ -835,6 +844,7 @@ export function runFullSync(db: Db, realmPath: string): SyncResult {
     );
 
     trySyncRealmCollections(db, realm, true);
+    trySyncRealmSkins(db, realm);
 
     return {
       kind: "full",
@@ -1062,6 +1072,7 @@ export function runReconcileSync(db: Db, realmPath: string): SyncResult {
     );
 
     trySyncRealmCollections(db, realm, true);
+    trySyncRealmSkins(db, realm);
 
     return {
       kind: "reconcile",

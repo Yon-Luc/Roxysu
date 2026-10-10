@@ -26,6 +26,10 @@ touches:
   - apps/server/public/lib/maniaSkinImport.ts
   - apps/server/public/components/ManiaSkinImportModal.tsx
   - apps/server/public/components/ManiaSkinDropHost.tsx
+  - apps/server/public/components/ManiaSkinRealmImportButton.tsx
+  - apps/server/src/routes/skins.ts
+  - apps/realm-reader/src/syncRealmSkins.ts
+  - packages/db/src/schema.ts
   - apps/server/public/lib/api.ts
   - apps/server/public/lib/stdSkin.ts
   - apps/server/public/lib/taikoSkin.ts
@@ -95,8 +99,12 @@ Playfield = the visual layer for that ruleset (notefield, 512×384, or taiko lan
 
 6. An **imported mania skin** can replace the procedural mania skin per keymode.
    Drop an `.osk` or `skin.ini` folder on Skin → Mania, beatmap preview, or score
-   rewatch, or use Skin → Mania **Import .osk** (`ManiaSkinFileButton`). A confirm
-   modal previews the skin and asks which keymodes to apply.
+   rewatch, use Skin → Mania **Import .osk** (`ManiaSkinFileButton`), or
+   **Import from game** (`ManiaSkinRealmImportButton`) to pick a **Realm skin**
+   that has `skin.ini`. Realm skins are extracted on full sync / reconcile into
+   `realm_skins` / `realm_skin_files`; `GET /api/skins` lists importable rows and
+   `GET /api/skins/:id/archive` zips hashed lazer files for the existing draft
+   pipeline. A confirm modal previews the skin and asks which keymodes to apply.
    Layout (column widths, spacing, hit position) and sprites (notes, LN, keys,
    stage) come from `skin.ini` `[Mania]` sections. Image blobs persist in
    IndexedDB (`roxysu-mania-skin`); JSON metadata stays in `roxysu:preview-skin`.
@@ -179,10 +187,16 @@ Score rewatch:
 
 Imported mania skin:
   drop .osk / skin folder  OR  Skin → Import .osk file picker
+    OR  Skin → Import from game (Realm skin list → archive zip)
     → unzip + parse skin.ini
     → confirm modal (preview + keymode picker)
     → persist sprites in IndexedDB + layout on preview skin
     → paintManiaNotefield draws sprites / stage / column layout
+
+Realm skin extract (full / reconcile):
+  realm-reader reads Realm Skin + Files
+    → upsert realm_skins / realm_skin_files (hasSkinIni denormalized)
+    → client lists via GET /api/skins
 ```
 
 ## Implementation
@@ -206,6 +220,7 @@ Imported mania skin:
   `["beatmap-preview-embed", beatmapId, modsKey]`.
 - Store / dispatch names: `"mania"`, `"osu"`, `"taiko"`, `"fruits"`.
 - `lib/osuSkinIni.ts` / `lib/maniaSkinImport.ts` — .osk parse + IndexedDB sprites.
+- `routes/skins.ts` / `syncRealmSkins.ts` — Realm skin catalog + archive for Import from game.
 
 ## Dependencies
 

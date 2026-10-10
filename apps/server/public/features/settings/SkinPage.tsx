@@ -5,6 +5,7 @@ import {
   ManiaSkinDropHost,
   ManiaSkinFileButton,
 } from "../../components/ManiaSkinDropHost";
+import { ManiaSkinRealmImportButton } from "../../components/ManiaSkinRealmImportButton";
 import { StandardSkinEditor } from "./sections/StandardSkinEditor";
 import { TaikoSkinEditor } from "./sections/TaikoSkinEditor";
 import { CatchSkinEditor } from "./sections/CatchSkinEditor";
@@ -353,7 +354,12 @@ export function SkinPage({ section }: { section?: string } = {}) {
           <p className="rx-subtitle">{dict?.skin.subtitle}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {tab === "mania" ? <ManiaSkinFileButton /> : null}
+          {tab === "mania" ? (
+            <>
+              <ManiaSkinFileButton />
+              <ManiaSkinRealmImportButton />
+            </>
+          ) : null}
           <button
             type="button"
             className="rx-btn"

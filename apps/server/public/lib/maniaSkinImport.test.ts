@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { zipSync } from "fflate";
-import { findSkinIniPath, unzipSkinArchive } from "./maniaSkinImport";
+import {
+  draftFromArchiveBytes,
+  findSkinIniPath,
+  unzipSkinArchive,
+} from "./maniaSkinImport";
 
 describe("unzipSkinArchive", () => {
   test("indexes files and finds nested skin.ini", () => {
@@ -20,5 +24,19 @@ describe("unzipSkinArchive", () => {
     });
     const files = unzipSkinArchive(archive);
     expect(findSkinIniPath(files)).toBe("skin.ini");
+  });
+});
+
+describe("draftFromArchiveBytes", () => {
+  test("builds a draft from a Realm-style archive zip", async () => {
+    const archive = zipSync({
+      "skin.ini": new TextEncoder().encode(
+        "[General]\nName: FromGame\n\n[Mania]\nKeys: 4\n",
+      ),
+    });
+    const draft = await draftFromArchiveBytes(archive, "Fallback");
+    expect(draft.name).toBe("FromGame");
+    expect(draft.definedKeys).toContain(4);
+    expect(draft.packs[4]).toBeDefined();
   });
 });

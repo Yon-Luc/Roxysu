@@ -305,12 +305,29 @@ standard. UI label is Catch; aliases `ctb` / `catch` exist only at filter edges.
 
 A user-provided osu! legacy skin (`.osk` or a folder with `skin.ini`) applied to
 the mania notefield for beatmap preview and score rewatch. Sprites live in
-IndexedDB; per-keymode layout metadata lives on the preview skin store.
+IndexedDB; per-keymode layout metadata lives on the preview skin store. May be
+sourced from a browser file picker/drop or from a **Realm skin** archive.
 
 **Not:** the procedural PreviewSkin editor (colors / shapes), lazer-native skins,
-std/taiko/catch skins
+std/taiko/catch skins, Realm skin rows before import
 
 **In code:** `maniaSkinImport.ts`, `osuSkinIni.ts`, `roxysu:preview-skin` `imported`
+
+**See:** [features/preview-replay/](features/preview-replay/index.md)
+
+---
+
+### Realm skin
+
+A skin tracked in osu!lazer's Realm `Skin` class, with named files resolved through
+the hashed `files/` store. Roxysu extracts metadata + file hashes into the local
+mirror (`realm_skins` / `realm_skin_files`) so the client can import legacy skins
+(`skin.ini`) into an **Imported mania skin** without a browser file picker.
+
+**Not:** Imported mania skin (browser IndexedDB), `Skins/` folder scanning,
+procedural PreviewSkin
+
+**In code:** Realm class `Skin`; `syncRealmSkins.ts`; `GET /api/skins`
 
 **See:** [features/preview-replay/](features/preview-replay/index.md)
 

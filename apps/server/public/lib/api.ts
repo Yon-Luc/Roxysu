@@ -478,6 +478,33 @@ export async function fetchSettings() {
   return unwrap(await api.api.settings.get(), "/api/settings");
 }
 
+export type RealmSkinListItem = {
+  id: string;
+  name: string;
+  creator: string | null;
+};
+
+export async function fetchRealmSkins(): Promise<{ items: RealmSkinListItem[] }> {
+  return unwrap(await api.api.skins.get(), "/api/skins") as {
+    items: RealmSkinListItem[];
+  };
+}
+
+export async function fetchRealmSkinArchive(id: string): Promise<ArrayBuffer> {
+  const res = await fetch(`/api/skins/${encodeURIComponent(id)}/archive`);
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const body = (await res.json()) as { error?: string };
+      if (body.error) detail = body.error;
+    } catch {
+      /* keep statusText */
+    }
+    throw new Error(`/api/skins/${id}/archive failed: ${detail}`);
+  }
+  return res.arrayBuffer();
+}
+
 export async function fetchMirrorSearch(params: {
   /** App query language (catalog subset). Preferred over legacy q/mode/status. */
   query?: string;

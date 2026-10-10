@@ -480,6 +480,16 @@ export async function draftFromFileList(
   return buildManiaSkinDraft(await filesToMap(files), name);
 }
 
+/** Build a draft from a zip/.osk ArrayBuffer (e.g. Realm skin archive API). */
+export async function draftFromArchiveBytes(
+  data: ArrayBuffer | Uint8Array,
+  fallbackName = "Imported skin",
+): Promise<ManiaSkinImportDraft> {
+  const bytes =
+    data instanceof Uint8Array ? data : new Uint8Array(data);
+  return buildManiaSkinDraft(unzipSkinArchive(bytes), fallbackName);
+}
+
 function spritesFromCacheOrEmpty(keys: Keymode): ManiaSkinSprites {
   return spriteCache[keys] ?? emptySprites(keys);
 }

@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08
+last_verified: 2026-10
 confidence: verified
 touches:
   - packages/db/src/schema.ts
@@ -14,7 +14,7 @@ Prevent dual-writer corruption by assigning table ownership per process.
 
 ## Business rules
 
-1. **realm-reader** writes only **raw import** tables: `beatmaps`, `scores`, `imports`, mirrored realm collections, and related raw rows.
+1. **realm-reader** writes only **raw import** tables: `beatmaps`, `scores`, `imports`, mirrored realm collections, Realm skins (`realm_skins` / `realm_skin_files`), and related raw rows.
 2. **server** writes only **derived / user** tables: sessions, mastery, stats, score_metrics, collections, settings, notes/tags, etc.
 3. **Roxysu Play** (`apps/play`) writes only **`play_*`** tables: `play_settings`, `play_sessions`.
 4. Soft-deleted Realm Score and BeatmapSet objects are upserted with `delete_pending = true`; product queries filter them out. Realm Beatmap has no `DeletePending`.

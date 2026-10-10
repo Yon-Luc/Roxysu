@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08
+last_verified: 2026-10
 confidence: verified
 touches:
   - packages/db/src/schema.ts
@@ -10,7 +10,7 @@ touches:
 
 ## Business rules
 
-1. realm-reader writes raw import tables only.
+1. realm-reader writes raw import tables only (including `realm_skins` / `realm_skin_files`).
 2. server writes derived analytics and user-authored tables only.
 3. Queries filter `delete_pending` / soft-deleted import rows out of product views.
 

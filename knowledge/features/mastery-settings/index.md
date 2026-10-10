@@ -32,7 +32,7 @@ see `features/sunny-dan-recommendations/` rule 8.
 2. Path resolution precedence: env → Settings → platform default (`packages/osu-paths`).
 3. Rice / LN / FLN **classification** boundaries are user-configurable (defaults LN start 20%, FLN start 80%). LN start must be strictly less than FLN start. Keys: `recommend.ln_ratio_threshold`, `recommend.fln_ratio_threshold`.
 4. Classification thresholds affect recommend axes, skill estimates, stats skillset mix, and `axis:` query filters. They do **not** change Sunny dan RC/LN **label table** selection (stays package constant 20%).
-5. Recommendation **focus** settings (clear-rate bands, target difficulty, tolerance, topPlays) live in `recommend.focus_settings` and are edited on the Customize tab. Defaults keep Push in a closed 90–95% band near that skill level.
+5. Recommendation **focus** settings (clear-rate bands, target difficulty, tolerance, topPlays) live in `recommend.focus_settings` and are edited on the Customize tab. Clear-rate band edges are clamped to 80–100% (Accuracy max may be open-ended above 100% in storage). Defaults keep Push in a closed 90–95% band near that skill level.
 
 ## Implementation
 

@@ -57,7 +57,7 @@ export const DEFAULT_FOCUS_SETTINGS: RecommendFocusSettings = {
   topPlays: 30,
 };
 
-const ACC_MIN = 0.5;
+const ACC_MIN = 0.8;
 const ACC_MAX_CEIL = 1.05;
 const RATIO_MIN = 0.7;
 const RATIO_MAX = 1.4;

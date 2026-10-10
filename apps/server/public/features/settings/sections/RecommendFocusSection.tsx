@@ -89,7 +89,7 @@ function bandToApi(
   };
 }
 
-const CLEAR_RATE_MIN = 50;
+const CLEAR_RATE_MIN = 80;
 const CLEAR_RATE_MAX = 100;
 const CLEAR_RATE_STEP = 0.5;
 const CLEAR_RATE_GAP = 0.5;

@@ -1,20 +1,73 @@
-- edit a collection online 
-- In the hub a tap "collections added" the current one find " search collections"
-- if a collection was updated by the creator we can update it to the game ( add a button logic)
-- all  collection  added from the hub will have the prefix !Roxysu
-- on the hub list and on a specific collection show how many map are missing like X/Y owned maps
-- on the list of maps in the collection show a button downloaded icons if the map is already owned
-- add a button " Save collection " + a pop up which said X missing maps will be downloaded
-- split tags per gamemode  -> so a primary tag at the top all / mania / ctb / std / taiko
-which then show tag linked to those gamemode like 4k /  7k / LN for mania ( patterns name ect...)
-- find a better name and icon for hub
-- fix settings icon which is really ugly
-- for the admin create a pages "users" which display all users which did connect to the app ( osu username + profile picture)
+Home:
+- Is the PP / Accuracy trend graph really useful? Probably not.
+- Replace the PP / Accuracy trend graph with something more useful.
+- Reduce the number of recent scores displayed by default and add a "See More" button that redirects to the Practice page, with scores sorted by last played (descending).
+- Add other useful information, such as newly ranked maps.
+- The Home page should display useful news and relevant information for the player.
 
+Practice:
+- No changes for now.
 
+Sessions:
+- Keep the button at the top.
+- Consider reducing the number of sessions displayed by default.
+- Add a calendar view based on the days the player played, potentially using a GitHub-style contribution calendar with green squares indicating activity.
+- Consider displaying the last 7 sessions first, followed by the activity calendar.
+- Add more filtering options.
 
+Download / Community:
+- Find a way to download graveyard maps.
 
+Marathon:
+- Fully rework the feature.
+- Add debugging tools for generated marathons.
 
+Skin:
+- Allow users to import skins directly from the game using the Realm database.
 
+Map Page:
+- Combine all additional action buttons (Export Map, Export Set, etc.) into a single dropdown menu.
+- Remove Best PP, as it is currently not useful.
+- Remove the Mastery System, as it does not make sense in its current form.
+- Remove Timing Analysis.
+- Improve the Score Timeline by displaying more detailed scoring information, such as Marvelous counts, potentially using a score-card layout.
 
-- fix mod hold off not showing any preview for some reason ?
+Previous Session Page:
+- Replace the current top-to-bottom score list with detailed score cards, similar to those on the Map page.
+- If a score is a PB, display information about the previous best score, if one exists.
+- If a score is not a PB, display information about the current PB for comparison.
+
+Current Session:
+- Remove the "Send to Marathon" button.
+- Display score cards at the bottom of the page.
+
+Recommendations in Current Session:
+- Allow players to configure what defines Push, Accuracy, Consistency, and Deficit through the settings.
+- The system should work similarly to how players configure RICE / LN / FLN, by adjusting percentages to control the recommendations.
+- For example, Push recommendations should not exceed the 90–95% clear-rate range. Recommended maps should be around the same difficulty level as the player's top X best clears.
+- It makes no sense to recommend maps that are significantly above the player's current skill level.
+
+Jobs:
+- Implement a caching system for difficulty calculations and pattern analysis, similar to the existing caching system used for certain searches in Download.
+- As the administrator, I should be able to share my existing Sunny Dan, Daniel Dan, and Rework Dan calculations, as well as pattern analysis results, through the Hub API.
+- Store these results in a cache so other users can benefit from calculations that have already been performed.
+- Display calculation progress indicators, similar to those used for downloads. A small toast notification should appear at the bottom of the screen, even when the user navigates to another page.
+- The cache system should be version-aware and tied to a specific Roxysu version.
+  - I should be able to prepare and upload cached calculations for an upcoming version locally before releasing it.
+  - When users update Roxysu, the app should check for new cached calculations and recalculate results when necessary, especially for Rework Dan calculations and pattern analysis.
+  - Eventually, I should be able to manually clear caches associated with older difficulty-system versions once no users are relying on them.
+- Since Jobs are a core part of the application, the system should be more proactive. Jobs should automatically run after the first sync, potentially after prompting the user with a modal to explain what will be calculated.
+
+Replay / Preview / Play:
+- Add a real-time judgment counter.
+- Allow the playfield to be resized to less than 40% of the available space.
+
+New Features:
+- Consider using the Hub to centralize osu! API requests and implement caching to avoid unnecessary API calls.
+- Implement an osu! account connection system that works throughout the entire application, not just in the Hub.
+- Allow connected users to create a friend list where they can view their friends' scores and compare them with their own.
+- Allow connected users to automatically fetch all their online scores.
+- Implement a score export/import system that allows users to:
+  - Export all their local scores to a file.
+  - Import a file containing scores in the same format.
+  - Transfer and synchronize their local scores between different PCs using this file format.

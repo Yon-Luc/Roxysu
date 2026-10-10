@@ -1,13 +1,4 @@
-import {
-  mkdirSync,
-  existsSync,
-  createWriteStream,
-  unlinkSync,
-  renameSync,
-  statSync,
-} from "node:fs";
-import { pipeline } from "node:stream/promises";
-import { Readable } from "node:stream";
+import { mkdirSync, existsSync } from "node:fs";
 import path from "node:path";
 import type { Db } from "../db-runtime";
 import {
@@ -16,6 +7,7 @@ import {
   listOszArchivesInDir,
   resolveBeatmapsDownloadDir,
 } from "./downloadDir";
+import { downloadBeatmapsetArchiveToPath } from "./downloadArchive";
 import { parseOnlineMirrorQuery, type OnlineMirrorQuery } from "./onlineQuery";
 import {
   openOszFilesInOsu,
@@ -23,7 +15,6 @@ import {
   type OpenOszBatchResult,
 } from "./openInOsu";
 import { recordPendingDownloads } from "./pendingDownloads";
-import { getActiveBeatmapMirrorProvider } from "./providers";
 import {
   filterNotSentToOsu,
   recordSentToOsu,
@@ -34,7 +25,6 @@ import {
   type MirrorSearchResult,
 } from "./searchOnline";
 import type { MirrorSearchParams, OnlineBeatmapSet } from "./search";
-import { MIRROR_USER_AGENT } from "./userAgent";
 import { diffAgainstLibrary } from "./ownership";
 
 export type MirrorBatchJobStatus =
@@ -120,7 +110,6 @@ export type MirrorBatchStartRequest =
   | MirrorBatchQueryRequest
   | MirrorBatchSetIdsRequest;
 
-const DOWNLOAD_TIMEOUT_MS = 120_000;
 /** Minimum pause between finishing one download slot and starting the next. */
 const DELAY_BETWEEN_MS = 200;
 const MAX_PAGE_COUNT = 10;
@@ -350,18 +339,6 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function parseRetryAfterSeconds(res: Response): number | null {
-  const raw = res.headers.get("retry-after");
-  if (!raw) return null;
-  const asInt = Number(raw);
-  if (Number.isFinite(asInt) && asInt >= 0) return asInt;
-  const asDate = Date.parse(raw);
-  if (!Number.isNaN(asDate)) {
-    return Math.max(0, (asDate - Date.now()) / 1000);
-  }
-  return null;
-}
-
 export function getMirrorBatchJobState(): MirrorBatchJobState {
   if (!job.running) {
     if (!didIdleReconcile) {
@@ -551,58 +528,12 @@ async function downloadSetToDisk(
   noVideo: boolean,
 ): Promise<{ result: "downloaded" | "exists"; path: string }> {
   const destPath = archivePathForSet(set, destDir);
-  if (existsSync(destPath)) return { result: "exists", path: destPath };
-
-  const provider = getActiveBeatmapMirrorProvider();
-  const url = provider.buildDownloadUrl(set.id, { noVideo });
-
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const res = await fetch(url, {
-      headers: { "user-agent": MIRROR_USER_AGENT, accept: "*/*" },
-      redirect: "follow",
-      signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
-    });
-
-    if (res.status === 429) {
-      const waitSec = parseRetryAfterSeconds(res) ?? 5;
-      await sleep(Math.min(60, Math.max(1, waitSec)) * 1000);
-      continue;
-    }
-
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
-    }
-
-    if (!res.body) {
-      throw new Error("Empty response body");
-    }
-
-    const tmpPath = `${destPath}.part`;
-    try {
-      await pipeline(
-        Readable.fromWeb(
-          res.body as unknown as import("stream/web").ReadableStream,
-        ),
-        createWriteStream(tmpPath),
-      );
-      const size = statSync(tmpPath).size;
-      if (size < 64) {
-        unlinkSync(tmpPath);
-        throw new Error("Response too small to be an .osz");
-      }
-      renameSync(tmpPath, destPath);
-    } catch (err) {
-      try {
-        unlinkSync(tmpPath);
-      } catch {
-        // ignore leftover part file
-      }
-      throw err;
-    }
-    return { result: "downloaded", path: destPath };
-  }
-
-  throw new Error("HTTP 429 (rate limited after retries)");
+  const result = await downloadBeatmapsetArchiveToPath(
+    set.id,
+    destPath,
+    noVideo,
+  );
+  return { result, path: destPath };
 }
 
 async function downloadQueue(

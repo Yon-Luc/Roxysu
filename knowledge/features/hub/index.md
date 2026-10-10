@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-09
+last_verified: 2026-10
 confidence: verified
 touches:
   - apps/hub/src/routes/auth.ts
@@ -149,6 +149,7 @@ update tag validation — status: verified
 
 - [architecture/hub-vs-local.md](../../architecture/hub-vs-local.md)
 - `features/smart-collections/` — hub collections can write back to Realm
+- `features/download-mirrors/` — Save collection starts `mode=setIds` for ownership-missing set ids (multi-provider fallback; pending sets often miss on hinai alone)
 
 ## Depended on by
 

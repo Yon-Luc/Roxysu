@@ -55,6 +55,26 @@ const MAX_OVERFETCH_PAGES = 20;
  */
 const PARALLEL_FETCH_WIDTH = 32;
 
+/**
+ * Graveyard (and similar upstream-cursor catalogues) often return short pages
+ * that are not final. Treat any non-empty page as "maybe more"; only an empty
+ * page means the catalogue ended.
+ */
+export function mirrorPageSuggestsMore(rawCount: number): boolean {
+  return rawCount > 0;
+}
+
+/**
+ * Graveyard is served via hinai's upstream cursor ledger. Cold parallel page
+ * jumps return empty / "sources unavailable" — stay sequential for that status.
+ */
+function overfetchParallelWidth(
+  status: MirrorSearchParams["status"],
+): number {
+  if (status === "graveyard") return 1;
+  return PARALLEL_FETCH_WIDTH;
+}
+
 export { OnlineQueryError, parseOnlineMirrorQuery };
 export type { OnlineMirrorQuery, OnlinePostFilter };
 
@@ -290,7 +310,7 @@ export async function searchOnlineBeatmapsets(
       page: mirrorPage,
     });
     lastRawCount = rawCount;
-    mirrorHasMore = rawCount >= MIRROR_PAGE_CAPACITY;
+    mirrorHasMore = mirrorPageSuggestsMore(rawCount);
     for (const set of sets) {
       if (seen.has(set.id)) continue;
       seen.add(set.id);
@@ -304,14 +324,15 @@ export async function searchOnlineBeatmapsets(
   } else {
     // Overfetch path: we need to scan multiple pages to fill one UI page.
     // Fetch the first page alone so we can bail early if it's the last page,
-    // then switch to parallel batches for the rest.
+    // then switch to parallel batches for the rest (sequential for graveyard).
+    const parallelWidth = overfetchParallelWidth(mirrorBase.status);
     const firstResult = await fetchMirrorPage(provider.id, {
       ...mirrorBase,
       page: mirrorPage,
     });
     pagesScanned += 1;
     lastRawCount = firstResult.rawCount;
-    mirrorHasMore = firstResult.rawCount >= MIRROR_PAGE_CAPACITY;
+    mirrorHasMore = mirrorPageSuggestsMore(firstResult.rawCount);
 
     const pagesToProcess: Array<{ rawCount: number; sets: OnlineBeatmapSet[] }> =
       [firstResult];
@@ -322,7 +343,7 @@ export async function searchOnlineBeatmapsets(
     ): boolean => {
       for (const { rawCount, sets } of pages) {
         lastRawCount = rawCount;
-        mirrorHasMore = rawCount >= MIRROR_PAGE_CAPACITY;
+        mirrorHasMore = mirrorPageSuggestsMore(rawCount);
 
         for (const set of sets) {
           if (seen.has(set.id)) continue;
@@ -359,7 +380,7 @@ export async function searchOnlineBeatmapsets(
       if (pagesScanned >= MAX_OVERFETCH_PAGES * (page + 2)) break;
 
       const batchSize = Math.min(
-        PARALLEL_FETCH_WIDTH,
+        parallelWidth,
         MAX_OVERFETCH_PAGES * (page + 2) - pagesScanned,
       );
       if (batchSize <= 0) break;
@@ -375,8 +396,9 @@ export async function searchOnlineBeatmapsets(
 
       done = drainPages(batchPages);
 
-      // If any page in the batch was short, the mirror has no more results.
-      if (batchPages.some((p) => p.rawCount < MIRROR_PAGE_CAPACITY)) {
+      // Empty page = catalogue end. Short non-empty pages (common for
+      // graveyard upstream) must keep scanning.
+      if (batchPages.some((p) => p.rawCount === 0)) {
         mirrorHasMore = false;
         break;
       }
@@ -385,7 +407,7 @@ export async function searchOnlineBeatmapsets(
 
   const hasMore = needsOverfetch
     ? mirrorHasMore || matched.length >= MIRROR_PAGE_CAPACITY
-    : lastRawCount >= MIRROR_PAGE_CAPACITY;
+    : mirrorPageSuggestsMore(lastRawCount);
 
   return {
     provider: provider.id,
@@ -507,11 +529,14 @@ export async function collectMatchingOnlineBeatmapsets(
   let hitPageCap = false;
   let hitSetCap = false;
   let mirrorHasMore = true;
+  const parallelWidth = overfetchParallelWidth(
+    opts.onlineQuery.mirrorParams.status,
+  );
 
   for (
     let mirrorPage = 0;
     mirrorHasMore && !hitPageCap && !hitSetCap;
-    mirrorPage += PARALLEL_FETCH_WIDTH
+    mirrorPage += parallelWidth
   ) {
     if (opts.shouldStop?.()) break;
 
@@ -521,7 +546,7 @@ export async function collectMatchingOnlineBeatmapsets(
       break;
     }
 
-    const batchSize = Math.min(PARALLEL_FETCH_WIDTH, remaining);
+    const batchSize = Math.min(parallelWidth, remaining);
     const batchResults = await fetchMirrorPagesBatch(
       provider.id,
       opts.onlineQuery.mirrorParams,
@@ -534,7 +559,7 @@ export async function collectMatchingOnlineBeatmapsets(
 
       const { rawCount, sets: pageSets } = batchResults[i];
       pagesScanned += 1;
-      mirrorHasMore = rawCount >= MIRROR_PAGE_CAPACITY;
+      mirrorHasMore = mirrorPageSuggestsMore(rawCount);
 
       for (const set of pageSets) {
         if (seen.has(set.id)) continue;
@@ -562,11 +587,8 @@ export async function collectMatchingOnlineBeatmapsets(
 
       if (hitSetCap) break;
 
-      // If this page was short, no point fetching more pages in the batch.
-      if (!mirrorHasMore) {
-        mirrorHasMore = false;
-        break;
-      }
+      // Empty page ends the crawl; short non-empty pages continue.
+      if (!mirrorHasMore) break;
     }
 
     if (pagesScanned >= maxPages) {

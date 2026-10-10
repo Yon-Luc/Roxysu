@@ -8,6 +8,10 @@ export {
   type BeatmapMirrorProviderId,
 } from "./providers";
 export {
+  downloadBeatmapsetArchiveToPath,
+  listDownloadProvidersInOrder,
+} from "./downloadArchive";
+export {
   buildMirrorSearchUrl,
   buildNerinyanSearchUrl,
   buildOsuDirectSearchUrl,
@@ -51,6 +55,7 @@ export {
   collectMatchingOnlineBeatmapsets,
   countMatchingOnlineBeatmapsets,
   MIRROR_PAGE_CAPACITY,
+  mirrorPageSuggestsMore,
   type MirrorSearchResult,
 } from "./searchOnline";
 export {

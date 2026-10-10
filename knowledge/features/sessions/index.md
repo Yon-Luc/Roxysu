@@ -79,7 +79,7 @@ On new session insert, `runSessionEngine()` sets `name` immediately after alloca
 
 ## Depended on by
 
-- `features/dashboard/` — current session summary (shows name)
+- `features/dashboard/` — current session summary and last closed session in practice snapshot
 - `features/now-selected/` — shares tosu live snapshot with Current session panel
 - `features/map-marathon/` — Send to marathon from 4K/7K recommend
 

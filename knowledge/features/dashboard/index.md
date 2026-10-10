@@ -1,9 +1,10 @@
 ---
-last_verified: 2026-09
+last_verified: 2026-10
 confidence: verified
 touches:
   - apps/server/public/features/dashboard/DashboardPage.tsx
   - apps/server/src/routes/dashboard.ts
+  - apps/server/src/analytics/practiceSnapshot.ts
   - apps/server/src/routes/overlay.ts
 ---
 
@@ -11,7 +12,7 @@ touches:
 
 ## Purpose
 
-At-a-glance practice library overview: indexed score/beatmap counts, Realm extraction status, current session, weekly activity, PP/accuracy trends, recent scores.
+At-a-glance practice library overview: indexed score/beatmap counts, Realm extraction status, current session, weekly activity, practice snapshot (plays today / last 7 days / active-day streak / last closed session), and a short recent-scores list.
 
 ## Business meaning
 
@@ -24,6 +25,12 @@ The OBS overlay must not poll this dashboard payload. Overlay idle recent scores
 1. Recent scores whose beatmap was removed from the game (`beatmapId` null after Realm orphan cleanup) display as “Beatmap deleted” / “Removed from the game”, not Untitled/Unknown.
    **Status:** verified
 
+2. Home shows at most **8** recent scores (`playedAt` descending). **See more** links to `/practice` (default sort `lastPlayed` desc).
+   **Status:** verified
+
+3. Practice snapshot is local-only: derived from `daily_stats` plus the newest closed session (`endedAt` set). No remote news or osu! API.
+   **Status:** verified
+
 ## Main flows
 
 - Open app → dashboard loads summary APIs + SSE extraction status.
@@ -32,11 +39,13 @@ The OBS overlay must not poll this dashboard payload. Overlay idle recent scores
 
 - `apps/server/public/features/dashboard/DashboardPage.tsx`
 - `apps/server/src/routes/dashboard.ts`
+- `apps/server/src/analytics/practiceSnapshot.ts:getPracticeSnapshot()`
 
 ## Dependencies
 
 - `features/live-sync/` — extraction status
-- `features/sessions/` — current session summary
+- `features/sessions/` — current session summary + last closed session
+- `features/practice/` — See more destination
 
 ## Depended on by
 

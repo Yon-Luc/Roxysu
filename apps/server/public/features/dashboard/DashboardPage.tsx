@@ -4,8 +4,6 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Line,
-  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -36,6 +34,7 @@ import {
   useRatingDisplayMode,
 } from "../../lib/ratingDisplay";
 import { useChartStyles } from "../../lib/chartStyles";
+import { formatDuration } from "../stats/statsHelpers";
 
 export function DashboardPage() {
   const ratingMode = useRatingDisplayMode();
@@ -74,8 +73,8 @@ export function DashboardPage() {
   const last = data.sync.lastImport;
   const session = data.currentSession;
   const weekly = data.weeklyActivity ?? [];
-  const ppTrend = data.ppTrend ?? [];
-  const accTrend = data.accuracyTrend ?? [];
+  const snapshot = data.practiceSnapshot;
+  const lastClosed = snapshot?.lastSession ?? null;
 
   return (
     <div className="space-y-10">
@@ -168,8 +167,8 @@ export function DashboardPage() {
           )}
         </ChartCard>
 
-        <ChartCard title={dict?.dashboard.ppAccTrend ?? "PP / accuracy trend"}>
-          {ppTrend.length === 0 && accTrend.length === 0 ? (
+        <ChartCard title={dict?.dashboard.practiceSnapshot ?? "Practice snapshot"}>
+          {!snapshot ? (
             <EmptyChart
               message={
                 dict?.dashboard.noDerivedStats ??
@@ -177,62 +176,66 @@ export function DashboardPage() {
               }
             />
           ) : (
-            <ResponsiveContainer width="100%" height={200}>
-              <LineChart
-                data={ppTrend.map((p, i) => ({
-                  day: p.day,
-                  totalPp: p.totalPp,
-                  avgAccuracy: (accTrend[i]?.avgAccuracy ?? 0) * 100,
-                }))}
-              >
-                <CartesianGrid stroke={charts.grid} vertical={false} />
-                <XAxis
-                  dataKey="day"
-                  tick={charts.tick}
-                  tickFormatter={formatChartDay}
-                  minTickGap={28}
-                  interval="preserveStartEnd"
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  yAxisId="pp"
-                  tick={charts.tick}
-                  width={40}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  yAxisId="acc"
-                  orientation="right"
-                  tick={charts.tick}
-                  width={36}
-                  domain={[0, 100]}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <Tooltip
-                  contentStyle={charts.tooltip}
-                  labelFormatter={formatChartDay}
-                />
-                <Line
-                  yAxisId="pp"
-                  type="monotone"
-                  dataKey="totalPp"
-                  stroke={charts.chartAlt}
-                  dot={false}
-                  strokeWidth={2.5}
-                />
-                <Line
-                  yAxisId="acc"
-                  type="monotone"
-                  dataKey="avgAccuracy"
-                  stroke={charts.chart}
-                  dot={false}
-                  strokeWidth={2.5}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+            <div className="flex h-50 flex-col justify-between gap-4">
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <div className="rx-label">
+                    {dict?.dashboard.playsToday ?? "Plays today"}
+                  </div>
+                  <div className="mt-1 text-2xl font-bold tabular-nums text-ink">
+                    {snapshot.playsToday.toLocaleString()}
+                  </div>
+                </div>
+                <div>
+                  <div className="rx-label">
+                    {dict?.dashboard.playsLast7Days ?? "Last 7 days"}
+                  </div>
+                  <div className="mt-1 text-2xl font-bold tabular-nums text-ink">
+                    {snapshot.playsLast7Days.toLocaleString()}
+                  </div>
+                </div>
+                <div>
+                  <div className="rx-label">
+                    {dict?.dashboard.activeDayStreak ?? "Active-day streak"}
+                  </div>
+                  <div className="mt-1 text-2xl font-bold tabular-nums text-ink">
+                    {snapshot.activeDayStreak.toLocaleString()}
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-white/8 pt-3">
+                <div className="rx-label">
+                  {dict?.dashboard.lastSession ?? "Last session"}
+                </div>
+                {lastClosed ? (
+                  <Link
+                    to="/sessions/$sessionId"
+                    params={{ sessionId: String(lastClosed.id) }}
+                    className="mt-1 block rounded-lg transition hover:bg-white/4"
+                  >
+                    <div className="truncate text-base font-semibold text-ink">
+                      {lastClosed.name}
+                    </div>
+                    <div className="mt-0.5 text-xs text-muted">
+                      {lastClosed.scoreCount} {dict?.dashboard.plays ?? "plays"}
+                      {" · "}
+                      {formatDuration(lastClosed.durationMs)}
+                      {" · "}
+                      {lastClosed.pbCount}{" "}
+                      {dict?.dashboard.pbs ?? "PBs"}
+                      {lastClosed.endedAt
+                        ? ` · ${formatRelativeTime(lastClosed.endedAt, dict?.common)}`
+                        : null}
+                    </div>
+                  </Link>
+                ) : (
+                  <p className="mt-1 text-sm text-muted">
+                    {dict?.dashboard.noSessionsYet ?? "No sessions yet"}
+                  </p>
+                )}
+              </div>
+            </div>
           )}
         </ChartCard>
       </section>
@@ -246,7 +249,7 @@ export function DashboardPage() {
             to="/practice"
             className="text-sm font-bold text-muted transition hover:text-accent"
           >
-            {dict?.dashboard.practice ?? "Practice"} →
+            {dict?.dashboard.seeMore ?? "See more"} →
           </Link>
         </div>
         {data.recentScores.length === 0 ? (
@@ -332,4 +335,3 @@ export function DashboardPage() {
     </div>
   );
 }
-

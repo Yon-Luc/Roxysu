@@ -13,11 +13,8 @@ import {
   resolveScoresUsernames,
   scoresUsernameCondition,
 } from "../analytics/scoreUsername";
-import {
-  getAccuracyTrend,
-  getPpTrend,
-  getWeeklyActivity,
-} from "../analytics/progression";
+import { getWeeklyActivity } from "../analytics/progression";
+import { getPracticeSnapshot } from "../analytics/practiceSnapshot";
 import { DANIEL_ALGORITHM } from "../map-analysis/computeDanielDan";
 import { SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
 import {
@@ -87,7 +84,7 @@ export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
       )
       .where(scoreScope)
       .orderBy(desc(scores.playedAt))
-      .limit(25);
+      .limit(8);
     const curves = await loadManiaPpCurves(
       db,
       recentScores
@@ -114,10 +111,9 @@ export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
       .limit(1);
 
     const current = await getCurrentSession(db);
-    const [weeklyActivity, ppTrend, accuracyTrend] = await Promise.all([
+    const [weeklyActivity, practiceSnapshot] = await Promise.all([
       getWeeklyActivity(db, 12),
-      getPpTrend(db, 30),
-      getAccuracyTrend(db, 30),
+      getPracticeSnapshot(db),
     ]);
 
     // Modded plays show their dan difficulty variant labels when computed.
@@ -210,8 +206,7 @@ export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
           : null,
       },
       weeklyActivity,
-      ppTrend,
-      accuracyTrend,
+      practiceSnapshot,
       currentSession: current
         ? {
             id: current.id,

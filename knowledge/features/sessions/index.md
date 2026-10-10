@@ -83,6 +83,7 @@ On new session insert, `runSessionEngine()` sets `name` immediately after alloca
 - `features/practice-library/` — Up Next query language
 - `features/sunny-dan-recommendations/` — 4K/7K recommend
 - `@roxysu/session-names` — display name vocabulary and generator
+- `features/practice-profiles/` — shared `ScoreCard` (Map Page) is the intended score-row component for session detail lists
 
 ## Depended on by
 

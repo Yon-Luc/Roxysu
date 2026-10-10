@@ -1,5 +1,6 @@
 import { Link, useCanGoBack } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 import { BeatmapCover } from "../../components/BeatmapCover";
 import { BeatmapPreviewButton } from "../../components/BeatmapPreviewButton";
 import { CopyBeatmapSearchButton } from "../../components/CopyBeatmapSearchButton";
@@ -16,13 +17,13 @@ import {
   formatPatternLabel,
   type ManiaPatternDetailView,
 } from "../../components/mania-analysis";
-import { ModBadges } from "../../components/ModBadges";
-import { ScoreReplayButton } from "../../components/ScoreReplayButton";
+import {
+  ScoreCard,
+  type ScoreCardScore,
+} from "../../components/ScoreCard";
 import { fetchBeatmap } from "../../lib/api";
 import {
   formatAccuracy,
-  formatClock,
-  formatPp,
   formatRelativeTime,
 } from "../../lib/format";
 import {
@@ -48,6 +49,87 @@ function MapBackLink() {
         ? (dict?.practice.detail.back ?? "Back")
         : (dict?.practice.detail.backToPractice ?? "Practice")}
     </GoBackLink>
+  );
+}
+
+function MapMoreActions({
+  beatmapId,
+  webUrl,
+}: {
+  beatmapId: string;
+  webUrl: string | null;
+}) {
+  const { dict } = useAppDict();
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        className="rx-btn"
+        aria-expanded={open}
+        aria-haspopup="menu"
+        onClick={() => setOpen((value) => !value)}
+      >
+        {dict?.practice.detail.moreActions ?? "More"}
+      </button>
+      {open ? (
+        <div
+          role="menu"
+          className="absolute bottom-full left-0 z-20 mb-2 min-w-[11rem] overflow-hidden rounded-xl bg-elevated py-1 shadow-lg shadow-black/40 ring-1 ring-white/10"
+        >
+          <a
+            role="menuitem"
+            href={`/api/beatmaps/${beatmapId}/export`}
+            className="block px-3 py-2 text-sm font-semibold text-ink hover:bg-highlight"
+            download
+            onClick={() => setOpen(false)}
+          >
+            {dict?.practice.detail.exportMap}
+          </a>
+          <a
+            role="menuitem"
+            href={`/api/beatmaps/${beatmapId}/export-set`}
+            className="block px-3 py-2 text-sm font-semibold text-ink hover:bg-highlight"
+            download
+            onClick={() => setOpen(false)}
+          >
+            {dict?.practice.detail.exportSet}
+          </a>
+          {webUrl ? (
+            <a
+              role="menuitem"
+              href={webUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="block px-3 py-2 text-sm font-semibold text-ink hover:bg-highlight"
+              onClick={() => setOpen(false)}
+            >
+              {dict?.practice.detail.viewOnWebsite}
+            </a>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -96,7 +178,6 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
   const beatmap = data.beatmap;
   const stats = data.stats!;
   const recentScores = data.recentScores ?? [];
-  const mastery = data.mastery;
   const sunnyDan =
     data && "sunnyDan" in data
       ? (data as { sunnyDan?: {
@@ -181,10 +262,6 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
           error: string | null;
         } | null }).patternAnalysis
       : null;
-  const timingAnalysis =
-    data && "timingAnalysis" in data
-      ? (data as { timingAnalysis?: ChartTimingView | null }).timingAnalysis
-      : null;
   const sevenKAnalysis =
     data && "sevenKAnalysis" in data
       ? (data as { sevenKAnalysis?: ManiaPatternDetailView | null })
@@ -259,36 +336,13 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
                 title={beatmap.title}
                 difficultyName={beatmap.difficultyName}
               />
-              <a
-                href={`/api/beatmaps/${beatmap.id}/export`}
-                className="rx-btn"
-                download
-              >
-                {dict?.practice.detail.exportMap}
-              </a>
-              <a
-                href={`/api/beatmaps/${beatmap.id}/export-set`}
-                className="rx-btn"
-                download
-              >
-                {dict?.practice.detail.exportSet}
-              </a>
-              {webUrl && (
-                <a
-                  href={webUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="rx-btn"
-                >
-                  {dict?.practice.detail.viewOnWebsite}
-                </a>
-              )}
+              <MapMoreActions beatmapId={beatmap.id} webUrl={webUrl} />
             </div>
           </div>
         </div>
       </div>
 
-      <section className="grid gap-3 sm:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-3">
         <MiniStat
           label={dict?.practice.detail.statPlays}
           value={String(stats.playCount)}
@@ -298,38 +352,12 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
           value={formatAccuracy(stats.bestAccuracy)}
         />
         <MiniStat
-          label={dict?.practice.detail.statBestPp}
-          value={formatPp(stats.bestPp)}
-        />
-        <MiniStat
           label={dict?.practice.detail.statLastPlayed}
           value={formatRelativeTime(stats.lastPlayedAt, dict?.common)}
         />
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rx-panel px-5 py-5">
-          <h3 className="text-sm font-bold text-ink">
-            {dict?.practice.detail.mastery}
-          </h3>
-          {mastery ? (
-            <div className="mt-3 space-y-1">
-              <div className="font-display text-4xl font-extrabold tabular-nums text-accent">
-                {mastery.level.toFixed(1)}
-              </div>
-              <p className="text-xs text-muted">
-                {t(dict?.practice.detail.masteryFormula, {
-                  formula: mastery.formulaId,
-                  plays: mastery.playCount,
-                })}
-              </p>
-            </div>
-          ) : (
-            <p className="mt-3 text-sm text-faint">
-              {dict?.practice.detail.noMasteryYet}
-            </p>
-          )}
-        </div>
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {beatmap.rulesetShortName === "mania" &&
         (ratingMode === "dan" ||
           ratingMode === "sunny" ||
@@ -532,15 +560,6 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
         </section>
       ) : null}
 
-      {beatmap.rulesetShortName === "mania" && timingAnalysis != null ? (
-        <section className="rx-panel p-5">
-          <h2 className="text-sm font-bold text-ink">
-            {dict?.practice.detail.timingAnalysis}
-          </h2>
-          <TimingAnalysisPanel timing={timingAnalysis} />
-        </section>
-      ) : null}
-
       <section>
         <h2 className="mb-3 font-display text-2xl font-bold tracking-tight text-ink">
           {dict?.practice.detail.scoreTimeline}
@@ -550,30 +569,27 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
             {dict?.practice.detail.noScoresOnMap}
           </p>
         ) : (
-          <ul className="space-y-0.5">
+          <ul className="space-y-2">
             {recentScores.map((score) => (
-              <li key={score.id} className="rx-row justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-1.5 text-sm text-subtle">
-                  <span>{formatRelativeTime(score.playedAt, dict?.common)}</span>
-                  <ModBadges mods={score.mods} />
-                </div>
-                <div className="flex shrink-0 items-center gap-3 text-sm font-semibold tabular-nums text-ink">
-                  <ScoreReplayButton
-                    scoreId={score.id}
-                    enabled={
-                      score.hasReplay &&
-                      (score.rulesetShortName === "mania" ||
-                        score.rulesetShortName === "osu" ||
-                        score.rulesetShortName === "taiko" ||
-                        score.rulesetShortName === "fruits")
-                    }
-                    className="rx-btn !px-2.5 !py-1 text-xs font-semibold"
-                  />
-                  <span>{formatAccuracy(score.accuracy)}</span>
-                  <span className="text-subtle">{formatPp(score.pp)}</span>
-                  <span className="text-muted">{score.maxCombo}x</span>
-                </div>
-              </li>
+              <ScoreCard
+                key={score.id}
+                score={{
+                  id: score.id,
+                  accuracy: score.accuracy,
+                  pp: score.pp,
+                  maxCombo: score.maxCombo,
+                  mods: score.mods,
+                  rank: score.rank,
+                  totalScore: score.totalScore,
+                  rulesetShortName: score.rulesetShortName,
+                  hasReplay: score.hasReplay,
+                  playedAt: score.playedAt,
+                  judgments:
+                    "judgments" in score
+                      ? (score.judgments as ScoreCardScore["judgments"])
+                      : null,
+                }}
+              />
             ))}
           </ul>
         )}
@@ -628,124 +644,5 @@ function PatternDensityHints({
   if (hints.length === 0) return null;
 
   return <p className="text-xs text-faint">{hints.join(" · ")}</p>;
-}
-
-type TimingIssueView = {
-  kind: string;
-  severity: string;
-  startMs: number;
-  endMs?: number;
-  message: string;
-};
-
-type ChartTimingView = {
-  algorithm: string;
-  metrics: {
-    bpm: number;
-    dominantSnap: number;
-    snapCoverage: number;
-    offSnapRatio: number;
-    peakNotesPerBeat: number;
-    timingPointCount: number;
-  };
-  issues: TimingIssueView[];
-  issueCounts: Record<string, number>;
-  error: string | null;
-};
-
-const ISSUE_KIND_FALLBACK: Record<string, string> = {
-  off_snap: "Off snap",
-  inconsistent_snap: "Ambiguous snap",
-  bpm_change: "BPM change",
-  high_density: "High density",
-  ln_off_snap: "LN off snap",
-  overlap: "Overlap",
-  missing_timing_points: "Missing timing",
-};
-
-function formatIssueKind(
-  kind: string,
-  labels: Record<string, string> | undefined,
-): string {
-  return labels?.[kind] ?? ISSUE_KIND_FALLBACK[kind] ?? kind;
-}
-
-function severityClass(severity: string): string {
-  switch (severity) {
-    case "error":
-      return "text-danger";
-    case "warn":
-      return "text-warning/90";
-    default:
-      return "text-muted";
-  }
-}
-
-function TimingAnalysisPanel({ timing }: { timing: ChartTimingView }) {
-  const { dict } = useAppDict();
-  const detail = dict?.practice.detail;
-
-  if (timing.error) {
-    return <p className="mt-3 text-sm text-faint">{timing.error}</p>;
-  }
-
-  const m = timing.metrics;
-  const totalIssues = Object.values(timing.issueCounts).reduce(
-    (sum, n) => sum + (n ?? 0),
-    0,
-  );
-
-  return (
-    <div className="mt-4 space-y-5">
-      <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm tabular-nums text-subtle">
-        <span>
-          {detail?.chartBpm}{" "}
-          <span className="font-semibold text-ink">{m.bpm.toFixed(1)}</span>
-        </span>
-        <span>
-          {detail?.snap}{" "}
-          <span className="font-semibold text-ink">1/{m.dominantSnap}</span>
-        </span>
-        <span>
-          {detail?.coverage}{" "}
-          <span className="font-semibold text-ink">
-            {Math.round(m.snapCoverage * 100)}%
-          </span>
-        </span>
-        <span>
-          {detail?.peakDensity}{" "}
-          <span className="font-semibold text-ink">{m.peakNotesPerBeat}</span>
-          {detail?.perBeat}
-        </span>
-        {totalIssues > 0 ? (
-          <span>
-            {detail?.issuesLabel}{" "}
-            <span className="font-semibold text-ink">{totalIssues}</span>
-          </span>
-        ) : null}
-      </div>
-
-      {timing.issues.length > 0 ? (
-        <ul className="max-h-48 space-y-1 overflow-y-auto text-sm">
-          {timing.issues.map((issue, idx) => (
-            <li
-              key={`${issue.kind}-${issue.startMs}-${idx}`}
-              className={`flex gap-2 ${severityClass(issue.severity)}`}
-            >
-              <span className="shrink-0 font-mono text-xs text-faint">
-                {formatClock(issue.startMs)}
-              </span>
-              <span className="shrink-0 text-xs uppercase tracking-wide opacity-80">
-                {formatIssueKind(issue.kind, detail?.issueKinds)}
-              </span>
-              <span className="min-w-0 text-subtle">{issue.message}</span>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-sm text-muted">{detail?.noTimingIssues}</p>
-      )}
-    </div>
-  );
 }
 

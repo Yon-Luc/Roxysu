@@ -193,6 +193,7 @@
       "exportMap": "Exportar map",
       "exportSet": "Exportar set",
       "viewOnWebsite": "Ver no site",
+      "moreActions": "Mais",
       "statPlays": "Plays",
       "statBestAcc": "Melhor acc",
       "statBestPp": "Melhor PP",
@@ -216,6 +217,14 @@
       "timingAnalysis": "Análise de timing",
       "scoreTimeline": "Linha do tempo de scores",
       "noScoresOnMap": "Ainda sem scores nessa map.",
+      "judgments": {
+        "perfect": "Marvelous",
+        "great": "Perfect",
+        "good": "Great",
+        "ok": "Good",
+        "meh": "Bad",
+        "miss": "Miss"
+      },
       "patterns": {
         "jack": "Jack",
         "jumpstream": "Jumpstream",

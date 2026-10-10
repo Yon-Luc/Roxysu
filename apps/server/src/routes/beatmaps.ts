@@ -25,11 +25,7 @@ import {
   analyzeManiaPatternDetail,
   getManiaPatternDetail,
 } from "../map-analysis/computePatternAnalysis";
-import {
-  loadBeatmapOsu,
-  chartTimingFromOsuText,
-  getChartTimingAnalysis,
-} from "../map-analysis/computeTimingAnalysis";
+import { loadBeatmapOsu } from "../map-analysis/computeTimingAnalysis";
 import {
   OsuFileParser,
   parseCatchChart,
@@ -48,6 +44,7 @@ import {
   isOszBuildError,
   oszContentDisposition,
 } from "../map-analysis/exportOsz";
+import { parseScoreStatistics } from "../scores/parseStatistics";
 import {
   loadManiaPpCurves,
   resolveScorePp,
@@ -198,6 +195,7 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
             rulesetShortName: scores.rulesetShortName,
             replayFileHash: scores.replayFileHash,
             playedAt: scores.playedAt,
+            statistics: scores.statistics,
           })
           .from(scores)
           .where(scoreScope)
@@ -257,21 +255,14 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
       }, null);
 
       let sevenKAnalysis = null;
-      let timingAnalysis = null;
       if (osuLoaded?.ok) {
         try {
           sevenKAnalysis = analyzeManiaPatternDetail(osuLoaded.osuText);
         } catch {
           sevenKAnalysis = await getManiaPatternDetail(db, params.id);
         }
-        try {
-          timingAnalysis = chartTimingFromOsuText(osuLoaded.osuText);
-        } catch {
-          timingAnalysis = await getChartTimingAnalysis(db, params.id);
-        }
       } else if (isMania) {
         sevenKAnalysis = await getManiaPatternDetail(db, params.id);
-        timingAnalysis = await getChartTimingAnalysis(db, params.id);
       }
 
       return {
@@ -317,6 +308,7 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
           rulesetShortName: s.rulesetShortName,
           hasReplay: Boolean(s.replayFileHash),
           playedAt: toIso(s.playedAt),
+          judgments: parseScoreStatistics(s.statistics),
         })),
         mastery: masteryRow
           ? {
@@ -334,7 +326,6 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
         reworkDan,
         patternAnalysis,
         sevenKAnalysis,
-        timingAnalysis,
         notes: [] as Array<{ id: number; body: string }>,
         tags: [] as Array<{ id: number; name: string; color: string | null }>,
         sessions: sessionRows.map((s) => ({

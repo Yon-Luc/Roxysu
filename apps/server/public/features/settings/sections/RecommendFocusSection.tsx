@@ -89,6 +89,75 @@ function bandToApi(
   };
 }
 
+const CLEAR_RATE_MIN = 50;
+const CLEAR_RATE_MAX = 100;
+const CLEAR_RATE_STEP = 0.5;
+const CLEAR_RATE_GAP = 0.5;
+
+function ClearRateBandSlider({
+  minPct,
+  maxPct,
+  onChange,
+  disabled,
+  minAriaLabel,
+  maxAriaLabel,
+}: {
+  minPct: number;
+  maxPct: number;
+  onChange: (minPct: number, maxPct: number) => void;
+  disabled?: boolean;
+  minAriaLabel: string;
+  maxAriaLabel: string;
+}) {
+  const span = CLEAR_RATE_MAX - CLEAR_RATE_MIN;
+  const minPos = ((minPct - CLEAR_RATE_MIN) / span) * 100;
+  const maxPos = ((maxPct - CLEAR_RATE_MIN) / span) * 100;
+  // Keep the nearer-edge thumb on top so either can still be grabbed when close.
+  const minOnTop = minPct > CLEAR_RATE_MAX - span * 0.25;
+
+  return (
+    <div className="rx-dual-range relative mt-1.5 h-6">
+      <div
+        className="pointer-events-none absolute top-1/2 right-0 left-0 h-1.5 -translate-y-1/2 rounded-full bg-highlight"
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-accent"
+        style={{ left: `${minPos}%`, width: `${Math.max(0, maxPos - minPos)}%` }}
+        aria-hidden
+      />
+      <input
+        type="range"
+        min={CLEAR_RATE_MIN}
+        max={CLEAR_RATE_MAX}
+        step={CLEAR_RATE_STEP}
+        value={minPct}
+        disabled={disabled}
+        aria-label={minAriaLabel}
+        onChange={(e) => {
+          const next = Number(e.target.value);
+          onChange(Math.min(next, maxPct - CLEAR_RATE_GAP), maxPct);
+        }}
+        style={{ zIndex: minOnTop ? 4 : 3 }}
+      />
+      <input
+        type="range"
+        min={CLEAR_RATE_MIN}
+        max={CLEAR_RATE_MAX}
+        step={CLEAR_RATE_STEP}
+        value={maxPct}
+        disabled={disabled}
+        aria-label={maxAriaLabel}
+        onChange={(e) => {
+          const next = Number(e.target.value);
+          onChange(minPct, Math.max(next, minPct + CLEAR_RATE_GAP));
+        }}
+        style={{ zIndex: minOnTop ? 3 : 4 }}
+      />
+    </div>
+  );
+}
+
 function BandEditors({
   title,
   hint,
@@ -105,7 +174,7 @@ function BandEditors({
   disabled?: boolean;
 }) {
   const { dict } = useAppDict();
-  const maxLabel =
+  const bandLabel =
     openEndedMax && band.accMaxPct >= 100
       ? `${band.accMinPct}%+`
       : `${band.accMinPct}–${band.accMaxPct}%`;
@@ -116,64 +185,38 @@ function BandEditors({
         <h3 className="text-sm font-bold text-ink">{title}</h3>
         <p className="mt-0.5 text-xs text-muted">{hint}</p>
         <p className="mt-1 font-mono text-xs text-faint">
-          {`Clear band: ${maxLabel} · target ${band.targetPct}% ±${band.tolerancePct}%`}
+          {`Clear band: ${bandLabel} · target ${band.targetPct}% ±${band.tolerancePct}%`}
         </p>
       </div>
 
-      <label className="block">
-        <div className="flex justify-between text-xs font-semibold text-ink">
-          <span>{dict?.settings.recommendFocusAccMin ?? "Clear-rate min"}</span>
-          <span className="font-mono text-muted">{band.accMinPct}%</span>
-        </div>
-        <input
-          type="range"
-          min={50}
-          max={99}
-          step={0.5}
-          value={band.accMinPct}
-          disabled={disabled}
-          onChange={(e) => {
-            const next = Number(e.target.value);
-            onChange({
-              ...band,
-              accMinPct: next,
-              accMaxPct: Math.max(band.accMaxPct, next + 0.5),
-            });
-          }}
-          className="mt-1.5 w-full accent-[var(--color-accent)]"
-        />
-      </label>
-
-      <label className="block">
+      <div>
         <div className="flex justify-between text-xs font-semibold text-ink">
           <span>
             {openEndedMax
-              ? (dict?.settings.recommendFocusAccMaxOpen ??
-                "Clear-rate max (100% = open-ended)")
-              : (dict?.settings.recommendFocusAccMax ?? "Clear-rate max")}
+              ? (dict?.settings.recommendFocusAccBandOpen ??
+                "Clear-rate (100% = open-ended)")
+              : (dict?.settings.recommendFocusAccBand ?? "Clear-rate")}
           </span>
-          <span className="font-mono text-muted">
-            {openEndedMax && band.accMaxPct >= 100 ? "∞" : `${band.accMaxPct}%`}
-          </span>
+          <span className="font-mono text-muted">{bandLabel}</span>
         </div>
-        <input
-          type="range"
-          min={51}
-          max={100}
-          step={0.5}
-          value={band.accMaxPct}
+        <ClearRateBandSlider
+          minPct={band.accMinPct}
+          maxPct={band.accMaxPct}
           disabled={disabled}
-          onChange={(e) => {
-            const next = Number(e.target.value);
-            onChange({
-              ...band,
-              accMaxPct: next,
-              accMinPct: Math.min(band.accMinPct, next - 0.5),
-            });
-          }}
-          className="mt-1.5 w-full accent-[var(--color-accent)]"
+          minAriaLabel={
+            dict?.settings.recommendFocusAccBand ?? "Clear-rate"
+          }
+          maxAriaLabel={
+            openEndedMax
+              ? (dict?.settings.recommendFocusAccBandOpen ??
+                "Clear-rate (100% = open-ended)")
+              : (dict?.settings.recommendFocusAccBand ?? "Clear-rate")
+          }
+          onChange={(accMinPct, accMaxPct) =>
+            onChange({ ...band, accMinPct, accMaxPct })
+          }
         />
-      </label>
+      </div>
 
       <label className="block">
         <div className="flex justify-between text-xs font-semibold text-ink">

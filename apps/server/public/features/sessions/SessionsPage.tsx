@@ -226,6 +226,7 @@ export function SessionsPage() {
 
       <SessionActivityCalendar
         activity={data.activity ?? []}
+        sessionDays={data.items.map((s) => sessionStartedUtcDay(s.startedAt))}
         selectedDay={selectedDay}
         onSelectDay={(day) => {
           setSelectedDay(day);

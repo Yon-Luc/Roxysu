@@ -280,7 +280,6 @@ export function DownloadMapsPage() {
   });
 
   const [openInOsuMessage, setOpenInOsuMessage] = useState<string | null>(null);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
   /** Immediate UI signal so Open in osu! enables without waiting on a refetch. */
   const [readyToOpenCount, setReadyToOpenCount] = useState(0);
   /** Set IDs downloaded this session — hide from results until search refetches. */
@@ -369,23 +368,32 @@ export function DownloadMapsPage() {
         title: args.title,
         noVideo,
       }),
-    onSuccess: (data) => {
+    onSuccess: (data, vars) => {
       setBatchError(null);
       if (typeof data.error === "string" && data.error.length > 0) {
-        setSaveMessage(data.error);
+        pushToast({ title: data.error, tone: "error" });
         return;
       }
       if (!("result" in data) || !("savedForImport" in data)) {
-        setSaveMessage(dict?.download?.saveFailed ?? "Save failed");
+        pushToast({
+          title: dict?.download?.saveFailed ?? "Save failed",
+          tone: "error",
+        });
         return;
       }
-      setSaveMessage(
-        data.result === "exists"
-          ? t(dict?.download?.saveExists, { id: data.setId }) ||
-            `#${data.setId} already on disk — ready to open in osu!`
-          : t(dict?.download?.saveSaved, { id: data.setId }) ||
-            `#${data.setId} saved — ready to open in osu!`,
-      );
+      const mapLabel =
+        vars.artist?.trim() && vars.title?.trim()
+          ? `${vars.artist.trim()} - ${vars.title.trim()}`
+          : `#${data.setId}`;
+      pushToast({
+        title:
+          data.result === "exists"
+            ? t(dict?.download?.saveExistsNamed, { map: mapLabel }) ||
+              `${mapLabel} is already on disk — ready to open in osu!`
+            : t(dict?.download?.saveSavedNamed, { map: mapLabel }) ||
+              `${mapLabel} saved — ready to open in osu!`,
+        tone: "success",
+      });
       setReadyToOpenCount(data.savedForImport);
       setPendingDownloadIds((prev) => {
         const next = new Set(prev);
@@ -403,8 +411,33 @@ export function DownloadMapsPage() {
         batchState as MirrorBatchJob,
       );
     },
-    onError: (err) => {
-      setSaveMessage(err instanceof Error ? err.message : String(err));
+    onError: (err, vars) => {
+      const code =
+        err && typeof err === "object" && "code" in err
+          ? String((err as { code?: unknown }).code)
+          : "";
+      if (
+        code === "mirror_unavailable" ||
+        /not available for download/i.test(
+          err instanceof Error ? err.message : String(err),
+        )
+      ) {
+        const mapLabel =
+          vars.artist?.trim() && vars.title?.trim()
+            ? `${vars.artist.trim()} - ${vars.title.trim()}`
+            : `#${vars.setId}`;
+        pushToast({
+          title:
+            t(dict?.download?.mapUnavailable, { map: mapLabel }) ||
+            `${mapLabel} is not available for download right now.`,
+          tone: "error",
+        });
+        return;
+      }
+      pushToast({
+        title: err instanceof Error ? err.message : String(err),
+        tone: "error",
+      });
     },
   });
 
@@ -825,9 +858,6 @@ export function DownloadMapsPage() {
 
           {batchError ? (
             <p className="text-sm text-danger">{batchError}</p>
-          ) : null}
-          {saveMessage ? (
-            <p className="text-sm text-muted">{saveMessage}</p>
           ) : null}
           {openInOsuMessage ? (
             <p className="text-sm text-muted">{openInOsuMessage}</p>

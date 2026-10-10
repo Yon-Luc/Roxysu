@@ -136,6 +136,27 @@ async function tryProvider(
     : new Error(String(lastError));
 }
 
+/** Thrown when every configured mirror failed to produce an `.osz`. */
+export class MirrorArchiveUnavailableError extends Error {
+  readonly code = "mirror_unavailable" as const;
+  readonly setId: number;
+  /** Technical per-provider failures (logs / debugging — not for the UI). */
+  readonly providerErrors: string[];
+
+  constructor(setId: number, providerErrors: string[]) {
+    super(`Map #${setId} is not available for download right now.`);
+    this.name = "MirrorArchiveUnavailableError";
+    this.setId = setId;
+    this.providerErrors = providerErrors;
+  }
+}
+
+export function isMirrorArchiveUnavailableError(
+  err: unknown,
+): err is MirrorArchiveUnavailableError {
+  return err instanceof MirrorArchiveUnavailableError;
+}
+
 /**
  * Download a beatmapset `.osz` into `destPath`, trying the active mirror then
  * falling back to the other configured providers (needed for pending sets that
@@ -161,7 +182,5 @@ export async function downloadBeatmapsetArchiveToPath(
     }
   }
 
-  throw new Error(
-    `All mirrors failed for beatmapset ${setId} (${errors.join("; ")})`,
-  );
+  throw new MirrorArchiveUnavailableError(setId, errors);
 }

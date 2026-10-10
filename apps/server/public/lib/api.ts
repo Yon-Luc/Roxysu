@@ -615,13 +615,22 @@ export async function saveMirrorBeatmapset(body: {
   });
   const data: unknown = await res.json().catch(() => null);
   if (!res.ok) {
+    const row =
+      data && typeof data === "object"
+        ? (data as { error?: unknown; code?: unknown; setId?: unknown })
+        : null;
     const detail =
-      data && typeof data === "object" && "error" in data
-        ? String((data as { error: unknown }).error)
+      row && typeof row.error === "string" && row.error.length > 0
+        ? row.error
         : `HTTP ${res.status}`;
-    throw new Error(
-      `/api/mirrors/beatmapsets/${body.setId}/save failed: ${detail}`,
-    );
+    const err = new Error(detail) as Error & {
+      code?: string;
+      setId?: number;
+    };
+    if (typeof row?.code === "string") err.code = row.code;
+    if (typeof row?.setId === "number") err.setId = row.setId;
+    else err.setId = body.setId;
+    throw err;
   }
   return data as MirrorBatchJob & {
     setId: number;

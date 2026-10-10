@@ -581,7 +581,17 @@ async function downloadQueue(
       } catch (err) {
         if (generation !== job.generation) break;
         job.failed += 1;
-        const message = err instanceof Error ? err.message : String(err);
+        const label =
+          "artist" in set && set.artist && set.title
+            ? `${set.artist} - ${set.title}`
+            : `#${set.id}`;
+        const message =
+          err instanceof Error &&
+          err.name === "MirrorArchiveUnavailableError"
+            ? `${label} is not available for download right now.`
+            : err instanceof Error
+              ? err.message
+              : String(err);
         job.recentErrors = [
           { setId: set.id, error: message },
           ...job.recentErrors,

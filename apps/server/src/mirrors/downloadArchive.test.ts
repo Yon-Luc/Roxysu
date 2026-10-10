@@ -6,6 +6,7 @@ import path from "node:path";
 import {
   downloadBeatmapsetArchiveToPath,
   listDownloadProvidersInOrder,
+  MirrorArchiveUnavailableError,
 } from "./downloadArchive";
 
 const originalFetch = globalThis.fetch;
@@ -45,6 +46,31 @@ describe("downloadBeatmapsetArchiveToPath", () => {
         downloadBeatmapsetArchiveToPath(1, dest, true),
       ).resolves.toBe("exists");
       expect(calls).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("throws a friendly unavailable error when every mirror fails", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "roxysu-dl-"));
+    try {
+      const dest = path.join(dir, "99.osz");
+      globalThis.fetch = (async () =>
+        new Response("nope", { status: 503 })) as typeof fetch;
+
+      let caught: unknown;
+      try {
+        await downloadBeatmapsetArchiveToPath(99, dest, true);
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeInstanceOf(MirrorArchiveUnavailableError);
+      expect((caught as MirrorArchiveUnavailableError).message).toBe(
+        "Map #99 is not available for download right now.",
+      );
+      expect((caught as MirrorArchiveUnavailableError).code).toBe(
+        "mirror_unavailable",
+      );
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

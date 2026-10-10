@@ -9,7 +9,9 @@ export {
 } from "./providers";
 export {
   downloadBeatmapsetArchiveToPath,
+  isMirrorArchiveUnavailableError,
   listDownloadProvidersInOrder,
+  MirrorArchiveUnavailableError,
 } from "./downloadArchive";
 export {
   buildMirrorSearchUrl,

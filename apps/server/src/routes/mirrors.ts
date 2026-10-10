@@ -6,6 +6,7 @@ import {
   diffAgainstLibrary,
   getActiveBeatmapMirrorProvider,
   getMirrorBatchJobState,
+  isMirrorArchiveUnavailableError,
   loadOwnedSetOnlineIds,
   openLastBatchArchivesInOsu,
   parsePositiveSetId,
@@ -51,6 +52,7 @@ const batchModeSchema = t.Union([
 
 function httpStatusForMirrorError(err: unknown): number {
   if (err instanceof OnlineQueryError) return 400;
+  if (isMirrorArchiveUnavailableError(err)) return 502;
   const message = err instanceof Error ? err.message : String(err);
   if (message.includes("already running")) return 409;
   if (
@@ -324,6 +326,13 @@ export const mirrorRoutes = new Elysia({ prefix: "/mirrors" })
         });
       } catch (err) {
         set.status = httpStatusForMirrorError(err);
+        if (isMirrorArchiveUnavailableError(err)) {
+          return {
+            error: err.message,
+            code: err.code,
+            setId: err.setId,
+          };
+        }
         return {
           error: err instanceof Error ? err.message : String(err),
         };

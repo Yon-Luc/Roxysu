@@ -129,13 +129,11 @@ describe("backfillPatternAnalysis", () => {
       .query(`DELETE FROM beatmap_pattern_analysis WHERE algorithm = ?`)
       .run(PATTERN_ALGORITHM);
 
-    let checks = 0;
+    // shouldContinue also runs inside each chart, so a call budget is not
+    // "one check per map". Stop once two ratings are stored.
     const result = await backfillPatternAnalysis(db, {
       limit: 10,
-      shouldContinue: () => {
-        checks += 1;
-        return checks <= 2;
-      },
+      shouldContinue: () => countPatternRows() < 2,
     });
 
     // The job pauses between maps on low memory; ratings already written must

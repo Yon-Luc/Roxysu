@@ -37,7 +37,7 @@ Three estimators write to the same store, keyed by `algorithm`: `sunny`, `daniel
 ## Business rules
 
 1. Estimates live in the Sunny dan ratings store (`beatmap_dan_ratings`); recommendations degrade without backfill.
-2. Backfill is a Settings-started background job. Practice/search list handlers and recommend HTTP handlers do not run Sunny/Daniel/rework/pattern compute on the request path.
+2. Backfill is a Settings-started background job (also offered after first sync via the Jobs onboarding modal). Before backfill, boot may gap-fill from a **Hub calc bundle** matching the Roxysu product version. Practice/search list handlers and recommend HTTP handlers do not run Sunny/Daniel/rework/pattern compute on the request path.
 3. Recommendations and skill estimates are for a single mania keymode (`keyCount`, default 7). 4K and 7K pools are never mixed.
 4. Matching uses Sunny stars for both 4K and 7K. Daniel remains a 4K profile label (Alpha+ only; below/above band → `< …` / `> …` sentinels). `dan:` matches Sunny tiers and Daniel tiers; `daniel:` matches Daniel labels only. A Daniel row does not hide 4K Sunny tiers (Intro / Reform / LN) — primary display falls back to Sunny when Daniel is out of band (`primaryDanLabel`).
 5. Modded plays (speed rate ≠ 1.0 or full-LN Invert) are rated by the **dan difficulty variants** store (`beatmap_dan_rating_variants`), computed lazily per played combo by an import-triggered background job. Skill axes and band plays read variant stars for modded plays; modded plays without a computed variant are excluded from skill until rated. NM-equivalent plays (rate 1.0, no Invert; Mirror/Classic ignored) always read the base store. Rework dan has **no** variant rows.
@@ -227,7 +227,8 @@ old non-yielding loop).
 
 ## Dependencies
 
-- `features/mastery-settings/` — job controls
+- `features/mastery-settings/` — job controls, Jobs chrome, first-sync onboarding
+- `features/hub/` — Hub calc bundle pull before local backfill
 - `features/practice-library/` — `dan:` / `sunny:` / `rework:` / `pattern:` query language fields
 - `packages/osu-chart`
 - `packages/mania-difficulty`
@@ -241,5 +242,7 @@ old non-yielding loop).
 
 ## Related knowledge
 
-- [vocabulary.md](../../vocabulary.md) — Sunny dan ratings store, Rework dan, Dominant skill, Mania difficulty port
+- [vocabulary.md](../../vocabulary.md) — Sunny dan ratings store, Rework dan, Dominant skill, Mania difficulty port, Hub calc bundle
 - [flows/sunny-backfill-to-recommend.md](../../flows/sunny-backfill-to-recommend.md)
+- [flows/hub-calc-bundle-pull.md](../../flows/hub-calc-bundle-pull.md)
+- [decisions/hub-calc-bundle-version.md](../../decisions/hub-calc-bundle-version.md)

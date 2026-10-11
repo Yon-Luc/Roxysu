@@ -7,11 +7,14 @@ touches:
   - apps/server/src/analytics/recommend/focusSettings.ts
   - apps/server/src/routes/settings.ts
   - apps/server/public/features/settings
+  - apps/server/public/features/settings/JobsBatchChrome.tsx
+  - apps/server/public/features/settings/JobsOnboardingModal.tsx
   - apps/server/public/features/settings/sections/RecommendFocusSection.tsx
   - packages/db/src/settings-keys.ts
   - apps/server/src/map-analysis/memoryPressure.ts
   - apps/server/src/map-analysis/patternAnalysisJob.ts
   - apps/server/src/map-analysis/reworkDanJob.ts
+  - apps/server/src/map-analysis/calcBundle.ts
 ---
 
 # Mastery & settings
@@ -54,6 +57,12 @@ with plenty of free RAM can still hit Node's heap cap, and that abort is fatal
 rather than a pause. The panel's `memory` line shows both (RSS · free · heap
 used/limit).
 
+While a job runs, `JobsBatchChrome` shows a floating progress chip (and
+completion toast) when the user leaves Settings — same pattern as Download
+batch chrome. After the first meaningful sync, `JobsOnboardingModal` offers to
+start Sunny + Daniel + Rework (pattern included via rework). Accepting also
+pulls a Hub calc bundle for the current app version when available.
+
 Dominant skill analysis and rework dan rate one chart synchronously, so they
 pause at a tighter heap ratio (`BACKFILL_IN_MAP_MAX_HEAP_RATIO`) than the other
 jobs, and they re-check every 128 notes while the difficulty graph is built.
@@ -71,9 +80,11 @@ Only the active tab’s panels mount. Deep-links still use `?section=<id>` (Comm
 - `apps/server/src/analytics/recommend/axisThresholds.ts` — read/validate thresholds
 - `apps/server/src/routes/settings.ts`
 - `apps/server/public/features/settings/*`
+- `apps/server/public/features/settings/JobsBatchChrome.tsx`
+- `apps/server/public/features/settings/JobsOnboardingModal.tsx`
 - `apps/server/public/features/settings/sections/AxisThresholdsSection.tsx`
 - `apps/server/public/features/settings/settingsTabs.ts`
-- `packages/db/src/settings-keys.ts` — `RECOMMEND_LN_RATIO_THRESHOLD_KEY`, `RECOMMEND_FLN_RATIO_THRESHOLD_KEY`
+- `packages/db/src/settings-keys.ts` — `RECOMMEND_LN_RATIO_THRESHOLD_KEY`, `RECOMMEND_FLN_RATIO_THRESHOLD_KEY`, `JOBS_CALC_BUNDLE_APPLIED_VERSION_KEY`, `JOBS_ONBOARDING_COMPLETED_KEY`
 
 ## Dependencies
 

@@ -61,6 +61,11 @@ const HubAdminCachePage = lazy(() =>
     default: m.HubAdminCachePage,
   })),
 );
+const HubAdminCalcBundlesPage = lazy(() =>
+  import("./features/hub/HubAdminCalcBundlesPage").then((m) => ({
+    default: m.HubAdminCalcBundlesPage,
+  })),
+);
 import { isDesktopShell } from "./lib/desktop";
 import type { StatsGranularity, StatsRange, StatsSkillAxis } from "./lib/api";
 import {
@@ -271,6 +276,12 @@ const hubAdminCacheRoute = createRoute({
   component: HubAdminCachePage,
 });
 
+const hubAdminCalcBundlesRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/hub/admin/calc-bundles",
+  component: HubAdminCalcBundlesPage,
+});
+
 const hubDetailRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/hub/$id",
@@ -358,6 +369,7 @@ const routeTree = rootRoute.addChildren([
     hubCallbackRoute,
     hubShareRoute,
     hubAdminCacheRoute,
+    hubAdminCalcBundlesRoute,
     hubDetailRoute,
     ...(isDesktopShell() ? [] : [ratingLabRoute]),
     skinRoute,

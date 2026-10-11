@@ -67,6 +67,16 @@ export function isHubSearchHttpCacheEnabled(
   return envFlagEnabled(env.HUB_SEARCH_HTTP_CACHE, true);
 }
 
+/**
+ * When false, GET /calc-bundles/* returns 503 (clients skip Hub fill).
+ * Admin upload/list/delete remain available.
+ */
+export function isHubCalcBundlesEnabled(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return envFlagEnabled(env.HUB_CALC_BUNDLES, true);
+}
+
 /** App-level freshness for hit-stale / background refresh (default 24h). */
 export function hubCacheTtlMs(env: NodeJS.ProcessEnv = process.env): number {
   const n = parseInt(env.HUB_CACHE_TTL_MS ?? "86400000", 10);

@@ -254,9 +254,14 @@ export function HubBrowsePage() {
             <HubLoginButton />
           )}
           {meQuery.data?.role === "admin" ? (
+            <>
               <Link to="/hub/admin/cache" className="rx-btn">
                 {dict?.hub?.searchCache ?? "Search cache"}
               </Link>
+              <Link to="/hub/admin/calc-bundles" className="rx-btn">
+                Calc bundles
+              </Link>
+            </>
           ) : null}
           <Link to="/hub/share" className="rx-btn">
             {dict?.hub?.shareCollection ?? "Share collection"}

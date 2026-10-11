@@ -133,6 +133,18 @@ Admin-managed pre-warmed beatmapset results in the Hub store. Each `search_cache
 
 ---
 
+### Hub calc bundle
+
+Admin-published, version-keyed shared precomputes for Sunny dan, Daniel dan, Rework dan, and dominant skill. Stored in the Hub store (`calc_bundles` / `calc_bundle_entries`), keyed by Roxysu product version. Clients pull the bundle matching their app version and gap-fill the local mirror by beatmap content hash.
+
+**Not:** "cache", "job cache", "search cache", "calc cache"
+
+**In code:** `packages/db/src/hub/schema.ts:calcBundles`, `apps/hub/src/services/calcBundles.ts`, `apps/server/src/map-analysis/calcBundle.ts`
+
+**See:** [features/hub/](features/hub/index.md), [decisions/hub-calc-bundle-version.md](decisions/hub-calc-bundle-version.md), [flows/hub-calc-bundle-pull.md](flows/hub-calc-bundle-pull.md)
+
+---
+
 ### Hub tag
 
 One canonical lowercase label from `HUB_TAGS_BY_MODE` / `VALID_TAGS` that a shared collection carries. Every tag belongs to a primary gamemode and is grouped under a category (Keys / Skill / Style / Difficulty) for the picker. Mania skill tags reuse the **dominant skill** vocabulary (`speed`, `jack`, `coordination`, `technical`, `release`). Retired Interlude tags stay valid in `LEGACY_HUB_TAGS` so pre-switch shared collections keep validating, but are no longer offered in the picker.

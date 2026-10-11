@@ -176,6 +176,7 @@ function finish(status: "completed" | "idle" | "error", error?: string): void {
   job.error = error ?? null;
   job.db = null;
   publish({ type: "dashboard.updated" });
+  publish({ type: "jobs.updated" });
 }
 
 /**
@@ -188,6 +189,7 @@ function memoryGuard(): boolean {
   if (job.status !== "paused") {
     job.status = "paused";
     publish({ type: "dashboard.updated" });
+    publish({ type: "jobs.updated" });
   }
   scheduleNext(PAUSE_POLL_MS);
   return true;
@@ -308,6 +310,7 @@ function startJob(
   }
 
   scheduleNext();
+  publish({ type: "jobs.updated" });
   return getPatternAnalysisJobState(db);
 }
 
@@ -325,6 +328,7 @@ export function startPatternAnalysisRecompute(db: Db): PatternAnalysisJobState {
 export function stopPatternAnalysisBackfill(db: Db): PatternAnalysisJobState {
   if (job.status === "running") {
     job.status = "stopping";
+    publish({ type: "jobs.updated" });
   }
   return getPatternAnalysisJobState(db);
 }

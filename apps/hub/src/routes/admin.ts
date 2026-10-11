@@ -13,6 +13,13 @@ import {
   type SearchCacheMeta,
 } from "../services/cache";
 import { hubCacheTtlMs } from "../services/hubEnv";
+import {
+  CALC_BUNDLE_CHUNK_MAX,
+  deleteCalcBundleByVersion,
+  listCalcBundles,
+  upsertCalcBundleChunk,
+  type CalcBundleEntryInput,
+} from "../services/calcBundles";
 
 /** Base prime identity only — secondary filters are request-time on GET /search. */
 const queryParamsSchema = t.Object({
@@ -236,4 +243,84 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
       return { message: "Cache entry deleted" };
     },
     { params: t.Object({ id: t.Numeric() }) },
+  )
+
+  .get("/calc-bundles", async () => listCalcBundles())
+
+  .post(
+    "/calc-bundles",
+    async ({ body, user }) => {
+      if (body.entries.length > CALC_BUNDLE_CHUNK_MAX) {
+        return status(400, {
+          message: `At most ${CALC_BUNDLE_CHUNK_MAX} entries per chunk`,
+        });
+      }
+      try {
+        const result = await upsertCalcBundleChunk({
+          roxysuVersion: body.roxysuVersion,
+          label: body.label,
+          replace: body.replace,
+          entries: body.entries as CalcBundleEntryInput[],
+          uploadedByUserId: user.sub,
+        });
+        return {
+          ...result,
+          message: body.replace
+            ? "Calc bundle replaced"
+            : "Calc bundle chunk appended",
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (message.includes("Bundle not found")) {
+          return status(404, { message });
+        }
+        return status(400, { message });
+      }
+    },
+    {
+      body: t.Object({
+        roxysuVersion: t.String({ minLength: 1, maxLength: 32 }),
+        label: t.Optional(t.String({ maxLength: 100 })),
+        /** true = truncate/create; false = append to existing version. */
+        replace: t.Boolean(),
+        entries: t.Array(
+          t.Object({
+            beatmapHash: t.String({ minLength: 1, maxLength: 128 }),
+            onlineBeatmapId: t.Optional(t.Nullable(t.Numeric())),
+            algorithm: t.String({ minLength: 1, maxLength: 64 }),
+            sunnyStar: t.Optional(t.Nullable(t.Numeric())),
+            lnRatio: t.Optional(t.Nullable(t.Numeric())),
+            columnCount: t.Optional(t.Nullable(t.Numeric())),
+            estDiff: t.Optional(t.Nullable(t.String({ maxLength: 64 }))),
+            dominantPattern: t.Optional(t.Nullable(t.String({ maxLength: 64 }))),
+            secondaryPattern: t.Optional(
+              t.Nullable(t.String({ maxLength: 64 })),
+            ),
+            confidence: t.Optional(t.Nullable(t.Numeric())),
+            jackDensity: t.Optional(t.Nullable(t.Numeric())),
+            chordDensity: t.Optional(t.Nullable(t.Numeric())),
+            streamDensity: t.Optional(t.Nullable(t.Numeric())),
+            bracketDensity: t.Optional(t.Nullable(t.Numeric())),
+            chordjackScore: t.Optional(t.Nullable(t.Numeric())),
+            jumpstreamScore: t.Optional(t.Nullable(t.Numeric())),
+            chordstreamScore: t.Optional(t.Nullable(t.Numeric())),
+          }),
+          { maxItems: CALC_BUNDLE_CHUNK_MAX },
+        ),
+      }),
+    },
+  )
+
+  .delete(
+    "/calc-bundles/:version",
+    async ({ params }) => {
+      const ok = await deleteCalcBundleByVersion(params.version);
+      if (!ok) return status(404, { message: "Calc bundle not found" });
+      return { message: "Calc bundle deleted" };
+    },
+    {
+      params: t.Object({
+        version: t.String({ minLength: 1, maxLength: 32 }),
+      }),
+    },
   );

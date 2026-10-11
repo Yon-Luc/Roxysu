@@ -1,0 +1,36 @@
+---
+last_verified: 2026-10
+confidence: verified
+touches:
+  - packages/db/src/hub/schema.ts
+  - apps/hub/src/services/calcBundles.ts
+  - apps/hub/src/routes/admin.ts
+  - apps/hub/src/routes/calcBundles.ts
+  - apps/hub/src/services/hubEnv.ts
+  - apps/server/src/map-analysis/calcBundle.ts
+  - knowledge/vocabulary.md
+---
+
+# Hub calc bundle versioning
+
+## Decision
+
+One **Hub calc bundle** per Roxysu product version (e.g. `0.1.17`). Each bundle may include rows for `sunny`, `daniel`, `mania-difficulty`, and `mania-skill-v1`. Match clients to bundles by product version only — not by separate algorithm pins. Apply Hub rows into the local mirror by beatmap content hash with **gap-fill only** (never overwrite a successful local compute). Admin may upload for a future version before release. Public pull is killable via `HUB_CALC_BUNDLES=0`.
+
+## Reason
+
+Difficulty and pattern algorithms ship with Roxysu releases. Sharing precomputes across users avoids repeating expensive backfills after an update, while keeping a single artefact per version that admins can prepare ahead of publishing.
+
+## Consequences
+
+- Hub key is `roxysu_version` (unique). Chunked admin `POST /admin/calc-bundles` with `replace=true` on the first chunk.
+- Clients store `jobs.calc_bundle_applied_version` after a successful pull or Hub 404 so boots do not hammer Hub.
+- Transport/5xx failures do not mark applied — retry next boot.
+- Dan difficulty variants and Mania Rating Lab are not part of Hub calc bundles.
+- Manual `DELETE /admin/calc-bundles/:version` clears old versions; there is no automatic cleanup.
+
+## Relevant implementation
+
+- `apps/hub/src/services/calcBundles.ts`
+- `apps/server/src/map-analysis/calcBundle.ts`
+- `apps/server/public/features/hub/HubAdminCalcBundlesPage.tsx`

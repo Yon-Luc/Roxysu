@@ -974,6 +974,63 @@ export async function stopPatternAnalysisJob() {
   );
 }
 
+export async function fetchCalcBundleStatus() {
+  return unwrap(
+    await api.api.settings["calc-bundle"].status.get(),
+    "/api/settings/calc-bundle/status",
+  );
+}
+
+export async function pullCalcBundle() {
+  return unwrap(
+    await api.api.settings["calc-bundle"].pull.post(),
+    "/api/settings/calc-bundle/pull",
+  );
+}
+
+export async function exportUploadCalcBundle(body: {
+  token: string;
+  roxysuVersion: string;
+  label?: string;
+  hubUrl?: string;
+}) {
+  return unwrap(
+    await api.api.settings["calc-bundle"]["export-upload"].post(body),
+    "/api/settings/calc-bundle/export-upload",
+  );
+}
+
+export async function startRecommendedJobs() {
+  return unwrap(
+    await api.api.settings.jobs["start-recommended"].post(),
+    "/api/settings/jobs/start-recommended",
+  );
+}
+
+export async function stopAllJobs() {
+  return unwrap(
+    await api.api.settings.jobs["stop-all"].post(),
+    "/api/settings/jobs/stop-all",
+  );
+}
+
+export async function fetchJobsOnboarding() {
+  return unwrap(
+    await api.api.settings.jobs.onboarding.get(),
+    "/api/settings/jobs/onboarding",
+  );
+}
+
+export async function completeJobsOnboarding(body: {
+  completed: boolean;
+  startJobs?: boolean;
+}) {
+  return unwrap(
+    await api.api.settings.jobs.onboarding.post(body),
+    "/api/settings/jobs/onboarding",
+  );
+}
+
 export async function fetchRatingLabVersions() {
   return unwrap(
     await api.api["rating-lab"].versions.get(),
@@ -1096,6 +1153,12 @@ export type RatingLabSummary = Exclude<
   { error: string }
 >;
 export type SettingsPayload = Awaited<ReturnType<typeof fetchSettings>>;
+export type SunnyDanJob = Awaited<ReturnType<typeof fetchSunnyDanJob>>;
+export type DanielDanJob = Awaited<ReturnType<typeof fetchDanielDanJob>>;
+export type ReworkDanJob = Awaited<ReturnType<typeof fetchReworkDanJob>>;
+export type PatternAnalysisJob = Awaited<
+  ReturnType<typeof fetchPatternAnalysisJob>
+>;
 export type TosuLive = Awaited<ReturnType<typeof fetchTosuLive>>;
 export type TosuLiveAnalysisPayload = Awaited<
   ReturnType<typeof fetchTosuLiveAnalysis>

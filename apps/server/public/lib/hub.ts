@@ -542,3 +542,31 @@ export function deleteHubAdminCache(
     token,
   });
 }
+
+export type HubCalcBundleMeta = {
+  id: number;
+  roxysuVersion: string;
+  label: string;
+  entryCount: number;
+  algorithms: string[];
+  uploadedAt: string;
+  uploadedByUserId: number | null;
+};
+
+export function fetchHubAdminCalcBundles(hubUrl: string, token: string) {
+  return hubFetch<HubCalcBundleMeta[]>(hubUrl, "/admin/calc-bundles", {
+    token,
+  });
+}
+
+export function deleteHubAdminCalcBundle(
+  hubUrl: string,
+  token: string,
+  version: string,
+) {
+  return hubFetch<{ message: string }>(
+    hubUrl,
+    `/admin/calc-bundles/${encodeURIComponent(version)}`,
+    { method: "DELETE", token },
+  );
+}

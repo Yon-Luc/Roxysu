@@ -23,6 +23,9 @@ touches:
 
 4. Hub search index admin APIs: admin role — status: verified
 
+4b. Hub calc bundle admin upload/list/delete: admin role — status: verified
+   **Enforced by:** `apps/hub/src/routes/admin.ts` `/admin/calc-bundles*` + `requireAdmin`
+
 5. `ADMIN_OSU_ID` promotes that osu! id to admin on login. An existing admin row is not demoted if the env var is unset or points at someone else.
    **Enforced by:** `apps/hub/src/services/hubRole.ts:resolveHubLoginRole()` — status: verified
 

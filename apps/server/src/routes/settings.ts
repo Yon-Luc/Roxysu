@@ -1,5 +1,6 @@
 import { settings } from "@roxysu/db/schema";
 import {
+  JOBS_ONBOARDING_COMPLETED_KEY,
   OVERLAY_HOST_ENABLED_KEY,
   OVERLAY_HOST_URL_KEY,
   RECOMMEND_FLN_RATIO_THRESHOLD_KEY,
@@ -10,6 +11,15 @@ import {
 } from "@roxysu/db/settings-keys";
 import { Elysia, t } from "elysia";
 import { eq } from "drizzle-orm";
+import { APP_VERSION } from "../appVersion";
+import { resolveHubBaseUrl } from "../hubUrl";
+import {
+  exportCalcBundleEntries,
+  getCalcBundleAppliedVersion,
+  getCalcBundlePullState,
+  pullAndApplyCalcBundle,
+  uploadCalcBundleToHub,
+} from "../map-analysis/calcBundle";
 
 import { dbPlugin, type Db } from "../db-runtime";
 import {
@@ -135,13 +145,25 @@ async function buildSettingsResponse(db: Db) {
   const maniaRatingExecutables = await readAllExecutablePaths(db);
   const overlayHostUrl = await readOverlayHostUrl(db);
   const overlayHostEnabled = await readOverlayHostEnabled(db);
-  const [scoresUsername, scoresGamemode, axisThresholds, recommendFocus] =
-    await Promise.all([
-      buildScoresUsernameSettings(db),
-      buildScoresGamemodeSettings(db),
-      readAxisThresholds(db),
-      readFocusSettings(db),
-    ]);
+  const [
+    scoresUsername,
+    scoresGamemode,
+    axisThresholds,
+    recommendFocus,
+    calcBundleAppliedVersion,
+    onboardingRow,
+  ] = await Promise.all([
+    buildScoresUsernameSettings(db),
+    buildScoresGamemodeSettings(db),
+    readAxisThresholds(db),
+    readFocusSettings(db),
+    getCalcBundleAppliedVersion(db),
+    db
+      .select({ value: settings.value })
+      .from(settings)
+      .where(eq(settings.key, JOBS_ONBOARDING_COMPLETED_KEY))
+      .get(),
+  ]);
 
   return {
     mastery: {
@@ -184,7 +206,13 @@ async function buildSettingsResponse(db: Db) {
     danielDan: getDanielDanJobState(db),
     reworkDan: getReworkDanJobState(db),
     patternAnalysis: getPatternAnalysisJobState(db),
-      maniaRating: {
+    calcBundle: {
+      appVersion: APP_VERSION,
+      appliedVersion: calcBundleAppliedVersion,
+      pull: getCalcBundlePullState(),
+    },
+    jobsOnboardingCompleted: onboardingRow?.value === "1",
+    maniaRating: {
       versions: listVersions().map((v) => ({
         id: v.id,
         label: v.label,
@@ -222,6 +250,94 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
     startPatternAnalysisRecompute(db),
   )
   .post("/pattern-analysis/stop", ({ db }) => stopPatternAnalysisBackfill(db))
+  .get("/calc-bundle/status", async ({ db }) => ({
+    appVersion: APP_VERSION,
+    appliedVersion: await getCalcBundleAppliedVersion(db),
+    pull: getCalcBundlePullState(),
+    exportCount: (await exportCalcBundleEntries(db)).length,
+  }))
+  .post("/calc-bundle/pull", async ({ db }) => pullAndApplyCalcBundle(db))
+  .post(
+    "/calc-bundle/export-upload",
+    async ({ db, body, set }) => {
+      try {
+        const result = await uploadCalcBundleToHub({
+          db,
+          hubUrl: body.hubUrl?.trim() || resolveHubBaseUrl(),
+          token: body.token,
+          roxysuVersion: body.roxysuVersion.trim(),
+          label: body.label,
+        });
+        return { ok: true as const, ...result };
+      } catch (err) {
+        set.status = 502;
+        return {
+          ok: false as const,
+          message: err instanceof Error ? err.message : String(err),
+        };
+      }
+    },
+    {
+      body: t.Object({
+        token: t.String({ minLength: 1 }),
+        roxysuVersion: t.String({ minLength: 1, maxLength: 32 }),
+        label: t.Optional(t.String({ maxLength: 100 })),
+        hubUrl: t.Optional(t.String()),
+      }),
+    },
+  )
+  .post("/jobs/start-recommended", ({ db }) => {
+    const sunny = startSunnyDanBackfill(db);
+    const daniel = startDanielDanBackfill(db);
+    const rework = startReworkDanBackfill(db);
+    return { sunny, daniel, rework };
+  })
+  .post("/jobs/stop-all", ({ db }) => {
+    const sunny = stopSunnyDanBackfill(db);
+    const daniel = stopDanielDanBackfill(db);
+    const rework = stopReworkDanBackfill(db);
+    const pattern = stopPatternAnalysisBackfill(db);
+    return { sunny, daniel, rework, pattern };
+  })
+  .get("/jobs/onboarding", async ({ db }) => {
+    const row = await db
+      .select({ value: settings.value })
+      .from(settings)
+      .where(eq(settings.key, JOBS_ONBOARDING_COMPLETED_KEY))
+      .get();
+    return { completed: row?.value === "1" };
+  })
+  .post(
+    "/jobs/onboarding",
+    async ({ db, body }) => {
+      if (body.completed) {
+        await db
+          .insert(settings)
+          .values({ key: JOBS_ONBOARDING_COMPLETED_KEY, value: "1" })
+          .onConflictDoUpdate({
+            target: settings.key,
+            set: { value: "1" },
+          });
+      }
+      if (body.startJobs) {
+        await pullAndApplyCalcBundle(db);
+        const sunny = startSunnyDanBackfill(db);
+        const daniel = startDanielDanBackfill(db);
+        const rework = startReworkDanBackfill(db);
+        return {
+          completed: true,
+          started: { sunny, daniel, rework },
+        };
+      }
+      return { completed: body.completed === true, started: null };
+    },
+    {
+      body: t.Object({
+        completed: t.Boolean(),
+        startJobs: t.Optional(t.Boolean()),
+      }),
+    },
+  )
   .patch(
     "/",
     async ({ db, body, set }) => {

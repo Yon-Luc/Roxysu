@@ -7,6 +7,7 @@ import { createApp } from "./createApp";
 import { startPollLoop } from "./sse";
 import { startAnalyticsPipeline } from "./analytics/pipeline";
 import { startDanVariantJob } from "./map-analysis/danVariantJob";
+import { maybePullCalcBundleOnBoot } from "./map-analysis/calcBundle";
 import { startCollectionMatchCache } from "./shared/collectionMatchCache";
 import { guardUpgradeSocketErrors } from "./shared/upgradeSocketGuard";
 import { clearStuckMirrorBatchLocks } from "./mirrors";
@@ -50,6 +51,7 @@ async function main() {
   const stopAnalytics = startAnalyticsPipeline(db);
   const stopDanVariants = startDanVariantJob(db);
   startCollectionMatchCache(db);
+  void maybePullCalcBundleOnBoot(db);
 
   console.log(`🦊 Roxysu (node) running at http://${hostname}:${port}`);
   console.log(`[static] ${staticAssetsDir}`);

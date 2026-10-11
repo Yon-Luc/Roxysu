@@ -157,6 +157,7 @@ function finish(status: "completed" | "idle" | "error", error?: string): void {
   job.error = error ?? null;
   job.db = null;
   publish({ type: "dashboard.updated" });
+  publish({ type: "jobs.updated" });
 }
 
 /**
@@ -169,6 +170,7 @@ function memoryGuard(): boolean {
   if (job.status !== "paused") {
     job.status = "paused";
     publish({ type: "dashboard.updated" });
+    publish({ type: "jobs.updated" });
   }
   scheduleNext(PAUSE_POLL_MS);
   return true;
@@ -246,12 +248,14 @@ export function startDanielDanBackfill(db: Db): DanielDanJobState {
   }
 
   scheduleNext();
+  publish({ type: "jobs.updated" });
   return getDanielDanJobState(db);
 }
 
 export function stopDanielDanBackfill(db: Db): DanielDanJobState {
   if (job.status === "running") {
     job.status = "stopping";
+    publish({ type: "jobs.updated" });
   }
   return getDanielDanJobState(db);
 }

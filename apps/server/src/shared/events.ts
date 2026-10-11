@@ -10,6 +10,8 @@ export type AppEvent =
   | { type: "mastery.updated" }
   | { type: "collection.updated"; collectionId?: number }
   | { type: "dashboard.updated" }
+  /** Background dan/pattern jobs or Hub calc-bundle pull changed state. */
+  | { type: "jobs.updated" }
   | {
       type: "tosu.updated";
       reason: "play" | "full";

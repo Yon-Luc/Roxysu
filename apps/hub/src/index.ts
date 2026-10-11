@@ -10,6 +10,7 @@ import { authRoutes } from "./routes/auth";
 import { collectionRoutes } from "./routes/collections";
 import { searchRoutes } from "./routes/search";
 import { adminRoutes } from "./routes/admin";
+import { calcBundleRoutes } from "./routes/calcBundles";
 
 // Fail closed on missing/weak JWT secret before binding the port.
 resolveJwtSecret();
@@ -43,6 +44,7 @@ const app = new Elysia()
   .use(authRoutes)
   .use(collectionRoutes)
   .use(searchRoutes)
+  .use(calcBundleRoutes)
   .use(adminRoutes)
   .onError(({ code, error, set }) => {
     if (code === "VALIDATION") {

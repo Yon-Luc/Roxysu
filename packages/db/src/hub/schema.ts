@@ -328,3 +328,79 @@ export const searchIndexDiffs = sqliteTable(
 
 export type SearchIndexDiff = typeof searchIndexDiffs.$inferSelect;
 export type NewSearchIndexDiff = typeof searchIndexDiffs.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// Hub calc bundles (admin-published Sunny/Daniel/Rework dan + dominant skill)
+// ---------------------------------------------------------------------------
+
+/** Algorithms included in a Hub calc bundle (one bundle per Roxysu version). */
+export const CALC_BUNDLE_ALGORITHMS = [
+  "sunny",
+  "daniel",
+  "mania-difficulty",
+  "mania-skill-v1",
+] as const;
+
+export type CalcBundleAlgorithm = (typeof CALC_BUNDLE_ALGORITHMS)[number];
+
+export const calcBundles = sqliteTable("calc_bundles", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  /** Roxysu product version this bundle targets, e.g. "0.1.17". */
+  roxysuVersion: text("roxysu_version").notNull().unique(),
+  label: text("label").notNull().default(""),
+  entryCount: integer("entry_count").notNull().default(0),
+  /** JSON string array of algorithm ids included in this bundle. */
+  algorithms: text("algorithms").notNull().default("[]"),
+  uploadedAt: integer("uploaded_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+  uploadedByUserId: integer("uploaded_by_user_id").references(() => hubUsers.id, {
+    onDelete: "set null",
+  }),
+});
+
+export type CalcBundle = typeof calcBundles.$inferSelect;
+export type NewCalcBundle = typeof calcBundles.$inferInsert;
+
+/**
+ * One precomputed dan or pattern row, keyed by beatmap content hash.
+ * Dan algorithms fill sunny_* / ln / est_diff; pattern fills skill columns.
+ */
+export const calcBundleEntries = sqliteTable(
+  "calc_bundle_entries",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    bundleId: integer("bundle_id")
+      .notNull()
+      .references(() => calcBundles.id, { onDelete: "cascade" }),
+    beatmapHash: text("beatmap_hash").notNull(),
+    onlineBeatmapId: integer("online_beatmap_id"),
+    algorithm: text("algorithm").notNull(),
+    sunnyStar: real("sunny_star"),
+    lnRatio: real("ln_ratio"),
+    columnCount: integer("column_count"),
+    estDiff: text("est_diff"),
+    dominantPattern: text("dominant_pattern"),
+    secondaryPattern: text("secondary_pattern"),
+    confidence: real("confidence"),
+    jackDensity: real("jack_density"),
+    chordDensity: real("chord_density"),
+    streamDensity: real("stream_density"),
+    bracketDensity: real("bracket_density"),
+    chordjackScore: real("chordjack_score"),
+    jumpstreamScore: real("jumpstream_score"),
+    chordstreamScore: real("chordstream_score"),
+  },
+  (t) => ({
+    bundleHashAlgoUnique: uniqueIndex(
+      "calc_bundle_entries_bundle_hash_algo_unique",
+    ).on(t.bundleId, t.beatmapHash, t.algorithm),
+    bundleAlgoIdx: index("calc_bundle_entries_bundle_algo_idx").on(
+      t.bundleId,
+      t.algorithm,
+    ),
+  }),
+);
+
+export type CalcBundleEntry = typeof calcBundleEntries.$inferSelect;
+export type NewCalcBundleEntry = typeof calcBundleEntries.$inferInsert;

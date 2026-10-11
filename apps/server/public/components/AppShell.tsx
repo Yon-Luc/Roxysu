@@ -31,6 +31,8 @@ import { SchemaOutdatedDialog } from "./SchemaOutdatedDialog";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { DownloadBatchChrome } from "../features/download/DownloadBatchChrome";
 import { useMirrorBatchJob } from "../features/download/useMirrorBatchJob";
+import { JobsBatchChrome } from "../features/settings/JobsBatchChrome";
+import { JobsOnboardingModal } from "../features/settings/JobsOnboardingModal";
 import { toggleTheme, useResolvedTheme } from "../lib/theme";
 import { ToastHost } from "../lib/toasts";
 import { PageHeaderSkeleton } from "./LoadingSkeleton";
@@ -162,6 +164,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         onOpenChange={setCommandPaletteOpen}
       />
       <DownloadBatchChrome />
+      <JobsBatchChrome />
+      <JobsOnboardingModal />
       <ToastHost offsetBottomClass={toastOffset} />
       {/* Desktop sidebar */}
       {!focusLayout ? (

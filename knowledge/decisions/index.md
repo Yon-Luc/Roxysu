@@ -10,5 +10,6 @@ Constraints agents must not accidentally violate. Terms: [vocabulary.md](../voca
 | Keep analytics in server | [keep-analytics-in-server.md](keep-analytics-in-server.md) |
 | Hub is a separate process | [hub-separate-process.md](hub-separate-process.md) |
 | Hub search base index + killable edge cache | [hub-search-base-index.md](hub-search-base-index.md) |
+| Hub calc bundle per Roxysu version | [hub-calc-bundle-version.md](hub-calc-bundle-version.md) |
 | Release tags include the linux-resources lock | [release-tag-includes-linux-resources.md](release-tag-includes-linux-resources.md) |
 | Streamed extraction + reconcile-only catch-up | [stream-extraction-stall-breaker.md](stream-extraction-stall-breaker.md) |

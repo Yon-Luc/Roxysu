@@ -4,6 +4,7 @@ import { db } from "./db";
 import { startPollLoop } from "./sse";
 import { startAnalyticsPipeline } from "./analytics/pipeline";
 import { startDanVariantJob } from "./map-analysis/danVariantJob";
+import { maybePullCalcBundleOnBoot } from "./map-analysis/calcBundle";
 import { startCollectionMatchCache } from "./shared/collectionMatchCache";
 import { ensureTosuStarted, stopTosuAdapter } from "./tosu";
 import { clearStuckMirrorBatchLocks } from "./mirrors";
@@ -28,6 +29,7 @@ const stopPoll = startPollLoop(db);
 const stopAnalytics = startAnalyticsPipeline(db);
 const stopDanVariants = startDanVariantJob(db);
 startCollectionMatchCache(db);
+void maybePullCalcBundleOnBoot(db);
 
 console.log(
   `🦊 Roxysu running at http://${app.server?.hostname}:${app.server?.port}`,

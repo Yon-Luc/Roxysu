@@ -100,3 +100,15 @@ export const RECOMMEND_FLN_RATIO_THRESHOLD_KEY = "recommend.fln_ratio_threshold"
  */
 export const RECOMMEND_FOCUS_SETTINGS_KEY = "recommend.focus_settings";
 
+/**
+ * Last Roxysu product version for which a Hub calc bundle pull was attempted
+ * (success or 404). Prevents re-hitting Hub every boot after a version bump.
+ */
+export const JOBS_CALC_BUNDLE_APPLIED_VERSION_KEY =
+  "jobs.calc_bundle_applied_version";
+
+/**
+ * "1" once the first-sync Jobs onboarding modal was accepted or dismissed.
+ */
+export const JOBS_ONBOARDING_COMPLETED_KEY = "jobs.onboarding_completed";
+

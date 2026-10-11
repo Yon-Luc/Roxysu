@@ -120,6 +120,15 @@ export function connectLiveUpdates(queryClient: QueryClient): () => void {
     inv(["system", "status"]);
   };
 
+  const onJobsUpdated = () => {
+    inv(["settings", "sunny-dan"]);
+    inv(["settings", "daniel-dan"]);
+    inv(["settings", "rework-dan"]);
+    inv(["settings", "pattern-analysis"]);
+    inv(["settings"]);
+    inv(["calc-bundle-status"]);
+  };
+
   /** sync.finished: full resync done — refresh everything + preview/replay hashes. */
   const onSyncFinished = () => {
     inv(["dashboard"]);
@@ -193,6 +202,7 @@ export function connectLiveUpdates(queryClient: QueryClient): () => void {
     connected: onConnected,
     "sync.schema_outdated": onSchemaOutdated,
     "sync.finished": onSyncFinished,
+    "jobs.updated": onJobsUpdated,
     "tosu.updated": onTosu,
   };
 

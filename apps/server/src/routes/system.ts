@@ -14,6 +14,7 @@ import {
   markHubOAuthHandoffReady,
   peekHubOAuthHandoffReady,
 } from "../hubOAuthPending";
+import { APP_VERSION } from "../appVersion";
 import { resolveHubBaseUrl } from "../hubUrl";
 import { toIso } from "../shared/serialize";
 
@@ -191,6 +192,8 @@ export const systemRoutes = new Elysia({ prefix: "/system" })
     return {
       beatmapCount: beatmapCount?.n ?? 0,
       scoreCount: scoreCount?.n ?? 0,
+      /** Roxysu product version (Hub calc bundles key on this). */
+      appVersion: APP_VERSION,
       /** Public hub base URL for collection sharing / search cache. */
       hubUrl: resolveHubBaseUrl(),
       /** True only when pause-when-unfocused is enabled and the web UI reported unfocused. */

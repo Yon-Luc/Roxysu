@@ -10,7 +10,9 @@ touches:
   - apps/hub/src/services/collectionWrite.ts
   - apps/hub/src/routes/collections.ts
   - apps/hub/src/routes/search.ts
+  - apps/hub/src/routes/calcBundles.ts
   - apps/hub/src/services/cache.ts
+  - apps/hub/src/services/calcBundles.ts
   - apps/hub/src/services/searchIndex.ts
   - apps/hub/src/services/hinamizawa.ts
   - apps/hub/src/services/hubSearchQuery.ts
@@ -18,13 +20,16 @@ touches:
   - apps/server/public/lib/hub.ts
   - apps/server/src/hubUrl.ts
   - apps/server/src/mirrors/hubSearch.ts
+  - apps/server/src/map-analysis/calcBundle.ts
   - apps/hub/src/db.ts
   - apps/hub/drizzle/0003_collection_indexes.sql
+  - apps/hub/drizzle/0006_calc_bundles.sql
   - packages/hub-client
   - packages/db/src/hub/schema.ts
   - apps/hub/Dockerfile
   - apps/hub/docker-compose.yml
   - knowledge/decisions/hub-search-base-index.md
+  - knowledge/decisions/hub-calc-bundle-version.md
 ---
 
 # Hub
@@ -55,6 +60,10 @@ Networked collaboration / discovery — not required for offline practice analyt
    **Enforced by:** hub admin checks — status: verified
    **Unauthorized result:** forbidden
 
+4b. Hub calc bundle admin upload/list/delete require admin role. Public `GET /calc-bundles/:version` is unauthenticated but killable.
+   **Enforced by:** `apps/hub/src/routes/admin.ts` + `requireAdmin`; `apps/hub/src/services/hubEnv.ts:isHubCalcBundlesEnabled()` — status: verified
+   **Unauthorized result:** 403 on admin routes; 503 when kill switch off
+
 5. Login may promote `ADMIN_OSU_ID` to admin but never demotes a stored admin.
    **Enforced by:** `apps/hub/src/services/hubRole.ts:resolveHubLoginRole()` — status: verified
    **Unauthorized result:** N/A (role is not taken from the JWT claim)
@@ -78,6 +87,10 @@ Networked collaboration / discovery — not required for offline practice analyt
 11. Kill switches (env, read per request): `HUB_SEARCH_INDEX=0` forces miss; `HUB_SEARCH_HTTP_CACHE=0` forces `Cache-Control`/`CDN-Cache-Control: no-store` (stops new Cloudflare edge entries; does not flush existing HITs — bypass the CF Cache Rule for that).
     **Enforced by:** `apps/hub/src/services/hubEnv.ts` + `apps/hub/src/routes/search.ts` — status: verified
 
+12. Hub calc bundles are keyed by Roxysu product version. Clients gap-fill the local mirror by beatmap hash and never overwrite successful local computes.
+    **Enforced by:** `apps/server/src/map-analysis/calcBundle.ts:applyCalcBundle()` — status: verified
+    **See:** [decisions/hub-calc-bundle-version.md](../../decisions/hub-calc-bundle-version.md)
+
 ## Important symbols
 
 - `apps/hub/src/*`
@@ -87,6 +100,9 @@ Networked collaboration / discovery — not required for offline practice analyt
 - `apps/hub/src/services/hinamizawa.ts:fetchAllBeatmapsetStubs()` — cache refresh crawls Hinamizawa search pages into enriched stubs; optional `keymode` keeps sets using embedded `beatmaps[].cs`. Do not N+1 `/s/{id}` for key filter
 - `apps/hub/src/services/hubEnv.ts:isHubSearchIndexEnabled()` / `isHubSearchHttpCacheEnabled()` — prod kill switches
 - `apps/server/public/features/hub/HubAdminCachePage.tsx` — admin prime UI: base fields only (mode, status, keys, sort, frequency); secondary filters are runtime on Download Maps
+- `apps/server/public/features/hub/HubAdminCalcBundlesPage.tsx` — admin Hub calc bundle upload/list/delete
+- `apps/hub/src/services/calcBundles.ts` / `routes/calcBundles.ts` — version-keyed calc bundle store + public GET
+- `apps/server/src/map-analysis/calcBundle.ts` — export, pull, gap-fill apply
 - `apps/server/src/hubUrl.ts:resolveHubBaseUrl()` — shared Hub URL for Community, OAuth redeem, and Download Maps (`HUB_URL`; localhost in `bun run dev`, `https://roxysu-api.yonx.app` when `ROXYSU_DESKTOP=1`)
 - `apps/server/public/lib/hub.ts` — runtime Community client (clears JWT on Hub 401; delete + export). `packages/hub-client` is the Node Eden client and is not used in the browser
 - `apps/server/src/mirrors/hubSearch.ts:mirrorParamsToHubQuery()` / `tryFetchAllHubCachedIds()` — maps Download params to Hub GET `/search` (page) or `/search/all` (count/download-all). Circuit breaker skips Hub for 30s after timeout/5xx.
@@ -155,6 +171,7 @@ update tag validation — status: verified
 
 - Hub UI pages under `apps/server/public/features/hub`
 - `features/download-mirrors/` — Download Maps search / count / download-all prefer primed Hub search index
+- `features/sunny-dan-recommendations/` — Hub calc bundle pull gap-fills dan/pattern rows before local backfill
 
 ## Failure behavior
 

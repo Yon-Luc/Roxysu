@@ -21,7 +21,10 @@ Populate mania difficulty estimates so 4K/7K recommendations and `dan:`/`sunny:`
 ## Flow
 
 ```
+(optional) Hub calc bundle pull gap-fills matching hashes
+    ↓
 Settings POST /api/settings/sunny-dan/start
+  (or Jobs onboarding /jobs/start-recommended)
     ↓
 job reads .osu from lazer files
     ↓
@@ -31,6 +34,8 @@ persist Sunny dan ratings store (beatmap_dan_ratings)
     ↓
 query language fields + GET /api/practice/recommend + Session Suggest UI
 ```
+
+Also see [hub-calc-bundle-pull.md](hub-calc-bundle-pull.md).
 
 ## Flow: rework dan backfill (mania difficulty port)
 

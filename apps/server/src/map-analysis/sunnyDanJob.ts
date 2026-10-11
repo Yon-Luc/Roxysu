@@ -163,6 +163,7 @@ function finish(status: "completed" | "idle" | "error", error?: string): void {
   job.error = error ?? null;
   job.db = null;
   publish({ type: "dashboard.updated" });
+  publish({ type: "jobs.updated" });
 }
 
 /**
@@ -175,6 +176,7 @@ function memoryGuard(): boolean {
   if (job.status !== "paused") {
     job.status = "paused";
     publish({ type: "dashboard.updated" });
+    publish({ type: "jobs.updated" });
   }
   scheduleNext(PAUSE_POLL_MS);
   return true;
@@ -258,6 +260,7 @@ export function startSunnyDanBackfill(db: Db): SunnyDanJobState {
   }
 
   scheduleNext();
+  publish({ type: "jobs.updated" });
   return getSunnyDanJobState(db);
 }
 
@@ -265,6 +268,7 @@ export function startSunnyDanBackfill(db: Db): SunnyDanJobState {
 export function stopSunnyDanBackfill(db: Db): SunnyDanJobState {
   if (job.status === "running") {
     job.status = "stopping";
+    publish({ type: "jobs.updated" });
   }
   return getSunnyDanJobState(db);
 }

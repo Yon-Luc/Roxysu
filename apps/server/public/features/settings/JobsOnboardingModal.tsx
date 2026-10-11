@@ -35,8 +35,7 @@ export function JobsOnboardingModal() {
     const beatmaps = statusQuery.data?.beatmapCount ?? 0;
     const lastImport = statusQuery.data?.lastImport;
     const syncDone =
-      lastImport?.status === "completed" ||
-      lastImport?.status === "partial" ||
+      lastImport?.status === "success" ||
       (lastImport != null && (lastImport.beatmapsUpserted ?? 0) > 0);
     if (!onboardingQuery.isLoading && beatmaps > 0 && syncDone) {
       setOpen(true);

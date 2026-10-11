@@ -8,6 +8,7 @@ import {
   listDownloadProvidersInOrder,
   MirrorArchiveUnavailableError,
 } from "./downloadArchive";
+import type { BeatmapMirrorProviderId } from "./providers";
 
 const originalFetch = globalThis.fetch;
 
@@ -26,7 +27,8 @@ describe("listDownloadProvidersInOrder", () => {
   test("puts the requested provider first, then the others", () => {
     const order = listDownloadProvidersInOrder("hinai").map((p) => p.id);
     expect(order[0]).toBe("hinai");
-    expect(order.slice(1).sort()).toEqual(["nerinyan", "osu.direct"].sort());
+    const rest: BeatmapMirrorProviderId[] = ["nerinyan", "osu.direct"];
+    expect(order.slice(1).sort()).toEqual(rest.sort());
   });
 });
 
@@ -56,7 +58,7 @@ describe("downloadBeatmapsetArchiveToPath", () => {
     try {
       const dest = path.join(dir, "99.osz");
       globalThis.fetch = (async () =>
-        new Response("nope", { status: 503 })) as typeof fetch;
+        new Response("nope", { status: 503 })) as unknown as typeof fetch;
 
       let caught: unknown;
       try {

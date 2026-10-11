@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createPortal } from "react-dom";
 import {
   fetchDanielDanJob,
@@ -79,39 +79,31 @@ export function JobsBatchChrome() {
   const onSettings = pathname === "/settings";
   const queryClient = useQueryClient();
 
-  const results = useQueries({
-    queries: [
-      {
-        queryKey: ["settings", "sunny-dan"],
-        queryFn: fetchSunnyDanJob,
-        refetchInterval: (q) =>
-          isBusy(q.state.data?.status) ? 1000 : false,
-      },
-      {
-        queryKey: ["settings", "daniel-dan"],
-        queryFn: fetchDanielDanJob,
-        refetchInterval: (q) =>
-          isBusy(q.state.data?.status) ? 1000 : false,
-      },
-      {
-        queryKey: ["settings", "rework-dan"],
-        queryFn: fetchReworkDanJob,
-        refetchInterval: (q) =>
-          isBusy(q.state.data?.status) ? 1000 : false,
-      },
-      {
-        queryKey: ["settings", "pattern-analysis"],
-        queryFn: fetchPatternAnalysisJob,
-        refetchInterval: (q) =>
-          isBusy(q.state.data?.status) ? 1000 : false,
-      },
-    ],
+  const sunnyQuery = useQuery({
+    queryKey: ["settings", "sunny-dan"],
+    queryFn: fetchSunnyDanJob,
+    refetchInterval: (q) => (isBusy(q.state.data?.status) ? 1000 : false),
+  });
+  const danielQuery = useQuery({
+    queryKey: ["settings", "daniel-dan"],
+    queryFn: fetchDanielDanJob,
+    refetchInterval: (q) => (isBusy(q.state.data?.status) ? 1000 : false),
+  });
+  const reworkQuery = useQuery({
+    queryKey: ["settings", "rework-dan"],
+    queryFn: fetchReworkDanJob,
+    refetchInterval: (q) => (isBusy(q.state.data?.status) ? 1000 : false),
+  });
+  const patternQuery = useQuery({
+    queryKey: ["settings", "pattern-analysis"],
+    queryFn: fetchPatternAnalysisJob,
+    refetchInterval: (q) => (isBusy(q.state.data?.status) ? 1000 : false),
   });
 
-  const sunny = results[0]?.data;
-  const daniel = results[1]?.data;
-  const rework = results[2]?.data;
-  const pattern = results[3]?.data;
+  const sunny = sunnyQuery.data;
+  const daniel = danielQuery.data;
+  const rework = reworkQuery.data;
+  const pattern = patternQuery.data;
   const agg = aggregate(sunny, daniel, rework, pattern);
 
   useJobsCompletionToasts(sunny, daniel, rework, pattern, agg.busy);

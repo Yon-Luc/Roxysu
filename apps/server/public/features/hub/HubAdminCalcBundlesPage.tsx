@@ -103,7 +103,7 @@ export function HubAdminCalcBundlesPage() {
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="space-y-1">
-          <GoBackLink to="/hub" />
+          <GoBackLink to="/hub">Community</GoBackLink>
           <PageTitle>Hub calc bundles</PageTitle>
           <p className="text-sm text-muted">
             Publish Sunny / Daniel / Rework dan and dominant-skill rows from

@@ -178,11 +178,15 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
     ),
   ];
 
+  // Closures drop the narrowing from the early returns above.
+  const activeSession = session;
+  const detail = data;
+
   async function handleShareImage() {
     if (sharing) return;
     setSharing(true);
 
-    const safeName = String(session.name ?? "session")
+    const safeName = String(activeSession.name ?? "session")
       .replace(/[^\w.-]+/g, "-")
       .replace(/^-+|-+$/g, "")
       .slice(0, 48);
@@ -193,10 +197,10 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
       // awaits — required for Chromium user-activation.
       const result = await shareSessionImage(async () => {
         let shareScores = scores;
-        let sharePbCount = data.pbCount ?? 0;
+        let sharePbCount = detail.pbCount ?? 0;
         const needsFullWindow =
-          ("hasMore" in data && data.hasMore) ||
-          scores.length < session.scoreCount;
+          ("hasMore" in detail && detail.hasMore) ||
+          scores.length < activeSession.scoreCount;
         if (needsFullWindow) {
           const full = await fetchSession(sessionId, { limit: 500 });
           if (
@@ -215,9 +219,9 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
 
         return (
           <SessionShareCard
-            startedAt={session.startedAt}
-            endedAt={session.endedAt}
-            scoreCount={session.scoreCount}
+            startedAt={activeSession.startedAt}
+            endedAt={activeSession.endedAt}
+            scoreCount={activeSession.scoreCount}
             pbCount={sharePbCount}
             highlights={highlights.map((score) => {
               const judgments =

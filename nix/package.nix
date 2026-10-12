@@ -22,7 +22,7 @@
   overlayBin ? null,
 }: let
   pname = "roxysu";
-  version = "0.1.17";
+  version = "0.1.18";
   nodejs = nodejs_24;
 
   # Keep in sync with realm version in bun.lock / apps/realm-reader.

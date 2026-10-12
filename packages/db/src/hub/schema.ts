@@ -404,3 +404,67 @@ export const calcBundleEntries = sqliteTable(
 
 export type CalcBundleEntry = typeof calcBundleEntries.$inferSelect;
 export type NewCalcBundleEntry = typeof calcBundleEntries.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// Online score pull — ranked bests fetched from osu!api, plus usage ledger
+// ---------------------------------------------------------------------------
+
+/** One completed or in-progress ranked-best scan for a player and ruleset. */
+export const osuScorePulls = sqliteTable(
+  "osu_score_pulls",
+  {
+    osuUserId: integer("osu_user_id").notNull(),
+    ruleset: text("ruleset").notNull(),
+    topScoreId: integer("top_score_id"),
+    scoreCount: integer("score_count").notNull().default(0),
+    completeAt: integer("complete_at", { mode: "timestamp" }),
+    status: text("status", {
+      enum: ["idle", "running", "done", "error"],
+    })
+      .notNull()
+      .default("idle"),
+    pagesFetched: integer("pages_fetched").notNull().default(0),
+    message: text("message"),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.osuUserId, t.ruleset] }),
+  }),
+);
+
+/** One ranked personal best, keyed by osu score id — not by page offset. */
+export const osuBestScores = sqliteTable(
+  "osu_best_scores",
+  {
+    osuUserId: integer("osu_user_id").notNull(),
+    ruleset: text("ruleset").notNull(),
+    scoreId: integer("score_id").notNull(),
+    payloadJson: text("payload_json").notNull(),
+    fetchedAt: integer("fetched_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.osuUserId, t.ruleset, t.scoreId] }),
+  }),
+);
+
+/** One row per UTC minute of outbound osu!api calls. Cache hits are separate. */
+export const osuApiUsage = sqliteTable("osu_api_usage", {
+  minuteBucket: integer("minute_bucket").primaryKey(),
+  calls: integer("calls").notNull().default(0),
+  cacheHits: integer("cache_hits").notNull().default(0),
+  ok: integer("ok").notNull().default(0),
+  notFound: integer("not_found").notNull().default(0),
+  limited: integer("limited").notNull().default(0),
+  other: integer("other").notNull().default(0),
+  lowestRemaining: integer("lowest_remaining"),
+});
+
+/** Singleton park window after an osu! 429. Row id is always 1. */
+export const osuApiPark = sqliteTable("osu_api_park", {
+  id: integer("id").primaryKey(),
+  parkedUntil: integer("parked_until"),
+});

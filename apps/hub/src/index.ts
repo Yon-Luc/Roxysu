@@ -11,6 +11,7 @@ import { collectionRoutes } from "./routes/collections";
 import { searchRoutes } from "./routes/search";
 import { adminRoutes } from "./routes/admin";
 import { calcBundleRoutes } from "./routes/calcBundles";
+import { osuBudgetAdminRoutes, osuScoreRoutes } from "./routes/osuScores";
 
 // Fail closed on missing/weak JWT secret before binding the port.
 resolveJwtSecret();
@@ -45,6 +46,8 @@ const app = new Elysia()
   .use(collectionRoutes)
   .use(searchRoutes)
   .use(calcBundleRoutes)
+  .use(osuScoreRoutes)
+  .use(osuBudgetAdminRoutes)
   .use(adminRoutes)
   .onError(({ code, error, set }) => {
     if (code === "VALIDATION") {

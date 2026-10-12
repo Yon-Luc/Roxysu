@@ -109,6 +109,13 @@ export const PAGE_SECTIONS: PageSectionDef[] = [
     ],
   },
   {
+    id: "online-score-pull",
+    to: "/settings",
+    pageLabel: "Settings",
+    label: "Online score pull",
+    keywords: ["settings", "osu", "scores", "ranked", "lazer", "import"],
+  },
+  {
     id: "live-sync",
     to: "/settings",
     pageLabel: "Settings",

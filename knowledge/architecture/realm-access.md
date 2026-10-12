@@ -17,7 +17,7 @@ Define how Roxysu reads and (rarely) writes osu!lazer's Realm file.
 
 ## Business meaning
 
-`client.realm` is osu!'s store — Roxysu treats it as read-only except for manual **collection write-back**. Schema stability is not guaranteed; extraction code must tolerate lazer changes.
+`client.realm` is osu!'s store — Roxysu treats it as read-only except for manual **collection write-back** and **online score pull**. Schema stability is not guaranteed; extraction code must tolerate lazer changes.
 
 ## Business rules
 

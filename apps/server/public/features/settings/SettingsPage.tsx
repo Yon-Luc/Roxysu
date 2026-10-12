@@ -16,6 +16,7 @@ import { MasteryFormulaSection } from "./sections/MasteryFormulaSection";
 import { ScoreUsernameSection } from "./sections/ScoreUsernameSection";
 import { GamemodeSection } from "./sections/GamemodeSection";
 import { LiveSyncSection } from "./sections/LiveSyncSection";
+import { OnlineScorePullSection } from "./sections/OnlineScorePullSection";
 import { AppearanceSection } from "./sections/AppearanceSection";
 import { DifficultyDisplaySection } from "./sections/DifficultyDisplaySection";
 import { PreviewSkinSection } from "./sections/PreviewSkinSection";
@@ -54,6 +55,7 @@ function SettingsTabPanels({
         <>
           <OsuDataFolderSection data={data} />
           <LiveSyncSection data={data} />
+          <OnlineScorePullSection />
           <OverlayHostSection data={data} />
           <TosuLiveMapSection data={data} />
         </>

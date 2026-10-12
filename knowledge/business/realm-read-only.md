@@ -15,6 +15,6 @@ Protect osu!lazer user beatmaps and scores.
 ## Business rules
 
 1. Realm is the immutable source of truth for scores and beatmaps; the local mirror holds extracted copies plus derived/user rows.
-2. The only intentional Realm write is manual **collection write-back** to `!Roxysu `-prefixed collections.
+2. Intentional Realm writes are manual only: **collection write-back** to `!Roxysu `-prefixed collections, and **online score pull** of ranked bests into `Score` rows. Both require lazer closed, a backup, and a schema check.
 
 **Status:** verified (README + architecture + collection write-back code)

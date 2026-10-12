@@ -60,6 +60,7 @@ Continuously extract Realm beatmaps and scores into the local mirror; surface Sy
 
 - Nearly all practice features (scores/beatmaps source of truth in local mirror)
 - `features/smart-collections/` — pause during collection write-back
+- `features/online-score-pull/` — pause during the Realm score write
 
 ## Related knowledge
 

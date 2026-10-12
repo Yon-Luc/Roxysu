@@ -18,6 +18,7 @@ import { ratingLabRoutes } from "./ratingLab";
 import { mirrorRoutes } from "./mirrors";
 import { marathonRoutes } from "./marathon";
 import { skinRoutes } from "./skins";
+import { onlineScoreRoutes } from "./onlineScores";
 
 const productApi = () =>
   new Elysia({ prefix: "/api" })
@@ -35,6 +36,7 @@ const productApi = () =>
     .use(searchRoutes)
     .use(collectionRoutes)
     .use(settingsRoutes)
+    .use(onlineScoreRoutes)
     .use(tosuRoutes)
     .use(marathonRoutes)
     .use(skinRoutes);

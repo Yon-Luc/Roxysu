@@ -172,6 +172,7 @@ update tag validation — status: verified
 - Hub UI pages under `apps/server/public/features/hub`
 - `features/download-mirrors/` — Download Maps search / count / download-all prefer primed Hub search index
 - `features/sunny-dan-recommendations/` — Hub calc bundle pull gap-fills dan/pattern rows before local backfill
+- `features/online-score-pull/` — Hub proxies ranked best fetches and holds the osu! usage ledger
 
 ## Failure behavior
 

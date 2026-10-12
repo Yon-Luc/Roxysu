@@ -539,6 +539,24 @@ export const playSettings = sqliteTable("play_settings", {
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });
 
+/**
+ * Ranked bests chosen by the last online score pull preview.
+ * Written by the client app. The Realm write reads this list and does not rescan.
+ */
+export const onlineScoreCandidates = sqliteTable("online_score_candidates", {
+  scoreId: integer("score_id").primaryKey(),
+  ruleset: text("ruleset").notNull(),
+  osuUserId: integer("osu_user_id").notNull(),
+  beatmapOnlineId: integer("beatmap_online_id").notNull(),
+  versionMismatch: integer("version_mismatch", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  payloadJson: text("payload_json").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch() * 1000)`),
+});
+
 /** Local play results recorded by Roxysu Play (not lazer-imported scores). */
 export const playSessions = sqliteTable(
   "play_sessions",

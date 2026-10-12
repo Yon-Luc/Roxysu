@@ -28,6 +28,7 @@ export const DEFAULT_SETTINGS_TAB: SettingsTabId = "setup";
 export const SECTION_TO_TAB: Record<string, SettingsTabId> = {
   "osu-lazer-data-folder": "setup",
   "live-sync": "setup",
+  "online-score-pull": "setup",
   "in-game-overlay": "setup",
   "tosu-live-map": "setup",
   "mastery-formula": "practice",

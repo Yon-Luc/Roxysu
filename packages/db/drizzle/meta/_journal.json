@@ -176,6 +176,13 @@
       "when": 1787603600000,
       "tag": "0024_realm_skins",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1788103600000,
+      "tag": "0025_online_score_candidates",
+      "breakpoints": true
     }
   ]
 }

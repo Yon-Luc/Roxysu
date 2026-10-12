@@ -9,7 +9,7 @@ See also: forbidden terms in `.cursor/rules/knowledge-maintainer.mdc`.
 
 ### Realm
 
-osu!lazer's `client.realm` file. Roxysu reads beatmaps and scores from it; the only intentional write is **collection write-back** to `!Roxysu`-prefixed rows.
+osu!lazer's `client.realm` file. Roxysu reads beatmaps and scores from it. Intentional writes are **collection write-back** and **online score pull**.
 
 **Not:** "the database", "osu db", "lazer db"
 
@@ -79,9 +79,19 @@ Manual push of smart collections from the local mirror into Realm `BeatmapCollec
 
 One completed Realm extraction cycle recorded in the local mirror's `imports` table. Signals new or changed scores for the analytics pipeline.
 
-**Not:** "sync event", "data update"
+**Not:** "sync event", "data update", online score pull
 
 **See:** [flows/realm-extraction-to-ui.md](flows/realm-extraction-to-ui.md)
+
+---
+
+### Online score pull
+
+A manual fetch of one ruleset's ranked personal bests from osu!api, then an optional write of the missing ones into Realm so lazer lists them as local scores.
+
+**Not:** Import, Realm extraction, collection write-back
+
+**See:** [flows/online-score-pull.md](flows/online-score-pull.md)
 
 ---
 

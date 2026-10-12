@@ -192,7 +192,7 @@ function PullModal({
                 label={copy?.onlineScorePullCanAdd ?? "Can add"}
                 hint={
                   preview.currentVersion > 0
-                    ? `${preview.currentVersion} on the current map file`
+                    ? `${preview.currentVersion} ${copy?.onlineScorePullCurrentVersion ?? "set on an older version of the map"}`
                     : undefined
                 }
                 tone="accent"

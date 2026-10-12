@@ -79,6 +79,8 @@
     "noDerivedStats": "Aún no hay estadísticas derivadas — el pipeline de análisis las completará tras la sincronización."
   },
   "stats": {
+    "pageHint": "{{keyCount}}K · horas en UTC",
+    "skillRulesLabel": "Cómo se calcula la habilidad",
     "subtitle": "Evolución de habilidad, progresión y cómo juegas — solo {{keyCount}}K, horas en UTC. La habilidad usa nomod (Mirror OK; DT/HT/etc. excluidos) y tu visualización de rating de Ajustes (Sunny ★ o dan) de tus top {{topPlays}} maps valoradas por banda (mejor partida por map, se requieren las {{topPlays}})",
     "axisOnly": "Solo {{axis}}",
     "top10": "Top 10",

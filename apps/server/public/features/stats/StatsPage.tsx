@@ -151,21 +151,98 @@ export function StatsPage({
     [ppTrend, accTrend],
   );
 
+  const axisToggle = (
+    <ToggleGroup
+      value={skillAxis}
+      options={[
+        { id: "all", label: dict?.stats.axisAll ?? "All" },
+        { id: "rc", label: dict?.stats.axisRice ?? "Rice" },
+        { id: "ln", label: dict?.stats.axisLn ?? "LN" },
+        { id: "fln", label: dict?.stats.axisFln ?? "FLN" },
+      ]}
+      onChange={onSkillAxisChange}
+    />
+  );
+  function rangeToggle() {
+    return (
+      <ToggleGroup
+        value={String(range)}
+        options={[
+          { id: "30", label: "30d" },
+          { id: "90", label: "90d" },
+          { id: "180", label: "180d" },
+        ]}
+        onChange={(v) => onRangeChange(Number(v) as StatsRange)}
+      />
+    );
+  }
+  const granularityToggle = (
+    <ToggleGroup
+      value={granularity}
+      options={[
+        { id: "day", label: dict?.stats.day ?? "Day" },
+        { id: "week", label: dict?.stats.week ?? "Week" },
+      ]}
+      onChange={onGranularityChange}
+    />
+  );
+  const topPlaysControl = (
+    <div className="flex flex-wrap items-center gap-2">
+      <ToggleGroup
+        value={String(topPlaysTab)}
+        options={[
+          { id: "10", label: dict?.stats.top10 ?? "Top 10" },
+          { id: "20", label: dict?.stats.top20 ?? "Top 20" },
+          { id: "30", label: dict?.stats.top30 ?? "Top 30" },
+          { id: "50", label: dict?.stats.top50 ?? "Top 50" },
+          { id: "custom", label: dict?.stats.custom ?? "Custom" },
+        ]}
+        onChange={(v) => {
+          if (v === "custom") {
+            setTopPlaysTab("custom");
+            return;
+          }
+          const n = Number(v);
+          if (!Number.isFinite(n)) return;
+          setTopPlaysTab(n as TopPlaysTab);
+          onSkillTopPlaysChange(n);
+          setCustomTopPlays(v);
+        }}
+      />
+      {topPlaysTab === "custom" ? (
+        <form
+          className="flex items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const n = Number(customTopPlays);
+            if (Number.isFinite(n) && n >= 1 && n <= 500) {
+              onSkillTopPlaysChange(Math.round(n));
+            }
+          }}
+        >
+          <input
+            type="number"
+            min={1}
+            max={500}
+            value={customTopPlays}
+            onChange={(e) => setCustomTopPlays(e.target.value)}
+            className="rx-input w-20 tabular-nums"
+            aria-label={dict?.stats.topPlaysCountAria ?? "Top plays count"}
+          />
+          <button type="submit" className="rx-btn text-xs">
+            {dict?.stats.apply ?? "Apply"}
+          </button>
+        </form>
+      ) : null}
+    </div>
+  );
+
   if (isLoading) {
     return (
       <div className="space-y-10">
-        <div className="space-y-4">
-          <PageHeaderSkeleton
-            actions={
-              <>
-                <SkeletonBlock className="h-9 w-56 rounded-md" />
-                <SkeletonBlock className="h-9 w-28 rounded-md" />
-                <SkeletonBlock className="h-9 w-36 rounded-md" />
-              </>
-            }
-          />
-          <SkeletonBlock className="h-9 w-64 rounded-md" />
-        </div>
+        <PageHeaderSkeleton
+          actions={<SkeletonBlock className="h-9 w-28 rounded-md" />}
+        />
         <StatGridSkeleton />
         <section>
           <div className="mb-4 h-8 w-40 animate-pulse rounded-lg bg-white/6" />
@@ -241,106 +318,26 @@ export function StatsPage({
 
   return (
     <div className="space-y-10">
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <PageTitle>{dict?.nav.stats ?? "Stats"}</PageTitle>
-            <p className="rx-subtitle">
-              {t(dict?.stats.subtitle, { keyCount, topPlays: skillTopPlays })}
-              {axisFilterActive
-                ? ` · ${t(dict?.stats.axisOnly, {
-                    axis: skillAxisLabel(dict, skillAxis),
-                  })}`
-                : ""}
-              .
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-          <ToggleGroup
-            value={String(topPlaysTab)}
-            options={[
-              { id: "10", label: dict?.stats.top10 ?? "Top 10" },
-              { id: "20", label: dict?.stats.top20 ?? "Top 20" },
-              { id: "30", label: dict?.stats.top30 ?? "Top 30" },
-              { id: "50", label: dict?.stats.top50 ?? "Top 50" },
-              { id: "custom", label: dict?.stats.custom ?? "Custom" },
-            ]}
-            onChange={(v) => {
-              if (v === "custom") {
-                setTopPlaysTab("custom");
-                return;
-              }
-              const n = Number(v);
-              if (!Number.isFinite(n)) return;
-              setTopPlaysTab(n as TopPlaysTab);
-              onSkillTopPlaysChange(n);
-              setCustomTopPlays(v);
-            }}
-          />
-          {topPlaysTab === "custom" ? (
-            <form
-              className="flex items-center gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                const n = Number(customTopPlays);
-                if (Number.isFinite(n) && n >= 1 && n <= 500) {
-                  onSkillTopPlaysChange(Math.round(n));
-                }
-              }}
-            >
-              <input
-                type="number"
-                min={1}
-                max={500}
-                value={customTopPlays}
-                onChange={(e) => setCustomTopPlays(e.target.value)}
-                className="rx-input w-20 tabular-nums"
-                aria-label={dict?.stats.topPlaysCountAria ?? "Top plays count"}
-              />
-              <button type="submit" className="rx-btn text-xs">
-                {dict?.stats.apply ?? "Apply"}
-              </button>
-            </form>
-          ) : null}
-          <ToggleGroup
-            value={granularity}
-            options={[
-              { id: "day", label: dict?.stats.day ?? "Day" },
-              { id: "week", label: dict?.stats.week ?? "Week" },
-            ]}
-            onChange={onGranularityChange}
-          />
-          <ToggleGroup
-            value={String(range)}
-            options={[
-              { id: "30", label: "30d" },
-              { id: "90", label: "90d" },
-              { id: "180", label: "180d" },
-            ]}
-            onChange={(v) => onRangeChange(Number(v) as StatsRange)}
-          />
-          </div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <PageTitle>{dict?.nav.stats ?? "Stats"}</PageTitle>
+          <p className="rx-subtitle">
+            {t(dict?.stats.pageHint, { keyCount })}
+            {axisFilterActive
+              ? ` · ${t(dict?.stats.axisOnly, {
+                  axis: skillAxisLabel(dict, skillAxis),
+                })}`
+              : ""}
+          </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <ToggleGroup
-            value={String(keyCount)}
-            options={(data.availableKeyCounts ?? [4, 7]).map((k) => ({
-              id: String(k),
-              label: `${k}K`,
-            }))}
-            onChange={(v) => onKeyCountChange(Number(v))}
-          />
-          <ToggleGroup
-            value={skillAxis}
-            options={[
-              { id: "all", label: dict?.stats.axisAll ?? "All" },
-              { id: "rc", label: dict?.stats.axisRice ?? "Rice" },
-              { id: "ln", label: dict?.stats.axisLn ?? "LN" },
-              { id: "fln", label: dict?.stats.axisFln ?? "FLN" },
-            ]}
-            onChange={onSkillAxisChange}
-          />
-        </div>
+        <ToggleGroup
+          value={String(keyCount)}
+          options={(data.availableKeyCounts ?? [4, 7]).map((k) => ({
+            id: String(k),
+            label: `${k}K`,
+          }))}
+          onChange={(v) => onKeyCountChange(Number(v))}
+        />
       </div>
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -367,9 +364,25 @@ export function StatsPage({
       </section>
 
       <section>
-        <h2 className="mb-4 font-display text-2xl font-bold tracking-tight text-ink">
-          {dict?.stats.currentSkill ?? "Current skill"}
-        </h2>
+        <div className="mb-4 flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="font-display text-lg font-bold tracking-tight text-ink">
+              {dict?.stats.currentSkill ?? "Current skill"}
+            </h2>
+            <div className="flex flex-wrap items-center gap-2">
+              {axisToggle}
+              {topPlaysControl}
+            </div>
+          </div>
+          <details className="text-xs text-muted">
+            <summary className="cursor-pointer font-medium text-subtle">
+              {dict?.stats.skillRulesLabel ?? "How skill is calculated"}
+            </summary>
+            <p className="mt-1 max-w-3xl leading-relaxed">
+              {t(dict?.stats.subtitle, { keyCount, topPlays: skillTopPlays })}
+            </p>
+          </details>
+        </div>
         <div className="grid gap-3 sm:grid-cols-3">
           <SkillCard
             mode={ratingMode}
@@ -479,6 +492,12 @@ export function StatsPage({
                 })
               : dict?.stats.skillEvolution ?? "Skill evolution"
           }
+          actions={
+            <div className="flex flex-wrap items-center gap-2">
+              {granularityToggle}
+              {rangeToggle()}
+            </div>
+          }
         >
           {chartHistory.length === 0 ? (
             <EmptyChart message={notEnoughData} />
@@ -542,9 +561,12 @@ export function StatsPage({
       {belowFoldReady ? (
         <>
       <section>
-        <h2 className="mb-4 font-display text-2xl font-bold tracking-tight text-ink">
-          {dict?.stats.progression ?? "Progression"}
-        </h2>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-display text-lg font-bold tracking-tight text-ink">
+            {dict?.stats.progression ?? "Progression"}
+          </h2>
+          {rangeToggle()}
+        </div>
         <div className="grid gap-4 lg:grid-cols-2">
           <ChartCard title={dict?.stats.weeklyActivity ?? "Weekly activity"}>
             {weekly.length === 0 ? (
@@ -650,7 +672,7 @@ export function StatsPage({
       </section>
 
       <section>
-        <h2 className="mb-4 font-display text-2xl font-bold tracking-tight text-ink">
+        <h2 className="mb-4 font-display text-lg font-bold tracking-tight text-ink">
           {dict?.stats.howYouPlay ?? "How you play"}
         </h2>
         <div className="mb-4 grid gap-3 sm:grid-cols-3">
@@ -856,7 +878,7 @@ export function StatsPage({
       </section>
 
       <section>
-        <h2 className="mb-4 font-display text-2xl font-bold tracking-tight text-ink">
+        <h2 className="mb-4 font-display text-lg font-bold tracking-tight text-ink">
           {dict?.stats.topMappers ?? "Top mappers"}
         </h2>
         {mappers.length === 0 ? (

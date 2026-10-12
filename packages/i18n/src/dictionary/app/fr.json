@@ -79,6 +79,8 @@
     "noDerivedStats": "Pas encore de stats dérivées — le pipeline d'analytique les remplira après la synchro."
   },
   "stats": {
+    "pageHint": "{{keyCount}}K · horaires UTC",
+    "skillRulesLabel": "Comment le skill est calculé",
     "subtitle": "Évolution du skill, progression et façon de jouer — {{keyCount}}K uniquement, horaires UTC. Le skill utilise nomod (Mirror OK ; DT/HT/etc. exclus) et votre affichage de rating des Paramètres (Sunny ★ ou dan) à partir de vos {{topPlays}} maps les mieux classées par bande (meilleur play par map, les {{topPlays}} requis)",
     "axisOnly": "{{axis}} uniquement",
     "top10": "Top 10",

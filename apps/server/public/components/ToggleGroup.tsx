@@ -8,7 +8,7 @@ export function ToggleGroup<T extends string>({
   onChange: (v: T) => void;
 }) {
   return (
-    <div className="flex rounded-md border border-white/10 bg-panel p-0.5">
+    <div className="flex rounded-md border border-line bg-elevated p-0.5">
       {options.map((opt) => (
         <button
           key={opt.id}

@@ -79,6 +79,8 @@
     "noDerivedStats": "No derived stats yet — analytics pipeline will fill this after sync."
   },
   "stats": {
+    "pageHint": "{{keyCount}}K · times in UTC",
+    "skillRulesLabel": "How skill is calculated",
     "subtitle": "Skill evolution, progression, and how you play — {{keyCount}}K only, times in UTC. Skill uses nomod (Mirror OK; DT/HT/etc. excluded) and your Settings rating display (Sunny ★ or dan) from your top {{topPlays}} rated maps per band (best play per map, all {{topPlays}} required)",
     "axisOnly": "{{axis}} only",
     "top10": "Top 10",

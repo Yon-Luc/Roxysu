@@ -79,6 +79,8 @@
     "noDerivedStats": "Ainda sem stats derivadas — o pipeline de analytics preenche isso depois da sync."
   },
   "stats": {
+    "pageHint": "{{keyCount}}K · horários em UTC",
+    "skillRulesLabel": "Como o skill é calculado",
     "subtitle": "Evolução de skill, progressão e como você joga — só {{keyCount}}K, horários em UTC. Skill usa nomod (Mirror OK; DT/HT/etc. excluídos) e o display de rating das Configurações (Sunny ★ ou dan) das suas top {{topPlays}} maps ranqueadas por banda (melhor play por map, as {{topPlays}} são obrigatórias)",
     "axisOnly": "Só {{axis}}",
     "top10": "Top 10",

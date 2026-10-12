@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08
+last_verified: 2026-10
 confidence: verified
 touches:
   - apps/server/src/routes/stats.ts
@@ -16,6 +16,8 @@ Player skill bands / axes and related aggregate practice statistics beyond the d
 ## Implementation
 
 `getPlayerStats` loads mania scores for the selected keymode once, then derives summary, rank mix, skillset mix, play-time patterns, mapper ranks, and skill history in memory. Day skill history is sampled to about 60 points. The client keeps previous chart data while filters change, defers below-fold Recharts, and invalidates `["stats"]` on `sync.finished` / `dashboard.updated` (`refetchType: "active"`).
+
+Keymode scopes the whole page and stays in the header. Axis and top-plays sit with Current skill. Day/week only samples skill history, so it sits on that chart. Range windows skill history and progression, so the same control appears on both.
 
 ## Mod gate
 

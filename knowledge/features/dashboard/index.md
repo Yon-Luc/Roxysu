@@ -55,4 +55,4 @@ The OBS overlay must not poll this dashboard payload. Overlay idle recent scores
 
 - [flows/realm-extraction-to-ui.md](../../flows/realm-extraction-to-ui.md)
 
-**In UI:** extraction status labels use "Live sync".
+**In UI:** current session leads, then the practice snapshot, weekly activity, and recent scores. Indexed counts and last sync stay as a quiet line under the title. Extraction status labels use "Live sync".

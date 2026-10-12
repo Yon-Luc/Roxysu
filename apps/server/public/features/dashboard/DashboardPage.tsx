@@ -76,60 +76,117 @@ export function DashboardPage() {
   const snapshot = data.practiceSnapshot;
   const lastClosed = snapshot?.lastSession ?? null;
 
+  const lastSyncLabel = last
+    ? `${dict?.sync.status[last.status] ?? last.status}${last.finishedAt ? ` · ${formatRelativeTime(last.finishedAt, dict?.common)}` : ""}`
+    : "—";
+
   return (
-    <div className="space-y-10">
+    <div className="space-y-8">
       <div>
         <PageTitle>{dict?.nav.home ?? "Home"}</PageTitle>
         <p className="rx-subtitle">
           {dict?.dashboard.subtitle ??
             "Recent plays from your local osu!lazer database."}
         </p>
+        <p className="mt-2 text-xs text-faint">
+          {data.sync.scoreCount.toLocaleString()}{" "}
+          {dict?.dashboard.scoresIndexed ?? "Scores indexed"}
+          {" · "}
+          {data.sync.beatmapCount.toLocaleString()}{" "}
+          {dict?.dashboard.beatmaps ?? "Beatmaps"}
+          {" · "}
+          {dict?.dashboard.lastSync ?? "Last sync"} {lastSyncLabel}
+        </p>
       </div>
 
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat
-          label={dict?.dashboard.scoresIndexed ?? "Scores indexed"}
-          value={data.sync.scoreCount.toLocaleString()}
-        />
-        <Stat
-          label={dict?.dashboard.beatmaps ?? "Beatmaps"}
-          value={data.sync.beatmapCount.toLocaleString()}
-        />
-        <Stat
-          label={dict?.dashboard.lastSync ?? "Last sync"}
-          value={
-            last
-              ? `${dict?.sync.status[last.status] ?? last.status}${last.finishedAt ? ` · ${formatRelativeTime(last.finishedAt, dict?.common)}` : ""}`
-              : "—"
-          }
-        />
-        {session ? (
-          <Link
-            to="/sessions/$sessionId"
-            params={{ sessionId: "current" }}
-            className="rx-stat block transition hover:bg-elevated hover:ring-1 hover:ring-accent/40"
-          >
+      {session ? (
+        <Link
+          to="/sessions/$sessionId"
+          params={{ sessionId: "current" }}
+          className="rx-panel flex flex-wrap items-end justify-between gap-3 px-4 py-4 transition hover:bg-elevated sm:px-5"
+        >
+          <div className="min-w-0">
             <div className="rx-label text-accent">
               {dict?.dashboard.currentSession ?? "Current session"}
             </div>
-            <div className="mt-2 text-2xl font-bold tabular-nums text-ink">
+            <div className="mt-1 truncate font-display text-2xl font-bold text-ink">
               {session.name}
             </div>
-            <div className="mt-1 text-xs text-muted">
-              {session.scoreCount} {dict?.dashboard.plays ?? "plays"}
-              {" · "}
-              {formatRelativeTime(session.startedAt, dict?.common)}
-            </div>
-          </Link>
+          </div>
+          <div className="text-sm text-muted">
+            {session.scoreCount} {dict?.dashboard.plays ?? "plays"}
+            {" · "}
+            {formatRelativeTime(session.startedAt, dict?.common)}
+          </div>
+        </Link>
+      ) : (
+        <div className="rx-panel px-4 py-4 sm:px-5">
+          <div className="rx-label">
+            {dict?.dashboard.currentSession ?? "Current session"}
+          </div>
+          <div className="mt-1 text-lg font-bold text-muted">
+            {dict?.dashboard.none ?? "None"}
+          </div>
+        </div>
+      )}
+
+      <section>
+        <h2 className="mb-3 font-display text-lg font-bold tracking-tight text-ink">
+          {dict?.dashboard.practiceSnapshot ?? "Practice snapshot"}
+        </h2>
+        {!snapshot ? (
+          <p className="text-sm text-muted">
+            {dict?.dashboard.noDerivedStats ??
+              "No derived stats yet — analytics pipeline will fill this after sync."}
+          </p>
         ) : (
-          <Stat
-            label={dict?.dashboard.currentSession ?? "Current session"}
-            value={dict?.dashboard.none ?? "None"}
-          />
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Stat
+              label={dict?.dashboard.playsToday ?? "Plays today"}
+              value={snapshot.playsToday.toLocaleString()}
+            />
+            <Stat
+              label={dict?.dashboard.playsLast7Days ?? "Last 7 days"}
+              value={snapshot.playsLast7Days.toLocaleString()}
+            />
+            <Stat
+              label={dict?.dashboard.activeDayStreak ?? "Active-day streak"}
+              value={snapshot.activeDayStreak.toLocaleString()}
+            />
+            {lastClosed ? (
+              <Link
+                to="/sessions/$sessionId"
+                params={{ sessionId: String(lastClosed.id) }}
+                className="rx-stat block transition hover:bg-elevated"
+              >
+                <div className="rx-label">
+                  {dict?.dashboard.lastSession ?? "Last session"}
+                </div>
+                <div className="mt-2 truncate text-lg font-bold text-ink">
+                  {lastClosed.name}
+                </div>
+                <div className="mt-1 text-xs text-muted">
+                  {lastClosed.scoreCount} {dict?.dashboard.plays ?? "plays"}
+                  {" · "}
+                  {formatDuration(lastClosed.durationMs)}
+                  {" · "}
+                  {lastClosed.pbCount} {dict?.dashboard.pbs ?? "PBs"}
+                  {lastClosed.endedAt
+                    ? ` · ${formatRelativeTime(lastClosed.endedAt, dict?.common)}`
+                    : null}
+                </div>
+              </Link>
+            ) : (
+              <Stat
+                label={dict?.dashboard.lastSession ?? "Last session"}
+                value={dict?.dashboard.noSessionsYet ?? "No sessions yet"}
+              />
+            )}
+          </div>
         )}
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-2">
+      <section>
         <ChartCard title={dict?.dashboard.weeklyActivity ?? "Weekly activity"}>
           {weekly.length === 0 ? (
             <EmptyChart
@@ -166,83 +223,11 @@ export function DashboardPage() {
             </ResponsiveContainer>
           )}
         </ChartCard>
-
-        <ChartCard title={dict?.dashboard.practiceSnapshot ?? "Practice snapshot"}>
-          {!snapshot ? (
-            <EmptyChart
-              message={
-                dict?.dashboard.noDerivedStats ??
-                "No derived stats yet — analytics pipeline will fill this after sync."
-              }
-            />
-          ) : (
-            <div className="flex h-50 flex-col justify-between gap-4">
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <div className="rx-label">
-                    {dict?.dashboard.playsToday ?? "Plays today"}
-                  </div>
-                  <div className="mt-1 text-2xl font-bold tabular-nums text-ink">
-                    {snapshot.playsToday.toLocaleString()}
-                  </div>
-                </div>
-                <div>
-                  <div className="rx-label">
-                    {dict?.dashboard.playsLast7Days ?? "Last 7 days"}
-                  </div>
-                  <div className="mt-1 text-2xl font-bold tabular-nums text-ink">
-                    {snapshot.playsLast7Days.toLocaleString()}
-                  </div>
-                </div>
-                <div>
-                  <div className="rx-label">
-                    {dict?.dashboard.activeDayStreak ?? "Active-day streak"}
-                  </div>
-                  <div className="mt-1 text-2xl font-bold tabular-nums text-ink">
-                    {snapshot.activeDayStreak.toLocaleString()}
-                  </div>
-                </div>
-              </div>
-
-              <div className="border-t border-white/8 pt-3">
-                <div className="rx-label">
-                  {dict?.dashboard.lastSession ?? "Last session"}
-                </div>
-                {lastClosed ? (
-                  <Link
-                    to="/sessions/$sessionId"
-                    params={{ sessionId: String(lastClosed.id) }}
-                    className="mt-1 block rounded-lg transition hover:bg-white/4"
-                  >
-                    <div className="truncate text-base font-semibold text-ink">
-                      {lastClosed.name}
-                    </div>
-                    <div className="mt-0.5 text-xs text-muted">
-                      {lastClosed.scoreCount} {dict?.dashboard.plays ?? "plays"}
-                      {" · "}
-                      {formatDuration(lastClosed.durationMs)}
-                      {" · "}
-                      {lastClosed.pbCount}{" "}
-                      {dict?.dashboard.pbs ?? "PBs"}
-                      {lastClosed.endedAt
-                        ? ` · ${formatRelativeTime(lastClosed.endedAt, dict?.common)}`
-                        : null}
-                    </div>
-                  </Link>
-                ) : (
-                  <p className="mt-1 text-sm text-muted">
-                    {dict?.dashboard.noSessionsYet ?? "No sessions yet"}
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-        </ChartCard>
       </section>
 
       <section>
         <div className="mb-4 flex items-end justify-between gap-3">
-          <h2 className="font-display text-2xl font-bold tracking-tight text-ink">
+          <h2 className="font-display text-lg font-bold tracking-tight text-ink">
             {dict?.dashboard.recentScores ?? "Recent scores"}
           </h2>
           <Link

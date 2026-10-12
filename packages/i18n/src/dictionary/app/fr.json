@@ -860,6 +860,11 @@
   },
   "collection": {
     "subtitle": "Les collections intelligentes stockent des chaînes de requête — ex. :",
+    "newCollection": "Nouvelle collection",
+    "smartHeading": "Collections intelligentes",
+    "lazerHeading": "Collections lazer",
+    "share": "Partager",
+    "setsResolved": "{{resolved}} / {{total}} sets résolus localement",
     "closeLazer": "Fermez d'abord osu!lazer. La synchro écrit des collections préfixées par !Roxysu et sauvegarde client.realm avant de modifier.",
     "syncing": "Synchronisation…",
     "syncToLazer": "Synchroniser vers osu!lazer",

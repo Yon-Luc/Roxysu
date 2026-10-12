@@ -65,4 +65,4 @@ Client app API has no auth. Collection write-back is still gated by process-safe
 - [flows/create-collection.md](../../flows/create-collection.md)
 - [flows/collection-write-back-to-lazer.md](../../flows/collection-write-back-to-lazer.md)
 
-**In code/UI:** route and modules still named `sync-lazer` / `syncCollections`.
+**In code/UI:** route and modules still named `sync-lazer` / `syncCollections`. Collection write-back sits with the close-lazer warning, not in the page title row.

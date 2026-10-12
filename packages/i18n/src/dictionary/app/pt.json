@@ -860,6 +860,11 @@
   },
   "collection": {
     "subtitle": "Coleções inteligentes guardam strings de query — ex.",
+    "newCollection": "Nova coleção",
+    "smartHeading": "Coleções inteligentes",
+    "lazerHeading": "Coleções do lazer",
+    "share": "Compartilhar",
+    "setsResolved": "{{resolved}} / {{total}} sets resolvidos localmente",
     "closeLazer": "Fecha o osu!lazer primeiro. A sync escreve coleções com prefixo !Roxysu e faz backup do client.realm antes de editar.",
     "syncing": "Sincronizando…",
     "syncToLazer": "Sync pro osu!lazer",

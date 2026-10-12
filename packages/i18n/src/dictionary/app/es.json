@@ -859,6 +859,11 @@
   },
   "collection": {
     "subtitle": "Las colecciones inteligentes almacenan cadenas de consulta — p. ej.",
+    "newCollection": "Nueva colección",
+    "smartHeading": "Colecciones inteligentes",
+    "lazerHeading": "Colecciones de lazer",
+    "share": "Compartir",
+    "setsResolved": "{{resolved}} / {{total}} sets resueltos en local",
     "closeLazer": "Cierra osu!lazer primero. La sincronización escribe colecciones con el prefijo !Roxysu y hace una copia de seguridad de client.realm antes de editar.",
     "syncing": "Sincronizando…",
     "syncToLazer": "Sincronizar con osu!lazer",

@@ -1,10 +1,7 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  ListSkeleton,
-  SkeletonBlock,
-} from "../../components/LoadingSkeleton";
+import { ListSkeleton } from "../../components/LoadingSkeleton";
 import { PageTitle } from "../../components/PageTitle";
 import { QueryLanguageHelpButton } from "../../components/QueryLanguageHelpModal";
 import { useAppDict, t } from "../../lib/i18n";
@@ -124,19 +121,20 @@ export function CollectionsPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <PageTitle>{dict?.nav.collections}</PageTitle>
-          <p className="rx-subtitle">
-            {dict?.collection.subtitle}{" "}
-            <code className="text-subtle">stars:6..7 mapper:Lasse</code>
-            {" · "}
-            <QueryLanguageHelpButton />
-          </p>
-          <p className="mt-2 text-sm text-muted">
-            {dict?.collection.closeLazer}
-          </p>
-        </div>
+      <div>
+        <PageTitle>{dict?.nav.collections}</PageTitle>
+        <p className="rx-subtitle">
+          {dict?.collection.subtitle}{" "}
+          <code className="text-subtle">stars:6..7 mapper:Lasse</code>
+          {" · "}
+          <QueryLanguageHelpButton />
+        </p>
+      </div>
+
+      <section className="rx-panel flex flex-wrap items-center justify-between gap-3 p-4 sm:p-5">
+        <p className="max-w-2xl text-sm text-warning">
+          {dict?.collection.closeLazer}
+        </p>
         <button
           type="button"
           onClick={() => {
@@ -150,22 +148,25 @@ export function CollectionsPage() {
             ? dict?.collection.syncing
             : dict?.collection.syncToLazer}
         </button>
-      </div>
+        {syncMessage ? (
+          <p
+            className={
+              syncMut.isError
+                ? "w-full text-sm text-danger"
+                : "w-full text-sm text-success"
+            }
+          >
+            {syncMessage}
+          </p>
+        ) : null}
+      </section>
 
-      {syncMessage ? (
-        <p
-          className={
-            syncMut.isError
-              ? "text-sm text-danger"
-              : "text-sm text-success/90"
-          }
-        >
-          {syncMessage}
-        </p>
-      ) : null}
-
-      <form
-        className="grid gap-3 rounded-xl bg-surface p-4 sm:grid-cols-[1fr_2fr_auto] sm:p-5"
+      <section className="space-y-3">
+        <h2 className="font-display text-lg font-bold tracking-tight text-ink">
+          {dict?.collection.newCollection ?? "New collection"}
+        </h2>
+        <form
+        className="rx-panel grid gap-3 p-4 sm:grid-cols-[1fr_2fr_auto] sm:p-5"
         onSubmit={(e) => {
           e.preventDefault();
           if (!name.trim() || !query.trim() || createMut.isPending) return;
@@ -200,24 +201,18 @@ export function CollectionsPage() {
             {createMut.error.message}
           </p>
         ) : null}
-      </form>
+        </form>
+      </section>
 
       {isLoading ? (
-        <div className="space-y-4">
-          <div className="grid gap-3 rounded-xl bg-surface p-4 sm:grid-cols-[1fr_2fr_auto] sm:p-5">
-            <SkeletonBlock className="h-10 w-full rounded-md" />
-            <SkeletonBlock className="h-10 w-full rounded-md" />
-            <SkeletonBlock className="h-10 w-24 rounded-md" />
-          </div>
-          <ListSkeleton count={5} showThumbnail={false} />
-        </div>
+        <ListSkeleton count={5} showThumbnail={false} />
       ) : error ? (
         <p className="text-danger">{error.message}</p>
       ) : (
         <div className="space-y-8">
           <section className="space-y-2">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
-              Smart collections
+            <h2 className="font-display text-lg font-bold tracking-tight text-ink">
+              {dict?.collection.smartHeading ?? "Smart collections"}
             </h2>
             {smartItems.length === 0 ? (
               <p className="text-sm text-muted">
@@ -300,8 +295,8 @@ export function CollectionsPage() {
 
                   return (
                     <li key={`smart-${c.id}`}>
-                      <div
-                        className={`rx-row justify-between transition-opacity ${isDeleting ? "opacity-50" : ""}`}
+                        <div
+                        className={`rx-row flex-wrap justify-between transition-opacity ${isDeleting ? "opacity-50" : ""}`}
                       >
                         <div className="min-w-0">
                           <Link
@@ -339,7 +334,7 @@ export function CollectionsPage() {
                             to="/hub/share"
                             className="text-xs font-medium text-muted transition hover:text-ink"
                           >
-                            Share
+                            {dict?.collection.share ?? "Share"}
                           </Link>
                           <button
                             type="button"
@@ -370,18 +365,21 @@ export function CollectionsPage() {
 
           {realmItems.length > 0 ? (
             <section className="space-y-2">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
-                Lazer collections
+              <h2 className="font-display text-lg font-bold tracking-tight text-ink">
+                {dict?.collection.lazerHeading ?? "Lazer collections"}
               </h2>
               <ul className="space-y-0.5">
                 {realmItems.map((c) => (
                   <li key={`realm-${c.id}`}>
-                    <div className="rx-row justify-between">
+                    <div className="rx-row flex-wrap justify-between">
                       <div className="min-w-0">
                         <div className="font-bold text-ink">{c.name}</div>
                         <div className="mt-0.5 text-xs text-muted">
-                          {c.resolvedSetCount.toLocaleString()} /{" "}
-                          {c.mapCount.toLocaleString()} sets resolved locally
+                          {t(dict?.collection.setsResolved, {
+                            resolved: c.resolvedSetCount.toLocaleString(),
+                            total: c.mapCount.toLocaleString(),
+                          }) ||
+                            `${c.resolvedSetCount.toLocaleString()} / ${c.mapCount.toLocaleString()} sets resolved locally`}
                         </div>
                       </div>
                       <div className="flex shrink-0 items-center gap-3">
@@ -394,7 +392,7 @@ export function CollectionsPage() {
                           to="/hub/share"
                           className="text-xs font-medium text-muted transition hover:text-ink"
                         >
-                          Share
+                          {dict?.collection.share ?? "Share"}
                         </Link>
                       </div>
                     </div>

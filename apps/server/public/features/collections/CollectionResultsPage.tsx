@@ -22,6 +22,17 @@ import { useAppDict, t } from "../../lib/i18n";
 
 const PAGE_SIZE = 24;
 
+function ResultStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <div className="truncate text-[10px] font-medium uppercase tracking-wide text-faint">
+        {label}
+      </div>
+      <div className="mt-0.5 truncate tabular-nums text-subtle">{value}</div>
+    </div>
+  );
+}
+
 export function CollectionResultsPage({
   collectionId,
 }: {
@@ -97,23 +108,27 @@ export function CollectionResultsPage({
         <GoBackLink to="/collections">
           {dict?.collection.backToCollections}
         </GoBackLink>
-        <PageTitle className="mt-3">{collection.name}</PageTitle>
-        <p className="mt-2 font-mono text-sm text-muted">{collection.query}</p>
-        <div className="mt-2 flex flex-wrap items-center gap-3">
-          <p className="text-xs text-faint">
-            {t(dict?.collection.matchesCount, {
-              count: total.toLocaleString(),
-            })}
-          </p>
-          {total > 0 && (
+        <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <PageTitle>{collection.name}</PageTitle>
+            <p className="mt-2 truncate font-mono text-sm text-muted">
+              {collection.query}
+            </p>
+            <p className="mt-1 text-xs text-faint">
+              {t(dict?.collection.matchesCount, {
+                count: total.toLocaleString(),
+              })}
+            </p>
+          </div>
+          {total > 0 ? (
             <a
               href={`/api/collections/${collection.id}/export`}
-              className="rx-btn"
+              className="rx-btn shrink-0"
               download
             >
               {dict?.collection.exportCollection}
             </a>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -161,16 +176,29 @@ export function CollectionResultsPage({
                         keyCount: item.keyCount,
                       })}
                     </div>
-                    <div className="mt-2 flex gap-3 text-xs tabular-nums text-subtle">
-                      <span>
-                        {item.masteryLevel != null
-                          ? item.masteryLevel.toFixed(0)
-                          : "—"}{" "}
-                        {dict?.collection.mastery}
-                      </span>
-                      <span>{formatAccuracy(item.bestAccuracy)}</span>
-                      <span>{formatPp(item.bestPp)}</span>
-                      <span>{formatRelativeTime(item.lastPlayedAt, dict?.common)}</span>
+                    <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                      <ResultStat
+                        label={dict?.collection.mastery ?? "mastery"}
+                        value={
+                          item.masteryLevel != null
+                            ? item.masteryLevel.toFixed(0)
+                            : "—"
+                        }
+                      />
+                      <ResultStat
+                        label={dict?.practice.detail.statBestAcc ?? "Best acc"}
+                        value={formatAccuracy(item.bestAccuracy)}
+                      />
+                      <ResultStat
+                        label={dict?.practice.detail.statBestPp ?? "Best PP"}
+                        value={formatPp(item.bestPp)}
+                      />
+                      <ResultStat
+                        label={
+                          dict?.practice.detail.statLastPlayed ?? "Last played"
+                        }
+                        value={formatRelativeTime(item.lastPlayedAt, dict?.common)}
+                      />
                     </div>
                   </div>
                 </Link>

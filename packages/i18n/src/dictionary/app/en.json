@@ -866,6 +866,11 @@
   },
   "collection": {
     "subtitle": "Smart collections store query strings — e.g.",
+    "newCollection": "New collection",
+    "smartHeading": "Smart collections",
+    "lazerHeading": "Lazer collections",
+    "share": "Share",
+    "setsResolved": "{{resolved}} / {{total}} sets resolved locally",
     "closeLazer": "Close osu!lazer first. Sync writes collections prefixed with !Roxysu and backs up client.realm before editing.",
     "syncing": "Syncing…",
     "syncToLazer": "Sync to osu!lazer",

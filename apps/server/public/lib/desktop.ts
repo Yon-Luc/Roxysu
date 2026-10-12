@@ -8,6 +8,8 @@ export type RoxysuDesktopBridge = {
   };
   /** Open an http(s) URL in the system default browser. */
   openExternal?: (url: string) => Promise<void>;
+  /** Write a PNG (or other image bytes) to the system clipboard. */
+  writeClipboardImage?: (pngBytes: Uint8Array) => Promise<void>;
 };
 
 declare global {

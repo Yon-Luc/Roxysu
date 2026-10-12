@@ -39,6 +39,7 @@
     "fflate": "^0.8.3",
     "lucide-react": "^1.31.0",
     "mediabunny": "^1.53.1",
+    "modern-screenshot": "^4.7.0",
     "react": "^19",
     "react-dom": "^19",
     "recharts": "^3.9.2",

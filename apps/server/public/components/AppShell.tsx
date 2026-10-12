@@ -29,13 +29,14 @@ import { useAppDict } from "../lib/i18n";
 import { CommandPalette, useCommandPaletteShortcut } from "./CommandPalette";
 import { SchemaOutdatedDialog } from "./SchemaOutdatedDialog";
 import { LanguageSwitcher } from "./LanguageSwitcher";
+import { HubSessionChip } from "../features/hub/HubSessionChip";
 import { DownloadBatchChrome } from "../features/download/DownloadBatchChrome";
 import { useMirrorBatchJob } from "../features/download/useMirrorBatchJob";
 import { JobsBatchChrome } from "../features/settings/JobsBatchChrome";
 import { JobsOnboardingModal } from "../features/settings/JobsOnboardingModal";
 import { toggleTheme, useResolvedTheme } from "../lib/theme";
 import { ToastHost } from "../lib/toasts";
-import { PageHeaderSkeleton } from "./LoadingSkeleton";
+import { PageHeaderSkeleton, SkeletonBlock } from "./LoadingSkeleton";
 import roxyIcon from "../roxy.png";
 
 const APP_VERSION_LABEL = formatAppVersionLabel();
@@ -283,14 +284,25 @@ export function AppShell({ children }: { children: ReactNode }) {
             />
             {syncLabel}
           </div>
-          {status ? (
-            <p className="px-1 text-[11px] leading-relaxed text-faint">
-              {status.scoreCount.toLocaleString()}{" "}
-              {dict?.sync.scores ?? "scores"}
-              <br />
-              {status.beatmapCount.toLocaleString()} {dict?.sync.maps ?? "maps"}
+          <div className="flex items-center justify-between gap-2">
+            <p className="min-h-[2.25rem] px-1 text-[11px] leading-relaxed text-faint">
+              {status ? (
+                <>
+                  {status.scoreCount.toLocaleString()}{" "}
+                  {dict?.sync.scores ?? "scores"}
+                  <br />
+                  {status.beatmapCount.toLocaleString()}{" "}
+                  {dict?.sync.maps ?? "maps"}
+                </>
+              ) : (
+                <>
+                  <SkeletonBlock className="mb-1 h-3 w-16 rounded" />
+                  <SkeletonBlock className="h-3 w-14 rounded" />
+                </>
+              )}
             </p>
-          ) : null}
+            <HubSessionChip />
+          </div>
         </div>
       </aside>
       ) : null}
@@ -383,6 +395,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </main>
+
+      {!focusLayout ? (
+      <div className="fixed bottom-[calc(4.25rem+env(safe-area-inset-bottom))] right-3 z-40 md:hidden">
+        <HubSessionChip />
+      </div>
+      ) : null}
 
       {/* Mobile bottom nav */}
       {!focusLayout ? (

@@ -9,8 +9,13 @@ touches:
   - apps/server/src/scores/pbCompare.ts
   - apps/server/src/scores/parseStatistics.ts
   - apps/server/public/features/sessions
+  - apps/server/public/features/sessions/SessionShareCard.tsx
+  - apps/server/public/features/sessions/sessionShareHighlights.ts
+  - apps/server/public/lib/sessionShareImage.ts
   - apps/server/public/components/ScoreCard.tsx
   - apps/server/public/features/overlay
+  - apps/desktop/preload.js
+  - apps/desktop/main.js
   - packages/session-names/src/generate.ts
   - packages/session-names/src/terms.json
   - packages/db/src/schema.ts
@@ -28,7 +33,7 @@ Each session has a **display name** — a stable, generated label (Mushoku Tense
 
 A session is a contiguous block of plays separated by inactivity. The display name is assigned once when the session row is created (or backfilled) and persists for the life of that row — including while the session is still open ("current session").
 
-Live sessions keep the **Current session** label in headings; the generated name appears as secondary text and is stored for future features (e.g. saving or sharing).
+Live sessions keep the **Current session** label in headings; the generated name appears as secondary text.
 
 ## Business rules
 
@@ -53,6 +58,7 @@ Live sessions keep the **Current session** label in headings; the generated name
     Ranking matches `runRetryEngine` (pp, then accuracy). Lookup is batched per distinct beatmap in the score window.
 17. Current session layout: stats → Now selected → recommendations → score cards at the bottom. 4K/7K recommend does not offer Send to marathon.
 18. Recommendation focus bands (Push / Accuracy / Consistency / Deficit) and topPlays are configured in Settings → Customize (`recommend.focus_settings`); session recommend reads those settings.
+19. Active session detail (live or closed, not idle) offers **Copy as image**: one dark branded PNG (absolute start–end calendar datetimes + ruleset, plays / PBs / duration, up to **8** highlight scores — no session display name, no relative “ago” times). Highlights prefer PBs by PP, then fill with non-PBs by PP (`pickSessionShareHighlights`). Share may refetch with `limit=500` when the UI score window is incomplete. Primary action copies the PNG to the clipboard; download is the fallback when clipboard write fails (desktop uses `roxysuDesktop.writeClipboardImage` after the web Clipboard API).
     **Status:** verified
 
 ## Important symbols
@@ -66,7 +72,10 @@ Live sessions keep the **Current session** label in headings; the generated name
 - `packages/session-names/src/terms.json` — character, region, activity, modifier, style word lists
 - `apps/server/public/features/sessions/*`
 - `apps/server/public/features/sessions/SessionsPage.tsx` — list + day filter
-- `apps/server/public/features/sessions/SessionDetailPage.tsx` — score cards via `ScoreCard`
+- `apps/server/public/features/sessions/SessionDetailPage.tsx` — score cards via `ScoreCard`; share image control
+- `apps/server/public/features/sessions/SessionShareCard.tsx` — off-screen share card layout
+- `apps/server/public/features/sessions/sessionShareHighlights.ts` — highlight picker + `formatSessionDuration`
+- `apps/server/public/lib/sessionShareImage.ts` — PNG capture + clipboard / download
 - `apps/server/public/components/ScoreCard.tsx` — compact (Map Page) and beatmap (session) variants
 - `apps/server/public/features/sessions/SessionActivityCalendar.tsx` — contribution grid
 - `apps/server/public/features/sessions/SessionSuggest.tsx` — Up Next / 4K / 7K tabs
@@ -107,3 +116,4 @@ On new session insert, `runSessionEngine()` sets `name` immediately after alloca
 
 - [business/sessions-gap.md](../../business/sessions-gap.md)
 - [flows/score-indexing-analytics.md](../../flows/score-indexing-analytics.md)
+- [flows/session-share-image.md](../../flows/session-share-image.md)

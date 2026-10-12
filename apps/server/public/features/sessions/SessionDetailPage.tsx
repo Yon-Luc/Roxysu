@@ -1,4 +1,5 @@
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { Image } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { BeatmapPreviewButton } from "../../components/BeatmapPreviewButton";
 import { GoBackLink } from "../../components/GoBackLink";
@@ -17,19 +18,27 @@ import {
 } from "../../components/ScoreCard";
 import { fetchSession } from "../../lib/api";
 import { formatRelativeTime } from "../../lib/format";
+import { useAppDict, t } from "../../lib/i18n";
 import {
   formatPrimaryRating,
   useRatingDisplayMode,
 } from "../../lib/ratingDisplay";
+import { shareSessionImage } from "../../lib/sessionShareImage";
+import { pushToast } from "../../lib/toasts";
+import { SessionShareCard } from "./SessionShareCard";
+import {
+  formatSessionDuration,
+  pickSessionShareHighlights,
+} from "./sessionShareHighlights";
 import { SessionSuggest } from "./SessionSuggest";
 import { SessionTosuLivePanel } from "./SessionTosuLivePanel";
-import { useAppDict, t } from "../../lib/i18n";
 
 export function SessionDetailPage({ sessionId }: { sessionId: string }) {
   const ratingMode = useRatingDisplayMode();
   const { dict } = useAppDict();
   const isCurrentHub = sessionId === "current";
   const [scoreLimit, setScoreLimit] = useState(50);
+  const [sharing, setSharing] = useState(false);
 
   const { data, isLoading, error, isFetching } = useQuery({
     queryKey: ["sessions", sessionId, scoreLimit],
@@ -169,6 +178,89 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
     ),
   ];
 
+  async function handleShareImage() {
+    if (sharing) return;
+    setSharing(true);
+    try {
+      let shareScores = scores;
+      let sharePbCount = data.pbCount ?? 0;
+      const needsFullWindow =
+        ("hasMore" in data && data.hasMore) ||
+        scores.length < session.scoreCount;
+      if (needsFullWindow) {
+        const full = await fetchSession(sessionId, { limit: 500 });
+        if (
+          full &&
+          !("error" in full) &&
+          "scores" in full &&
+          Array.isArray(full.scores)
+        ) {
+          shareScores = full.scores;
+          sharePbCount = full.pbCount ?? sharePbCount;
+        }
+      }
+
+      const highlights = pickSessionShareHighlights(shareScores);
+      const safeName = String(session.name ?? "session")
+        .replace(/[^\w.-]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 48);
+      const filename = `roxysu-session-${safeName || "session"}.png`;
+
+      const result = await shareSessionImage(
+        <SessionShareCard
+          rulesetShortName={session.rulesetShortName}
+          startedAt={session.startedAt}
+          endedAt={session.endedAt}
+          scoreCount={session.scoreCount}
+          pbCount={sharePbCount}
+          highlights={highlights.map((score) => ({
+            id: score.id,
+            accuracy: score.accuracy,
+            pp: score.pp,
+            mods: score.mods,
+            isPb: score.isPb,
+            title: score.title,
+            artist: score.artist,
+            difficultyName: score.difficultyName,
+            backgroundFileHash: score.backgroundFileHash,
+            setOnlineId: score.setOnlineId,
+            beatmapId: score.beatmapId,
+          }))}
+          labels={{
+            plays: dict?.session.statPlays ?? "Plays",
+            pbs: dict?.session.statPbs ?? "PBs",
+            duration: dict?.session.statDuration ?? "Duration",
+            pb: dict?.session.pb ?? "PB",
+            untitled: dict?.session.untitled ?? "Untitled",
+            unknownArtist: dict?.session.unknownArtist ?? "Unknown",
+            beatmapDeleted: dict?.session.beatmapDeleted ?? "Beatmap deleted",
+            morePlays: dict?.session.shareMorePlays ?? "+{{count}} more plays",
+            brand: "Roxysu",
+          }}
+        />,
+        filename,
+      );
+
+      pushToast({
+        title:
+          result === "copied"
+            ? (dict?.session.shareCopied ?? "Session image copied")
+            : (dict?.session.shareDownloaded ??
+              "Clipboard unavailable — image downloaded"),
+        tone: result === "copied" ? "success" : "neutral",
+      });
+    } catch (err) {
+      pushToast({
+        title: dict?.session.shareFailed ?? "Could not share session image",
+        detail: err instanceof Error ? err.message : undefined,
+        tone: "error",
+      });
+    } finally {
+      setSharing(false);
+    }
+  }
+
   return (
     <div className="space-y-8">
       <div>
@@ -193,6 +285,17 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
               ) : null}
             </span>
           ) : null}
+          <button
+            type="button"
+            className="rx-btn inline-flex items-center gap-1.5 text-sm"
+            disabled={sharing}
+            onClick={() => void handleShareImage()}
+          >
+            <Image className="size-4" aria-hidden />
+            {sharing
+              ? (dict?.session.sharingImage ?? "Sharing…")
+              : (dict?.session.shareImage ?? "Copy as image")}
+          </button>
         </div>
         <p className="rx-subtitle">
           {isLive ? `${session.name} · ` : ""}
@@ -365,18 +468,4 @@ function MiniStat({ label, value }: { label: string; value: string }) {
       <div className="mt-1.5 text-lg font-bold tabular-nums text-ink">{value}</div>
     </div>
   );
-}
-
-function formatSessionDuration(
-  startedAt: string,
-  endedAt: string | null,
-): string {
-  const start = new Date(startedAt).getTime();
-  const end = endedAt ? new Date(endedAt).getTime() : Date.now();
-  if (Number.isNaN(start) || Number.isNaN(end) || end < start) return "—";
-  const minutes = Math.round((end - start) / 60_000);
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  const rem = minutes % 60;
-  return rem === 0 ? `${hours}h` : `${hours}h ${rem}m`;
 }

@@ -9,4 +9,7 @@ contextBridge.exposeInMainWorld("roxysuDesktop", {
   },
   /** Open http(s) URLs in the system browser (hub OAuth, external links). */
   openExternal: (url) => ipcRenderer.invoke("roxysu:open-external", url),
+  /** Write PNG (or other image) bytes to the system clipboard. */
+  writeClipboardImage: (pngBytes) =>
+    ipcRenderer.invoke("roxysu:write-clipboard-image", pngBytes),
 });

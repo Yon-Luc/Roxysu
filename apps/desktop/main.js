@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, Menu, ipcMain, shell, clipboard, nativeImage } = require("electron");
 const { spawn } = require("node:child_process");
 const path = require("node:path");
 const http = require("node:http");
@@ -587,6 +587,24 @@ ipcMain.handle("roxysu:open-external", async (_event, url) => {
   }
   desktopLog(`openExternal ${parsed.origin}${parsed.pathname}`);
   await shell.openExternal(parsed.toString());
+});
+
+ipcMain.handle("roxysu:write-clipboard-image", async (_event, bytes) => {
+  if (bytes == null) {
+    throw new Error("Invalid image");
+  }
+  const buf = Buffer.isBuffer(bytes)
+    ? bytes
+    : Buffer.from(bytes instanceof ArrayBuffer ? bytes : new Uint8Array(bytes));
+  if (buf.length === 0) {
+    throw new Error("Invalid image");
+  }
+  const image = nativeImage.createFromBuffer(buf);
+  if (image.isEmpty()) {
+    throw new Error("Invalid image");
+  }
+  clipboard.writeImage(image);
+  desktopLog(`writeClipboardImage bytes=${buf.length}`);
 });
 
 const gotLock = app.requestSingleInstanceLock();

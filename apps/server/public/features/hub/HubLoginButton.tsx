@@ -13,6 +13,7 @@ import { useAppDict } from "../../lib/i18n";
 type HubLoginButtonProps = {
   className?: string;
   children?: ReactNode;
+  title?: string;
 };
 
 /**
@@ -22,6 +23,7 @@ type HubLoginButtonProps = {
 export function HubLoginButton({
   className = "rx-btn-primary",
   children,
+  title,
 }: HubLoginButtonProps) {
   const hubUrl = useHubUrl();
   const queryClient = useQueryClient();
@@ -57,7 +59,7 @@ export function HubLoginButton({
 
   if (!desktop) {
     return (
-      <a href={hubLoginUrl(hubUrl)} className={className}>
+      <a href={hubLoginUrl(hubUrl)} className={className} title={title}>
         {label}
       </a>
     );
@@ -68,6 +70,7 @@ export function HubLoginButton({
       <button
         type="button"
         className={className}
+        title={title}
         disabled={waiting || !window.roxysuDesktop?.openExternal}
         onClick={() => {
           setError(null);

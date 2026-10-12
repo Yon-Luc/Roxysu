@@ -4,6 +4,7 @@ import { resolveHubBaseUrl } from "../hubUrl";
 import {
   candidateSummary,
   commitOnlineScores,
+  listLocalOsuPlayers,
   previewOnlineScores,
   resolveLocalOsuUser,
 } from "../online-scores/pull";
@@ -13,12 +14,18 @@ const RULESETS = ["osu", "taiko", "fruits", "mania"] as const;
 export const onlineScoreRoutes = new Elysia({ prefix: "/online-scores" })
   .use(dbPlugin)
   .get("/user", async ({ db }) => {
+    const players = await listLocalOsuPlayers(db);
     const local = await resolveLocalOsuUser(db);
     const waiting = await candidateSummary(db);
-    if ("error" in local) {
-      return { ok: false, error: local.error, waiting, hubUrl: resolveHubBaseUrl() };
-    }
-    return { ok: true, ...local, waiting, hubUrl: resolveHubBaseUrl() };
+    return {
+      ok: !("error" in local),
+      error: "error" in local ? local.error : null,
+      username: "error" in local ? null : local.username,
+      osuId: "error" in local ? null : local.osuId,
+      players,
+      waiting,
+      hubUrl: resolveHubBaseUrl(),
+    };
   })
   .post(
     "/preview",
@@ -32,6 +39,7 @@ export const onlineScoreRoutes = new Elysia({ prefix: "/online-scores" })
           hubJwt: body.hubJwt,
           ruleset: body.ruleset,
           force: body.force,
+          username: body.username,
         });
         if ("error" in result) {
           set.status = result.code === "account_mismatch" ? 409 : 400;
@@ -48,6 +56,7 @@ export const onlineScoreRoutes = new Elysia({ prefix: "/online-scores" })
         hubJwt: t.String({ minLength: 10 }),
         ruleset: t.String(),
         force: t.Optional(t.Boolean()),
+        username: t.Optional(t.String()),
       }),
     },
   )

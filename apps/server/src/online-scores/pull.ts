@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { and, eq, gt, inArray } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import {
   beatmaps,
   onlineScoreCandidates,
@@ -76,32 +76,61 @@ async function setSetting(db: Db, key: string, value: string): Promise<void> {
     .onConflictDoUpdate({ target: settings.key, set: { value } });
 }
 
-export async function resolveLocalOsuUser(
-  db: Db,
-): Promise<{ osuId: number; username: string } | { error: string }> {
-  const usernames = await resolveScoresUsernames(db);
-  if (usernames == null) {
-    return { error: "Pick a single score username before pulling online scores." };
-  }
-  if (usernames.length !== 1) {
-    return { error: "Pick one score username. Online score pull uses a single player." };
-  }
-  const username = usernames[0]!;
-  const [row] = await db
-    .select({ osuId: scores.userOnlineId })
+export type LocalOsuPlayer = {
+  username: string;
+  osuId: number;
+  count: number;
+};
+
+export async function listLocalOsuPlayers(db: Db): Promise<LocalOsuPlayer[]> {
+  const rows = await db
+    .select({
+      username: scores.userUsername,
+      osuId: sql<number>`max(${scores.userOnlineId})`.mapWith(Number),
+      count: sql<number>`count(*)`.mapWith(Number),
+    })
     .from(scores)
     .where(
       and(
-        eq(scores.userUsername, username),
         eq(scores.deletePending, false),
         gt(scores.userOnlineId, 1),
+        isNotNull(scores.userUsername),
+        ne(scores.userUsername, ""),
       ),
     )
-    .limit(1);
-  if (!row?.osuId) {
-    return { error: `No osu! id on local scores for ${username}.` };
+    .groupBy(scores.userUsername)
+    .orderBy(desc(sql`count(*)`));
+  return rows.filter(
+    (row): row is LocalOsuPlayer =>
+      typeof row.username === "string" &&
+      row.username.length > 0 &&
+      row.osuId > 1,
+  );
+}
+
+export async function resolveLocalOsuUser(
+  db: Db,
+  username?: string,
+): Promise<{ osuId: number; username: string } | { error: string }> {
+  const players = await listLocalOsuPlayers(db);
+  if (players.length === 0) {
+    return { error: "No osu! id on local scores yet." };
   }
-  return { osuId: row.osuId, username };
+  const wanted = username?.trim();
+  if (wanted) {
+    const match = players.find((player) => player.username === wanted);
+    if (!match) return { error: `No osu! id on local scores for ${wanted}.` };
+    return { osuId: match.osuId, username: match.username };
+  }
+  if (players.length === 1) {
+    return { osuId: players[0]!.osuId, username: players[0]!.username };
+  }
+  const filtered = await resolveScoresUsernames(db);
+  if (filtered?.length === 1) {
+    const match = players.find((player) => player.username === filtered[0]);
+    if (match) return { osuId: match.osuId, username: match.username };
+  }
+  return { error: "Pick a player below." };
 }
 
 async function hubPull(
@@ -150,9 +179,9 @@ function rankInt(rank: string): number {
 
 export async function previewOnlineScores(
   db: Db,
-  input: { hubJwt: string; ruleset: string; force?: boolean },
+  input: { hubJwt: string; ruleset: string; force?: boolean; username?: string },
 ): Promise<PullPreview | { error: string; code: string }> {
-  const local = await resolveLocalOsuUser(db);
+  const local = await resolveLocalOsuUser(db, input.username);
   if ("error" in local) return { error: local.error, code: "local_user" };
   const pulled = await hubPull(input.hubJwt, input.ruleset, input.force === true);
   if (pulled.osuId !== local.osuId) {

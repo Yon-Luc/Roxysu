@@ -362,13 +362,48 @@ export function RecommendFocusSection({ data }: { data: SettingsPayload }) {
       id={pageSectionDomId("recommend-focus")}
       className="rx-panel scroll-mt-6 p-5"
     >
-      <h2 className="text-sm font-bold text-ink">
-        {dict?.settings.recommendFocus ?? "Recommendation focuses"}
-      </h2>
-      <p className="mt-1 text-sm text-muted">
-        {dict?.settings.recommendFocusDesc ??
-          "Define Push, Accuracy, Consistency, and Deficit for Current Session recommendations — clear-rate bands and how hard maps should be relative to your top clears in that band."}
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-sm font-bold text-ink">
+            {dict?.settings.recommendFocus ?? "Recommendation focuses"}
+          </h2>
+          <p className="mt-1 text-sm text-muted">
+            {dict?.settings.recommendFocusDesc ??
+              "Define Push, Accuracy, Consistency, and Deficit for Current Session recommendations — clear-rate bands and how hard maps should be relative to your top clears in that band."}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <button
+            type="button"
+            className="rx-btn-primary"
+            disabled={mut.isPending || invalid || !dirty}
+            onClick={save}
+          >
+            {mut.isPending
+              ? (dict?.settings.saving ?? "Saving…")
+              : (dict?.settings.saveRecommendFocus ?? "Save focuses")}
+          </button>
+          <button
+            type="button"
+            className="rx-btn"
+            disabled={mut.isPending}
+            onClick={reset}
+          >
+            {dict?.settings.resetRecommendFocus ?? "Reset to defaults"}
+          </button>
+        </div>
+      </div>
+
+      {invalid ? (
+        <p className="mt-3 text-sm text-danger">
+          {dict?.settings.recommendFocusInvalid ??
+            "Each clear-rate min must be less than max."}
+        </p>
+      ) : null}
+
+      {mut.error ? (
+        <p className="mt-3 text-sm text-danger">{mut.error.message}</p>
+      ) : null}
 
       <label className="mt-5 block max-w-xs">
         <div className="flex justify-between text-sm font-semibold text-ink">
@@ -491,38 +526,6 @@ export function RecommendFocusSection({ data }: { data: SettingsPayload }) {
           </label>
         </div>
       </div>
-
-      {invalid ? (
-        <p className="mt-3 text-sm text-danger">
-          {dict?.settings.recommendFocusInvalid ??
-            "Each clear-rate min must be less than max."}
-        </p>
-      ) : null}
-
-      <div className="mt-4 flex flex-wrap gap-2">
-        <button
-          type="button"
-          className="rx-btn-primary"
-          disabled={mut.isPending || invalid || !dirty}
-          onClick={save}
-        >
-          {mut.isPending
-            ? (dict?.settings.saving ?? "Saving…")
-            : (dict?.settings.saveRecommendFocus ?? "Save focuses")}
-        </button>
-        <button
-          type="button"
-          className="rx-btn"
-          disabled={mut.isPending}
-          onClick={reset}
-        >
-          {dict?.settings.resetRecommendFocus ?? "Reset to defaults"}
-        </button>
-      </div>
-
-      {mut.error ? (
-        <p className="mt-3 text-sm text-danger">{mut.error.message}</p>
-      ) : null}
     </section>
   );
 }

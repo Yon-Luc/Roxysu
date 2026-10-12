@@ -487,45 +487,7 @@ export function HubDetailPage({ id }: { id: string }) {
             </p>
           ) : null}
         </div>
-        <div className="flex flex-wrap gap-2">
-          {jwt ? (
-            <button
-              type="button"
-              className="rx-btn"
-              disabled={!c || favoriteMut.isPending}
-              onClick={() => favoriteMut.mutate(!!c?.favoritedByMe)}
-            >
-              {c?.favoritedByMe
-                ? (dict?.hub?.unfavorite ?? "Unfavorite")
-                : (dict?.hub?.favorite ?? "Favorite")}
-            </button>
-          ) : (
-            <HubLoginButton className="rx-btn">
-              {dict?.hub?.loginToFavorite ?? "Log in to favorite"}
-            </HubLoginButton>
-          )}
-          {canManage ? (
-            <button
-              type="button"
-              className="rx-btn"
-              disabled={!c}
-              onClick={() => setEditing((v) => !v)}
-            >
-              {editing
-                ? (dict?.hub?.cancelEdit ?? "Cancel edit")
-                : (dict?.hub?.edit ?? "Edit")}
-            </button>
-          ) : null}
-          {canManage ? (
-            <button
-              type="button"
-              className="rx-btn"
-              disabled={!c || deleteMut.isPending}
-              onClick={() => setDeleteOpen(true)}
-            >
-              {dict?.hub?.delete ?? "Delete"}
-            </button>
-          ) : null}
+        <div className="flex flex-col items-stretch gap-2 sm:items-end">
           {updateAvailable ? (
             <button
               type="button"
@@ -547,6 +509,46 @@ export function HubDetailPage({ id }: { id: string }) {
                 : (dict?.hub?.saveCollection ?? "Save collection")}
             </button>
           )}
+          <div className="flex flex-wrap gap-2">
+            {jwt ? (
+              <button
+                type="button"
+                className="rx-btn text-sm"
+                disabled={!c || favoriteMut.isPending}
+                onClick={() => favoriteMut.mutate(!!c?.favoritedByMe)}
+              >
+                {c?.favoritedByMe
+                  ? (dict?.hub?.unfavorite ?? "Unfavorite")
+                  : (dict?.hub?.favorite ?? "Favorite")}
+              </button>
+            ) : (
+              <HubLoginButton className="rx-btn text-sm">
+                {dict?.hub?.loginToFavorite ?? "Log in to favorite"}
+              </HubLoginButton>
+            )}
+            {canManage ? (
+              <button
+                type="button"
+                className="rx-btn text-sm"
+                disabled={!c}
+                onClick={() => setEditing((v) => !v)}
+              >
+                {editing
+                  ? (dict?.hub?.cancelEdit ?? "Cancel edit")
+                  : (dict?.hub?.edit ?? "Edit")}
+              </button>
+            ) : null}
+            {canManage ? (
+              <button
+                type="button"
+                className="rx-btn text-sm text-danger"
+                disabled={!c || deleteMut.isPending}
+                onClick={() => setDeleteOpen(true)}
+              >
+                {dict?.hub?.delete ?? "Delete"}
+              </button>
+            ) : null}
+          </div>
         </div>
       </div>
 
@@ -625,7 +627,7 @@ export function HubDetailPage({ id }: { id: string }) {
               </span>
             ) : null}
             {isAdded ? (
-              <span className="text-success/90">{dict?.hub?.savedToGame ?? "Saved to game"}</span>
+              <span className="text-success">{dict?.hub?.savedToGame ?? "Saved to game"}</span>
             ) : null}
             {updateAvailable ? (
               <span className="text-warning">{dict?.hub?.creatorUpdated ?? "Creator updated this pack"}</span>
@@ -683,11 +685,11 @@ export function HubDetailPage({ id }: { id: string }) {
                   </label>
                   <button
                     type="button"
-                    className={`rx-btn shrink-0 text-xs ${
+                    className={
                       moreFiltersOpen || advancedFiltersActive
-                        ? "rx-btn-primary"
-                        : ""
-                    }`}
+                        ? "rx-btn-primary shrink-0 text-xs"
+                        : "rx-btn shrink-0 text-xs"
+                    }
                     aria-expanded={moreFiltersOpen}
                     onClick={() => setMoreFiltersOpen((v) => !v)}
                   >
@@ -701,7 +703,7 @@ export function HubDetailPage({ id }: { id: string }) {
                 </div>
 
                 {moreFiltersOpen ? (
-                  <div className="space-y-3 border-t border-white/10 pt-3">
+                  <div className="space-y-3 border-t border-line pt-3">
                     <div className="space-y-1.5">
                       <span className="rx-label">{dict?.hub?.ownership ?? "Ownership"}</span>
                       <div className="flex flex-wrap gap-2">
@@ -709,11 +711,11 @@ export function HubDetailPage({ id }: { id: string }) {
                         <button
                           key={value}
                           type="button"
-                          className={`rx-btn text-xs ${
+                          className={
                             mapFilters.ownership === value
-                              ? "rx-btn-primary"
-                              : ""
-                          }`}
+                              ? "rx-btn-primary text-xs"
+                              : "rx-btn text-xs"
+                          }
                           onClick={() =>
                             patchMapFilters({ ownership: value })
                           }
@@ -729,9 +731,11 @@ export function HubDetailPage({ id }: { id: string }) {
                       <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
-                          className={`rx-btn text-xs ${
-                            mapFilters.mode === "all" ? "rx-btn-primary" : ""
-                          }`}
+                          className={
+                            mapFilters.mode === "all"
+                              ? "rx-btn-primary text-xs"
+                              : "rx-btn text-xs"
+                          }
                           onClick={() =>
                             patchMapFilters({ mode: "all" })
                           }
@@ -742,9 +746,11 @@ export function HubDetailPage({ id }: { id: string }) {
                           <button
                             key={m}
                             type="button"
-                            className={`rx-btn text-xs ${
-                              mapFilters.mode === m ? "rx-btn-primary" : ""
-                            }`}
+                            className={
+                              mapFilters.mode === m
+                                ? "rx-btn-primary text-xs"
+                                : "rx-btn text-xs"
+                            }
                             onClick={() =>
                               patchMapFilters({
                                 mode: m,
@@ -764,9 +770,11 @@ export function HubDetailPage({ id }: { id: string }) {
                         <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
-                            className={`rx-btn text-xs ${
-                              mapFilters.keys == null ? "rx-btn-primary" : ""
-                            }`}
+                            className={
+                              mapFilters.keys == null
+                                ? "rx-btn-primary text-xs"
+                                : "rx-btn text-xs"
+                            }
                             onClick={() => patchMapFilters({ keys: null })}
                           >
                             {dict?.hub?.all ?? "All"}
@@ -775,9 +783,11 @@ export function HubDetailPage({ id }: { id: string }) {
                             <button
                               key={k}
                               type="button"
-                              className={`rx-btn text-xs ${
-                                mapFilters.keys === k ? "rx-btn-primary" : ""
-                              }`}
+                              className={
+                                mapFilters.keys === k
+                                  ? "rx-btn-primary text-xs"
+                                  : "rx-btn text-xs"
+                              }
                               onClick={() => patchMapFilters({ keys: k })}
                             >
                               {k}K

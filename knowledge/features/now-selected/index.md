@@ -34,7 +34,7 @@ While song-selecting or playing, open **Now selected** (optionally `#/now-select
 5. Pattern weights / density / hotspots use the same `ManiaPatternDetail` path as the practice profile (unrated chart).
 6. Maps not in the local mirror still show identity + ephemeral mania analysis from tosu `.osu` text; preview is skipped.
 7. Widget visibility and order are page-local (`localStorage` key `roxysu:now-selected-layout`), not the Settings HTTP store.
-8. Focus layout (`?focus=1`) hides AppShell chrome (sidebar, mobile nav) for a second monitor.
+8. Focus layout (`?focus=1`) hides AppShell chrome (sidebar, mobile nav) for a second monitor. While no map is selected, connection status and Start tosu share one panel. Live play shows combo, accuracy, misses, and PP as separate figures.
 9. Personal play count / best accuracy / best PP use `GET /api/beatmaps/:id/stats`, not the full practice-profile payload.
 10. Live play ticks patch the tosu live query cache (`tosu.updated` `reason: play`). HTTP poll of `GET /api/tosu/live` runs only when SSE is down.
 11. The rating widget follows Settings difficulty display (`roxysu:rating-display`): `rework` shows ephemeral `analysis.rework` (Rework dan + ★); other modes keep Sunny/Daniel from `analysis.sunny`. Same rule on the Current session **Now selected** panel.

@@ -23,6 +23,8 @@ touches:
 
 Choose mastery formula (`simple` or `practice`), rating display preference (osu! stars / dan / Sunny stars / rework dan), paths, background jobs (Sunny, Daniel, rework backfills), Rice/LN/FLN classification boundaries, and recommendation focus bands (Push / Accuracy / Consistency / Deficit). Recompute mastery across the practice library when formula changes.
 
+**In UI:** each Settings tab has jump links to its sections. Skin import, reset, and overlay sprite publish stay on the mania tab.
+
 Rating display is stored in the browser (`roxysu:rating-display`). The `rework`
 option shows mania-difficulty-port dan labels (and the matching star under the
 detail panel). It needs the rework dan Settings job to have filled

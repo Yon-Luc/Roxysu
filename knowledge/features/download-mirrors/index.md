@@ -22,6 +22,8 @@ touches:
 
 Fetch beatmap sets via configured mirrors (hinai / nerinyan / osu.direct) from the UI.
 
+**In UI:** search stays first. Count / download-all / download-pages sit under Get missing maps. No-video and parallel downloads sit with those actions. Open in osu! is a separate Import row. The long explanation is collapsed.
+
 ## Business rules
 
 1. Only one mirror batch download or single-save runs at a time (`job.running` / `savingInProgress`).

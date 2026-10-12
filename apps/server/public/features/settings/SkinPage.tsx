@@ -348,36 +348,10 @@ export function SkinPage({ section }: { section?: string } = {}) {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <PageTitle>{dict?.skin.pageTitle}</PageTitle>
-          <p className="rx-subtitle">{dict?.skin.subtitle}</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {tab === "mania" ? (
-            <>
-              <ManiaSkinFileButton />
-              <ManiaSkinRealmImportButton />
-            </>
-          ) : null}
-          <button
-            type="button"
-            className="rx-btn"
-            onClick={() => void resetImportedKeymode(keys)}
-          >
-            {t(dict?.skin.resetKeymode, { keys })}
-          </button>
-          <button
-            type="button"
-            className="rx-btn"
-            onClick={() => void resetAllImported()}
-          >
-            {dict?.skin.resetAll}
-          </button>
-        </div>
+      <div>
+        <PageTitle>{dict?.skin.pageTitle}</PageTitle>
+        <p className="rx-subtitle">{dict?.skin.subtitle}</p>
       </div>
-
-      <OverlaySkinSyncCard />
 
       <div className="flex flex-wrap gap-2" role="tablist" aria-label="Ruleset">
         <button
@@ -420,6 +394,25 @@ export function SkinPage({ section }: { section?: string } = {}) {
 
       {tab === "mania" ? (
         <ManiaSkinDropHost className="space-y-6">
+      <div className="flex flex-wrap gap-2">
+        <ManiaSkinFileButton />
+        <ManiaSkinRealmImportButton />
+        <button
+          type="button"
+          className="rx-btn"
+          onClick={() => void resetImportedKeymode(keys)}
+        >
+          {t(dict?.skin.resetKeymode, { keys })}
+        </button>
+        <button
+          type="button"
+          className="rx-btn"
+          onClick={() => void resetAllImported()}
+        >
+          {dict?.skin.resetAll}
+        </button>
+      </div>
+      <OverlaySkinSyncCard />
       <div className="flex flex-wrap gap-2">
         {KEYMODES.map((k) => (
           <button
@@ -602,7 +595,7 @@ export function SkinPage({ section }: { section?: string } = {}) {
             id={pageSectionDomId("columns")}
             className="rx-panel scroll-mt-6 overflow-hidden p-0"
           >
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/5 px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
               <h2 className="text-sm font-bold text-ink">
                 {dict?.skin.columns}
               </h2>

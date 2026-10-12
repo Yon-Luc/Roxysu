@@ -38,6 +38,8 @@ touches:
 
 Optional online process for sharing collections and maintaining the hub search index. Separate Hub store from the client app's local mirror.
 
+**In UI:** Share collection is the primary header action on browse. Login, logout, and admin links sit on a second row. Browse, Favorites, and Added are exclusive tabs. On a collection, Save / Update is the primary action; favorite, edit, and delete sit under it. Share page publish stays with the readiness line, not duplicated in the header.
+
 ## Business meaning
 
 Networked collaboration / discovery — not required for offline practice analytics.

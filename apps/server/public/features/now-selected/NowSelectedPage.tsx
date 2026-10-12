@@ -73,7 +73,7 @@ function statusLabel(
   if (!data || !data.enabled) {
     return {
       text: dict?.session.tosu.disabled ?? "Disabled",
-      className: "bg-white/5 text-faint",
+      className: "bg-elevated text-faint",
     };
   }
   switch (data.status) {
@@ -95,7 +95,7 @@ function statusLabel(
     default:
       return {
         text: dict?.session.tosu.disabled ?? "Disabled",
-        className: "bg-white/5 text-faint",
+        className: "bg-elevated text-faint",
       };
   }
 }
@@ -364,65 +364,74 @@ export function NowSelectedPage({
         </div>
       </div>
 
-      {isLoading && !data ? (
-        <p className="text-sm text-muted">
-          {dict?.session.tosu.connectingTosu ?? "Connecting to tosu…"}
-        </p>
-      ) : null}
-
-      {error ? (
+      {error && hasMap ? (
         <p className="text-sm text-danger">{error.message}</p>
       ) : null}
 
-      {data && !data.enabled ? (
-        <p className="text-sm text-muted">
-          {(() => {
-            const parts = (
-              dict?.session.tosu.adapterOff ??
-              "Tosu live adapter is off. Enable it in ⟦SETTINGS⟧."
-            ).split("⟦SETTINGS⟧");
-            return (
-              <>
-                {parts[0]}
-                <Link to="/settings" className="text-accent hover:underline">
-                  {dict?.nav.settings ?? "Settings"}
-                </Link>
-                {parts[1]}
-              </>
-            );
-          })()}
-        </p>
-      ) : null}
-
-      {data?.warnings?.length ? (
-        <ul className="space-y-1 text-sm text-warning/90">
+      {!hasMap ? (
+        <section className="rx-panel space-y-3 p-4 sm:p-5">
+          {isLoading && !data ? (
+            <p className="text-sm text-muted">
+              {dict?.session.tosu.connectingTosu ?? "Connecting to tosu…"}
+            </p>
+          ) : null}
+          {error ? (
+            <p className="text-sm text-danger">{error.message}</p>
+          ) : null}
+          {data && !data.enabled ? (
+            <p className="text-sm text-muted">
+              {(() => {
+                const parts = (
+                  dict?.session.tosu.adapterOff ??
+                  "Tosu live adapter is off. Enable it in ⟦SETTINGS⟧."
+                ).split("⟦SETTINGS⟧");
+                return (
+                  <>
+                    {parts[0]}
+                    <Link to="/settings" className="text-accent hover:underline">
+                      {dict?.nav.settings ?? "Settings"}
+                    </Link>
+                    {parts[1]}
+                  </>
+                );
+              })()}
+            </p>
+          ) : null}
+          {data?.warnings?.length ? (
+            <ul className="space-y-1 text-sm text-warning">
+              {data.warnings.map((w) => (
+                <li key={w}>{w}</li>
+              ))}
+            </ul>
+          ) : null}
+          {data &&
+          data.enabled &&
+          data.status !== "connected" &&
+          !startMut.isSuccess ? (
+            <button
+              type="button"
+              className="rx-btn-primary text-sm"
+              disabled={startMut.isPending}
+              onClick={() => startMut.mutate()}
+            >
+              {startMut.isPending
+                ? dict?.session.tosu.starting ?? "Starting…"
+                : dict?.session.tosu.startTosu ?? "Start tosu"}
+            </button>
+          ) : null}
+          {data?.enabled && data.status === "connected" && !hasMap ? (
+            <p className="text-sm text-muted">
+              {dict?.session.tosu.waitingForMap ??
+                "Waiting for a selected map from osu!…"}
+            </p>
+          ) : null}
+        </section>
+      ) : data?.warnings?.length ? (
+        <ul className="space-y-1 text-sm text-warning">
           {data.warnings.map((w) => (
             <li key={w}>{w}</li>
           ))}
         </ul>
-      ) : null}
-
-      {data &&
-      data.enabled &&
-      data.status !== "connected" &&
-      !startMut.isSuccess ? (
-        <button
-          type="button"
-          className="rx-btn-primary text-sm"
-          disabled={startMut.isPending}
-          onClick={() => startMut.mutate()}
-        >
-          {startMut.isPending
-            ? dict?.session.tosu.starting ?? "Starting…"
-            : dict?.session.tosu.startTosu ?? "Start tosu"}
-        </button>
-      ) : null}
-
-      {data?.enabled && data.status === "connected" && !hasMap ? (
-        <p className="text-sm text-muted">
-          {dict?.session.tosu.waitingForMap ??
-            "Waiting for a selected map from osu!…"}
-        </p>
       ) : null}
 
       {hasMap ? (
@@ -496,7 +505,7 @@ function IdentityWidget({
             {beatmap.title ?? dict?.session.untitled}
           </span>
           {beatmap.keys != null ? (
-            <span className="rx-chip bg-black/35 text-ink">
+            <span className="rx-chip bg-elevated text-ink">
               {beatmap.keys}K
             </span>
           ) : null}
@@ -587,20 +596,29 @@ function NowSelectedLivePlay() {
   });
   const play = data?.play;
   if (play?.active) {
+    const combo =
+      play.maxCombo != null
+        ? `${play.combo ?? 0} / ${play.maxCombo}`
+        : String(play.combo ?? 0);
     return (
-      <p className="text-sm text-muted">
-        {t(dict?.session.tosu.liveCombo, {
-          combo: play.combo ?? 0,
-        }) || `Live · combo ${play.combo ?? 0}`}
-        {play.maxCombo != null ? ` / ${play.maxCombo}` : ""}
-        {" · "}
-        {play.accuracy != null ? formatAccuracy(play.accuracy) : "—"}
-        {" · "}
-        {t(dict?.session.tosu.misses, {
-          count: play.misses ?? 0,
-        }) || `${play.misses ?? 0} miss`}
-        {play.pp != null ? ` · ${Math.round(play.pp)}pp` : ""}
-      </p>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <MiniStat
+          label={dict?.session.tosu.combo ?? "Combo"}
+          value={combo}
+        />
+        <MiniStat
+          label={dict?.session.tosu.accuracy ?? "Accuracy"}
+          value={play.accuracy != null ? formatAccuracy(play.accuracy) : "—"}
+        />
+        <MiniStat
+          label={dict?.practice.sortLabels.misses ?? "Misses"}
+          value={String(play.misses ?? 0)}
+        />
+        <MiniStat
+          label="PP"
+          value={play.pp != null ? String(Math.round(play.pp)) : "—"}
+        />
+      </div>
     );
   }
   return (

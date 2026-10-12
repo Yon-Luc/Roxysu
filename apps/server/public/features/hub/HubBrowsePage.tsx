@@ -222,64 +222,73 @@ export function HubBrowsePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <PageTitle>{dict?.hub?.workshop ?? "Community"}</PageTitle>
           <p className="rx-subtitle">
             {dict?.hub?.browseSubtitle ?? "Browse and share beatmap collection packs."}
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          {meQuery.data ? (
-            <>
-              <div className="flex items-center gap-2 text-sm text-muted">
-                {meQuery.data.avatarUrl ? (
-                  <img
-                    src={meQuery.data.avatarUrl}
-                    alt=""
-                    className="h-7 w-7 rounded-full object-cover"
-                  />
-                ) : null}
-                <span className="text-ink">{meQuery.data.username}</span>
-              </div>
-                <button
-                  type="button"
-                  className="rx-btn"
-                  onClick={() => logout.mutate()}
-                >
-                  {dict?.hub?.logout ?? "Log out"}
-                </button>
-            </>
-          ) : (
-            <HubLoginButton />
-          )}
-          {meQuery.data?.role === "admin" ? (
-            <>
-              <Link to="/hub/admin/cache" className="rx-btn">
-                {dict?.hub?.searchCache ?? "Search cache"}
-              </Link>
-              <Link to="/hub/admin/calc-bundles" className="rx-btn">
-                Calc bundles
-              </Link>
-            </>
-          ) : null}
-          <Link to="/hub/share" className="rx-btn">
-            {dict?.hub?.shareCollection ?? "Share collection"}
-          </Link>
-        </div>
+        <Link to="/hub/share" className="rx-btn-primary shrink-0">
+          {dict?.hub?.shareCollection ?? "Share collection"}
+        </Link>
       </div>
 
-      <div className="flex flex-wrap gap-2 border-b border-highlight/40 pb-3">
+      <div className="flex flex-wrap items-center gap-2">
+        {meQuery.data ? (
+          <>
+            <div className="flex items-center gap-2 text-sm text-muted">
+              {meQuery.data.avatarUrl ? (
+                <img
+                  src={meQuery.data.avatarUrl}
+                  alt=""
+                  className="h-7 w-7 rounded-full object-cover"
+                />
+              ) : null}
+              <span className="text-ink">{meQuery.data.username}</span>
+            </div>
+            <button
+              type="button"
+              className="rx-btn text-sm"
+              onClick={() => logout.mutate()}
+            >
+              {dict?.hub?.logout ?? "Log out"}
+            </button>
+          </>
+        ) : (
+          <HubLoginButton />
+        )}
+        {meQuery.data?.role === "admin" ? (
+          <>
+            <Link to="/hub/admin/cache" className="rx-btn text-sm">
+              {dict?.hub?.searchCache ?? "Search cache"}
+            </Link>
+            <Link to="/hub/admin/calc-bundles" className="rx-btn text-sm">
+              {dict?.hub?.calcBundles ?? "Calc bundles"}
+            </Link>
+          </>
+        ) : null}
+      </div>
+
+      <div
+        className="flex flex-wrap gap-2"
+        role="tablist"
+        aria-label={dict?.hub?.workshop ?? "Community"}
+      >
         <button
           type="button"
-          className={`rx-btn text-sm ${tab === "browse" ? "rx-btn-primary" : ""}`}
+          role="tab"
+          aria-selected={tab === "browse"}
+          className={tab === "browse" ? "rx-btn-primary text-sm" : "rx-btn text-sm"}
           onClick={() => setTab("browse")}
         >
           {dict?.hub?.tabBrowse ?? "Search collections"}
         </button>
         <button
           type="button"
-          className={`rx-btn text-sm ${tab === "favorites" ? "rx-btn-primary" : ""}`}
+          role="tab"
+          aria-selected={tab === "favorites"}
+          className={tab === "favorites" ? "rx-btn-primary text-sm" : "rx-btn text-sm"}
           onClick={() => setTab("favorites")}
         >
           {t(dict?.hub?.tabFavorites ?? "Favorites")}
@@ -289,7 +298,9 @@ export function HubBrowsePage() {
         </button>
         <button
           type="button"
-          className={`rx-btn text-sm ${tab === "added" ? "rx-btn-primary" : ""}`}
+          role="tab"
+          aria-selected={tab === "added"}
+          className={tab === "added" ? "rx-btn-primary text-sm" : "rx-btn text-sm"}
           onClick={() => setTab("added")}
         >
           {t(dict?.hub?.tabAdded ?? "Collections added")}
@@ -302,7 +313,7 @@ export function HubBrowsePage() {
       <div className="flex flex-col gap-3">
         <input
           type="search"
-          className="rx-input w-full max-w-xl"
+          className="rx-input w-full"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder={

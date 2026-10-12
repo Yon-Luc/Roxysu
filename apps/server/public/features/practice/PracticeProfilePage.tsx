@@ -38,7 +38,6 @@ import {
   useRatingDisplayMode,
 } from "../../lib/ratingDisplay";
 import { useAppDict, t } from "../../lib/i18n";
-import roxyIcon from "../../roxy.png";
 
 function MapBackLink() {
   const canGoBack = useCanGoBack();
@@ -301,16 +300,7 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
             <p className="text-sm font-medium text-subtle">
               {beatmap.artist}
             </p>
-            <div className="mt-1 flex flex-wrap items-center gap-3">
-              <img
-                src={roxyIcon}
-                alt=""
-                className="size-14 shrink-0 rounded-full object-cover sm:size-16"
-              />
-              <h1 className="font-display text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
-                {beatmap.title}
-              </h1>
-            </div>
+            <h1 className="rx-title mt-1">{beatmap.title}</h1>
             <p className="mt-2 text-sm text-muted">
               [{beatmap.difficultyName}] · {displayedRating}{" "}
               · {beatmap.bpm.toFixed(0)} BPM
@@ -325,20 +315,20 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
                   })
                 : ""}
             </p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <BeatmapPreviewButton beatmapId={beatmap.id} />
-              {clientUrl && (
-                <a href={clientUrl} className="rx-btn-primary">
-                  {dict?.practice.detail.openInOsu}
-                </a>
-              )}
-              <CopyBeatmapSearchButton
-                title={beatmap.title}
-                difficultyName={beatmap.difficultyName}
-              />
-              <MapMoreActions beatmapId={beatmap.id} webUrl={webUrl} />
-            </div>
           </div>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <BeatmapPreviewButton beatmapId={beatmap.id} />
+          {clientUrl ? (
+            <a href={clientUrl} className="rx-btn-primary">
+              {dict?.practice.detail.openInOsu}
+            </a>
+          ) : null}
+          <CopyBeatmapSearchButton
+            title={beatmap.title}
+            difficultyName={beatmap.difficultyName}
+          />
+          <MapMoreActions beatmapId={beatmap.id} webUrl={webUrl} />
         </div>
       </div>
 

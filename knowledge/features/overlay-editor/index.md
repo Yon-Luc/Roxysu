@@ -21,7 +21,7 @@ touches:
 Compose the `/overlay` HUD: an editor page (`/overlay-editor`) where the user
 places **Overlay elements** by dragging, sizes the render surface, saves named
 **Overlay profiles**, and gates element visibility with **Overlay triggers**
-evaluated against **tosu live**.
+evaluated against **tosu live**. The editor stays dark so the canvas matches the overlay. The toolbar groups profile, file actions, then consumer actions.
 
 ## Business rules
 

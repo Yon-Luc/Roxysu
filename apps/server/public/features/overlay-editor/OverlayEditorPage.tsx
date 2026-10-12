@@ -344,90 +344,94 @@ export function OverlayEditorPage() {
         <>
           {/* Toolbar */}
           <UiLayer className="inset-x-0 top-0 border-b border-white/10 bg-[#0b0d10]/95 px-3 py-2 backdrop-blur">
-            <div
-              className="flex flex-wrap items-center gap-2"
-            >
-              <Link
-                to="/"
-                className="rx-btn !px-3 !py-1 text-xs"
-                aria-label="Back"
-              >
-                ←
-              </Link>
-              <span className="mr-2 text-xs font-bold uppercase tracking-wide text-white/60">
-                Overlay editor
-              </span>
-              <select
-                className="rx-input max-w-48 py-1 text-xs"
-                value={activeProfile?.id ?? ""}
-                onChange={(e) => setSelectedId(e.target.value || null)}
-              >
-                {profiles.length === 0 ? <option value="">—</option> : null}
-                {profiles.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                className="rx-btn !px-3 !py-1 text-xs"
-                onClick={() => {
-                  const profile = makeProfile("New overlay");
-                  saveMutation.mutate(profile);
-                }}
-              >
-                New
-              </button>
-              <button
-                type="button"
-                className="rx-btn !px-3 !py-1 text-xs"
-                disabled={!draft}
-                onClick={() => {
-                  if (!draft) return;
-                  const copy = structuredClone(draft);
-                  copy.id = `profile-${Math.random().toString(36).slice(2, 10)}`;
-                  copy.name = `${draft.name} copy`;
-                  saveMutation.mutate(copy);
-                }}
-              >
-                Duplicate
-              </button>
-              <button
-                type="button"
-                className="rx-btn-primary !px-3 !py-1 text-xs"
-                disabled={!draft}
-                onClick={() => draft && saveMutation.mutate(draft)}
-              >
-                Save
-              </button>
-              <button
-                type="button"
-                className="rx-btn !px-3 !py-1 text-xs text-danger"
-                disabled={!draft || deleteMutation.isPending}
-                onClick={() => draft && deleteMutation.mutate(draft.id)}
-              >
-                Delete
-              </button>
-              {consumerUrl ? (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <div className="flex items-center gap-2">
+                <Link
+                  to="/"
+                  className="rx-btn !px-3 !py-1 text-xs"
+                  aria-label="Back"
+                >
+                  ←
+                </Link>
+                <span className="text-xs font-bold uppercase tracking-wide text-white/60">
+                  Overlay editor
+                </span>
+                <select
+                  className="rx-input max-w-48 py-1 text-xs"
+                  value={activeProfile?.id ?? ""}
+                  onChange={(e) => setSelectedId(e.target.value || null)}
+                >
+                  {profiles.length === 0 ? <option value="">—</option> : null}
+                  {profiles.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   className="rx-btn !px-3 !py-1 text-xs"
-                  onClick={() => navigator.clipboard.writeText(consumerUrl)}
-                  title={consumerUrl}
+                  onClick={() => {
+                    const profile = makeProfile("New overlay");
+                    saveMutation.mutate(profile);
+                  }}
                 >
-                  Copy URL
+                  New
                 </button>
-              ) : null}
-              <button
-                type="button"
-                className="rx-btn !px-3 !py-1 text-xs"
-                disabled={pushSkinsMutation.isPending}
-                onClick={() => pushSkinsMutation.mutate(undefined)}
-                title="Publish this browser's preview skins (incl. imported .osk) for overlay consumers"
-              >
-                {pushSkinsMutation.isPending ? "Pushing…" : "Push skins"}
-              </button>
+                <button
+                  type="button"
+                  className="rx-btn !px-3 !py-1 text-xs"
+                  disabled={!draft}
+                  onClick={() => {
+                    if (!draft) return;
+                    const copy = structuredClone(draft);
+                    copy.id = `profile-${Math.random().toString(36).slice(2, 10)}`;
+                    copy.name = `${draft.name} copy`;
+                    saveMutation.mutate(copy);
+                  }}
+                >
+                  Duplicate
+                </button>
+                <button
+                  type="button"
+                  className="rx-btn-primary !px-3 !py-1 text-xs"
+                  disabled={!draft}
+                  onClick={() => draft && saveMutation.mutate(draft)}
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  className="rx-btn !px-3 !py-1 text-xs text-danger"
+                  disabled={!draft || deleteMutation.isPending}
+                  onClick={() => draft && deleteMutation.mutate(draft.id)}
+                >
+                  Delete
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                {consumerUrl ? (
+                  <button
+                    type="button"
+                    className="rx-btn !px-3 !py-1 text-xs"
+                    onClick={() => navigator.clipboard.writeText(consumerUrl)}
+                    title={consumerUrl}
+                  >
+                    Copy URL
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="rx-btn !px-3 !py-1 text-xs"
+                  disabled={pushSkinsMutation.isPending}
+                  onClick={() => pushSkinsMutation.mutate(undefined)}
+                  title="Publish this browser's preview skins (incl. imported .osk) for overlay consumers"
+                >
+                  {pushSkinsMutation.isPending ? "Pushing…" : "Push skins"}
+                </button>
+              </div>
               <button
                 type="button"
                 className="rx-btn ml-auto !px-3 !py-1 text-xs"
@@ -439,7 +443,7 @@ export function OverlayEditorPage() {
           </UiLayer>
 
           {/* Palette + layers */}
-          <UiLayer className="bottom-3 left-3 top-14 w-56 overflow-y-auto">
+          <UiLayer className="bottom-3 left-3 top-24 w-56 overflow-y-auto">
             <div className="flex flex-col gap-3">
               <section className="rx-panel p-3">
                 <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-faint">
@@ -503,7 +507,7 @@ export function OverlayEditorPage() {
           </UiLayer>
 
           {/* Inspector */}
-          <UiLayer className="bottom-3 right-3 top-14 w-80 overflow-y-auto">
+          <UiLayer className="bottom-3 right-3 top-24 w-80 overflow-y-auto">
             <div className="flex flex-col gap-3">
               <section className="rx-panel space-y-3 p-3">
                 <h3 className="text-xs font-bold uppercase tracking-wide text-faint">

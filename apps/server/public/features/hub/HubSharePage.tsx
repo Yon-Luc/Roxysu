@@ -264,16 +264,6 @@ export function HubSharePage() {
           ) : (
             <HubLoginButton />
           )}
-          <button
-            type="button"
-            className="rx-btn-primary"
-            disabled={!canSubmit || shareMut.isPending}
-            onClick={() => shareMut.mutate()}
-          >
-            {shareMut.isPending
-              ? (dict?.hub?.sharing ?? "Sharing…")
-              : (dict?.hub?.shareToWorkshop ?? "Share to Community")}
-          </button>
         </div>
       </div>
 

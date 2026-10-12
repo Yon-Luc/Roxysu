@@ -7,7 +7,8 @@ import {
 } from "../../components/LoadingSkeleton";
 import { PageTitle } from "../../components/PageTitle";
 import { fetchSettings, type SettingsPayload } from "../../lib/api";
-import { useScrollToPageSection } from "../../lib/pageSections";
+import { pageSectionDomId, useScrollToPageSection } from "../../lib/pageSections";
+import { isDesktopShell } from "../../lib/desktop";
 import { useAppDict, t } from "../../lib/i18n";
 import { OsuDataFolderSection } from "./sections/OsuDataFolderSection";
 import { OverlayHostSection } from "./sections/OverlayHostSection";
@@ -31,9 +32,18 @@ import { AxisThresholdsSection } from "./sections/AxisThresholdsSection";
 import { RecommendFocusSection } from "./sections/RecommendFocusSection";
 import {
   SETTINGS_TABS,
+  TAB_SECTIONS,
   resolveSettingsTab,
   type SettingsTabId,
 } from "./settingsTabs";
+
+function sectionLabel(
+  dict: ReturnType<typeof useAppDict>["dict"],
+  key: string,
+): string {
+  const value = dict?.settings?.[key as keyof NonNullable<typeof dict>["settings"]];
+  return typeof value === "string" ? value : key;
+}
 
 const TAB_FALLBACK: Record<SettingsTabId, string> = {
   setup: "Setup",
@@ -186,6 +196,23 @@ export function SettingsPage({
           );
         })}
       </div>
+
+      <nav
+        className="flex flex-wrap gap-x-3 gap-y-1"
+        aria-label={dict?.settings.pageTitle ?? "Settings"}
+      >
+        {TAB_SECTIONS[activeTab]
+          .filter((section) => !(section.desktopHidden && isDesktopShell()))
+          .map((section) => (
+            <a
+              key={section.id}
+              href={`#${pageSectionDomId(section.id)}`}
+              className="text-xs font-medium text-muted transition hover:text-ink"
+            >
+              {sectionLabel(dict, section.labelKey)}
+            </a>
+          ))}
+      </nav>
 
       <div className="space-y-8" role="tabpanel">
         <SettingsTabPanels tab={activeTab} data={data} />

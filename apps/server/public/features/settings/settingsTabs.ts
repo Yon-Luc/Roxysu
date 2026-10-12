@@ -43,8 +43,46 @@ export const SECTION_TO_TAB: Record<string, SettingsTabId> = {
   keybinds: "appearance",
   "sunny-dan-calculation": "jobs",
   "daniel-dan-calculation": "jobs",
+  "rework-dan-calculation": "jobs",
   "pattern-analysis": "jobs",
   "mania-rating-lab": "jobs",
+};
+
+/** Sections shown as jump links under the active Settings tab, in page order. */
+export const TAB_SECTIONS: Record<
+  SettingsTabId,
+  { id: string; labelKey: string; desktopHidden?: boolean }[]
+> = {
+  setup: [
+    { id: "osu-lazer-data-folder", labelKey: "lazerDataFolder" },
+    { id: "live-sync", labelKey: "liveSync" },
+    { id: "online-score-pull", labelKey: "onlineScorePull" },
+    { id: "score-transfer", labelKey: "scoreTransfer" },
+    { id: "in-game-overlay", labelKey: "overlayHost" },
+    { id: "tosu-live-map", labelKey: "tosuLiveMap" },
+  ],
+  practice: [
+    { id: "mastery-formula", labelKey: "masteryFormula" },
+    { id: "score-username", labelKey: "scoreUsername" },
+    { id: "gamemode", labelKey: "gamemode" },
+  ],
+  customize: [
+    { id: "axis-thresholds", labelKey: "axisThresholds" },
+    { id: "recommend-focus", labelKey: "recommendFocus" },
+  ],
+  appearance: [
+    { id: "appearance", labelKey: "appearance" },
+    { id: "difficulty-display", labelKey: "difficultyDisplay" },
+    { id: "preview-skin", labelKey: "previewSkin" },
+    { id: "keybinds", labelKey: "keybinds" },
+  ],
+  jobs: [
+    { id: "sunny-dan-calculation", labelKey: "sunnyDan" },
+    { id: "daniel-dan-calculation", labelKey: "danielDan" },
+    { id: "rework-dan-calculation", labelKey: "reworkDan" },
+    { id: "pattern-analysis", labelKey: "patternAnalysis" },
+    { id: "mania-rating-lab", labelKey: "maniaRatingLab", desktopHidden: true },
+  ],
 };
 
 export function isSettingsTabId(value: string): value is SettingsTabId {

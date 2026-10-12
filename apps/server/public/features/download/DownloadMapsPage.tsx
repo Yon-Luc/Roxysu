@@ -550,17 +550,9 @@ export function DownloadMapsPage() {
     <div className="space-y-8">
       <div>
         <PageTitle>{dict?.download?.pageTitle ?? "Download maps"}</PageTitle>
-        <p className="rx-subtitle mt-2 max-w-2xl">
-          {dict?.download?.subtitle1 ??
-            "Search online with the same query language as Practice — then download every missing set that matches. Downloads (single or batch) save"}{" "}
-          <code className="text-ink">.osz</code>{" "}
-          {dict?.download?.subtitle2 ?? "files into"}{" "}
-          <code className="text-ink">{downloadDir}</code>.{" "}
-          {dict?.download?.subtitle3 ?? "Use"}{" "}
-          <span className="font-medium text-ink">
-            {dict?.download?.openInOsu ?? "Open in osu!"}
-          </span>{" "}
-          {dict?.download?.subtitle4 ?? "to import them into osu!lazer."}
+        <p className="rx-subtitle">
+          {dict?.download?.pageHint ??
+            "Search online, then download the sets you don't own."}
         </p>
       </div>
 
@@ -628,49 +620,6 @@ export function DownloadMapsPage() {
             />
             {dict?.download?.hideOwned ?? "Hide maps I already own"}
           </label>
-          <label className="inline-flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={noVideo}
-              onChange={(e) => {
-                const next = e.target.checked;
-                setNoVideo(next);
-                persist({
-                  q,
-                  sort,
-                  excludeOwned,
-                  noVideo: next,
-                  pageCount,
-                  downloadConcurrency,
-                });
-              }}
-            />
-            {dict?.download?.noVideo ?? "Download without video"}
-          </label>
-          <label className="inline-flex items-center gap-2">
-            <span className="text-muted">
-              {dict?.download?.parallelDownloads ?? "Parallel downloads:"}
-            </span>
-            <input
-              type="number"
-              min={1}
-              max={10}
-              value={downloadConcurrency}
-              onChange={(e) => {
-                const next = Math.min(10, Math.max(1, Math.floor(Number(e.target.value))));
-                setDownloadConcurrency(next);
-                persist({ q, sort, excludeOwned, noVideo, pageCount, downloadConcurrency: next });
-              }}
-              className="w-12 rounded border border-subtle bg-surface px-1 py-0.5 text-center text-sm"
-              aria-label={
-                dict?.download?.parallelAria ??
-                "Number of maps to download in parallel (1–10)"
-              }
-            />
-            <span className="text-muted text-xs">
-              {dict?.download?.parallelRange ?? "(1–10)"}
-            </span>
-          </label>
         </div>
       </form>
 
@@ -685,8 +634,12 @@ export function DownloadMapsPage() {
           onStop={() => stopBatch.mutate()}
         />
       ) : (
-        <section className="rx-panel space-y-3 p-4">
-          <div className="flex flex-wrap items-end gap-3">
+        <section className="rx-panel space-y-4 p-4">
+          <div>
+            <h2 className="text-sm font-bold text-ink">
+              {dict?.download?.getMissing ?? "Get missing maps"}
+            </h2>
+          <div className="mt-2 flex flex-wrap items-end gap-3">
             <button
               type="button"
               className="rx-btn"
@@ -769,6 +722,69 @@ export function DownloadMapsPage() {
                 s: pageCount === 1 ? "" : "s",
               }) || `Download ${pageCount} page${pageCount === 1 ? "" : "s"}`}
             </button>
+          </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-4 border-t border-line pt-3 text-sm text-muted">
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={noVideo}
+                onChange={(e) => {
+                  const next = e.target.checked;
+                  setNoVideo(next);
+                  persist({
+                    q,
+                    sort,
+                    excludeOwned,
+                    noVideo: next,
+                    pageCount,
+                    downloadConcurrency,
+                  });
+                }}
+              />
+              {dict?.download?.noVideo ?? "Download without video"}
+            </label>
+            <label className="inline-flex items-center gap-2">
+              <span>
+                {dict?.download?.parallelDownloads ?? "Parallel downloads:"}
+              </span>
+              <input
+                type="number"
+                min={1}
+                max={10}
+                value={downloadConcurrency}
+                onChange={(e) => {
+                  const next = Math.min(
+                    10,
+                    Math.max(1, Math.floor(Number(e.target.value))),
+                  );
+                  setDownloadConcurrency(next);
+                  persist({
+                    q,
+                    sort,
+                    excludeOwned,
+                    noVideo,
+                    pageCount,
+                    downloadConcurrency: next,
+                  });
+                }}
+                className="rx-input w-16 px-2 py-1 text-center tabular-nums"
+                aria-label={
+                  dict?.download?.parallelAria ??
+                  "Number of maps to download in parallel (1–10)"
+                }
+              />
+              <span className="text-xs text-faint">
+                {dict?.download?.parallelRange ?? "(1–10)"}
+              </span>
+            </label>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
+            <h2 className="text-sm font-bold text-ink">
+              {dict?.download?.importHeading ?? "Import"}
+            </h2>
             <button
               type="button"
               className="rx-btn-primary"
@@ -792,7 +808,11 @@ export function DownloadMapsPage() {
             </button>
           </div>
 
-          <p className="text-sm text-muted">
+          <details className="text-sm text-muted">
+            <summary className="cursor-pointer font-medium text-subtle">
+              {dict?.download?.howItWorks ?? "How download works"}
+            </summary>
+          <p className="mt-2">
             {dict?.download?.scrollHint ?? "Search loads more as you scroll."}{" "}
             <span className="font-medium text-ink">
               {dict?.download?.countAllMissing ?? "Count all missing"}
@@ -815,8 +835,14 @@ export function DownloadMapsPage() {
             </span>{" "}
             {dict?.download?.orUse ?? "or"}{" "}
             <code className="text-ink">import-into-osu.sh</code> /{" "}
-            <code className="text-ink">import-into-osu.bat</code>.
+            <code className="text-ink">import-into-osu.bat</code>.{" "}
+            {dict?.download?.subtitle1 ??
+              "Search online with the same query language as Practice — then download every missing set that matches. Downloads (single or batch) save"}{" "}
+            <code className="text-ink">.osz</code>{" "}
+            {dict?.download?.subtitle2 ?? "files into"}{" "}
+            <code className="text-ink">{downloadDir}</code>.
           </p>
+          </details>
 
           {countError ? (
             <p className="text-sm text-danger">{countError}</p>

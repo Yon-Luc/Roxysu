@@ -338,7 +338,7 @@ export function RatingLabPage() {
     <div className="space-y-8">
       <div>
         <PageTitle>{dict?.ratingLab.title ?? "Rating Lab"}</PageTitle>
-        <p className="mt-2 max-w-3xl text-sm text-muted">
+        <p className="rx-subtitle max-w-3xl">
           {dict?.ratingLab.subtitle ??
             "Compare experimental mania star rating and PP (at a chosen custom accuracy) against a baseline. Uses local .osu files and versioned calculator binaries configured in Settings."}
         </p>
@@ -359,7 +359,7 @@ export function RatingLabPage() {
                   if (e.key === "Enter") runSearch();
                 }}
                 placeholder="mode:mania key=7 ranked"
-                className="w-full rounded-xl border border-line bg-elevated/50 px-3 py-2 font-mono text-sm text-ink placeholder:text-faint focus:border-accent focus:outline-none"
+                className="rx-input min-w-0 flex-1 font-mono"
                 spellCheck={false}
               />
               <QueryLanguageHelpButton />
@@ -388,7 +388,7 @@ export function RatingLabPage() {
           ))}
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 border-t border-line pt-4 sm:grid-cols-3">
           <label>
               <span className="text-xs font-semibold uppercase tracking-wide text-faint">
                 {dict?.ratingLab.baseline ?? "Baseline"}
@@ -399,7 +399,7 @@ export function RatingLabPage() {
                 setBaseline(e.target.value);
                 setPage(1);
               }}
-              className="mt-1.5 w-full rounded-xl border border-line bg-elevated/50 px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none"
+              className="rx-select mt-1.5 w-full"
             >
               {versions.map((v) => (
                 <option key={v.id} value={v.id}>
@@ -423,7 +423,7 @@ export function RatingLabPage() {
                 setExperiment(e.target.value);
                 setPage(1);
               }}
-              className="mt-1.5 w-full rounded-xl border border-line bg-elevated/50 px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none"
+              className="rx-select mt-1.5 w-full"
             >
               {versions.map((v) => (
                 <option key={v.id} value={v.id}>
@@ -444,7 +444,7 @@ export function RatingLabPage() {
               onChange={(e) => {
                 setPpAccuracy(Number(e.target.value) as PpAccuracyTier);
               }}
-              className="mt-1.5 w-full rounded-xl border border-line bg-elevated/50 px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none"
+              className="rx-select mt-1.5 w-full"
             >
               {PP_ACCURACY_TIERS.map((tier) => (
                 <option key={tier} value={String(tier)}>

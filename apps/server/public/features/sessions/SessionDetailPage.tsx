@@ -201,32 +201,49 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
       }
 
       const highlights = pickSessionShareHighlights(shareScores);
-      const safeName = String(session.name ?? "session")
-        .replace(/[^\w.-]+/g, "-")
-        .replace(/^-+|-+$/g, "")
-        .slice(0, 48);
-      const filename = `roxysu-session-${safeName || "session"}.png`;
-
-      const result = await shareSessionImage(
+      const judgmentLabels = dict?.practice?.detail?.judgments;
+      await shareSessionImage(
         <SessionShareCard
-          rulesetShortName={session.rulesetShortName}
           startedAt={session.startedAt}
           endedAt={session.endedAt}
           scoreCount={session.scoreCount}
           pbCount={sharePbCount}
-          highlights={highlights.map((score) => ({
-            id: score.id,
-            accuracy: score.accuracy,
-            pp: score.pp,
-            mods: score.mods,
-            isPb: score.isPb,
-            title: score.title,
-            artist: score.artist,
-            difficultyName: score.difficultyName,
-            backgroundFileHash: score.backgroundFileHash,
-            setOnlineId: score.setOnlineId,
-            beatmapId: score.beatmapId,
-          }))}
+          highlights={highlights.map((score) => {
+            const judgments =
+              "judgments" in score
+                ? ((score as { judgments?: ScoreJudgmentsView | null })
+                    .judgments ?? null)
+                : null;
+            const pbCompare =
+              "pbCompare" in score
+                ? ((score as { pbCompare?: ScoreCardPbCompare | null })
+                    .pbCompare ?? null)
+                : null;
+            return {
+              id: score.id,
+              accuracy: score.accuracy,
+              pp: score.pp,
+              maxCombo: score.maxCombo,
+              mods: score.mods,
+              isPb: score.isPb,
+              title: score.title,
+              artist: score.artist,
+              difficultyName: score.difficultyName,
+              backgroundFileHash: score.backgroundFileHash,
+              setOnlineId: score.setOnlineId,
+              beatmapId: score.beatmapId,
+              judgments,
+              pbCompare: pbCompare
+                ? {
+                    kind: pbCompare.kind,
+                    accuracy: pbCompare.accuracy,
+                    pp: pbCompare.pp,
+                    maxCombo: pbCompare.maxCombo,
+                    mods: pbCompare.mods,
+                  }
+                : null,
+            };
+          })}
           labels={{
             plays: dict?.session.statPlays ?? "Plays",
             pbs: dict?.session.statPbs ?? "PBs",
@@ -236,19 +253,25 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
             unknownArtist: dict?.session.unknownArtist ?? "Unknown",
             beatmapDeleted: dict?.session.beatmapDeleted ?? "Beatmap deleted",
             morePlays: dict?.session.shareMorePlays ?? "+{{count}} more plays",
+            previousBest:
+              dict?.session.pbCompare?.previous ?? "Previous best",
+            currentPb: dict?.session.pbCompare?.current ?? "Current PB",
             brand: "Roxysu",
+            judgments: {
+              perfect: judgmentLabels?.perfect,
+              great: judgmentLabels?.great,
+              good: judgmentLabels?.good,
+              ok: judgmentLabels?.ok,
+              meh: judgmentLabels?.meh,
+              miss: judgmentLabels?.miss,
+            },
           }}
         />,
-        filename,
       );
 
       pushToast({
-        title:
-          result === "copied"
-            ? (dict?.session.shareCopied ?? "Session image copied")
-            : (dict?.session.shareDownloaded ??
-              "Clipboard unavailable — image downloaded"),
-        tone: result === "copied" ? "success" : "neutral",
+        title: dict?.session.shareCopied ?? "Session image copied",
+        tone: "success",
       });
     } catch (err) {
       pushToast({

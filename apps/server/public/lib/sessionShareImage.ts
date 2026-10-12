@@ -1,10 +1,7 @@
 import type { ReactElement } from "react";
 import { createRoot } from "react-dom/client";
 import { domToBlob, waitUntilLoad } from "modern-screenshot";
-import { downloadBlob } from "./replayVideoExport";
 import { isDesktopShell } from "./desktop";
-
-export type ShareSessionImageResult = "copied" | "downloaded";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -33,7 +30,7 @@ async function waitForImages(root: HTMLElement, timeoutMs = 8_000): Promise<void
   ]);
 }
 
-async function writeClipboardPng(blob: Blob): Promise<boolean> {
+async function writeClipboardPng(blob: Blob): Promise<void> {
   try {
     if (
       typeof ClipboardItem !== "undefined" &&
@@ -45,33 +42,25 @@ async function writeClipboardPng(blob: Blob): Promise<boolean> {
           "image/png": Promise.resolve(blob),
         }),
       ]);
-      return true;
+      return;
     }
   } catch {
-    // fall through to desktop bridge / download
+    // fall through to desktop bridge
   }
 
   if (isDesktopShell() && window.roxysuDesktop?.writeClipboardImage) {
-    try {
-      const buffer = new Uint8Array(await blob.arrayBuffer());
-      await window.roxysuDesktop.writeClipboardImage(buffer);
-      return true;
-    } catch {
-      return false;
-    }
+    const buffer = new Uint8Array(await blob.arrayBuffer());
+    await window.roxysuDesktop.writeClipboardImage(buffer);
+    return;
   }
 
-  return false;
+  throw new Error("Clipboard image write is unavailable");
 }
 
 /**
- * Render a React share card off-screen, rasterize to PNG, copy to clipboard,
- * or download when clipboard write fails.
+ * Render a React share card off-screen, rasterize to PNG, and copy to clipboard.
  */
-export async function shareSessionImage(
-  card: ReactElement,
-  filename: string,
-): Promise<ShareSessionImageResult> {
+export async function shareSessionImage(card: ReactElement): Promise<void> {
   const host = document.createElement("div");
   host.setAttribute("data-session-share-host", "1");
   host.style.cssText =
@@ -104,11 +93,7 @@ export async function shareSessionImage(
       throw new Error("Failed to capture share image");
     }
 
-    const copied = await writeClipboardPng(blob);
-    if (copied) return "copied";
-
-    downloadBlob(blob, filename);
-    return "downloaded";
+    await writeClipboardPng(blob);
   } finally {
     root.unmount();
     host.remove();

@@ -1,5 +1,5 @@
 /** Max score rows drawn on a session share card. */
-export const SESSION_SHARE_HIGHLIGHT_CAP = 8;
+export const SESSION_SHARE_HIGHLIGHT_CAP = 20;
 
 export type SessionShareScoreLike = {
   id: string;

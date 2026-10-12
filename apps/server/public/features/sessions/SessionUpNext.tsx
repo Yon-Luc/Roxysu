@@ -267,7 +267,7 @@ export function SessionUpNext({
           className="rx-btn"
           onClick={() => openInPractice(prefs.query.trim())}
         >
-          {t(dict?.session.openInPractice) || "Open in Practice"}
+          {t(dict?.session.openInPractice) || "Open in Beatmaps"}
         </Link>
       </div>
 

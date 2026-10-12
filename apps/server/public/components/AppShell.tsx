@@ -55,7 +55,7 @@ const SIDEBAR_OPEN_KEY = "roxysu.sidebarOpen";
 const ALL_NAV = [
   { to: "/", label: "Home", labelKey: "home", exact: true, icon: Home, group: "practice" },
   { to: "/stats", label: "Stats", labelKey: "stats", icon: ChartColumn, group: "practice" },
-  { to: "/practice", label: "Practice", labelKey: "practice", icon: Clock, group: "practice" },
+  { to: "/practice", label: "Beatmaps", labelKey: "practice", icon: Clock, group: "practice" },
   { to: "/sessions", label: "Sessions", labelKey: "sessions", icon: List, group: "practice" },
   { to: "/now-selected", label: "Now selected", labelKey: "nowSelected", icon: AudioLines, group: "practice" },
   { to: "/collections", label: "Collections", labelKey: "collections", icon: LayoutGrid, group: "practice" },

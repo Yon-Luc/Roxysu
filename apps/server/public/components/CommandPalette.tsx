@@ -120,7 +120,7 @@ const ALL_PAGE_ITEMS: {
 }[] = [
   { to: "/", label: "Home", keywords: ["dashboard"] },
   { to: "/stats", label: "Stats", keywords: ["statistics", "analytics"] },
-  { to: "/practice", label: "Practice", keywords: ["maps", "library", "beatmaps"] },
+  { to: "/practice", label: "Beatmaps", keywords: ["maps", "library", "practice", "beatmaps"] },
   { to: "/sessions", label: "Sessions", keywords: ["plays", "live"] },
   {
     to: "/now-selected",

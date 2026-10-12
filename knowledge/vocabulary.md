@@ -265,7 +265,9 @@ Persisted mod-aware mania difficulty estimates in `beatmap_dan_rating_variants`:
 
 The searchable catalog of played beatmaps (practice cards). Filtered via the query language.
 
-**Not:** "library data", "beatmap list" when meaning this product surface
+**In UI:** Beatmaps. The route stays `/practice`.
+
+**Not:** "library data", "beatmap list" when meaning this product surface. Not the Settings tab named Practice.
 
 **See:** [features/practice-library/](features/practice-library/index.md)
 

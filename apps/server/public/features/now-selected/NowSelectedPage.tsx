@@ -536,7 +536,7 @@ function IdentityWidget({
               params={{ beatmapId: matchedBeatmapId }}
               className="rx-btn text-sm"
             >
-              {dict?.session.tosu.practiceProfile ?? "Practice profile"}
+              {dict?.session.tosu.practiceProfile ?? "Beatmap"}
             </Link>
           ) : null}
         </div>

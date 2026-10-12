@@ -296,7 +296,7 @@ export function PracticeListPage() {
   return (
     <div className="space-y-8">
       <div>
-        <PageTitle>{dict?.nav.practice ?? "Practice"}</PageTitle>
+        <PageTitle>{dict?.nav.practice ?? "Beatmaps"}</PageTitle>
         <p className="rx-subtitle">
           {dict?.practice.subtitle ??
             "Plain text or query language — e.g."}{" "}

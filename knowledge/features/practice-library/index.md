@@ -15,6 +15,8 @@ touches:
 
 Browse every played map as practice cards; filter/sort via plain text or the shared query DSL.
 
+**In UI:** the page is labeled Beatmaps. The route stays `/practice`.
+
 ## Business meaning
 
 The searchable practice catalog — same query language powers collections and global search.

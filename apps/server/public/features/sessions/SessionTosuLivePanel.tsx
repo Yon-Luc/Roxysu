@@ -418,7 +418,7 @@ export function SessionTosuLivePanel() {
                       params={{ beatmapId: data.matchedBeatmapId }}
                       className="rx-btn text-sm"
                     >
-                      {dict?.session.tosu.practiceProfile ?? "Practice profile"}
+                      {dict?.session.tosu.practiceProfile ?? "Beatmap"}
                     </Link>
                   </div>
                 ) : (

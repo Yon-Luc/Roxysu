@@ -46,7 +46,7 @@ function MapBackLink() {
     <GoBackLink to="/practice" history>
       {canGoBack
         ? (dict?.practice.detail.back ?? "Back")
-        : (dict?.practice.detail.backToPractice ?? "Practice")}
+        : (dict?.practice.detail.backToPractice ?? "Beatmaps")}
     </GoBackLink>
   );
 }

@@ -18,8 +18,6 @@ import { BeatmapPreviewButton } from "../../components/BeatmapPreviewButton";
 import { CopyBeatmapSearchButton } from "../../components/CopyBeatmapSearchButton";
 import {
   CardGridSkeleton,
-  PageHeaderSkeleton,
-  PanelSkeleton,
   SkeletonBlock,
 } from "../../components/LoadingSkeleton";
 import { PageTitle } from "../../components/PageTitle";
@@ -103,6 +101,17 @@ function cleanupMergedQuery(query: string): string {
     .replace(/\(\s*\)/g, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function CardStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <div className="truncate text-[10px] font-medium uppercase tracking-wide text-faint">
+        {label}
+      </div>
+      <div className="mt-0.5 truncate tabular-nums text-subtle">{value}</div>
+    </div>
+  );
 }
 
 function formatNum(n: number): string {
@@ -190,6 +199,7 @@ export function PracticeListPage() {
   const [sortDir, setSortDir] = useState<PracticeSortDir>(stored.sortDir);
   const [metric, setMetric] = useState<PracticeMetric>(stored.metric);
   const [queryHistory, setQueryHistory] = useState<string[]>([]);
+  const [distributionOpen, setDistributionOpen] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   useEffect(() => {
@@ -263,6 +273,7 @@ export function PracticeListPage() {
   function applySearch(nextQ: string, opts?: { fromChart?: boolean }) {
     if (opts?.fromChart) {
       setQueryHistory((prev) => [...prev, submitted]);
+      setDistributionOpen(true);
     } else {
       setQueryHistory([]);
     }
@@ -284,104 +295,111 @@ export function PracticeListPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <PageTitle>{dict?.nav.practice ?? "Practice"}</PageTitle>
-          <p className="rx-subtitle">
-            {dict?.practice.subtitle ??
-              "Plain text or query language — e.g."}{" "}
-            <code className="text-subtle">mode:mania stars:5..6</code>
-            {" · "}
-            <QueryLanguageHelpButton />
-            {" · "}
-            <PatternBrowserButton onApplyQuery={(query) => applySearch(query)} />
-          </p>
-        </div>
-        <form
-          className="flex flex-wrap gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            applySearch(q.trim());
-          }}
-        >
-          <input
-            type="search"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder={
-              dict?.practice.searchPlaceholder ??
-              "Search or mode:mania mastery>50…"
-            }
-            className="rx-input w-72"
-          />
-          <button type="submit" className="rx-btn-primary">
-            {dict?.practice.search ?? "Search"}
-          </button>
-        </form>
+      <div>
+        <PageTitle>{dict?.nav.practice ?? "Practice"}</PageTitle>
+        <p className="rx-subtitle">
+          {dict?.practice.subtitle ??
+            "Plain text or query language — e.g."}{" "}
+          <code className="text-subtle">mode:mania stars:5..6</code>
+        </p>
       </div>
 
-      <section className="rx-panel px-4 py-5 sm:px-5">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-bold text-ink">
-              {dict?.practice.bestScoreDistribution ??
-                "Best-score distribution"}
-            </h2>
-            <p className="mt-0.5 text-xs text-muted">
-              {dict?.practice.distributionHint ??
-                "Across all maps matching the current query — click a bar to filter that range."}
-            </p>
+      <form
+        className="flex flex-col gap-2 sm:flex-row"
+        onSubmit={(e) => {
+          e.preventDefault();
+          applySearch(q.trim());
+        }}
+      >
+        <input
+          type="search"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder={
+            dict?.practice.searchPlaceholder ??
+            "Search or mode:mania mastery>50…"
+          }
+          className="rx-input min-w-0 flex-1"
+        />
+        <button type="submit" className="rx-btn-primary">
+          {dict?.practice.search ?? "Search"}
+        </button>
+      </form>
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
+        <QueryLanguageHelpButton />
+        <PatternBrowserButton onApplyQuery={(query) => applySearch(query)} />
+      </div>
+
+      <details
+        className="rx-panel px-4 py-3 sm:px-5"
+        open={distributionOpen}
+        onToggle={(event) =>
+          setDistributionOpen(event.currentTarget.open)
+        }
+      >
+        <summary className="cursor-pointer">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-bold text-ink">
+                {dict?.practice.bestScoreDistribution ??
+                  "Best-score distribution"}
+              </h2>
+              <p className="mt-0.5 text-xs text-muted">
+                {dict?.practice.distributionHint ??
+                  "Across all maps matching the current query — click a bar to filter that range."}
+              </p>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {queryHistory.length > 0 ? (
-              <button
-                type="button"
-                onClick={undoQuery}
-                className="rx-btn text-xs"
-                title={
-                  queryHistory[queryHistory.length - 1]
-                    ? t(dict?.practice.restoreQuery, {
-                        query: queryHistory[queryHistory.length - 1],
-                      })
-                    : dict?.practice.clearRangeFilter ?? "Clear range filter"
-                }
-              >
-                {dict?.practice.undoFilter ?? "Undo filter"}
-              </button>
-            ) : null}
-            <label className="flex items-center gap-2 text-xs text-muted">
-              {dict?.practice.show ?? "Show"}
-              <select
-                className="rx-select"
-                value={metric}
-                onChange={(e) => {
-                  const next = e.target.value as PracticeMetric;
-                  setMetric(next);
-                  persist({ metric: next });
-                }}
-              >
-                {METRIC_OPTIONS.map((value) => (
-                  <option key={value} value={value}>
-                    {dict?.practice.metricLabels[value] ??
-                      METRIC_LABEL_FALLBACK[value]}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
+        </summary>
+        <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+          {queryHistory.length > 0 ? (
+            <button
+              type="button"
+              onClick={undoQuery}
+              className="rx-btn text-xs"
+              title={
+                queryHistory[queryHistory.length - 1]
+                  ? t(dict?.practice.restoreQuery, {
+                      query: queryHistory[queryHistory.length - 1],
+                    })
+                  : dict?.practice.clearRangeFilter ?? "Clear range filter"
+              }
+            >
+              {dict?.practice.undoFilter ?? "Undo filter"}
+            </button>
+          ) : null}
+          <label className="flex items-center gap-2 text-xs text-muted">
+            {dict?.practice.show ?? "Show"}
+            <select
+              className="rx-select"
+              value={metric}
+              onChange={(e) => {
+                const next = e.target.value as PracticeMetric;
+                setMetric(next);
+                persist({ metric: next });
+              }}
+            >
+              {METRIC_OPTIONS.map((value) => (
+                <option key={value} value={value}>
+                  {dict?.practice.metricLabels[value] ??
+                    METRIC_LABEL_FALLBACK[value]}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
 
-        {distLoading ? (
+        {distributionOpen && distLoading ? (
           <div className="py-2">
             <SkeletonBlock className="h-[220px] w-full" />
           </div>
-        ) : distError || !bins ? (
+        ) : distributionOpen && (distError || !bins) ? (
           <p className="py-10 text-center text-sm text-danger">
             {distError?.message ??
               dict?.practice.failedToLoadDistribution ??
               "Failed to load distribution"}
           </p>
-        ) : (
+        ) : distributionOpen && bins ? (
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={bins} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid stroke={charts.grid} vertical={false} />
@@ -435,10 +453,10 @@ export function PracticeListPage() {
               </Bar>
             </BarChart>
           </ResponsiveContainer>
-        )}
-      </section>
+        ) : null}
+      </details>
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2 text-sm text-muted">
             <label className="flex items-center gap-2">
               {dict?.practice.sort ?? "Sort"}
@@ -496,30 +514,7 @@ export function PracticeListPage() {
       </div>
 
       {isLoading ? (
-        <>
-          <section className="rx-panel px-4 py-5 sm:px-5">
-            <PageHeaderSkeleton
-              subtitleWidth="w-72"
-              actions={
-                <>
-                  <SkeletonBlock className="h-10 w-40 rounded-md" />
-                  <SkeletonBlock className="h-10 w-28 rounded-md" />
-                </>
-              }
-            />
-            <div className="mt-5">
-              <PanelSkeleton lines={1} className="min-h-[16rem] p-0" />
-            </div>
-          </section>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex gap-2">
-              <SkeletonBlock className="h-9 w-32 rounded-md" />
-              <SkeletonBlock className="h-9 w-32 rounded-md" />
-            </div>
-            <SkeletonBlock className="h-4 w-28" />
-          </div>
-          <CardGridSkeleton count={6} />
-        </>
+        <CardGridSkeleton count={6} />
       ) : error ? (
         <p className="text-danger">
           {t(dict?.practice.failedToLoad, { error: error.message })}
@@ -570,7 +565,7 @@ export function PracticeListPage() {
                     />
                     {(ratingMode === "osu" || ratingMode === "sunny") &&
                     danLabel ? (
-                      <span className="absolute bottom-2 left-2 max-w-[calc(100%-1rem)] truncate rounded bg-canvas/85 px-2 py-1 text-[11px] font-semibold leading-none text-ink shadow-sm ring-1 ring-white/10 backdrop-blur-sm">
+                      <span className="absolute bottom-2 left-2 max-w-[calc(100%-1rem)] truncate rounded bg-canvas/85 px-2 py-1 text-[11px] font-semibold leading-none text-ink shadow-sm ring-1 ring-border backdrop-blur-sm">
                         {danLabel}
                       </span>
                     ) : null}
@@ -614,15 +609,31 @@ export function PracticeListPage() {
                         {item.mapperUsername ? ` · ${item.mapperUsername}` : ""}
                       </div>
                     </div>
-                    <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs tabular-nums text-subtle">
-                      <span>
-                        {t(dict?.practice.playsCount, { count: item.playCount })}
-                      </span>
-                      <span>{formatAccuracy(item.bestAccuracy)}</span>
-                      <span>{formatMisses(item.bestMisses)}</span>
-                      <span>{formatScore(item.bestScore)}</span>
-                      <span>{formatPp(item.bestPp)}</span>
-                      <span>{formatRelativeTime(item.lastPlayedAt, dict?.common)}</span>
+                    <div className="mt-3 grid grid-cols-3 gap-x-3 gap-y-2 text-xs">
+                      <CardStat
+                        label={dict?.practice.detail.statPlays ?? "Plays"}
+                        value={String(item.playCount)}
+                      />
+                      <CardStat
+                        label={dict?.practice.detail.statBestAcc ?? "Best acc"}
+                        value={formatAccuracy(item.bestAccuracy)}
+                      />
+                      <CardStat
+                        label={dict?.practice.sortLabels.misses ?? "Misses"}
+                        value={formatMisses(item.bestMisses)}
+                      />
+                      <CardStat
+                        label={dict?.practice.sortLabels.score ?? "Score"}
+                        value={formatScore(item.bestScore)}
+                      />
+                      <CardStat
+                        label={dict?.practice.detail.statBestPp ?? "Best PP"}
+                        value={formatPp(item.bestPp)}
+                      />
+                      <CardStat
+                        label={dict?.practice.detail.statLastPlayed ?? "Last played"}
+                        value={formatRelativeTime(item.lastPlayedAt, dict?.common)}
+                      />
                     </div>
                   </div>
                 </Link>

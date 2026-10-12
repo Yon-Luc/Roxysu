@@ -19,6 +19,8 @@ Browse every played map as practice cards; filter/sort via plain text or the sha
 
 The searchable practice catalog — same query language powers collections and global search.
 
+**In UI:** search is the first control. The best-score distribution chart is collapsed until opened, and opens again after a bar click so undo stays visible. Sort sits with the result count, above the cards.
+
 ## Business rules
 
 1. Soft-deleted / `delete_pending` **sets** and scores are excluded from product queries; hidden difficulties are excluded via `hidden`.

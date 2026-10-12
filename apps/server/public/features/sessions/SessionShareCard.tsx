@@ -163,7 +163,7 @@ function SharePbCompare({
   return (
     <div className="mt-1.5 rounded-lg bg-black/25 px-2 py-1 text-[11px] text-white/55">
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-        <span className="font-semibold uppercase tracking-wide text-white/35">
+        <span className="shrink-0 whitespace-nowrap font-semibold uppercase tracking-wide text-white/35">
           {label}
         </span>
         <span className="tabular-nums text-white/70">
@@ -184,9 +184,11 @@ function SharePbCompare({
 function ShareScoreRow({
   score,
   labels,
+  className = "",
 }: {
   score: SessionShareCardScore;
   labels: SessionShareCardLabels;
+  className?: string;
 }) {
   const missing = !score.beatmapId;
   const title = missing
@@ -196,8 +198,10 @@ function ShareScoreRow({
   const diff = missing ? null : score.difficultyName;
 
   return (
-    <li className="rounded-xl border border-white/8 bg-white/5 px-3 py-2.5">
-      <div className="flex items-start gap-3">
+    <div
+      className={`flex h-full flex-col rounded-xl border border-white/8 bg-white/5 px-3 py-2.5 ${className}`.trim()}
+    >
+      <div className="flex min-h-0 flex-1 items-start gap-3">
         <BeatmapCover
           backgroundFileHash={score.backgroundFileHash}
           setOnlineId={score.setOnlineId}
@@ -205,7 +209,7 @@ function ShareScoreRow({
           priority
           className="size-12 shrink-0 rounded-lg"
         />
-        <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex items-center gap-2">
             <p className="truncate text-sm font-semibold text-white">{title}</p>
             {score.isPb ? (
@@ -232,7 +236,9 @@ function ShareScoreRow({
               compare={score.pbCompare}
               labels={labels}
             />
-          ) : null}
+          ) : (
+            <div className="min-h-0 flex-1" aria-hidden />
+          )}
         </div>
         <div className="shrink-0 text-right tabular-nums">
           <div className="text-sm font-semibold text-white">
@@ -242,7 +248,7 @@ function ShareScoreRow({
           <div className="text-[11px] text-white/40">{score.maxCombo}x</div>
         </div>
       </div>
-    </li>
+    </div>
   );
 }
 
@@ -308,24 +314,38 @@ export function SessionShareCard({
 
       {highlights.length > 0 ? (
         twoColumns ? (
-          <div className="mt-5 grid grid-cols-2 gap-3">
-            <ul className="space-y-2.5">
-              {leftScores.map((score) => (
-                <ShareScoreRow key={score.id} score={score} labels={labels} />
-              ))}
-            </ul>
-            <ul className="space-y-2.5">
-              {rightScores.map((score) => (
-                <ShareScoreRow key={score.id} score={score} labels={labels} />
-              ))}
-            </ul>
+          <div className="mt-5 flex flex-col gap-2.5">
+            {Array.from(
+              { length: Math.max(leftScores.length, rightScores.length) },
+              (_, i) => {
+                const left = leftScores[i];
+                const right = rightScores[i];
+                return (
+                  <div
+                    key={`${left?.id ?? "empty"}-${right?.id ?? "empty"}`}
+                    className="grid grid-cols-2 items-stretch gap-3"
+                  >
+                    {left ? (
+                      <ShareScoreRow score={left} labels={labels} />
+                    ) : (
+                      <div />
+                    )}
+                    {right ? (
+                      <ShareScoreRow score={right} labels={labels} />
+                    ) : (
+                      <div />
+                    )}
+                  </div>
+                );
+              },
+            )}
           </div>
         ) : (
-          <ul className="mt-5 space-y-2.5">
+          <div className="mt-5 flex flex-col gap-2.5">
             {leftScores.map((score) => (
               <ShareScoreRow key={score.id} score={score} labels={labels} />
             ))}
-          </ul>
+          </div>
         )
       ) : null}
 

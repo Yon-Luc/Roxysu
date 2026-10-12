@@ -44,6 +44,7 @@ export type PullPreview = {
   add: number;
   currentVersion: number;
   skipped: number;
+  missingSetIds: number[];
   fromCache: boolean;
   budget: unknown;
 };
@@ -173,6 +174,37 @@ async function hubPull(
   };
 }
 
+async function resolveMissingSetIds(beatmapIds: number[]): Promise<number[]> {
+  const unique = [...new Set(beatmapIds.filter((id) => id > 0))].slice(0, 200);
+  const sets = new Set<number>();
+  const chunkSize = 8;
+  for (let i = 0; i < unique.length; i += chunkSize) {
+    const chunk = unique.slice(i, i + chunkSize);
+    const found = await Promise.all(
+      chunk.map(async (id) => {
+        try {
+          const res = await fetch(`https://mirror.hinamizawa.ai/v3/osu/beatmaps/b/${id}`, {
+            headers: {
+              accept: "application/json",
+              "user-agent": "roxysu/0.1.3 (+https://github.com/Yon-Luc/Roxysu)",
+            },
+            signal: AbortSignal.timeout(12_000),
+          });
+          if (!res.ok) return 0;
+          const data = (await res.json()) as { beatmapset_id?: number };
+          return data.beatmapset_id ?? 0;
+        } catch {
+          return 0;
+        }
+      }),
+    );
+    for (const setId of found) {
+      if (setId > 0) sets.add(setId);
+    }
+  }
+  return [...sets];
+}
+
 function rankInt(rank: string): number {
   return RANK[rank.toUpperCase()] ?? 0;
 }
@@ -247,6 +279,8 @@ export async function previewOnlineScores(
   let add = 0;
   let currentVersion = 0;
   let skipped = 0;
+  const missingSetIds = new Set<number>();
+  const missingBeatmapIds: number[] = [];
   const candidates: Array<typeof onlineScoreCandidates.$inferInsert> = [];
   const now = new Date();
 
@@ -263,6 +297,8 @@ export async function previewOnlineScores(
     }
     if (classified.kind === "skipped" || !classified.beatmap) {
       skipped += 1;
+      if (score.beatmapsetId && score.beatmapsetId > 0) missingSetIds.add(score.beatmapsetId);
+      else missingBeatmapIds.push(score.beatmapId);
       continue;
     }
     if (classified.kind === "add-current-version") currentVersion += 1;
@@ -314,6 +350,10 @@ export async function previewOnlineScores(
     add,
     currentVersion,
     skipped,
+    missingSetIds: [
+      ...missingSetIds,
+      ...(await resolveMissingSetIds(missingBeatmapIds)),
+    ],
     fromCache: pulled.fromCache,
     budget: pulled.budget,
   };

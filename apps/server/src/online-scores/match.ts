@@ -2,6 +2,7 @@ export type RankedBest = {
   id: number;
   legacyScoreId: number | null;
   beatmapId: number;
+  beatmapsetId?: number | null;
   checksum: string | null;
   accuracy: number;
   pp: number | null;

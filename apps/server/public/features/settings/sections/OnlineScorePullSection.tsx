@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { HubLoginButton } from "../../hub/HubLoginButton";
 import { pageSectionDomId } from "../../../lib/pageSections";
 import { fetchHubMe, getHubJwt, useHubJwt, useHubUrl } from "../../../lib/hub";
+import { startMirrorBatchJob } from "../../../lib/api";
 import { useAppDict } from "../../../lib/i18n";
 
 const RULESETS = [
@@ -18,6 +19,7 @@ type Preview = {
   add: number;
   currentVersion: number;
   skipped: number;
+  missingSetIds?: number[];
   username: string;
   fromCache: boolean;
   budget?: { callsThisMinute?: number; limitPerMinute?: number; parked?: boolean };
@@ -86,6 +88,8 @@ function PullModal({
   onConfirmAsk,
   onConfirmBack,
   onCommit,
+  onDownload,
+  downloading,
 }: {
   open: boolean;
   looking: boolean;
@@ -100,10 +104,13 @@ function PullModal({
   onConfirmAsk: () => void;
   onConfirmBack: () => void;
   onCommit: () => void;
+  onDownload: () => void;
+  downloading: boolean;
 }) {
   const titleId = useId();
   const addable = preview ? preview.add + preview.currentVersion : 0;
-  const busy = looking || writing;
+  const missingSets = preview?.missingSetIds?.length ?? 0;
+  const busy = looking || writing || downloading;
 
   useEffect(() => {
     if (!open) return;
@@ -200,6 +207,12 @@ function PullModal({
               <Stat
                 value={preview.skipped}
                 label={copy?.onlineScorePullSkipped ?? "Map not installed"}
+                hint={
+                  missingSets > 0
+                    ? (copy?.onlineScorePullDownloadHint ??
+                      "Download them, open lazer so it imports the files, then check again.")
+                    : undefined
+                }
                 tone="warning"
               />
             </div>
@@ -237,6 +250,13 @@ function PullModal({
               {copy?.onlineScorePullCancel ?? "Close"}
             </button>
           )}
+          {preview && !looking && !confirming && !done && missingSets > 0 ? (
+            <button type="button" className="rx-btn" disabled={downloading} onClick={onDownload}>
+              {downloading
+                ? (copy?.onlineScorePullDownloading ?? "Downloading…")
+                : `${copy?.onlineScorePullDownload ?? "Download missing maps"} · ${missingSets}`}
+            </button>
+          ) : null}
           {preview && !looking && !confirming && !done && addable > 0 ? (
             <button type="button" className="rx-btn-primary" onClick={onConfirmAsk}>
               {copy?.onlineScorePullAdd ?? "Add to lazer"} · {addable}
@@ -300,6 +320,16 @@ export function OnlineScorePullSection() {
       setProgress(null);
       void queryClient.invalidateQueries({ queryKey: ["online-scores", "user"] });
     },
+  });
+
+  const downloadMut = useMutation({
+    mutationFn: (setIds: number[]) =>
+      startMirrorBatchJob({
+        mode: "setIds",
+        setIds,
+        noVideo: true,
+        excludeOwned: true,
+      }),
   });
 
   const commitMut = useMutation({
@@ -430,7 +460,15 @@ export function OnlineScorePullSection() {
         looking={previewMut.isPending}
         progress={progress}
         preview={preview}
-        error={previewMut.isError ? previewMut.error.message : commitMut.isError ? commitMut.error.message : null}
+        error={
+          previewMut.isError
+            ? previewMut.error.message
+            : commitMut.isError
+              ? commitMut.error.message
+              : downloadMut.isError
+                ? downloadMut.error.message
+                : null
+        }
         confirming={confirming}
         writing={commitMut.isPending}
         done={commitMut.data ?? null}
@@ -443,6 +481,12 @@ export function OnlineScorePullSection() {
         onConfirmAsk={() => setConfirming(true)}
         onConfirmBack={() => setConfirming(false)}
         onCommit={() => commitMut.mutate()}
+        onDownload={() => {
+          const ids = preview?.missingSetIds ?? [];
+          if (ids.length === 0) return;
+          downloadMut.mutate(ids);
+        }}
+        downloading={downloadMut.isPending}
       />
     </section>
   );

@@ -14,6 +14,7 @@ export type RankedBest = {
   id: number;
   legacyScoreId: number | null;
   beatmapId: number;
+  beatmapsetId: number | null;
   checksum: string | null;
   accuracy: number;
   pp: number | null;
@@ -109,6 +110,7 @@ export function normalizeRankedBest(raw: unknown): RankedBest | null {
   if (id <= 0) return null;
 
   const beatmap = row.beatmap as Record<string, unknown> | undefined;
+  const beatmapset = row.beatmapset as Record<string, unknown> | undefined;
   const beatmapId = int(row.beatmap_id ?? beatmap?.id, 0);
   if (beatmapId <= 0) return null;
 
@@ -131,6 +133,7 @@ export function normalizeRankedBest(raw: unknown): RankedBest | null {
     id,
     legacyScoreId: legacyScoreId != null && legacyScoreId > 0 ? Math.trunc(legacyScoreId) : null,
     beatmapId,
+    beatmapsetId: int(beatmap?.beatmapset_id ?? beatmapset?.id, 0) || null,
     checksum:
       typeof beatmap?.checksum === "string" && beatmap.checksum
         ? beatmap.checksum.toLowerCase()

@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08
+last_verified: 2026-10
 confidence: verified
 touches:
   - packages/osu-chart/src/fuse.ts
@@ -7,6 +7,8 @@ touches:
   - apps/server/src/routes/marathon.ts
   - apps/server/public/lib/marathonExport.ts
   - apps/server/public/features/marathon/MarathonPage.tsx
+  - apps/server/public/components/AppShell.tsx
+  - apps/server/public/components/CommandPalette.tsx
 ---
 
 # Map marathon
@@ -21,6 +23,7 @@ A **Map marathon** is one new unsubmitted mania difficulty: songs play back-to-b
 
 ## Business rules
 
+0. Sidebar and command palette hide `/marathon` while the feature is still buggy (`HIDDEN_NAV` / `HIDDEN_PAGES`). The route remains reachable by URL.
 1. Mania only. Every source must share one key count.
 2. Between 2 and 12 maps. Sources without local audio (or a readable `.osu`) are skipped, not listed.
 3. Pause between songs is user-chosen (0–5000 ms, default 2000). Audio duration is the decoded file length, not last-note time.

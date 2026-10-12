@@ -59,13 +59,16 @@ const ALL_NAV = [
   { to: "/settings", label: "Settings", labelKey: "settings", icon: Settings },
 ] as const;
 
+/** Hidden while the feature is still buggy / unfinished. Route may still exist. */
+const HIDDEN_NAV = new Set(["/marathon"]);
 const DESKTOP_HIDDEN_NAV = new Set(["/rating-lab"]);
 
 function useNavItems(dict: Dictionary["app"] | undefined) {
   return useMemo(() => {
-    const items = isDesktopShell()
-      ? ALL_NAV.filter((item) => !DESKTOP_HIDDEN_NAV.has(item.to))
-      : [...ALL_NAV];
+    let items = ALL_NAV.filter((item) => !HIDDEN_NAV.has(item.to));
+    if (isDesktopShell()) {
+      items = items.filter((item) => !DESKTOP_HIDDEN_NAV.has(item.to));
+    }
     return items.map((item) => ({
       ...item,
       label: dict?.nav[item.labelKey] ?? item.label,

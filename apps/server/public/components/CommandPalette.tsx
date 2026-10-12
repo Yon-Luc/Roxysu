@@ -144,11 +144,16 @@ const ALL_PAGE_ITEMS: {
   { to: "/settings", label: "Settings", keywords: ["config", "preferences"] },
 ];
 
+/** Hidden while the feature is still buggy / unfinished. Route may still exist. */
+const HIDDEN_PAGES = new Set(["/marathon"]);
 const DESKTOP_HIDDEN_PAGES = new Set(["/rating-lab"]);
 
 function pageItems() {
-  if (!isDesktopShell()) return ALL_PAGE_ITEMS;
-  return ALL_PAGE_ITEMS.filter((item) => !DESKTOP_HIDDEN_PAGES.has(item.to));
+  let items = ALL_PAGE_ITEMS.filter((item) => !HIDDEN_PAGES.has(item.to));
+  if (isDesktopShell()) {
+    items = items.filter((item) => !DESKTOP_HIDDEN_PAGES.has(item.to));
+  }
+  return items;
 }
 
 function matchesQuery(text: string, query: string): boolean {

@@ -12,7 +12,10 @@
     "overlayEditor": "Overlay",
     "ratingLab": "Rating Lab",
     "skin": "Skin",
-    "settings": "Settings"
+    "settings": "Settings",
+    "groupPractice": "Practice",
+    "groupTools": "Tools",
+    "more": "More"
   },
   "common": {
     "quickSearch": "Quick search",
@@ -20,6 +23,7 @@
     "lightMode": "Light mode",
     "hideMenu": "Hide menu",
     "showMenu": "Show menu",
+    "close": "Close",
     "language": "Language",
     "justNow": "just now",
     "minutesAgo": "{{n}}m ago",

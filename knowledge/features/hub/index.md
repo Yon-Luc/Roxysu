@@ -105,7 +105,7 @@ Networked collaboration / discovery — not required for offline practice analyt
 - `apps/server/src/map-analysis/calcBundle.ts` — export, pull, gap-fill apply
 - `apps/server/src/hubUrl.ts:resolveHubBaseUrl()` — shared Hub URL for Community, OAuth redeem, and Download Maps (`HUB_URL`; localhost in `bun run dev`, `https://roxysu-api.yonx.app` when `ROXYSU_DESKTOP=1`)
 - `apps/server/public/lib/hub.ts` — runtime Community client (clears JWT on Hub 401; delete + export). `packages/hub-client` is the Node Eden client and is not used in the browser
-- `apps/server/public/features/hub/HubSessionChip.tsx` — app-wide osu! OAuth state on the right of the sidebar scores/maps lines (bottom-right on small screens). Logged out shows Log in; logged in shows avatar and username. Same JWT as Community. Not client app auth.
+- `apps/server/public/features/hub/HubSessionChip.tsx` — app-wide osu! OAuth state on the right of the sidebar scores/maps lines. On small screens it floats bottom-right above the tab bar, and sits in the More sheet while that sheet is open. Logged out shows Log in; logged in shows avatar and username. Same JWT as Community. Not client app auth.
 - `apps/server/src/mirrors/hubSearch.ts:mirrorParamsToHubQuery()` / `tryFetchAllHubCachedIds()` — maps Download params to Hub GET `/search` (page) or `/search/all` (count/download-all). Circuit breaker skips Hub for 30s after timeout/5xx.
 - `apps/server/src/routes/system.ts` — client app OAuth handoff helpers
 - Community detail: owner or admin can edit/delete; Save calls `GET /collections/:id/export` so `downloadCount` increments

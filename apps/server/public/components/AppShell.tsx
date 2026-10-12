@@ -1,4 +1,11 @@
-import { Suspense, useCallback, useMemo, useState, type ReactNode } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import type { Dictionary } from "@roxysu/i18n";
@@ -7,6 +14,7 @@ import {
   ChartColumn,
   Clock,
   Download,
+  Ellipsis,
   Layers,
   Home,
   LayoutGrid,
@@ -21,6 +29,7 @@ import {
   Share2,
   Star,
   Sun,
+  X,
 } from "lucide-react";
 import { fetchSystemStatus } from "../lib/api";
 import { formatAppVersionLabel } from "../lib/appVersion";
@@ -44,24 +53,27 @@ const APP_VERSION_LABEL = formatAppVersionLabel();
 const SIDEBAR_OPEN_KEY = "roxysu.sidebarOpen";
 
 const ALL_NAV = [
-  { to: "/", label: "Home", labelKey: "home", exact: true, icon: Home },
-  { to: "/stats", label: "Stats", labelKey: "stats", icon: ChartColumn },
-  { to: "/practice", label: "Practice", labelKey: "practice", icon: Clock },
-  { to: "/sessions", label: "Sessions", labelKey: "sessions", icon: List },
-  { to: "/now-selected", label: "Now selected", labelKey: "nowSelected", icon: AudioLines },
-  { to: "/collections", label: "Collections", labelKey: "collections", icon: LayoutGrid },
-  { to: "/hub", label: "Community", labelKey: "hub", icon: Share2 },
-  { to: "/download-maps", label: "Download", labelKey: "download", icon: Download },
-  { to: "/marathon", label: "Marathon", labelKey: "marathon", icon: Layers },
-  { to: "/overlay-editor", label: "Overlay", labelKey: "overlayEditor", icon: MonitorUp },
-  { to: "/rating-lab", label: "Rating Lab", labelKey: "ratingLab", icon: Star },
-  { to: "/skin", label: "Skin", labelKey: "skin", icon: Palette },
-  { to: "/settings", label: "Settings", labelKey: "settings", icon: Settings },
+  { to: "/", label: "Home", labelKey: "home", exact: true, icon: Home, group: "practice" },
+  { to: "/stats", label: "Stats", labelKey: "stats", icon: ChartColumn, group: "practice" },
+  { to: "/practice", label: "Practice", labelKey: "practice", icon: Clock, group: "practice" },
+  { to: "/sessions", label: "Sessions", labelKey: "sessions", icon: List, group: "practice" },
+  { to: "/now-selected", label: "Now selected", labelKey: "nowSelected", icon: AudioLines, group: "practice" },
+  { to: "/collections", label: "Collections", labelKey: "collections", icon: LayoutGrid, group: "practice" },
+  { to: "/hub", label: "Community", labelKey: "hub", icon: Share2, group: "tools" },
+  { to: "/download-maps", label: "Download", labelKey: "download", icon: Download, group: "tools" },
+  { to: "/marathon", label: "Marathon", labelKey: "marathon", icon: Layers, group: "tools" },
+  { to: "/overlay-editor", label: "Overlay", labelKey: "overlayEditor", icon: MonitorUp, group: "tools" },
+  { to: "/skin", label: "Skin", labelKey: "skin", icon: Palette, group: "tools" },
+  { to: "/settings", label: "Settings", labelKey: "settings", icon: Settings, group: "tools" },
+  { to: "/rating-lab", label: "Rating Lab", labelKey: "ratingLab", icon: Star, group: "tools" },
 ] as const;
 
 /** Hidden while the feature is still buggy / unfinished. Route may still exist. */
 const HIDDEN_NAV = new Set(["/marathon"]);
 const DESKTOP_HIDDEN_NAV = new Set(["/rating-lab"]);
+const MOBILE_PRIMARY = ["/", "/practice", "/sessions", "/stats"] as const;
+
+type NavItem = ReturnType<typeof useNavItems>[number];
 
 function useNavItems(dict: Dictionary["app"] | undefined) {
   return useMemo(() => {
@@ -86,11 +98,52 @@ function readSidebarOpen(): boolean {
   }
 }
 
+function pathMatches(pathname: string, to: string, exact?: boolean) {
+  if (exact || to === "/") return pathname === to;
+  return pathname === to || pathname.startsWith(`${to}/`);
+}
+
+function NavItemLink({
+  item,
+  tabIndex,
+  className,
+  iconClassName,
+  onClick,
+}: {
+  item: NavItem;
+  tabIndex?: number;
+  className: string;
+  iconClassName: string;
+  onClick?: () => void;
+}) {
+  const Icon = item.icon;
+  return (
+    <Link
+      to={item.to}
+      tabIndex={tabIndex}
+      onClick={onClick}
+      className={className}
+      {...("exact" in item && item.exact
+        ? { activeOptions: { exact: true } }
+        : {})}
+    >
+      <Icon className={iconClassName} />
+      {item.label}
+    </Link>
+  );
+}
+
+const sideLinkClass =
+  "group flex items-center gap-3 rounded-md px-3 py-2 text-sm font-bold text-muted transition hover:text-ink [&.active]:bg-highlight [&.active]:text-ink";
+const sideIconClass =
+  "size-5 shrink-0 opacity-70 transition group-hover:opacity-100 group-[.active]:opacity-100 group-[.active]:text-accent";
+
 export function AppShell({ children }: { children: ReactNode }) {
   const { dict } = useAppDict();
   const nav = useNavItems(dict);
   const [sidebarOpen, setSidebarOpen] = useState(readSidebarOpen);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const toggleCommandPalette = useCallback(
     () => setCommandPaletteOpen((open) => !open),
     [],
@@ -98,6 +151,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   useCommandPaletteShortcut(toggleCommandPalette);
 
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
   const focusLayout = useRouterState({
     select: (s) => {
       if (s.location.pathname !== "/now-selected") return false;
@@ -105,6 +159,24 @@ export function AppShell({ children }: { children: ReactNode }) {
       return Boolean(search.focus);
     },
   });
+
+  useEffect(() => {
+    setMoreOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setMoreOpen(false);
+    }
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = previous;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [moreOpen]);
 
   function toggleSidebar() {
     setSidebarOpen((open) => {
@@ -130,9 +202,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const resolvedTheme = useResolvedTheme();
   const { busy: downloadBusy } = useMirrorBatchJob();
-  const onDownloadPage = useRouterState({
-    select: (s) => s.location.pathname === "/download-maps",
-  });
+  const onDownloadPage = pathname === "/download-maps";
   const toastOffset =
     downloadBusy && !onDownloadPage
       ? "bottom-44 md:bottom-28"
@@ -160,6 +230,99 @@ export function AppShell({ children }: { children: ReactNode }) {
               ? dict?.sync.locked ?? "Locked"
               : dict?.sync.noSyncYet ?? "No sync yet";
 
+  const practiceNav = nav.filter((item) => item.group === "practice");
+  const toolsNav = nav.filter((item) => item.group === "tools");
+  const mobilePrimary = MOBILE_PRIMARY.map((to) =>
+    nav.find((item) => item.to === to),
+  ).filter((item): item is NavItem => item != null);
+  const moreNav = nav.filter(
+    (item) => !MOBILE_PRIMARY.includes(item.to as (typeof MOBILE_PRIMARY)[number]),
+  );
+  const moreActive = moreNav.some((item) =>
+    pathMatches(pathname, item.to, "exact" in item && item.exact),
+  );
+  const moreLabel = dict?.nav.more ?? "More";
+  const closeLabel = dict?.common.close ?? "Close";
+
+  function openSearch() {
+    setMoreOpen(false);
+    setCommandPaletteOpen(true);
+  }
+
+  function themeButton(iconOnly: boolean) {
+    const label =
+      resolvedTheme === "light"
+        ? dict?.common.darkMode ?? "Dark mode"
+        : dict?.common.lightMode ?? "Light mode";
+    return (
+      <button
+        type="button"
+        onClick={() => toggleTheme()}
+        className={
+          iconOnly
+            ? "flex size-9 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-highlight hover:text-ink"
+            : "flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm font-medium text-muted transition hover:bg-highlight hover:text-ink"
+        }
+        title={label}
+        aria-label={label}
+      >
+        {resolvedTheme === "light" ? (
+          <Moon className="size-4 shrink-0" />
+        ) : (
+          <Sun className="size-4 shrink-0" />
+        )}
+        {iconOnly ? null : label}
+      </button>
+    );
+  }
+
+  function syncChip() {
+    return (
+      <div
+        className={`rx-chip ${
+          syncTone === "sky"
+            ? "bg-info/15 text-info"
+            : syncTone === "amber"
+              ? "bg-warning/15 text-warning"
+              : syncTone === "rose"
+                ? "bg-danger/15 text-danger"
+                : "bg-accent-glow text-accent"
+        }`}
+      >
+        <span
+          className={`size-1.5 rounded-full ${
+            syncTone === "sky"
+              ? "bg-info"
+              : syncTone === "amber"
+                ? "animate-pulse bg-warning"
+                : syncTone === "rose"
+                  ? "bg-danger"
+                  : "bg-accent"
+          }`}
+        />
+        {syncLabel}
+      </div>
+    );
+  }
+
+  function searchButton(className: string) {
+    return (
+      <button
+        type="button"
+        onClick={openSearch}
+        className={className}
+      >
+        <Search className="size-4 shrink-0 opacity-70" />
+        <span className="flex-1 text-left">
+          {dict?.common.quickSearch ?? "Quick search"}
+        </span>
+        <kbd className="hidden rounded border border-border bg-canvas px-1.5 py-0.5 text-[10px] font-medium text-faint lg:inline">
+          ⌃K
+        </kbd>
+      </button>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-canvas text-ink">
       <SchemaOutdatedDialog mismatch={status?.schemaOutdated} />
@@ -171,7 +334,6 @@ export function AppShell({ children }: { children: ReactNode }) {
       <JobsBatchChrome />
       <JobsOnboardingModal />
       <ToastHost offsetBottomClass={toastOffset} />
-      {/* Desktop sidebar */}
       {!focusLayout ? (
       <aside
         className={`fixed inset-y-0 left-0 z-30 hidden w-60 flex-col bg-sidebar p-3 transition-transform duration-200 ease-out md:flex ${
@@ -179,7 +341,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         }`}
         aria-hidden={!sidebarOpen}
       >
-        <div className="mb-6 flex items-center gap-1 px-1 pt-2">
+        <div className="mb-4 flex items-center gap-1 px-1 pt-2">
           <Link
             to="/"
             className="flex min-w-0 flex-1 items-center gap-2.5 px-2 transition hover:opacity-90"
@@ -209,84 +371,29 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
         </div>
 
-        <nav className="flex flex-1 flex-col gap-1">
-          <button
-            type="button"
-            onClick={() => setCommandPaletteOpen(true)}
-            className="group mb-2 flex items-center gap-3 rounded-md border border-line bg-surface/50 px-3 py-2 text-sm text-muted transition hover:border-border hover:text-ink"
-          >
-            <Search className="size-4 shrink-0 opacity-70" />
-            <span className="flex-1 text-left">
-              {dict?.common.quickSearch ?? "Quick search"}
-            </span>
-            <kbd className="hidden rounded border border-border bg-canvas px-1.5 py-0.5 text-[10px] font-medium text-faint lg:inline">
-              ⌃K
-            </kbd>
-          </button>
-          {nav.map((item) => {
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                tabIndex={sidebarOpen ? undefined : -1}
-                className="group flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-bold text-muted transition hover:text-ink [&.active]:bg-highlight [&.active]:text-ink"
-                {...("exact" in item && item.exact
-                  ? { activeOptions: { exact: true } }
-                  : {})}
-              >
-                <Icon className="size-5 shrink-0 opacity-70 transition group-hover:opacity-100 group-[.active]:opacity-100 group-[.active]:text-accent" />
-                {item.label}
-              </Link>
-            );
-          })}
+        <nav className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          {searchButton(
+            "group mb-3 flex items-center gap-3 rounded-md border border-line bg-surface/50 px-3 py-2 text-sm text-muted transition hover:border-border hover:text-ink",
+          )}
+          <NavGroup
+            label={dict?.nav.groupPractice ?? "Practice"}
+            items={practiceNav}
+            sidebarOpen={sidebarOpen}
+          />
+          <NavGroup
+            label={dict?.nav.groupTools ?? "Tools"}
+            items={toolsNav}
+            sidebarOpen={sidebarOpen}
+            separated
+          />
         </nav>
 
         <div className="mt-auto space-y-2 border-t border-line px-2 pt-3">
-          <LanguageSwitcher />
-          <button
-            type="button"
-            onClick={() => toggleTheme()}
-            className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm font-medium text-muted transition hover:bg-highlight hover:text-ink"
-            title={
-              resolvedTheme === "light"
-                ? dict?.common.darkMode ?? "Switch to dark theme"
-                : dict?.common.lightMode ?? "Switch to light theme"
-            }
-          >
-            {resolvedTheme === "light" ? (
-              <Moon className="size-4 shrink-0" />
-            ) : (
-              <Sun className="size-4 shrink-0" />
-            )}
-            {resolvedTheme === "light"
-              ? dict?.common.darkMode ?? "Dark mode"
-              : dict?.common.lightMode ?? "Light mode"}
-          </button>
-          <div
-            className={`rx-chip ${
-              syncTone === "sky"
-                ? "bg-info/15 text-info"
-                : syncTone === "amber"
-                  ? "bg-warning/15 text-warning"
-                  : syncTone === "rose"
-                    ? "bg-danger/15 text-danger"
-                    : "bg-accent-glow text-accent"
-            }`}
-          >
-            <span
-              className={`size-1.5 rounded-full ${
-                syncTone === "sky"
-                  ? "bg-info"
-                  : syncTone === "amber"
-                    ? "animate-pulse bg-warning"
-                    : syncTone === "rose"
-                      ? "bg-danger"
-                      : "bg-accent"
-              }`}
-            />
-            {syncLabel}
+          <div className="flex items-center gap-2">
+            <LanguageSwitcher className="min-w-0 flex-1" />
+            {themeButton(true)}
           </div>
+          {syncChip()}
           <div className="flex items-center justify-between gap-2">
             <p className="min-h-[2.25rem] px-1 text-[11px] leading-relaxed text-faint">
               {status ? (
@@ -310,7 +417,6 @@ export function AppShell({ children }: { children: ReactNode }) {
       </aside>
       ) : null}
 
-      {/* Reopen control when sidebar is hidden (desktop) */}
       {!focusLayout ? (
       <button
         type="button"
@@ -328,7 +434,6 @@ export function AppShell({ children }: { children: ReactNode }) {
       </button>
       ) : null}
 
-      {/* Mobile top brand bar */}
       {!focusLayout ? (
       <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-line bg-canvas/90 px-4 py-3 backdrop-blur-md md:hidden">
         <Link to="/" className="flex items-center gap-2">
@@ -346,30 +451,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </span>
           </span>
         </Link>
-        <span
-          className={`rx-chip ${
-            syncTone === "sky"
-              ? "bg-info/15 text-info"
-              : syncTone === "amber"
-                ? "bg-warning/15 text-warning"
-                : syncTone === "rose"
-                  ? "bg-danger/15 text-danger"
-                  : "bg-accent-glow text-accent"
-          }`}
-        >
-          <span
-            className={`size-1.5 rounded-full ${
-              syncTone === "sky"
-                ? "bg-info"
-                : syncTone === "amber"
-                  ? "animate-pulse bg-warning"
-                  : syncTone === "rose"
-                    ? "bg-danger"
-                    : "bg-accent"
-            }`}
-          />
-          {syncLabel}
-        </span>
+        {syncChip()}
       </header>
       ) : null}
 
@@ -399,33 +481,136 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </main>
 
-      {!focusLayout ? (
+      {!focusLayout && !moreOpen ? (
       <div className="fixed bottom-[calc(4.25rem+env(safe-area-inset-bottom))] right-3 z-40 md:hidden">
         <HubSessionChip />
       </div>
       ) : null}
 
-      {/* Mobile bottom nav */}
+      {!focusLayout && moreOpen ? (
+      <div className="fixed inset-x-0 top-0 z-40 bottom-[calc(4.25rem+env(safe-area-inset-bottom))] md:hidden">
+        <button
+          type="button"
+          className="absolute inset-0 bg-canvas/70"
+          aria-label={closeLabel}
+          onClick={() => setMoreOpen(false)}
+        />
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={moreLabel}
+          className="absolute inset-x-0 bottom-0 max-h-[min(80vh,36rem)] overflow-y-auto rounded-t-2xl border border-line bg-sidebar px-3 pb-4 pt-3"
+        >
+          <div className="mb-2 flex items-center justify-between px-1">
+            <span className="text-sm font-bold text-ink">{moreLabel}</span>
+            <button
+              type="button"
+              onClick={() => setMoreOpen(false)}
+              className="flex size-8 items-center justify-center rounded-md text-muted transition hover:bg-highlight hover:text-ink"
+              aria-label={closeLabel}
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+          {searchButton(
+            "mb-2 flex w-full items-center gap-3 rounded-md border border-line bg-surface/50 px-3 py-2 text-sm text-muted transition hover:border-border hover:text-ink",
+          )}
+          <NavGroup
+            label={dict?.nav.groupPractice ?? "Practice"}
+            items={practiceNav.filter(
+              (item) =>
+                !MOBILE_PRIMARY.includes(
+                  item.to as (typeof MOBILE_PRIMARY)[number],
+                ),
+            )}
+            sidebarOpen
+            onNavigate={() => setMoreOpen(false)}
+          />
+          <NavGroup
+            label={dict?.nav.groupTools ?? "Tools"}
+            items={toolsNav}
+            sidebarOpen
+            separated
+            onNavigate={() => setMoreOpen(false)}
+          />
+          <div className="mt-3 flex items-center gap-2 border-t border-line pt-3">
+            <LanguageSwitcher className="min-w-0 flex-1" />
+            {themeButton(true)}
+            <HubSessionChip />
+          </div>
+        </div>
+      </div>
+      ) : null}
+
       {!focusLayout ? (
       <nav className="fixed inset-x-0 bottom-0 z-30 flex border-t border-line bg-sidebar/95 px-1 pb-[env(safe-area-inset-bottom)] backdrop-blur-lg md:hidden">
-        {nav.map((item) => {
+        {mobilePrimary.map((item) => {
           const Icon = item.icon;
           return (
             <Link
               key={item.to}
               to={item.to}
-              className="group flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[10px] font-bold text-faint transition [&.active]:text-ink"
+              className="group flex min-w-0 flex-1 flex-col items-center gap-0.5 py-2.5 text-[10px] font-bold text-faint transition [&.active]:text-ink"
               {...("exact" in item && item.exact
                 ? { activeOptions: { exact: true } }
                 : {})}
             >
               <Icon className="size-5 opacity-70 transition group-[.active]:text-accent group-[.active]:opacity-100" />
-              {item.label}
+              <span className="max-w-full truncate px-0.5">{item.label}</span>
             </Link>
           );
         })}
+        <button
+          type="button"
+          onClick={() => setMoreOpen((open) => !open)}
+          className={`flex min-w-0 flex-1 flex-col items-center gap-0.5 py-2.5 text-[10px] font-bold transition ${
+            moreActive || moreOpen ? "text-ink" : "text-faint"
+          }`}
+          aria-expanded={moreOpen}
+          aria-label={moreLabel}
+        >
+          <Ellipsis
+            className={`size-5 ${moreActive || moreOpen ? "text-accent opacity-100" : "opacity-70"}`}
+          />
+          <span className="max-w-full truncate px-0.5">{moreLabel}</span>
+        </button>
       </nav>
       ) : null}
+    </div>
+  );
+}
+
+function NavGroup({
+  label,
+  items,
+  sidebarOpen,
+  separated = false,
+  onNavigate,
+}: {
+  label: string;
+  items: NavItem[];
+  sidebarOpen: boolean;
+  separated?: boolean;
+  onNavigate?: () => void;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <div className={separated ? "mt-3 border-t border-line pt-3" : undefined}>
+      <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-faint">
+        {label}
+      </div>
+      <div className="flex flex-col gap-0.5">
+        {items.map((item) => (
+          <NavItemLink
+            key={item.to}
+            item={item}
+            tabIndex={sidebarOpen ? undefined : -1}
+            onClick={onNavigate}
+            className={sideLinkClass}
+            iconClassName={sideIconClass}
+          />
+        ))}
+      </div>
     </div>
   );
 }

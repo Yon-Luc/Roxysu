@@ -436,10 +436,8 @@ export type ReplayVideoExportOptions = {
   replay: LoadedScoreReplay;
   /** Mania scroll speed from rewatch prefs. */
   scrollSpeed?: number;
-  /** Fullscreen playfield width % (mania, fullscreen only). */
+  /** Playfield width as % of the stage (mania/taiko width, letterbox scale). */
   fieldWidth?: number;
-  /** Match fullscreen vs windowed playfield sizing. */
-  fullscreen?: boolean;
   /** Explicit skins (falls back to localStorage stores). */
   stdSkin?: StdSkin;
   taikoSkin?: TaikoSkin;
@@ -712,21 +710,25 @@ function evenDim(n: number): number {
   return Math.max(2, Math.floor(n / 2) * 2);
 }
 
+function fieldWidthScale(fieldWidthPct: number): number {
+  return clamp(fieldWidthPct, FIELD_WIDTH_MIN, FIELD_WIDTH_MAX) / 100;
+}
+
 function layoutPlayfield(
   canvasW: number,
   canvasH: number,
   letterbox: boolean,
   fieldWidthPct: number,
-  fullscreen: boolean,
 ): PlayfieldRect {
   const contentY = HEADER_H;
   const contentH = canvasH - HEADER_H - FOOTER_H;
   const contentW = canvasW;
+  const widthScale = fieldWidthScale(fieldWidthPct);
 
   if (letterbox) {
     const availW = contentW - CONTENT_PAD * 2;
     const availH = contentH - CONTENT_PAD * 2;
-    const scale = Math.min(availW / 4, availH / 3);
+    const scale = Math.min(availW / 4, availH / 3) * widthScale;
     const w = scale * 4;
     const h = scale * 3;
     return {
@@ -737,13 +739,7 @@ function layoutPlayfield(
     };
   }
 
-  // Mania: fullscreen uses fieldWidth %; windowed matches max-w-3xl (~768–960px).
-  const w = fullscreen
-    ? Math.min(
-        contentW - CONTENT_PAD * 2,
-        contentW * (clamp(fieldWidthPct, FIELD_WIDTH_MIN, FIELD_WIDTH_MAX) / 100),
-      )
-    : Math.min(contentW - CONTENT_PAD * 2, 960);
+  const w = Math.min(contentW - CONTENT_PAD * 2, contentW * widthScale);
   const h = contentH - CONTENT_PAD * 2;
   return {
     x: (contentW - w) / 2,
@@ -762,18 +758,18 @@ function layoutTightCanvas(
   maxW: number,
   maxH: number,
   fieldWidthPct: number,
-  fullscreen: boolean,
   hudBelow: boolean,
 ): { width: number; height: number; rect: PlayfieldRect } {
   const padX = 20;
   const padY = 12;
   const hudH = hudBelow ? HUD_BELOW_H : 0;
   const chromeH = HEADER_H + FOOTER_H + hudH;
+  const widthScale = fieldWidthScale(fieldWidthPct);
 
   if (letterbox) {
     const availW = maxW - padX * 2;
     const availH = maxH - chromeH - padY * 2;
-    const scale = Math.min(availW / 4, availH / 3);
+    const scale = Math.min(availW / 4, availH / 3) * widthScale;
     const pfW = evenDim(scale * 4);
     const pfH = evenDim(scale * 3);
     const width = evenDim(pfW + padX * 2);
@@ -785,13 +781,7 @@ function layoutTightCanvas(
     };
   }
 
-  const targetW = fullscreen
-    ? Math.min(
-        maxW - padX * 2,
-        maxW * (clamp(fieldWidthPct, FIELD_WIDTH_MIN, FIELD_WIDTH_MAX) / 100),
-      )
-    : // Discord-sized presets stay ~720 wide; HQ presets can go wider.
-      Math.min(maxW - padX * 2, maxW > 1280 ? 960 : 720);
+  const targetW = Math.min(maxW - padX * 2, maxW * widthScale);
   const pfW = evenDim(targetW);
   const availH = maxH - chromeH - padY * 2;
   const pfH = evenDim(Math.min(availH, Math.round(pfW * 1.2)));
@@ -1315,7 +1305,6 @@ export async function exportReplayVideo(
   );
 
   const fieldWidth = opts.fieldWidth ?? FIELD_WIDTH_DEFAULT;
-  const fullscreen = opts.fullscreen ?? false;
 
   let width: number;
   let height: number;
@@ -1326,7 +1315,6 @@ export async function exportReplayVideo(
       opts.width ?? preset.width,
       opts.height ?? preset.height,
       fieldWidth,
-      fullscreen,
       hudBelow,
     );
     width = tight.width;
@@ -1335,7 +1323,7 @@ export async function exportReplayVideo(
   } else {
     width = opts.width ?? preset.width;
     height = opts.height ?? preset.height;
-    rect = layoutPlayfield(width, height, letterbox, fieldWidth, fullscreen);
+    rect = layoutPlayfield(width, height, letterbox, fieldWidth);
   }
 
   const encodeQuality = buildVideoEncodeQuality(

@@ -1180,7 +1180,7 @@
     "loginFailed": "Falha ao entrar",
     "loginDesktopBridge": "Ponte de desktop indisponível",
     "loginOpenBrowser": "Não foi possível abrir o navegador",
-    "loginWaitingBrowser": "Aguardando o navegador…",
+    "loginBrowserPrompt": "Vá ao navegador para concluir o login.",
     "loginFirstError": "Entre com osu! primeiro",
     "nameRequiredError": "Nome é obrigatório",
     "pickCollectionError": "Escolha uma coleção",

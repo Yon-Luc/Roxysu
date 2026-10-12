@@ -9,7 +9,7 @@ import {
 } from "react";
 import { fetchBeatmapPreview, fetchBeatmapSunnyDan, type BeatmapPreview } from "../lib/api";
 import { AudioClock, sampleAudioClock } from "../lib/audioClock";
-import { clamp, formatAccuracy, formatClock } from "../lib/format";
+import { clamp, formatClock } from "../lib/format";
 import { useStdSkin } from "../lib/stdSkin";
 import { useTaikoSkin } from "../lib/taikoSkin";
 import { useCatchSkin } from "../lib/catchSkin";
@@ -52,6 +52,11 @@ import { StdPlayfield } from "./StdPlayfield";
 import { TaikoPlayfield } from "./TaikoPlayfield";
 import { CatchPlayfield } from "./CatchPlayfield";
 import { ManiaSkinDropHost } from "./ManiaSkinDropHost";
+import {
+  AccuracyHudOverlay,
+  ComboHudOverlay,
+  JudgmentCounterOverlay,
+} from "./JudgmentCounterOverlay";
 import { NotefieldStage } from "./NotefieldStage";
 import {
   EMPTY_SUMMARY,
@@ -108,6 +113,8 @@ export function BeatmapPreviewModal({
   const practiceRangeRef = useRef(practiceRange);
   /** Map time where the current Play / Test session started (R restarts here). */
   const playStartMsRef = useRef(practiceRange?.fromMs ?? 0);
+  const [stageEl, setStageEl] = useState<HTMLDivElement | null>(null);
+  const [fieldEl, setFieldEl] = useState<HTMLDivElement | null>(null);
   const keybindsAll = useKeybinds();
   const actionKeybinds = useActionKeybinds();
   const bindsRef = useRef<string[]>([]);
@@ -978,7 +985,10 @@ export function BeatmapPreviewModal({
           </div>
         </div>
 
-        <div className="relative flex min-h-0 flex-1 flex-col">
+        <div
+          ref={setStageEl}
+          className="relative flex min-h-0 flex-1 flex-col"
+        >
           {isLoading ? (
             <p className="flex flex-1 items-center justify-center px-5 py-10 text-center text-sm text-on-media-muted">
               Loading preview…
@@ -991,60 +1001,18 @@ export function BeatmapPreviewModal({
             </p>
           ) : data ? (
             <>
-              {isPlay ? (
-                <div className="relative flex flex-wrap items-center justify-center gap-x-4 gap-y-1 border-b border-white/10 bg-black/40 px-4 py-2 text-sm tabular-nums backdrop-blur">
-                  <span className="font-bold text-on-media">
-                    {liveSummary.combo}x
-                  </span>
-                  <span className="text-on-media-muted">
-                    {formatAccuracy(liveSummary.accuracy)}
-                  </span>
-                  <span className="text-on-media-muted">
-                    max {liveSummary.maxCombo}x
-                  </span>
-                  <span className="hidden text-xs text-on-media-muted sm:inline">
-                    <span className="text-[#ffe566]">
-                      {liveSummary.counts.perfect}
-                    </span>
-                    {" / "}
-                    <span className="text-[#7dd3fc]">
-                      {liveSummary.counts.great}
-                    </span>
-                    {" / "}
-                    <span className="text-[#86efac]">
-                      {liveSummary.counts.good}
-                    </span>
-                    {" / "}
-                    <span className="text-[#fdba74]">
-                      {liveSummary.counts.ok}
-                    </span>
-                    {" / "}
-                    <span className="text-[#f9a8d4]">
-                      {liveSummary.counts.meh}
-                    </span>
-                    {" / "}
-                    <span className="text-[#f87171]">
-                      {liveSummary.counts.miss}
-                    </span>
-                  </span>
-                </div>
-              ) : null}
-
               <div
+                ref={setFieldEl}
                 className={
                   isLetterbox
                     ? fullscreen
-                      ? "relative mx-auto min-h-0 w-full max-w-none flex-1 px-1 py-1 sm:px-2 sm:py-2"
-                      : "relative mx-auto min-h-0 w-full max-w-none flex-1 px-2 py-2 sm:px-3 sm:py-3"
+                      ? "relative mx-auto min-h-0 w-full flex-1 px-1 py-1 sm:px-2 sm:py-2"
+                      : "relative mx-auto min-h-0 w-full flex-1 px-2 py-2 sm:px-3 sm:py-3"
                     : fullscreen
                       ? "relative mx-auto min-h-0 w-full flex-1 px-2 py-1 sm:px-4 sm:py-2"
-                      : "relative mx-auto min-h-0 w-full max-w-2xl flex-1 px-3 py-2 sm:max-w-3xl sm:px-6 sm:py-4"
+                      : "relative mx-auto min-h-0 w-full flex-1 px-3 py-2 sm:px-6 sm:py-4"
                 }
-                style={
-                  fullscreen && !isLetterbox
-                    ? { maxWidth: `${prefs.fieldWidth}%` }
-                    : undefined
-                }
+                style={{ maxWidth: `${prefs.fieldWidth}%` }}
               >
                 {isMania ? (
                   <NotefieldStage
@@ -1106,6 +1074,42 @@ export function BeatmapPreviewModal({
                   </div>
                 )}
               </div>
+
+              {isPlay && stageEl && fieldEl ? (
+                <>
+                  <ComboHudOverlay
+                    anchor={fieldEl}
+                    stage={stageEl}
+                    combo={liveSummary.combo}
+                    maxCombo={liveSummary.maxCombo}
+                    xPct={prefs.comboX}
+                    yPct={prefs.comboY}
+                    onMove={(comboX, comboY) =>
+                      setPrefs((p) => ({ ...p, comboX, comboY }))
+                    }
+                  />
+                  <AccuracyHudOverlay
+                    anchor={fieldEl}
+                    stage={stageEl}
+                    accuracy={liveSummary.accuracy}
+                    xPct={prefs.accuracyX}
+                    yPct={prefs.accuracyY}
+                    onMove={(accuracyX, accuracyY) =>
+                      setPrefs((p) => ({ ...p, accuracyX, accuracyY }))
+                    }
+                  />
+                  <JudgmentCounterOverlay
+                    anchor={fieldEl}
+                    stage={stageEl}
+                    counts={liveSummary.counts}
+                    xPct={prefs.counterX}
+                    yPct={prefs.counterY}
+                    onMove={(counterX, counterY) =>
+                      setPrefs((p) => ({ ...p, counterX, counterY }))
+                    }
+                  />
+                </>
+              ) : null}
 
               <div className="group/ctrl absolute inset-x-0 bottom-0 z-20">
                 <div
@@ -1381,7 +1385,7 @@ export function BeatmapPreviewModal({
                     </>
                   ) : null}
 
-                  {fullscreen && !isLetterbox ? (
+                  {isMania || isStd || isTaiko || isCatch ? (
                     <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-on-media-muted sm:max-w-xs">
                       <span className="shrink-0">
                         Size {Math.round(prefs.fieldWidth)}%

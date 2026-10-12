@@ -1179,7 +1179,7 @@
     "loginFailed": "Error al iniciar sesión",
     "loginDesktopBridge": "Puente de escritorio no disponible",
     "loginOpenBrowser": "No se pudo abrir el navegador",
-    "loginWaitingBrowser": "Esperando al navegador…",
+    "loginBrowserPrompt": "Ve a tu navegador para terminar el inicio de sesión.",
     "loginFirstError": "Inicia sesión con osu! primero",
     "nameRequiredError": "El nombre es obligatorio",
     "pickCollectionError": "Elige una colección",

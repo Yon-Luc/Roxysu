@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { isDesktopShell } from "../../lib/desktop";
 import {
@@ -33,6 +34,11 @@ export function HubLoginButton({
   const [error, setError] = useState<string | null>(null);
   const { dict } = useAppDict();
   const label = children ?? (dict?.hub?.loginButtonLabel ?? "Log in with osu!");
+
+  const cancelWait = useCallback(() => {
+    setWaiting(false);
+    setHandoff(null);
+  }, []);
 
   useEffect(() => {
     if (!waiting || !handoff) return;
@@ -95,9 +101,72 @@ export function HubLoginButton({
           })();
         }}
       >
-        {waiting ? (dict?.hub?.loginWaitingBrowser ?? "Waiting for browser…") : label}
+        {label}
       </button>
       {error ? <span className="text-xs text-danger">{error}</span> : null}
+      {waiting ? (
+        <BrowserLoginModal
+          message={
+            dict?.hub?.loginBrowserPrompt ??
+            "Go to your browser to finish the login."
+          }
+          cancelLabel={dict?.collection?.cancel ?? "Cancel"}
+          onCancel={cancelWait}
+        />
+      ) : null}
     </span>
+  );
+}
+
+function BrowserLoginModal({
+  message,
+  cancelLabel,
+  onCancel,
+}: {
+  message: string;
+  cancelLabel: string;
+  onCancel: () => void;
+}) {
+  const titleId = useId();
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onCancel();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [onCancel]);
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={onCancel}
+      role="presentation"
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="page-enter w-full max-w-xs rounded-2xl bg-elevated px-6 py-6 text-center shadow-2xl shadow-black/60"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="relative mx-auto h-14 w-14" aria-hidden>
+          <div className="absolute inset-0 animate-spin rounded-full border-2 border-accent/20 border-t-accent" />
+          <div className="absolute inset-2 animate-pulse rounded-full bg-accent/15" />
+        </div>
+        <p id={titleId} className="mt-5 text-sm font-semibold text-ink">
+          {message}
+        </p>
+        <button type="button" className="rx-btn mt-5" onClick={onCancel}>
+          {cancelLabel}
+        </button>
+      </div>
+    </div>,
+    document.body,
   );
 }

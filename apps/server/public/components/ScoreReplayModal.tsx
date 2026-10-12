@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import {
-  memo,
+  useCallback,
   useEffect,
   useId,
   useLayoutEffect,
@@ -29,7 +29,11 @@ import {
 } from "../lib/keybinds";
 import { KeybindModal } from "../features/settings/KeybindModal";
 import { LiveManiaPlay, type PracticeRange } from "../lib/liveManiaPlay";
-import { maniaHitWindows, type JudgmentSummary } from "../lib/maniaWindows";
+import {
+  emptyJudgmentCounts,
+  maniaHitWindows,
+  type JudgmentSummary,
+} from "../lib/maniaWindows";
 import {
   localBeatmapAudioUrl,
   localBeatmapCoverUrl,
@@ -46,6 +50,11 @@ import { StdPlayfield } from "./StdPlayfield";
 import { TaikoPlayfield } from "./TaikoPlayfield";
 import { CatchPlayfield } from "./CatchPlayfield";
 import { ManiaSkinDropHost } from "./ManiaSkinDropHost";
+import {
+  AccuracyHudOverlay,
+  ComboHudOverlay,
+  JudgmentCounterOverlay,
+} from "./JudgmentCounterOverlay";
 import { NotefieldStage } from "./NotefieldStage";
 import {
   buildReplayAnalysis,
@@ -160,46 +169,6 @@ function chartEndMsFromReplay(replay: LoadedScoreReplay | null): number {
   return end;
 }
 
-const ReplayHudOverlay = memo(function ReplayHudOverlay({
-  combo,
-  accuracy,
-  last,
-}: {
-  combo: number;
-  accuracy: number;
-  last: ReplayJudgmentResult | null;
-}) {
-  return (
-    <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex justify-between gap-3 sm:inset-x-6 sm:top-5">
-      <div className="rounded-lg bg-black/55 px-3 py-2 backdrop-blur">
-        <div className="text-[10px] font-semibold uppercase tracking-wide text-on-media-muted">
-          Combo
-        </div>
-        <div className="font-display text-2xl font-bold tabular-nums text-on-media">
-          {combo}
-          <span className="text-base text-on-media-muted">x</span>
-        </div>
-      </div>
-      <div className="rounded-lg bg-black/55 px-3 py-2 text-right backdrop-blur">
-        <div className="text-[10px] font-semibold uppercase tracking-wide text-on-media-muted">
-          Accuracy
-        </div>
-        <div className="font-display text-2xl font-bold tabular-nums text-on-media">
-          {formatAccuracy(accuracy)}
-        </div>
-        {last ? (
-          <div
-            className="mt-0.5 text-xs font-bold uppercase tracking-wide"
-            style={{ color: JUDGMENT_COLORS[last] }}
-          >
-            {last}
-          </div>
-        ) : null}
-      </div>
-    </div>
-  );
-});
-
 function playbackRateOptions(current: number): number[] {
   const options: number[] = [...PRESET_RATES];
   if (!options.some((r) => Math.abs(r - current) < 0.001) && current > 0) {
@@ -280,6 +249,8 @@ export function ScoreReplayModal({
   >(undefined);
   /** Map time where the current Play / Test session started (R restarts here). */
   const playStartMsRef = useRef(0);
+  const [stageEl, setStageEl] = useState<HTMLDivElement | null>(null);
+  const [fieldEl, setFieldEl] = useState<HTMLDivElement | null>(null);
   const keybindsAll = useKeybinds();
   const actionKeybinds = useActionKeybinds();
   const bindsRef = useRef<string[]>([]);
@@ -302,6 +273,7 @@ export function ScoreReplayModal({
     combo: 0,
     accuracy: 1,
     last: null as ReplayJudgmentResult | null,
+    counts: emptyJudgmentCounts(),
   });
   const [activeMissTMs, setActiveMissTMs] = useState<number | null>(null);
   const [liveHeldMask, setLiveHeldMask] = useState(0);
@@ -569,7 +541,6 @@ export function ScoreReplayModal({
         replay: replayData,
         scrollSpeed: prefsRef.current.scroll,
         fieldWidth: prefsRef.current.fieldWidth,
-        fullscreen: prefsRef.current.fullscreen,
         stdSkin: skin,
         taikoSkin,
         catchSkin,
@@ -836,7 +807,7 @@ export function ScoreReplayModal({
     setLiveHeldMask(0);
     setLiveJudgments([]);
     setLiveSummary(EMPTY_SUMMARY);
-    setHud({ combo: 0, accuracy: 1, last: null });
+    setHud({ combo: 0, accuracy: 1, last: null, counts: emptyJudgmentCounts() });
     setActiveMissTMs(null);
     cancelExport();
     setExportError(null);
@@ -983,6 +954,7 @@ export function ScoreReplayModal({
     let last: ReplayJudgmentResult | null = null;
     let accWeight = 0;
     let judged = 0;
+    let counts = emptyJudgmentCounts();
 
     function tick() {
       if (!running) return;
@@ -1000,6 +972,7 @@ export function ScoreReplayModal({
         accWeight = 0;
         judged = 0;
         index = 0;
+        counts = emptyJudgmentCounts();
       }
 
       while (index < judgments.length) {
@@ -1010,6 +983,7 @@ export function ScoreReplayModal({
         else combo += 1;
         accWeight += weight[j.result];
         judged += 1;
+        counts[j.result] += 1;
         index += 1;
       }
       lastT = t;
@@ -1026,6 +1000,7 @@ export function ScoreReplayModal({
           combo,
           accuracy: judged > 0 ? accWeight / (judged * scale) : 1,
           last,
+          counts: { ...counts },
         });
       }
       raf = requestAnimationFrame(tick);
@@ -1094,6 +1069,10 @@ export function ScoreReplayModal({
     (replayData.beatmap.catchHitObjects?.length ?? 0) > 0;
   const isLetterboxReplay = isStdReplay || isCatchReplay;
   const { outerRef: stdFitRef, size: stdFitSize } = useAspectFit(4 / 3);
+  const setStageNode = useCallback((node: HTMLDivElement | null) => {
+    stdFitRef.current = node;
+    setStageEl((prev) => (prev === node ? prev : node));
+  }, [stdFitRef]);
   const canLivePlay = isManiaReplay;
   const showAnalysis = analysisOn && !isPlay && isManiaReplay;
 
@@ -1267,47 +1246,8 @@ export function ScoreReplayModal({
             </p>
           ) : data ? (
             <>
-              {isPlay ? (
-                <div className="relative flex flex-wrap items-center justify-center gap-x-4 gap-y-1 border-b border-white/10 bg-black/40 px-4 py-2 text-sm tabular-nums backdrop-blur">
-                  <span className="font-bold text-on-media">
-                    {liveSummary.combo}x
-                  </span>
-                  <span className="text-on-media-muted">
-                    {formatAccuracy(liveSummary.accuracy)}
-                  </span>
-                  <span className="text-on-media-muted">
-                    max {liveSummary.maxCombo}x
-                  </span>
-                  <span className="hidden text-xs text-on-media-muted sm:inline">
-                    <span className="text-[#ffe566]">
-                      {liveSummary.counts.perfect}
-                    </span>
-                    {" / "}
-                    <span className="text-[#7dd3fc]">
-                      {liveSummary.counts.great}
-                    </span>
-                    {" / "}
-                    <span className="text-[#86efac]">
-                      {liveSummary.counts.good}
-                    </span>
-                    {" / "}
-                    <span className="text-[#fdba74]">
-                      {liveSummary.counts.ok}
-                    </span>
-                    {" / "}
-                    <span className="text-[#f9a8d4]">
-                      {liveSummary.counts.meh}
-                    </span>
-                    {" / "}
-                    <span className="text-[#f87171]">
-                      {liveSummary.counts.miss}
-                    </span>
-                  </span>
-                </div>
-              ) : null}
-
               <div
-                ref={isLetterboxReplay ? stdFitRef : undefined}
+                ref={setStageNode}
                 className={
                   showAnalysis
                     ? "relative flex min-h-0 flex-1 flex-col sm:flex-row"
@@ -1315,36 +1255,27 @@ export function ScoreReplayModal({
                 }
               >
                 <div
+                  ref={setFieldEl}
                   className={
                     isLetterboxReplay
                       ? "relative mx-auto min-h-0 shrink-0"
-                      : fullscreen
-                        ? "relative mx-auto min-h-0 w-full flex-1 px-2 py-1 sm:px-4 sm:py-2"
-                        : showAnalysis
-                          ? "relative mx-auto min-h-0 w-full min-w-0 flex-1 px-3 py-2 sm:px-4 sm:py-3"
-                          : "relative mx-auto min-h-0 w-full max-w-2xl flex-1 px-3 py-2 sm:max-w-3xl sm:px-6 sm:py-4"
+                      : showAnalysis
+                        ? "relative mx-auto min-h-0 w-full min-w-0 flex-1 px-3 py-2 sm:px-4 sm:py-3"
+                        : fullscreen
+                          ? "relative mx-auto min-h-0 w-full flex-1 px-2 py-1 sm:px-4 sm:py-2"
+                          : "relative mx-auto min-h-0 w-full flex-1 px-3 py-2 sm:px-6 sm:py-4"
                   }
                   style={
                     isLetterboxReplay
                       ? stdFitSize
                         ? {
-                            width: `${stdFitSize.width}px`,
-                            height: `${stdFitSize.height}px`,
+                            width: `${(stdFitSize.width * prefs.fieldWidth) / 100}px`,
+                            height: `${(stdFitSize.height * prefs.fieldWidth) / 100}px`,
                           }
                         : { width: "100%", height: "100%", visibility: "hidden" }
-                      : fullscreen
-                        ? { maxWidth: `${prefs.fieldWidth}%` }
-                        : undefined
+                      : { maxWidth: `${prefs.fieldWidth}%` }
                   }
                 >
-                  {!isPlay ? (
-                    <ReplayHudOverlay
-                      combo={hud.combo}
-                      accuracy={hud.accuracy}
-                      last={hud.last}
-                    />
-                  ) : null}
-
                   {isManiaReplay ? (
                     <NotefieldStage
                       columnCount={replayData.beatmap.columnCount}
@@ -1415,6 +1346,43 @@ export function ScoreReplayModal({
                     </div>
                   )}
                 </div>
+
+                {stageEl && fieldEl ? (
+                  <>
+                    <ComboHudOverlay
+                      anchor={fieldEl}
+                      stage={stageEl}
+                      combo={isPlay ? liveSummary.combo : hud.combo}
+                      maxCombo={isPlay ? liveSummary.maxCombo : undefined}
+                      xPct={prefs.comboX}
+                      yPct={prefs.comboY}
+                      onMove={(comboX, comboY) =>
+                        setPrefs((p) => ({ ...p, comboX, comboY }))
+                      }
+                    />
+                    <AccuracyHudOverlay
+                      anchor={fieldEl}
+                      stage={stageEl}
+                      accuracy={isPlay ? liveSummary.accuracy : hud.accuracy}
+                      last={isPlay ? null : hud.last}
+                      xPct={prefs.accuracyX}
+                      yPct={prefs.accuracyY}
+                      onMove={(accuracyX, accuracyY) =>
+                        setPrefs((p) => ({ ...p, accuracyX, accuracyY }))
+                      }
+                    />
+                    <JudgmentCounterOverlay
+                      anchor={fieldEl}
+                      stage={stageEl}
+                      counts={isPlay ? liveSummary.counts : hud.counts}
+                      xPct={prefs.counterX}
+                      yPct={prefs.counterY}
+                      onMove={(counterX, counterY) =>
+                        setPrefs((p) => ({ ...p, counterX, counterY }))
+                      }
+                    />
+                  </>
+                ) : null}
 
                 {showAnalysis && analysis && replayData ? (
                   <div className="h-56 shrink-0 sm:h-auto sm:w-72 sm:max-w-[40%] md:w-80">
@@ -1616,7 +1584,7 @@ export function ScoreReplayModal({
                     </label>
                     ) : null}
 
-                    {fullscreen && !isLetterboxReplay ? (
+                    {isManiaReplay || isStdReplay || isTaikoReplay || isCatchReplay ? (
                       <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-on-media-muted sm:max-w-xs">
                         <span className="shrink-0">
                           Size {Math.round(prefs.fieldWidth)}%

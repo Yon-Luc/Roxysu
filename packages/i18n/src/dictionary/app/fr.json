@@ -1180,7 +1180,7 @@
     "loginFailed": "Échec de la connexion",
     "loginDesktopBridge": "Pont de bureau indisponible",
     "loginOpenBrowser": "Impossible d'ouvrir le navigateur",
-    "loginWaitingBrowser": "En attente du navigateur…",
+    "loginBrowserPrompt": "Allez dans votre navigateur pour terminer la connexion.",
     "loginFirstError": "Connectez-vous avec osu! d'abord",
     "nameRequiredError": "Le nom est requis",
     "pickCollectionError": "Choisissez une collection",

@@ -8,6 +8,8 @@ touches:
   - apps/server/public/features/now-selected/NowSelectedPage.tsx
   - apps/server/public/features/overlay/OverlayElements.tsx
   - apps/server/public/components/ScoreReplayModal.tsx
+  - apps/server/public/components/JudgmentCounterOverlay.tsx
+  - apps/server/public/components/previewPrefs.ts
   - apps/server/public/lib/api.ts
   - apps/server/src/routes/beatmaps.ts
   - apps/server/src/routes/scores.ts
@@ -155,7 +157,27 @@ Playfield = the visual layer for that ruleset (notefield, 512×384, or taiko lan
     **Source:** `map-analysis/computeSunnyDan.ts:getSunnyDanForPatternMods`,
     `routes/beatmaps.ts` `/:id/sunny-dan`, `BeatmapPreviewModal.tsx` Sunny chip,
     `lib/api.ts:fetchBeatmapSunnyDan` — status: verified by
-    `beatmapsPreview.test.ts`.
+     `beatmapsPreview.test.ts`.
+
+12. Score rewatch and Play (preview modal and score modal) show running judgment
+    counts on the playfield: perfect / great / good / ok / meh / miss, including
+    zeros, stacked vertically. Counts advance with map time (rewatch, same scan
+    as combo / accuracy, tails included) or with hits (Play, from `LiveManiaPlay`
+    summary). Combo and accuracy are separate playfield chips (Play also shows
+    max combo on the combo chip; rewatch accuracy shows the last result). All
+    three chips drag on the playfield and up to 200px past its left or right
+    edge; centers are saved as % of the playfield on the preview prefs store. Preview without Play has none of them. They are not drawn on
+    replay video export.
+    **Source:** `JudgmentCounterOverlay.tsx`, `previewPrefs.ts` `counterX` /
+    `comboX` / `accuracyX`, `ScoreReplayModal.tsx` HUD scan,
+    `BeatmapPreviewModal.tsx` Play branch.
+
+13. Playfield width is a saved percentage of the stage, 15–100 (default 55), in
+    both modals, windowed and fullscreen, every ruleset. Mania and taiko use it
+    as max-width. Standard and catch in score rewatch scale the fitted 4:3 by
+    that percentage; preview letterbox applies it as max-width of the stage box.
+    **Source:** `previewPrefs.ts:FIELD_WIDTH_MIN`, `ScoreReplayModal.tsx`,
+    `BeatmapPreviewModal.tsx`.
 
 ## Security rules
 
@@ -206,8 +228,9 @@ Realm skin extract (full / reconcile):
   notes) are unchanged, and cancels while `document.hidden`. Video export
   calls the same paint.
 - Score rewatch HUD ticks incrementally through judgments and calls `setHud`
-  only when combo / accuracy / last result change. Paused + unchanged time
-  skips the scan. Overlay lives in memoized `ReplayHudOverlay`.
+  only when combo / accuracy / last result change (counts ride the same update).
+  Paused + unchanged time   skips the scan. Combo, accuracy, and running counts are draggable playfield
+  chips (`ComboHudOverlay`, `AccuracyHudOverlay`, `JudgmentCounterOverlay`).
 - Fat API payload: unused `notes` / `hitObjects` / `taikoHitObjects` /
   `catchHitObjects` / frame arrays are `[]`. Preview responses echo
   `appliedMods` for the pattern conversions actually applied.

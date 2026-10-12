@@ -3,6 +3,14 @@ import {
   PREVIEW_SCROLL_DEFAULT,
 } from "./ManiaNotefield";
 import {
+  ACCURACY_X_DEFAULT,
+  ACCURACY_Y_DEFAULT,
+  COMBO_X_DEFAULT,
+  COMBO_Y_DEFAULT,
+  COUNTER_X_DEFAULT,
+  COUNTER_Y_DEFAULT,
+} from "./JudgmentCounterOverlay";
+import {
   TIMING_VIS_X_DEFAULT,
   TIMING_VIS_Y_DEFAULT,
 } from "./TimingVisualizer";
@@ -12,8 +20,8 @@ import { clamp } from "../lib/format";
 export const PREFS_KEY = "rx-beatmap-preview";
 export const SKIP_MS = 5000;
 export const PRESET_RATES = [0.5, 0.75, 1, 1.25, 1.5] as const;
-/** Fullscreen playfield width as % of the modal (saved). */
-export const FIELD_WIDTH_MIN = 40;
+/** Playfield width as % of the stage (saved). */
+export const FIELD_WIDTH_MIN = 15;
 export const FIELD_WIDTH_MAX = 100;
 export const FIELD_WIDTH_DEFAULT = 55;
 
@@ -22,12 +30,24 @@ export type PreviewPrefs = {
   rate: number;
   scroll: number;
   fullscreen: boolean;
-  /** Fullscreen playfield max-width (% of dialog). */
+  /** Playfield max-width (% of the stage). */
   fieldWidth: number;
   /** Timing visualizer center X (% of playfield). */
   timingX: number;
   /** Timing visualizer center Y (% of playfield). */
   timingY: number;
+  /** Judgment counter center X (% of playfield). */
+  counterX: number;
+  /** Judgment counter center Y (% of playfield). */
+  counterY: number;
+  /** Combo chip center X (% of playfield). */
+  comboX: number;
+  /** Combo chip center Y (% of playfield). */
+  comboY: number;
+  /** Accuracy chip center X (% of playfield). */
+  accuracyX: number;
+  /** Accuracy chip center Y (% of playfield). */
+  accuracyY: number;
   /** Solid black backdrop while in Play mode. */
   blackBg: boolean;
   /** Opt-in miss/timing/pattern tools. Default off. */
@@ -42,6 +62,12 @@ export const DEFAULT_PREFS: PreviewPrefs = {
   fieldWidth: FIELD_WIDTH_DEFAULT,
   timingX: TIMING_VIS_X_DEFAULT,
   timingY: TIMING_VIS_Y_DEFAULT,
+  counterX: COUNTER_X_DEFAULT,
+  counterY: COUNTER_Y_DEFAULT,
+  comboX: COMBO_X_DEFAULT,
+  comboY: COMBO_Y_DEFAULT,
+  accuracyX: ACCURACY_X_DEFAULT,
+  accuracyY: ACCURACY_Y_DEFAULT,
   blackBg: false,
   analysis: false,
 };
@@ -62,6 +88,14 @@ export const EMPTY_SUMMARY: JudgmentSummary = {
 
 export function clampRate(rate: number): number {
   return clamp(rate, 0.5, 2);
+}
+
+function hudX(value: unknown, fallback: number): number {
+  return clamp(typeof value === "number" ? value : fallback, -1000, 1100);
+}
+
+function hudY(value: unknown, fallback: number): number {
+  return clamp(typeof value === "number" ? value : fallback, 0, 100);
 }
 
 export function loadPrefs(): PreviewPrefs {
@@ -107,6 +141,12 @@ export function loadPrefs(): PreviewPrefs {
         0,
         100,
       ),
+      counterX: hudX(parsed.counterX, DEFAULT_PREFS.counterX),
+      counterY: hudY(parsed.counterY, DEFAULT_PREFS.counterY),
+      comboX: hudX(parsed.comboX, DEFAULT_PREFS.comboX),
+      comboY: hudY(parsed.comboY, DEFAULT_PREFS.comboY),
+      accuracyX: hudX(parsed.accuracyX, DEFAULT_PREFS.accuracyX),
+      accuracyY: hudY(parsed.accuracyY, DEFAULT_PREFS.accuracyY),
       blackBg:
         typeof parsed.blackBg === "boolean"
           ? parsed.blackBg

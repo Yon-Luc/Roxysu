@@ -1186,7 +1186,7 @@
     "loginFailed": "Login failed",
     "loginDesktopBridge": "Desktop bridge unavailable",
     "loginOpenBrowser": "Could not open browser",
-    "loginWaitingBrowser": "Waiting for browser…",
+    "loginBrowserPrompt": "Go to your browser to finish the login.",
     "loginFirstError": "Log in with osu! first",
     "nameRequiredError": "Name is required",
     "pickCollectionError": "Pick a collection",

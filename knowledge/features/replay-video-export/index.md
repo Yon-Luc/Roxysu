@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08
+last_verified: 2026-10
 confidence: verified
 touches:
   - apps/server/public/lib/replayVideoExport.ts
@@ -40,9 +40,11 @@ and not a live screen capture.
 3. Frame composition mirrors the score rewatch page: beatmap background, top-left
    title / subtitle / mods, playfield at modal-like scale with the user's skin
    (std or mania preview / imported mania skin, scroll, hit position, lane cover,
-   field width),
-   live combo/accuracy HUD, and bottom stored/sim stats with a Roxysu logo +
-   wordmark watermark on the bottom left. Control buttons
+   field width), live combo/accuracy HUD, and bottom stored/sim stats with a
+   Roxysu logo + wordmark watermark on the bottom left. Field width (15–100% of
+   the stage) scales mania/taiko width and the letterbox 4:3 in every layout,
+   including windowed export. The running judgment counter is not painted; the
+   footer still shows final sim counts. Control buttons
    (Rewatch / Play / Export / Window / Esc) are omitted.
    **Status:** verified — `paintComposedFrame` in `replayVideoExport.ts`.
 

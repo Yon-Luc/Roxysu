@@ -86,10 +86,13 @@ function formatShareDate(iso: string): string {
 function formatShareTime(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleTimeString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  // Keep "10:02 PM" from wrapping mid-marker (NBSP before AM/PM).
+  return date
+    .toLocaleTimeString(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+    .replace(/(\d)\s+(AM|PM|am|pm)/g, "$1\u00a0$2");
 }
 
 function sameLocalCalendarDay(a: Date, b: Date): boolean {
@@ -239,15 +242,15 @@ function ShareScoreRow({
           className="size-12 shrink-0 rounded-lg"
         />
         <div className="flex min-w-0 flex-1 flex-col">
-          <div className="flex items-center gap-2">
-            <p className="truncate text-sm font-semibold text-white">{title}</p>
+          <p className="text-sm font-semibold text-white">
+            {title}
             {score.isPb ? (
-              <span className="shrink-0 rounded-full bg-amber-400/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-300">
+              <span className="ml-2 inline-block rounded-full bg-amber-400/20 px-1.5 py-0.5 align-middle text-[10px] font-bold uppercase tracking-wide text-amber-300">
                 {labels.pb}
               </span>
             ) : null}
-          </div>
-          <p className="mt-0.5 truncate text-xs text-white/50">
+          </p>
+          <p className="mt-0.5 text-xs text-white/50">
             {[artist, diff].filter(Boolean).join(" · ")}
           </p>
           <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -309,8 +312,8 @@ export function SessionShareCard({
       }`}
       style={{ fontFamily: "Figtree, system-ui, sans-serif" }}
     >
-      <header className="flex items-center justify-between gap-4">
-        <div className="flex min-w-0 items-center gap-3">
+      <header>
+        <div className="flex items-center justify-between gap-4">
           <img
             src={roxyIcon}
             alt=""
@@ -318,16 +321,17 @@ export function SessionShareCard({
             height={56}
             className="size-14 shrink-0 rounded-full object-cover"
           />
-          <h1
-            className="min-w-0 text-[1.65rem] leading-tight font-bold tracking-tight text-white"
-            style={{ fontFamily: "Outfit, Figtree, system-ui, sans-serif" }}
-          >
-            {dateRange || "Session"}
-          </h1>
+          <div className="shrink-0 text-xs font-semibold uppercase tracking-wider text-white/40">
+            {labels.brand}
+          </div>
         </div>
-        <div className="shrink-0 text-right text-xs font-semibold uppercase tracking-wider text-white/40">
-          {labels.brand}
-        </div>
+        {/* Full-width row so AM/PM is never clipped by flex overflow */}
+        <h1
+          className="mt-3 whitespace-nowrap text-[1.65rem] leading-tight font-bold tracking-tight text-white"
+          style={{ fontFamily: "Outfit, Figtree, system-ui, sans-serif" }}
+        >
+          {dateRange || "Session"}
+        </h1>
       </header>
 
       <div

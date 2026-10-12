@@ -73,29 +73,58 @@ const JUDGMENT_ORDER = [
   { key: "miss", fallback: "Miss", color: "text-rose-400" },
 ] as const;
 
-function formatShareDateTime(iso: string): string {
+function formatShareDate(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString(undefined, {
+  return date.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
     year: "numeric",
+  });
+}
+
+function formatShareTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString(undefined, {
     hour: "2-digit",
     minute: "2-digit",
   });
 }
 
-/** Absolute calendar range so the PNG stays meaningful later (never relative). */
+function sameLocalCalendarDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+/**
+ * Absolute calendar range so the PNG stays meaningful later (never relative).
+ * Same day → `Oct 12, 2026 · 09:14 – 10:02`. Different days → full datetime each side.
+ */
 function formatShareDateRange(
   startedAt: string,
   endedAt: string | null,
 ): string {
-  const startLabel = formatShareDateTime(startedAt);
-  if (!startLabel) return "";
-  if (!endedAt) return startLabel;
-  const endLabel = formatShareDateTime(endedAt);
-  if (!endLabel) return startLabel;
-  return `${startLabel} – ${endLabel}`;
+  const start = new Date(startedAt);
+  if (Number.isNaN(start.getTime())) return "";
+  const startDate = formatShareDate(startedAt);
+  const startTime = formatShareTime(startedAt);
+  if (!endedAt) {
+    return startTime ? `${startDate} · ${startTime}` : startDate;
+  }
+  const end = new Date(endedAt);
+  if (Number.isNaN(end.getTime())) {
+    return startTime ? `${startDate} · ${startTime}` : startDate;
+  }
+  const endTime = formatShareTime(endedAt);
+  if (sameLocalCalendarDay(start, end)) {
+    return `${startDate} · ${startTime} – ${endTime}`;
+  }
+  const endDate = formatShareDate(endedAt);
+  return `${startDate} · ${startTime} – ${endDate} · ${endTime}`;
 }
 
 function formatSigned(value: number, suffix: string, digits: number): string {
@@ -302,7 +331,9 @@ export function SessionShareCard({
       </header>
 
       <div
-        className={`mt-5 grid grid-cols-3 gap-3 ${twoColumns ? "max-w-[720px]" : ""}`}
+        className={`mt-5 grid grid-cols-3 gap-3 ${
+          twoColumns ? "mx-auto w-full max-w-[720px]" : ""
+        }`}
       >
         <ShareStat label={labels.plays} value={String(scoreCount)} />
         <ShareStat label={labels.pbs} value={String(pbCount)} />

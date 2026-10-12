@@ -729,6 +729,7 @@
     "clearDayFilter": "Ver todas",
     "noSessionsOnDay": "Nenhuma sessão neste dia.",
     "activityCalendar": "Atividade",
+    "activityFilterHint": "Clique num dia para filtrar a lista acima.",
     "playsOnDay": "{{day}}: {{count}} plays",
     "dayStats": "{{day}}: {{plays}} plays · {{sessions}} sessões",
     "activityLess": "Menos",

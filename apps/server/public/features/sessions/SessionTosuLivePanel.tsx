@@ -199,7 +199,7 @@ export function SessionTosuLivePanel() {
     <section className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
-          <h2 className="font-display text-2xl font-bold tracking-tight text-ink">
+          <h2 className="font-display text-lg font-bold tracking-tight text-ink">
             {dict?.session.tosu.nowSelected ?? "Now selected"}
           </h2>
           <span className={`rx-chip ${chip.className}`}>{chip.text}</span>

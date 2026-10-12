@@ -735,6 +735,7 @@
     "clearDayFilter": "Show all",
     "noSessionsOnDay": "No sessions on this day.",
     "activityCalendar": "Activity",
+    "activityFilterHint": "Click a day to filter the list above.",
     "playsOnDay": "{{day}}: {{count}} plays",
     "dayStats": "{{day}}: {{plays}} plays · {{sessions}} sessions",
     "activityLess": "Less",

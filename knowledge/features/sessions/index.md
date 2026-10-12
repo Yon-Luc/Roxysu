@@ -48,7 +48,7 @@ Live sessions keep the **Current session** label in headings; the generated name
 9. Up Next samples debounce the query string; recommend/Up Next query keys include excluded beatmap IDs. Shuffle bumps a key instead of double-fetching.
 10. Session score rows whose beatmap was removed from the game (`beatmapId` null after Realm orphan cleanup) display as “Beatmap deleted” / “Removed from the game”, not Untitled/Unknown.
 11. The Current session **Now selected** panel follows Settings difficulty display: when `rework` is selected it shows ephemeral tosu `analysis.rework` (Rework dan), not Sunny dan.
-12. Sessions list page keeps the current-session CTA at the top, then recent sessions (default **7**), then a GitHub-style activity calendar from `daily_stats` (~53 weeks UTC).
+12. Sessions list page keeps the current-session CTA at the top, then recent sessions (default **7**), then a GitHub-style activity calendar from `daily_stats` (~53 weeks UTC). The CTA uses the same panel as Home. The calendar says that a day click filters the list above.
 13. `GET /api/sessions` returns `{ current, items, activity }` where `activity` is `{ day, playCount }[]` from `getDailyActivity` (missing days = 0 plays in the UI).
 14. Clicking a calendar day filters the list to sessions whose `startedAt` falls on that UTC day (`YYYY-MM-DD`). Clicking the day again or **Show all** clears the filter. With no day selected, **Show all** expands beyond the default 7 (API still caps `items` at 100).
 15. Session detail score lists use shared `ScoreCard` (`variant="beatmap"`) with map cover, judgments, and PB comparison.

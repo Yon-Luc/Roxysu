@@ -83,70 +83,56 @@ export function SessionsPage() {
         <p className="rx-subtitle">{dict?.session.subtitle}</p>
       </div>
 
-      {data.current ? (
-        <Link
-          to="/sessions/$sessionId"
-          params={{ sessionId: "current" }}
-          className="group relative block overflow-hidden rounded-xl bg-gradient-to-br from-accent/20 via-surface to-surface p-5 transition hover:from-accent/30"
-        >
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-accent">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60" />
-                  <span className="relative flex h-2 w-2 rounded-full bg-accent" />
-                </span>
-                {dict?.session.nowPlaying}
-              </div>
-              <div className="mt-2 font-display text-2xl font-bold text-ink">
-                {data.current.name}
-              </div>
-              <div className="mt-1 text-sm text-muted">
+      <Link
+        to="/sessions/$sessionId"
+        params={{ sessionId: "current" }}
+        className="rx-panel flex flex-wrap items-end justify-between gap-3 px-4 py-4 transition hover:bg-elevated sm:px-5"
+      >
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-accent">
+            {data.current ? (
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60" />
+                <span className="relative flex h-2 w-2 rounded-full bg-accent" />
+              </span>
+            ) : null}
+            {data.current
+              ? dict?.session.nowPlaying
+              : dict?.session.readyWhenYouAre}
+          </div>
+          <div className="mt-1 truncate font-display text-2xl font-bold text-ink">
+            {data.current ? data.current.name : dict?.session.startASession}
+          </div>
+          <div className="mt-1 text-sm text-muted">
+            {data.current ? (
+              <>
                 {t(dict?.session.playsCount, {
                   count: data.current.scoreCount,
                 })}
                 {" · "}
                 {t(dict?.session.started, {
-                  time: formatRelativeTime(data.current.startedAt, dict?.common),
+                  time: formatRelativeTime(
+                    data.current.startedAt,
+                    dict?.common,
+                  ),
                 })}
                 {data.current.rulesetShortName
                   ? ` · ${data.current.rulesetShortName}`
                   : ""}
-              </div>
-            </div>
-            <span className="shrink-0 rounded-full bg-accent px-4 py-2 text-sm font-bold text-white transition group-hover:scale-105">
-              {dict?.session.openLive}
-            </span>
+              </>
+            ) : (
+              dict?.session.startHint
+            )}
           </div>
-        </Link>
-      ) : (
-        <Link
-          to="/sessions/$sessionId"
-          params={{ sessionId: "current" }}
-          className="group relative block overflow-hidden rounded-xl bg-gradient-to-br from-accent/20 via-surface to-surface p-5 transition hover:from-accent/30"
-        >
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-xs font-bold uppercase tracking-widest text-accent">
-                {dict?.session.readyWhenYouAre}
-              </div>
-              <div className="mt-2 font-display text-2xl font-bold text-ink">
-                {dict?.session.startASession}
-              </div>
-              <div className="mt-1 text-sm text-muted">
-                {dict?.session.startHint}
-              </div>
-            </div>
-            <span className="shrink-0 rounded-full bg-accent px-4 py-2 text-sm font-bold text-white transition group-hover:scale-105">
-              {dict?.session.open}
-            </span>
-          </div>
-        </Link>
-      )}
+        </div>
+        <span className="rx-btn-primary shrink-0 text-sm">
+          {data.current ? dict?.session.openLive : dict?.session.open}
+        </span>
+      </Link>
 
       <section>
         <div className="mb-4 flex items-end justify-between gap-3">
-          <h2 className="font-display text-2xl font-bold tracking-tight text-ink">
+          <h2 className="font-display text-lg font-bold tracking-tight text-ink">
             {listHeading}
           </h2>
           {selectedDay ? (
@@ -242,6 +228,10 @@ export function SessionsPage() {
         }
         lessLabel={dict?.session.activityLess ?? "Less"}
         moreLabel={dict?.session.activityMore ?? "More"}
+        hint={
+          dict?.session.activityFilterHint ??
+          "Click a day to filter the list above."
+        }
       />
     </div>
   );

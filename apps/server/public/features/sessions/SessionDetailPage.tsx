@@ -307,27 +307,31 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
         <GoBackLink to="/sessions">
           {dict?.session.backToSessions}
         </GoBackLink>
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <PageTitle>
-            {isLive ? dict?.session.currentSession : session.name}
-          </PageTitle>
-          {isLive ? (
-            <span className="rx-chip bg-accent-glow text-accent">
-              <span className="relative flex h-1.5 w-1.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60" />
-                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent" />
-              </span>
-              {dict?.session.liveChip}
-              {isFetching ? (
-                <span className="text-accent/70">
-                  {dict?.session.updating}
+        <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-3">
+              <PageTitle>
+                {isLive ? dict?.session.currentSession : session.name}
+              </PageTitle>
+              {isLive ? (
+                <span className="rx-chip bg-accent-glow text-accent">
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60" />
+                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent" />
+                  </span>
+                  {dict?.session.liveChip}
+                  {isFetching ? (
+                    <span className="text-accent/70">
+                      {dict?.session.updating}
+                    </span>
+                  ) : null}
                 </span>
               ) : null}
-            </span>
-          ) : null}
+            </div>
+          </div>
           <button
             type="button"
-            className="rx-btn inline-flex items-center gap-1.5 text-sm"
+            className="rx-btn inline-flex shrink-0 items-center gap-1.5 text-sm"
             disabled={sharing}
             onClick={() => void handleShareImage()}
           >
@@ -376,7 +380,7 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
       ) : null}
 
       <section>
-        <h2 className="mb-3 font-display text-2xl font-bold tracking-tight text-ink">
+        <h2 className="mb-3 font-display text-lg font-bold tracking-tight text-ink">
           {dict?.session.playsHeading}
         </h2>
         {scores.length === 0 ? (

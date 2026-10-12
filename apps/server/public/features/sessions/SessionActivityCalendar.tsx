@@ -98,6 +98,7 @@ export function SessionActivityCalendar({
   dayStatsLabel,
   lessLabel,
   moreLabel,
+  hint,
 }: {
   activity: ActivityDay[];
   /** Per-day aggregates from the sessions list (startedAt UTC day). */
@@ -108,6 +109,7 @@ export function SessionActivityCalendar({
   dayStatsLabel: (day: string, plays: number, sessions: number) => string;
   lessLabel: string;
   moreLabel: string;
+  hint?: string;
 }) {
   const weeks = 53;
   const cells = useMemo(() => buildWeekGrid(weeks), []);
@@ -221,7 +223,8 @@ export function SessionActivityCalendar({
 
   return (
     <section className="rx-panel w-full max-w-full px-4 py-4 sm:px-5">
-      <h3 className="mb-3 text-sm font-bold text-ink">{title}</h3>
+      <h3 className="text-sm font-bold text-ink">{title}</h3>
+      {hint ? <p className="mb-3 mt-0.5 text-xs text-muted">{hint}</p> : <div className="mb-3" />}
       <div className="w-full min-w-0">
         <div className="mb-1 flex gap-0.5 text-[10px] text-muted sm:text-xs">
           <div className="w-6 shrink-0 sm:w-7" />

@@ -43,7 +43,7 @@ export function SessionSuggest({
   return (
     <section className="space-y-4">
       <div>
-        <h2 className="font-display text-2xl font-bold tracking-tight text-ink">
+        <h2 className="font-display text-lg font-bold tracking-tight text-ink">
           {dict?.session.suggestTitle}
         </h2>
         <p className="mt-1 text-sm text-muted">{activeHint}</p>

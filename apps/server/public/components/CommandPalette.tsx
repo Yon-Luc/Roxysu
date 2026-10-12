@@ -51,6 +51,7 @@ const SETTINGS_SECTION_KEYS: Record<string, keyof Dictionary["app"]["settings"]>
     "score-username": "scoreUsername",
     gamemode: "gamemode",
     "live-sync": "liveSync",
+    "score-transfer": "scoreTransfer",
     appearance: "appearance",
     "difficulty-display": "difficultyDisplay",
     "preview-skin": "previewSkin",

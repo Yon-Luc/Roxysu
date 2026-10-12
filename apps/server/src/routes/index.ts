@@ -19,6 +19,7 @@ import { mirrorRoutes } from "./mirrors";
 import { marathonRoutes } from "./marathon";
 import { skinRoutes } from "./skins";
 import { onlineScoreRoutes } from "./onlineScores";
+import { scoreTransferRoutes } from "./scoreTransfer";
 
 const productApi = () =>
   new Elysia({ prefix: "/api" })
@@ -37,6 +38,7 @@ const productApi = () =>
     .use(collectionRoutes)
     .use(settingsRoutes)
     .use(onlineScoreRoutes)
+    .use(scoreTransferRoutes)
     .use(tosuRoutes)
     .use(marathonRoutes)
     .use(skinRoutes);

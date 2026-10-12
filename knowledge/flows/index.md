@@ -8,6 +8,8 @@ End-to-end paths. Prefer these when changing behavior that spans modules. Terms:
 | Create collection | [create-collection.md](create-collection.md) |
 | Collection write-back to lazer | [collection-write-back-to-lazer.md](collection-write-back-to-lazer.md) |
 | Score indexing / analytics | [score-indexing-analytics.md](score-indexing-analytics.md) |
+| Online score pull | [online-score-pull.md](online-score-pull.md) |
+| Score transfer | [score-transfer.md](score-transfer.md) |
 | Sunny backfill → recommend | [sunny-backfill-to-recommend.md](sunny-backfill-to-recommend.md) |
 | Hub calc bundle pull → gap-fill | [hub-calc-bundle-pull.md](hub-calc-bundle-pull.md) |
 | Export score rewatch as video | [export-replay-video.md](export-replay-video.md) |

@@ -9,7 +9,7 @@ See also: forbidden terms in `.cursor/rules/knowledge-maintainer.mdc`.
 
 ### Realm
 
-osu!lazer's `client.realm` file. Roxysu reads beatmaps and scores from it. Intentional writes are **collection write-back** and **online score pull**.
+osu!lazer's `client.realm` file. Roxysu reads beatmaps and scores from it. Intentional writes are **collection write-back**, **online score pull**, and **score transfer**.
 
 **Not:** "the database", "osu db", "lazer db"
 
@@ -79,7 +79,7 @@ Manual push of smart collections from the local mirror into Realm `BeatmapCollec
 
 One completed Realm extraction cycle recorded in the local mirror's `imports` table. Signals new or changed scores for the analytics pipeline.
 
-**Not:** "sync event", "data update", online score pull
+**Not:** "sync event", "data update", online score pull, score transfer
 
 **See:** [flows/realm-extraction-to-ui.md](flows/realm-extraction-to-ui.md)
 
@@ -89,9 +89,19 @@ One completed Realm extraction cycle recorded in the local mirror's `imports` ta
 
 A manual fetch of one ruleset's ranked personal bests from osu!api, then an optional write of the missing ones into Realm so lazer lists them as local scores.
 
-**Not:** Import, Realm extraction, collection write-back
+**Not:** Import, Realm extraction, collection write-back, score transfer
 
 **See:** [flows/online-score-pull.md](flows/online-score-pull.md)
+
+---
+
+### Score transfer
+
+A versioned file of local scores used to add the ones missing from another PC's Realm, so they show in lazer. Add-only. No replays.
+
+**Not:** Import, Online score pull, Realm extraction
+
+**See:** [flows/score-transfer.md](flows/score-transfer.md)
 
 ---
 

@@ -337,6 +337,12 @@ async function main() {
     label: "realm-reader syncCollections",
   });
 
+  await bundleEntry({
+    entry: path.join(repoRoot, "apps/realm-reader/src/writeScoreTransfer.ts"),
+    outfile: path.join(stageDir, "realm-reader/writeScoreTransfer.js"),
+    label: "realm-reader writeScoreTransfer",
+  });
+
   const nodeBin = await downloadNodeRuntime();
 
   const serverDeps = {

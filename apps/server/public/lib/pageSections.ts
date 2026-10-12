@@ -116,6 +116,13 @@ export const PAGE_SECTIONS: PageSectionDef[] = [
     keywords: ["settings", "osu", "scores", "ranked", "lazer", "import"],
   },
   {
+    id: "score-transfer",
+    to: "/settings",
+    pageLabel: "Settings",
+    label: "Score transfer",
+    keywords: ["settings", "scores", "export", "import", "lazer", "file"],
+  },
+  {
     id: "live-sync",
     to: "/settings",
     pageLabel: "Settings",

@@ -21,20 +21,18 @@ Copy a branded session summary image to the clipboard so it can be pasted into c
 ```text
 SessionDetailPage (active session)
   → Copy as image
-  → optional fetchSession(limit=500) when UI window incomplete
-  → pickSessionShareHighlights (PBs by PP, then non-PBs, cap 20)
-  → off-screen SessionShareCard (2 columns when 9+ scores, even split)
-  → modern-screenshot domToBlob (PNG)
-  → navigator.clipboard.write(ClipboardItem)
-       ├── ok → toast Copied
-       └── fail + desktop → roxysuDesktop.writeClipboardImage
-            ├── ok → toast Copied
-            └── fail → toast error (no download)
+  → shareSessionImage arms navigator.clipboard.write(ClipboardItem + deferred PNG promise)
+       (must run in the click turn — Chromium user activation)
+  → prepareCard: optional fetchSession(limit=500) + pickSessionShareHighlights
+  → off-screen SessionShareCard → modern-screenshot domToBlob → deliver blob
+       ├── clipboard write ok → toast Copied
+       ├── else desktop writeClipboardImage → toast Copied
+       └── else downloadBlob → toast Downloaded
 ```
 
 ## Business guarantee
 
-One PNG copied to the clipboard only: absolute session date range, plays / PBs / duration, and up to twenty highlight scores with judgments and PB compare (no display name, no ruleset; never relative times). Nine or more highlights use a wider two-column even split instead of a taller card. Idle “start a session” hub cannot share. No Hub upload. No download fallback.
+One PNG: prefer clipboard copy (deferred ClipboardItem so capture can finish after the click). Absolute session date range, plays / PBs / duration, up to twenty highlight scores with judgments and PB compare. Nine or more highlights use a wider two-column even split. Idle hub cannot share. Download only if clipboard and Electron bridge both fail.
 
 ## Implementation references
 

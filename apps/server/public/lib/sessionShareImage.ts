@@ -123,19 +123,21 @@ async function captureSessionPng(card: ReactElement): Promise<Blob> {
 
 /**
  * Capture a session share card and copy the PNG to the clipboard.
- * Must be invoked directly from a click handler (no prior awaits) so the
- * deferred ClipboardItem write keeps user activation.
+ *
+ * `prepareCard` may await (e.g. refetch scores). Clipboard write is armed
+ * synchronously before that so Chromium keeps user activation.
  *
  * Falls back to Electron IPC, then download, if clipboard write is unsupported.
  */
 export async function shareSessionImage(
-  card: ReactElement,
+  prepareCard: () => Promise<ReactElement> | ReactElement,
   filename = "roxysu-session.png",
 ): Promise<ShareSessionImageResult> {
-  // Must run before any await in the caller for Chromium clipboard activation.
+  // Must be the first thing — before any await — while still in the click turn.
   const deferred = beginDeferredClipboardPngWrite();
 
   try {
+    const card = await prepareCard();
     const blob = await captureSessionPng(card);
     deferred.deliver(blob);
 
@@ -147,7 +149,6 @@ export async function shareSessionImage(
       return "copied";
     }
 
-    // Browser without image clipboard (or gesture already spent upstream).
     downloadBlob(blob, filename);
     return "downloaded";
   } catch (error) {

@@ -37,6 +37,10 @@ export class OnlineQueryError extends Error {
 }
 
 const UNSUPPORTED_FIELDS = new Set([
+  "ar",
+  "cs",
+  "od",
+  "hp",
   "ln",
   "mods",
   "acc",

@@ -109,6 +109,10 @@ describe("parseOnlineMirrorQuery", () => {
     expect(() => parseOnlineMirrorQuery("pattern:jack")).toThrow(OnlineQueryError);
     expect(() => parseOnlineMirrorQuery("pp>=200")).toThrow(OnlineQueryError);
     expect(() => parseOnlineMirrorQuery("ln<10")).toThrow(OnlineQueryError);
+    expect(() => parseOnlineMirrorQuery("ar>=9")).toThrow(OnlineQueryError);
+    expect(() => parseOnlineMirrorQuery("cs=4")).toThrow(OnlineQueryError);
+    expect(() => parseOnlineMirrorQuery("od:8")).toThrow(OnlineQueryError);
+    expect(() => parseOnlineMirrorQuery("hp<6")).toThrow(OnlineQueryError);
   });
 
   test("rejects OR and NOT", () => {

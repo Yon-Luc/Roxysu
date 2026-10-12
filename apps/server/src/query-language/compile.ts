@@ -78,6 +78,20 @@ function compileDanMatch(
   )${sentinelClause})`;
 }
 
+function compileNumericColumn(
+  column: string,
+  term: { min?: number; max?: number; op?: string; value?: number },
+  push: (value: unknown) => string,
+): string {
+  if (term.min != null && term.max != null) {
+    return `${column} BETWEEN ${push(term.min)} AND ${push(term.max)}`;
+  }
+  if (term.op != null && term.value != null) {
+    return `${column} ${term.op} ${push(term.value)}`;
+  }
+  return "1=1";
+}
+
 /** Positional `?` binders. Alias contract: b=beatmaps, m=mastery, ps=play_stats, rs=retry_stats */
 function compileTerm(
   term: FieldTerm,
@@ -102,15 +116,16 @@ function compileTerm(
       return `b.artist LIKE ${push(likePattern(term.value, term.prefix))} ESCAPE '\\'`;
     case "difficulty":
       return `b.difficulty_name LIKE ${push(likePattern(term.value, term.prefix))} ESCAPE '\\'`;
-    case "stars": {
-      if (term.min != null && term.max != null) {
-        return `b.star_rating BETWEEN ${push(term.min)} AND ${push(term.max)}`;
-      }
-      if (term.op != null && term.value != null) {
-        return `b.star_rating ${term.op} ${push(term.value)}`;
-      }
-      return "1=1";
-    }
+    case "stars":
+      return compileNumericColumn("b.star_rating", term, push);
+    case "ar":
+      return compileNumericColumn("b.approach_rate", term, push);
+    case "cs":
+      return compileNumericColumn("b.circle_size", term, push);
+    case "od":
+      return compileNumericColumn("b.overall_difficulty", term, push);
+    case "hp":
+      return compileNumericColumn("b.drain_rate", term, push);
     case "key": {
       // Mania key count is stored as circle size; key filters always imply mania.
       const mania = `lower(b.ruleset_short_name) = lower(${push("mania")})`;

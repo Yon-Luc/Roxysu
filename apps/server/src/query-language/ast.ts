@@ -7,6 +7,14 @@ export type FieldTerm =
   | { type: "artist"; value: string; prefix?: boolean }
   | { type: "difficulty"; value: string; prefix?: boolean }
   | { type: "stars"; min?: number; max?: number; op?: ComparisonOp; value?: number }
+  /** Approach rate (`beatmaps.approach_rate`). */
+  | { type: "ar"; min?: number; max?: number; op?: ComparisonOp; value?: number }
+  /** Circle size (`beatmaps.circle_size`). Not mania key count. */
+  | { type: "cs"; min?: number; max?: number; op?: ComparisonOp; value?: number }
+  /** Overall difficulty (`beatmaps.overall_difficulty`). */
+  | { type: "od"; min?: number; max?: number; op?: ComparisonOp; value?: number }
+  /** HP drain (`beatmaps.drain_rate`). */
+  | { type: "hp"; min?: number; max?: number; op?: ComparisonOp; value?: number }
   | { type: "key"; min?: number; max?: number; op?: ComparisonOp; value?: number }
   | { type: "ln"; min?: number; max?: number; op?: ComparisonOp; value?: number }
   | { type: "mods"; value: string }

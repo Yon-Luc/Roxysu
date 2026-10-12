@@ -11,6 +11,10 @@ describe("looksLikeQuery", () => {
     expect(looksLikeQuery("key=7")).toBe(true);
     expect(looksLikeQuery("ln<10")).toBe(true);
     expect(looksLikeQuery("sunny>7")).toBe(true);
+    expect(looksLikeQuery("ar>9")).toBe(true);
+    expect(looksLikeQuery("cs=4")).toBe(true);
+    expect(looksLikeQuery("od>=8")).toBe(true);
+    expect(looksLikeQuery("hp<6")).toBe(true);
     expect(looksLikeQuery("pattern:jack")).toBe(true);
     expect(looksLikeQuery("hello world")).toBe(false);
   });
@@ -212,6 +216,55 @@ describe("compileQuery", () => {
     expect(compiled.sql).toContain("m.level");
     expect(compiled.sql).toContain("best_accuracy");
     expect(compiled.params).toEqual([80, 0.98]);
+  });
+
+  test("parses approach rate, circle size, overall difficulty, and HP drain", () => {
+    expect(parseQuery("ar>=9")).toEqual({
+      type: "term",
+      term: { type: "ar", op: ">=", value: 9 },
+    });
+    expect(parseQuery("cs:4..4.5")).toEqual({
+      type: "term",
+      term: { type: "cs", min: 4, max: 4.5 },
+    });
+    expect(parseQuery("od:8")).toEqual({
+      type: "term",
+      term: { type: "od", min: 8, max: 8 },
+    });
+    expect(parseQuery("hp<6")).toEqual({
+      type: "term",
+      term: { type: "hp", op: "<", value: 6 },
+    });
+    expect(parseQuery("approachrate=9.2 circlesize>4 overalldifficulty<=8 drainrate:5")).toEqual({
+      type: "and",
+      left: {
+        type: "and",
+        left: {
+          type: "and",
+          left: { type: "term", term: { type: "ar", op: "=", value: 9.2 } },
+          right: { type: "term", term: { type: "cs", op: ">", value: 4 } },
+        },
+        right: { type: "term", term: { type: "od", op: "<=", value: 8 } },
+      },
+      right: { type: "term", term: { type: "hp", min: 5, max: 5 } },
+    });
+  });
+
+  test("keeps pattern:cs as coordination, not circle size", () => {
+    expect(parseQuery("pattern:cs")).toEqual({
+      type: "term",
+      term: { type: "pattern", value: "coordination", prefix: false },
+    });
+  });
+
+  test("compiles difficulty stats against beatmap columns", () => {
+    const compiled = compileQuery(parseQuery("ar>=9 cs=4 od:8..9 hp<6"));
+    expect(compiled.sql).toContain("b.approach_rate");
+    expect(compiled.sql).toContain("b.circle_size");
+    expect(compiled.sql).toContain("b.overall_difficulty");
+    expect(compiled.sql).toContain("b.drain_rate");
+    expect(compiled.sql).not.toContain("ruleset_short_name");
+    expect(compiled.params).toEqual([9, 4, 8, 9, 6]);
   });
 
   test("compiles key filter as mania + circle size", () => {

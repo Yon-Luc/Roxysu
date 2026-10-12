@@ -18,6 +18,27 @@ const FIELDS: { field: string; meaning: string; example: string }[] = [
   },
   { field: "stars / star", meaning: "Star rating range or comparison", example: "stars:5..6" },
   {
+    field: "ar / approachrate",
+    meaning: "Approach rate. Local library only (not Download Maps).",
+    example: "ar>=9",
+  },
+  {
+    field: "cs / circlesize",
+    meaning:
+      "Circle size on any ruleset. Not mania keys (use key:) and not pattern:cs (coordination). Local library only.",
+    example: "cs:4..4.5",
+  },
+  {
+    field: "od / overalldifficulty",
+    meaning: "Overall difficulty. Local library only.",
+    example: "od:8..9",
+  },
+  {
+    field: "hp / drainrate",
+    meaning: "HP drain. Local library only.",
+    example: "hp<6",
+  },
+  {
     field: "key / keys",
     meaning: "Mania key count (implies mode:mania)",
     example: "key=7",
@@ -90,6 +111,8 @@ const EXAMPLES = [
   "mode:mania key=7 ranked",
   "mode:mania status:ranked,loved stars:6..8",
   "mode:mania stars:5..6",
+  "mode:osu ar>=9 cs:4",
+  "od:8..9 hp>=5",
   "key=7 stars:5..6",
   "key=7 ln<10",
   "key=4 dan:Reform",
@@ -189,7 +212,8 @@ function QueryLanguageHelpModal({ onClose }: { onClose: () => void }) {
               <code className="text-subtle">mapper</code>,{" "}
               <code className="text-subtle">title</code>,{" "}
               <code className="text-subtle">artist</code>, and free text (AND
-              only). Score and practice fields are local-library only.
+              only). Score and practice fields, plus ar, cs, od, and hp, are
+              local-library only.
             </p>
           </div>
           <button

@@ -176,7 +176,7 @@ function parseFieldTerm(raw: string): FieldTerm {
       return { type: "mode", value: gluedMode[1]!.trim() };
     }
     // Could be acc>98 style without field prefix... support field+op glued
-    const glued = raw.match(/^(acc|retry|mastery|pp|stars|misses|miss|score|keys|key|lns|ln|sunny|danstars|sunnystars)(>=|<=|>|<|=)(-?\d+(?:\.\d+)?)$/i);
+    const glued = raw.match(/^(acc|retry|mastery|pp|stars|ar|approachrate|cs|circlesize|od|overalldifficulty|hp|drainrate|misses|miss|score|keys|key|lns|ln|sunny|danstars|sunnystars)(>=|<=|>|<|=)(-?\d+(?:\.\d+)?)$/i);
     if (glued) {
       const field = glued[1]!.toLowerCase();
       const op = glued[2] as ComparisonOp;
@@ -186,6 +186,10 @@ function parseFieldTerm(raw: string): FieldTerm {
       if (field === "mastery") return { type: "mastery", op, value };
       if (field === "pp") return { type: "pp", op, value };
       if (field === "stars") return { type: "stars", op, value };
+      if (field === "ar" || field === "approachrate") return { type: "ar", op, value };
+      if (field === "cs" || field === "circlesize") return { type: "cs", op, value };
+      if (field === "od" || field === "overalldifficulty") return { type: "od", op, value };
+      if (field === "hp" || field === "drainrate") return { type: "hp", op, value };
       if (field === "misses" || field === "miss") return { type: "misses", op, value };
       if (field === "score") return { type: "score", op, value };
       if (field === "key" || field === "keys") return { type: "key", op, value };
@@ -235,6 +239,30 @@ function parseFieldTerm(raw: string): FieldTerm {
       const r = parseRange(value);
       if (!r) throw new QueryParseError(`Invalid stars value: ${value}`);
       return { type: "stars", ...r };
+    }
+    case "ar":
+    case "approachrate": {
+      const r = parseRange(value);
+      if (!r) throw new QueryParseError(`Invalid ar value: ${value}`);
+      return { type: "ar", ...r };
+    }
+    case "cs":
+    case "circlesize": {
+      const r = parseRange(value);
+      if (!r) throw new QueryParseError(`Invalid cs value: ${value}`);
+      return { type: "cs", ...r };
+    }
+    case "od":
+    case "overalldifficulty": {
+      const r = parseRange(value);
+      if (!r) throw new QueryParseError(`Invalid od value: ${value}`);
+      return { type: "od", ...r };
+    }
+    case "hp":
+    case "drainrate": {
+      const r = parseRange(value);
+      if (!r) throw new QueryParseError(`Invalid hp value: ${value}`);
+      return { type: "hp", ...r };
     }
     case "key":
     case "keys": {
@@ -490,7 +518,7 @@ export function looksLikeQuery(q: string): boolean {
   if (/[()]/.test(trimmed)) return true;
   if (/\b(AND|OR|NOT)\b/i.test(trimmed)) return true;
   if (/:\S/.test(trimmed)) return true;
-  if (/\b(acc|retry|mastery|pp|stars|misses|miss|score|keys|key|lns|ln|sunny|danstars|sunnystars|pattern|dominant|style|axis|rice|lnmap|grade|rank)(>=|<=|>|<|=)/i.test(trimmed)) return true;
+  if (/\b(acc|retry|mastery|pp|stars|ar|approachrate|cs|circlesize|od|overalldifficulty|hp|drainrate|misses|miss|score|keys|key|lns|ln|sunny|danstars|sunnystars|pattern|dominant|style|axis|rice|lnmap|grade|rank)(>=|<=|>|<|=)/i.test(trimmed)) return true;
   if (/:(rc|rice|ln|lnmap|fln)\b/i.test(trimmed)) return true;
   if (/\bgrade:[dcbasx]/i.test(trimmed)) return true;
   if (/\bgrade:ss\b/i.test(trimmed)) return true;

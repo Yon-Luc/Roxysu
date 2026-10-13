@@ -108,6 +108,7 @@ async function sessionDetailPayload(
 
       return {
         id: s.id,
+        onlineId: s.onlineId > 0 ? s.onlineId : null,
         beatmapId: s.beatmapId,
         accuracy: s.accuracy,
         pp,

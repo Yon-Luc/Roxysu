@@ -394,6 +394,7 @@ export async function listSessionScores(
   const q = db
     .select({
       id: scores.id,
+      onlineId: scores.onlineId,
       beatmapId: scores.beatmapId,
       accuracy: scores.accuracy,
       pp: scores.pp,

@@ -13,6 +13,8 @@ touches:
   - apps/server/public/features/sessions/sessionShareHighlights.ts
   - apps/server/public/lib/sessionShareImage.ts
   - apps/server/public/components/ScoreCard.tsx
+  - apps/server/public/components/ShareScoreLinkButton.tsx
+  - apps/server/public/lib/osuUrls.ts
   - apps/server/public/features/overlay
   - apps/desktop/preload.js
   - apps/desktop/main.js
@@ -51,7 +53,7 @@ Live sessions keep the **Current session** label in headings; the generated name
 12. Sessions list page keeps the current-session CTA at the top, then recent sessions (default **7**), then a GitHub-style activity calendar from `daily_stats` (~53 weeks UTC). The CTA uses the same panel as Home. The calendar says that a day click filters the list above.
 13. `GET /api/sessions` returns `{ current, items, activity }` where `activity` is `{ day, playCount }[]` from `getDailyActivity` (missing days = 0 plays in the UI).
 14. Clicking a calendar day filters the list to sessions whose `startedAt` falls on that UTC day (`YYYY-MM-DD`). Clicking the day again or **Show all** clears the filter. With no day selected, **Show all** expands beyond the default 7 (API still caps `items` at 100).
-15. Session detail score lists use shared `ScoreCard` (`variant="beatmap"`) with map cover, judgments, and PB comparison.
+15. Session detail score lists use shared `ScoreCard` (`variant="beatmap"`) with map cover, judgments, and PB comparison. A submitted score (`online_id` > 0) shows **Share link**, which copies `https://osu.ppy.sh/scores/{onlineId}`. Unsubmitted scores (`-1` or `0`) do not.
 16. Each session score may include `judgments` (from `scores.statistics`) and `pbCompare`:
     - when `isPb` — previous best on that beatmap (`kind: "previous"`), if one exists
     - when not PB — current PB on that beatmap (`kind: "current"`)
@@ -77,6 +79,7 @@ Live sessions keep the **Current session** label in headings; the generated name
 - `apps/server/public/features/sessions/sessionShareHighlights.ts` — highlight picker + `formatSessionDuration`
 - `apps/server/public/lib/sessionShareImage.ts` — PNG capture + clipboard / download
 - `apps/server/public/components/ScoreCard.tsx` — compact (Map Page) and beatmap (session) variants
+- `apps/server/public/components/ShareScoreLinkButton.tsx` — copies the osu! score page URL when `onlineId` > 0
 - `apps/server/public/features/sessions/SessionActivityCalendar.tsx` — contribution grid
 - `apps/server/public/features/sessions/SessionSuggest.tsx` — Up Next / 4K / 7K tabs
 - `apps/server/public/features/sessions/SessionSevenKRecommend.tsx` — Sunny recommend panel (`keyCount` 4 or 7)

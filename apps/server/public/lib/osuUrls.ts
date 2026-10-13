@@ -18,6 +18,19 @@ export function osuWebBeatmapUrl(
   return `https://osu.ppy.sh/b/${onlineId}`;
 }
 
+/**
+ * Public score page on the osu! website.
+ * Realm stores `-1` (and `0`) when a score was never submitted online.
+ */
+export function osuWebScoreUrl(
+  onlineId: number | null | undefined,
+): string | null {
+  if (onlineId == null || !Number.isFinite(onlineId) || onlineId <= 0) {
+    return null;
+  }
+  return `https://osu.ppy.sh/scores/${onlineId}`;
+}
+
 /** Open a user profile on the osu! website. */
 export function osuWebUserUrl(
   osuId: number | null | undefined,

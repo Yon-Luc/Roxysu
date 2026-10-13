@@ -453,6 +453,7 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
                     totalScore: score.totalScore,
                     rulesetShortName: score.rulesetShortName,
                     hasReplay: score.hasReplay,
+                    onlineId: score.onlineId,
                     playedAt: score.playedAt,
                     judgments,
                   }}

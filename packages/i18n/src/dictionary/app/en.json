@@ -223,6 +223,8 @@
       "timingAnalysis": "Timing analysis",
       "scoreTimeline": "Score timeline",
       "noScoresOnMap": "No scores on this map yet.",
+      "shareScoreLink": "Share link",
+      "shareScoreCopied": "Score link copied",
       "judgments": {
         "perfect": "Marvelous",
         "great": "Perfect",

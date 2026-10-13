@@ -573,6 +573,7 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
                   totalScore: score.totalScore,
                   rulesetShortName: score.rulesetShortName,
                   hasReplay: score.hasReplay,
+                  onlineId: score.onlineId,
                   playedAt: score.playedAt,
                   judgments:
                     "judgments" in score

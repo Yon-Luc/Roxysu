@@ -186,6 +186,7 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
         db
           .select({
             id: scores.id,
+            onlineId: scores.onlineId,
             accuracy: scores.accuracy,
             pp: scores.pp,
             maxCombo: scores.maxCombo,
@@ -299,6 +300,7 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
         },
         recentScores: recentScores.map((s) => ({
           id: s.id,
+          onlineId: s.onlineId > 0 ? s.onlineId : null,
           accuracy: s.accuracy,
           pp: resolvePp(s),
           maxCombo: s.maxCombo,

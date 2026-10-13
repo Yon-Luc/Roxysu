@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { BeatmapCover } from "./BeatmapCover";
 import { ModBadges } from "./ModBadges";
 import { ScoreReplayButton } from "./ScoreReplayButton";
+import { ShareScoreLinkButton } from "./ShareScoreLinkButton";
 import {
   formatAccuracy,
   formatPp,
@@ -29,6 +30,8 @@ export type ScoreCardScore = {
   totalScore?: number | null;
   rulesetShortName: string | null;
   hasReplay: boolean;
+  /** osu! score id. Absent, `0`, or `-1` means the score was not submitted. */
+  onlineId?: number | null;
   playedAt: string | null;
   judgments?: ScoreJudgmentsView | null;
 };
@@ -276,8 +279,12 @@ export function ScoreCard({
           {formatPp(score.pp)} · {score.maxCombo}x
         </div>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-2">
         {actions}
+        <ShareScoreLinkButton
+          onlineId={score.onlineId}
+          className="rx-btn !px-2.5 !py-1 text-xs font-semibold"
+        />
         <ScoreReplayButton
           scoreId={score.id}
           enabled={canRewatch}

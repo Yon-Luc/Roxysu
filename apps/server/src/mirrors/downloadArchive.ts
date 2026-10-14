@@ -16,7 +16,10 @@ import {
 } from "./providers";
 import { MIRROR_USER_AGENT } from "./userAgent";
 
-const DOWNLOAD_TIMEOUT_MS = 120_000;
+/** Wait for response headers / first byte before falling through to next mirror. */
+export const DOWNLOAD_FIRST_BYTE_MS = 20_000;
+/** Max time to stream the archive body after headers arrive. */
+export const DOWNLOAD_BODY_TIMEOUT_MS = 120_000;
 const MIN_OSZ_BYTES = 64;
 /**
  * Retries on 429 only (rate limit). 503 means this mirror cannot serve the set
@@ -27,6 +30,21 @@ const RATE_LIMIT_ATTEMPTS = 3;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export function isDownloadAbortError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const name = (err as { name?: string }).name;
+  return name === "AbortError" || name === "TimeoutError";
+}
+
+function combineSignals(
+  ...signals: Array<AbortSignal | undefined>
+): AbortSignal | undefined {
+  const active = signals.filter((s): s is AbortSignal => s != null);
+  if (active.length === 0) return undefined;
+  if (active.length === 1) return active[0];
+  return AbortSignal.any(active);
 }
 
 function parseRetryAfterSeconds(res: Response): number | null {
@@ -58,11 +76,22 @@ export function listDownloadProvidersInOrder(
 async function streamUrlToFile(
   url: string,
   destPath: string,
+  opts?: { signal?: AbortSignal },
 ): Promise<void> {
+  const userSignal = opts?.signal;
+  if (userSignal?.aborted) {
+    throw new DOMException("The operation was aborted.", "AbortError");
+  }
+
+  const headerSignal = combineSignals(
+    userSignal,
+    AbortSignal.timeout(DOWNLOAD_FIRST_BYTE_MS),
+  );
+
   const res = await fetch(url, {
     headers: { "user-agent": MIRROR_USER_AGENT, accept: "*/*" },
     redirect: "follow",
-    signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+    signal: headerSignal,
   });
 
   if (res.status === 429) {
@@ -84,13 +113,29 @@ async function streamUrlToFile(
     throw new Error("Empty response body");
   }
 
+  const bodySignal = combineSignals(
+    userSignal,
+    AbortSignal.timeout(DOWNLOAD_BODY_TIMEOUT_MS),
+  );
+
   const tmpPath = `${destPath}.part`;
+  const write = createWriteStream(tmpPath);
+  const onAbort = () => {
+    write.destroy(
+      new DOMException("The operation was aborted.", "AbortError"),
+    );
+  };
+  bodySignal?.addEventListener("abort", onAbort, { once: true });
+
   try {
+    if (bodySignal?.aborted) {
+      throw new DOMException("The operation was aborted.", "AbortError");
+    }
     await pipeline(
       Readable.fromWeb(
         res.body as unknown as import("stream/web").ReadableStream,
       ),
-      createWriteStream(tmpPath),
+      write,
     );
     const size = statSync(tmpPath).size;
     if (size < MIN_OSZ_BYTES) {
@@ -105,6 +150,8 @@ async function streamUrlToFile(
       // ignore leftover part file
     }
     throw err;
+  } finally {
+    bodySignal?.removeEventListener("abort", onAbort);
   }
 }
 
@@ -113,15 +160,20 @@ async function tryProvider(
   setId: number,
   destPath: string,
   noVideo: boolean,
+  signal?: AbortSignal,
 ): Promise<void> {
   const url = provider.buildDownloadUrl(setId, { noVideo });
   let lastError: unknown;
   for (let attempt = 0; attempt < RATE_LIMIT_ATTEMPTS; attempt += 1) {
+    if (signal?.aborted) {
+      throw new DOMException("The operation was aborted.", "AbortError");
+    }
     try {
-      await streamUrlToFile(url, destPath);
+      await streamUrlToFile(url, destPath, { signal });
       return;
     } catch (err) {
       lastError = err;
+      if (isDownloadAbortError(err) && signal?.aborted) throw err;
       const rateLimited =
         err instanceof Error &&
         (err as Error & { rateLimited?: boolean }).rateLimited === true;
@@ -166,17 +218,23 @@ export async function downloadBeatmapsetArchiveToPath(
   setId: number,
   destPath: string,
   noVideo: boolean,
+  opts?: { signal?: AbortSignal },
 ): Promise<"downloaded" | "exists"> {
   if (existsSync(destPath)) return "exists";
 
   const providers = listDownloadProvidersInOrder();
   const errors: string[] = [];
+  const signal = opts?.signal;
 
   for (const provider of providers) {
+    if (signal?.aborted) {
+      throw new DOMException("The operation was aborted.", "AbortError");
+    }
     try {
-      await tryProvider(provider, setId, destPath, noVideo);
+      await tryProvider(provider, setId, destPath, noVideo, signal);
       return "downloaded";
     } catch (err) {
+      if (isDownloadAbortError(err) && signal?.aborted) throw err;
       const message = err instanceof Error ? err.message : String(err);
       errors.push(`${provider.id}: ${message}`);
     }

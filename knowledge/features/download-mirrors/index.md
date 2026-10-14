@@ -34,17 +34,20 @@ Fetch beatmap sets via configured mirrors (hinai / nerinyan / osu.direct) from t
 6. Download search QL accepts glued mode filters (`mode=m`, `mode=mania`) and short aliases (`m`, `o`, `t`, `c`, `f`) — same as hub browse — so they are not mistaken for free-text mirror `query`. `ar:`, `cs:`, `od:`, and `hp:` are local-library fields and are rejected; they are not forwarded to mirrors or the Hub search index.
 7. Paginated search, **Count all missing**, and **Download all missing** prefer a primed Hub search index when `hubCacheKeymode(postFilters)` allows it: no non-star post-filters, or a single exact `key=N` (star post-filters may also be present). Hub looks up the **base** prime (`mode`/`status`/`key`/`sort`) and applies secondary filters in SQL. Page search uses `GET /search`; count/download-all use one `GET /search/all`. Lookups forward `sort` + secondary params via `mirrorParamsToHubQuery` so they match admin base primes (admin UI defaults to Recently ranked / `ranked_desc`). Cache miss, `HUB_SEARCH_INDEX=0`, Hub 5xx/timeout (then a 30s circuit skip), or Hub down falls back to the live mirror crawl. Owned/pending subtraction is an ID-set intersect against local hide ids — not `total − count(owned mania ranked)`. A hub page that shrinks after hide is refilled from later SQL pages.
   8. Download Maps browse is infinite scroll (`useInfiniteQuery` + virtualized grid). Search / sort / hide-owned reset to page 0. **Download N pages** always starts at the top of the current search (`startPage: 0`). A single card Download hides that set locally and does not refetch loaded pages. The window virtualizer seeds `initialOffset` from router scroll restoration so a restored scroll still renders the rows at that offset.
-  9. Batch ETA uses `downloadingStartedAt` (set when phase flips to downloading — not job `startedAt`, which includes scan). Remount / reload mid-batch keeps that epoch. When `processed >= queued` while still busy the label is "Wrapping up…".
+  9. Batch progress `%` is `(processed + 0.5 × inFlight) / queued`. ETA uses `etaStartedAt` (first network download/fail — not skip-only) and rates from `downloaded + failed` only; `skippedExisting` must not unlock or inflate ETA. Remount mid-batch keeps `etaStartedAt`. When `processed >= queued` while still busy the label is "Wrapping up…".
 10. Single-save, batch pages/query, and Community collection `mode=setIds` downloads try the active mirror first, then fall back across the other configured providers. Hinai often 503s pending sets that osu.direct still serves; do not treat a single-provider failure as final. When every mirror fails, the API returns `code: "mirror_unavailable"`; Download Maps shows a toast: `{{map}} is not available for download right now.` (same toast path for single-save success/failure — not inline page text).
 11. Live mirror paging treats any non-empty page as “maybe more” (`mirrorPageSuggestsMore`). Graveyard upstream pages are routinely short (&lt;100) and must not end the crawl. Graveyard overfetch/collect stays sequential (no parallel page jumps — hinai’s cursor ledger returns empty on cold deep jumps).
+12. Import companions are fixed-size `import-into-osu.sh` / `.bat` plus `.roxysu-import-queue.txt` (pending relative paths). Scripts must not embed one open line per map — only the queue grows with batch size.
 
 ## Important symbols
 
 - `apps/server/src/routes/mirrors.ts`
 - `apps/server/src/mirrors/batchJob.ts` — page loop stops on `!hasMore`; idle dir reconcile once per idle period; single-save shares the batch lock
 - `apps/server/src/mirrors/downloadArchive.ts:downloadBeatmapsetArchiveToPath()` — multi-provider `.osz` fetch used by batch + single-save
+- `apps/server/src/mirrors/openInOsu.ts:writeOsuImportScripts()` — fixed `import-into-osu.sh` / `.bat` plus `.roxysu-import-queue.txt` (one relative path per line; scripts loop the queue, they do not embed every map)
 - `apps/server/src/mirrors/batchJob.ts:stopMirrorBatchJob()`
-- `apps/server/src/mirrors/batchJob.ts` — `downloadingStartedAt`
+- `apps/server/src/mirrors/batchJob.ts` — `downloadingStartedAt`, `etaStartedAt`, `inFlight`; Stop aborts in-flight fetches
+- `apps/server/public/features/download/batchProgress.ts:estimateBatchEta()` / `batchProgressPct()`
 - `apps/server/public/features/download/batchProgress.ts:estimateBatchEta()`
 - `apps/server/src/mirrors/hubSearch.ts:tryFetchAllHubCachedIds()` — single `GET /search/all`
 - `apps/server/src/mirrors/hubSearch.ts:mirrorParamsToHubQuery()`

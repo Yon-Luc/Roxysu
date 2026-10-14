@@ -15,17 +15,25 @@ export function batchProcessedCount(
   );
 }
 
+/** Network outcomes only — used for ETA rate (skips must not inflate speed). */
+export function batchNetworkSampleCount(
+  batch: Pick<MirrorBatchJob, "downloaded" | "failed"> | null | undefined,
+): number {
+  if (!batch) return 0;
+  return (Number(batch.downloaded) || 0) + (Number(batch.failed) || 0);
+}
+
 export function batchProgressPct(
   batch: Pick<
     MirrorBatchJob,
-    "queued" | "downloaded" | "skippedExisting" | "failed"
+    "queued" | "downloaded" | "skippedExisting" | "failed" | "inFlight"
   > | null | undefined,
 ): number {
   if (!batch || !(Number(batch.queued) > 0)) return 0;
-  return Math.min(
-    100,
-    Math.round((batchProcessedCount(batch) / batch.queued) * 100),
-  );
+  const processed = batchProcessedCount(batch);
+  const inFlight = Math.max(0, Number(batch.inFlight) || 0);
+  const credited = processed + 0.5 * inFlight;
+  return Math.min(100, Math.round((credited / batch.queued) * 100));
 }
 
 export function isBatchBusy(
@@ -34,7 +42,7 @@ export function isBatchBusy(
   return batch?.status === "running" || batch?.status === "stopping";
 }
 
-/** Minimum completed maps before we trust a rate-based ETA. */
+/** Minimum network completions before we trust a rate-based ETA. */
 export const ETA_MIN_SAMPLES = 10;
 
 export function formatEtaMs(ms: number): string {
@@ -50,17 +58,20 @@ export function formatEtaMs(ms: number): string {
 }
 
 /**
- * Estimate remaining download time from average map duration since
- * `downloadingStartedAtMs`. Returns null while still warming up / scanning.
+ * Estimate remaining download time from average network-map duration since
+ * `etaStartedAtMs` (first real download/fail). Skips do not unlock or inflate
+ * the rate. Returns null while still warming up / scanning.
  */
 export function estimateBatchEta(opts: {
   phase: string | undefined;
   queued: number;
   processed: number;
-  downloadingStartedAtMs: number | null;
+  /** `downloaded + failed` — skips excluded. */
+  networkSamples: number;
+  etaStartedAtMs: number | null;
   nowMs?: number;
 }): { label: string; ready: boolean } | null {
-  const { phase, queued, processed, downloadingStartedAtMs } = opts;
+  const { phase, queued, processed, networkSamples, etaStartedAtMs } = opts;
   const nowMs = opts.nowMs ?? Date.now();
 
   if (phase === "scanning") {
@@ -70,12 +81,12 @@ export function estimateBatchEta(opts: {
   if (processed >= queued) {
     return { label: "Wrapping up…", ready: false };
   }
-  if (processed < ETA_MIN_SAMPLES || downloadingStartedAtMs == null) {
+  if (networkSamples < ETA_MIN_SAMPLES || etaStartedAtMs == null) {
     return { label: "Estimating…", ready: false };
   }
 
-  const elapsed = Math.max(0, nowMs - downloadingStartedAtMs);
-  const avg = elapsed / processed;
+  const elapsed = Math.max(0, nowMs - etaStartedAtMs);
+  const avg = elapsed / networkSamples;
   const remaining = avg * (queued - processed);
   return { label: formatEtaMs(remaining), ready: true };
 }

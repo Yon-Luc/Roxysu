@@ -7,7 +7,10 @@ import {
   listOszArchivesInDir,
   resolveBeatmapsDownloadDir,
 } from "./downloadDir";
-import { downloadBeatmapsetArchiveToPath } from "./downloadArchive";
+import {
+  downloadBeatmapsetArchiveToPath,
+  isDownloadAbortError,
+} from "./downloadArchive";
 import { parseOnlineMirrorQuery, type OnlineMirrorQuery } from "./onlineQuery";
 import {
   openOszFilesInOsu,
@@ -55,6 +58,8 @@ export type MirrorBatchJobState = {
   skippedExisting: number;
   skippedOwned: number;
   failed: number;
+  /** Active download slots (for progress half-credit). */
+  inFlight: number;
   matched: number;
   pagesScanned: number;
   hitCap: boolean;
@@ -66,6 +71,8 @@ export type MirrorBatchJobState = {
   currentTitle: string | null;
   startedAt: string | null;
   downloadingStartedAt: string | null;
+  /** First network download/fail — ETA clock (skips do not start this). */
+  etaStartedAt: string | null;
   finishedAt: string | null;
   error: string | null;
   recentErrors: Array<{ setId: number; error: string }>;
@@ -110,14 +117,14 @@ export type MirrorBatchStartRequest =
   | MirrorBatchQueryRequest
   | MirrorBatchSetIdsRequest;
 
-/** Minimum pause between finishing one download slot and starting the next. */
-const DELAY_BETWEEN_MS = 200;
+/** Minimum pause after a successful download before the slot pulls the next set. */
+const DELAY_BETWEEN_MS = 50;
 const MAX_PAGE_COUNT = 10;
 const MAX_RECENT_ERRORS = 8;
 const MAX_QUERY_PAGES = 1000;
 const MAX_QUERY_SETS = 100_000;
 /** Default number of simultaneous downloads. */
-export const DOWNLOAD_CONCURRENCY_DEFAULT = 3;
+export const DOWNLOAD_CONCURRENCY_DEFAULT = 5;
 /** Upper cap the user can raise to via the UI. */
 export const DOWNLOAD_CONCURRENCY_MAX = 10;
 
@@ -137,6 +144,7 @@ type JobInternal = {
   skippedExisting: number;
   skippedOwned: number;
   failed: number;
+  inFlight: number;
   matched: number;
   pagesScanned: number;
   hitCap: boolean;
@@ -147,6 +155,7 @@ type JobInternal = {
   currentTitle: string | null;
   startedAt: Date | null;
   downloadingStartedAt: Date | null;
+  etaStartedAt: Date | null;
   finishedAt: Date | null;
   error: string | null;
   recentErrors: Array<{ setId: number; error: string }>;
@@ -161,6 +170,19 @@ let savingInProgress = false;
 let didIdleReconcile = false;
 /** Monotonic id so abandoned async batches stop mutating `job`. */
 let jobGeneration = 0;
+/** Aborts in-flight mirror fetches on Stop / force-unlock / new batch. */
+let downloadAbort: AbortController | null = null;
+
+function beginDownloadAbortScope(): AbortSignal {
+  downloadAbort?.abort();
+  downloadAbort = new AbortController();
+  return downloadAbort.signal;
+}
+
+function abortInFlightDownloads(): void {
+  downloadAbort?.abort();
+  downloadAbort = null;
+}
 
 /**
  * Clear in-memory download locks left behind by a hung batch or Open-in-osu!
@@ -181,6 +203,7 @@ export function clearStuckMirrorBatchLocks(): boolean {
     job.status === "stopping";
   openingInProgress = false;
   savingInProgress = false;
+  abortInFlightDownloads();
   // Abandon any in-flight runBatch / download slots still awaiting I/O.
   jobGeneration += 1;
   job.generation = jobGeneration;
@@ -189,6 +212,7 @@ export function clearStuckMirrorBatchLocks(): boolean {
   job.running = false;
   job.stopRequested = true;
   job.phase = "idle";
+  job.inFlight = 0;
   job.currentSetId = null;
   job.currentTitle = null;
   if (job.status === "running" || job.status === "stopping") {
@@ -222,6 +246,7 @@ export function resetMirrorBatchJobForTests(): void {
     skippedExisting: 0,
     skippedOwned: 0,
     failed: 0,
+    inFlight: 0,
     matched: 0,
     pagesScanned: 0,
     hitCap: false,
@@ -232,6 +257,7 @@ export function resetMirrorBatchJobForTests(): void {
     currentTitle: null,
     startedAt: null,
     downloadingStartedAt: null,
+    etaStartedAt: null,
     finishedAt: null,
     error: null,
     recentErrors: [],
@@ -317,6 +343,7 @@ let job: JobInternal = {
   skippedExisting: 0,
   skippedOwned: 0,
   failed: 0,
+  inFlight: 0,
   matched: 0,
   pagesScanned: 0,
   hitCap: false,
@@ -327,6 +354,7 @@ let job: JobInternal = {
   currentTitle: null,
   startedAt: null,
   downloadingStartedAt: null,
+  etaStartedAt: null,
   finishedAt: null,
   error: null,
   recentErrors: [],
@@ -367,6 +395,7 @@ export function getMirrorBatchJobState(): MirrorBatchJobState {
     skippedExisting: job.skippedExisting,
     skippedOwned: job.skippedOwned,
     failed: job.failed,
+    inFlight: job.inFlight,
     matched: job.matched,
     pagesScanned: job.pagesScanned,
     hitCap: job.hitCap,
@@ -377,6 +406,7 @@ export function getMirrorBatchJobState(): MirrorBatchJobState {
     currentTitle: job.currentTitle,
     startedAt: job.startedAt?.toISOString() ?? null,
     downloadingStartedAt: job.downloadingStartedAt?.toISOString() ?? null,
+    etaStartedAt: job.etaStartedAt?.toISOString() ?? null,
     finishedAt: job.finishedAt?.toISOString() ?? null,
     error: job.error,
     recentErrors: job.recentErrors,
@@ -393,6 +423,7 @@ export function stopMirrorBatchJob(): MirrorBatchJobState {
   if (job.running) {
     job.stopRequested = true;
     job.status = "stopping";
+    abortInFlightDownloads();
   }
   return getMirrorBatchJobState();
 }
@@ -400,6 +431,7 @@ export function stopMirrorBatchJob(): MirrorBatchJobState {
 function resetJob(
   partial: Partial<JobInternal> & { mode: MirrorBatchMode },
 ): void {
+  abortInFlightDownloads();
   jobGeneration += 1;
   job = {
     status: "running",
@@ -420,6 +452,7 @@ function resetJob(
     skippedExisting: 0,
     skippedOwned: 0,
     failed: 0,
+    inFlight: 0,
     matched: 0,
     pagesScanned: 0,
     hitCap: false,
@@ -430,6 +463,7 @@ function resetJob(
     currentTitle: null,
     startedAt: new Date(),
     downloadingStartedAt: null,
+    etaStartedAt: null,
     finishedAt: null,
     error: null,
     recentErrors: [],
@@ -526,14 +560,20 @@ async function downloadSetToDisk(
   set: OnlineBeatmapSet | { id: number; artist?: string; title?: string },
   destDir: string,
   noVideo: boolean,
+  signal?: AbortSignal,
 ): Promise<{ result: "downloaded" | "exists"; path: string }> {
   const destPath = archivePathForSet(set, destDir);
   const result = await downloadBeatmapsetArchiveToPath(
     set.id,
     destPath,
     noVideo,
+    { signal },
   );
   return { result, path: destPath };
+}
+
+function noteNetworkSample(): void {
+  if (!job.etaStartedAt) job.etaStartedAt = new Date();
 }
 
 async function downloadQueue(
@@ -550,15 +590,20 @@ async function downloadQueue(
   mkdirSync(downloadDir, { recursive: true });
   job.phase = "downloading";
   job.downloadingStartedAt = new Date();
+  job.etaStartedAt = null;
   job.queued = sets.length;
+  job.inFlight = 0;
   job.savedPaths = [];
   const downloadedIds: number[] = [];
+  const signal = beginDownloadAbortScope();
 
   let index = 0;
 
   async function runSlot(): Promise<void> {
     while (index < sets.length) {
-      if (job.stopRequested || generation !== job.generation) break;
+      if (job.stopRequested || generation !== job.generation || signal.aborted) {
+        break;
+      }
       const set = sets[index++];
       if (generation === job.generation) {
         job.currentSetId = set.id;
@@ -566,21 +611,35 @@ async function downloadQueue(
           "artist" in set && set.artist && set.title
             ? `${set.artist} - ${set.title}`
             : `#${set.id}`;
+        job.inFlight += 1;
       }
       try {
         const { result, path: destPath } = await downloadSetToDisk(
           set,
           downloadDir,
           noVideo,
+          signal,
         );
         if (generation !== job.generation) break;
-        if (result === "exists") job.skippedExisting += 1;
-        else job.downloaded += 1;
+        if (result === "exists") {
+          job.skippedExisting += 1;
+        } else {
+          job.downloaded += 1;
+          noteNetworkSample();
+        }
         job.savedPaths.push(destPath);
         downloadedIds.push(set.id);
+        await sleep(DELAY_BETWEEN_MS);
       } catch (err) {
         if (generation !== job.generation) break;
+        if (
+          isDownloadAbortError(err) &&
+          (signal.aborted || job.stopRequested)
+        ) {
+          break;
+        }
         job.failed += 1;
+        noteNetworkSample();
         const label =
           "artist" in set && set.artist && set.title
             ? `${set.artist} - ${set.title}`
@@ -596,10 +655,11 @@ async function downloadQueue(
           { setId: set.id, error: message },
           ...job.recentErrors,
         ].slice(0, MAX_RECENT_ERRORS);
+      } finally {
+        if (generation === job.generation && job.inFlight > 0) {
+          job.inFlight -= 1;
+        }
       }
-      // Small courtesy pause between downloads per slot — much shorter than
-      // before since multiple slots now run in parallel.
-      await sleep(DELAY_BETWEEN_MS);
     }
   }
 
@@ -607,6 +667,10 @@ async function downloadQueue(
   await Promise.all(
     Array.from({ length: concurrency }, () => runSlot()),
   );
+
+  if (generation === job.generation) {
+    job.inFlight = 0;
+  }
 
   if (generation !== job.generation) return;
 

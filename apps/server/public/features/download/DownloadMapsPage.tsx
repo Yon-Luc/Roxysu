@@ -86,7 +86,7 @@ function readStored(): StoredSearch {
     excludeOwned: true,
     noVideo: true,
     pageCount: 3,
-    downloadConcurrency: 3,
+    downloadConcurrency: 5,
   };
   try {
     const raw = localStorage.getItem(SEARCH_KEY);
@@ -795,7 +795,7 @@ export function DownloadMapsPage() {
               }}
               title={
                 dict?.download?.openInOsuTitle ??
-                "Open saved .osz files with osu!lazer (also writes import-into-osu.sh / .bat)"
+                "Open saved .osz files with osu!lazer (also writes import-into-osu.sh / .bat + import queue)"
               }
             >
               {openInOsu.isPending

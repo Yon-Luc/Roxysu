@@ -61,12 +61,13 @@ function idleJob(): MirrorBatchJob {
     pageCount: 1,
     noVideo: true,
     excludeOwned: true,
-    downloadConcurrency: 3,
+    downloadConcurrency: 5,
     queued: 0,
     downloaded: 0,
     skippedExisting: 0,
     skippedOwned: 0,
     failed: 0,
+    inFlight: 0,
     matched: 0,
     pagesScanned: 0,
     hitCap: false,
@@ -77,6 +78,7 @@ function idleJob(): MirrorBatchJob {
     currentTitle: null,
     startedAt: null,
     downloadingStartedAt: null,
+    etaStartedAt: null,
     finishedAt: null,
     error: null,
     recentErrors: [],
@@ -174,14 +176,17 @@ export function startFakeMirrorBatch(opts: FakeStartOptions) {
       return;
     }
 
+    const downloadingStartedAt = new Date().toISOString();
     patchFake({
       phase: "downloading",
       queued: count,
       matched: count,
       pagesScanned: 3,
+      inFlight: 1,
       currentSetId: 900_001,
       currentTitle: titleFor(0),
-      downloadingStartedAt: new Date().toISOString(),
+      downloadingStartedAt,
+      etaStartedAt: null,
     });
     schedule(() => stepDownload(0), delayMs);
   };
@@ -196,6 +201,9 @@ export function startFakeMirrorBatch(opts: FakeStartOptions) {
     if (failAt != null && index >= failAt) {
       patchFake({
         failed: (fakeJob?.failed ?? 0) + 1,
+        inFlight: 0,
+        etaStartedAt:
+          fakeJob?.etaStartedAt ?? new Date().toISOString(),
         recentErrors: [
           {
             setId: 900_000 + index + 1,
@@ -213,11 +221,15 @@ export function startFakeMirrorBatch(opts: FakeStartOptions) {
     }
 
     const setId = 900_001 + index;
+    const nextInFlight = index + 1 < count ? 1 : 0;
     patchFake({
       downloaded: index + 1,
+      inFlight: nextInFlight,
       currentSetId: setId,
       currentTitle: titleFor(index),
       savedForImport: index + 1,
+      etaStartedAt:
+        fakeJob?.etaStartedAt ?? new Date().toISOString(),
     });
 
     if (index + 1 >= count) {

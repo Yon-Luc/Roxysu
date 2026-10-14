@@ -6,6 +6,7 @@ import {
   type MirrorBatchJob,
 } from "../../lib/api";
 import {
+  batchNetworkSampleCount,
   batchProcessedCount,
   batchProgressPct,
   estimateBatchEta,
@@ -42,9 +43,10 @@ export function useMirrorBatchJob() {
   const phase =
     batch && typeof batch.phase === "string" ? batch.phase : "idle";
   const processed = batchProcessedCount(batch);
+  const networkSamples = batchNetworkSampleCount(batch);
   const progressPct = batchProgressPct(batch);
 
-  const downloadingStartedAtMs = useDownloadingClock(batch, phase, busy);
+  const etaStartedAtMs = useEtaClock(batch, phase, busy);
 
   const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
@@ -57,7 +59,8 @@ export function useMirrorBatchJob() {
     phase,
     queued: Number(batch?.queued) || 0,
     processed,
-    downloadingStartedAtMs,
+    networkSamples,
+    etaStartedAtMs,
     nowMs,
   });
 
@@ -89,8 +92,11 @@ export function useMirrorBatchJob() {
   };
 }
 
-/** Prefer the server download-phase epoch; local clock is only a fallback. */
-function useDownloadingClock(
+/**
+ * Prefer server `etaStartedAt` (first network outcome). Fall back to
+ * `downloadingStartedAt` only after network samples exist (legacy mid-batch).
+ */
+function useEtaClock(
   batch: MirrorBatchJob | undefined,
   phase: string,
   busy: boolean,
@@ -99,7 +105,9 @@ function useDownloadingClock(
   const jobKeyRef = useRef<string | null>(null);
 
   const jobKey = batch?.startedAt ?? null;
-  const serverMs = parseIsoMs(batch?.downloadingStartedAt);
+  const serverEtaMs = parseIsoMs(batch?.etaStartedAt);
+  const serverDownloadMs = parseIsoMs(batch?.downloadingStartedAt);
+  const networkSamples = batchNetworkSampleCount(batch);
 
   useEffect(() => {
     if (jobKey !== jobKeyRef.current) {
@@ -113,13 +121,19 @@ function useDownloadingClock(
       setFallbackMs(null);
       return;
     }
-    if (phase === "downloading" && serverMs == null) {
+    if (
+      phase === "downloading" &&
+      serverEtaMs == null &&
+      networkSamples > 0
+    ) {
       setFallbackMs((prev) => prev ?? Date.now());
     }
-  }, [busy, phase, serverMs]);
+  }, [busy, phase, serverEtaMs, networkSamples]);
 
   if (!busy || phase !== "downloading") return null;
-  return serverMs ?? fallbackMs;
+  if (serverEtaMs != null) return serverEtaMs;
+  if (networkSamples > 0) return fallbackMs ?? serverDownloadMs;
+  return null;
 }
 
 function parseIsoMs(iso: string | null | undefined): number | null {

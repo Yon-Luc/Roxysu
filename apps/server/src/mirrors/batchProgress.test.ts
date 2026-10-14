@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   ETA_MIN_SAMPLES,
+  batchNetworkSampleCount,
   batchProcessedCount,
   batchProgressPct,
   estimateBatchEta,
@@ -22,35 +23,63 @@ describe("batch progress helpers", () => {
       skippedExisting: 1,
       failed: 1,
       queued: 20,
+      inFlight: 0,
     };
     expect(batchProcessedCount(batch)).toBe(10);
+    expect(batchNetworkSampleCount(batch)).toBe(9);
     expect(batchProgressPct(batch)).toBe(50);
+  });
+
+  test("gives half-credit for in-flight downloads", () => {
+    const batch = {
+      downloaded: 0,
+      skippedExisting: 0,
+      failed: 0,
+      queued: 10,
+      inFlight: 4,
+    };
+    expect(batchProgressPct(batch)).toBe(20);
   });
 });
 
 describe("estimateBatchEta", () => {
-  test("waits for warm-up samples", () => {
+  test("ignores skip-only processed counts for warm-up", () => {
     const eta = estimateBatchEta({
       phase: "downloading",
       queued: 40,
-      processed: ETA_MIN_SAMPLES - 1,
-      downloadingStartedAtMs: Date.now() - 10_000,
+      processed: 25,
+      networkSamples: ETA_MIN_SAMPLES - 1,
+      etaStartedAtMs: Date.now() - 10_000,
       nowMs: Date.now(),
     });
     expect(eta).toEqual({ label: "Estimating…", ready: false });
   });
 
-  test("estimates after warm-up", () => {
+  test("waits for warm-up network samples", () => {
+    const eta = estimateBatchEta({
+      phase: "downloading",
+      queued: 40,
+      processed: ETA_MIN_SAMPLES - 1,
+      networkSamples: ETA_MIN_SAMPLES - 1,
+      etaStartedAtMs: Date.now() - 10_000,
+      nowMs: Date.now(),
+    });
+    expect(eta).toEqual({ label: "Estimating…", ready: false });
+  });
+
+  test("estimates after warm-up using network sample rate", () => {
     const now = 1_000_000;
     const eta = estimateBatchEta({
       phase: "downloading",
       queued: 40,
-      processed: 10,
-      downloadingStartedAtMs: now - 10_000,
+      processed: 15,
+      networkSamples: 10,
+      etaStartedAtMs: now - 10_000,
       nowMs: now,
     });
     expect(eta?.ready).toBe(true);
-    expect(eta?.label).toBe("~30s left");
+    // avg 1s/network sample × 25 remaining = 25s
+    expect(eta?.label).toBe("~25s left");
   });
 
   test("uses a stable epoch so remount mid-batch keeps the rate", () => {
@@ -60,7 +89,8 @@ describe("estimateBatchEta", () => {
       phase: "downloading",
       queued: 40,
       processed: 20,
-      downloadingStartedAtMs: downloadStart,
+      networkSamples: 20,
+      etaStartedAtMs: downloadStart,
       nowMs: remountNow,
     });
     expect(eta?.ready).toBe(true);
@@ -72,7 +102,8 @@ describe("estimateBatchEta", () => {
       phase: "downloading",
       queued: 40,
       processed: 40,
-      downloadingStartedAtMs: Date.now() - 10_000,
+      networkSamples: 40,
+      etaStartedAtMs: Date.now() - 10_000,
       nowMs: Date.now(),
     });
     expect(eta).toEqual({ label: "Wrapping up…", ready: false });

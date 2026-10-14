@@ -33,7 +33,7 @@ zip .osu + audio + bg.jpg
     ↓
 POST /api/marathon/open-in-osu
     ↓
-write to beatmaps download dir + writeOsuImportScripts + openOszWithOsu
+write to beatmaps download dir + writeOsuImportScripts (queue + fixed scripts) + openOszWithOsu
 ```
 
 ## Business guarantee

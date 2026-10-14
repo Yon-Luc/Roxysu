@@ -73,7 +73,7 @@ export const mirrorRoutes = new Elysia({ prefix: "/mirrors" })
       label: active.label,
       downloadDir: probeBeatmapsDownloadDir(),
       note:
-        "Single downloads redirect to a mirror. Batch downloads save .osz files and write import-into-osu.sh / import-into-osu.bat — use Open in osu! or run the script to import into osu!lazer.",
+        "Single downloads redirect to a mirror. Batch downloads save .osz files and write import-into-osu.sh / .bat plus .roxysu-import-queue.txt — use Open in osu! or run the script to import into osu!lazer.",
     };
   })
   .get("/download-dir", () => probeBeatmapsDownloadDir())

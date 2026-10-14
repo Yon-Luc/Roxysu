@@ -87,12 +87,15 @@ export {
   type MirrorBatchStartRequest,
 } from "./batchJob";
 export {
+  clearSentToOsuCacheForTests,
   filterNotSentToOsu,
   isSentToOsu,
   loadSentToOsuPaths,
   recordSentToOsu,
 } from "./sentToOsu";
 export {
+  IMPORT_QUEUE_FILENAME,
+  OPEN_BETWEEN_MS,
   writeOsuImportScripts,
   openOszFilesInOsu,
   type ImportScriptPaths,

@@ -1296,7 +1296,7 @@
     "pagesFromStartAria": "Number of pages to batch download",
     "pagesOption": "{{n}} page{{s}}",
     "downloadPages": "Download {{n}} page{{s}}",
-    "openInOsuTitle": "Open saved .osz files with osu!lazer (also writes import-into-osu.sh / .bat)",
+    "openInOsuTitle": "Open saved .osz files with osu!lazer (also writes import-into-osu.sh / .bat + import queue)",
     "opening": "Opening…",
     "openInOsuCount": "Open in osu! ({{n}})",
     "scrollHint": "Search loads more as you scroll.",

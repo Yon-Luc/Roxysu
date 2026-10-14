@@ -301,6 +301,7 @@
       "appearance": "Apariencia",
       "jobs": "Tareas"
     },
+    "onThisPage": "En esta página",
     "failedToLoad": "Error al cargar los ajustes: {{error}}",
     "saving": "Guardando…",
     "stop": "Detener",

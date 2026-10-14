@@ -301,6 +301,7 @@
       "appearance": "Appearance",
       "jobs": "Jobs"
     },
+    "onThisPage": "On this page",
     "failedToLoad": "Failed to load settings: {{error}}",
     "saving": "Saving…",
     "stop": "Stop",

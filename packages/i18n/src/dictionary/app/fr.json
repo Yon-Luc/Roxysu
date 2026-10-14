@@ -301,6 +301,7 @@
       "appearance": "Apparence",
       "jobs": "Tâches"
     },
+    "onThisPage": "Sur cette page",
     "failedToLoad": "Échec du chargement des paramètres : {{error}}",
     "saving": "Enregistrement…",
     "stop": "Arrêter",

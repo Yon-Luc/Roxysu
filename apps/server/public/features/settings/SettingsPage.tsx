@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import {
   PageHeaderSkeleton,
   PanelSkeleton,
@@ -7,7 +7,7 @@ import {
 } from "../../components/LoadingSkeleton";
 import { PageTitle } from "../../components/PageTitle";
 import { fetchSettings, type SettingsPayload } from "../../lib/api";
-import { pageSectionDomId, useScrollToPageSection } from "../../lib/pageSections";
+import { useScrollToPageSection } from "../../lib/pageSections";
 import { isDesktopShell } from "../../lib/desktop";
 import { useAppDict, t } from "../../lib/i18n";
 import { OsuDataFolderSection } from "./sections/OsuDataFolderSection";
@@ -174,45 +174,56 @@ export function SettingsPage({
         <p className="rx-subtitle">{dict?.settings.subtitle}</p>
       </div>
 
-      <div
-        className="flex flex-wrap gap-2"
-        role="tablist"
-        aria-label={dict?.settings.pageTitle ?? "Settings"}
-      >
-        {SETTINGS_TABS.map((tabDef) => {
-          const selected = activeTab === tabDef.id;
-          return (
-            <button
-              key={tabDef.id}
-              type="button"
-              role="tab"
-              aria-selected={selected}
-              className={selected ? "rx-btn-primary" : "rx-btn"}
-              onClick={() => selectTab(tabDef.id)}
-            >
-              {dict?.settings.tabs?.[tabDef.labelKey] ??
-                TAB_FALLBACK[tabDef.id]}
-            </button>
-          );
-        })}
-      </div>
+      <div className="space-y-3">
+        <div
+          className="flex flex-wrap gap-2"
+          role="tablist"
+          aria-label={dict?.settings.pageTitle ?? "Settings"}
+        >
+          {SETTINGS_TABS.map((tabDef) => {
+            const selected = activeTab === tabDef.id;
+            return (
+              <button
+                key={tabDef.id}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                className={selected ? "rx-btn-primary" : "rx-btn"}
+                onClick={() => selectTab(tabDef.id)}
+              >
+                {dict?.settings.tabs?.[tabDef.labelKey] ??
+                  TAB_FALLBACK[tabDef.id]}
+              </button>
+            );
+          })}
+        </div>
 
-      <nav
-        className="flex flex-wrap gap-x-3 gap-y-1"
-        aria-label={dict?.settings.pageTitle ?? "Settings"}
-      >
-        {TAB_SECTIONS[activeTab]
-          .filter((section) => !(section.desktopHidden && isDesktopShell()))
-          .map((section) => (
-            <a
-              key={section.id}
-              href={`#${pageSectionDomId(section.id)}`}
-              className="text-xs font-medium text-muted transition hover:text-ink"
-            >
-              {sectionLabel(dict, section.labelKey)}
-            </a>
-          ))}
-      </nav>
+        <nav
+          className="flex flex-wrap gap-1.5"
+          aria-label={dict?.settings.onThisPage ?? "On this page"}
+        >
+          {TAB_SECTIONS[activeTab]
+            .filter((item) => !(item.desktopHidden && isDesktopShell()))
+            .map((item) => {
+              const active = section === item.id;
+              return (
+                <Link
+                  key={item.id}
+                  to="/settings"
+                  search={{ tab: activeTab, section: item.id }}
+                  className={
+                    active
+                      ? "rx-chip bg-accent-glow text-accent"
+                      : "rx-chip bg-elevated text-muted transition hover:text-ink"
+                  }
+                  aria-current={active ? "location" : undefined}
+                >
+                  {sectionLabel(dict, item.labelKey)}
+                </Link>
+              );
+            })}
+        </nav>
+      </div>
 
       <div className="space-y-8" role="tabpanel">
         <SettingsTabPanels tab={activeTab} data={data} />

@@ -301,6 +301,7 @@
       "appearance": "Aparência",
       "jobs": "Tarefas"
     },
+    "onThisPage": "Nesta página",
     "failedToLoad": "Falha ao carregar configurações: {{error}}",
     "saving": "Salvando…",
     "stop": "Parar",

@@ -23,7 +23,7 @@ touches:
 
 Choose mastery formula (`simple` or `practice`), rating display preference (osu! stars / dan / Sunny stars / rework dan), paths, background jobs (Sunny, Daniel, rework backfills), Rice/LN/FLN classification boundaries, and recommendation focus bands (Push / Accuracy / Consistency / Deficit). Recompute mastery across the practice library when formula changes.
 
-**In UI:** each Settings tab has jump links to its sections. Skin import, reset, and overlay sprite publish stay on the mania tab.
+**In UI:** each Settings tab has chip-style jump links to its sections (`?tab=` + `?section=` — not `#` hashes, because the client uses hash history). Skin import, reset, and overlay sprite publish stay on the mania tab.
 
 Rating display is stored in the browser (`roxysu:rating-display`). The `rework`
 option shows mania-difficulty-port dan labels (and the matching star under the
@@ -74,7 +74,7 @@ as a failed pattern row (and a failed rework row, when that job is the one
 running), and the job pauses until the heap drops. That chart is not retried
 until a recompute. A single on-request read does not use this abort.
 
-Only the active tab’s panels mount. Deep-links still use `?section=<id>` (Command Palette); optional `?tab=` selects a tab when no section is present. Tab registry: `apps/server/public/features/settings/settingsTabs.ts`.
+Only the active tab’s panels mount. Jump chips and Command Palette deep-links both use `?section=<id>` (scroll + highlight via `useScrollToPageSection`); optional `?tab=` selects a tab when no section is present. Tab registry: `apps/server/public/features/settings/settingsTabs.ts`.
 
 ## Important symbols
 

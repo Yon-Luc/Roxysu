@@ -8,6 +8,7 @@ import {
   REWORK_ALGORITHM,
   backfillReworkDanAsync,
   backfillReworkDanSync,
+  clearStoredReworkSync,
   countReworkDanMissing,
   computeReworkDanSync,
   getReworkDan,
@@ -316,6 +317,24 @@ describe("backfillReworkDanSync", () => {
       expect(SKILL_LABELS).toContain(row.dominant as never);
       expect(row.chordDensity).not.toBeNull();
     }
+  });
+
+  test("clearStoredReworkSync drops rework stars and dominant-skill rows", () => {
+    clearReworkRows();
+    db.$client.query(`DELETE FROM beatmap_pattern_analysis`).run();
+    backfillReworkDanSync(db, { limit: 10 });
+    expect(getReworkDan(db, MAP_4K)?.reworkStar).toBeGreaterThan(0);
+
+    clearStoredReworkSync(db);
+
+    expect(getReworkDan(db, MAP_4K)).toBeNull();
+    const n = db.$client
+      .query(
+        `SELECT COUNT(*) AS n FROM beatmap_pattern_analysis WHERE algorithm = ?`,
+      )
+      .get(PATTERN_ALGORITHM) as { n: number };
+    expect(n.n).toBe(0);
+    expect(countReworkDanMissing(db)).toBeGreaterThan(0);
   });
 
   test("withPattern false skips the pattern write", () => {

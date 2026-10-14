@@ -57,6 +57,7 @@ import {
   getReworkDanJobState,
   relabelReworkDan,
   startReworkDanBackfill,
+  startReworkDanRecompute,
   stopReworkDanBackfill,
 } from "../map-analysis/reworkDanJob";
 import {
@@ -243,6 +244,7 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
   .post("/rework-dan/relabel", ({ db }) => ({
     relabeled: relabelReworkDan(db),
   }))
+  .post("/rework-dan/recompute", ({ db }) => startReworkDanRecompute(db))
   .post("/rework-dan/stop", ({ db }) => stopReworkDanBackfill(db))
   .get("/pattern-analysis", ({ db }) => getPatternAnalysisJobState(db))
   .post("/pattern-analysis/start", ({ db }) => startPatternAnalysisBackfill(db))

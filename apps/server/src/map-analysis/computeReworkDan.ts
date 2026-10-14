@@ -623,6 +623,19 @@ export async function backfillReworkDanAsync(
   };
 }
 
+/**
+ * Drop stored rework stars and the dominant-skill rows written with them.
+ * The next backfill treats every mania map as missing.
+ */
+export function clearStoredReworkSync(db: Db): void {
+  db.$client
+    .query(`DELETE FROM beatmap_dan_ratings WHERE algorithm = ?`)
+    .run(REWORK_ALGORITHM);
+  db.$client
+    .query(`DELETE FROM beatmap_pattern_analysis WHERE algorithm = ?`)
+    .run(PATTERN_ALGORITHM);
+}
+
 /** Compute rework dan for mania maps missing a fresh rating. */
 export function backfillReworkDanSync(
   db: Db,

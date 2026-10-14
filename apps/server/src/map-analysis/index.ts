@@ -41,6 +41,7 @@ export {
   getReworkDanJobState,
   getReworkDanCoverage,
   startReworkDanBackfill,
+  startReworkDanRecompute,
   stopReworkDanBackfill,
   relabelReworkDan,
   countReworkDanPending,

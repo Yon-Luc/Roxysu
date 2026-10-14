@@ -939,6 +939,13 @@ export async function relabelReworkDanJob() {
   );
 }
 
+export async function recomputeReworkDanJob() {
+  return unwrap(
+    await api.api.settings["rework-dan"].recompute.post(),
+    "/api/settings/rework-dan/recompute",
+  );
+}
+
 export async function stopReworkDanJob() {
   return unwrap(
     await api.api.settings["rework-dan"].stop.post(),

@@ -1,11 +1,14 @@
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   fetchReworkDanJob,
+  recomputeReworkDanJob,
   relabelReworkDanJob,
   startReworkDanJob,
   stopReworkDanJob,
   type SettingsPayload,
 } from "../../../lib/api";
+import { ConfirmModal } from "../../../components/ConfirmModal";
 import { statusLabel } from "../../../lib/settingsLabels";
 import { useAppDict, t } from "../../../lib/i18n";
 import { JobRunnerSection } from "./JobRunnerSection";
@@ -45,10 +48,21 @@ export function ReworkDanSection({ data }: { data: SettingsPayload }) {
     },
   });
 
+  const [recalcOpen, setRecalcOpen] = useState(false);
+  const recomputeRework = useMutation({
+    mutationFn: recomputeReworkDanJob,
+    onSuccess: (state) => {
+      setRecalcOpen(false);
+      queryClient.setQueryData(["settings", "rework-dan"], state);
+      void queryClient.invalidateQueries({ queryKey: ["settings"] });
+    },
+  });
+
   const reworkDan = reworkDanQuery.data ?? data.reworkDan;
   const coverage = reworkDan?.coverage;
   const running =
     reworkDan?.status === "running" || reworkDan?.status === "stopping";
+  const recalcBlocked = running || reworkDan?.status === "paused";
   const progressPct =
     coverage && coverage.maniaTotal > 0
       ? Math.min(100, Math.round((coverage.computed / coverage.maniaTotal) * 100))
@@ -77,6 +91,7 @@ export function ReworkDanSection({ data }: { data: SettingsPayload }) {
   );
 
   return (
+    <>
     <JobRunnerSection
       sectionId="rework-dan-calculation"
       title={dict?.settings.reworkDan ?? "Rework dan calculation"}
@@ -109,16 +124,67 @@ export function ReworkDanSection({ data }: { data: SettingsPayload }) {
       stopError={stopRework.error?.message}
       jobError={reworkDan?.error}
       extraActions={
-        <button
-          type="button"
-          className="rx-btn"
-          disabled={running || relabelRework.isPending}
-          onClick={() => relabelRework.mutate()}
-          title={dict?.settings.reworkDanRelabelHint}
-        >
-          {dict?.settings.reworkDanRelabel ?? "Relabel from dans.json"}
-        </button>
+        <>
+          <button
+            type="button"
+            className="rx-btn"
+            disabled={running || relabelRework.isPending}
+            onClick={() => relabelRework.mutate()}
+            title={dict?.settings.reworkDanRelabelHint}
+          >
+            {dict?.settings.reworkDanRelabel ?? "Relabel from dans.json"}
+          </button>
+          <button
+            type="button"
+            className="rx-btn"
+            disabled={
+              recalcBlocked ||
+              recomputeRework.isPending ||
+              (coverage?.maniaTotal ?? 0) === 0
+            }
+            onClick={() => setRecalcOpen(true)}
+          >
+            {dict?.settings.reworkDanRecalculate ?? "Recalculate all"}
+          </button>
+        </>
       }
     />
+    <ConfirmModal
+      open={recalcOpen}
+      title={
+        dict?.settings.reworkDanRecalculateTitle ??
+        "Recalculate every rework rating?"
+      }
+      confirmLabel={
+        dict?.settings.reworkDanRecalculateConfirm ?? "Recalculate everything"
+      }
+      cancelLabel={dict?.collection?.cancel ?? "Cancel"}
+      busy={recomputeRework.isPending}
+      onClose={() => {
+        if (!recomputeRework.isPending) setRecalcOpen(false);
+      }}
+      onConfirm={() => recomputeRework.mutate()}
+    >
+      <p>
+        {dict?.settings.reworkDanRecalculateWarn ??
+          "This deletes every stored rework star and dominant-skill label, then reads the whole mania library again."}
+      </p>
+      <p>
+        {dict?.settings.reworkDanRecalculateHeavy ??
+          "A full pass is slow and can run the machine out of memory. The job pauses when memory is tight, and you can stop it, but ratings stay missing until each map is finished."}
+      </p>
+      <p>
+        {dict?.settings.reworkDanRecalculateRelabel ??
+          "A floor edit in dans.json does not need this. Use Relabel from dans.json."}
+      </p>
+      <p>
+        {dict?.settings.reworkDanRecalculateHub ??
+          "If you restart before it finishes, a Hub calc bundle can fill the gaps with the previous formula."}
+      </p>
+      {recomputeRework.error ? (
+        <p className="text-danger">{recomputeRework.error.message}</p>
+      ) : null}
+    </ConfirmModal>
+    </>
   );
 }

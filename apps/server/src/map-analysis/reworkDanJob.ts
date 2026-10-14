@@ -2,6 +2,7 @@ import type { Db } from "@roxysu/db/types";
 import {
   REWORK_ALGORITHM,
   backfillReworkDanAsync,
+  clearStoredReworkSync,
   relabelReworkDanSync,
 } from "./computeReworkDan";
 import { collectNow } from "./jobYield";
@@ -290,6 +291,23 @@ async function runBatch(): Promise<void> {
 /** Relabel cached rows from the current `dans.json` without re-estimating. */
 export function relabelReworkDan(db: Db): number {
   return relabelReworkDanSync(db);
+}
+
+/**
+ * Delete every stored rework rating and dominant-skill row, then rate the
+ * library again. Refuses while a pass is already in flight.
+ */
+export function startReworkDanRecompute(db: Db): ReworkDanJobState {
+  if (
+    job.status === "running" ||
+    job.status === "stopping" ||
+    job.status === "paused"
+  ) {
+    return getReworkDanJobState(db);
+  }
+
+  clearStoredReworkSync(db);
+  return startReworkDanBackfill(db);
 }
 
 export function startReworkDanBackfill(db: Db): ReworkDanJobState {

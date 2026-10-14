@@ -86,10 +86,12 @@ Three estimators write to the same store, keyed by `algorithm`: `sunny`, `daniel
    Sunny and Daniel only. The two never mix.
 8. The mania difficulty port pin is `packages/mania-difficulty/upstream/revision.json`
    (`loleur362/osu` branch `mania-difficulty`). A new pin changes star ratings.
-   The rework backfill only fills missing rows and rows whose beatmap hash
-   changed, so an existing library keeps the previous pin's stars until those
-   rows are removed and the job is run again. A Hub calc bundle for the same
-   product version can gap-fill the old numbers back in.
+   **Calculate missing dans** only fills missing rows and rows whose beatmap
+   hash changed. **Recalculate all** (`POST /api/settings/rework-dan/recompute`)
+   deletes `mania-difficulty` dan rows and `mania-skill-v1` pattern rows, then
+   starts the same backfill. It refuses while a pass is running, stopping, or
+   paused. A Hub calc bundle for the same product version can gap-fill the old
+   numbers back in if the process restarts before the pass finishes.
 9. The `rework` rating display mode is client-side (`roxysu:rating-display`).
    Practice/search/collection list cards and the beatmap detail panel must pass
    `reworkStar` / `reworkEstDiff` / `reworkLnRatio` into `formatPrimaryRating`
@@ -229,7 +231,7 @@ old non-yielding loop).
 - `apps/server/src/analytics/recommend/*`
 - `GET /api/practice/recommend` — optional `keyCount` (default 7)
 - `GET /api/beatmaps/:id/sunny-dan?mods=&rate=` — mod-aware preview dan
-- `GET|POST /api/settings/rework-dan{,/start,/stop,/relabel}`
+- `GET|POST /api/settings/rework-dan{,/start,/stop,/relabel,/recompute}`
 
 ## Dependencies
 

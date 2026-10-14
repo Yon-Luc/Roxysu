@@ -220,13 +220,34 @@ export async function exportCalcBundleEntries(
 
 type ApplyStats = { applied: number; skipped: number; unmatched: number };
 
+export type CalcBundleApplyOptions = {
+  /**
+   * Algorithms whose successful local rows are replaced by the bundle.
+   * Omitted algorithms stay gap-fill (missing or failed rows only).
+   */
+  replaceAlgorithms?: ReadonlySet<string>;
+};
+
 /**
- * Gap-fill only: write Hub entries when local row is missing or has error.
- * Never overwrite a successful local compute.
+ * Packaged installs (Nix `ROXYSU_RESOURCES`, electron-builder) replace rework
+ * rows from the Hub bundle on a product-version bump. `bun desktop` does not
+ * set `ROXYSU_PACKAGED`, so the dev library is left alone.
+ */
+export function reworkReplaceAlgorithmsForBoot(
+  env: NodeJS.ProcessEnv = process.env,
+): ReadonlySet<string> | undefined {
+  if (env.ROXYSU_PACKAGED !== "1") return undefined;
+  return new Set([REWORK_ALGORITHM, PATTERN_ALGORITHM]);
+}
+
+/**
+ * Gap-fill: write Hub entries when the local row is missing or failed.
+ * Successful local rows are kept unless `replaceAlgorithms` names that algorithm.
  */
 export async function applyCalcBundle(
   db: Db,
   entries: CalcBundleEntry[],
+  options?: CalcBundleApplyOptions,
 ): Promise<ApplyStats> {
   const stats: ApplyStats = { applied: 0, skipped: 0, unmatched: 0 };
   if (entries.length === 0) return stats;
@@ -270,6 +291,7 @@ export async function applyCalcBundle(
         .get();
 
       if (
+        !options?.replaceAlgorithms?.has(entry.algorithm) &&
         existing &&
         existing.error == null &&
         existing.estDiff != null
@@ -323,6 +345,7 @@ export async function applyCalcBundle(
         .get();
 
       if (
+        !options?.replaceAlgorithms?.has(PATTERN_ALGORITHM) &&
         existing &&
         existing.error == null &&
         existing.dominantPattern != null
@@ -437,12 +460,13 @@ async function fetchHubCalcBundle(
 }
 
 /**
- * Pull Hub calc bundle for `version`, gap-fill local mirror, mark applied.
+ * Pull Hub calc bundle for `version`, apply it, mark applied.
  * 404 still marks applied so boot does not retry every start.
  */
 export async function pullAndApplyCalcBundle(
   db: Db,
   version: string = APP_VERSION,
+  apply?: CalcBundleApplyOptions,
 ): Promise<CalcBundlePullState> {
   if (pullState.status === "running") {
     return getCalcBundlePullState();
@@ -480,7 +504,7 @@ export async function pullAndApplyCalcBundle(
     return getCalcBundlePullState();
   }
 
-  const stats = await applyCalcBundle(db, fetched.entries);
+  const stats = await applyCalcBundle(db, fetched.entries, apply);
   await setCalcBundleAppliedVersion(db, version);
   setPullState({
     status: "completed",
@@ -499,10 +523,13 @@ export async function maybePullCalcBundleOnBoot(db: Db): Promise<void> {
   try {
     const applied = await getCalcBundleAppliedVersion(db);
     if (applied === APP_VERSION) return;
+    const replaceAlgorithms = reworkReplaceAlgorithmsForBoot();
     console.log(
-      `[calc-bundle] pulling Hub calc bundle for ${APP_VERSION} (was ${applied ?? "none"})`,
+      `[calc-bundle] pulling Hub calc bundle for ${APP_VERSION} (was ${applied ?? "none"})${replaceAlgorithms ? "; replacing rework rows" : ""}`,
     );
-    const state = await pullAndApplyCalcBundle(db, APP_VERSION);
+    const state = await pullAndApplyCalcBundle(db, APP_VERSION, {
+      replaceAlgorithms,
+    });
     console.log(
       `[calc-bundle] pull ${state.status}: applied=${state.applied} skipped=${state.skipped} unmatched=${state.unmatched}`,
     );

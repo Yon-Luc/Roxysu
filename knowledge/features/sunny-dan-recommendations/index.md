@@ -90,8 +90,13 @@ Three estimators write to the same store, keyed by `algorithm`: `sunny`, `daniel
    hash changed. **Recalculate all** (`POST /api/settings/rework-dan/recompute`)
    deletes `mania-difficulty` dan rows and `mania-skill-v1` pattern rows, then
    starts the same backfill. It refuses while a pass is running, stopping, or
-   paused. A Hub calc bundle for the same product version can gap-fill the old
-   numbers back in if the process restarts before the pass finishes.
+   paused. On a packaged install, a product-version bump replaces successful
+   `mania-difficulty` and `mania-skill-v1` rows with that version's Hub calc
+   bundle (maps the bundle does not contain keep their previous rows).
+   `bun desktop` does not set `ROXYSU_PACKAGED`, so it gap-fills only and does
+   not replace the dev library. A Hub bundle for the same product version can
+   still gap-fill old numbers back in if a Recalculate all pass is restarted
+   before it finishes.
 9. The `rework` rating display mode is client-side (`roxysu:rating-display`).
    Practice/search/collection list cards and the beatmap detail panel must pass
    `reworkStar` / `reworkEstDiff` / `reworkLnRatio` into `formatPrimaryRating`

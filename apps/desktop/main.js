@@ -654,6 +654,9 @@ if (!gotLock) {
 
     const sharedEnv = {
       ROXYSU_DESKTOP: "1",
+      // Set only for Nix / electron-builder installs. `bun desktop` stays
+      // unpackaged so a version bump does not replace the dev library.
+      ...(paths.isPackaged ? { ROXYSU_PACKAGED: "1" } : {}),
       ROXYSU_PORT: String(PORT),
       ROXYSU_HOST: HOST,
       ROXYSU_STATIC_DIR: paths.staticDir,

@@ -11,8 +11,13 @@ import {
 } from "@roxysu/db/client.bun";
 import type { Db } from "@roxysu/db/types";
 import { and, eq } from "drizzle-orm";
-import { applyCalcBundle, exportCalcBundleEntries } from "./calcBundle";
+import {
+  applyCalcBundle,
+  exportCalcBundleEntries,
+  reworkReplaceAlgorithmsForBoot,
+} from "./calcBundle";
 import { SUNNY_ALGORITHM } from "./computeSunnyDan";
+import { REWORK_ALGORITHM } from "./computeReworkDan";
 
 const SET_ID = "00000000-0000-0000-0000-000000000030";
 const MAP_A = "00000000-0000-0000-0000-000000000031";
@@ -84,6 +89,19 @@ afterAll(() => {
   rmSync(tmpDir, { recursive: true, force: true });
 });
 
+describe("reworkReplaceAlgorithmsForBoot", () => {
+  test("packaged installs replace rework; bun desktop does not", () => {
+    expect(reworkReplaceAlgorithmsForBoot({})).toBeUndefined();
+    expect(
+      reworkReplaceAlgorithmsForBoot({ ROXYSU_DESKTOP: "1" }),
+    ).toBeUndefined();
+    const replace = reworkReplaceAlgorithmsForBoot({ ROXYSU_PACKAGED: "1" });
+    expect(replace?.has(REWORK_ALGORITHM)).toBe(true);
+    expect(replace?.has("mania-skill-v1")).toBe(true);
+    expect(replace?.has(SUNNY_ALGORITHM)).toBe(false);
+  });
+});
+
 describe("applyCalcBundle", () => {
   test("gap-fills missing rows and skips successful locals", async () => {
     const stats = await applyCalcBundle(db, [
@@ -142,6 +160,80 @@ describe("applyCalcBundle", () => {
       .get();
     expect(filled?.estDiff).toBe("Regular 2 mid");
     expect(filled?.sunnyStar).toBe(6.5);
+  });
+
+  test("replaceAlgorithms overwrites successful rework and leaves sunny", async () => {
+    await db
+      .insert(beatmapDanRatings)
+      .values({
+        beatmapId: MAP_A,
+        algorithm: REWORK_ALGORITHM,
+        beatmapHash: HASH_A,
+        sunnyStar: 1,
+        lnRatio: 0,
+        columnCount: 4,
+        estDiff: "old formula",
+        error: null,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [beatmapDanRatings.beatmapId, beatmapDanRatings.algorithm],
+        set: {
+          sunnyStar: 1,
+          estDiff: "old formula",
+          error: null,
+          updatedAt: new Date(),
+        },
+      });
+
+    const stats = await applyCalcBundle(
+      db,
+      [
+        {
+          beatmapHash: HASH_A,
+          algorithm: SUNNY_ALGORITHM,
+          sunnyStar: 9,
+          estDiff: "SHOULD_NOT_OVERWRITE",
+        },
+        {
+          beatmapHash: HASH_A,
+          algorithm: REWORK_ALGORITHM,
+          sunnyStar: 2.5,
+          lnRatio: 0.1,
+          columnCount: 4,
+          estDiff: "new formula",
+        },
+      ],
+      { replaceAlgorithms: new Set([REWORK_ALGORITHM]) },
+    );
+
+    expect(stats.skipped).toBe(1);
+    expect(stats.applied).toBe(1);
+
+    const sunny = await db
+      .select()
+      .from(beatmapDanRatings)
+      .where(
+        and(
+          eq(beatmapDanRatings.beatmapId, MAP_A),
+          eq(beatmapDanRatings.algorithm, SUNNY_ALGORITHM),
+        ),
+      )
+      .get();
+    expect(sunny?.estDiff).toBe("Regular 1 mid");
+
+    const rework = await db
+      .select()
+      .from(beatmapDanRatings)
+      .where(
+        and(
+          eq(beatmapDanRatings.beatmapId, MAP_A),
+          eq(beatmapDanRatings.algorithm, REWORK_ALGORITHM),
+        ),
+      )
+      .get();
+    expect(rework?.estDiff).toBe("new formula");
+    expect(rework?.sunnyStar).toBe(2.5);
   });
 
   test("replaces failed local rows", async () => {

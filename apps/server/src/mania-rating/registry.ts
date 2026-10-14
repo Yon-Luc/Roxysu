@@ -74,6 +74,6 @@ registerVersion({
   label: "Mania difficulty (TS port)",
   description:
     "In-process TypeScript port of the WIP mania SR rework. No .NET binary. Difficulty only (no PP tiers yet).",
-  gitRef: "loleur362/osu mania-difficulty@e6207616bd732c7c00207a060f31cf7729f8390b",
+  gitRef: "loleur362/osu mania-difficulty@bd6bbda8e649a806371d784a485d5962f709089e",
   source: "inprocess",
 });

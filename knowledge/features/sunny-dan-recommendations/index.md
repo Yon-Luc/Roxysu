@@ -84,7 +84,13 @@ Three estimators write to the same store, keyed by `algorithm`: `sunny`, `daniel
    and run automatically when the job starts with nothing missing.
 7. `rework:` matches only `algorithm = 'mania-difficulty'` rows; `dan:` matches
    Sunny and Daniel only. The two never mix.
-8. The `rework` rating display mode is client-side (`roxysu:rating-display`).
+8. The mania difficulty port pin is `packages/mania-difficulty/upstream/revision.json`
+   (`loleur362/osu` branch `mania-difficulty`). A new pin changes star ratings.
+   The rework backfill only fills missing rows and rows whose beatmap hash
+   changed, so an existing library keeps the previous pin's stars until those
+   rows are removed and the job is run again. A Hub calc bundle for the same
+   product version can gap-fill the old numbers back in.
+9. The `rework` rating display mode is client-side (`roxysu:rating-display`).
    Practice/search/collection list cards and the beatmap detail panel must pass
    `reworkStar` / `reworkEstDiff` / `reworkLnRatio` into `formatPrimaryRating`
    and `primaryDanSource`. The practice list serializer (`mapCard`) and

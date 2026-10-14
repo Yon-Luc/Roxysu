@@ -16,6 +16,8 @@ public sealed class TypeScriptTranslator
     private readonly HashSet<string> _imports = new(StringComparer.Ordinal);
     private readonly HashSet<string> _boundPatternNames = new(StringComparer.Ordinal);
     private readonly HashSet<string> _locals = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _nullableValueLocals = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _intNames = new(StringComparer.Ordinal);
     private int _indent;
     private string _typeName = "Generated";
     private string _outRel = "";
@@ -256,6 +258,8 @@ public sealed class TypeScriptTranslator
         var paramList = new List<string>();
         _locals.Clear();
         _boundPatternNames.Clear();
+        _nullableValueLocals.Clear();
+        _intNames.Clear();
         _currentMethod = method;
         _yieldMode = method.Body != null &&
                      method.Body.DescendantNodes().OfType<YieldStatementSyntax>().Any();
@@ -271,6 +275,11 @@ public sealed class TypeScriptTranslator
             var pname = SafeName(p.Identifier.Text);
             _locals.Add(p.Identifier.Text);
             _locals.Add(pname);
+            if (IsIntegerType(p.Type))
+            {
+                _intNames.Add(p.Identifier.Text);
+                _intNames.Add(pname);
+            }
 
             if (p.Modifiers.Any(m => m.IsKind(SyntaxKind.ParamsKeyword)))
             {
@@ -375,6 +384,11 @@ public sealed class TypeScriptTranslator
 
                     _locals.Add(v.Identifier.Text);
                     _locals.Add(name);
+                    if (IsIntegerType(local.Declaration.Type))
+                    {
+                        _intNames.Add(v.Identifier.Text);
+                        _intNames.Add(name);
+                    }
                     EmitLine($"{kw} {name}{init};");
                 }
                 break;
@@ -428,6 +442,8 @@ public sealed class TypeScriptTranslator
                 break;
 
             case ForEachStatementSyntax fe:
+                if (fe.Type is NullableTypeSyntax)
+                    _nullableValueLocals.Add(fe.Identifier.Text);
                 EmitLine($"for (const {fe.Identifier.Text} of {Expr(fe.Expression)}) {{");
                 Indent();
                 TranslateEmbedded(fe.Statement);
@@ -587,69 +603,65 @@ public sealed class TypeScriptTranslator
     /// </summary>
     private void EmitPatternBindings(ExpressionSyntax condition, bool rebind = false)
     {
+        var boundThisPass = new HashSet<string>(StringComparer.Ordinal);
         foreach (var isPat in condition.DescendantNodesAndSelf().OfType<IsPatternExpressionSyntax>())
         {
-            if (isPat.Pattern is DeclarationPatternSyntax decl && decl.Designation is SingleVariableDesignationSyntax svd)
+            if (!TryPatternDesignation(isPat.Pattern, out var designation))
+                continue;
+
+            var name = SafeName(designation);
+            if (!rebind && _boundPatternNames.Contains(name))
+                continue;
+
+            var rhs = Expr(isPat.Expression);
+            var deps = isPat.Expression.DescendantNodesAndSelf()
+                .OfType<IdentifierNameSyntax>()
+                .Select(id => id.Identifier.Text)
+                .Where(boundThisPass.Contains)
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            var assign = rebind && _boundPatternNames.Contains(name) ? "" : "const ";
+            if (deps.Count == 0)
+                EmitLine($"{assign}{name} = {rhs};");
+            else
             {
-                var name = SafeName(svd.Identifier.Text);
-                if (!rebind && _boundPatternNames.Contains(name))
-                    continue;
-                var rhs = Expr(isPat.Expression);
-                EmitLine($"{(rebind && _boundPatternNames.Contains(name) ? "" : "const ")}{name} = {rhs};");
-                _boundPatternNames.Add(name);
-                _boundPatternNames.Add(svd.Identifier.Text);
-                _locals.Add(name);
-                _locals.Add(svd.Identifier.Text);
+                // A later pattern may read an earlier binding (`a is { } x || Foo(x.Index) is { } y`).
+                // C# does not evaluate the right side when the left binding is null.
+                var guard = string.Join(" && ", deps.Select(d => $"{SafeName(d)} != null"));
+                EmitLine($"{assign}{name} = {guard} ? {rhs} : null;");
             }
-            else if (isPat.Pattern is UnaryPatternSyntax
-                     {
-                         Pattern: DeclarationPatternSyntax decl2,
-                     } && decl2.Designation is SingleVariableDesignationSyntax svd2)
+
+            boundThisPass.Add(designation);
+            boundThisPass.Add(name);
+            _boundPatternNames.Add(name);
+            _boundPatternNames.Add(designation);
+            _locals.Add(name);
+            _locals.Add(designation);
+        }
+    }
+
+    private static bool TryPatternDesignation(PatternSyntax pattern, out string name)
+    {
+        name = "";
+        switch (pattern)
+        {
+            case DeclarationPatternSyntax { Designation: SingleVariableDesignationSyntax svd }:
+                name = svd.Identifier.Text;
+                return true;
+            case RecursivePatternSyntax { Designation: SingleVariableDesignationSyntax svd3 }:
+                name = svd3.Identifier.Text;
+                return true;
+            case UnaryPatternSyntax { Pattern: DeclarationPatternSyntax { Designation: SingleVariableDesignationSyntax svd2 } }:
+                name = svd2.Identifier.Text;
+                return true;
+            case UnaryPatternSyntax
             {
-                var name = SafeName(svd2.Identifier.Text);
-                if (!rebind && _boundPatternNames.Contains(name))
-                    continue;
-                var rhs = Expr(isPat.Expression);
-                EmitLine($"{(rebind && _boundPatternNames.Contains(name) ? "" : "const ")}{name} = {rhs};");
-                _boundPatternNames.Add(name);
-                _boundPatternNames.Add(svd2.Identifier.Text);
-                _locals.Add(name);
-                _locals.Add(svd2.Identifier.Text);
-            }
-            else if (isPat.Pattern is RecursivePatternSyntax
-                     {
-                         Designation: SingleVariableDesignationSyntax svd3,
-                     })
-            {
-                // `x is { } name`
-                var name = SafeName(svd3.Identifier.Text);
-                if (!rebind && _boundPatternNames.Contains(name))
-                    continue;
-                var rhs = Expr(isPat.Expression);
-                EmitLine($"{(rebind && _boundPatternNames.Contains(name) ? "" : "const ")}{name} = {rhs};");
-                _boundPatternNames.Add(name);
-                _boundPatternNames.Add(svd3.Identifier.Text);
-                _locals.Add(name);
-                _locals.Add(svd3.Identifier.Text);
-            }
-            else if (isPat.Pattern is UnaryPatternSyntax
-                     {
-                         Pattern: RecursivePatternSyntax
-                         {
-                             Designation: SingleVariableDesignationSyntax svd4,
-                         },
-                     })
-            {
-                var name = SafeName(svd4.Identifier.Text);
-                if (!rebind && _boundPatternNames.Contains(name))
-                    continue;
-                var rhs = Expr(isPat.Expression);
-                EmitLine($"{(rebind && _boundPatternNames.Contains(name) ? "" : "const ")}{name} = {rhs};");
-                _boundPatternNames.Add(name);
-                _boundPatternNames.Add(svd4.Identifier.Text);
-                _locals.Add(name);
-                _locals.Add(svd4.Identifier.Text);
-            }
+                Pattern: RecursivePatternSyntax { Designation: SingleVariableDesignationSyntax svd4 },
+            }:
+                name = svd4.Identifier.Text;
+                return true;
+            default:
+                return false;
         }
     }
 
@@ -803,6 +815,11 @@ public sealed class TypeScriptTranslator
                     return $"{_typeName}.{ma.Name.Identifier.Text}";
 
                 var member = ma.Name.Identifier.Text;
+                // Nullable<T>.Value unwraps to the value. Only locals declared as T? are tracked.
+                if (member == "Value" &&
+                    ma.Expression is IdentifierNameSyntax valueId &&
+                    _nullableValueLocals.Contains(valueId.Identifier.Text))
+                    return SafeName(valueId.Identifier.Text);
                 // C# array.Length → JS array.length
                 if (member == "Length")
                     member = "length";
@@ -811,6 +828,11 @@ public sealed class TypeScriptTranslator
 
             case BinaryExpressionSyntax bin:
             {
+                // C# integer division truncates. JS `/` is always floating point.
+                if (bin.OperatorToken.IsKind(SyntaxKind.SlashToken) &&
+                    IsIntExpr(bin.Left) && IsIntExpr(bin.Right))
+                    return $"(Math.trunc({Expr(bin.Left)} / {Expr(bin.Right)}))";
+
                 // `a is T x && x.Y` — left may be is-pattern; bindings hoisted by statement
                 return $"({Expr(bin.Left)} {bin.OperatorToken.Text} {Expr(bin.Right)})";
             }
@@ -832,6 +854,9 @@ public sealed class TypeScriptTranslator
 
             case InvocationExpressionSyntax inv:
                 return TranslateInvocation(inv);
+
+            case ConditionalAccessExpressionSyntax ca:
+                return TranslateConditionalAccess(ca);
 
             case ElementAccessExpressionSyntax ea:
             {
@@ -905,7 +930,7 @@ public sealed class TypeScriptTranslator
                     return "(() => undefined)";
                 }
 
-                return $"(({p}: number) => {Expr(body)})";
+                return $"(({p}: any) => {Expr(body)})";
             }
 
             case ParenthesizedLambdaExpressionSyntax plam:
@@ -981,6 +1006,10 @@ public sealed class TypeScriptTranslator
                     return $"({SafeName(svdN.Identifier.Text)} == null)";
                 return $"({Expr(isPat.Expression)} == null)";
             }
+
+            if (notPat.Pattern is ConstantPatternSyntax notConst &&
+                notConst.Expression.IsKind(SyntaxKind.NullLiteralExpression))
+                return $"({Expr(isPat.Expression)} != null)";
 
             return $"({Expr(isPat.Expression)} == null)";
         }
@@ -1145,6 +1174,29 @@ public sealed class TypeScriptTranslator
         return sb.ToString();
     }
 
+    private string TranslateConditionalAccess(ConditionalAccessExpressionSyntax ca)
+    {
+        var left = Expr(ca.Expression);
+        switch (ca.WhenNotNull)
+        {
+            case MemberBindingExpressionSyntax mb:
+            {
+                var member = mb.Name.Identifier.Text;
+                if (member == "Length")
+                    member = "length";
+                return $"({left}?.{member} ?? null)";
+            }
+            case InvocationExpressionSyntax inv when inv.Expression is MemberBindingExpressionSyntax imb:
+            {
+                var args = string.Join(", ", inv.ArgumentList.Arguments.Select(a => Expr(a.Expression)));
+                return $"({left}?.{imb.Name.Identifier.Text}({args}) ?? null)";
+            }
+            default:
+                Error(ca, $"unsupported conditional access {ca.WhenNotNull.Kind()}");
+                return "null";
+        }
+    }
+
     private string TranslateInvocation(InvocationExpressionSyntax inv)
     {
         foreach (var a in inv.ArgumentList.Arguments)
@@ -1191,6 +1243,13 @@ public sealed class TypeScriptTranslator
                     var arr = Expr(inv.ArgumentList.Arguments[0].Expression);
                     return $"{arr}.reverse()";
                 }
+
+                if (method == "IndexOf" && inv.ArgumentList.Arguments.Count >= 2)
+                {
+                    var arr = Expr(inv.ArgumentList.Arguments[0].Expression);
+                    var item = Expr(inv.ArgumentList.Arguments[1].Expression);
+                    return $"{arr}.indexOf({item})";
+                }
             }
 
             if (leftName is "double" or "Double" or "float" or "Float" or "single" or "Single")
@@ -1214,6 +1273,23 @@ public sealed class TypeScriptTranslator
 
             if (leftName == _typeName)
                 return $"{_typeName}.{method}({argList})";
+
+            if (method is "Select" or "Where" or "Count" or "Any")
+            {
+                var recv = Expr(ma.Expression);
+                if (method == "Select" && inv.ArgumentList.Arguments.Count == 1)
+                    return $"{recv}.map({Expr(inv.ArgumentList.Arguments[0].Expression)})";
+                if (method == "Where" && inv.ArgumentList.Arguments.Count == 1)
+                    return $"{recv}.filter({Expr(inv.ArgumentList.Arguments[0].Expression)})";
+                if (method == "Count" && inv.ArgumentList.Arguments.Count == 0)
+                    return $"{recv}.length";
+                if (method == "Count" && inv.ArgumentList.Arguments.Count == 1)
+                    return $"{recv}.filter({Expr(inv.ArgumentList.Arguments[0].Expression)}).length";
+                if (method == "Any" && inv.ArgumentList.Arguments.Count == 0)
+                    return $"({recv}.length > 0)";
+                if (method == "Any" && inv.ArgumentList.Arguments.Count == 1)
+                    return $"{recv}.some({Expr(inv.ArgumentList.Arguments[0].Expression)})";
+            }
 
             // instance method
             return $"{Expr(ma.Expression)}.{method}({argList})";
@@ -1418,6 +1494,53 @@ public sealed class TypeScriptTranslator
     }
 
     private static string StripNullable(string t) => t.EndsWith('?') ? t[..^1] : t;
+
+    private static bool IsIntegerType(TypeSyntax? type)
+    {
+        if (type == null) return false;
+        var t = StripNullable(type.ToString().Trim());
+        return t is "int" or "long" or "short" or "byte" or "uint" or "ulong" or "sbyte" or "ushort";
+    }
+
+    private static readonly HashSet<string> IntMembers = new(StringComparer.Ordinal)
+    {
+        "Column", "Size", "Index", "TotalColumns", "RowIndex", "Count", "Length",
+    };
+
+    /// <summary>
+    /// Syntax-only guess that a C# expression has an integer type, so <c>/</c> truncates.
+    /// </summary>
+    private bool IsIntExpr(ExpressionSyntax expr)
+    {
+        switch (expr)
+        {
+            case LiteralExpressionSyntax lit when lit.IsKind(SyntaxKind.NumericLiteralExpression):
+            {
+                var t = lit.Token.Text;
+                if (t.Contains('.') || t.Contains('e') || t.Contains('E'))
+                    return false;
+                if (t.Length > 0 && t[^1] is 'f' or 'F' or 'd' or 'D' or 'm' or 'M')
+                    return false;
+                return true;
+            }
+            case IdentifierNameSyntax id:
+                return _intNames.Contains(id.Identifier.Text);
+            case MemberAccessExpressionSyntax ma:
+                return IntMembers.Contains(ma.Name.Identifier.Text);
+            case ParenthesizedExpressionSyntax par:
+                return IsIntExpr(par.Expression);
+            case BinaryExpressionSyntax b when b.OperatorToken.IsKind(SyntaxKind.PlusToken)
+                                              || b.OperatorToken.IsKind(SyntaxKind.MinusToken)
+                                              || b.OperatorToken.IsKind(SyntaxKind.AsteriskToken):
+                return IsIntExpr(b.Left) && IsIntExpr(b.Right);
+            case PrefixUnaryExpressionSyntax pre when pre.OperatorToken.IsKind(SyntaxKind.MinusToken):
+                return IsIntExpr(pre.Operand);
+            case CastExpressionSyntax cast:
+                return IsIntegerType(cast.Type);
+            default:
+                return false;
+        }
+    }
 
     private void Error(SyntaxNode node, string message)
     {

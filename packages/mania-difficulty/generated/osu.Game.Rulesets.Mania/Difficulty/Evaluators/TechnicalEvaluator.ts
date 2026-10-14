@@ -1,6 +1,6 @@
 // @generated from osu.Game.Rulesets.Mania/Difficulty/Evaluators/TechnicalEvaluator.cs
-// upstream sha: e6207616bd732c7c00207a060f31cf7729f8390b
-// generator: 0.4.0
+// upstream sha: bd6bbda8e649a806371d784a485d5962f709089e
+// generator: 0.5.0
 // Do not edit by hand — regenerate with: bun run port:generate
 
 import type { ManiaDifficultyHitObject } from "../../../../src/adapters/hitObject";
@@ -15,15 +15,16 @@ const variety_gap_log_base = 1.18;
 export const TechnicalEvaluator = {
   EvaluateDifficultyOf(hitObject: ManiaDifficultyHitObject, rhythmIrregularity: number, patternVariety: number, windowedIrregularity: number): number {
     const pattern_buff = 0.69740;
-    const technical_scale = 1.95;
+    const technical_weight = 2.6;
     const total_weight = 1.58087;
     let columnComplexity = TechnicalEvaluator.evaluateColumnComplexityOf(hitObject);
     let speedFactor = (1.0 / (((hitObject.DeltaTime / 1000.0) + 0.060)));
     let readingPressure = TechnicalEvaluator.readingPressureOf(hitObject);
     let rhythmAmplifier = (1.0 + ((0.9 * readingPressure) * DiffUtils.BellCurve(windowedIrregularity, 0.15, 0.085)));
     let varietyFloor = (((1.55 * patternVariety) * readingPressure) * DiffUtils.Smoothstep(windowedIrregularity, 0.04, 0.12));
-    let complexity = Math.max((rhythmIrregularity + columnComplexity), varietyFloor);
-    return (((((((pattern_buff * complexity) * speedFactor) * technical_scale) * rhythmAmplifier) * TechnicalEvaluator.chordWidth(hitObject)) * hitObject.ManipulationFactor) * total_weight);
+    let rhythmShare = DiffUtils.Smoothstep(hitObject.DeltaTime, 8.0, 30.0);
+    let complexity = (Math.max((rhythmIrregularity + columnComplexity), varietyFloor) * rhythmShare);
+    return (((((((pattern_buff * complexity) * speedFactor) * technical_weight) * rhythmAmplifier) * TechnicalEvaluator.chordWidth(hitObject)) * hitObject.ManipulationFactor) * total_weight);
   },
 
   EvaluateRhythmIrregularityOf(hitObject: ManiaDifficultyHitObject, previousDeltaTime: number): number {
@@ -58,9 +59,7 @@ export const TechnicalEvaluator = {
     let density = DiffUtils.Smoothstep(passage.wideShare, 0.30, 0.60);
     let moves = DiffUtils.Smoothstep(passage.jackShare, 0.90, 0.65);
     let reforms = DiffUtils.Smoothstep(passage.shapeChange, 0.25, 0.65);
-    let keymode = Math.min(hitObject.Row.TotalColumns, 9);
-    let lightGate = (1.0 - DiffUtils.Smoothstep(hitObject.Row.Size, (keymode * 0.4), (((keymode + 9.5)) / 3.0)));
-    return (((1.0 + (((1.9 * density) * moves) * reforms))) * lightGate);
+    return ((1.0 + (((1.9 * density) * moves) * reforms)));
   },
 
   readPassageAround(hitObject: ManiaDifficultyHitObject): { wideShare: number; jackShare: number; shapeChange: number } {
@@ -102,14 +101,19 @@ export const TechnicalEvaluator = {
     if (((previous == null) || (previous2 == null))) {
       return 0.0;
     }
+    let handSplit = (Math.trunc(hitObject.Row.TotalColumns / 2));
+    if ((((previous.Column < handSplit)) != ((hitObject.Column < handSplit)))) {
+      return 0.0;
+    }
     let columnComplexity = 0.0;
     let previousDirection = (previous.Column - previous2.Column);
     let currentDirection = (hitObject.Column - previous.Column);
+    let span = Math.min(Math.abs(currentDirection), handSplit);
     if ((((previousDirection != 0) && (currentDirection != 0)) && (Math.sign(previousDirection) != Math.sign(currentDirection)))) {
       let coefficient = CrossColumnUtils.SumBoundaryMultipliersBetween(previous.Column, hitObject.Column, hitObject.Row.TotalColumns);
       columnComplexity += (0.45 + (2.0 * coefficient));
     }
-    if ((Math.abs(currentDirection) >= 2)) {
+    if ((span >= 2)) {
       columnComplexity += CrossColumnUtils.AverageBoundaryMultipliersBetween(previous.Column, hitObject.Column, hitObject.Row.TotalColumns);
     }
     let spanDamper = (1.0 - (0.60 * DiffUtils.Smoothstep(Math.abs(currentDirection), 3.0, 5.5)));

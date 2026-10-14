@@ -71,7 +71,7 @@ hit-object construction (skip first note, ColumnDelta null-coalesce, chord/hold 
 Fixture parity (vs pinned C# baselines): SR and main skills within ~0.1% on synthetic
 maps. Score-loss polynomial coeffs still not emitted.
 
-Generated modules (v0.3): utils + all five evaluators (+ Jack/* helpers).
+Generated modules (generator 0.5.0): utils + all five evaluators (+ Jack/* helpers).
 
 ## Developer commands
 
@@ -121,7 +121,7 @@ OSU_GAME_PATH=/path/to/checkout dotnet run --project tools/ReferenceRunner -- \
 {
   "repository": "https://github.com/loleur362/osu",
   "branch": "mania-difficulty",
-  "sha": "e6207616bd732c7c00207a060f31cf7729f8390b"
+  "sha": "bd6bbda8e649a806371d784a485d5962f709089e"
 }
 ```
 

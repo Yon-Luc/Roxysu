@@ -1,6 +1,6 @@
 // @generated from osu.Game.Rulesets.Mania/Difficulty/Evaluators/ReleaseEvaluator.cs
-// upstream sha: e6207616bd732c7c00207a060f31cf7729f8390b
-// generator: 0.4.0
+// upstream sha: bd6bbda8e649a806371d784a485d5962f709089e
+// generator: 0.5.0
 // Do not edit by hand — regenerate with: bun run port:generate
 
 import type { ManiaDifficultyHitObject } from "../../../../src/adapters/hitObject";
@@ -12,6 +12,7 @@ const max_long_note_duration_ms = 1000.0;
 /** Generated from C# class ReleaseEvaluator */
 export const ReleaseEvaluator = {
   EvaluateDifficultyOf(current: ManiaDifficultyHitObject): number {
+    const release_weight = 0.9;
     let releaseDifficulty = 0.0;
     if (!(!!(current).IsHoldNote)) {
       return releaseDifficulty;
@@ -22,7 +23,7 @@ export const ReleaseEvaluator = {
     releaseDifficulty += ReleaseEvaluator.calculateLongHoldBonus(duration, longNoteGate);
     releaseDifficulty += ReleaseEvaluator.calculateReleaseSpeedBonus(current, longNoteGate);
     releaseDifficulty += ReleaseEvaluator.calculateReleaseWhileHolds(current, longNoteGate);
-    return (releaseDifficulty * total_weight);
+    return ((releaseDifficulty * release_weight) * total_weight);
   },
 
   longNoteGateOf(duration: number): number {
@@ -31,26 +32,8 @@ export const ReleaseEvaluator = {
 
   calculateLongHoldBonus(duration: number, longNoteGate: number): number {
     let seconds = (duration / 1000.0);
-    let holdLengthFactor = ((1.6 * DiffUtils.Smoothstep(duration, 500, 680)) * seconds);
-    return ((((0.42 + (0.9 * seconds)) + holdLengthFactor)) * longNoteGate);
-  },
-
-  otherColumnHoldEndTimes(current: ManiaDifficultyHitObject): number[] {
-    const __yield: number[] = [];
-    for (let otherColumn = 0; (otherColumn < current.Row.TotalColumns); (otherColumn++)) {
-      if ((otherColumn == current.Column)) {
-        continue;
-      }
-      let otherStartTime = current.LastStartTimeInColumn(otherColumn);
-      if (((otherStartTime) === Number.NEGATIVE_INFINITY)) {
-        continue;
-      }
-      if ((Math.abs((otherStartTime - current.StartTime)) <= ChordUtils.CHORD_TOLERANCE_MS)) {
-        continue;
-      }
-      __yield.push(current.LastEndTimeInColumn(otherColumn));
-    }
-    return __yield;
+    let holdLengthFactor = ((1.4 * DiffUtils.Smoothstep(duration, 500, 680)) * seconds);
+    return (Math.min((((0.42 + (0.75 * seconds)) + holdLengthFactor)), 1.0) * longNoteGate);
   },
 
   calculateReleaseSpeedBonus(current: ManiaDifficultyHitObject, longNoteGate: number): number {
@@ -58,10 +41,11 @@ export const ReleaseEvaluator = {
     const offset_ms = 30.0;
     const weight = 0.2;
     let closestReleaseDelta = Number.POSITIVE_INFINITY;
-    for (const otherEndTime of ReleaseEvaluator.otherColumnHoldEndTimes(current)) {
-      if ((otherEndTime > current.StartTime)) {
-        closestReleaseDelta = Math.min(closestReleaseDelta, Math.abs((current.EndTime - otherEndTime)));
+    for (const endTime of current.LastConcurrentlyReleasedHolds.map(((o: any) => (o?.EndTime ?? null)))) {
+      if (((endTime === null) || (Math.abs((endTime - current.EndTime)) <= ChordUtils.CHORD_TOLERANCE_MS))) {
+        continue;
       }
+      closestReleaseDelta = Math.min(closestReleaseDelta, Math.abs((current.EndTime - endTime)));
     }
     if (((closestReleaseDelta) === Number.POSITIVE_INFINITY)) {
       return 0.0;
@@ -71,12 +55,7 @@ export const ReleaseEvaluator = {
 
   calculateReleaseWhileHolds(current: ManiaDifficultyHitObject, longNoteGate: number): number {
     const release_long_note_weight = 0.4;
-    let releasingColumns = 0;
-    for (const otherEndTime of ReleaseEvaluator.otherColumnHoldEndTimes(current)) {
-      if ((otherEndTime > current.EndTime)) {
-        (releasingColumns++);
-      }
-    }
+    let releasingColumns = current.TailOverlappedHolds.filter(((o: any) => (o != null))).length;
     if ((releasingColumns == 0)) {
       return 0.0;
     }
@@ -85,8 +64,8 @@ export const ReleaseEvaluator = {
   },
 
   nextNoteNerf(current: ManiaDifficultyHitObject): number {
-    const min_ms = 80.0;
-    const max_ms = 220.0;
+    const min_ms = 40.0;
+    const max_ms = 190.0;
     let nextInColumn = current.NextInColumn(0);
     if ((nextInColumn == null)) {
       return 1.0;

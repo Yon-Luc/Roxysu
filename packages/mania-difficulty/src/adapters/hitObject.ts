@@ -29,6 +29,10 @@ export type ManiaDifficultyHitObject = {
   LastConcurrentlyReleasedHolds: Array<ManiaDifficultyHitObject | null>;
   Previous: (skip?: number) => ManiaDifficultyHitObject | null;
   PrevInColumn: (back?: number) => ManiaDifficultyHitObject | null;
+  PrevInColumnBefore: (
+    column: number,
+    afterIndex: number,
+  ) => ManiaDifficultyHitObject | null;
   NextInColumn: (forward?: number) => ManiaDifficultyHitObject | null;
   LastStartTimeInColumn: (column: number) => number;
   LastEndTimeInColumn: (column: number) => number;
@@ -253,6 +257,19 @@ const hitProto = {
     const list = this._col[this.Column]!;
     const j = this._colIdx - (back + 1);
     return j >= 0 ? list[j]! : null;
+  },
+  PrevInColumnBefore(
+    this: HitMutable,
+    column: number,
+    afterIndex: number,
+  ): ManiaDifficultyHitObject | null {
+    const list = this._col[column];
+    if (!list) return null;
+    for (let i = list.length - 1; i >= 0; i--) {
+      const obj = list[i]!;
+      if (obj.Index < afterIndex) return obj;
+    }
+    return null;
   },
   NextInColumn(this: HitMutable, forward = 0): ManiaDifficultyHitObject | null {
     const list = this._col[this.Column]!;

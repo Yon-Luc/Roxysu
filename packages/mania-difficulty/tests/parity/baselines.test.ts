@@ -9,7 +9,11 @@ import {
 } from "../../src/index";
 
 const pkgRoot = join(import.meta.dir, "../..");
-const sha = "e6207616bd732c7c00207a060f31cf7729f8390b";
+const sha = (
+  JSON.parse(readFileSync(join(pkgRoot, "upstream/revision.json"), "utf8")) as {
+    sha: string;
+  }
+).sha;
 const baselineDir = join(pkgRoot, "tests/fixtures/baselines", sha);
 
 type Baseline = {

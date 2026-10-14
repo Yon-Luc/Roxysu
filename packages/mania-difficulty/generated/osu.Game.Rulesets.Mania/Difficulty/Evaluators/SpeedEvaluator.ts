@@ -1,6 +1,6 @@
 // @generated from osu.Game.Rulesets.Mania/Difficulty/Evaluators/SpeedEvaluator.cs
-// upstream sha: e6207616bd732c7c00207a060f31cf7729f8390b
-// generator: 0.4.0
+// upstream sha: bd6bbda8e649a806371d784a485d5962f709089e
+// generator: 0.5.0
 // Do not edit by hand — regenerate with: bun run port:generate
 
 import type { ManiaDifficultyHitObject } from "../../../../src/adapters/hitObject";
@@ -17,9 +17,9 @@ export const SpeedEvaluator = {
       return 0.0;
     }
     const tap_rate_offset_ms = 36;
-    const speed_weight = 1.613;
-    const jack_speed_nerf = 0.49996;
-    const total_weight = 1.01112;
+    const speed_weight = 1.74;
+    const jack_speed_nerf = 0.5;
+    const total_weight = 1.3;
     let tapRate = (1000.0 / ((hitObject.DeltaTime + tap_rate_offset_ms)));
     tapRate *= SpeedEvaluator.speedGrowth(hitObject);
     const previous = hitObject.Previous();
@@ -29,8 +29,8 @@ export const SpeedEvaluator = {
   },
 
   speedGrowth(hitObject: ManiaDifficultyHitObject): number {
-    const window_ms = 200.0;
-    const sustain_window_ms = 700.0;
+    const window_ms = 250.0;
+    const sustain_window_ms = 1000.0;
     let rows = 0;
     let longRows = 0;
     let longShared = 0;
@@ -54,7 +54,7 @@ export const SpeedEvaluator = {
     let sustainReward = 0.0;
     if ((longRows >= 20)) {
       let longEven = (1.0 - (Number(longShared) / longRows));
-      sustainReward = (((0.8 * DiffUtils.Smoothstep(longRows, 20.0, 30.0)) * DiffUtils.Smoothstep(longEven, 0.6, 0.8)) * hitObject.ManipulationFactor);
+      sustainReward = (((0.85 * DiffUtils.Smoothstep(longRows, 20.0, 30.0)) * DiffUtils.Smoothstep(longEven, 0.6, 0.8)) * hitObject.ManipulationFactor);
     }
     return (spikeNerf * ((1.0 + sustainReward)));
   },

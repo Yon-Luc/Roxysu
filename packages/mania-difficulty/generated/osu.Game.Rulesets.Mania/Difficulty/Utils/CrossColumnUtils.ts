@@ -1,6 +1,6 @@
 // @generated from osu.Game.Rulesets.Mania/Difficulty/Utils/CrossColumnUtils.cs
-// upstream sha: e6207616bd732c7c00207a060f31cf7729f8390b
-// generator: 0.4.0
+// upstream sha: bd6bbda8e649a806371d784a485d5962f709089e
+// generator: 0.5.0
 // Do not edit by hand — regenerate with: bun run port:generate
 
 const boundary_multipliers_per_column = [ [ 0.075, 0.075 ], [ 0.125, 0.05, 0.125 ], [ 0.125, 0.125, 0.125, 0.125 ], [ 0.175, 0.25, 0.05, 0.25, 0.175 ], [ 0.175, 0.25, 0.175, 0.175, 0.25, 0.175 ], [ 0.225, 0.35, 0.25, 0.05, 0.25, 0.35, 0.225 ], [ 0.225, 0.35, 0.25, 0.225, 0.225, 0.25, 0.35, 0.225 ], [ 0.275, 0.45, 0.35, 0.25, 0.05, 0.25, 0.35, 0.45, 0.275 ], [ 0.275, 0.45, 0.35, 0.25, 0.275, 0.275, 0.25, 0.35, 0.45, 0.275 ], [ 0.325, 0.55, 0.45, 0.35, 0.25, 0.05, 0.25, 0.35, 0.45, 0.55, 0.325 ] ];

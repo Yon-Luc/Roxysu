@@ -23,7 +23,7 @@ import {
   PREVIEW_SCROLL_MAX,
   PREVIEW_SCROLL_MIN,
 } from "./ManiaNotefield";
-import { loadPrefs, SKIP_MS } from "./previewPrefs";
+import { loadPrefs, PREFS_KEY, SKIP_MS } from "./previewPrefs";
 import { useAppDict } from "../lib/i18n";
 import { parseScoreMods } from "@server/replay/mods";
 
@@ -100,6 +100,8 @@ export function BeatmapPreviewEmbed({
   const desiredMsRef = useRef<number | null>(null);
   const seekGuardUntilRef = useRef(0);
   const liveSyncSampleRef = useRef<LiveSyncSample | null>(null);
+  /** User pause or pause-while-playing: do not follow tosu until times are already close. */
+  const holdSyncRef = useRef(false);
   const lengthMsRef = useRef(0);
   const durationMsRef = useRef(0);
   const audioUrlRef = useRef<string | null>(null);
@@ -198,6 +200,15 @@ export function BeatmapPreviewEmbed({
     setCurrentMs(next);
   }
 
+  const holdAndFreeze = useCallback(() => {
+    holdSyncRef.current = true;
+    liveSyncSampleRef.current = null;
+    const frozen = clockRef.current.nowMs();
+    clockRef.current.set(frozen, { playing: false, rate: 1 });
+    setCurrentMs(frozen);
+    audioRef.current?.pause();
+  }, []);
+
   function togglePlay() {
     const audio = audioRef.current;
     if (!audio || !audioUrlRef.current) return;
@@ -208,7 +219,20 @@ export function BeatmapPreviewEmbed({
         );
       });
     } else {
-      audio.pause();
+      holdAndFreeze();
+    }
+  }
+
+  function onVolume(e: FormEvent<HTMLInputElement>) {
+    const next = clamp(Number(e.currentTarget.value), 0, 1);
+    setVolume(next);
+    try {
+      localStorage.setItem(
+        PREFS_KEY,
+        JSON.stringify({ ...loadPrefs(), volume: next }),
+      );
+    } catch {
+      // ignore quota / private mode
     }
   }
 
@@ -223,6 +247,7 @@ export function BeatmapPreviewEmbed({
     previewSeekDone.current = false;
     desiredMsRef.current = null;
     liveSyncSampleRef.current = null;
+    holdSyncRef.current = false;
     clockRef.current.set(0, { playing: false, rate: 1 });
     audioRef.current?.pause();
     setAudioError(null);
@@ -266,6 +291,7 @@ export function BeatmapPreviewEmbed({
     }
 
     function tryAutoPlay() {
+      if (holdSyncRef.current) return;
       if (!autoPlayRef.current || !playingAllowedRef.current) return;
       if (!audioUrlRef.current) return;
       void audio!.play().catch(() => {
@@ -361,7 +387,7 @@ export function BeatmapPreviewEmbed({
     const audio = audioRef.current;
     if (!audio || !audioUrl) return;
     if (!playingAllowed) {
-      audio.pause();
+      holdAndFreeze();
       return;
     }
     if (autoPlay && audio.paused) {
@@ -369,13 +395,31 @@ export function BeatmapPreviewEmbed({
         /* ignore */
       });
     }
-  }, [playingAllowed, autoPlay, audioUrl]);
+  }, [playingAllowed, autoPlay, audioUrl, holdAndFreeze]);
 
   useEffect(() => {
     if (!syncActive || syncTimeMs == null) {
       liveSyncSampleRef.current = null;
       return;
     }
+
+    const audio = audioRef.current;
+    const resumed =
+      playingAllowedRef.current &&
+      audio != null &&
+      !audio.paused &&
+      !audio.ended;
+    if (holdSyncRef.current || !playingAllowedRef.current) {
+      const localMs = audio
+        ? (audio.currentTime || 0) * 1000
+        : clockRef.current.nowMs();
+      if (!(resumed && Math.abs(localMs - syncTimeMs) <= SYNC_RESYNC_MS)) {
+        liveSyncSampleRef.current = null;
+        return;
+      }
+      holdSyncRef.current = false;
+    }
+
     const now = performance.now();
     const prev = liveSyncSampleRef.current;
     const playing = prev == null || syncTimeMs > prev.ms + 20;
@@ -394,7 +438,6 @@ export function BeatmapPreviewEmbed({
       setCurrentMs(localMs);
     }
 
-    const audio = audioRef.current;
     if (!audio) return;
     const atMs = (audio.currentTime || 0) * 1000;
     if (Math.abs(atMs - syncTimeMs) <= SYNC_RESYNC_MS) return;
@@ -609,21 +652,22 @@ export function BeatmapPreviewEmbed({
                 className="min-w-[4rem] flex-1 accent-[var(--accent)]"
               />
             </label>
-          ) : (
-            <label className="ml-auto flex min-w-[8rem] items-center gap-2 text-[11px] text-on-media-muted">
-              <span className="shrink-0">{dict?.nowSelected.vol ?? "Vol"}</span>
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.01}
-                value={volume}
-                onInput={(e) => setVolume(Number(e.currentTarget.value))}
-                className="min-w-[4rem] flex-1 accent-[var(--accent)]"
-                disabled={muted}
-              />
-            </label>
-          )}
+          ) : null}
+          <label
+            className={`${isMania ? "" : "ml-auto"} flex min-w-[8rem] items-center gap-2 text-[11px] text-on-media-muted`}
+          >
+            <span className="shrink-0">{dict?.nowSelected.vol ?? "Vol"}</span>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={volume}
+              onInput={onVolume}
+              className="min-w-[4rem] flex-1 accent-[var(--accent)]"
+              disabled={muted}
+            />
+          </label>
           {onHeightRemChange ? (
             <label className="flex min-w-[8rem] items-center gap-2 text-[11px] text-on-media-muted">
               <span className="shrink-0">

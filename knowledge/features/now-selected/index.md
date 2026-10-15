@@ -29,15 +29,16 @@ While song-selecting or playing, open **Now selected** (optionally `#/now-select
 
 1. **tosu live** is the selection source — not scores. Realm extraction remains authoritative for plays.
 2. The Current session **Now selected** panel stays as a compact hub; this page is the rich companion.
-3. Preview auto-starts when the map is matched in the local mirror and in-game play is not active (configurable). Pause while `play.active` avoids doubling game audio.
-4. Preview position syncs with tosu `beatmap.time.live`: while tosu samples are fresh (≤1.5s old), `BeatmapPreviewEmbed` drives its playfield clock from the live time (interpolated at the tosu rate); small transport-latency offsets are ignored — the clock keeps gliding — and clock + audio hard-resync only when drift exceeds ~2s; otherwise it falls back to independent playback from the preview point.
-5. Pattern weights / density / hotspots use the same `ManiaPatternDetail` path as the practice profile (unrated chart).
-6. Maps not in the local mirror still show identity + ephemeral mania analysis from tosu `.osu` text; preview is skipped.
-7. Widget visibility and order are page-local (`localStorage` key `roxysu:now-selected-layout`), not the Settings HTTP store.
-8. Focus layout (`?focus=1`) hides AppShell chrome (sidebar, mobile nav) for a second monitor. While no map is selected, connection status and Start tosu share one panel. Live play shows combo, accuracy, misses, and PP as separate figures.
-9. Personal play count / best accuracy / best PP use `GET /api/beatmaps/:id/stats`, not the full practice-profile payload.
-10. Live play ticks patch the tosu live query cache (`tosu.updated` `reason: play`). HTTP poll of `GET /api/tosu/live` runs only when SSE is down.
-11. The rating widget follows Settings difficulty display (`roxysu:rating-display`): `rework` shows ephemeral `analysis.rework` (Rework dan + ★); other modes keep Sunny/Daniel from `analysis.sunny`. Same rule on the Current session **Now selected** panel.
+3. Preview auto-starts when the map is matched in the local mirror and in-game play is not active (configurable). Pause — the user Pause control, or pause while `play.active` — freezes the playfield clock and the audio so game audio is not doubled. While that hold is set, tosu time must not move or seek the preview. Playback resumes from the frozen time. The hold clears only once local time and tosu time are already within ~2s; a new map starts the hold clear.
+4. While the preview is playing and not held, position syncs with tosu `beatmap.time.live`: while tosu samples are fresh (≤1.5s old), `BeatmapPreviewEmbed` drives its playfield clock from the live time (interpolated at the tosu rate); small transport-latency offsets are ignored — the clock keeps gliding — and clock + audio hard-resync only when drift exceeds ~2s; otherwise it falls back to independent playback from the preview point.
+5. The embed volume slider writes `volume` on the shared preview prefs store (`rx-beatmap-preview`). Changing maps remounts the embed and reloads that value, so a volume the user set stays. The slider is shown for every ruleset.
+6. Pattern weights / density / hotspots use the same `ManiaPatternDetail` path as the practice profile (unrated chart).
+7. Maps not in the local mirror still show identity + ephemeral mania analysis from tosu `.osu` text; preview is skipped.
+8. Widget visibility and order are page-local (`localStorage` key `roxysu:now-selected-layout`), not the Settings HTTP store.
+9. Focus layout (`?focus=1`) hides AppShell chrome (sidebar, mobile nav) for a second monitor. While no map is selected, connection status and Start tosu share one panel. Live play shows combo, accuracy, misses, and PP as separate figures.
+10. Personal play count / best accuracy / best PP use `GET /api/beatmaps/:id/stats`, not the full practice-profile payload.
+11. Live play ticks patch the tosu live query cache (`tosu.updated` `reason: play`). HTTP poll of `GET /api/tosu/live` runs only when SSE is down.
+12. The rating widget follows Settings difficulty display (`roxysu:rating-display`): `rework` shows ephemeral `analysis.rework` (Rework dan + ★); other modes keep Sunny/Daniel from `analysis.sunny`. Same rule on the Current session **Now selected** panel.
 
 ## Security rules
 

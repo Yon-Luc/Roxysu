@@ -1,10 +1,9 @@
 export type TosuProbeResult = {
   httpUp: boolean;
-  maniaMapAnalyserInstalled: boolean;
   warnings: string[];
 };
 
-/** Probe tosu HTTP dashboard and optional ManiaMapAnalyser static overlay. */
+/** Probe tosu HTTP dashboard reachability. */
 export async function probeTosuHttp(
   host: string,
   timeoutMs = 2_000,
@@ -24,24 +23,8 @@ export async function probeTosuHttp(
 
   if (!httpUp) {
     warnings.push(`Tosu is not reachable at ${host}.`);
-    return { httpUp: false, maniaMapAnalyserInstalled: false, warnings };
+    return { httpUp: false, warnings };
   }
 
-  let maniaMapAnalyserInstalled = false;
-  try {
-    const res = await fetch(`${base}/ManiaMapAnalyser/`, {
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    maniaMapAnalyserInstalled = res.ok;
-  } catch {
-    maniaMapAnalyserInstalled = false;
-  }
-
-  if (!maniaMapAnalyserInstalled) {
-    warnings.push(
-      "ManiaMapAnalyser overlay not found under tosu static (http://…/ManiaMapAnalyser/). Install it for the in-game overlay; Roxysu still analyzes maps itself.",
-    );
-  }
-
-  return { httpUp, maniaMapAnalyserInstalled, warnings };
+  return { httpUp, warnings };
 }

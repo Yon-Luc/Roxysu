@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08
+last_verified: 2026-10
 confidence: verified
 touches:
   - `apps/server/src/overlay/profiles.ts`
@@ -42,8 +42,9 @@ evaluated against **tosu live**. The editor stays dark so the canvas matches the
    hide/show/fade). `fade` keeps layout space at 0.25 opacity; no nesting.
    Triggers never gate data fetching — only rendering.
 5. The preview embed pauses while `play.active` (same rule as Now selected)
-   so in-game audio is not doubled. Preview/density elements are opt-in per
-   element instance.
+   so in-game audio is not doubled. That pause freezes the playfield clock and
+   does not resync to tosu time; playback continues from the frozen time when
+   play ends. Preview/density elements are opt-in per element instance.
 6. The editor page (`/overlay-editor`) lives under the root route — it renders
    **without AppShell chrome**. The canvas shows the profile at its real pixel
    size (1:1); a Fit view toggle scales it to the viewport instead.

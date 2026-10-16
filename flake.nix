@@ -8,7 +8,7 @@
     # Versioned URL (not releases/latest) so Nix's tarball cache cannot keep an
     # older payload. publish.sh rewrites this after CI uploads the tarball.
     linux-resources = {
-      url = "https://github.com/Yon-Luc/Roxysu/releases/download/v0.1.18/Roxysu-0.1.18-linux-x64-resources.tar.gz";
+      url = "https://github.com/Yon-Luc/Roxysu/releases/download/v0.1.19/Roxysu-0.1.19-linux-x64-resources.tar.gz";
       flake = false;
     };
   };

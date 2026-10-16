@@ -88,20 +88,14 @@ describe("streamMappedUpsert", () => {
   test("rows failing to map are skipped and not attempted", () => {
     function* mixed() {
       yield fakeSet(1);
-      yield { ...fakeSet(2), ID: null }; // mapBeatmapSet throws → treat via wrapper
+      yield { ...fakeSet(2), ID: null };
       yield fakeSet(3);
     }
     const result = streamMappedUpsert(
       db,
       beatmapSets,
       mixed(),
-      (obj) => {
-        try {
-          return mapBeatmapSet(obj as never) as Record<string, unknown> | null;
-        } catch {
-          return null; // mirrors how the sync paths skip unmappable objects
-        }
-      },
+      (obj) => mapBeatmapSet(obj as never) as Record<string, unknown> | null,
       ["id"],
     );
 
@@ -112,6 +106,35 @@ describe("streamMappedUpsert", () => {
       .all()
       .map((r) => r.id);
     expect(kept.length).toBe(2);
+  });
+
+  test("onUpserted skips rows that failed a NOT NULL constraint", () => {
+    const seen: string[] = [];
+    const rows = [0, 1, 2].map((i) => ({
+      id: `${i.toString().padStart(8, "0")}-0000-0000-0000-0000000000aa`,
+      onlineId: i,
+      setId: "00000000-0000-0000-0000-000000000002",
+      status: 0,
+      length: 1,
+      bpm: 120,
+      starRating: i === 1 ? null : 4.5,
+    }));
+
+    const result = streamMappedUpsert(
+      db,
+      beatmaps,
+      rows,
+      (obj) => obj as Record<string, unknown>,
+      ["id"],
+      (row) => seen.push(row.id as string),
+    );
+
+    expect(result.skipped).toBe(1);
+    expect(seen.sort()).toEqual(
+      [0, 2].map(
+        (i) => `${i.toString().padStart(8, "0")}-0000-0000-0000-0000000000aa`,
+      ),
+    );
   });
 
   test("changed counter reflects modified rows on re-upsert", () => {

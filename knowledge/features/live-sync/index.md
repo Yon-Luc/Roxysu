@@ -11,6 +11,8 @@ touches:
   - packages/db/src/settings-keys.ts
   - apps/realm-reader/src/schemaMismatch.ts
   - apps/realm-reader/src/map.ts
+  - apps/realm-reader/src/map.test.ts
+  - apps/realm-reader/src/stream.test.ts
   - apps/server/src/sse.ts
   - apps/server/src/routes/system.ts
   - apps/server/public/components/SchemaOutdatedDialog.tsx
@@ -40,6 +42,8 @@ Continuously extract Realm beatmaps and scores into the local mirror; surface Sy
 11. When the Realm file schema is newer than the bundled osu schema, extraction writes `sync.schema_outdated` and waits until shutdown (no retry, no exit). The client app shows a non-dismissible notice that a matching Roxysu version is coming, with a link to GitHub. A successful Realm open clears the setting immediately.
 12. Non-finite Realm numbers on required columns are stored as the column fallback (0, or -1 for a ruleset online id). A beatmap whose `StarRating` is NaN must not fail the extraction cycle. Optional numerics that are non-finite are stored as null.
 13. A constraint error on one raw-import row does not fail the cycle. The batch is split until that row is alone, the row is skipped and logged, and the rest commit. The row stays missing, so reconcile catch-up retries it; a later valid Realm value imports on its own. A row that stays invalid is covered by the catch-up stall breaker.
+14. Null or missing Realm primary IDs soft-skip the row (`mapBeatmapSet` / `mapBeatmap` / `mapScore` return null) — they must not throw and abort the cycle.
+15. Invalid Realm dates are rejected: required timestamps (`dateAdded`, `playedAt`) fall back to epoch; optional dates become null. Watermarks advance only from rows that successfully upserted; non-finite timestamp ms are ignored.
 
 ## Important symbols
 
@@ -50,7 +54,8 @@ Continuously extract Realm beatmaps and scores into the local mirror; surface Sy
 - `packages/db/src/failStaleRunningImports.ts`
 - `packages/db/src/settings-keys.ts` — `SYNC_CATCHUP_STALLED_KEY`, `SYNC_SCHEMA_OUTDATED_KEY`
 - `apps/realm-reader/src/schemaMismatch.ts` — `toSchemaVersionMismatchError()`
-- `apps/realm-reader/src/map.ts` — `mapBeatmap()` coerces non-finite `StarRating`
+- `apps/realm-reader/src/map.ts` — `mapBeatmap()` / `mapBeatmapSet()` / `mapScore()` soft-skip null IDs; coerce non-finite numbers and invalid dates
+- `apps/realm-reader/src/upsert.ts` — `streamMappedUpsert` `onUpserted` runs only after a successful commit
 - `apps/server/public/components/SchemaOutdatedDialog.tsx`
 - `apps/server/src/sse.ts` — poll `imports` + `MAX(played_at)` (no `COUNT(*)`); SSE `: ping` heartbeat ~20s
 

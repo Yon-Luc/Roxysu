@@ -14,20 +14,19 @@ export type ScoreRow = typeof scores.$inferInsert;
 // Realm JS returns dynamic objects; keep access untyped at the boundary.
 type RealmObj = Record<string, any>;
 
-function uuidString(value: unknown): string {
-  if (value == null) throw new Error("expected uuid");
-  return String(value);
-}
-
 function optionalUuid(value: unknown): string | null {
   if (value == null) return null;
   return String(value);
 }
 
+/**
+ * Invalid Date is truthy, so nullish checks alone are not enough.
+ * better-sqlite3 binds NaN getTime() as NULL → NOT NULL constraint failures.
+ */
 function toDate(value: unknown): Date | null {
   if (value == null) return null;
-  if (value instanceof Date) return value;
-  return new Date(value as string | number);
+  const d = value instanceof Date ? value : new Date(value as string | number);
+  return Number.isFinite(d.getTime()) ? d : null;
 }
 
 function requireDate(value: unknown, fallback = new Date(0)): Date {
@@ -62,8 +61,10 @@ export function mapRuleset(obj: RealmObj): RulesetRow | null {
 }
 
 export function mapBeatmapSet(obj: RealmObj): BeatmapSetRow | null {
+  const id = optionalUuid(obj.ID);
+  if (!id) return null;
   return {
-    id: uuidString(obj.ID),
+    id,
     onlineId: finiteNumber(obj.OnlineID, 0),
     dateAdded: requireDate(obj.DateAdded),
     dateSubmitted: toDate(obj.DateSubmitted),
@@ -129,7 +130,9 @@ function resolveScoreReplayHash(obj: RealmObj): string | null {
 
 export function mapBeatmap(obj: RealmObj): BeatmapRow | null {
   const set = obj.BeatmapSet as RealmObj | null | undefined;
-  if (!set?.ID) return null;
+  const id = optionalUuid(obj.ID);
+  const setId = optionalUuid(set?.ID);
+  if (!id || !set || !setId) return null;
 
   const difficulty = obj.Difficulty as RealmObj | null | undefined;
   const metadata = obj.Metadata as RealmObj | null | undefined;
@@ -140,9 +143,9 @@ export function mapBeatmap(obj: RealmObj): BeatmapRow | null {
   const audioFile = (metadata?.AudioFile as string | null) ?? null;
 
   return {
-    id: uuidString(obj.ID),
+    id,
     onlineId: finiteNumber(obj.OnlineID, 0),
-    setId: uuidString(set.ID),
+    setId,
     difficultyName: (obj.DifficultyName as string | null) ?? null,
     rulesetShortName: (ruleset?.ShortName as string | null) ?? null,
     status: finiteNumber(obj.Status, 0),
@@ -184,12 +187,15 @@ export function mapBeatmap(obj: RealmObj): BeatmapRow | null {
 }
 
 export function mapScore(obj: RealmObj): ScoreRow | null {
+  const id = optionalUuid(obj.ID);
+  if (!id) return null;
+
   const beatmap = obj.BeatmapInfo as RealmObj | null | undefined;
   const ruleset = obj.Ruleset as RealmObj | null | undefined;
   const user = obj.User as RealmObj | null | undefined;
 
   return {
-    id: uuidString(obj.ID),
+    id,
     onlineId: finiteNumber(obj.OnlineID, 0),
     legacyOnlineId: finiteNumber(obj.LegacyOnlineID, 0),
     beatmapId: optionalUuid(beatmap?.ID),

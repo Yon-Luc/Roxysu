@@ -42,6 +42,7 @@ import {
   streamMappedUpsert,
   upsertBatches,
   withBusyRetry,
+  type UpsertResult,
 } from "./upsert";
 import {
   SYNC_CATCHUP_STALLED_KEY,
@@ -240,8 +241,21 @@ export function hasSuccessfulImport(db: Db): boolean {
 
 function playedAtMs(value: Date | number | null | undefined): number | null {
   if (value == null) return null;
-  if (value instanceof Date) return value.getTime();
-  return value;
+  if (value instanceof Date) {
+    const ms = value.getTime();
+    return Number.isFinite(ms) ? ms : null;
+  }
+  return Number.isFinite(value) ? value : null;
+}
+
+/** Rows that survived constraint bisect (skippedKeys are `id=…` from upsert). */
+function withoutSkipped<T extends { id: string }>(
+  rows: readonly T[],
+  skippedKeys: readonly string[],
+): T[] {
+  if (skippedKeys.length === 0) return [...rows];
+  const skipped = new Set(skippedKeys);
+  return rows.filter((row) => !skipped.has(`id=${row.id}`));
 }
 
 type ExtractionWatermarks = {
@@ -763,9 +777,12 @@ export function runFullSync(db: Db, realmPath: string): SyncResult {
       db,
       beatmapSets,
       realm.objects("BeatmapSet"),
-      (obj) => mapBeatmapSet(obj as never) as Record<string, unknown> | null,
+      (obj) => {
+        const row = mapBeatmapSet(obj as never);
+        if (row) realmSetIds.add(row.id);
+        return row as Record<string, unknown> | null;
+      },
       ["id"],
-      (row) => realmSetIds.add(row.id as string),
     );
 
     const realmBeatmapIds = new Set<string>();
@@ -774,10 +791,13 @@ export function runFullSync(db: Db, realmPath: string): SyncResult {
       db,
       beatmaps,
       realm.objects("Beatmap"),
-      (obj) => mapBeatmap(obj as never) as Record<string, unknown> | null,
+      (obj) => {
+        const row = mapBeatmap(obj as never);
+        if (row) realmBeatmapIds.add(row.id);
+        return row as Record<string, unknown> | null;
+      },
       ["id"],
       (row) => {
-        realmBeatmapIds.add(row.id as string);
         maxLastLocalUpdate = laterDate(
           maxLastLocalUpdate,
           row.lastLocalUpdate as Date | number | null,
@@ -794,6 +814,7 @@ export function runFullSync(db: Db, realmPath: string): SyncResult {
       (obj) => {
         const row = mapScore(obj as never);
         if (!row) return null;
+        realmScoreIds.add(row.id);
         if (row.beatmapId && !realmBeatmapIds.has(row.beatmapId)) {
           row.beatmapId = null;
         }
@@ -801,7 +822,6 @@ export function runFullSync(db: Db, realmPath: string): SyncResult {
       },
       ["id"],
       (row) => {
-        realmScoreIds.add(row.id as string);
         maxPlayedAt = laterDate(
           maxPlayedAt,
           row.playedAt as Date | number | null,
@@ -1034,13 +1054,16 @@ export function runReconcileSync(db: Db, realmPath: string): SyncResult {
         (obj) => mapScore(obj as never) as Record<string, unknown> | null,
         ["id"],
       ).changed;
-      db.insert(settings)
-        .values({ key: REPLAY_HASH_BACKFILL_KEY, value: "1" })
-        .onConflictDoUpdate({
-          target: settings.key,
-          set: { value: "1" },
-        })
-        .run();
+      withBusyRetry(() =>
+        db
+          .insert(settings)
+          .values({ key: REPLAY_HASH_BACKFILL_KEY, value: "1" })
+          .onConflictDoUpdate({
+            target: settings.key,
+            set: { value: "1" },
+          })
+          .run(),
+      );
       replayBackfillRan = true;
     }
 
@@ -1244,10 +1267,16 @@ export function runIncrementalSync(db: Db, realmPath: string): SyncResult {
       }
     }
 
-    let rulesetsUpserted = { attempted: 0, changed: 0 };
-    let beatmapSetsUpserted = { attempted: 0, changed: 0 };
-    let beatmapsUpserted = { attempted: 0, changed: 0 };
-    let scoresUpserted = { attempted: 0, changed: 0 };
+    const emptyUpsert = (): UpsertResult => ({
+      attempted: 0,
+      changed: 0,
+      skipped: 0,
+      skippedKeys: [],
+    });
+    let rulesetsUpserted = emptyUpsert();
+    let beatmapSetsUpserted = emptyUpsert();
+    let beatmapsUpserted = emptyUpsert();
+    let scoresUpserted = emptyUpsert();
     let rowsChanged = 0;
 
     withTransaction(db, (tx) => {
@@ -1301,7 +1330,11 @@ export function runIncrementalSync(db: Db, realmPath: string): SyncResult {
           changedScoreIds,
           changedBeatmapIds,
         },
-        advanceWatermarks(watermarks, scoreRows, beatmapRows),
+        advanceWatermarks(
+          watermarks,
+          withoutSkipped(scoreRows, scoresUpserted.skippedKeys),
+          withoutSkipped(beatmapRows, beatmapsUpserted.skippedKeys),
+        ),
       );
     });
 

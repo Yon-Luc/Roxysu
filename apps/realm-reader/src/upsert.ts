@@ -15,6 +15,8 @@ export type UpsertResult = {
   changed: number;
   /** Rows dropped after a constraint error so the rest of the batch can commit. */
   skipped: number;
+  /** Primary-key keys (`id=…`) for rows skipped by constraint bisect. */
+  skippedKeys: string[];
 };
 
 function sqliteErrorCode(err: unknown): string {
@@ -139,7 +141,7 @@ function upsertChunk(
   target: unknown,
   set: unknown,
   setWhere: ReturnType<typeof conflictSetWhere>,
-): { changed: number; skipped: number } {
+): { changed: number; skipped: number; skippedKeys: string[] } {
   try {
     const result = withBusyRetry(() =>
       db
@@ -152,7 +154,7 @@ function upsertChunk(
         })
         .run(),
     );
-    return { changed: result.changes, skipped: 0 };
+    return { changed: result.changes, skipped: 0, skippedKeys: [] };
   } catch (err) {
     if (!isSqliteConstraint(err)) throw err;
     if (rows.length <= 1) {
@@ -162,7 +164,11 @@ function upsertChunk(
       console.warn(
         `skip ${sqliteTableName(table)} ${key}: ${sqliteErrorMessage(err)}`,
       );
-      return { changed: 0, skipped: rows.length };
+      return {
+        changed: 0,
+        skipped: rows.length,
+        skippedKeys: rows[0] ? [key] : [],
+      };
     }
     const mid = Math.floor(rows.length / 2);
     const left = upsertChunk(
@@ -186,6 +192,7 @@ function upsertChunk(
     return {
       changed: left.changed + right.changed,
       skipped: left.skipped + right.skipped,
+      skippedKeys: [...left.skippedKeys, ...right.skippedKeys],
     };
   }
 }
@@ -196,7 +203,9 @@ export function upsertBatches(
   rows: Record<string, unknown>[],
   primaryKeyNames: string[],
 ): UpsertResult {
-  if (rows.length === 0) return { attempted: 0, changed: 0, skipped: 0 };
+  if (rows.length === 0) {
+    return { attempted: 0, changed: 0, skipped: 0, skippedKeys: [] };
+  }
   const columns = getTableColumns(table) as Record<string, { name: string }>;
   const targetCols = primaryKeyNames.map((k) => {
     const col = columns[k];
@@ -209,6 +218,7 @@ export function upsertBatches(
 
   let changed = 0;
   let skipped = 0;
+  const skippedKeys: string[] = [];
   for (const batch of chunk(rows, BATCH_SIZE)) {
     const result = upsertChunk(
       db,
@@ -221,14 +231,18 @@ export function upsertBatches(
     );
     changed += result.changed;
     skipped += result.skipped;
+    skippedKeys.push(...result.skippedKeys);
   }
-  return { attempted: rows.length, changed, skipped };
+  return { attempted: rows.length, changed, skipped, skippedKeys };
 }
 
 /**
  * Map source objects one at a time and upsert in bounded batches, so peak
  * heap stays flat regardless of library size (never materializes all rows).
  * Lives apart from sync.ts so it can be tested without the Realm native addon.
+ *
+ * `onUpserted` runs only for rows that committed (not constraint-skipped), so
+ * watermarks must not advance from rows that never landed in the local mirror.
  */
 export function streamMappedUpsert(
   db: Db,
@@ -236,30 +250,40 @@ export function streamMappedUpsert(
   objects: Iterable<unknown>,
   mapRow: (obj: unknown) => Record<string, unknown> | null,
   primaryKeyNames: string[],
-  onRow?: (row: Record<string, unknown>) => void,
+  onUpserted?: (row: Record<string, unknown>) => void,
 ): UpsertResult {
   let buffer: Record<string, unknown>[] = [];
   let attempted = 0;
   let changed = 0;
   let skipped = 0;
+  const skippedKeys: string[] = [];
 
   const flush = () => {
     if (buffer.length === 0) return;
-    const result = upsertBatches(db, table, buffer, primaryKeyNames);
+    const batch = buffer;
+    buffer = [];
+    const result = upsertBatches(db, table, batch, primaryKeyNames);
     attempted += result.attempted;
     changed += result.changed;
     skipped += result.skipped;
-    buffer = [];
+    skippedKeys.push(...result.skippedKeys);
+    if (onUpserted) {
+      const skippedSet = new Set(result.skippedKeys);
+      for (const row of batch) {
+        if (!skippedSet.has(rowPrimaryKey(row, primaryKeyNames))) {
+          onUpserted(row);
+        }
+      }
+    }
   };
 
   for (const obj of objects) {
     const row = mapRow(obj);
     if (!row) continue;
-    onRow?.(row);
     buffer.push(row);
     if (buffer.length >= BATCH_SIZE) flush();
   }
   flush();
 
-  return { attempted, changed, skipped };
+  return { attempted, changed, skipped, skippedKeys };
 }

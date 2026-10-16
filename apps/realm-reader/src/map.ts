@@ -34,12 +34,28 @@ function requireDate(value: unknown, fallback = new Date(0)): Date {
   return toDate(value) ?? fallback;
 }
 
+/**
+ * Realm doubles can be NaN (a difficulty that never calculated). better-sqlite3
+ * binds NaN and Infinity as NULL, which fails NOT NULL columns and aborts the
+ * whole extraction cycle.
+ */
+function finiteNumber(value: unknown, fallback: number): number {
+  const n = Number(value ?? fallback);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function optionalFinite(value: unknown): number | null {
+  if (value == null) return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 export function mapRuleset(obj: RealmObj): RulesetRow | null {
   const shortName = obj.ShortName as string | null | undefined;
   if (!shortName) return null;
   return {
     shortName,
-    onlineId: Number(obj.OnlineID ?? -1),
+    onlineId: finiteNumber(obj.OnlineID, -1),
     name: (obj.Name as string | null) ?? null,
     available: Boolean(obj.Available),
   };
@@ -48,11 +64,11 @@ export function mapRuleset(obj: RealmObj): RulesetRow | null {
 export function mapBeatmapSet(obj: RealmObj): BeatmapSetRow | null {
   return {
     id: uuidString(obj.ID),
-    onlineId: Number(obj.OnlineID ?? 0),
+    onlineId: finiteNumber(obj.OnlineID, 0),
     dateAdded: requireDate(obj.DateAdded),
     dateSubmitted: toDate(obj.DateSubmitted),
     dateRanked: toDate(obj.DateRanked),
-    status: Number(obj.Status ?? 0),
+    status: finiteNumber(obj.Status, 0),
     deletePending: Boolean(obj.DeletePending),
     hash: (obj.Hash as string | null) ?? null,
     protected: Boolean(obj.Protected),
@@ -125,30 +141,27 @@ export function mapBeatmap(obj: RealmObj): BeatmapRow | null {
 
   return {
     id: uuidString(obj.ID),
-    onlineId: Number(obj.OnlineID ?? 0),
+    onlineId: finiteNumber(obj.OnlineID, 0),
     setId: uuidString(set.ID),
     difficultyName: (obj.DifficultyName as string | null) ?? null,
     rulesetShortName: (ruleset?.ShortName as string | null) ?? null,
-    status: Number(obj.Status ?? 0),
-    length: Number(obj.Length ?? 0),
-    bpm: Number(obj.BPM ?? 0),
-    starRating: Number(obj.StarRating ?? 0),
+    status: finiteNumber(obj.Status, 0),
+    length: finiteNumber(obj.Length, 0),
+    bpm: finiteNumber(obj.BPM, 0),
+    starRating: finiteNumber(obj.StarRating, 0),
     md5Hash: (obj.MD5Hash as string | null) ?? null,
     hash: (obj.Hash as string | null) ?? null,
     hidden: Boolean(obj.Hidden),
-    totalObjectCount: Number(obj.TotalObjectCount ?? 0),
-    endTimeObjectCount: Number(obj.EndTimeObjectCount ?? 0),
+    totalObjectCount: finiteNumber(obj.TotalObjectCount, 0),
+    endTimeObjectCount: finiteNumber(obj.EndTimeObjectCount, 0),
     lastPlayed: toDate(obj.LastPlayed),
 
-    drainRate: difficulty != null ? Number(difficulty.DrainRate) : null,
-    circleSize: difficulty != null ? Number(difficulty.CircleSize) : null,
-    overallDifficulty:
-      difficulty != null ? Number(difficulty.OverallDifficulty) : null,
-    approachRate: difficulty != null ? Number(difficulty.ApproachRate) : null,
-    sliderMultiplier:
-      difficulty != null ? Number(difficulty.SliderMultiplier) : null,
-    sliderTickRate:
-      difficulty != null ? Number(difficulty.SliderTickRate) : null,
+    drainRate: optionalFinite(difficulty?.DrainRate),
+    circleSize: optionalFinite(difficulty?.CircleSize),
+    overallDifficulty: optionalFinite(difficulty?.OverallDifficulty),
+    approachRate: optionalFinite(difficulty?.ApproachRate),
+    sliderMultiplier: optionalFinite(difficulty?.SliderMultiplier),
+    sliderTickRate: optionalFinite(difficulty?.SliderTickRate),
 
     title: (metadata?.Title as string | null) ?? null,
     titleUnicode: (metadata?.TitleUnicode as string | null) ?? null,
@@ -156,16 +169,15 @@ export function mapBeatmap(obj: RealmObj): BeatmapRow | null {
     artistUnicode: (metadata?.ArtistUnicode as string | null) ?? null,
     source: (metadata?.Source as string | null) ?? null,
     tags: (metadata?.Tags as string | null) ?? null,
-    previewTime:
-      metadata?.PreviewTime != null ? Number(metadata.PreviewTime) : null,
+    previewTime: optionalFinite(metadata?.PreviewTime),
     audioFile,
     audioFileHash: resolveNamedFileHash(set, audioFile),
     backgroundFile,
     backgroundFileHash: resolveNamedFileHash(set, backgroundFile),
-    mapperOnlineId: author != null ? Number(author.OnlineID ?? 0) : null,
+    mapperOnlineId: author != null ? finiteNumber(author.OnlineID, 0) : null,
     mapperUsername: (author?.Username as string | null) ?? null,
 
-    offset: userSettings != null ? Number(userSettings.Offset ?? 0) : null,
+    offset: userSettings != null ? finiteNumber(userSettings.Offset, 0) : null,
     lastLocalUpdate: toDate(obj.LastLocalUpdate),
     lastOnlineUpdate: toDate(obj.LastOnlineUpdate),
   };
@@ -178,26 +190,25 @@ export function mapScore(obj: RealmObj): ScoreRow | null {
 
   return {
     id: uuidString(obj.ID),
-    onlineId: Number(obj.OnlineID ?? 0),
-    legacyOnlineId: Number(obj.LegacyOnlineID ?? 0),
+    onlineId: finiteNumber(obj.OnlineID, 0),
+    legacyOnlineId: finiteNumber(obj.LegacyOnlineID, 0),
     beatmapId: optionalUuid(beatmap?.ID),
     beatmapHash: (obj.BeatmapHash as string | null) ?? null,
     rulesetShortName: (ruleset?.ShortName as string | null) ?? null,
     clientVersion: (obj.ClientVersion as string | null) ?? null,
-    totalScore: Number(obj.TotalScore ?? 0),
-    totalScoreWithoutMods: Number(obj.TotalScoreWithoutMods ?? 0),
-    legacyTotalScore:
-      obj.LegacyTotalScore != null ? Number(obj.LegacyTotalScore) : null,
-    maxCombo: Number(obj.MaxCombo ?? 0),
-    combo: Number(obj.Combo ?? 0),
-    accuracy: Number(obj.Accuracy ?? 0),
-    pp: obj.PP != null ? Number(obj.PP) : null,
-    rank: Number(obj.Rank ?? 0),
+    totalScore: finiteNumber(obj.TotalScore, 0),
+    totalScoreWithoutMods: finiteNumber(obj.TotalScoreWithoutMods, 0),
+    legacyTotalScore: optionalFinite(obj.LegacyTotalScore),
+    maxCombo: finiteNumber(obj.MaxCombo, 0),
+    combo: finiteNumber(obj.Combo, 0),
+    accuracy: finiteNumber(obj.Accuracy, 0),
+    pp: optionalFinite(obj.PP),
+    rank: finiteNumber(obj.Rank, 0),
     mods: (obj.Mods as string | null) ?? null,
     statistics: (obj.Statistics as string | null) ?? null,
     maximumStatistics: (obj.MaximumStatistics as string | null) ?? null,
     playedAt: requireDate(obj.Date),
-    userOnlineId: user != null ? Number(user.OnlineID ?? 0) : null,
+    userOnlineId: user != null ? finiteNumber(user.OnlineID, 0) : null,
     userUsername: (user?.Username as string | null) ?? null,
     isLegacyScore: Boolean(obj.IsLegacyScore),
     deletePending: Boolean(obj.DeletePending),

@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-09
+last_verified: 2026-10
 confidence: verified
 touches:
   - apps/realm-reader/src/index.ts
@@ -10,6 +10,7 @@ touches:
   - packages/db/src/failStaleRunningImports.ts
   - packages/db/src/settings-keys.ts
   - apps/realm-reader/src/schemaMismatch.ts
+  - apps/realm-reader/src/map.ts
   - apps/server/src/sse.ts
   - apps/server/src/routes/system.ts
   - apps/server/public/components/SchemaOutdatedDialog.tsx
@@ -37,16 +38,19 @@ Continuously extract Realm beatmaps and scores into the local mirror; surface Sy
 9. Reconcile catch-up stops after 3 fruitless rounds against an unshrinkable row-count gap (`sync.catchup_stalled`), and resets when an incremental imports rows again.
 10. Failed cycles back off exponentially (`REALM_RETRY_MS` base, `REALM_RETRY_MAX_MS` cap) instead of retrying flat every 10 s.
 11. When the Realm file schema is newer than the bundled osu schema, extraction writes `sync.schema_outdated` and waits until shutdown (no retry, no exit). The client app shows a non-dismissible notice that a matching Roxysu version is coming, with a link to GitHub. A successful Realm open clears the setting immediately.
+12. Non-finite Realm numbers on required columns are stored as the column fallback (0, or -1 for a ruleset online id). A beatmap whose `StarRating` is NaN must not fail the extraction cycle. Optional numerics that are non-finite are stored as null.
+13. A constraint error on one raw-import row does not fail the cycle. The batch is split until that row is alone, the row is skipped and logged, and the rest commit. The row stays missing, so reconcile catch-up retries it; a later valid Realm value imports on its own. A row that stays invalid is covered by the catch-up stall breaker.
 
 ## Important symbols
 
 - `apps/realm-reader/src/index.ts`
 - `apps/realm-reader/src/sync.ts`
-- `apps/realm-reader/src/upsert.ts` — batch upserts + `streamMappedUpsert`
+- `apps/realm-reader/src/upsert.ts` — batch upserts, constraint bisect, `streamMappedUpsert`
 - `apps/realm-reader/src/syncRealmCollections.ts`
 - `packages/db/src/failStaleRunningImports.ts`
 - `packages/db/src/settings-keys.ts` — `SYNC_CATCHUP_STALLED_KEY`, `SYNC_SCHEMA_OUTDATED_KEY`
 - `apps/realm-reader/src/schemaMismatch.ts` — `toSchemaVersionMismatchError()`
+- `apps/realm-reader/src/map.ts` — `mapBeatmap()` coerces non-finite `StarRating`
 - `apps/server/public/components/SchemaOutdatedDialog.tsx`
 - `apps/server/src/sse.ts` — poll `imports` + `MAX(played_at)` (no `COUNT(*)`); SSE `: ping` heartbeat ~20s
 

@@ -6,13 +6,14 @@ import path from "node:path";
 // client; the SQLite dialect (and thus the SQL under test) is identical.
 import {
   beatmapSets,
+  beatmaps,
   closeDb,
   count,
   eq,
   ensureDb,
   type Db,
 } from "@roxysu/db/client.bun";
-import { streamMappedUpsert } from "./upsert";
+import { streamMappedUpsert, upsertBatches } from "./upsert";
 import { mapBeatmapSet } from "./map";
 
 /** Fake Realm object shaped like a lazer BeatmapSet row. */
@@ -141,5 +142,33 @@ describe("streamMappedUpsert", () => {
       .where(eq(beatmapSets.id, fakeSet(0).ID))
       .get();
     expect(updated?.onlineId).toBe(100);
+  });
+
+  test("a NOT NULL violation skips that row and inserts the rest", () => {
+    const rows = [0, 1, 2, 3, 4].map((i) => ({
+      id: `${i.toString().padStart(8, "0")}-0000-0000-0000-000000000001`,
+      onlineId: i,
+      setId: "00000000-0000-0000-0000-000000000002",
+      status: 0,
+      length: 1,
+      bpm: 120,
+      starRating: i === 2 ? null : 4.5,
+    }));
+
+    const result = upsertBatches(db, beatmaps, rows, ["id"]);
+
+    expect(result.attempted).toBe(5);
+    expect(result.skipped).toBe(1);
+    const kept = db
+      .select({ id: beatmaps.id })
+      .from(beatmaps)
+      .all()
+      .map((row) => row.id)
+      .sort();
+    expect(kept).toEqual(
+      [0, 1, 3, 4].map(
+        (i) => `${i.toString().padStart(8, "0")}-0000-0000-0000-000000000001`,
+      ),
+    );
   });
 });

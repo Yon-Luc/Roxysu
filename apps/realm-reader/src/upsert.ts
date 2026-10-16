@@ -13,16 +13,33 @@ export const BATCH_SIZE = 500;
 export type UpsertResult = {
   attempted: number;
   changed: number;
+  /** Rows dropped after a constraint error so the rest of the batch can commit. */
+  skipped: number;
 };
 
-function isSqliteBusy(err: unknown): boolean {
+function sqliteErrorCode(err: unknown): string {
   if (err && typeof err === "object" && "code" in err) {
-    const code = String((err as { code: unknown }).code);
-    if (code === "SQLITE_BUSY" || code === "SQLITE_LOCKED") return true;
+    return String((err as { code: unknown }).code);
   }
-  const msg = err instanceof Error ? err.message : String(err);
-  const lower = msg.toLowerCase();
+  return "";
+}
+
+function sqliteErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function isSqliteBusy(err: unknown): boolean {
+  const code = sqliteErrorCode(err);
+  if (code === "SQLITE_BUSY" || code === "SQLITE_LOCKED") return true;
+  const lower = sqliteErrorMessage(err).toLowerCase();
   return lower.includes("database is locked") || lower.includes("sqlite_busy");
+}
+
+/** NOT NULL, foreign key, and other constraints. Busy/locked is not one of these. */
+function isSqliteConstraint(err: unknown): boolean {
+  const code = sqliteErrorCode(err);
+  if (code.startsWith("SQLITE_CONSTRAINT")) return true;
+  return sqliteErrorMessage(err).toLowerCase().includes("constraint failed");
 }
 
 /** Sync sleep for busy-retry backoff (better-sqlite3 is synchronous). */
@@ -63,9 +80,7 @@ function conflictSet(
   return set;
 }
 
-export function sqliteTableName(
-  table: typeof rulesets | typeof beatmapSets | typeof beatmaps | typeof scores,
-): string {
+export function sqliteTableName(table: UpsertTable): string {
   if (table === rulesets) return "rulesets";
   if (table === beatmapSets) return "beatmap_sets";
   if (table === beatmaps) return "beatmaps";
@@ -73,10 +88,7 @@ export function sqliteTableName(
 }
 
 /** Only apply conflict updates when at least one non-PK column differs. */
-function conflictSetWhere(
-  table: typeof rulesets | typeof beatmapSets | typeof beatmaps | typeof scores,
-  primaryKeyNames: string[],
-) {
+function conflictSetWhere(table: UpsertTable, primaryKeyNames: string[]) {
   const columns = getTableColumns(table);
   const resolvedName = sqliteTableName(table);
 
@@ -101,13 +113,90 @@ export function chunk<T>(items: T[], size: number): T[][] {
   return out;
 }
 
+type UpsertTable =
+  | typeof rulesets
+  | typeof beatmapSets
+  | typeof beatmaps
+  | typeof scores;
+
+function rowPrimaryKey(
+  row: Record<string, unknown>,
+  primaryKeyNames: string[],
+): string {
+  return primaryKeyNames.map((name) => `${name}=${String(row[name])}`).join(" ");
+}
+
+/**
+ * Insert one batch. A constraint failure is bisected until the bad row is
+ * alone, then that row is skipped. The failed statement rolls back, so the
+ * halves are inserted cleanly. Busy errors still retry and are never skipped.
+ */
+function upsertChunk(
+  db: Db,
+  table: UpsertTable,
+  rows: Record<string, unknown>[],
+  primaryKeyNames: string[],
+  target: unknown,
+  set: unknown,
+  setWhere: ReturnType<typeof conflictSetWhere>,
+): { changed: number; skipped: number } {
+  try {
+    const result = withBusyRetry(() =>
+      db
+        .insert(table)
+        .values(rows as never[])
+        .onConflictDoUpdate({
+          target: target as never,
+          set: set as never,
+          ...(setWhere ? { setWhere } : {}),
+        })
+        .run(),
+    );
+    return { changed: result.changes, skipped: 0 };
+  } catch (err) {
+    if (!isSqliteConstraint(err)) throw err;
+    if (rows.length <= 1) {
+      const key = rows[0]
+        ? rowPrimaryKey(rows[0], primaryKeyNames)
+        : "(empty)";
+      console.warn(
+        `skip ${sqliteTableName(table)} ${key}: ${sqliteErrorMessage(err)}`,
+      );
+      return { changed: 0, skipped: rows.length };
+    }
+    const mid = Math.floor(rows.length / 2);
+    const left = upsertChunk(
+      db,
+      table,
+      rows.slice(0, mid),
+      primaryKeyNames,
+      target,
+      set,
+      setWhere,
+    );
+    const right = upsertChunk(
+      db,
+      table,
+      rows.slice(mid),
+      primaryKeyNames,
+      target,
+      set,
+      setWhere,
+    );
+    return {
+      changed: left.changed + right.changed,
+      skipped: left.skipped + right.skipped,
+    };
+  }
+}
+
 export function upsertBatches(
   db: Db,
-  table: typeof rulesets | typeof beatmapSets | typeof beatmaps | typeof scores,
+  table: UpsertTable,
   rows: Record<string, unknown>[],
   primaryKeyNames: string[],
 ): UpsertResult {
-  if (rows.length === 0) return { attempted: 0, changed: 0 };
+  if (rows.length === 0) return { attempted: 0, changed: 0, skipped: 0 };
   const columns = getTableColumns(table) as Record<string, { name: string }>;
   const targetCols = primaryKeyNames.map((k) => {
     const col = columns[k];
@@ -119,21 +208,21 @@ export function upsertBatches(
   const setWhere = conflictSetWhere(table, primaryKeyNames);
 
   let changed = 0;
+  let skipped = 0;
   for (const batch of chunk(rows, BATCH_SIZE)) {
-    const result = withBusyRetry(() =>
-      db
-        .insert(table)
-        .values(batch as never[])
-        .onConflictDoUpdate({
-          target: target as never,
-          set: set as never,
-          ...(setWhere ? { setWhere } : {}),
-        })
-        .run(),
+    const result = upsertChunk(
+      db,
+      table,
+      batch,
+      primaryKeyNames,
+      target,
+      set,
+      setWhere,
     );
-    changed += result.changes;
+    changed += result.changed;
+    skipped += result.skipped;
   }
-  return { attempted: rows.length, changed };
+  return { attempted: rows.length, changed, skipped };
 }
 
 /**
@@ -143,7 +232,7 @@ export function upsertBatches(
  */
 export function streamMappedUpsert(
   db: Db,
-  table: typeof rulesets | typeof beatmapSets | typeof beatmaps | typeof scores,
+  table: UpsertTable,
   objects: Iterable<unknown>,
   mapRow: (obj: unknown) => Record<string, unknown> | null,
   primaryKeyNames: string[],
@@ -152,12 +241,14 @@ export function streamMappedUpsert(
   let buffer: Record<string, unknown>[] = [];
   let attempted = 0;
   let changed = 0;
+  let skipped = 0;
 
   const flush = () => {
     if (buffer.length === 0) return;
     const result = upsertBatches(db, table, buffer, primaryKeyNames);
     attempted += result.attempted;
     changed += result.changed;
+    skipped += result.skipped;
     buffer = [];
   };
 
@@ -170,5 +261,5 @@ export function streamMappedUpsert(
   }
   flush();
 
-  return { attempted, changed };
+  return { attempted, changed, skipped };
 }

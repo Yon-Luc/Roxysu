@@ -11,6 +11,7 @@ import { AudioClock, sampleAudioClock } from "../lib/audioClock";
 import { clamp, formatClock } from "../lib/format";
 import { localBeatmapAudioUrl, localBeatmapCoverUrl, osuBeatmapCoverUrl } from "../lib/osuUrls";
 import { useStdSkin } from "../lib/stdSkin";
+import { useImportedStdSprites } from "../lib/stdSkinImport";
 import { useTaikoSkin } from "../lib/taikoSkin";
 import { useCatchSkin } from "../lib/catchSkin";
 import { usePreviewSkin } from "../lib/previewSkin";
@@ -112,6 +113,7 @@ export function BeatmapPreviewEmbed({
   const prefs = loadPrefs();
   const skin = usePreviewSkin();
   const stdSkin = useStdSkin();
+  const stdSprites = useImportedStdSprites();
   const taikoSkin = useTaikoSkin();
   const catchSkin = useCatchSkin();
   void skin;
@@ -544,6 +546,8 @@ export function BeatmapPreviewEmbed({
                   approachRate={data.approachRate ?? 5}
                   getCurrentTimeMs={mapTimeMs}
                   skin={stdSkin}
+                  beatmapComboColors={data.comboColors ?? null}
+                  sprites={stdSprites}
                 />
               </div>
             ) : isTaiko ? (

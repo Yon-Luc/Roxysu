@@ -13,6 +13,7 @@ import { fetchScoreReplay, type ScoreReplay } from "../lib/api";
 import { AudioClock, sampleAudioClock } from "../lib/audioClock";
 import { clamp, formatAccuracy, formatClock } from "../lib/format";
 import { useStdSkin } from "../lib/stdSkin";
+import { useImportedStdSprites } from "../lib/stdSkinImport";
 import { useTaikoSkin } from "../lib/taikoSkin";
 import { useCatchSkin } from "../lib/catchSkin";
 import { usePreviewSkin } from "../lib/previewSkin";
@@ -260,6 +261,7 @@ export function ScoreReplayModal({
   const [prefs, setPrefs] = useState<PreviewPrefs>(() => loadPrefs());
   const prefsRef = useRef(prefs);
   const skin = useStdSkin();
+  const stdSprites = useImportedStdSprites();
   const taikoSkin = useTaikoSkin();
   const catchSkin = useCatchSkin();
   const previewSkin = usePreviewSkin();
@@ -542,6 +544,7 @@ export function ScoreReplayModal({
         scrollSpeed: prefsRef.current.scroll,
         fieldWidth: prefsRef.current.fieldWidth,
         stdSkin: skin,
+        stdSprites,
         taikoSkin,
         catchSkin,
         previewSkin,
@@ -1311,6 +1314,10 @@ export function ScoreReplayModal({
                           getCurrentTimeMs={mapTimeMs}
                           hidden={replayData.playback.acronyms.includes("HD")}
                           skin={skin}
+                          beatmapComboColors={
+                            replayData.beatmap.comboColors ?? null
+                          }
+                          sprites={stdSprites}
                         />
                       </div>
                     </div>

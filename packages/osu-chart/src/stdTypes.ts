@@ -9,6 +9,10 @@ export type StdHitObject =
       /** Stack-adjusted position used for rendering / hit testing. */
       stackX: number;
       stackY: number;
+      /** Type bit 2 — starts a new combo. Omitted → false. */
+      newCombo?: boolean;
+      /** Type bits 4–6 — combo colours to skip. Omitted → 0. */
+      comboOffset?: number;
     }
   | {
       type: "slider";
@@ -28,6 +32,10 @@ export type StdHitObject =
        * Timing-accurate (beatLength / SliderTickRate spacing, per timing point).
        */
       ticks: { frac: number; tMs: number }[];
+      /** Type bit 2 — starts a new combo. Omitted → false. */
+      newCombo?: boolean;
+      /** Type bits 4–6 — combo colours to skip. Omitted → 0. */
+      comboOffset?: number;
     }
   | {
       type: "spinner";
@@ -45,6 +53,8 @@ export type ParsedStdChart = {
   sliderMultiplier: number;
   sliderTickRate: number;
   hitObjects: StdHitObject[];
+  /** Beatmap `[Colours]` Combo1…Combo8 as `#rrggbb`, when present. */
+  comboColors: string[];
   timingPoints: Array<[timeMs: number, beatLengthMs: number]>;
   breaks: Array<[startMs: number, endMs: number]>;
   metaData: Record<string, string>;

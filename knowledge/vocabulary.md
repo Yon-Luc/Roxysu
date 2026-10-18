@@ -339,13 +339,33 @@ standard. UI label is Catch; aliases `ctb` / `catch` exist only at filter edges.
 
 A user-provided osu! legacy skin (`.osk` or a folder with `skin.ini`) applied to
 the mania notefield for beatmap preview and score rewatch. Sprites live in
-IndexedDB; per-keymode layout metadata lives on the preview skin store. May be
-sourced from a browser file picker/drop or from a **Realm skin** archive.
+IndexedDB (`roxysu-mania-skin`); per-keymode layout metadata lives on the
+preview skin store. May be sourced from a browser file picker/drop or from a
+**Realm skin** archive.
 
 **Not:** the procedural PreviewSkin editor (colors / shapes), lazer-native skins,
-std/taiko/catch skins, Realm skin rows before import
+**Imported standard skin**, taiko/catch skins, Realm skin rows before import
 
 **In code:** `maniaSkinImport.ts`, `osuSkinIni.ts`, `roxysu:preview-skin` `imported`
+
+**See:** [features/preview-replay/](features/preview-replay/index.md)
+
+---
+
+### Imported standard skin
+
+A user-provided osu! legacy skin (`.osk` or folder with `skin.ini`) applied to
+the **standard** playfield for beatmap preview, score rewatch, embed, and replay
+video export. Sprites (hitcircle, approach, slider ball, follow points, cursor,
+combo digits, judgments, …) live in IndexedDB (`roxysu-std-skin`); metadata and
+`[Colours]` live on `roxysu:std-skin` (`imported`). Missing sprites fall back to
+procedural drawing. Same `.osk` can also feed an **Imported mania skin**.
+
+**Not:** procedural-only `StdSkin` colours, lazer-native skins, **Imported mania
+skin**, taiko/catch skins
+
+**In code:** `stdSkinImport.ts`, `osuSkinIni.ts` `[Colours]`, `paintStdPlayfield`
+`sprites`, `roxysu:std-skin` `imported`
 
 **See:** [features/preview-replay/](features/preview-replay/index.md)
 
@@ -356,10 +376,11 @@ std/taiko/catch skins, Realm skin rows before import
 A skin tracked in osu!lazer's Realm `Skin` class, with named files resolved through
 the hashed `files/` store. Roxysu extracts metadata + file hashes into the local
 mirror (`realm_skins` / `realm_skin_files`) so the client can import legacy skins
-(`skin.ini`) into an **Imported mania skin** without a browser file picker.
+(`skin.ini`) into an **Imported mania skin** or **Imported standard skin**
+without a browser file picker.
 
-**Not:** Imported mania skin (browser IndexedDB), `Skins/` folder scanning,
-procedural PreviewSkin
+**Not:** Imported mania/standard skin (browser IndexedDB), `Skins/` folder
+scanning, procedural PreviewSkin / StdSkin
 
 **In code:** Realm class `Skin`; `syncRealmSkins.ts`; `GET /api/skins`
 

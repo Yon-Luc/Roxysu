@@ -11,6 +11,7 @@ import { fetchBeatmapPreview, fetchBeatmapSunnyDan, type BeatmapPreview } from "
 import { AudioClock, sampleAudioClock } from "../lib/audioClock";
 import { clamp, formatClock } from "../lib/format";
 import { useStdSkin } from "../lib/stdSkin";
+import { useImportedStdSprites } from "../lib/stdSkinImport";
 import { useTaikoSkin } from "../lib/taikoSkin";
 import { useCatchSkin } from "../lib/catchSkin";
 import {
@@ -122,6 +123,7 @@ export function BeatmapPreviewModal({
   const keybindModalOpenRef = useRef(false);
   const skin = usePreviewSkin();
   const stdSkin = useStdSkin();
+  const stdSprites = useImportedStdSprites();
   const taikoSkin = useTaikoSkin();
   const catchSkin = useCatchSkin();
 
@@ -1040,6 +1042,8 @@ export function BeatmapPreviewModal({
                         approachRate={data.approachRate ?? 5}
                         getCurrentTimeMs={mapTimeMs}
                         skin={stdSkin}
+                        beatmapComboColors={data.comboColors ?? null}
+                        sprites={stdSprites}
                       />
                     </div>
                   </div>

@@ -18,6 +18,7 @@ import {
   desc,
   inArray,
   count,
+  sql,
   type Db,
 } from "@roxysu/db/client.node";
 import path from "node:path";
@@ -676,15 +677,15 @@ function encodeChangedIds(ids: string[] | null): string | null {
 const IMPORTS_RETAIN = 500;
 
 function pruneImports(db: Db) {
+  // Use Drizzle `run(sql)` so this works on both the root db and a
+  // transaction (`tx` has no `$client` — incremental finishImport passes tx).
   withBusyRetry(() => {
-    db.$client
-      .query(
-        `DELETE FROM imports
-         WHERE id NOT IN (
-           SELECT id FROM imports ORDER BY id DESC LIMIT ?
-         )`,
+    db.run(sql`
+      DELETE FROM imports
+      WHERE id NOT IN (
+        SELECT id FROM imports ORDER BY id DESC LIMIT ${IMPORTS_RETAIN}
       )
-      .run(IMPORTS_RETAIN);
+    `);
   });
 }
 

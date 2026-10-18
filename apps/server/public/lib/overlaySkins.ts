@@ -21,6 +21,10 @@ import {
   applyOverlaySpriteEntries,
   exportImportedSpriteDataUrls,
 } from "./maniaSkinImport";
+import {
+  applyOverlayStdSpriteEntries,
+  exportImportedStdSpriteDataUrls,
+} from "./stdSkinImport";
 
 /** Server-side skin snapshot consumed by overlay pages (OBS / Wayland host). */
 export type OverlaySkinSnapshot = {
@@ -36,7 +40,11 @@ export type OverlaySkinSnapshot = {
 export async function collectOverlaySkinSnapshot(): Promise<OverlaySkinSnapshot> {
   let sprites: Record<string, string> = {};
   try {
-    sprites = await exportImportedSpriteDataUrls();
+    const [mania, std] = await Promise.all([
+      exportImportedSpriteDataUrls(),
+      exportImportedStdSpriteDataUrls(),
+    ]);
+    sprites = { ...mania, ...std };
   } catch {
     // IndexedDB unavailable — publish configs only.
   }
@@ -61,7 +69,12 @@ export async function applyOverlaySkinSnapshot(
   if (!snapshot) return;
   try {
     const spriteKeys = Object.keys(snapshot.sprites ?? {});
-    if (spriteKeys.length > 0) await applyOverlaySpriteEntries(spriteKeys);
+    if (spriteKeys.length > 0) {
+      await Promise.all([
+        applyOverlaySpriteEntries(spriteKeys),
+        applyOverlayStdSpriteEntries(spriteKeys),
+      ]);
+    }
   } catch {
     // Sprites are best-effort; configs still apply.
   }
@@ -91,7 +104,10 @@ export async function publishOverlaySkins(): Promise<void> {
   const keymodes =
     (snapshot.mania as { keymodes?: Record<string, { imported?: unknown }> })
       ?.keymodes ?? {};
-  const hasImported = Object.values(keymodes).some((k) => k?.imported);
+  const hasImportedMania = Object.values(keymodes).some((k) => k?.imported);
+  const hasImportedStd = Boolean(
+    (snapshot.std as { imported?: unknown } | null | undefined)?.imported,
+  );
   const spriteCount = Object.keys(snapshot.sprites ?? {}).length;
   try {
     await publish(snapshot);
@@ -99,11 +115,11 @@ export async function publishOverlaySkins(): Promise<void> {
     pushToast({ title: String(error), tone: "error" });
     return;
   }
-  if (hasImported && spriteCount === 0) {
+  if ((hasImportedMania || hasImportedStd) && spriteCount === 0) {
     pushToast({
       title: "Published without imported sprites",
       detail:
-        "Your mania skin uses an imported .osk, but its sprites were not found in this browser. Skins are stored per origin — open Roxysu on the same address (localhost vs 127.0.0.1) where you imported the skin, then push again.",
+        "An imported .osk skin is configured, but its sprites were not found in this browser. Skins are stored per origin — open Roxysu on the same address (localhost vs 127.0.0.1) where you imported the skin, then push again.",
       tone: "error",
       durationMs: null,
     });

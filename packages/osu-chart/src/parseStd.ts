@@ -2,7 +2,57 @@ import type { ParsedStdChart, StdHitObject, StdPoint } from "./stdTypes";
 
 const HIT_CIRCLE = 1;
 const HIT_SLIDER = 2;
+const HIT_NEW_COMBO = 4;
 const HIT_SPINNER = 8;
+
+function comboFlags(type: number): { newCombo: boolean; comboOffset: number } {
+  return {
+    newCombo: (type & HIT_NEW_COMBO) !== 0,
+    comboOffset: (type >> 4) & 0b111,
+  };
+}
+
+/** Parse beatmap `[Colours]` Combo1…Combo8 into `#rrggbb` hex strings. */
+export function parseBeatmapComboColors(lines: string[]): string[] {
+  const colors: string[] = [];
+  let inColours = false;
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line || line.startsWith("//")) continue;
+    if (line.startsWith("[")) {
+      inColours = line.toLowerCase() === "[colours]" || line.toLowerCase() === "[colors]";
+      continue;
+    }
+    if (!inColours) continue;
+    const colon = line.indexOf(":");
+    if (colon < 0) continue;
+    const key = line.slice(0, colon).trim().toLowerCase();
+    const match = /^combo(\d+)$/.exec(key);
+    if (!match) continue;
+    const index = Number.parseInt(match[1]!, 10);
+    if (!Number.isFinite(index) || index < 1 || index > 8) continue;
+    const hex = parseColourValue(line.slice(colon + 1).trim());
+    if (!hex) continue;
+    colors[index - 1] = hex;
+  }
+  return colors.filter((c): c is string => typeof c === "string");
+}
+
+function parseColourValue(value: string): string | null {
+  const trimmed = value.trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) return trimmed.toLowerCase();
+  const parts = trimmed.split(",").map((p) => Number.parseInt(p.trim(), 10));
+  if (
+    parts.length >= 3 &&
+    parts.slice(0, 3).every((n) => Number.isFinite(n) && n >= 0 && n <= 255)
+  ) {
+    const [r, g, b] = parts;
+    return `#${[r, g, b]
+      .map((n) => n!.toString(16).padStart(2, "0"))
+      .join("")}`;
+  }
+  return null;
+}
 
 type RawTiming = {
   timeMs: number;
@@ -519,6 +569,8 @@ function parseHitObjects(
       continue;
     }
 
+    const { newCombo, comboOffset } = comboFlags(type);
+
     if (type & HIT_SLIDER) {
       if (parts.length < 8) continue;
       const { curveType, controls } = parseSliderPath(parts[5]!, { x, y });
@@ -550,6 +602,8 @@ function parseHitObjects(
           sliderTickRate,
           repeats,
         ),
+        newCombo,
+        comboOffset,
       });
       continue;
     }
@@ -562,6 +616,8 @@ function parseHitObjects(
         timeMs,
         stackX: x,
         stackY: y,
+        newCombo,
+        comboOffset,
       });
     }
   }
@@ -584,6 +640,7 @@ export function parseStdChart(osuText: string): ParsedStdChart {
     sliderMultiplier: 1.4,
     sliderTickRate: 1,
     hitObjects: [],
+    comboColors: [],
     timingPoints: [],
     breaks: [],
     metaData: {},
@@ -602,6 +659,7 @@ export function parseStdChart(osuText: string): ParsedStdChart {
     diff.sliderTickRate,
   );
   applyStacking(hitObjects, diff.stackLeniency, diff.approachRate);
+  const comboColors = parseBeatmapComboColors(lines);
 
   const uninherited: Array<[number, number]> = timing
     .filter((t) => t.uninherited)
@@ -617,6 +675,7 @@ export function parseStdChart(osuText: string): ParsedStdChart {
     sliderMultiplier: diff.sliderMultiplier,
     sliderTickRate: diff.sliderTickRate,
     hitObjects,
+    comboColors,
     timingPoints: uninherited.length ? uninherited : [[0, 500]],
     breaks: parseBreaks(lines),
     metaData: parseMeta(lines),

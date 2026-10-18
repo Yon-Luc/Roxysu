@@ -24,10 +24,54 @@ export type SkinIniManiaSection = {
   stageBottom?: string;
 };
 
+export type SkinIniColours = {
+  comboColors: string[];
+  sliderBorder?: string;
+  sliderTrackOverride?: string;
+  cursor?: string;
+};
+
 export type ParsedSkinIni = {
   name: string;
   mania: SkinIniManiaSection[];
+  colours: SkinIniColours;
 };
+
+function parseIniColourValue(value: string): string | null {
+  const trimmed = value.trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) return trimmed.toLowerCase();
+  const parts = trimmed.split(",").map((p) => Number.parseInt(p.trim(), 10));
+  if (
+    parts.length >= 3 &&
+    parts.slice(0, 3).every((n) => Number.isFinite(n) && n >= 0 && n <= 255)
+  ) {
+    const [r, g, b] = parts;
+    return `#${[r, g, b]
+      .map((n) => n!.toString(16).padStart(2, "0"))
+      .join("")}`;
+  }
+  return null;
+}
+
+function parseColoursSection(fields: Record<string, string>): SkinIniColours {
+  const comboColors: string[] = [];
+  for (let i = 1; i <= 8; i += 1) {
+    const raw = fields[`combo${i}`];
+    if (!raw) continue;
+    const hex = parseIniColourValue(raw);
+    if (hex) comboColors.push(hex);
+  }
+  const sliderBorder = fields.sliderborder
+    ? parseIniColourValue(fields.sliderborder) ?? undefined
+    : undefined;
+  const sliderTrackOverride = fields.slidertrackoverride
+    ? parseIniColourValue(fields.slidertrackoverride) ?? undefined
+    : undefined;
+  const cursor = fields.cursor
+    ? parseIniColourValue(fields.cursor) ?? undefined
+    : undefined;
+  return { comboColors, sliderBorder, sliderTrackOverride, cursor };
+}
 
 const COLUMN_TYPES: Record<number, string> = {
   1: "S",
@@ -210,6 +254,12 @@ export function parseSkinIni(text: string): ParsedSkinIni {
   const general = sections.find(
     (s) => s.name.toLowerCase() === "general",
   )?.fields;
+  const coloursFields = sections.find(
+    (s) => {
+      const n = s.name.toLowerCase();
+      return n === "colours" || n === "colors";
+    },
+  )?.fields;
   const mania: SkinIniManiaSection[] = [];
   for (const section of sections) {
     if (section.name.toLowerCase() !== "mania") continue;
@@ -220,6 +270,9 @@ export function parseSkinIni(text: string): ParsedSkinIni {
   return {
     name: general?.name?.trim() || "",
     mania,
+    colours: coloursFields
+      ? parseColoursSection(coloursFields)
+      : { comboColors: [] },
   };
 }
 

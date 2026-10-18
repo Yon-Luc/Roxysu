@@ -5,21 +5,42 @@ import {
   type StdPlayfieldJudgment,
 } from "../../../components/StdPlayfield";
 import {
+  StdSkinFileButton,
+  StdSkinRealmImportButton,
+} from "../../../components/StdSkinImportControls";
+import {
   comboColorFor,
   getStdSkin,
-  resetStdSkin,
   setStdSkin,
   HIT_CIRCLE_SCALE_MAX,
   HIT_CIRCLE_SCALE_MIN,
   type StdSkin,
 } from "../../../lib/stdSkin";
+import {
+  resetImportedStdSkin,
+  useImportedStdSprites,
+} from "../../../lib/stdSkinImport";
 import { useAppDict } from "../../../lib/i18n";
 import { SkinColorInput } from "../SkinColorInput";
 
 const LOOP_MS = 9000;
 
-function demoCircle(x: number, y: number, timeMs: number): StdHitObject {
-  return { type: "circle", x, y, timeMs, stackX: x, stackY: y };
+function demoCircle(
+  x: number,
+  y: number,
+  timeMs: number,
+  opts?: { newCombo?: boolean; comboOffset?: number },
+): StdHitObject {
+  return {
+    type: "circle",
+    x,
+    y,
+    timeMs,
+    stackX: x,
+    stackY: y,
+    newCombo: opts?.newCombo,
+    comboOffset: opts?.comboOffset,
+  };
 }
 
 function demoSlider({
@@ -66,15 +87,16 @@ function demoSlider({
     stackY: y,
     path,
     ticks,
+    newCombo: true,
   };
 }
 
 /** Dense looping chart so combo colors, ticks, and slider bodies stay on screen. */
 const DEMO_OBJECTS: StdHitObject[] = [
-  demoCircle(96, 128, 700),
+  demoCircle(96, 128, 700, { newCombo: true }),
   demoCircle(192, 220, 980),
   demoCircle(288, 128, 1260),
-  demoCircle(384, 220, 1540),
+  demoCircle(384, 220, 1540, { newCombo: true }),
   demoCircle(416, 300, 1820),
   demoSlider({
     x: 80,
@@ -87,7 +109,7 @@ const DEMO_OBJECTS: StdHitObject[] = [
   }),
   demoCircle(128, 300, 2500),
   demoCircle(256, 320, 2820),
-  demoCircle(384, 300, 3140),
+  demoCircle(384, 300, 3140, { newCombo: true }),
   demoSlider({
     x: 430,
     y: 160,
@@ -99,7 +121,7 @@ const DEMO_OBJECTS: StdHitObject[] = [
   }),
   demoCircle(160, 96, 4300),
   demoCircle(256, 192, 4620),
-  demoCircle(352, 96, 4940),
+  demoCircle(352, 96, 4940, { newCombo: true }),
   demoCircle(256, 300, 5800),
   demoCircle(128, 192, 6120),
   demoCircle(384, 192, 6440),
@@ -187,11 +209,16 @@ export function StandardSkinEditor() {
   const [skin, setSkin] = useState(() => getStdSkin());
   const [playing, setPlaying] = useState(true);
   const timeRef = useRef(0);
+  const sprites = useImportedStdSprites();
 
   function update(patch: Partial<StdSkin>) {
     const next = { ...skin, ...patch };
     setSkin(next);
     setStdSkin(next);
+  }
+
+  function reloadSkin() {
+    setSkin(getStdSkin());
   }
 
   useEffect(() => {
@@ -218,6 +245,8 @@ export function StandardSkinEditor() {
           {dict?.skin.stdTitle ?? "osu!standard skin"}
         </h2>
         <div className="flex flex-wrap gap-2">
+          <StdSkinFileButton onApplied={reloadSkin} />
+          <StdSkinRealmImportButton onApplied={reloadSkin} />
           <button
             type="button"
             className="rx-btn text-xs"
@@ -229,8 +258,7 @@ export function StandardSkinEditor() {
             type="button"
             className="rx-btn text-xs"
             onClick={() => {
-              resetStdSkin();
-              setSkin(getStdSkin());
+              void resetImportedStdSkin().then(reloadSkin);
             }}
           >
             {dict?.skin.resetStd ?? "Reset standard skin"}
@@ -239,8 +267,13 @@ export function StandardSkinEditor() {
       </div>
       <p className="mt-1 text-xs text-muted">
         {dict?.skin.stdDesc ??
-          "Standard playfield visuals: combo colors, slider ticks, follow circle, and hit popups."}
+          "Standard playfield visuals: combo colors, slider ticks, follow circle, and hit popups. Import a legacy .osk for hitcircle sprites."}
       </p>
+      {skin.imported ? (
+        <p className="mt-2 text-xs text-accent">
+          {dict?.skin.importTitle ?? "Imported skin"}: {skin.imported.name}
+        </p>
+      ) : null}
 
       <div className="mt-4 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)]">
         <div className="h-[24rem] overflow-hidden rounded-xl bg-black/40">
@@ -251,6 +284,7 @@ export function StandardSkinEditor() {
             getCurrentTimeMs={() => timeRef.current}
             judgments={DEMO_JUDGMENTS}
             skin={skin}
+            sprites={sprites}
           />
         </div>
 

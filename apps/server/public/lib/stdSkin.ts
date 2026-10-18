@@ -6,8 +6,18 @@ import { useSyncExternalStore } from "react";
  * per-keymode.
  */
 
+export type ImportedStdSkinMeta = {
+  name: string;
+  colours?: {
+    comboColors?: string[];
+    sliderBorder?: string;
+    sliderTrackOverride?: string;
+    cursor?: string;
+  };
+};
+
 export type StdSkin = {
-  /** Colors cycled per combo number (hit circles / slider heads). */
+  /** Colors cycled per combo colour index (hit circles / slider heads). */
   comboColors: string[];
   /** Slider body outer track. */
   sliderTrack: string;
@@ -17,7 +27,7 @@ export type StdSkin = {
   sliderBall: string;
   /** Spinner ring. */
   spinner: string;
-  /** Approach ring stroke. */
+  /** Approach ring stroke (custom override; default white → tint with combo). */
   approach: string;
   /** Replay cursor fill. */
   cursor: string;
@@ -33,6 +43,8 @@ export type StdSkin = {
   showSliderTicks: boolean;
   showFollowCircle: boolean;
   showHitPopups: boolean;
+  /** Metadata for an imported legacy `.osk` / skin.ini pack, if any. */
+  imported: ImportedStdSkinMeta | null;
 };
 
 /** Classic stable default combo palette. */
@@ -64,6 +76,7 @@ export function defaultStdSkin(): StdSkin {
     showSliderTicks: true,
     showFollowCircle: true,
     showHitPopups: true,
+    imported: null,
   };
 }
 
@@ -81,10 +94,45 @@ function isHex(value: unknown): value is string {
   return typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value);
 }
 
-/** Resolve the combo color for a 1-based combo number. */
+/** Resolve the combo color for a 1-based combo number (legacy). */
 export function comboColorFor(skin: StdSkin, combo: number): string {
-  const colors = skin.comboColors.length > 0 ? skin.comboColors : DEFAULT_COMBO_COLORS;
-  return colors[(Math.max(0, combo - 1)) % colors.length]!;
+  return comboColorAtIndex(skin.comboColors, Math.max(0, combo - 1));
+}
+
+/** Resolve palette colour by 0-based combo colour index. */
+export function comboColorAtIndex(
+  colors: string[] | undefined,
+  colourIndex: number,
+): string {
+  const palette =
+    colors && colors.length > 0 ? colors : DEFAULT_COMBO_COLORS;
+  const idx =
+    ((colourIndex % palette.length) + palette.length) % palette.length;
+  return palette[idx]!;
+}
+
+/**
+ * Effective combo palette: beatmap `[Colours]` wins, then skin, then defaults.
+ */
+export function resolveComboPalette(
+  skinColors: string[] | undefined,
+  beatmapColors: string[] | undefined,
+): string[] {
+  if (beatmapColors && beatmapColors.length > 0) return beatmapColors;
+  if (skinColors && skinColors.length > 0) return skinColors;
+  return [...DEFAULT_COMBO_COLORS];
+}
+
+function parseImported(
+  value: unknown,
+): ImportedStdSkinMeta | null {
+  if (!value || typeof value !== "object") return null;
+  const v = value as Partial<ImportedStdSkinMeta>;
+  if (typeof v.name !== "string" || !v.name.trim()) return null;
+  return {
+    name: v.name.trim(),
+    colours: v.colours && typeof v.colours === "object" ? v.colours : undefined,
+  };
 }
 
 function parseSkin(raw: string | null): StdSkin {
@@ -116,6 +164,7 @@ function parseSkin(raw: string | null): StdSkin {
       showSliderTicks: parsed.showSliderTicks !== false,
       showFollowCircle: parsed.showFollowCircle !== false,
       showHitPopups: parsed.showHitPopups !== false,
+      imported: parseImported(parsed.imported),
     };
   } catch {
     return defaults;

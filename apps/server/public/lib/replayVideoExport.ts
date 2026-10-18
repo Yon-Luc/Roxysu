@@ -31,11 +31,13 @@ import {
   osuBeatmapCoverUrl,
 } from "./osuUrls";
 import {
-  buildComboNumbers,
+  buildComboInfo,
   buildHeadMap,
   paintStdPlayfield,
+  type ComboInfo,
   type CursorTrailPoint,
   type StdPlayfieldJudgment,
+  type StdPlayfieldSprites,
 } from "./paintStdPlayfield";
 import {
   buildHeadJudgmentMap,
@@ -440,6 +442,8 @@ export type ReplayVideoExportOptions = {
   fieldWidth?: number;
   /** Explicit skins (falls back to localStorage stores). */
   stdSkin?: StdSkin;
+  /** Optional imported standard skin sprites. */
+  stdSprites?: StdPlayfieldSprites | null;
   taikoSkin?: TaikoSkin;
   catchSkin?: CatchSkin;
   previewSkin?: PreviewSkin;
@@ -1115,10 +1119,12 @@ function paintComposedFrame(args: {
   rect: PlayfieldRect;
   stdPaint?: {
     trail: CursorTrailPoint[];
-    comboNumbers: number[];
+    comboInfo: ComboInfo;
     judgmentMaps: ReturnType<typeof buildHeadMap>;
     skin: StdSkin;
     hidden: boolean;
+    beatmapComboColors: string[] | null;
+    sprites: StdPlayfieldSprites | null;
   };
   taikoPaint?: {
     skin: TaikoSkin;
@@ -1178,7 +1184,9 @@ function paintComposedFrame(args: {
       hidden: args.stdPaint.hidden,
       skin: args.stdPaint.skin,
       trail: args.stdPaint.trail,
-      comboNumbers: args.stdPaint.comboNumbers,
+      comboInfo: args.stdPaint.comboInfo,
+      beatmapComboColors: args.stdPaint.beatmapComboColors,
+      sprites: args.stdPaint.sprites,
       judgmentMaps: args.stdPaint.judgmentMaps,
     });
   } else if (taiko && args.taikoPaint) {
@@ -1394,12 +1402,14 @@ export async function exportReplayVideo(
   const stdPaint = std
     ? {
         trail: [] as CursorTrailPoint[],
-        comboNumbers: buildComboNumbers(replay.beatmap.hitObjects ?? []),
+        comboInfo: buildComboInfo(replay.beatmap.hitObjects ?? []),
         judgmentMaps: buildHeadMap(
           replay.judgments as StdPlayfieldJudgment[],
         ),
         skin: opts.stdSkin ?? getStdSkin(),
         hidden: replay.playback.acronyms.includes("HD"),
+        beatmapComboColors: replay.beatmap.comboColors ?? null,
+        sprites: opts.stdSprites ?? null,
       }
     : undefined;
 

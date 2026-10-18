@@ -24,6 +24,7 @@ export type LoadedStdChart = {
   backgroundFileHash: string | null;
   lengthMs: number;
   hitObjects: StdHitObject[];
+  comboColors: string[];
   usedBeatmapHash: string;
 };
 
@@ -126,6 +127,7 @@ export async function loadStdChartForScore(
       backgroundFileHash: row.backgroundFileHash,
       lengthMs: Math.round(row.length ?? 0),
       hitObjects: chart.hitObjects,
+      comboColors: chart.comboColors,
       usedBeatmapHash: usedHash,
     },
   };

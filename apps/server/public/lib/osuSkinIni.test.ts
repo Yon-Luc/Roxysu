@@ -43,6 +43,25 @@ describe("parseSkinIni", () => {
     expect(parsed.mania[0]!.noteImage[3]).toBe("n3");
     expect(parsed.mania[0]!.stageLeft).toBe("stage-l");
     expect(parsed.mania[1]!.columnWidth).toEqual([45, 45, 45, 45]);
+    expect(parsed.colours.comboColors).toEqual([]);
+  });
+
+  test("parses [Colours] ComboN and slider colours", () => {
+    const parsed = parseSkinIni(`
+[General]
+Name: Coloured
+
+[Colours]
+Combo1: 255,0,0
+Combo2: #00ff00
+SliderBorder: 128,128,255
+SliderTrackOverride: 20,20,40
+Cursor: 255,255,255
+`);
+    expect(parsed.colours.comboColors).toEqual(["#ff0000", "#00ff00"]);
+    expect(parsed.colours.sliderBorder).toBe("#8080ff");
+    expect(parsed.colours.sliderTrackOverride).toBe("#141428");
+    expect(parsed.colours.cursor).toBe("#ffffff");
   });
 
   test("strips // comments and defaults missing fields", () => {

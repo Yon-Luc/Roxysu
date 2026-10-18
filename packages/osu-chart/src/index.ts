@@ -33,6 +33,7 @@ export type { ChartNote, ParsedOsuChart, TimingPoint } from "./types";
 export {
   approachPreemptMs,
   circleRadius,
+  parseBeatmapComboColors,
   parseStdChart,
 } from "./parseStd";
 export type {

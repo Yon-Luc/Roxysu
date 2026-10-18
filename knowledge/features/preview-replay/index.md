@@ -1,6 +1,6 @@
 ---
 last_verified: 2026-10
-confidence: inferred
+confidence: verified
 touches:
   - apps/server/public/components/BeatmapPreviewModal.tsx
   - apps/server/public/components/BeatmapPreviewButton.tsx
@@ -26,9 +26,12 @@ touches:
   - apps/server/public/lib/keybinds.ts
   - apps/server/public/lib/osuSkinIni.ts
   - apps/server/public/lib/maniaSkinImport.ts
+  - apps/server/public/lib/stdSkinImport.ts
+  - apps/server/public/lib/overlaySkins.ts
   - apps/server/public/components/ManiaSkinImportModal.tsx
   - apps/server/public/components/ManiaSkinDropHost.tsx
   - apps/server/public/components/ManiaSkinRealmImportButton.tsx
+  - apps/server/public/components/StdSkinImportControls.tsx
   - apps/server/src/routes/skins.ts
   - apps/realm-reader/src/syncRealmSkins.ts
   - packages/db/src/schema.ts
@@ -49,6 +52,7 @@ touches:
   - apps/server/src/replay/loadTaikoChart.ts
   - apps/server/src/replay/loadCatchChart.ts
   - packages/osu-chart/src/parseStd.ts
+  - packages/osu-chart/src/stdTypes.ts
   - packages/osu-chart/src/parseTaiko.ts
   - packages/osu-chart/src/parseCatch.ts
   - packages/osu-chart/src/osuFileParser.js
@@ -89,6 +93,31 @@ Playfield = the visual layer for that ruleset (notefield, 512×384, or taiko lan
 
 5. Skins are separate stores: `roxysu:preview-skin` (mania), `roxysu:std-skin`,
    `roxysu:taiko-skin`, `roxysu:catch-skin`.
+
+5c. **Standard playfield fidelity:** `parseStd` keeps `newCombo` / `comboOffset`
+    and beatmap `[Colours]` ComboN. Combo numbers reset on new combo / after
+    spinner; colour index advances by `1 + comboOffset`. Palette priority:
+    beatmap ComboN → skin `comboColors` → classic defaults. Painter draws
+    follow points, snaking slider bodies, reverse arrows, follow circle on the
+    ball, and combo-tinted approach rings (skin `approach` overrides when not
+    default white).
+    **Source:** `parseStd.ts`, `paintStdPlayfield.ts:buildComboInfo` — status:
+    verified by `parseStd.combo.test.ts`, `paintStdPlayfield.test.ts`.
+
+5d. An **imported standard skin** can replace procedural std drawing with legacy
+    sprites. Skin → Standard **Import .osk** / **Import from game** (same Realm
+    skin archives as mania). Sprites in IndexedDB `roxysu-std-skin`; metadata on
+    `roxysu:std-skin` `imported`. `skin.ini` `[Colours]` feeds combo / slider /
+    cursor colours. Missing sprites fall back per element. Overlay push includes
+    `std:*` sprite keys alongside mania sprites.
+    Fidelity notes: hitcircle/approach use **multiplicative** combo tint;
+    slider ball loads `sliderb` / `sliderbN`; followpoints rotate along the
+    segment; slider body fill uses combo colour unless `SliderTrackOverride`
+    is set; import sets `hitCircleScale` to 1.0; draw order is body →
+    followpoints → approach → circle → numbers → overlay → reverse → ball.
+    **Source:** `stdSkinImport.ts`, `paintStdPlayfield.ts`,
+    `StdSkinImportControls.tsx`, `overlaySkins.ts` — status: verified by
+    `stdSkinImport.names.test.ts`, `paintStdPlayfield.test.ts`.
 
 5b. **Keybinds** are browser-local: column keys (`roxysu:keybinds`) per keymode
     and playback **action keybinds** (`roxysu:action-keybinds`) for preview /
@@ -215,6 +244,13 @@ Imported mania skin:
     → persist sprites in IndexedDB + layout on preview skin
     → paintManiaNotefield draws sprites / stage / column layout
 
+Imported standard skin:
+  Skin → Standard Import .osk / Import from game
+    → unzip + parse skin.ini ([Colours] + std sprite names)
+    → confirm modal (StdPlayfield preview)
+    → persist sprites in IndexedDB (roxysu-std-skin) + imported meta on std-skin
+    → paintStdPlayfield draws sprites with procedural fallback
+
 Realm skin extract (full / reconcile):
   realm-reader reads Realm Skin + Files
     → upsert realm_skins / realm_skin_files (hasSkinIni denormalized)
@@ -242,8 +278,11 @@ Realm skin extract (full / reconcile):
   preview auto-matches the in-game MR/IN/HO selection; its query key is
   `["beatmap-preview-embed", beatmapId, modsKey]`.
 - Store / dispatch names: `"mania"`, `"osu"`, `"taiko"`, `"fruits"`.
-- `lib/osuSkinIni.ts` / `lib/maniaSkinImport.ts` — .osk parse + IndexedDB sprites.
+- `lib/osuSkinIni.ts` / `lib/maniaSkinImport.ts` / `lib/stdSkinImport.ts` —
+  .osk parse + IndexedDB sprites (mania + standard).
 - `routes/skins.ts` / `syncRealmSkins.ts` — Realm skin catalog + archive for Import from game.
+- Preview/rewatch std payloads include `comboColors` and hit-object combo flags
+  from `parseStdChart`.
 
 ## Dependencies
 
@@ -263,6 +302,6 @@ Realm skin extract (full / reconcile):
 
 ## Related knowledge
 
-- [vocabulary.md](../../vocabulary.md) — Score rewatch, Taiko playfield, Catch playfield, Imported mania skin
+- [vocabulary.md](../../vocabulary.md) — Score rewatch, Taiko playfield, Catch playfield, Imported mania skin, Imported standard skin
 - [replay-video-export/](../replay-video-export/index.md)
 - [architecture/client-theme.md](../../architecture/client-theme.md)

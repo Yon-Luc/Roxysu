@@ -3,13 +3,15 @@ import type { ScoreReplay } from "../lib/api";
 import { resizePlayfieldCanvas, startPlayfieldRaf } from "../lib/playfieldRaf";
 import type { StdSkin } from "../lib/stdSkin";
 import {
-  buildComboNumbers,
+  buildComboInfo,
   buildHeadMap,
   paintStdPlayfield,
+  type ComboInfo,
   type CursorTrailPoint,
   type StdHitObject,
   type StdPlayfieldFrame,
   type StdPlayfieldJudgment,
+  type StdPlayfieldSprites,
 } from "../lib/paintStdPlayfield";
 
 export type {
@@ -27,6 +29,8 @@ type StdPlayfieldProps = {
   judgments?: StdPlayfieldJudgment[];
   hidden?: boolean;
   skin?: StdSkin;
+  beatmapComboColors?: string[] | null;
+  sprites?: StdPlayfieldSprites | null;
   className?: string;
 };
 
@@ -43,6 +47,8 @@ export function StdPlayfield({
   judgments,
   hidden = false,
   skin,
+  beatmapComboColors = null,
+  sprites = null,
   className = "",
 }: StdPlayfieldProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -50,22 +56,26 @@ export function StdPlayfield({
   const getTimeRef = useRef(getCurrentTimeMs);
   const framesRef = useRef<StdPlayfieldFrame[]>([]);
   const judgmentsRef = useRef(buildHeadMap(undefined));
-  const comboRef = useRef<number[]>([]);
+  const comboRef = useRef<ComboInfo>({ numbers: [], colourIndexes: [] });
   const csRef = useRef(circleSize);
   const arRef = useRef(approachRate);
   const hiddenRef = useRef(hidden);
   const skinRef = useRef(skin ?? null);
+  const beatmapColorsRef = useRef(beatmapComboColors);
+  const spritesRef = useRef(sprites);
   const trailRef = useRef<CursorTrailPoint[]>([]);
 
   objectsRef.current = hitObjects;
   getTimeRef.current = getCurrentTimeMs;
   framesRef.current = frames ?? [];
   judgmentsRef.current = buildHeadMap(judgments);
-  comboRef.current = buildComboNumbers(hitObjects);
+  comboRef.current = buildComboInfo(hitObjects);
   csRef.current = circleSize;
   arRef.current = approachRate;
   hiddenRef.current = hidden;
   skinRef.current = skin ?? null;
+  beatmapColorsRef.current = beatmapComboColors;
+  spritesRef.current = sprites;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -97,6 +107,8 @@ export function StdPlayfield({
         framesRef.current,
         hiddenRef.current,
         skinRef.current,
+        beatmapColorsRef.current,
+        spritesRef.current,
         comboRef.current,
         judgmentsRef.current,
       ],
@@ -112,8 +124,10 @@ export function StdPlayfield({
           frames: framesRef.current,
           hidden: hiddenRef.current,
           skin: skinRef.current,
+          beatmapComboColors: beatmapColorsRef.current,
+          sprites: spritesRef.current,
           trail: trailRef.current,
-          comboNumbers: comboRef.current,
+          comboInfo: comboRef.current,
           judgmentMaps: judgmentsRef.current,
         });
       },

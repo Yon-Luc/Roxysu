@@ -12,8 +12,12 @@ export type ImportedStdSkinMeta = {
     comboColors?: string[];
     sliderBorder?: string;
     sliderTrackOverride?: string;
+    sliderBall?: string;
+    spinnerBackground?: string;
     cursor?: string;
   };
+  /** From skin.ini `[General] LayeredHitSounds` (default true). */
+  layeredHitSounds?: boolean;
 };
 
 export type StdSkin = {
@@ -112,12 +116,20 @@ export function comboColorAtIndex(
 }
 
 /**
- * Effective combo palette: beatmap `[Colours]` wins, then skin, then defaults.
+ * Effective combo palette.
+ * When `preferSkin` (imported `.osk` active), skin colours win over beatmap
+ * ComboN — same idea as “ignore beatmap skin”. Otherwise beatmap → skin →
+ * defaults. Beatmap colours stay Combo1-first; skin colours must already be
+ * in skin.ini cycle order (Combo2…Combo1).
  */
 export function resolveComboPalette(
   skinColors: string[] | undefined,
   beatmapColors: string[] | undefined,
+  opts?: { preferSkin?: boolean },
 ): string[] {
+  if (opts?.preferSkin && skinColors && skinColors.length > 0) {
+    return skinColors;
+  }
   if (beatmapColors && beatmapColors.length > 0) return beatmapColors;
   if (skinColors && skinColors.length > 0) return skinColors;
   return [...DEFAULT_COMBO_COLORS];
@@ -132,6 +144,8 @@ function parseImported(
   return {
     name: v.name.trim(),
     colours: v.colours && typeof v.colours === "object" ? v.colours : undefined,
+    layeredHitSounds:
+      typeof v.layeredHitSounds === "boolean" ? v.layeredHitSounds : undefined,
   };
 }
 

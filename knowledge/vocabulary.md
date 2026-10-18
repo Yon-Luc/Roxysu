@@ -357,15 +357,19 @@ preview skin store. May be sourced from a browser file picker/drop or from a
 A user-provided osu! legacy skin (`.osk` or folder with `skin.ini`) applied to
 the **standard** playfield for beatmap preview, score rewatch, embed, and replay
 video export. Sprites (hitcircle, approach, slider ball, follow points, cursor,
-combo digits, judgments, …) live in IndexedDB (`roxysu-std-skin`); metadata and
-`[Colours]` live on `roxysu:std-skin` (`imported`). Missing sprites fall back to
-procedural drawing. Same `.osk` can also feed an **Imported mania skin**.
+combo digits, judgments, …) and hitsound samples (`std:hs:*`) live in IndexedDB
+(`roxysu-std-skin`); metadata and `[Colours]` (Combo2-first cycle, slider /
+spinner colours) plus `LayeredHitSounds` live on `roxysu:std-skin` (`imported`).
+While imported, skin combo colours override beatmap ComboN. Missing sprites fall
+back to procedural drawing; discrete skin hitsounds play from the preview/rewatch
+clock. Same `.osk` can also feed an **Imported mania skin**.
 
 **Not:** procedural-only `StdSkin` colours, lazer-native skins, **Imported mania
 skin**, taiko/catch skins
 
-**In code:** `stdSkinImport.ts`, `osuSkinIni.ts` `[Colours]`, `paintStdPlayfield`
-`sprites`, `roxysu:std-skin` `imported`
+**In code:** `stdSkinImport.ts`, `stdHitsoundPlayer.ts`, `osuSkinIni.ts`
+`[Colours]` / `skinComboCycle`, `paintStdPlayfield` `sprites`, `roxysu:std-skin`
+`imported`
 
 **See:** [features/preview-replay/](features/preview-replay/index.md)
 

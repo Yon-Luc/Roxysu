@@ -2,7 +2,11 @@ import { beatmapSets, beatmaps } from "@roxysu/db/schema";
 import { readFileSync } from "node:fs";
 import { eq } from "drizzle-orm";
 
-import { parseStdChart, type StdHitObject } from "@roxysu/osu-chart";
+import {
+  parseStdChart,
+  type StdHitObject,
+  type StdSampleTiming,
+} from "@roxysu/osu-chart";
 import {
   getOsuDataPath,
   resolveLazerFilePath,
@@ -25,6 +29,7 @@ export type LoadedStdChart = {
   lengthMs: number;
   hitObjects: StdHitObject[];
   comboColors: string[];
+  sampleTiming: StdSampleTiming[];
   usedBeatmapHash: string;
 };
 
@@ -128,6 +133,7 @@ export async function loadStdChartForScore(
       lengthMs: Math.round(row.length ?? 0),
       hitObjects: chart.hitObjects,
       comboColors: chart.comboColors,
+      sampleTiming: chart.sampleTiming,
       usedBeatmapHash: usedHash,
     },
   };

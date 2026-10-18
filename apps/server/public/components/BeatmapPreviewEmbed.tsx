@@ -12,6 +12,7 @@ import { clamp, formatClock } from "../lib/format";
 import { localBeatmapAudioUrl, localBeatmapCoverUrl, osuBeatmapCoverUrl } from "../lib/osuUrls";
 import { useStdSkin } from "../lib/stdSkin";
 import { useImportedStdSprites } from "../lib/stdSkinImport";
+import { useStdHitsounds } from "../lib/useStdHitsounds";
 import { useTaikoSkin } from "../lib/taikoSkin";
 import { useCatchSkin } from "../lib/catchSkin";
 import { usePreviewSkin } from "../lib/previewSkin";
@@ -150,6 +151,16 @@ export function BeatmapPreviewEmbed({
     refetchOnMount: true,
   });
 
+  const stdHitsounds = useStdHitsounds({
+    enabled:
+      data?.rulesetShortName === "osu" &&
+      (data.hitObjects?.length ?? 0) > 0,
+    hitObjects: data?.hitObjects,
+    sampleTiming: data?.sampleTiming,
+    volume,
+    muted,
+  });
+
   const audioUrl = localBeatmapAudioUrl(data?.audioFileHash);
   const bgUrl =
     localBeatmapCoverUrl(data?.backgroundFileHash) ??
@@ -172,10 +183,16 @@ export function BeatmapPreviewEmbed({
   durationMsRef.current = durationMs;
 
   function mapTimeMs(): number {
-    if (syncSampleFresh(liveSyncSampleRef.current)) {
-      return clockRef.current.nowMs();
-    }
-    return sampleAudioClock(clockRef.current, audioRef.current, currentMs);
+    const t = syncSampleFresh(liveSyncSampleRef.current)
+      ? clockRef.current.nowMs()
+      : sampleAudioClock(clockRef.current, audioRef.current, currentMs);
+    const audio = audioRef.current;
+    stdHitsounds.onTick(
+      t,
+      Boolean(audio && !audio.paused && !audio.ended) ||
+        syncSampleFresh(liveSyncSampleRef.current),
+    );
+    return t;
   }
 
   function seekTo(ms: number) {
@@ -200,6 +217,7 @@ export function BeatmapPreviewEmbed({
       rate: audio.playbackRate > 0 ? audio.playbackRate : 1,
     });
     setCurrentMs(next);
+    stdHitsounds.onSeek(next);
   }
 
   const holdAndFreeze = useCallback(() => {

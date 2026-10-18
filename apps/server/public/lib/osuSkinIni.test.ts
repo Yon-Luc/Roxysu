@@ -8,7 +8,9 @@ import {
   layoutManiaPlayfield,
   parseSkinIni,
   resolveManiaSection,
+  skinComboCycle,
 } from "./osuSkinIni";
+import { resolveComboPalette } from "./stdSkin";
 
 const SAMPLE = `
 [General]
@@ -46,22 +48,52 @@ describe("parseSkinIni", () => {
     expect(parsed.colours.comboColors).toEqual([]);
   });
 
-  test("parses [Colours] ComboN and slider colours", () => {
+  test("parses [Colours] with Combo2-first cycle and playfield colours", () => {
     const parsed = parseSkinIni(`
 [General]
 Name: Coloured
+LayeredHitSounds: 0
 
 [Colours]
 Combo1: 255,0,0
 Combo2: #00ff00
+Combo3: 0,0,255
 SliderBorder: 128,128,255
 SliderTrackOverride: 20,20,40
+SliderBall: 2,170,255
+SpinnerBackground: 100,100,100
 Cursor: 255,255,255
 `);
-    expect(parsed.colours.comboColors).toEqual(["#ff0000", "#00ff00"]);
+    // Skin cycle: Combo2, Combo3, Combo1
+    expect(parsed.colours.comboColors).toEqual([
+      "#00ff00",
+      "#0000ff",
+      "#ff0000",
+    ]);
     expect(parsed.colours.sliderBorder).toBe("#8080ff");
     expect(parsed.colours.sliderTrackOverride).toBe("#141428");
+    expect(parsed.colours.sliderBall).toBe("#02aaff");
+    expect(parsed.colours.spinnerBackground).toBe("#646464");
     expect(parsed.colours.cursor).toBe("#ffffff");
+    expect(parsed.layeredHitSounds).toBe(false);
+  });
+
+  test("skinComboCycle puts Combo1 last", () => {
+    expect(skinComboCycle(["#aa0000", "#00aa00", "#0000aa"])).toEqual([
+      "#00aa00",
+      "#0000aa",
+      "#aa0000",
+    ]);
+    expect(skinComboCycle([undefined, "#00ff00"])).toEqual(["#00ff00"]);
+  });
+
+  test("resolveComboPalette prefers imported skin over beatmap", () => {
+    expect(
+      resolveComboPalette(["#111111"], ["#eeeeee"], { preferSkin: true }),
+    ).toEqual(["#111111"]);
+    expect(resolveComboPalette(["#111111"], ["#eeeeee"])).toEqual([
+      "#eeeeee",
+    ]);
   });
 
   test("strips // comments and defaults missing fields", () => {

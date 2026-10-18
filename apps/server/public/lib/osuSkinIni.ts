@@ -25,9 +25,17 @@ export type SkinIniManiaSection = {
 };
 
 export type SkinIniColours = {
+  /**
+   * Combo colours in **playfield cycle order** (Combo2…ComboN, then Combo1).
+   * Empty when the skin defines none.
+   */
   comboColors: string[];
+  /** Raw Combo1…Combo8 slots (index 0 = Combo1); sparse gaps allowed. */
+  comboSlots?: Array<string | undefined>;
   sliderBorder?: string;
   sliderTrackOverride?: string;
+  sliderBall?: string;
+  spinnerBackground?: string;
   cursor?: string;
 };
 
@@ -35,7 +43,27 @@ export type ParsedSkinIni = {
   name: string;
   mania: SkinIniManiaSection[];
   colours: SkinIniColours;
+  /** `[General] LayeredHitSounds` — default true (osu!stable). */
+  layeredHitSounds: boolean;
 };
+
+/**
+ * Skin.ini combo cycle: Combo2 appears first, Combo1 last
+ * (https://osu.ppy.sh/wiki/en/Skinning/skin.ini).
+ * `slots[0]` = Combo1 … `slots[7]` = Combo8; undefined slots are skipped.
+ */
+export function skinComboCycle(
+  slots: ReadonlyArray<string | undefined>,
+): string[] {
+  const combo1 = slots[0];
+  const rest: string[] = [];
+  for (let i = 1; i < Math.min(8, slots.length); i += 1) {
+    const c = slots[i];
+    if (c) rest.push(c);
+  }
+  if (combo1) rest.push(combo1);
+  return rest;
+}
 
 function parseIniColourValue(value: string): string | null {
   const trimmed = value.trim();
@@ -54,23 +82,41 @@ function parseIniColourValue(value: string): string | null {
 }
 
 function parseColoursSection(fields: Record<string, string>): SkinIniColours {
-  const comboColors: string[] = [];
+  const comboSlots: Array<string | undefined> = Array.from(
+    { length: 8 },
+    () => undefined,
+  );
   for (let i = 1; i <= 8; i += 1) {
     const raw = fields[`combo${i}`];
     if (!raw) continue;
     const hex = parseIniColourValue(raw);
-    if (hex) comboColors.push(hex);
+    if (hex) comboSlots[i - 1] = hex;
   }
+  const comboColors = skinComboCycle(comboSlots);
   const sliderBorder = fields.sliderborder
     ? parseIniColourValue(fields.sliderborder) ?? undefined
     : undefined;
   const sliderTrackOverride = fields.slidertrackoverride
     ? parseIniColourValue(fields.slidertrackoverride) ?? undefined
     : undefined;
+  const sliderBall = fields.sliderball
+    ? parseIniColourValue(fields.sliderball) ?? undefined
+    : undefined;
+  const spinnerBackground = fields.spinnerbackground
+    ? parseIniColourValue(fields.spinnerbackground) ?? undefined
+    : undefined;
   const cursor = fields.cursor
     ? parseIniColourValue(fields.cursor) ?? undefined
     : undefined;
-  return { comboColors, sliderBorder, sliderTrackOverride, cursor };
+  return {
+    comboColors,
+    comboSlots,
+    sliderBorder,
+    sliderTrackOverride,
+    sliderBall,
+    spinnerBackground,
+    cursor,
+  };
 }
 
 const COLUMN_TYPES: Record<number, string> = {
@@ -267,12 +313,19 @@ export function parseSkinIni(text: string): ParsedSkinIni {
     if (parsed) mania.push(parsed);
   }
 
+  const layeredRaw = general?.layeredhitsounds?.trim();
+  const layeredHitSounds =
+    layeredRaw == null || layeredRaw === ""
+      ? true
+      : layeredRaw !== "0" && layeredRaw.toLowerCase() !== "false";
+
   return {
     name: general?.name?.trim() || "",
     mania,
     colours: coloursFields
       ? parseColoursSection(coloursFields)
       : { comboColors: [] },
+    layeredHitSounds,
   };
 }
 

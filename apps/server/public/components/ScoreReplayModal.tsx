@@ -14,6 +14,7 @@ import { AudioClock, sampleAudioClock } from "../lib/audioClock";
 import { clamp, formatAccuracy, formatClock } from "../lib/format";
 import { useStdSkin } from "../lib/stdSkin";
 import { useImportedStdSprites } from "../lib/stdSkinImport";
+import { useStdHitsounds } from "../lib/useStdHitsounds";
 import { useTaikoSkin } from "../lib/taikoSkin";
 import { useCatchSkin } from "../lib/catchSkin";
 import { usePreviewSkin } from "../lib/previewSkin";
@@ -299,6 +300,16 @@ export function ScoreReplayModal({
   });
   const replayData = isLoadedScoreReplay(data) ? data : null;
 
+  const stdHitsounds = useStdHitsounds({
+    enabled:
+      !!replayData &&
+      replayData.beatmap.rulesetShortName === "osu" &&
+      (replayData.beatmap.hitObjects?.length ?? 0) > 0,
+    hitObjects: replayData?.beatmap.hitObjects,
+    sampleTiming: replayData?.beatmap.sampleTiming,
+    volume: prefs.volume,
+  });
+
   const analysisOn = prefs.analysis;
   const analysis = useMemo(() => {
     if (
@@ -369,7 +380,13 @@ export function ScoreReplayModal({
   }, [prefs.volume, prefs.rate, audioUrl]);
 
   function mapTimeMs(): number {
-    return sampleAudioClock(clockRef.current, audioRef.current, currentMs);
+    const t = sampleAudioClock(clockRef.current, audioRef.current, currentMs);
+    const audio = audioRef.current;
+    stdHitsounds.onTick(
+      t,
+      Boolean(audio && !audio.paused && !audio.ended),
+    );
+    return t;
   }
 
   function syncLiveHud() {
@@ -477,6 +494,7 @@ export function ScoreReplayModal({
       rate: audio.playbackRate > 0 ? audio.playbackRate : 1,
     });
     setCurrentMs(next);
+    stdHitsounds.onSeek(next);
   }
 
   function jumpToMiss(tMs: number) {

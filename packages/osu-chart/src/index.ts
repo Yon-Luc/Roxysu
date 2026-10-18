@@ -39,7 +39,9 @@ export {
 export type {
   ParsedStdChart,
   StdHitObject,
+  StdHitSample,
   StdPoint,
+  StdSampleTiming,
 } from "./stdTypes";
 export { parseTaikoChart } from "./parseTaiko";
 export type {

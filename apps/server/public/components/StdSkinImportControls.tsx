@@ -24,6 +24,8 @@ function skinFromDraft(draft: StdSkinImportDraft): StdSkin {
       c.comboColors.length > 0 ? c.comboColors : base.comboColors,
     sliderTrack: c.sliderBorder ?? base.sliderTrack,
     sliderFill: c.sliderTrackOverride ?? base.sliderFill,
+    sliderBall: c.sliderBall ?? base.sliderBall,
+    spinner: c.spinnerBackground ?? base.spinner,
     cursor: c.cursor ?? base.cursor,
     hitCircleScale: 1,
     imported: {
@@ -32,8 +34,11 @@ function skinFromDraft(draft: StdSkinImportDraft): StdSkin {
         comboColors: c.comboColors,
         sliderBorder: c.sliderBorder,
         sliderTrackOverride: c.sliderTrackOverride,
+        sliderBall: c.sliderBall,
+        spinnerBackground: c.spinnerBackground,
         cursor: c.cursor,
       },
+      layeredHitSounds: draft.layeredHitSounds,
     },
   };
 }

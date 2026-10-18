@@ -12,6 +12,7 @@ import { AudioClock, sampleAudioClock } from "../lib/audioClock";
 import { clamp, formatClock } from "../lib/format";
 import { useStdSkin } from "../lib/stdSkin";
 import { useImportedStdSprites } from "../lib/stdSkinImport";
+import { useStdHitsounds } from "../lib/useStdHitsounds";
 import { useTaikoSkin } from "../lib/taikoSkin";
 import { useCatchSkin } from "../lib/catchSkin";
 import {
@@ -154,6 +155,15 @@ export function BeatmapPreviewModal({
     refetchOnMount: true,
   });
 
+  const stdHitsounds = useStdHitsounds({
+    enabled:
+      data?.rulesetShortName === "osu" &&
+      (data.hitObjects?.length ?? 0) > 0,
+    hitObjects: data?.hitObjects,
+    sampleTiming: data?.sampleTiming,
+    volume: prefs.volume,
+  });
+
   // Mod-aware Sunny dan: recomputed for the selected pattern mods + rate so
   // e.g. an IN preview shows the full-LN dan instead of the NM one.
   const isManiaMap = data?.rulesetShortName === "mania";
@@ -221,7 +231,13 @@ export function BeatmapPreviewModal({
   }, [prefs.volume, prefs.rate, audioUrl]);
 
   function mapTimeMs(): number {
-    return sampleAudioClock(clockRef.current, audioRef.current, currentMs);
+    const t = sampleAudioClock(clockRef.current, audioRef.current, currentMs);
+    const audio = audioRef.current;
+    stdHitsounds.onTick(
+      t,
+      Boolean(audio && !audio.paused && !audio.ended),
+    );
+    return t;
   }
 
   function syncLiveHud() {
@@ -340,6 +356,7 @@ export function BeatmapPreviewModal({
       rate: audio.playbackRate > 0 ? audio.playbackRate : 1,
     });
     setCurrentMs(next);
+    stdHitsounds.onSeek(next);
   }
 
   function seekBy(deltaMs: number) {

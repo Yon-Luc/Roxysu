@@ -1,5 +1,24 @@
 export type StdPoint = { x: number; y: number };
 
+/** osu! hitSample colon field: normalSet:additionSet:index:volume:filename */
+export type StdHitSample = {
+  /** 0 = inherit timing; 1 normal, 2 soft, 3 drum */
+  normalSet: number;
+  additionSet: number;
+  index: number;
+  /** 0 = inherit timing volume */
+  volume: number;
+};
+
+export type StdSampleTiming = {
+  timeMs: number;
+  /** 1 normal, 2 soft, 3 drum (osu timing-point sample set). */
+  sampleSet: number;
+  sampleIndex: number;
+  /** 0–100 */
+  volume: number;
+};
+
 export type StdHitObject =
   | {
       type: "circle";
@@ -13,6 +32,9 @@ export type StdHitObject =
       newCombo?: boolean;
       /** Type bits 4–6 — combo colours to skip. Omitted → 0. */
       comboOffset?: number;
+      /** HitSound bitfield (whistle/finish/clap). */
+      hitSound?: number;
+      hitSample?: StdHitSample;
     }
   | {
       type: "slider";
@@ -36,11 +58,17 @@ export type StdHitObject =
       newCombo?: boolean;
       /** Type bits 4–6 — combo colours to skip. Omitted → 0. */
       comboOffset?: number;
+      hitSound?: number;
+      hitSample?: StdHitSample;
+      /** Per-edge hitSound bitfields (head, reverses…, tail), when present. */
+      edgeHitSounds?: number[];
     }
   | {
       type: "spinner";
       timeMs: number;
       endMs: number;
+      hitSound?: number;
+      hitSample?: StdHitSample;
     };
 
 export type ParsedStdChart = {
@@ -56,6 +84,8 @@ export type ParsedStdChart = {
   /** Beatmap `[Colours]` Combo1…Combo8 as `#rrggbb`, when present. */
   comboColors: string[];
   timingPoints: Array<[timeMs: number, beatLengthMs: number]>;
+  /** Sample-set / volume timeline (red + green lines). */
+  sampleTiming: StdSampleTiming[];
   breaks: Array<[startMs: number, endMs: number]>;
   metaData: Record<string, string>;
 };

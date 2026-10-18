@@ -694,6 +694,7 @@ function paintStdPlayfieldInner(args: PaintStdPlayfieldArgs): void {
   const palette = resolveComboPalette(
     skin?.comboColors,
     beatmapComboColors ?? undefined,
+    { preferSkin: Boolean(skin?.imported) },
   );
   const radius =
     circleRadius(cs) * (skin?.hitCircleScale != null ? skin.hitCircleScale : 1);

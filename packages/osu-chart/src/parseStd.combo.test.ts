@@ -42,12 +42,25 @@ describe("parseStdChart combo flags", () => {
     const chart = parseStdChart(COMBO_MAP);
     expect(chart.status).toBe("OK");
     expect(chart.comboColors).toEqual(["#ff0000", "#00ff00", "#0000ff"]);
+    expect(chart.sampleTiming[0]).toEqual({
+      timeMs: 0,
+      sampleSet: 2,
+      sampleIndex: 0,
+      volume: 100,
+    });
 
     const c0 = chart.hitObjects[0]!;
     expect(c0.type).toBe("circle");
     if (c0.type === "circle") {
       expect(c0.newCombo).toBe(true);
       expect(c0.comboOffset).toBe(0);
+      expect(c0.hitSound).toBe(0);
+      expect(c0.hitSample).toEqual({
+        normalSet: 0,
+        additionSet: 0,
+        index: 0,
+        volume: 0,
+      });
     }
 
     const c1 = chart.hitObjects[1]!;

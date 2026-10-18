@@ -27,6 +27,8 @@ touches:
   - apps/server/public/lib/osuSkinIni.ts
   - apps/server/public/lib/maniaSkinImport.ts
   - apps/server/public/lib/stdSkinImport.ts
+  - apps/server/public/lib/stdHitsoundPlayer.ts
+  - apps/server/public/lib/useStdHitsounds.ts
   - apps/server/public/lib/overlaySkins.ts
   - apps/server/public/components/ManiaSkinImportModal.tsx
   - apps/server/public/components/ManiaSkinDropHost.tsx
@@ -97,33 +99,41 @@ Playfield = the visual layer for that ruleset (notefield, 512×384, or taiko lan
 5c. **Standard playfield fidelity:** `parseStd` keeps `newCombo` / `comboOffset`
     and beatmap `[Colours]` ComboN. Combo numbers reset on new combo / after
     spinner; colour index advances by `1 + comboOffset`. Palette priority:
-    beatmap ComboN → skin `comboColors` → classic defaults. Painter draws
-    follow points, snaking slider bodies, reverse arrows, follow circle on the
-    ball, and combo-tinted approach rings (skin `approach` overrides when not
-    default white).
-    **Source:** `parseStd.ts`, `paintStdPlayfield.ts:buildComboInfo` — status:
-    verified by `parseStd.combo.test.ts`, `paintStdPlayfield.test.ts`.
+    palette: when an **imported standard skin** is active, skin combo colours
+    win (ignore-beatmap-skin); otherwise beatmap ComboN → skin → defaults.
+    Skin.ini combo colours are stored in **Combo2…Combo1** cycle order.
+    Painter draws follow points, snaking slider bodies, reverse arrows, follow
+    circle on the ball, and combo-tinted approach rings (skin `approach`
+    overrides when not default white).
+    **Source:** `parseStd.ts`, `stdSkin.ts:resolveComboPalette`,
+    `paintStdPlayfield.ts:buildComboInfo` — status: verified by
+    `parseStd.combo.test.ts`, `osuSkinIni.test.ts`, `paintStdPlayfield.test.ts`.
 
 5d. An **imported standard skin** can replace procedural std drawing with legacy
-    sprites. Skin → Standard **Import .osk** / **Import from game** (same Realm
-    skin archives as mania). Sprites in IndexedDB `roxysu-std-skin`; metadata on
-    `roxysu:std-skin` `imported`. `skin.ini` `[Colours]` feeds combo / slider /
-    cursor colours. Missing sprites fall back per element. Overlay push includes
-    `std:*` sprite keys alongside mania sprites.
+    sprites and play skin hitsounds. Skin → Standard **Import .osk** / **Import
+    from game** (same Realm skin archives as mania). Sprites + `std:hs:*`
+    sample blobs in IndexedDB `roxysu-std-skin`; metadata on `roxysu:std-skin`
+    `imported`. `skin.ini` `[Colours]` feeds combo (Combo2-first cycle),
+    SliderBorder / SliderTrackOverride / SliderBall / SpinnerBackground /
+    cursor; `LayeredHitSounds` is stored on import meta. Missing sprites fall
+    back per element. Overlay push includes `std:*` sprite keys alongside mania
+    sprites.
     Fidelity notes: hitcircle/approach use **multiplicative** combo tint
     (`multiply` + `destination-in` alpha restore); slider ball loads
     `sliderb` / `sliderbN`; followpoints rotate along the segment; slider
     body fill uses combo colour unless `SliderTrackOverride` is set; import
     sets `hitCircleScale` to 1.0; draw order is body → followpoints →
     approach → circle → numbers → overlay → reverse → ball.
-    Bad/closed sprites never blank the playfield — paint falls back to
-    procedural drawing per element (and retries without sprites on throw).
+    Hitsounds: chart keeps `hitSound` / `hitSample` + `sampleTiming`; client
+    `stdHitsoundPlayer` schedules discrete hitnormal/whistle/finish/clap and
+    slidertick from the song clock (slide/spin loops and beatmap custom samples
+    deferred). Bad/closed sprites never blank the playfield.
     Standard/catch rewatch letterbox uses `useAspectFit` with a **state**
-    outer element so ResizeObserver attaches after replay data mounts
-    (a mount-time null ref left the stage `visibility: hidden` forever).
-    **Source:** `stdSkinImport.ts`, `paintStdPlayfield.ts`,
-    `ScoreReplayModal.tsx`, `StdSkinImportControls.tsx`, `overlaySkins.ts`
-    — status: verified by `stdSkinImport.names.test.ts`,
+    outer element so ResizeObserver attaches after replay data mounts.
+    **Source:** `stdSkinImport.ts`, `stdHitsoundPlayer.ts`, `useStdHitsounds.ts`,
+    `paintStdPlayfield.ts`, `ScoreReplayModal.tsx`, `StdSkinImportControls.tsx`,
+    `overlaySkins.ts` — status: verified by `stdSkinImport.names.test.ts`,
+    `stdHitsoundPlayer.test.ts`, `osuSkinIni.test.ts`,
     `paintStdPlayfield.test.ts`.
 
 5b. **Keybinds** are browser-local: column keys (`roxysu:keybinds`) per keymode
@@ -253,10 +263,10 @@ Imported mania skin:
 
 Imported standard skin:
   Skin → Standard Import .osk / Import from game
-    → unzip + parse skin.ini ([Colours] + std sprite names)
+    → unzip + parse skin.ini ([Colours] Combo2-first + LayeredHitSounds + std sprites/samples)
     → confirm modal (StdPlayfield preview)
-    → persist sprites in IndexedDB (roxysu-std-skin) + imported meta on std-skin
-    → paintStdPlayfield draws sprites with procedural fallback
+    → persist sprites + std:hs:* samples in IndexedDB (roxysu-std-skin) + imported meta
+    → paintStdPlayfield draws sprites; stdHitsoundPlayer plays samples on the clock
 
 Realm skin extract (full / reconcile):
   realm-reader reads Realm Skin + Files

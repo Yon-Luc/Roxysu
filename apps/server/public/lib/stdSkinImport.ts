@@ -19,30 +19,81 @@ export type StdSkinBlobs = Record<string, Blob>;
 export type StdSkinImportDraft = {
   name: string;
   colours: SkinIniColours;
+  layeredHitSounds: boolean;
   sprites: StdPlayfieldSprites;
   blobs: StdSkinBlobs;
 };
 
 const IMAGE_EXTS = ["png", "jpg", "jpeg", "gif"] as const;
+const AUDIO_EXTS = ["wav", "ogg", "mp3"] as const;
 const SPRITE_EVENT = "roxysu:std-imported-skin";
 const DB_NAME = "roxysu-std-skin";
 const DB_VERSION = 1;
 const STORE = "sprites";
 const KEY_PREFIX = "std:";
+const HS_PREFIX = `${KEY_PREFIX}hs:`;
+
+export const HITSOUND_SETS = ["normal", "soft", "drum"] as const;
+export const HITSOUND_HITS = [
+  "hitnormal",
+  "hitwhistle",
+  "hitfinish",
+  "hitclap",
+] as const;
+export const HITSOUND_EXTRAS = [
+  "slidertick",
+  "sliderslide",
+  "sliderwhistle",
+  "spinnerspin",
+  "spinnerbonus",
+] as const;
 
 type FileMap = Map<string, Uint8Array>;
 
 let spriteCache: StdPlayfieldSprites | null = null;
+let hitsoundBufferCache: Record<string, AudioBuffer> | null = null;
 let loadStarted = false;
 /** Bumped on apply/reset so a stale hydrate cannot overwrite fresher sprites. */
 let spriteEpoch = 0;
+
+/** Sample key used by the player, e.g. `soft-hitclap` or `normal-hitnormal2`. */
+export function hitsoundSampleKey(
+  set: string,
+  hit: string,
+  index = 0,
+): string {
+  if (index >= 2) return `${set}-${hit}${index}`;
+  return `${set}-${hit}`;
+}
+
+export function hitsoundBlobKey(sampleKey: string): string {
+  return `${HS_PREFIX}${sampleKey}`;
+}
+
+/** Candidate file basenames (no extension) for a skin hitsound. */
+export function hitsoundNameCandidates(
+  set: string,
+  hit: string,
+  index = 0,
+): string[] {
+  const keyed = hitsoundSampleKey(set, hit, index);
+  if (index >= 2) return [keyed];
+  // Bare slidertick etc. sometimes shipped without a set prefix.
+  if (
+    (HITSOUND_EXTRAS as readonly string[]).includes(hit) &&
+    set === "normal"
+  ) {
+    return [keyed, hit];
+  }
+  return [keyed];
+}
 
 function normalizePath(path: string): string {
   return path.replace(/\\/g, "/").replace(/^\/+/, "");
 }
 
 function stripExt(path: string): string {
-  return path.replace(/\.(png|jpe?g|gif)$/i, "");
+  return path.replace(/\.(png|jpe?g|gif|wav|ogg|mp3)$/i, "");
 }
 
 export function unzipSkinArchive(data: Uint8Array): FileMap {
@@ -124,14 +175,82 @@ function lookupImage(
   return null;
 }
 
+function lookupAudio(
+  files: FileMap,
+  root: string,
+  name: string,
+): Uint8Array | null {
+  const raw = normalizePath(name).replace(/\\/g, "/");
+  const noExt = stripExt(raw);
+  const bases = [joinPath(root, noExt), noExt];
+  const seen = new Set<string>();
+  const tryKey = (key: string): Uint8Array | null => {
+    const lower = key.toLowerCase();
+    if (seen.has(lower)) return null;
+    seen.add(lower);
+    for (const [path, bytes] of files) {
+      if (path.toLowerCase() === lower) return bytes;
+    }
+    return null;
+  };
+
+  for (const base of bases) {
+    for (const ext of AUDIO_EXTS) {
+      const hit = tryKey(`${base}.${ext}`);
+      if (hit) return hit;
+    }
+  }
+
+  const needle = noExt.split("/").pop()?.toLowerCase();
+  if (!needle) return null;
+  for (const ext of AUDIO_EXTS) {
+    const suffix = `.${ext}`;
+    for (const [path, bytes] of files) {
+      if (
+        path.toLowerCase().endsWith(`/${needle}${suffix}`) ||
+        path.toLowerCase() === `${needle}${suffix}`
+      ) {
+        return bytes;
+      }
+    }
+  }
+  return null;
+}
+
+function scoopHitsoundBlobs(
+  files: FileMap,
+  root: string,
+  blobs: StdSkinBlobs,
+): void {
+  for (const set of HITSOUND_SETS) {
+    for (const hit of HITSOUND_HITS) {
+      for (const index of [0, 2, 3, 4, 5, 6, 7, 8, 9]) {
+        const key = hitsoundSampleKey(set, hit, index);
+        for (const name of hitsoundNameCandidates(set, hit, index)) {
+          const bytes = lookupAudio(files, root, name);
+          if (!bytes) continue;
+          blobs[hitsoundBlobKey(key)] = new Blob([Uint8Array.from(bytes)]);
+          break;
+        }
+      }
+    }
+    for (const extra of HITSOUND_EXTRAS) {
+      const key = hitsoundSampleKey(set, extra, 0);
+      for (const name of hitsoundNameCandidates(set, extra, 0)) {
+        const bytes = lookupAudio(files, root, name);
+        if (!bytes) continue;
+        blobs[hitsoundBlobKey(key)] = new Blob([Uint8Array.from(bytes)]);
+        break;
+      }
+    }
+  }
+}
+
 type DecodedSkinImage = ImageBitmap | HTMLImageElement;
 
 async function decodeImage(bytes: Uint8Array): Promise<DecodedSkinImage | null> {
   const copy = Uint8Array.from(bytes);
-  const blob = new Blob([copy.buffer.slice(
-    copy.byteOffset,
-    copy.byteOffset + copy.byteLength,
-  )]);
+  const blob = new Blob([copy]);
   if (typeof createImageBitmap === "function") {
     try {
       const bmp = await createImageBitmap(blob);
@@ -403,10 +522,12 @@ async function buildDraftFromFiles(
     defaults.push(img);
   }
   sprites.defaults = defaults;
+  scoopHitsoundBlobs(files, root, blobs);
 
   return {
     name: parsed.name || fallbackName || "Imported skin",
     colours: parsed.colours,
+    layeredHitSounds: parsed.layeredHitSounds,
     sprites,
     blobs,
   };
@@ -451,6 +572,8 @@ function coloursToSkinPatch(colours: SkinIniColours): Partial<StdSkin> {
   // uses combo colour at draw time.
   if (colours.sliderTrackOverride)
     patch.sliderFill = colours.sliderTrackOverride;
+  if (colours.sliderBall) patch.sliderBall = colours.sliderBall;
+  if (colours.spinnerBackground) patch.spinner = colours.spinnerBackground;
   if (colours.cursor) patch.cursor = colours.cursor;
   return patch;
 }
@@ -465,14 +588,22 @@ export async function applyImportedStdSkin(
   await idbPut(entries);
   if (epoch !== spriteEpoch) return;
   spriteCache = draft.sprites;
+  void decodeHitsoundBlobs(draft.blobs).then((buffers) => {
+    if (epoch !== spriteEpoch) return;
+    hitsoundBufferCache = buffers;
+    emitSprites();
+  });
   const meta: ImportedStdSkinMeta = {
     name: draft.name,
     colours: {
       comboColors: draft.colours.comboColors,
       sliderBorder: draft.colours.sliderBorder,
       sliderTrackOverride: draft.colours.sliderTrackOverride,
+      sliderBall: draft.colours.sliderBall,
+      spinnerBackground: draft.colours.spinnerBackground,
       cursor: draft.colours.cursor,
     },
+    layeredHitSounds: draft.layeredHitSounds,
   };
   const current = getStdSkin();
   setStdSkin({
@@ -489,6 +620,7 @@ export async function resetImportedStdSkin(): Promise<void> {
   spriteEpoch += 1;
   await idbClear();
   spriteCache = null;
+  hitsoundBufferCache = null;
   const defaults = defaultStdSkin();
   const current = getStdSkin();
   setStdSkin({
@@ -620,6 +752,48 @@ async function hydrateSpritesFromRows(
   sprites.defaults = defaults;
   spriteCache = sprites;
   emitSprites();
+
+  const hsRows = rows.filter(([k]) => k.startsWith(HS_PREFIX));
+  if (hsRows.length > 0) {
+    const blobMap: StdSkinBlobs = {};
+    for (const [k, blob] of hsRows) blobMap[k] = blob;
+    const buffers = await decodeHitsoundBlobs(blobMap);
+    if (epoch !== spriteEpoch) return;
+    hitsoundBufferCache = buffers;
+    emitSprites();
+  }
+}
+
+async function decodeHitsoundBlobs(
+  blobs: StdSkinBlobs,
+): Promise<Record<string, AudioBuffer>> {
+  const out: Record<string, AudioBuffer> = {};
+  if (typeof AudioContext === "undefined") return out;
+  let ctx: AudioContext;
+  try {
+    ctx = new AudioContext();
+  } catch {
+    return out;
+  }
+  const entries = Object.entries(blobs).filter(([k]) => k.startsWith(HS_PREFIX));
+  await Promise.all(
+    entries.map(async ([key, blob]) => {
+      try {
+        const ab = await blob.arrayBuffer();
+        const buffer = await ctx.decodeAudioData(ab.slice(0));
+        const sampleKey = key.slice(HS_PREFIX.length);
+        if (sampleKey) out[sampleKey] = buffer;
+      } catch {
+        // skip undecodable sample
+      }
+    }),
+  );
+  try {
+    await ctx.close();
+  } catch {
+    // ignore
+  }
+  return out;
 }
 
 async function hydrateFromIdb(): Promise<void> {
@@ -637,6 +811,13 @@ export function ensureImportedStdSpritesLoaded(): void {
 
 export function getImportedStdSprites(): StdPlayfieldSprites | null {
   return spriteCache;
+}
+
+export function getImportedStdHitsoundBuffers(): Record<
+  string,
+  AudioBuffer
+> | null {
+  return hitsoundBufferCache;
 }
 
 export async function loadImportedStdSprites(): Promise<StdPlayfieldSprites | null> {

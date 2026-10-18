@@ -1,9 +1,36 @@
-import type { ParsedStdChart, StdHitObject, StdPoint } from "./stdTypes";
+import type {
+  ParsedStdChart,
+  StdHitObject,
+  StdHitSample,
+  StdPoint,
+  StdSampleTiming,
+} from "./stdTypes";
 
 const HIT_CIRCLE = 1;
 const HIT_SLIDER = 2;
 const HIT_NEW_COMBO = 4;
 const HIT_SPINNER = 8;
+
+function parseHitSample(raw: string | undefined): StdHitSample | undefined {
+  if (!raw || !raw.includes(":")) return undefined;
+  const parts = raw.split(":");
+  const normalSet = Number.parseInt(parts[0] ?? "0", 10) || 0;
+  const additionSet = Number.parseInt(parts[1] ?? "0", 10) || 0;
+  const index = Number.parseInt(parts[2] ?? "0", 10) || 0;
+  const volume = Number.parseInt(parts[3] ?? "0", 10) || 0;
+  return { normalSet, additionSet, index, volume };
+}
+
+function parseHitSound(raw: string | undefined): number {
+  const n = Number.parseInt(raw ?? "0", 10);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function parseEdgeHitSounds(raw: string | undefined): number[] | undefined {
+  if (!raw || !raw.includes("|")) return undefined;
+  const parts = raw.split("|").map((p) => Number.parseInt(p, 10) || 0);
+  return parts.length > 0 ? parts : undefined;
+}
 
 function comboFlags(type: number): { newCombo: boolean; comboOffset: number } {
   return {
@@ -59,6 +86,9 @@ type RawTiming = {
   beatLength: number;
   /** Uninherited when true. */
   uninherited: boolean;
+  sampleSet: number;
+  sampleIndex: number;
+  volume: number;
 };
 
 type Difficulty = {
@@ -199,10 +229,32 @@ function parseTimingPoints(lines: string[]): RawTiming[] {
     if (!Number.isFinite(timeMs) || !Number.isFinite(beatLength)) continue;
     const uninherited =
       parts.length < 7 ? beatLength > 0 : parts[6]!.trim() === "1";
-    points.push({ timeMs, beatLength, uninherited: uninherited && beatLength > 0 });
+    const sampleSet = Number.parseInt(parts[3] ?? "0", 10) || 0;
+    const sampleIndex = Number.parseInt(parts[4] ?? "0", 10) || 0;
+    const volumeRaw = Number.parseInt(parts[5] ?? "100", 10);
+    const volume = Number.isFinite(volumeRaw)
+      ? Math.min(100, Math.max(0, volumeRaw))
+      : 100;
+    points.push({
+      timeMs,
+      beatLength,
+      uninherited: uninherited && beatLength > 0,
+      sampleSet: sampleSet >= 1 && sampleSet <= 3 ? sampleSet : 0,
+      sampleIndex: Math.max(0, sampleIndex),
+      volume,
+    });
   }
   points.sort((a, b) => a.timeMs - b.timeMs);
   return points;
+}
+
+function toSampleTiming(points: RawTiming[]): StdSampleTiming[] {
+  return points.map((p) => ({
+    timeMs: p.timeMs,
+    sampleSet: p.sampleSet || 1,
+    sampleIndex: p.sampleIndex,
+    volume: p.volume,
+  }));
 }
 
 type TimingAt = { beatLength: number; sliderVelocity: number };
@@ -565,11 +617,18 @@ function parseHitObjects(
     if (type & HIT_SPINNER) {
       const endMs = Number.parseFloat(parts[5] ?? "");
       if (!Number.isFinite(endMs) || endMs <= timeMs) continue;
-      objects.push({ type: "spinner", timeMs, endMs });
+      objects.push({
+        type: "spinner",
+        timeMs,
+        endMs,
+        hitSound: parseHitSound(parts[4]),
+        hitSample: parseHitSample(parts[6]),
+      });
       continue;
     }
 
     const { newCombo, comboOffset } = comboFlags(type);
+    const hitSound = parseHitSound(parts[4]);
 
     if (type & HIT_SLIDER) {
       if (parts.length < 8) continue;
@@ -583,6 +642,15 @@ function parseHitObjects(
       const spanDuration =
         (pixelLength / (sliderMultiplier * 100 * sliderVelocity)) * beatLength;
       const endMs = timeMs + spanDuration * repeats;
+      // Optional: edgeSounds, edgeSets, hitSample after length.
+      const edgeHitSounds = parseEdgeHitSounds(parts[8]);
+      const hitSample = parseHitSample(
+        parts.length > 10 ? parts[10] : parts.length > 9 && parts[9]!.includes(":")
+          ? parts[9]
+          : parts[8]?.includes(":")
+            ? parts[8]
+            : undefined,
+      );
 
       objects.push({
         type: "slider",
@@ -604,6 +672,9 @@ function parseHitObjects(
         ),
         newCombo,
         comboOffset,
+        hitSound,
+        hitSample,
+        edgeHitSounds,
       });
       continue;
     }
@@ -618,6 +689,8 @@ function parseHitObjects(
         stackY: y,
         newCombo,
         comboOffset,
+        hitSound,
+        hitSample: parseHitSample(parts[5]),
       });
     }
   }
@@ -642,6 +715,7 @@ export function parseStdChart(osuText: string): ParsedStdChart {
     hitObjects: [],
     comboColors: [],
     timingPoints: [],
+    sampleTiming: [],
     breaks: [],
     metaData: {},
   });
@@ -677,9 +751,16 @@ export function parseStdChart(osuText: string): ParsedStdChart {
     hitObjects,
     comboColors,
     timingPoints: uninherited.length ? uninherited : [[0, 500]],
+    sampleTiming: toSampleTiming(timing),
     breaks: parseBreaks(lines),
     metaData: parseMeta(lines),
   };
 }
 
-export type { ParsedStdChart, StdHitObject, StdPoint };
+export type {
+  ParsedStdChart,
+  StdHitObject,
+  StdHitSample,
+  StdPoint,
+  StdSampleTiming,
+};

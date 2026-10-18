@@ -397,6 +397,7 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
         notes: [] as Array<{ column: number; startMs: number; endMs: number }>,
         hitObjects: [] as ReturnType<typeof parseStdChart>["hitObjects"],
         comboColors: [] as string[],
+        sampleTiming: [] as ReturnType<typeof parseStdChart>["sampleTiming"],
         taikoHitObjects: [] as ReturnType<typeof parseTaikoChart>["hitObjects"],
         catchHitObjects: [] as ReturnType<typeof parseCatchChart>["hitObjects"],
       };
@@ -445,6 +446,7 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
           overallDifficulty: chart.overallDifficulty,
           hitObjects: chart.hitObjects,
           comboColors: chart.comboColors,
+          sampleTiming: chart.sampleTiming,
         };
       }
 

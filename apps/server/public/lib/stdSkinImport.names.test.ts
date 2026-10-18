@@ -2,6 +2,9 @@ import { describe, expect, test } from "bun:test";
 import {
   animationFrameNameCandidates,
   animationSingleNameCandidates,
+  hitsoundBlobKey,
+  hitsoundNameCandidates,
+  hitsoundSampleKey,
 } from "./stdSkinImport";
 
 describe("slider ball / followpoint name candidates", () => {
@@ -28,5 +31,24 @@ describe("slider ball / followpoint name candidates", () => {
     expect(animationSingleNameCandidates("followpoint")).toEqual([
       "followpoint",
     ]);
+  });
+});
+
+describe("hitsound sample naming", () => {
+  test("index 0/1 uses bare set-hit key", () => {
+    expect(hitsoundSampleKey("soft", "hitclap", 0)).toBe("soft-hitclap");
+    expect(hitsoundSampleKey("soft", "hitclap", 1)).toBe("soft-hitclap");
+    expect(hitsoundSampleKey("soft", "hitclap", 2)).toBe("soft-hitclap2");
+  });
+
+  test("name candidates include bare slidertick for normal", () => {
+    expect(hitsoundNameCandidates("normal", "slidertick", 0)).toEqual([
+      "normal-slidertick",
+      "slidertick",
+    ]);
+    expect(hitsoundNameCandidates("drum", "hitnormal", 0)).toEqual([
+      "drum-hitnormal",
+    ]);
+    expect(hitsoundBlobKey("normal-hitnormal")).toBe("std:hs:normal-hitnormal");
   });
 });

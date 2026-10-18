@@ -190,7 +190,7 @@ function QueryLanguageHelpModal({ onClose }: { onClose: () => void }) {
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="flex max-h-[min(90vh,40rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-elevated shadow-2xl shadow-black/60 outline-none"
+        className="flex max-h-[min(90vh,40rem)] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-elevated shadow-2xl shadow-black/60 outline-none"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex shrink-0 items-start justify-between gap-4 border-b border-white/5 px-5 py-4">
@@ -233,9 +233,11 @@ function QueryLanguageHelpModal({ onClose }: { onClose: () => void }) {
                 <table className="w-full text-left text-xs sm:text-sm">
                   <thead className="bg-highlight/60 text-muted">
                     <tr>
-                      <th className="px-3 py-2 font-medium">Field</th>
+                      <th className="whitespace-nowrap px-3 py-2 font-medium">
+                        Field
+                      </th>
                       <th className="px-3 py-2 font-medium">Meaning</th>
-                      <th className="hidden px-3 py-2 font-medium sm:table-cell">
+                      <th className="hidden whitespace-nowrap px-3 py-2 font-medium sm:table-cell">
                         Example
                       </th>
                     </tr>
@@ -243,11 +245,11 @@ function QueryLanguageHelpModal({ onClose }: { onClose: () => void }) {
                   <tbody className="divide-y divide-white/5">
                     {FIELDS.map((row) => (
                       <tr key={row.field}>
-                        <td className="px-3 py-2 font-mono text-subtle">
+                        <td className="whitespace-nowrap px-3 py-2 font-mono text-subtle">
                           {row.field}
                         </td>
                         <td className="px-3 py-2 text-subtle">{row.meaning}</td>
-                        <td className="hidden px-3 py-2 font-mono text-muted sm:table-cell">
+                        <td className="hidden whitespace-nowrap px-3 py-2 font-mono text-muted sm:table-cell">
                           {row.example}
                         </td>
                       </tr>

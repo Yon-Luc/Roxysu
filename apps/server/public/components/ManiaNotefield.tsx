@@ -115,13 +115,13 @@ export function ManiaNotefield({
   skinRef.current = keymodeSkin;
   const spritesRef = useRef(sprites);
   spritesRef.current = sprites;
-  const hitPositionRef = useRef(storedSkin.hitPosition);
+  const hitPositionRef = useRef(keymodeSkin.hitPosition);
   hitPositionRef.current = keymodeSkin.imported
     ? importedHitPositionFrac(keymodeSkin.imported.hitPositionPx)
-    : clamp(storedSkin.hitPosition, HIT_POSITION_MIN, HIT_POSITION_MAX);
-  const laneCoverRef = useRef(storedSkin.laneCover);
+    : clamp(keymodeSkin.hitPosition, HIT_POSITION_MIN, HIT_POSITION_MAX);
+  const laneCoverRef = useRef(keymodeSkin.laneCover);
   laneCoverRef.current = clamp(
-    storedSkin.laneCover,
+    keymodeSkin.laneCover,
     LANE_COVER_MIN,
     LANE_COVER_MAX,
   );

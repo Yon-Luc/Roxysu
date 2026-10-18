@@ -25,6 +25,10 @@ import {
   applyOverlayStdSpriteEntries,
   exportImportedStdSpriteDataUrls,
 } from "./stdSkinImport";
+import {
+  applyOverlayCatchSpriteDataUrls,
+  exportImportedCatchSpriteDataUrls,
+} from "./catchSkinImport";
 
 /** Server-side skin snapshot consumed by overlay pages (OBS / Wayland host). */
 export type OverlaySkinSnapshot = {
@@ -40,11 +44,12 @@ export type OverlaySkinSnapshot = {
 export async function collectOverlaySkinSnapshot(): Promise<OverlaySkinSnapshot> {
   let sprites: Record<string, string> = {};
   try {
-    const [mania, std] = await Promise.all([
+    const [mania, std, catchSprites] = await Promise.all([
       exportImportedSpriteDataUrls(),
       exportImportedStdSpriteDataUrls(),
+      exportImportedCatchSpriteDataUrls(),
     ]);
-    sprites = { ...mania, ...std };
+    sprites = { ...mania, ...std, ...catchSprites };
   } catch {
     // IndexedDB unavailable — publish configs only.
   }
@@ -74,6 +79,9 @@ export async function applyOverlaySkinSnapshot(
         applyOverlaySpriteEntries(spriteKeys),
         applyOverlayStdSpriteEntries(spriteKeys),
       ]);
+    }
+    if (snapshot.sprites) {
+      await applyOverlayCatchSpriteDataUrls(snapshot.sprites);
     }
   } catch {
     // Sprites are best-effort; configs still apply.
@@ -108,6 +116,9 @@ export async function publishOverlaySkins(): Promise<void> {
   const hasImportedStd = Boolean(
     (snapshot.std as { imported?: unknown } | null | undefined)?.imported,
   );
+  const hasImportedCatch = Boolean(
+    (snapshot.catch as { imported?: unknown } | null | undefined)?.imported,
+  );
   const spriteCount = Object.keys(snapshot.sprites ?? {}).length;
   try {
     await publish(snapshot);
@@ -115,7 +126,10 @@ export async function publishOverlaySkins(): Promise<void> {
     pushToast({ title: String(error), tone: "error" });
     return;
   }
-  if ((hasImportedMania || hasImportedStd) && spriteCount === 0) {
+  if (
+    (hasImportedMania || hasImportedStd || hasImportedCatch) &&
+    spriteCount === 0
+  ) {
     pushToast({
       title: "Published without imported sprites",
       detail:

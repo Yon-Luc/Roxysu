@@ -12,6 +12,7 @@ import { clamp, formatClock } from "../lib/format";
 import { localBeatmapAudioUrl, localBeatmapCoverUrl, osuBeatmapCoverUrl } from "../lib/osuUrls";
 import { useStdSkin } from "../lib/stdSkin";
 import { useImportedStdSprites } from "../lib/stdSkinImport";
+import { useImportedCatchSprites } from "../lib/catchSkinImport";
 import { useStdHitsounds } from "../lib/useStdHitsounds";
 import { useTaikoSkin } from "../lib/taikoSkin";
 import { useCatchSkin } from "../lib/catchSkin";
@@ -22,10 +23,17 @@ import { TaikoPlayfield } from "./TaikoPlayfield";
 import { CatchPlayfield } from "./CatchPlayfield";
 import { maniaHitWindows } from "../lib/maniaWindows";
 import {
+  PREVIEW_SCROLL_DEFAULT,
   PREVIEW_SCROLL_MAX,
   PREVIEW_SCROLL_MIN,
 } from "./ManiaNotefield";
-import { loadPrefs, PREFS_KEY, SKIP_MS } from "./previewPrefs";
+import {
+  loadPrefs,
+  patchManiaPlayfield,
+  PREFS_KEY,
+  resolveManiaScroll,
+  SKIP_MS,
+} from "./previewPrefs";
 import { useAppDict } from "../lib/i18n";
 import { parseScoreMods } from "@server/replay/mods";
 
@@ -115,6 +123,7 @@ export function BeatmapPreviewEmbed({
   const skin = usePreviewSkin();
   const stdSkin = useStdSkin();
   const stdSprites = useImportedStdSprites();
+  const catchSprites = useImportedCatchSprites();
   const taikoSkin = useTaikoSkin();
   const catchSkin = useCatchSkin();
   void skin;
@@ -124,7 +133,7 @@ export function BeatmapPreviewEmbed({
   const [durationMs, setDurationMs] = useState(0);
   const [audioError, setAudioError] = useState<string | null>(null);
   const [volume, setVolume] = useState(prefs.volume);
-  const [scroll, setScroll] = useState(prefs.scroll);
+  const [scroll, setScroll] = useState(PREVIEW_SCROLL_DEFAULT);
 
   playingAllowedRef.current = playingAllowed;
   autoPlayRef.current = autoPlay;
@@ -255,6 +264,26 @@ export function BeatmapPreviewEmbed({
       // ignore quota / private mode
     }
   }
+
+  function onScroll(e: FormEvent<HTMLInputElement>) {
+    const next = Number(e.currentTarget.value);
+    setScroll(next);
+    const cols = data?.columnCount;
+    if (!cols || cols <= 0) return;
+    try {
+      localStorage.setItem(
+        PREFS_KEY,
+        JSON.stringify(patchManiaPlayfield(loadPrefs(), cols, { scroll: next })),
+      );
+    } catch {
+      // ignore quota / private mode
+    }
+  }
+
+  useEffect(() => {
+    if (data?.rulesetShortName !== "mania" || !(data.columnCount > 0)) return;
+    setScroll(resolveManiaScroll(loadPrefs(), data.columnCount));
+  }, [beatmapId, data?.rulesetShortName, data?.columnCount]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -584,6 +613,8 @@ export function BeatmapPreviewEmbed({
                   approachRate={data.approachRate ?? 5}
                   getCurrentTimeMs={mapTimeMs}
                   skin={catchSkin}
+                  beatmapComboColors={data.comboColors ?? null}
+                  sprites={catchSprites}
                 />
               </div>
             ) : (
@@ -670,7 +701,7 @@ export function BeatmapPreviewEmbed({
                 max={PREVIEW_SCROLL_MAX}
                 step={1}
                 value={scroll}
-                onInput={(e) => setScroll(Number(e.currentTarget.value))}
+                onInput={onScroll}
                 className="min-w-[4rem] flex-1 accent-[var(--accent)]"
               />
             </label>

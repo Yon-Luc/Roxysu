@@ -24,6 +24,7 @@ export type LoadedCatchChart = {
   backgroundFileHash: string | null;
   lengthMs: number;
   hitObjects: CatchHitObject[];
+  comboColors: string[];
   usedBeatmapHash: string;
 };
 
@@ -122,6 +123,7 @@ export async function loadCatchChartForScore(
       backgroundFileHash: row.backgroundFileHash,
       lengthMs: Math.round(row.length ?? 0),
       hitObjects: chart.hitObjects,
+      comboColors: chart.comboColors,
       usedBeatmapHash: usedHash,
     },
   };

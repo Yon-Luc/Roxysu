@@ -12,6 +12,12 @@ export type PaintContext2D =
 
 const OSU_WIDTH = 512;
 const OSU_HEIGHT = 384;
+/**
+ * osu!stable / lazer "magic ratio": playfield uses 80% of the 4:3 game area
+ * (`OsuPlayfieldAdjustmentContainer.playfield_size_adjust`). Without this,
+ * circles look oversized relative to the stage.
+ */
+const PLAYFIELD_SIZE_ADJUST = 0.8;
 /** osu!stable follow-point spacing in playfield pixels. */
 const FOLLOW_POINT_SPACING = 32;
 const FOLLOW_POINT_PADDING = 16;
@@ -313,11 +319,41 @@ function subListFor(
   return (subs.get(index) ?? []).find((s) => s.kind === kind);
 }
 
-function playfieldTransform(w: number, h: number) {
-  const scale = Math.min(w / OSU_WIDTH, h / OSU_HEIGHT);
-  const ox = (w - OSU_WIDTH * scale) / 2;
-  const oy = (h - OSU_HEIGHT * scale) / 2;
-  return { scale, ox, oy };
+/**
+ * Letterbox the osu! gamefield into `w`×`h`, with CS-based border padding and
+ * the stable/lazer 0.8 playfield size adjust.
+ *
+ * - Object coords stay in 512×384.
+ * - Border expands by `padOsu` on each side (lazer
+ *   `ApplyCircleSizeToPlayfieldBorder`) so edge hitcircles fit inside.
+ * - The whole padded playfield is fitted into 80% of the stage
+ *   (`playfield_size_adjust`), matching gameplay proportions.
+ */
+export function playfieldTransform(w: number, h: number, padOsu = 0) {
+  const pad = Math.max(0, padOsu);
+  const contentW = OSU_WIDTH + 2 * pad;
+  const contentH = OSU_HEIGHT + 2 * pad;
+  const availW = w * PLAYFIELD_SIZE_ADJUST;
+  const availH = h * PLAYFIELD_SIZE_ADJUST;
+  const scale = Math.min(availW / contentW, availH / contentH);
+  const borderW = contentW * scale;
+  const borderH = contentH * scale;
+  const borderX = (w - borderW) / 2;
+  const borderY = (h - borderH) / 2;
+  return {
+    scale,
+    /** Screen X of osu! (0,0). */
+    ox: borderX + pad * scale,
+    /** Screen Y of osu! (0,0). */
+    oy: borderY + pad * scale,
+    /** Border padding in osu! pixels (same on each side). */
+    pad,
+    /** Expanded border origin / size in screen pixels. */
+    borderX,
+    borderY,
+    borderW,
+    borderH,
+  };
 }
 
 /** Scratch canvas reused for multiplicative combo tint (osu AccentColour). */
@@ -681,7 +717,6 @@ function paintStdPlayfieldInner(args: PaintStdPlayfieldArgs): void {
 
   const preempt = approachPreemptMs(ar);
   const fadeIn = approachFadeInMs(ar);
-  const { scale, ox, oy } = playfieldTransform(w, h);
   const { head, subs } = args.judgmentMaps ?? buildHeadMap(judgments);
   const combo =
     args.comboInfo ??
@@ -698,6 +733,8 @@ function paintStdPlayfieldInner(args: PaintStdPlayfieldArgs): void {
   );
   const radius =
     circleRadius(cs) * (skin?.hitCircleScale != null ? skin.hitCircleScale : 1);
+  const { scale, ox, oy, borderX, borderY, borderW, borderH } =
+    playfieldTransform(w, h, radius);
   const defaultApproach = "#ffffff";
   const approachOverride =
     skin?.approach && skin.approach.toLowerCase() !== defaultApproach
@@ -706,15 +743,16 @@ function paintStdPlayfieldInner(args: PaintStdPlayfieldArgs): void {
 
   ctx.clearRect(0, 0, w, h);
 
+  // Border is expanded by circle radius (lazer playfield border padding).
   ctx.fillStyle = "rgba(0,0,0,0.45)";
-  ctx.fillRect(ox, oy, OSU_WIDTH * scale, OSU_HEIGHT * scale);
+  ctx.fillRect(borderX, borderY, borderW, borderH);
   ctx.strokeStyle = "rgba(255,255,255,0.12)";
   ctx.lineWidth = 1;
   ctx.strokeRect(
-    ox + 0.5,
-    oy + 0.5,
-    OSU_WIDTH * scale - 1,
-    OSU_HEIGHT * scale - 1,
+    borderX + 0.5,
+    borderY + 0.5,
+    borderW - 1,
+    borderH - 1,
   );
 
   const toScreen = (x: number, y: number) => ({

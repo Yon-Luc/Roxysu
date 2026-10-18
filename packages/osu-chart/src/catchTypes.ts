@@ -4,6 +4,12 @@ export type CatchHitObject =
       x: number;
       timeMs: number;
       hyperDash: boolean;
+      /** Hit-object new-combo flag (head fruit only). */
+      newCombo?: boolean;
+      /** Combo colour skip from type bits 4–6 (head fruit only). */
+      comboOffset?: number;
+      /** Stable fruit index for pear/grapes/apple/orange cycle. */
+      indexInBeatmap: number;
     }
   | {
       type: "droplet";
@@ -26,6 +32,8 @@ export type ParsedCatchChart = {
   sliderMultiplier: number;
   sliderTickRate: number;
   hitObjects: CatchHitObject[];
+  /** Beatmap `[Colours]` Combo1…Combo8 as `#rrggbb`. */
+  comboColors: string[];
   timingPoints: Array<[timeMs: number, beatLengthMs: number]>;
   breaks: Array<[startMs: number, endMs: number]>;
   metaData: Record<string, string>;

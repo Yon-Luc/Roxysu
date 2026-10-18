@@ -1,21 +1,23 @@
 import { useEffect, useRef } from "react";
 import { resizePlayfieldCanvas, startPlayfieldRaf } from "../lib/playfieldRaf";
 import type { CatchSkin } from "../lib/catchSkin";
-import catcherSpriteUrl from "../roxyctb.png";
+import { useImportedCatchSprites } from "../lib/catchSkinImport";
 import {
-  buildCatchComboNumbers,
+  buildCatchComboInfo,
   buildCatchJudgmentMap,
   paintCatchPlayfield,
   type CatcherTrailPoint,
   type CatchHitObject,
   type CatchPlayfieldFrame,
   type CatchPlayfieldJudgment,
+  type CatchPlayfieldSprites,
 } from "../lib/paintCatchPlayfield";
 
 export type {
   CatchHitObject,
   CatchPlayfieldFrame,
   CatchPlayfieldJudgment,
+  CatchPlayfieldSprites,
 } from "../lib/paintCatchPlayfield";
 
 type CatchPlayfieldProps = {
@@ -27,6 +29,8 @@ type CatchPlayfieldProps = {
   judgments?: CatchPlayfieldJudgment[];
   hidden?: boolean;
   skin?: CatchSkin;
+  beatmapComboColors?: string[] | null;
+  sprites?: CatchPlayfieldSprites | null;
   className?: string;
 };
 
@@ -39,38 +43,37 @@ export function CatchPlayfield({
   judgments,
   hidden = false,
   skin,
+  beatmapComboColors = null,
+  sprites: spritesProp,
   className = "",
 }: CatchPlayfieldProps) {
+  const importedSprites = useImportedCatchSprites();
+  const sprites = spritesProp !== undefined ? spritesProp : importedSprites;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const objectsRef = useRef<CatchHitObject[]>([]);
   const getTimeRef = useRef(getCurrentTimeMs);
   const framesRef = useRef<CatchPlayfieldFrame[]>([]);
   const judgmentsRef = useRef(buildCatchJudgmentMap(undefined));
-  const comboRef = useRef<number[]>([]);
+  const comboRef = useRef(buildCatchComboInfo([]));
   const csRef = useRef(circleSize);
   const arRef = useRef(approachRate);
   const hiddenRef = useRef(hidden);
   const skinRef = useRef(skin ?? null);
+  const comboColorsRef = useRef(beatmapComboColors);
+  const spritesRef = useRef(sprites ?? null);
   const trailRef = useRef<CatcherTrailPoint[]>([]);
-  const spriteRef = useRef<HTMLImageElement | null>(null);
 
   objectsRef.current = hitObjects;
   getTimeRef.current = getCurrentTimeMs;
   framesRef.current = frames ?? [];
   judgmentsRef.current = buildCatchJudgmentMap(judgments);
-  comboRef.current = buildCatchComboNumbers(hitObjects);
+  comboRef.current = buildCatchComboInfo(hitObjects);
   csRef.current = circleSize;
   arRef.current = approachRate;
   hiddenRef.current = hidden;
   skinRef.current = skin ?? null;
-
-  useEffect(() => {
-    const img = new Image();
-    img.src = catcherSpriteUrl;
-    img.onload = () => {
-      spriteRef.current = img;
-    };
-  }, []);
+  comboColorsRef.current = beatmapComboColors;
+  spritesRef.current = sprites ?? null;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -104,7 +107,8 @@ export function CatchPlayfield({
         skinRef.current,
         comboRef.current,
         judgmentsRef.current,
-        spriteRef.current,
+        comboColorsRef.current,
+        spritesRef.current,
       ],
       paint: (tMs) => {
         paintCatchPlayfield({
@@ -119,9 +123,10 @@ export function CatchPlayfield({
           hidden: hiddenRef.current,
           skin: skinRef.current,
           trail: trailRef.current,
-          comboNumbers: comboRef.current,
+          comboInfo: comboRef.current,
           judgmentMap: judgmentsRef.current,
-          catcherSprite: spriteRef.current,
+          beatmapComboColors: comboColorsRef.current,
+          sprites: spritesRef.current,
         });
       },
     });

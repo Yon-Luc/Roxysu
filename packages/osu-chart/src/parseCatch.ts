@@ -1,4 +1,9 @@
-import { catcherWidth, type CatchHitObject, type ParsedCatchChart } from "./catchTypes";
+import {
+  catcherWidth,
+  type CatchHitObject,
+  type ParsedCatchChart,
+} from "./catchTypes";
+import { parseBeatmapComboColors } from "./parseStd";
 import {
   HIT_CIRCLE,
   HIT_SLIDER,
@@ -19,12 +24,21 @@ import {
 
 const OSU_WIDTH = 512;
 const CATCHER_BASE_SPEED = 1;
-const ALLOWED_CATCH_RANGE = 0.8;
-const TINY_DROPLET_INTERVAL_MS = 32;
+/** Match judge plate tolerance (`halfWidth * 1.02`) for hyperdash distance. */
+const ALLOWED_CATCH_RANGE = 1.02;
+const TINY_DROPLET_INTERVAL_MS = 16;
 const BANANA_INTERVAL_MS = 60;
+const HIT_NEW_COMBO = 4;
 
 function clampX(x: number): number {
   return Math.min(OSU_WIDTH, Math.max(0, x));
+}
+
+function comboFlags(type: number): { newCombo: boolean; comboOffset: number } {
+  return {
+    newCombo: (type & HIT_NEW_COMBO) !== 0,
+    comboOffset: (type >> 4) & 0b111,
+  };
 }
 
 function bananaX(timeMs: number, index: number): number {
@@ -34,7 +48,9 @@ function bananaX(timeMs: number, index: number): number {
 
 function applyHyperDash(objects: CatchHitObject[], cs: number): void {
   const halfWidth = (catcherWidth(cs) / 2) * ALLOWED_CATCH_RANGE;
-  const fruits = objects.filter((o): o is Extract<CatchHitObject, { type: "fruit" }> => o.type === "fruit");
+  const fruits = objects.filter(
+    (o): o is Extract<CatchHitObject, { type: "fruit" }> => o.type === "fruit",
+  );
   for (let i = 0; i < fruits.length - 1; i += 1) {
     const cur = fruits[i]!;
     const next = fruits[i + 1]!;
@@ -54,6 +70,7 @@ function parseHitObjects(
   sliderTickRate: number,
 ): CatchHitObject[] {
   const objects: CatchHitObject[] = [];
+  let fruitIndex = 0;
   let inHit = false;
   for (const raw of lines) {
     const line = raw.trim();
@@ -92,6 +109,7 @@ function parseHitObjects(
 
     if (type & HIT_SLIDER) {
       if (parts.length < 8) continue;
+      const { newCombo, comboOffset } = comboFlags(type);
       const { curveType, controls } = parseSliderPath(parts[5]!, { x, y });
       const repeats = Math.max(1, Number.parseInt(parts[6]!, 10) || 1);
       const pixelLength = Number.parseFloat(parts[7]!);
@@ -118,13 +136,16 @@ function parseHitObjects(
         x: clampX(x),
         timeMs,
         hyperDash: false,
+        newCombo,
+        comboOffset,
+        indexInBeatmap: fruitIndex,
       });
+      fruitIndex += 1;
 
       for (const tick of ticks) {
         const pt = pathPointAt(path, bounceFracAt(tick.frac, 1));
         const spanIndex = Math.floor((tick.tMs - timeMs) / span);
-        const localFrac =
-          spanIndex % 2 === 1 ? 1 - tick.frac : tick.frac;
+        const localFrac = spanIndex % 2 === 1 ? 1 - tick.frac : tick.frac;
         const p = pathPointAt(path, localFrac);
         objects.push({
           type: "droplet",
@@ -143,7 +164,11 @@ function parseHitObjects(
           x: clampX(pt.x),
           timeMs: t,
           hyperDash: false,
+          newCombo: false,
+          comboOffset: 0,
+          indexInBeatmap: fruitIndex,
         });
+        fruitIndex += 1;
       }
 
       const duration = endMs - timeMs;
@@ -159,6 +184,15 @@ function parseHitObjects(
           const nearFruit =
             Math.abs(t - timeMs) < 8 || Math.abs(t - endMs) < 8;
           if (nearTick || nearFruit) continue;
+          // Skip near repeat fruits
+          let nearRepeat = false;
+          for (let s = 1; s < repeats; s += 1) {
+            if (Math.abs(t - (timeMs + s * span)) < 8) {
+              nearRepeat = true;
+              break;
+            }
+          }
+          if (nearRepeat) continue;
           objects.push({
             type: "droplet",
             x: clampX(pt.x),
@@ -171,12 +205,17 @@ function parseHitObjects(
     }
 
     if (type & HIT_CIRCLE) {
+      const { newCombo, comboOffset } = comboFlags(type);
       objects.push({
         type: "fruit",
         x: clampX(x),
         timeMs,
         hyperDash: false,
+        newCombo,
+        comboOffset,
+        indexInBeatmap: fruitIndex,
       });
+      fruitIndex += 1;
     }
   }
 
@@ -196,6 +235,7 @@ export function parseCatchChart(osuText: string): ParsedCatchChart {
     sliderMultiplier: 1.4,
     sliderTickRate: 1,
     hitObjects: [],
+    comboColors: [],
     timingPoints: [],
     breaks: [],
     metaData: {},
@@ -228,6 +268,7 @@ export function parseCatchChart(osuText: string): ParsedCatchChart {
     sliderMultiplier: diff.sliderMultiplier,
     sliderTickRate: diff.sliderTickRate,
     hitObjects,
+    comboColors: parseBeatmapComboColors(lines),
     timingPoints: uninherited.length ? uninherited : [[0, 500]],
     breaks: parseBreaks(lines),
     metaData: parseMeta(lines),

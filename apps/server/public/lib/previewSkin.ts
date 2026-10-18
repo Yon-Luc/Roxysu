@@ -75,6 +75,10 @@ export type KeymodeSkin = {
   lnTailShape: LnTailShape;
   /** When false, hold notes omit the head note graphic. */
   lnShowHead: boolean;
+  /** Receptor / hit line position (fraction of height from top). */
+  hitPosition: number;
+  /** Top lane cover height (fraction of playfield height). */
+  laneCover: number;
   imported?: ImportedManiaLayout;
 };
 
@@ -90,10 +94,6 @@ export const LANE_COVER_MAX = 0.7;
 
 export type PreviewSkin = {
   keymodes: Record<Keymode, KeymodeSkin>;
-  /** Receptor / hit line position (fraction of height from top). */
-  hitPosition: number;
-  /** Top lane cover height (fraction of playfield height). */
-  laneCover: number;
 };
 
 export const NOTE_SHAPES: { id: NoteShape; label: string }[] = [
@@ -148,6 +148,8 @@ export function defaultKeymodeSkin(keys: Keymode): KeymodeSkin {
     columnSpacing: COLUMN_SPACING_DEFAULT,
     lnTailShape: "pointed",
     lnShowHead: true,
+    hitPosition: HIT_POSITION_DEFAULT,
+    laneCover: LANE_COVER_DEFAULT,
   };
 }
 
@@ -186,8 +188,6 @@ export function defaultPreviewSkin(): PreviewSkin {
       9: defaultKeymodeSkin(9),
       10: defaultKeymodeSkin(10),
     },
-    hitPosition: HIT_POSITION_DEFAULT,
-    laneCover: LANE_COVER_DEFAULT,
   };
 }
 
@@ -252,9 +252,20 @@ function parseImportedLayout(raw: unknown): ImportedManiaLayout | undefined {
   };
 }
 
-function parseKeymodeSkin(raw: unknown, keys: Keymode): KeymodeSkin {
+function parseKeymodeSkin(
+  raw: unknown,
+  keys: Keymode,
+  legacyHitPosition: number,
+  legacyLaneCover: number,
+): KeymodeSkin {
   const base = defaultKeymodeSkin(keys);
-  if (!raw || typeof raw !== "object") return base;
+  if (!raw || typeof raw !== "object") {
+    return {
+      ...base,
+      hitPosition: legacyHitPosition,
+      laneCover: legacyLaneCover,
+    };
+  }
   const k = raw as Partial<KeymodeSkin>;
   const shape: NoteShape =
     k.shape === "flat" || k.shape === "arrow" || k.shape === "circle"
@@ -279,8 +290,23 @@ function parseKeymodeSkin(raw: unknown, keys: Keymode): KeymodeSkin {
     ),
     lnTailShape: parseLnTailShape(k.lnTailShape),
     lnShowHead: k.lnShowHead !== false,
+    hitPosition: clamp(
+      typeof k.hitPosition === "number" ? k.hitPosition : legacyHitPosition,
+      HIT_POSITION_MIN,
+      HIT_POSITION_MAX,
+    ),
+    laneCover: clamp(
+      typeof k.laneCover === "number" ? k.laneCover : legacyLaneCover,
+      LANE_COVER_MIN,
+      LANE_COVER_MAX,
+    ),
     ...(imported ? { imported } : {}),
   };
+}
+
+/** Exported for tests — parse localStorage JSON into PreviewSkin with migration. */
+export function parsePreviewSkinJson(raw: string | null): PreviewSkin {
+  return parseSkin(raw);
 }
 
 function parseSkin(raw: string | null): PreviewSkin {
@@ -292,27 +318,30 @@ function parseSkin(raw: string | null): PreviewSkin {
       hitPosition?: unknown;
       laneCover?: unknown;
     };
+    const legacyHitPosition = clamp(
+      typeof parsed.hitPosition === "number"
+        ? parsed.hitPosition
+        : HIT_POSITION_DEFAULT,
+      HIT_POSITION_MIN,
+      HIT_POSITION_MAX,
+    );
+    const legacyLaneCover = clamp(
+      typeof parsed.laneCover === "number"
+        ? parsed.laneCover
+        : LANE_COVER_DEFAULT,
+      LANE_COVER_MIN,
+      LANE_COVER_MAX,
+    );
     const keymodes = { ...defaults.keymodes };
     for (const keys of KEYMODES) {
-      keymodes[keys] = parseKeymodeSkin(parsed.keymodes?.[String(keys)], keys);
+      keymodes[keys] = parseKeymodeSkin(
+        parsed.keymodes?.[String(keys)],
+        keys,
+        legacyHitPosition,
+        legacyLaneCover,
+      );
     }
-    return {
-      keymodes,
-      hitPosition: clamp(
-        typeof parsed.hitPosition === "number"
-          ? parsed.hitPosition
-          : defaults.hitPosition,
-        HIT_POSITION_MIN,
-        HIT_POSITION_MAX,
-      ),
-      laneCover: clamp(
-        typeof parsed.laneCover === "number"
-          ? parsed.laneCover
-          : defaults.laneCover,
-        LANE_COVER_MIN,
-        LANE_COVER_MAX,
-      ),
-    };
+    return { keymodes };
   } catch {
     return defaults;
   }
@@ -335,9 +364,12 @@ export function getPreviewSkin(): PreviewSkin {
 }
 
 export function setPreviewSkin(skin: PreviewSkin): void {
-  cachedSkin = skin;
+  // Re-parse so legacy root hitPosition/laneCover (overlay snapshots, old
+  // localStorage) migrate onto each keymode before persist.
+  const normalized = parseSkin(JSON.stringify(skin));
+  cachedSkin = normalized;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(skin));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
   } catch {
     // ignore quota / private mode
   }
@@ -355,6 +387,44 @@ export function resetKeymodeSkin(keys: Keymode): void {
     keymodes: {
       ...skin.keymodes,
       [keys]: defaultKeymodeSkin(keys),
+    },
+  });
+}
+
+/** Nearest supported keymode for an arbitrary column count. */
+export function nearestKeymode(columnCount: number): Keymode {
+  if (KEYMODES.includes(columnCount as Keymode)) {
+    return columnCount as Keymode;
+  }
+  let nearest: Keymode = 7;
+  let best = Infinity;
+  for (const k of KEYMODES) {
+    const d = Math.abs(k - columnCount);
+    if (d < best) {
+      best = d;
+      nearest = k;
+    }
+  }
+  return nearest;
+}
+
+/** Patch hit/cover (or other fields) on the resolved keymode slot. */
+export function patchKeymodeSkin(
+  columnCount: number,
+  patch: Partial<KeymodeSkin>,
+): void {
+  const skin = getPreviewSkin();
+  const keys = nearestKeymode(columnCount);
+  const current = skin.keymodes[keys];
+  setPreviewSkin({
+    ...skin,
+    keymodes: {
+      ...skin.keymodes,
+      [keys]: {
+        ...current,
+        ...patch,
+        columns: patch.columns ?? current.columns,
+      },
     },
   });
 }
@@ -422,15 +492,7 @@ export function resolveKeymodeSkin(
     return skin.keymodes[columnCount as Keymode];
   }
   // Nearest supported keymode by count, then pad/truncate columns.
-  let nearest: Keymode = 7;
-  let best = Infinity;
-  for (const k of KEYMODES) {
-    const d = Math.abs(k - columnCount);
-    if (d < best) {
-      best = d;
-      nearest = k;
-    }
-  }
+  const nearest = nearestKeymode(columnCount);
   const base = skin.keymodes[nearest];
   return {
     shape: base.shape,
@@ -443,6 +505,8 @@ export function resolveKeymodeSkin(
     columnSpacing: base.columnSpacing,
     lnTailShape: base.lnTailShape,
     lnShowHead: base.lnShowHead,
+    hitPosition: base.hitPosition,
+    laneCover: base.laneCover,
     ...(base.imported ? { imported: base.imported } : {}),
   };
 }

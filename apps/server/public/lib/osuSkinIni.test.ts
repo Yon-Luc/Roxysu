@@ -76,6 +76,22 @@ Cursor: 255,255,255
     expect(parsed.colours.spinnerBackground).toBe("#646464");
     expect(parsed.colours.cursor).toBe("#ffffff");
     expect(parsed.layeredHitSounds).toBe(false);
+    expect(parsed.catchColours).toEqual({});
+  });
+
+  test("parses [CatchTheBeat] HyperDash colours", () => {
+    const parsed = parseSkinIni(`
+[General]
+Name: Catchy
+
+[CatchTheBeat]
+HyperDash: 255,0,0
+HyperDashFruit: 0,255,0
+HyperDashAfterImage: 0,0,255
+`);
+    expect(parsed.catchColours.hyperDash).toBe("#ff0000");
+    expect(parsed.catchColours.hyperDashFruit).toBe("#00ff00");
+    expect(parsed.catchColours.hyperDashAfterImage).toBe("#0000ff");
   });
 
   test("skinComboCycle puts Combo1 last", () => {

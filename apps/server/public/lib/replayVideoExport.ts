@@ -70,19 +70,20 @@ import {
   type TaikoPlayfieldJudgment,
 } from "./paintTaikoPlayfield";
 import {
-  buildCatchComboNumbers,
+  buildCatchComboInfo,
   buildCatchJudgmentMap,
   paintCatchPlayfield,
   type CatcherTrailPoint,
   type CatchPlayfieldJudgment,
+  type CatchPlayfieldSprites,
 } from "./paintCatchPlayfield";
+import { loadImportedCatchSprites } from "./catchSkinImport";
 import {
   FIELD_WIDTH_DEFAULT,
   FIELD_WIDTH_MAX,
   FIELD_WIDTH_MIN,
 } from "../components/previewPrefs";
 import roxyIconUrl from "../roxy.png";
-import catcherSpriteUrl from "../roxyctb.png";
 
 export const REPLAY_VIDEO_WIDTH = 1920;
 export const REPLAY_VIDEO_HEIGHT = 1080;
@@ -1135,9 +1136,10 @@ function paintComposedFrame(args: {
     skin: CatchSkin;
     hidden: boolean;
     trail: CatcherTrailPoint[];
-    comboNumbers: number[];
+    comboInfo: ReturnType<typeof buildCatchComboInfo>;
     judgmentMap: ReturnType<typeof buildCatchJudgmentMap>;
-    catcherSprite: HTMLImageElement | null;
+    beatmapComboColors: string[] | null;
+    sprites: CatchPlayfieldSprites | null;
   };
   maniaPaint?: {
     notes: LoadedScoreReplay["beatmap"]["notes"];
@@ -1214,9 +1216,10 @@ function paintComposedFrame(args: {
       hidden: args.catchPaint.hidden,
       skin: args.catchPaint.skin,
       trail: args.catchPaint.trail,
-      comboNumbers: args.catchPaint.comboNumbers,
+      comboInfo: args.catchPaint.comboInfo,
       judgmentMap: args.catchPaint.judgmentMap,
-      catcherSprite: args.catchPaint.catcherSprite,
+      beatmapComboColors: args.catchPaint.beatmapComboColors,
+      sprites: args.catchPaint.sprites,
     });
   } else if (!std && !taiko && !fruits && args.maniaPaint) {
     paintManiaNotefield({
@@ -1290,11 +1293,11 @@ export async function exportReplayVideo(
   onProgress?.({ phase: "audio" });
   throwIfAborted(signal);
 
-  const [fullAudio, bg, logo, catcherSprite, maniaSprites] = await Promise.all([
+  const [fullAudio, bg, logo, catchSprites, maniaSprites] = await Promise.all([
     decodeBeatmapAudio(audioUrl, signal),
     hideBackground ? Promise.resolve(null) : loadBackgroundImage(replay, signal),
     loadRoxysuLogo(signal),
-    fruits ? loadImageFromUrl(catcherSpriteUrl, signal) : Promise.resolve(null),
+    fruits ? loadImportedCatchSprites() : Promise.resolve(null),
     mania
       ? loadImportedManiaSprites(replay.beatmap.columnCount)
       : Promise.resolve(null),
@@ -1428,13 +1431,12 @@ export async function exportReplayVideo(
         skin: opts.catchSkin ?? getCatchSkin(),
         hidden: replay.playback.acronyms.includes("HD"),
         trail: [] as CatcherTrailPoint[],
-        comboNumbers: buildCatchComboNumbers(
-          replay.beatmap.catchHitObjects ?? [],
-        ),
+        comboInfo: buildCatchComboInfo(replay.beatmap.catchHitObjects ?? []),
         judgmentMap: buildCatchJudgmentMap(
           replay.judgments as CatchPlayfieldJudgment[],
         ),
-        catcherSprite,
+        beatmapComboColors: replay.beatmap.comboColors ?? null,
+        sprites: catchSprites,
       }
     : undefined;
 
@@ -1462,16 +1464,8 @@ export async function exportReplayVideo(
           skin,
           hitPosition: skin.imported
             ? importedHitPositionFrac(skin.imported.hitPositionPx)
-            : clamp(
-                previewSkin.hitPosition,
-                HIT_POSITION_MIN,
-                HIT_POSITION_MAX,
-              ),
-          laneCover: clamp(
-            previewSkin.laneCover,
-            LANE_COVER_MIN,
-            LANE_COVER_MAX,
-          ),
+            : clamp(skin.hitPosition, HIT_POSITION_MIN, HIT_POSITION_MAX),
+          laneCover: clamp(skin.laneCover, LANE_COVER_MIN, LANE_COVER_MAX),
           headJudgments: buildHeadJudgmentMap(replay.judgments),
           sprites: maniaSprites as ManiaNotefieldSprites | null,
         };

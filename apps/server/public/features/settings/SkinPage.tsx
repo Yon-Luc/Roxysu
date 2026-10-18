@@ -246,6 +246,8 @@ export function SkinPage({ section }: { section?: string } = {}) {
       columnSpacing: number;
       lnTailShape: LnTailShape;
       lnShowHead: boolean;
+      hitPosition: number;
+      laneCover: number;
     }>,
   ) {
     const prev = getPreviewSkin();
@@ -549,7 +551,7 @@ export function SkinPage({ section }: { section?: string } = {}) {
               <label className="flex flex-col gap-1 text-xs text-muted">
                 <span>
                   {t(dict?.skin.hitPosition, {
-                    pct: Math.round(skin.hitPosition * 100),
+                    pct: Math.round(keySkin.hitPosition * 100),
                   })}
                 </span>
                 <input
@@ -557,11 +559,11 @@ export function SkinPage({ section }: { section?: string } = {}) {
                   min={HIT_POSITION_MIN}
                   max={HIT_POSITION_MAX}
                   step={0.01}
-                  value={skin.hitPosition}
+                  value={keySkin.hitPosition}
                   onInput={(e) => {
-                    const hitPosition = Number(e.currentTarget.value);
-                    const prev = getPreviewSkin();
-                    setPreviewSkin({ ...prev, hitPosition });
+                    updateKeymode({
+                      hitPosition: Number(e.currentTarget.value),
+                    });
                   }}
                   className="accent-[var(--accent)]"
                 />
@@ -570,7 +572,7 @@ export function SkinPage({ section }: { section?: string } = {}) {
               <label className="flex flex-col gap-1 text-xs text-muted">
                 <span>
                   {t(dict?.skin.laneCover, {
-                    pct: Math.round(skin.laneCover * 100),
+                    pct: Math.round(keySkin.laneCover * 100),
                   })}
                 </span>
                 <input
@@ -578,11 +580,11 @@ export function SkinPage({ section }: { section?: string } = {}) {
                   min={LANE_COVER_MIN}
                   max={LANE_COVER_MAX}
                   step={0.01}
-                  value={skin.laneCover}
+                  value={keySkin.laneCover}
                   onInput={(e) => {
-                    const laneCover = Number(e.currentTarget.value);
-                    const prev = getPreviewSkin();
-                    setPreviewSkin({ ...prev, laneCover });
+                    updateKeymode({
+                      laneCover: Number(e.currentTarget.value),
+                    });
                   }}
                   className="accent-[var(--accent)]"
                 />

@@ -326,6 +326,8 @@ setting, not BPM/SV.
 The visual layer that draws fruits, droplets, bananas, and the catcher for
 **catch** (`rulesetShortName` `fruits`, Mode `2`). Playfield is 512×384 like
 standard. UI label is Catch; aliases `ctb` / `catch` exist only at filter edges.
+Default catcher is a procedural plate; an **Imported catch skin** may supply
+legacy fruit/catcher sprites.
 
 **Not:** "ctb preview" as a separate product surface, converted Mode 0 maps played as catch
 
@@ -344,7 +346,8 @@ preview skin store. May be sourced from a browser file picker/drop or from a
 **Realm skin** archive.
 
 **Not:** the procedural PreviewSkin editor (colors / shapes), lazer-native skins,
-**Imported standard skin**, taiko/catch skins, Realm skin rows before import
+**Imported standard skin**, **Imported catch skin**, taiko skins, Realm skin
+rows before import
 
 **In code:** `maniaSkinImport.ts`, `osuSkinIni.ts`, `roxysu:preview-skin` `imported`
 
@@ -362,14 +365,37 @@ combo digits, judgments, …) and hitsound samples (`std:hs:*`) live in IndexedD
 spinner colours) plus `LayeredHitSounds` live on `roxysu:std-skin` (`imported`).
 While imported, skin combo colours override beatmap ComboN. Missing sprites fall
 back to procedural drawing; discrete skin hitsounds play from the preview/rewatch
-clock. Same `.osk` can also feed an **Imported mania skin**.
+clock. Same `.osk` can also feed an **Imported mania skin** or **Imported catch
+skin**.
 
 **Not:** procedural-only `StdSkin` colours, lazer-native skins, **Imported mania
-skin**, taiko/catch skins
+skin**, **Imported catch skin**, taiko skins
 
 **In code:** `stdSkinImport.ts`, `stdHitsoundPlayer.ts`, `osuSkinIni.ts`
 `[Colours]` / `skinComboCycle`, `paintStdPlayfield` `sprites`, `roxysu:std-skin`
 `imported`
+
+**See:** [features/preview-replay/](features/preview-replay/index.md)
+
+---
+
+### Imported catch skin
+
+A user-provided osu! legacy skin (`.osk` or folder with `skin.ini`) applied to
+the **Catch playfield** for beatmap preview, score rewatch, embed, and replay
+video export. Sprites (`fruit-pear` / grapes / apple / orange + overlays,
+`fruit-drop`, `fruit-bananas`, `fruit-catcher-idle|fail|kiai` or
+`fruit-ryuuta`, optional `lighting`) live in IndexedDB (`roxysu-catch-skin`,
+keys `catch:*`); metadata, combo colours, and `[CatchTheBeat]` HyperDash /
+HyperDashFruit / HyperDashAfterImage live on `roxysu:catch-skin` (`imported`).
+Missing sprites fall back to procedural fruit/droplet/banana drawing and a
+procedural plate catcher.
+
+**Not:** procedural-only `CatchSkin` colours, lazer-native skins, **Imported
+mania skin**, **Imported standard skin**, taiko skins
+
+**In code:** `catchSkinImport.ts`, `osuSkinIni.ts` `[CatchTheBeat]`,
+`paintCatchPlayfield` `sprites`, `roxysu:catch-skin` `imported`
 
 **See:** [features/preview-replay/](features/preview-replay/index.md)
 

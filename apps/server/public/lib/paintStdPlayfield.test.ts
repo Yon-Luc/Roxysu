@@ -7,6 +7,7 @@ import {
   followPointPositions,
   objectEndPos,
   paintStdPlayfield,
+  playfieldTransform,
   snakeFracAt,
   type StdHitObject,
 } from "./paintStdPlayfield";
@@ -82,6 +83,49 @@ describe("followPointPositions / followPointAngle", () => {
 describe("darkenHex", () => {
   test("darkens combo red for slider body fill", () => {
     expect(darkenHex("#ff0000", 0.35)).toBe("#590000");
+  });
+});
+
+describe("playfieldTransform CS border padding + 0.8 size adjust", () => {
+  test("with no pad, border is 80% of a matching 4:3 stage", () => {
+    const tf = playfieldTransform(640, 480, 0);
+    // 0.8 × 640 = 512 → scale 1; border fills the adjusted area, centered.
+    expect(tf.scale).toBeCloseTo(1);
+    expect(tf.borderW).toBeCloseTo(512);
+    expect(tf.borderH).toBeCloseTo(384);
+    expect(tf.borderX).toBeCloseTo((640 - 512) / 2);
+    expect(tf.borderY).toBeCloseTo((480 - 384) / 2);
+    expect(tf.ox).toBeCloseTo(tf.borderX);
+    expect(tf.oy).toBeCloseTo(tf.borderY);
+  });
+
+  test("edge circle at (0,0) stays inside the expanded border", () => {
+    // CS4 → radius ≈ 36.48; pad by that amount.
+    const pad = 54.4 - 4.48 * 4;
+    const tf = playfieldTransform(800, 600, pad);
+    const sx = tf.ox + 0 * tf.scale;
+    const sy = tf.oy + 0 * tf.scale;
+    const rScreen = pad * tf.scale;
+    // Left/top of the circle disc
+    expect(sx - rScreen).toBeGreaterThanOrEqual(tf.borderX - 0.01);
+    expect(sy - rScreen).toBeGreaterThanOrEqual(tf.borderY - 0.01);
+    // Right/bottom for a circle at (512, 384)
+    const sx2 = tf.ox + 512 * tf.scale;
+    const sy2 = tf.oy + 384 * tf.scale;
+    expect(sx2 + rScreen).toBeLessThanOrEqual(tf.borderX + tf.borderW + 0.01);
+    expect(sy2 + rScreen).toBeLessThanOrEqual(tf.borderY + tf.borderH + 0.01);
+  });
+
+  test("playfield stays within 80% of the stage", () => {
+    const tf = playfieldTransform(640, 480, 32);
+    expect(tf.borderW).toBeLessThanOrEqual(640 * 0.8 + 0.01);
+    expect(tf.borderH).toBeLessThanOrEqual(480 * 0.8 + 0.01);
+  });
+
+  test("padding shrinks scale vs unpadded", () => {
+    const bare = playfieldTransform(640, 480, 0);
+    const padded = playfieldTransform(640, 480, 32);
+    expect(padded.scale).toBeLessThan(bare.scale);
   });
 });
 

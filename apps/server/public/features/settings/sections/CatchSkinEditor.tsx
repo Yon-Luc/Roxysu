@@ -5,6 +5,10 @@ import {
   type CatchPlayfieldJudgment,
 } from "../../../components/CatchPlayfield";
 import {
+  CatchSkinFileButton,
+  CatchSkinRealmButton,
+} from "../../../components/CatchSkinImportControls";
+import {
   CATCHER_SCALE_MAX,
   CATCHER_SCALE_MIN,
   catchComboColorFor,
@@ -13,30 +17,109 @@ import {
   setCatchSkin,
   type CatchSkin,
 } from "../../../lib/catchSkin";
+import {
+  resetImportedCatchSkin,
+  useImportedCatchSprites,
+} from "../../../lib/catchSkinImport";
 import { useAppDict } from "../../../lib/i18n";
 import { SkinColorInput } from "../SkinColorInput";
 
 const LOOP_MS = 8000;
 
 const DEMO_OBJECTS: CatchHitObject[] = [
-  { type: "fruit", x: 80, timeMs: 700, hyperDash: false },
-  { type: "fruit", x: 180, timeMs: 1000, hyperDash: false },
-  { type: "fruit", x: 280, timeMs: 1300, hyperDash: false },
-  { type: "fruit", x: 420, timeMs: 1600, hyperDash: true },
+  {
+    type: "fruit",
+    x: 80,
+    timeMs: 700,
+    hyperDash: false,
+    newCombo: true,
+    indexInBeatmap: 0,
+  },
+  {
+    type: "fruit",
+    x: 180,
+    timeMs: 1000,
+    hyperDash: false,
+    indexInBeatmap: 1,
+  },
+  {
+    type: "fruit",
+    x: 280,
+    timeMs: 1300,
+    hyperDash: false,
+    indexInBeatmap: 2,
+  },
+  {
+    type: "fruit",
+    x: 420,
+    timeMs: 1600,
+    hyperDash: true,
+    newCombo: true,
+    indexInBeatmap: 3,
+  },
   { type: "droplet", x: 200, timeMs: 2000, kind: "tiny" },
   { type: "droplet", x: 240, timeMs: 2140, kind: "large" },
   { type: "droplet", x: 280, timeMs: 2280, kind: "tiny" },
-  { type: "fruit", x: 320, timeMs: 2500, hyperDash: false },
-  { type: "fruit", x: 160, timeMs: 2900, hyperDash: false },
+  {
+    type: "fruit",
+    x: 320,
+    timeMs: 2500,
+    hyperDash: false,
+    indexInBeatmap: 4,
+  },
+  {
+    type: "fruit",
+    x: 160,
+    timeMs: 2900,
+    hyperDash: false,
+    indexInBeatmap: 5,
+  },
   { type: "banana", x: 100, timeMs: 3400 },
   { type: "banana", x: 250, timeMs: 3520 },
   { type: "banana", x: 400, timeMs: 3640 },
-  { type: "fruit", x: 256, timeMs: 4200, hyperDash: false },
-  { type: "fruit", x: 90, timeMs: 4600, hyperDash: true },
-  { type: "fruit", x: 400, timeMs: 5100, hyperDash: false },
-  { type: "fruit", x: 220, timeMs: 5600, hyperDash: false },
-  { type: "fruit", x: 340, timeMs: 6100, hyperDash: false },
-  { type: "fruit", x: 150, timeMs: 6600, hyperDash: false },
+  {
+    type: "fruit",
+    x: 256,
+    timeMs: 4200,
+    hyperDash: false,
+    newCombo: true,
+    indexInBeatmap: 6,
+  },
+  {
+    type: "fruit",
+    x: 90,
+    timeMs: 4600,
+    hyperDash: true,
+    indexInBeatmap: 7,
+  },
+  {
+    type: "fruit",
+    x: 400,
+    timeMs: 5100,
+    hyperDash: false,
+    indexInBeatmap: 8,
+  },
+  {
+    type: "fruit",
+    x: 220,
+    timeMs: 5600,
+    hyperDash: false,
+    indexInBeatmap: 9,
+  },
+  {
+    type: "fruit",
+    x: 340,
+    timeMs: 6100,
+    hyperDash: false,
+    indexInBeatmap: 10,
+  },
+  {
+    type: "fruit",
+    x: 150,
+    timeMs: 6600,
+    hyperDash: false,
+    indexInBeatmap: 11,
+  },
 ];
 
 const DEMO_FRAMES = Array.from({ length: 80 }, (_, i) => {
@@ -120,12 +203,17 @@ export function CatchSkinEditor() {
   const { dict } = useAppDict();
   const [skin, setSkin] = useState(() => getCatchSkin());
   const [playing, setPlaying] = useState(true);
+  const importedSprites = useImportedCatchSprites();
   const timeRef = useRef(0);
 
   function update(patch: Partial<CatchSkin>) {
     const next = { ...skin, ...patch };
     setSkin(next);
     setCatchSkin(next);
+  }
+
+  function refreshSkin() {
+    setSkin(getCatchSkin());
   }
 
   useEffect(() => {
@@ -149,6 +237,8 @@ export function CatchSkinEditor() {
           {dict?.skin.catchTitle ?? "Catch skin"}
         </h2>
         <div className="flex flex-wrap gap-2">
+          <CatchSkinFileButton onApplied={refreshSkin} />
+          <CatchSkinRealmButton onApplied={refreshSkin} />
           <button
             type="button"
             className="rx-btn text-xs"
@@ -160,8 +250,10 @@ export function CatchSkinEditor() {
             type="button"
             className="rx-btn text-xs"
             onClick={() => {
-              resetCatchSkin();
-              setSkin(getCatchSkin());
+              void resetImportedCatchSkin().then(() => {
+                resetCatchSkin();
+                setSkin(getCatchSkin());
+              });
             }}
           >
             {dict?.skin.resetCatch ?? "Reset catch skin"}
@@ -172,6 +264,12 @@ export function CatchSkinEditor() {
         {dict?.skin.catchDesc ??
           "Catch playfield visuals: fruit combo colors, catcher, droplets, and bananas."}
       </p>
+      {skin.imported ? (
+        <p className="mt-1 text-xs text-muted">
+          Imported: {skin.imported.name}
+          {importedSprites ? " · sprites loaded" : ""}
+        </p>
+      ) : null}
 
       <div className="mt-4 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)]">
         <div className="h-[24rem] overflow-hidden rounded-xl bg-black/40">
@@ -248,7 +346,26 @@ export function CatchSkinEditor() {
             <ColorRow
               label={dict?.skin.catchHyperDash ?? "Hyperdash"}
               value={skin.hyperDash}
-              onChange={(v) => update({ hyperDash: v })}
+              onChange={(v) =>
+                update({
+                  hyperDash: v,
+                  hyperDashFruit: skin.hyperDashFruit === skin.hyperDash ? v : skin.hyperDashFruit,
+                  hyperDashAfterImage:
+                    skin.hyperDashAfterImage === skin.hyperDash
+                      ? v
+                      : skin.hyperDashAfterImage,
+                })
+              }
+            />
+            <ColorRow
+              label="Hyperdash fruit"
+              value={skin.hyperDashFruit}
+              onChange={(v) => update({ hyperDashFruit: v })}
+            />
+            <ColorRow
+              label="Hyperdash afterimage"
+              value={skin.hyperDashAfterImage}
+              onChange={(v) => update({ hyperDashAfterImage: v })}
             />
           </div>
 

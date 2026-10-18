@@ -223,6 +223,8 @@ export function ManiaSkinImportModal({
                     columnSpacing: 0,
                     lnTailShape: "flat",
                     lnShowHead: true,
+                    hitPosition: 0.88,
+                    laneCover: 0,
                     imported: pack.layout,
                   }}
                   spritesOverride={pack.sprites}

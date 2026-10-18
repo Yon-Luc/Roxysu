@@ -10,6 +10,8 @@ touches:
   - apps/server/public/components/ScoreReplayModal.tsx
   - apps/server/public/components/JudgmentCounterOverlay.tsx
   - apps/server/public/components/previewPrefs.ts
+  - apps/server/public/components/previewPrefs.test.ts
+  - apps/server/public/lib/previewSkin.test.ts
   - apps/server/public/lib/api.ts
   - apps/server/src/routes/beatmaps.ts
   - apps/server/src/routes/scores.ts
@@ -27,6 +29,7 @@ touches:
   - apps/server/public/lib/osuSkinIni.ts
   - apps/server/public/lib/maniaSkinImport.ts
   - apps/server/public/lib/stdSkinImport.ts
+  - apps/server/public/lib/catchSkinImport.ts
   - apps/server/public/lib/stdHitsoundPlayer.ts
   - apps/server/public/lib/useStdHitsounds.ts
   - apps/server/public/lib/overlaySkins.ts
@@ -34,6 +37,7 @@ touches:
   - apps/server/public/components/ManiaSkinDropHost.tsx
   - apps/server/public/components/ManiaSkinRealmImportButton.tsx
   - apps/server/public/components/StdSkinImportControls.tsx
+  - apps/server/public/components/CatchSkinImportControls.tsx
   - apps/server/src/routes/skins.ts
   - apps/realm-reader/src/syncRealmSkins.ts
   - packages/db/src/schema.ts
@@ -57,6 +61,7 @@ touches:
   - packages/osu-chart/src/stdTypes.ts
   - packages/osu-chart/src/parseTaiko.ts
   - packages/osu-chart/src/parseCatch.ts
+  - packages/osu-chart/src/catchTypes.ts
   - packages/osu-chart/src/osuFileParser.js
 ---
 
@@ -105,9 +110,15 @@ Playfield = the visual layer for that ruleset (notefield, 512×384, or taiko lan
     Painter draws follow points, snaking slider bodies, reverse arrows, follow
     circle on the ball, and combo-tinted approach rings (skin `approach`
     overrides when not default white).
+    Object coords stay in 512×384; the drawn border is expanded by circle
+    radius on each side (lazer `ApplyCircleSizeToPlayfieldBorder`) so edge
+    hitcircles fit inside the rectangle. The padded playfield is fitted into
+    **80%** of the stage (`playfield_size_adjust`), matching stable/lazer
+    proportions so circles are not oversized relative to the view.
     **Source:** `parseStd.ts`, `stdSkin.ts:resolveComboPalette`,
-    `paintStdPlayfield.ts:buildComboInfo` — status: verified by
-    `parseStd.combo.test.ts`, `osuSkinIni.test.ts`, `paintStdPlayfield.test.ts`.
+    `paintStdPlayfield.ts:buildComboInfo`, `playfieldTransform` — status:
+    verified by `parseStd.combo.test.ts`, `osuSkinIni.test.ts`,
+    `paintStdPlayfield.test.ts`.
 
 5d. An **imported standard skin** can replace procedural std drawing with legacy
     sprites and play skin hitsounds. Skin → Standard **Import .osk** / **Import
@@ -171,10 +182,34 @@ Playfield = the visual layer for that ruleset (notefield, 512×384, or taiko lan
 
 8. Catcher width is `106.75 * |1 - 0.7 * (cs - 5) / 5|` times skin
    `catcherScale` (default `0.7`). Hyperdash is a visual flag from walk-speed vs
-   next fruit distance. When preview has no replay frames, the catcher lerps
-   across fruits and large droplets so it sits on each object at hit time.
-   The catcher is `roxyctb.png` (Roxy holding a plate); the plate in the
-   art is the catch surface — no extra platter is drawn.
+   next fruit distance (half-width aligned with judge plate tolerance). When
+   preview has no replay frames, the catcher lerps across fruits and large
+   droplets so it sits on each object at hit time. Default catcher is a
+   **procedural plate** (CS-scaled capsule + body, face-flipped from motion);
+   imported `fruit-catcher-*` / `fruit-ryuuta` sprites replace it. Hyperdash
+   draws a dashed path to the next fruit, afterimage trail tint, and fruit
+   outline from `[CatchTheBeat]` / skin HyperDash* colours. Caught fruit /
+   large droplets flash a catch-line explode (optional `lighting` sprite).
+
+8b. **Catch playfield fidelity:** `parseCatch` keeps `newCombo` / `comboOffset`
+    / `indexInBeatmap` on fruits and beatmap `[Colours]` ComboN. Combo colour
+    index advances like Standard (`1 + comboOffset` on new combo). Palette:
+    when an **imported catch skin** is active, skin combo colours win;
+    otherwise beatmap → skin → defaults. Fruit visual cycles
+    pear → grapes → apple → orange by `indexInBeatmap % 4`.
+    **Source:** `parseCatch.ts`, `catchSkin.ts:resolveCatchComboPalette`,
+    `paintCatchPlayfield.ts:buildCatchComboInfo` — status: verified by
+    `parseCatch.combo.test.ts`, `paintCatchPlayfield.test.ts`.
+
+8c. An **imported catch skin** replaces procedural fruit/droplet/banana/catcher
+    drawing with legacy sprites. Skin → Catch **Import .osk** / **Import from
+    game**. Sprites in IndexedDB `roxysu-catch-skin` (`catch:*`); metadata and
+    `[CatchTheBeat]` HyperDash / HyperDashFruit / HyperDashAfterImage on
+    `roxysu:catch-skin` `imported`. Missing sprites fall back per element.
+    Overlay push includes `catch:*` sprite keys.
+    **Source:** `catchSkinImport.ts`, `CatchSkinImportControls.tsx`,
+    `osuSkinIni.ts` `[CatchTheBeat]`, `overlaySkins.ts` — status: verified by
+    `osuSkinIni.test.ts`.
 
 9. Judges are visual-quality approximations, not full lazer sims.
 
@@ -218,12 +253,28 @@ Playfield = the visual layer for that ruleset (notefield, 512×384, or taiko lan
     `comboX` / `accuracyX`, `ScoreReplayModal.tsx` HUD scan,
     `BeatmapPreviewModal.tsx` Play branch.
 
-13. Playfield width is a saved percentage of the stage, 15–100 (default 55), in
-    both modals, windowed and fullscreen, every ruleset. Mania and taiko use it
-    as max-width. Standard and catch in score rewatch scale the fitted 4:3 by
-    that percentage; preview letterbox applies it as max-width of the stage box.
-    **Source:** `previewPrefs.ts:FIELD_WIDTH_MIN`, `ScoreReplayModal.tsx`,
-    `BeatmapPreviewModal.tsx`.
+13. Playfield **Size** (`fieldWidth`, 15–100%, default 55) is saved **per
+    ruleset** (`osu` / `taiko` / `fruits` / `mania`) under
+    `rx-beatmap-preview` → `playfield`. For mania it is also **per keymode**
+    (`4|6|7|8|9|10`). Mania **Scroll** is per keymode on the same map. Mania
+    and taiko apply Size as max-width; standard and catch rewatch scale the
+    fitted 4:3 by that percentage. Legacy flat `scroll` / `fieldWidth` migrate
+    onto every slot on load.
+    **Source:** `previewPrefs.ts` (`resolvePlayfieldFieldWidth`,
+    `resolveManiaScroll`, `loadPrefs`), `ScoreReplayModal.tsx`,
+    `BeatmapPreviewModal.tsx` — status: verified by `previewPrefs.test.ts`.
+
+14. Mania procedural **Hit** position and **lane Cover** live on each
+    `KeymodeSkin` (not a shared skin root). Skin → Mania tabs and preview
+    modal sliders write the active keymode only. Imported skins still override
+    hit position from `skin.ini` per keymode. Legacy root `hitPosition` /
+    `laneCover` copy onto every keymode on parse.
+    **Source:** `previewSkin.ts` (`parsePreviewSkinJson`, `patchKeymodeSkin`),
+    `SkinPage.tsx`, `ManiaNotefield.tsx` — status: verified by
+    `previewSkin.test.ts`.
+
+Volume, rate, fullscreen, HUD chip positions, blackBg, and analysis stay
+shared across rulesets and keymodes.
 
 ## Security rules
 
@@ -268,6 +319,13 @@ Imported standard skin:
     → persist sprites + std:hs:* samples in IndexedDB (roxysu-std-skin) + imported meta
     → paintStdPlayfield draws sprites; stdHitsoundPlayer plays samples on the clock
 
+Imported catch skin:
+  Skin → Catch Import .osk / Import from game
+    → unzip + parse skin.ini ([Colours] + [CatchTheBeat] + fruit/catcher sprites)
+    → confirm modal (CatchPlayfield preview)
+    → persist sprites in IndexedDB (roxysu-catch-skin) + imported meta on catch-skin
+    → paintCatchPlayfield draws sprites with procedural plate/fruit fallback
+
 Realm skin extract (full / reconcile):
   realm-reader reads Realm Skin + Files
     → upsert realm_skins / realm_skin_files (hasSkinIni denormalized)
@@ -295,11 +353,12 @@ Realm skin extract (full / reconcile):
   preview auto-matches the in-game MR/IN/HO selection; its query key is
   `["beatmap-preview-embed", beatmapId, modsKey]`.
 - Store / dispatch names: `"mania"`, `"osu"`, `"taiko"`, `"fruits"`.
-- `lib/osuSkinIni.ts` / `lib/maniaSkinImport.ts` / `lib/stdSkinImport.ts` —
-  .osk parse + IndexedDB sprites (mania + standard).
+- `lib/osuSkinIni.ts` / `lib/maniaSkinImport.ts` / `lib/stdSkinImport.ts` /
+  `lib/catchSkinImport.ts` — .osk parse + IndexedDB sprites (mania + standard +
+  catch).
 - `routes/skins.ts` / `syncRealmSkins.ts` — Realm skin catalog + archive for Import from game.
-- Preview/rewatch std payloads include `comboColors` and hit-object combo flags
-  from `parseStdChart`.
+- Preview/rewatch std and catch payloads include `comboColors` and hit-object
+  combo flags from `parseStdChart` / `parseCatchChart`.
 
 ## Dependencies
 
@@ -319,6 +378,6 @@ Realm skin extract (full / reconcile):
 
 ## Related knowledge
 
-- [vocabulary.md](../../vocabulary.md) — Score rewatch, Taiko playfield, Catch playfield, Imported mania skin, Imported standard skin
+- [vocabulary.md](../../vocabulary.md) — Score rewatch, Taiko playfield, Catch playfield, Imported mania skin, Imported standard skin, Imported catch skin
 - [replay-video-export/](../replay-video-export/index.md)
 - [architecture/client-theme.md](../../architecture/client-theme.md)

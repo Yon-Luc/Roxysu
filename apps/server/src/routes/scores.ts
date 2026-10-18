@@ -321,7 +321,7 @@ export const scoreRoutes = new Elysia({ prefix: "/scores" })
             columnCount: 0,
             notes: EMPTY_NOTES,
             hitObjects: EMPTY_HIT_OBJECTS,
-            comboColors: [] as string[],
+            comboColors: chart.comboColors,
             sampleTiming: [],
             taikoHitObjects: EMPTY_TAIKO_OBJECTS,
             catchHitObjects: flipped.hitObjects,

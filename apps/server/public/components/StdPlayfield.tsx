@@ -35,7 +35,8 @@ type StdPlayfieldProps = {
 };
 
 /**
- * Standard (osu!) playfield — 512×384 letterboxed into the modal stage.
+ * Standard (osu!) playfield — 512×384 gamefield letterboxed into ~80% of the
+ * modal stage with CS-based border padding (stable/lazer proportions).
  * Scrub-only for preview; pass frames for replay cursor overlay.
  */
 export function StdPlayfield({

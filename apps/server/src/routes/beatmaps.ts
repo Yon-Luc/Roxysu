@@ -484,6 +484,7 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
           circleSize: chart.circleSize,
           approachRate: chart.approachRate,
           overallDifficulty: chart.overallDifficulty,
+          comboColors: chart.comboColors,
           catchHitObjects: chart.hitObjects,
         };
       }

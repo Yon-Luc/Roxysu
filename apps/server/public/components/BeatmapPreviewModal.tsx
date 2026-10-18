@@ -12,6 +12,7 @@ import { AudioClock, sampleAudioClock } from "../lib/audioClock";
 import { clamp, formatClock } from "../lib/format";
 import { useStdSkin } from "../lib/stdSkin";
 import { useImportedStdSprites } from "../lib/stdSkinImport";
+import { useImportedCatchSprites } from "../lib/catchSkinImport";
 import { useStdHitsounds } from "../lib/useStdHitsounds";
 import { useTaikoSkin } from "../lib/taikoSkin";
 import { useCatchSkin } from "../lib/catchSkin";
@@ -41,8 +42,8 @@ import {
   HIT_POSITION_MIN,
   LANE_COVER_MAX,
   LANE_COVER_MIN,
-  getPreviewSkin,
-  setPreviewSkin,
+  patchKeymodeSkin,
+  resolveKeymodeSkin,
   usePreviewSkin,
 } from "../lib/previewSkin";
 import {
@@ -65,11 +66,17 @@ import {
   FIELD_WIDTH_DEFAULT,
   FIELD_WIDTH_MAX,
   FIELD_WIDTH_MIN,
+  isPreviewRuleset,
   loadPrefs,
+  patchManiaPlayfield,
+  patchPlayfieldFieldWidth,
   PRESET_RATES,
   PREFS_KEY,
+  resolveManiaScroll,
+  resolvePlayfieldFieldWidth,
   SKIP_MS,
   type PreviewPrefs,
+  type PreviewRuleset,
 } from "./previewPrefs";
 
 export type ModalMode = "preview" | "play";
@@ -125,6 +132,7 @@ export function BeatmapPreviewModal({
   const skin = usePreviewSkin();
   const stdSkin = useStdSkin();
   const stdSprites = useImportedStdSprites();
+  const catchSprites = useImportedCatchSprites();
   const taikoSkin = useTaikoSkin();
   const catchSkin = useCatchSkin();
 
@@ -506,14 +514,16 @@ export function BeatmapPreviewModal({
         ) {
           e.preventDefault();
           const dir = matchesAction(ab, "scrollDown", e.code) ? -1 : 1;
-          setPrefs((p) => ({
-            ...p,
-            scroll: clamp(
-              p.scroll + dir,
-              PREVIEW_SCROLL_MIN,
-              PREVIEW_SCROLL_MAX,
-            ),
-          }));
+          const cols = dataRef.current?.columnCount ?? 7;
+          setPrefs((p) =>
+            patchManiaPlayfield(p, cols, {
+              scroll: clamp(
+                resolveManiaScroll(p, cols) + dir,
+                PREVIEW_SCROLL_MIN,
+                PREVIEW_SCROLL_MAX,
+              ),
+            }),
+          );
         }
         return;
       }
@@ -573,18 +583,28 @@ export function BeatmapPreviewModal({
       }
       if (matchesAction(ab, "scrollDown", e.code)) {
         e.preventDefault();
-        setPrefs((p) => ({
-          ...p,
-          scroll: Math.max(PREVIEW_SCROLL_MIN, p.scroll - 1),
-        }));
+        const cols = dataRef.current?.columnCount ?? 7;
+        setPrefs((p) =>
+          patchManiaPlayfield(p, cols, {
+            scroll: Math.max(
+              PREVIEW_SCROLL_MIN,
+              resolveManiaScroll(p, cols) - 1,
+            ),
+          }),
+        );
         return;
       }
       if (matchesAction(ab, "scrollUp", e.code)) {
         e.preventDefault();
-        setPrefs((p) => ({
-          ...p,
-          scroll: Math.min(PREVIEW_SCROLL_MAX, p.scroll + 1),
-        }));
+        const cols = dataRef.current?.columnCount ?? 7;
+        setPrefs((p) =>
+          patchManiaPlayfield(p, cols, {
+            scroll: Math.min(
+              PREVIEW_SCROLL_MAX,
+              resolveManiaScroll(p, cols) + 1,
+            ),
+          }),
+        );
         return;
       }
       if (matchesAction(ab, "rateDown", e.code)) {
@@ -847,7 +867,6 @@ export function BeatmapPreviewModal({
     const base = candidates.length > 0 ? Math.max(...candidates) : 1;
     return Math.max(base, currentMs, 1);
   })();
-  const scrollLabel = Math.round(prefs.scroll);
   const fullscreen = prefs.fullscreen;
   const isMania =
     data?.rulesetShortName === "mania" &&
@@ -865,6 +884,17 @@ export function BeatmapPreviewModal({
     data?.rulesetShortName === "fruits" &&
     Boolean(data.supported) &&
     (data.catchHitObjects?.length ?? 0) > 0;
+  const rulesetShort = data?.rulesetShortName;
+  const activeRuleset: PreviewRuleset | null = isPreviewRuleset(rulesetShort)
+    ? rulesetShort
+    : null;
+  const activeColumnCount = data?.columnCount ?? 7;
+  const fieldWidth = activeRuleset
+    ? resolvePlayfieldFieldWidth(prefs, activeRuleset, activeColumnCount)
+    : FIELD_WIDTH_DEFAULT;
+  const maniaScroll = resolveManiaScroll(prefs, activeColumnCount);
+  const scrollLabel = Math.round(maniaScroll);
+  const keymodeSkin = resolveKeymodeSkin(skin, activeColumnCount);
   const isLetterbox = isStd || isCatch;
   const binds =
     isMania ? resolveKeybinds(keybindsAll, data!.columnCount) : [];
@@ -1031,13 +1061,13 @@ export function BeatmapPreviewModal({
                       ? "relative mx-auto min-h-0 w-full flex-1 px-2 py-1 sm:px-4 sm:py-2"
                       : "relative mx-auto min-h-0 w-full flex-1 px-3 py-2 sm:px-6 sm:py-4"
                 }
-                style={{ maxWidth: `${prefs.fieldWidth}%` }}
+                style={{ maxWidth: `${fieldWidth}%` }}
               >
                 {isMania ? (
                   <NotefieldStage
                     columnCount={data.columnCount}
                     notes={fieldNotes}
-                    scrollSpeed={prefs.scroll}
+                    scrollSpeed={maniaScroll}
                     playbackRate={prefs.rate}
                     liveHeldMask={isPlay ? liveHeldMask : null}
                     getCurrentTimeMs={mapTimeMs}
@@ -1081,6 +1111,8 @@ export function BeatmapPreviewModal({
                         approachRate={data.approachRate ?? 5}
                         getCurrentTimeMs={mapTimeMs}
                         skin={catchSkin}
+                        beatmapComboColors={data.comboColors ?? null}
+                        sprites={catchSprites}
                       />
                     </div>
                   </div>
@@ -1353,10 +1385,12 @@ export function BeatmapPreviewModal({
                       min={PREVIEW_SCROLL_MIN}
                       max={PREVIEW_SCROLL_MAX}
                       step={1}
-                      value={prefs.scroll}
+                      value={maniaScroll}
                       onInput={(e) => {
                         const scroll = Number(e.currentTarget.value);
-                        setPrefs((p) => ({ ...p, scroll }));
+                        setPrefs((p) =>
+                          patchManiaPlayfield(p, activeColumnCount, { scroll }),
+                        );
                       }}
                       className="min-w-[4rem] flex-1 accent-[var(--accent)]"
                       aria-label="Scroll speed"
@@ -1368,17 +1402,18 @@ export function BeatmapPreviewModal({
                     <>
                   <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-on-media-muted sm:max-w-xs">
                     <span className="shrink-0">
-                      Hit {Math.round(skin.hitPosition * 100)}%
+                      Hit {Math.round(keymodeSkin.hitPosition * 100)}%
                     </span>
                     <input
                       type="range"
                       min={HIT_POSITION_MIN}
                       max={HIT_POSITION_MAX}
                       step={0.01}
-                      value={skin.hitPosition}
+                      value={keymodeSkin.hitPosition}
                       onInput={(e) => {
-                        const hitPosition = Number(e.currentTarget.value);
-                        setPreviewSkin({ ...getPreviewSkin(), hitPosition });
+                        patchKeymodeSkin(activeColumnCount, {
+                          hitPosition: Number(e.currentTarget.value),
+                        });
                       }}
                       className="min-w-[4rem] flex-1 accent-[var(--accent)]"
                       aria-label="Hit position"
@@ -1387,17 +1422,18 @@ export function BeatmapPreviewModal({
 
                   <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-on-media-muted sm:max-w-xs">
                     <span className="shrink-0">
-                      Cover {Math.round(skin.laneCover * 100)}%
+                      Cover {Math.round(keymodeSkin.laneCover * 100)}%
                     </span>
                     <input
                       type="range"
                       min={LANE_COVER_MIN}
                       max={LANE_COVER_MAX}
                       step={0.01}
-                      value={skin.laneCover}
+                      value={keymodeSkin.laneCover}
                       onInput={(e) => {
-                        const laneCover = Number(e.currentTarget.value);
-                        setPreviewSkin({ ...getPreviewSkin(), laneCover });
+                        patchKeymodeSkin(activeColumnCount, {
+                          laneCover: Number(e.currentTarget.value),
+                        });
                       }}
                       className="min-w-[4rem] flex-1 accent-[var(--accent)]"
                       aria-label="Lane cover"
@@ -1409,17 +1445,25 @@ export function BeatmapPreviewModal({
                   {isMania || isStd || isTaiko || isCatch ? (
                     <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-on-media-muted sm:max-w-xs">
                       <span className="shrink-0">
-                        Size {Math.round(prefs.fieldWidth)}%
+                        Size {Math.round(fieldWidth)}%
                       </span>
                       <input
                         type="range"
                         min={FIELD_WIDTH_MIN}
                         max={FIELD_WIDTH_MAX}
                         step={1}
-                        value={prefs.fieldWidth}
+                        value={fieldWidth}
                         onInput={(e) => {
-                          const fieldWidth = Number(e.currentTarget.value);
-                          setPrefs((p) => ({ ...p, fieldWidth }));
+                          if (!activeRuleset) return;
+                          const next = Number(e.currentTarget.value);
+                          setPrefs((p) =>
+                            patchPlayfieldFieldWidth(
+                              p,
+                              activeRuleset,
+                              next,
+                              activeColumnCount,
+                            ),
+                          );
                         }}
                         className="min-w-[4rem] flex-1 accent-[var(--accent)]"
                         aria-label="Playfield size"

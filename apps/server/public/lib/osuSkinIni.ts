@@ -39,10 +39,18 @@ export type SkinIniColours = {
   cursor?: string;
 };
 
+/** `[CatchTheBeat]` hyperdash colours from skin.ini. */
+export type SkinIniCatchColours = {
+  hyperDash?: string;
+  hyperDashFruit?: string;
+  hyperDashAfterImage?: string;
+};
+
 export type ParsedSkinIni = {
   name: string;
   mania: SkinIniManiaSection[];
   colours: SkinIniColours;
+  catchColours: SkinIniCatchColours;
   /** `[General] LayeredHitSounds` — default true (osu!stable). */
   layeredHitSounds: boolean;
 };
@@ -117,6 +125,21 @@ function parseColoursSection(fields: Record<string, string>): SkinIniColours {
     spinnerBackground,
     cursor,
   };
+}
+
+function parseCatchTheBeatSection(
+  fields: Record<string, string>,
+): SkinIniCatchColours {
+  const hyperDash = fields.hyperdash
+    ? parseIniColourValue(fields.hyperdash) ?? undefined
+    : undefined;
+  const hyperDashFruit = fields.hyperdashfruit
+    ? parseIniColourValue(fields.hyperdashfruit) ?? undefined
+    : undefined;
+  const hyperDashAfterImage = fields.hyperdashafterimage
+    ? parseIniColourValue(fields.hyperdashafterimage) ?? undefined
+    : undefined;
+  return { hyperDash, hyperDashFruit, hyperDashAfterImage };
 }
 
 const COLUMN_TYPES: Record<number, string> = {
@@ -319,12 +342,19 @@ export function parseSkinIni(text: string): ParsedSkinIni {
       ? true
       : layeredRaw !== "0" && layeredRaw.toLowerCase() !== "false";
 
+  const catchFields = sections.find(
+    (s) => s.name.toLowerCase() === "catchthebeat",
+  )?.fields;
+
   return {
     name: general?.name?.trim() || "",
     mania,
     colours: coloursFields
       ? parseColoursSection(coloursFields)
       : { comboColors: [] },
+    catchColours: catchFields
+      ? parseCatchTheBeatSection(catchFields)
+      : {},
     layeredHitSounds,
   };
 }

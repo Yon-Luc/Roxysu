@@ -117,7 +117,15 @@ describe("decode catch frames", () => {
 describe("simulateCatchJudgments", () => {
   test("catches a fruit under the plate", () => {
     const { judgments, summary } = simulateCatchJudgments({
-      hitObjects: [{ type: "fruit", x: 200, timeMs: 1000, hyperDash: false }],
+      hitObjects: [
+        {
+          type: "fruit",
+          x: 200,
+          timeMs: 1000,
+          hyperDash: false,
+          indexInBeatmap: 0,
+        },
+      ],
       frames: [
         { tMs: 0, x: 200, dashing: false },
         { tMs: 1000, x: 200, dashing: false },

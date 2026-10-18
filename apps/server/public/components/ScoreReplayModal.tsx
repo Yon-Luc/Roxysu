@@ -14,6 +14,7 @@ import { AudioClock, sampleAudioClock } from "../lib/audioClock";
 import { clamp, formatAccuracy, formatClock } from "../lib/format";
 import { useStdSkin } from "../lib/stdSkin";
 import { useImportedStdSprites } from "../lib/stdSkinImport";
+import { useImportedCatchSprites } from "../lib/catchSkinImport";
 import { useStdHitsounds } from "../lib/useStdHitsounds";
 import { useTaikoSkin } from "../lib/taikoSkin";
 import { useCatchSkin } from "../lib/catchSkin";
@@ -50,7 +51,10 @@ import {
 } from "./ManiaNotefield";
 import { StdPlayfield } from "./StdPlayfield";
 import { TaikoPlayfield } from "./TaikoPlayfield";
-import { CatchPlayfield } from "./CatchPlayfield";
+import {
+  CatchPlayfield,
+  type CatchPlayfieldJudgment,
+} from "./CatchPlayfield";
 import { ManiaSkinDropHost } from "./ManiaSkinDropHost";
 import {
   AccuracyHudOverlay,
@@ -69,11 +73,17 @@ import {
   FIELD_WIDTH_DEFAULT,
   FIELD_WIDTH_MAX,
   FIELD_WIDTH_MIN,
+  isPreviewRuleset,
   loadPrefs,
+  patchManiaPlayfield,
+  patchPlayfieldFieldWidth,
   PRESET_RATES,
   PREFS_KEY,
+  resolveManiaScroll,
+  resolvePlayfieldFieldWidth,
   SKIP_MS,
   type PreviewPrefs,
+  type PreviewRuleset,
 } from "./previewPrefs";
 import {
   downloadBlob,
@@ -266,6 +276,7 @@ export function ScoreReplayModal({
   const prefsRef = useRef(prefs);
   const skin = useStdSkin();
   const stdSprites = useImportedStdSprites();
+  const catchSprites = useImportedCatchSprites();
   const taikoSkin = useTaikoSkin();
   const catchSkin = useCatchSkin();
   const previewSkin = usePreviewSkin();
@@ -560,10 +571,21 @@ export function ScoreReplayModal({
     // Pause live playback so the encoder can use CPU freely.
     audioRef.current?.pause();
     try {
+      const ruleset = replayData.beatmap.rulesetShortName;
+      const exportRuleset: PreviewRuleset = isPreviewRuleset(ruleset)
+        ? ruleset
+        : "mania";
       const result = await exportReplayVideo({
         replay: replayData,
-        scrollSpeed: prefsRef.current.scroll,
-        fieldWidth: prefsRef.current.fieldWidth,
+        scrollSpeed: resolveManiaScroll(
+          prefsRef.current,
+          replayData.beatmap.columnCount,
+        ),
+        fieldWidth: resolvePlayfieldFieldWidth(
+          prefsRef.current,
+          exportRuleset,
+          replayData.beatmap.columnCount,
+        ),
         stdSkin: skin,
         stdSprites,
         taikoSkin,
@@ -727,14 +749,16 @@ export function ScoreReplayModal({
         ) {
           e.preventDefault();
           const dir = matchesAction(ab, "scrollDown", e.code) ? -1 : 1;
-          setPrefs((p) => ({
-            ...p,
-            scroll: clamp(
-              p.scroll + dir,
-              PREVIEW_SCROLL_MIN,
-              PREVIEW_SCROLL_MAX,
-            ),
-          }));
+          const cols = dataRef.current?.beatmap?.columnCount ?? 7;
+          setPrefs((p) =>
+            patchManiaPlayfield(p, cols, {
+              scroll: clamp(
+                resolveManiaScroll(p, cols) + dir,
+                PREVIEW_SCROLL_MIN,
+                PREVIEW_SCROLL_MAX,
+              ),
+            }),
+          );
         }
         return;
       }
@@ -779,18 +803,28 @@ export function ScoreReplayModal({
       }
       if (matchesAction(ab, "scrollDown", e.code)) {
         e.preventDefault();
-        setPrefs((p) => ({
-          ...p,
-          scroll: Math.max(PREVIEW_SCROLL_MIN, p.scroll - 1),
-        }));
+        const cols = dataRef.current?.beatmap?.columnCount ?? 7;
+        setPrefs((p) =>
+          patchManiaPlayfield(p, cols, {
+            scroll: Math.max(
+              PREVIEW_SCROLL_MIN,
+              resolveManiaScroll(p, cols) - 1,
+            ),
+          }),
+        );
         return;
       }
       if (matchesAction(ab, "scrollUp", e.code)) {
         e.preventDefault();
-        setPrefs((p) => ({
-          ...p,
-          scroll: Math.min(PREVIEW_SCROLL_MAX, p.scroll + 1),
-        }));
+        const cols = dataRef.current?.beatmap?.columnCount ?? 7;
+        setPrefs((p) =>
+          patchManiaPlayfield(p, cols, {
+            scroll: Math.min(
+              PREVIEW_SCROLL_MAX,
+              resolveManiaScroll(p, cols) + 1,
+            ),
+          }),
+        );
       }
     }
 
@@ -1072,7 +1106,6 @@ export function ScoreReplayModal({
     const base = candidates.length > 0 ? Math.max(...candidates) : 1;
     return Math.max(base, currentMs, 1);
   })();
-  const scrollLabel = Math.round(prefs.scroll);
   const fullscreen = prefs.fullscreen;
   const isPlay = mode === "play";
   const isManiaReplay =
@@ -1092,6 +1125,18 @@ export function ScoreReplayModal({
     replayData.beatmap.rulesetShortName === "fruits" &&
     (replayData.beatmap.catchHitObjects?.length ?? 0) > 0;
   const isLetterboxReplay = isStdReplay || isCatchReplay;
+  const replayRulesetShort = replayData?.beatmap.rulesetShortName;
+  const activeRuleset: PreviewRuleset | null = isPreviewRuleset(
+    replayRulesetShort,
+  )
+    ? replayRulesetShort
+    : null;
+  const activeColumnCount = replayData?.beatmap.columnCount ?? 7;
+  const fieldWidth = activeRuleset
+    ? resolvePlayfieldFieldWidth(prefs, activeRuleset, activeColumnCount)
+    : FIELD_WIDTH_DEFAULT;
+  const maniaScroll = resolveManiaScroll(prefs, activeColumnCount);
+  const scrollLabel = Math.round(maniaScroll);
   const { setOuterEl: setStdFitEl, size: stdFitSize } = useAspectFit(4 / 3);
   const setStageNode = useCallback((node: HTMLDivElement | null) => {
     setStdFitEl(node);
@@ -1293,18 +1338,18 @@ export function ScoreReplayModal({
                     isLetterboxReplay
                       ? stdFitSize
                         ? {
-                            width: `${(stdFitSize.width * prefs.fieldWidth) / 100}px`,
-                            height: `${(stdFitSize.height * prefs.fieldWidth) / 100}px`,
+                            width: `${(stdFitSize.width * fieldWidth) / 100}px`,
+                            height: `${(stdFitSize.height * fieldWidth) / 100}px`,
                           }
                         : { width: "100%", height: "100%", visibility: "hidden" }
-                      : { maxWidth: `${prefs.fieldWidth}%` }
+                      : { maxWidth: `${fieldWidth}%` }
                   }
                 >
                   {isManiaReplay ? (
                     <NotefieldStage
                       columnCount={replayData.beatmap.columnCount}
                       notes={replayData.beatmap.notes}
-                      scrollSpeed={prefs.scroll}
+                      scrollSpeed={maniaScroll}
                       playbackRate={prefs.rate}
                       liveHeldMask={isPlay ? liveHeldMask : null}
                       getCurrentTimeMs={mapTimeMs}
@@ -1361,10 +1406,16 @@ export function ScoreReplayModal({
                           circleSize={replayData.beatmap.circleSize ?? 5}
                           approachRate={replayData.beatmap.approachRate ?? 5}
                           frames={replayData.catchFrames ?? []}
-                          judgments={replayData.judgments}
+                          judgments={
+                            replayData.judgments as CatchPlayfieldJudgment[]
+                          }
                           getCurrentTimeMs={mapTimeMs}
                           hidden={replayData.playback.acronyms.includes("HD")}
                           skin={catchSkin}
+                          beatmapComboColors={
+                            replayData.beatmap.comboColors ?? null
+                          }
+                          sprites={catchSprites}
                         />
                       </div>
                     </div>
@@ -1601,10 +1652,14 @@ export function ScoreReplayModal({
                         min={PREVIEW_SCROLL_MIN}
                         max={PREVIEW_SCROLL_MAX}
                         step={1}
-                        value={prefs.scroll}
+                        value={maniaScroll}
                         onInput={(e) => {
                           const scroll = Number(e.currentTarget.value);
-                          setPrefs((p) => ({ ...p, scroll }));
+                          setPrefs((p) =>
+                            patchManiaPlayfield(p, activeColumnCount, {
+                              scroll,
+                            }),
+                          );
                         }}
                         className="min-w-[4rem] flex-1 accent-[var(--accent)]"
                         aria-label="Scroll speed"
@@ -1615,17 +1670,25 @@ export function ScoreReplayModal({
                     {isManiaReplay || isStdReplay || isTaikoReplay || isCatchReplay ? (
                       <label className="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-on-media-muted sm:max-w-xs">
                         <span className="shrink-0">
-                          Size {Math.round(prefs.fieldWidth)}%
+                          Size {Math.round(fieldWidth)}%
                         </span>
                         <input
                           type="range"
                           min={FIELD_WIDTH_MIN}
                           max={FIELD_WIDTH_MAX}
                           step={1}
-                          value={prefs.fieldWidth}
+                          value={fieldWidth}
                           onInput={(e) => {
-                            const fieldWidth = Number(e.currentTarget.value);
-                            setPrefs((p) => ({ ...p, fieldWidth }));
+                            if (!activeRuleset) return;
+                            const next = Number(e.currentTarget.value);
+                            setPrefs((p) =>
+                              patchPlayfieldFieldWidth(
+                                p,
+                                activeRuleset,
+                                next,
+                                activeColumnCount,
+                              ),
+                            );
                           }}
                           className="min-w-[4rem] flex-1 accent-[var(--accent)]"
                           aria-label="Playfield size"

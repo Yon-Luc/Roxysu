@@ -190,10 +190,10 @@ function QueryLanguageHelpModal({ onClose }: { onClose: () => void }) {
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="max-h-[min(90vh,40rem)] w-full max-w-2xl overflow-y-auto rounded-2xl bg-elevated shadow-2xl shadow-black/60 outline-none"
+        className="flex max-h-[min(90vh,40rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-elevated shadow-2xl shadow-black/60 outline-none"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="sticky top-0 flex items-start justify-between gap-4 border-b border-white/5 bg-elevated/95 px-5 py-4 backdrop-blur">
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-white/5 px-5 py-4">
           <div>
             <h2 id={titleId} className="font-display text-xl font-bold text-ink">
               Query language
@@ -226,82 +226,84 @@ function QueryLanguageHelpModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        <div className="space-y-6 px-5 py-5 text-sm">
-          <Section title="Fields">
-            <div className="overflow-hidden rounded-xl bg-surface">
-              <table className="w-full text-left text-xs sm:text-sm">
-                <thead className="bg-highlight/60 text-muted">
-                  <tr>
-                    <th className="px-3 py-2 font-medium">Field</th>
-                    <th className="px-3 py-2 font-medium">Meaning</th>
-                    <th className="hidden px-3 py-2 font-medium sm:table-cell">
-                      Example
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {FIELDS.map((row) => (
-                    <tr key={row.field}>
-                      <td className="px-3 py-2 font-mono text-subtle">
-                        {row.field}
-                      </td>
-                      <td className="px-3 py-2 text-subtle">{row.meaning}</td>
-                      <td className="hidden px-3 py-2 font-mono text-muted sm:table-cell">
-                        {row.example}
-                      </td>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="space-y-6 px-5 py-5 text-sm">
+            <Section title="Fields">
+              <div className="overflow-hidden rounded-xl bg-surface">
+                <table className="w-full text-left text-xs sm:text-sm">
+                  <thead className="bg-highlight/60 text-muted">
+                    <tr>
+                      <th className="px-3 py-2 font-medium">Field</th>
+                      <th className="px-3 py-2 font-medium">Meaning</th>
+                      <th className="hidden px-3 py-2 font-medium sm:table-cell">
+                        Example
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Section>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {FIELDS.map((row) => (
+                      <tr key={row.field}>
+                        <td className="px-3 py-2 font-mono text-subtle">
+                          {row.field}
+                        </td>
+                        <td className="px-3 py-2 text-subtle">{row.meaning}</td>
+                        <td className="hidden px-3 py-2 font-mono text-muted sm:table-cell">
+                          {row.example}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Section>
 
-          <Section title="Numbers">
-            <ul className="list-disc space-y-1.5 pl-5 text-subtle">
-              <li>
-                Comparisons:{" "}
-                <Code>acc&gt;98</Code>, <Code>mastery&gt;=50</Code>,{" "}
-                <Code>pp=300</Code>
-              </li>
-              <li>
-                Ranges: <Code>stars:5..6</Code> (inclusive)
-              </li>
-              <li>
-                Bare number after a field means ≥ that value: <Code>acc:98</Code>
-              </li>
-              <li>
-                Glued form works too: <Code>stars&gt;5</Code>, <Code>retry&gt;10</Code>
-              </li>
-            </ul>
-          </Section>
-
-          <Section title="Boolean logic">
-            <ul className="list-disc space-y-1.5 pl-5 text-subtle">
-              <li>
-                <Code>AND</Code>, <Code>OR</Code>, <Code>NOT</Code> (case-insensitive)
-              </li>
-              <li>
-                Space between terms is AND:{" "}
-                <Code>mode:mania stars:5..6</Code>
-              </li>
-              <li>
-                Group with parentheses:{" "}
-                <Code>(mode:osu OR mode:mania) stars:6..7</Code>
-              </li>
-            </ul>
-          </Section>
-
-          <Section title="Examples">
-            <ul className="space-y-2">
-              {EXAMPLES.map((ex) => (
-                <li key={ex}>
-                  <code className="block rounded-xl bg-surface px-3 py-2 font-mono text-xs text-subtle sm:text-sm">
-                    {ex}
-                  </code>
+            <Section title="Numbers">
+              <ul className="list-disc space-y-1.5 pl-5 text-subtle">
+                <li>
+                  Comparisons:{" "}
+                  <Code>acc&gt;98</Code>, <Code>mastery&gt;=50</Code>,{" "}
+                  <Code>pp=300</Code>
                 </li>
-              ))}
-            </ul>
-          </Section>
+                <li>
+                  Ranges: <Code>stars:5..6</Code> (inclusive)
+                </li>
+                <li>
+                  Bare number after a field means ≥ that value: <Code>acc:98</Code>
+                </li>
+                <li>
+                  Glued form works too: <Code>stars&gt;5</Code>, <Code>retry&gt;10</Code>
+                </li>
+              </ul>
+            </Section>
+
+            <Section title="Boolean logic">
+              <ul className="list-disc space-y-1.5 pl-5 text-subtle">
+                <li>
+                  <Code>AND</Code>, <Code>OR</Code>, <Code>NOT</Code> (case-insensitive)
+                </li>
+                <li>
+                  Space between terms is AND:{" "}
+                  <Code>mode:mania stars:5..6</Code>
+                </li>
+                <li>
+                  Group with parentheses:{" "}
+                  <Code>(mode:osu OR mode:mania) stars:6..7</Code>
+                </li>
+              </ul>
+            </Section>
+
+            <Section title="Examples">
+              <ul className="space-y-2">
+                {EXAMPLES.map((ex) => (
+                  <li key={ex}>
+                    <code className="block rounded-xl bg-surface px-3 py-2 font-mono text-xs text-subtle sm:text-sm">
+                      {ex}
+                    </code>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          </div>
         </div>
       </div>
     </div>

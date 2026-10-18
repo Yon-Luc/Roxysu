@@ -57,6 +57,13 @@
       "when": 1788100000000,
       "tag": "0007_osu_score_pull",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1788114400000,
+      "tag": "0008_bms",
+      "breakpoints": true
     }
   ]
 }

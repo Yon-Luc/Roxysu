@@ -18,6 +18,7 @@ import { ScoreUsernameSection } from "./sections/ScoreUsernameSection";
 import { GamemodeSection } from "./sections/GamemodeSection";
 import { LiveSyncSection } from "./sections/LiveSyncSection";
 import { OnlineScorePullSection } from "./sections/OnlineScorePullSection";
+import { BmsSyncSection } from "./sections/BmsSyncSection";
 import { ScoreTransferSection } from "./sections/ScoreTransferSection";
 import { AppearanceSection } from "./sections/AppearanceSection";
 import { DifficultyDisplaySection } from "./sections/DifficultyDisplaySection";
@@ -67,6 +68,7 @@ function SettingsTabPanels({
           <OsuDataFolderSection data={data} />
           <LiveSyncSection data={data} />
           <OnlineScorePullSection />
+          <BmsSyncSection />
           <ScoreTransferSection />
           <OverlayHostSection data={data} />
           <TosuLiveMapSection data={data} />

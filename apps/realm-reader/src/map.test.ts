@@ -178,6 +178,24 @@ describe("map soft-skip and date sanitization", () => {
     expect(stored?.playedAt.getTime()).toBe(0);
   });
 
+  test("BMS scores keep ruleset, mods, and statistics without a special mapper", () => {
+    const stats = JSON.stringify({ perfect: 2, great: 1, miss: 0 });
+    const mods = JSON.stringify([{ acronym: "HS" }, { acronym: "CN" }]);
+    const row = mapScore(
+      fakeScore({
+        Ruleset: { ShortName: "bms" },
+        Statistics: stats,
+        Mods: mods,
+        TotalScore: 500000,
+      }),
+    );
+    expect(row?.rulesetShortName).toBe("bms");
+    expect(row?.statistics).toBe(stats);
+    expect(row?.mods).toBe(mods);
+    expect(row?.totalScore).toBe(500000);
+    expect(row?.id).toBe(SCORE_ID);
+  });
+
   test("optional Invalid dates become null", () => {
     const set = mapBeatmapSet(
       fakeSet({ DateSubmitted: new Date(Number.NaN) }),

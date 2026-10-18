@@ -12,8 +12,8 @@ import {
   setCachedMostCommonGamemode,
 } from "./scoreAutoFilterCache";
 
-/** Canonical osu!lazer ruleset short names. */
-export const SCORE_GAMEMODE_IDS = ["osu", "taiko", "fruits", "mania"] as const;
+/** Canonical ruleset short names shown in the score filter, including BMS. */
+export const SCORE_GAMEMODE_IDS = ["osu", "taiko", "fruits", "mania", "bms"] as const;
 export type ScoreGamemodeId = (typeof SCORE_GAMEMODE_IDS)[number];
 
 export type ScoreGamemodeCount = {
@@ -37,6 +37,7 @@ export const SCORE_GAMEMODE_META: Record<
   taiko: { label: "Taiko", shortLabel: "taiko" },
   fruits: { label: "Catch", shortLabel: "ctb" },
   mania: { label: "Mania", shortLabel: "mania" },
+  bms: { label: "BMS", shortLabel: "bms" },
 };
 
 const ALIASES: Record<string, ScoreGamemodeId> = {
@@ -48,6 +49,7 @@ const ALIASES: Record<string, ScoreGamemodeId> = {
   catch: "fruits",
   ctb: "fruits",
   mania: "mania",
+  bms: "bms",
 };
 
 export function isScoreGamemodeId(value: string): value is ScoreGamemodeId {

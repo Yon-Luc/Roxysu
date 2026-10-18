@@ -26,6 +26,9 @@ touches:
   - apps/hub/drizzle/0006_calc_bundles.sql
   - packages/hub-client
   - packages/db/src/hub/schema.ts
+  - apps/hub/src/routes/bms.ts
+  - apps/hub/src/services/bms.ts
+  - apps/hub/drizzle/0008_bms.sql
   - apps/hub/Dockerfile
   - apps/hub/docker-compose.yml
   - knowledge/decisions/hub-search-base-index.md
@@ -92,6 +95,18 @@ Networked collaboration / discovery — not required for offline practice analyt
 12. Hub calc bundles are keyed by Roxysu product version. Clients gap-fill the local mirror by beatmap hash and never overwrite successful local computes.
     **Enforced by:** `apps/server/src/map-analysis/calcBundle.ts:applyCalcBundle()` — status: verified
     **See:** [decisions/hub-calc-bundle-version.md](../../decisions/hub-calc-bundle-version.md)
+
+13. BMS score batches belong to the authenticated Hub user. A `userId` in the body is ignored. Trust is always `community_submitted`.
+    **Enforced by:** `apps/hub/src/routes/bms.ts` `POST /api/bms/scores/batch` — status: verified
+    **Unauthorized result:** 401 before insert
+
+14. A private BMS profile (`hub_users.bms_profile_public = 0`) is hidden from everyone except that user. Missing and private profiles both return 404.
+    **Enforced by:** `apps/hub/src/services/bms.ts:readBmsProfile()` and the other public BMS reads — status: verified
+    **Unauthorized result:** 404, including for anonymous viewers
+
+15. BMS table import accepts only HTTPS URLs on the allowlist, rejects redirects, and is admin-only.
+    **Enforced by:** `apps/hub/src/routes/bms.ts` `POST /api/bms/tables/import` plus `isAllowedBmsTableUrl()` — status: verified
+    **Unauthorized result:** 403 for non-admins; 400 for a disallowed URL
 
 ## Important symbols
 
@@ -176,6 +191,7 @@ update tag validation — status: verified
 - `features/download-mirrors/` — Download Maps search / count / download-all prefer primed Hub search index
 - `features/sunny-dan-recommendations/` — Hub calc bundle pull gap-fills dan/pattern rows before local backfill
 - `features/online-score-pull/` — Hub proxies ranked best fetches and holds the osu! usage ledger
+- `features/bms/` — public BMS profile, score batch, and table import
 
 ## Failure behavior
 

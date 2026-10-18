@@ -6,6 +6,7 @@ import { db } from "./db.node";
 import { createApp } from "./createApp";
 import { startPollLoop } from "./sse";
 import { startAnalyticsPipeline } from "./analytics/pipeline";
+import { startBmsSync } from "./bms/sync";
 import { startDanVariantJob } from "./map-analysis/danVariantJob";
 import { maybePullCalcBundleOnBoot } from "./map-analysis/calcBundle";
 import { startCollectionMatchCache } from "./shared/collectionMatchCache";
@@ -49,6 +50,7 @@ async function main() {
   });
   const stopPoll = startPollLoop(db);
   const stopAnalytics = startAnalyticsPipeline(db);
+  const stopBmsSync = startBmsSync(db);
   const stopDanVariants = startDanVariantJob(db);
   startCollectionMatchCache(db);
   void maybePullCalcBundleOnBoot(db);
@@ -70,6 +72,7 @@ async function main() {
       // best-effort
     }
 
+    stopBmsSync();
     stopAnalytics();
     stopDanVariants();
     stopTosuAdapter();

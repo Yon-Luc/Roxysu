@@ -11,7 +11,7 @@ touches:
 ## Business rules
 
 1. realm-reader writes raw import tables only (including `realm_skins` / `realm_skin_files`).
-2. server writes derived analytics and user-authored tables only.
+2. server writes derived analytics and user-authored tables only, including `bms_score_details`, `bms_sync_queue`, and `bms_table_cache`.
 3. Queries filter `delete_pending` / soft-deleted import rows out of product views.
 
 **Status:** verified

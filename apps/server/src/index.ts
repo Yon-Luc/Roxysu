@@ -3,6 +3,7 @@ import { app } from "./app";
 import { db } from "./db";
 import { startPollLoop } from "./sse";
 import { startAnalyticsPipeline } from "./analytics/pipeline";
+import { startBmsSync } from "./bms/sync";
 import { startDanVariantJob } from "./map-analysis/danVariantJob";
 import { maybePullCalcBundleOnBoot } from "./map-analysis/calcBundle";
 import { startCollectionMatchCache } from "./shared/collectionMatchCache";
@@ -27,6 +28,7 @@ void ensureTosuStarted(db);
 app.listen(4321);
 const stopPoll = startPollLoop(db);
 const stopAnalytics = startAnalyticsPipeline(db);
+const stopBmsSync = startBmsSync(db);
 const stopDanVariants = startDanVariantJob(db);
 startCollectionMatchCache(db);
 void maybePullCalcBundleOnBoot(db);
@@ -50,6 +52,7 @@ async function shutdown(signal: string) {
   }
 
   stopTosuAdapter();
+  stopBmsSync();
   stopAnalytics();
   stopDanVariants();
   stopPoll();

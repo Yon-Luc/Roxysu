@@ -71,6 +71,7 @@ Continuously extract Realm beatmaps and scores into the local mirror; surface Sy
 - `features/smart-collections/` — pause during collection write-back
 - `features/online-score-pull/` — pause during the Realm score write
 - `features/score-transfer/` — pause during the Realm score write
+- `features/bms/` — interprets BMS scores already stored by extraction
 
 ## Related knowledge
 

@@ -114,6 +114,7 @@ On new session insert, `runSessionEngine()` sets `name` immediately after alloca
 
 - `features/dashboard/` — current session summary and last closed session in practice snapshot
 - `features/now-selected/` — shares tosu live snapshot with Current session panel
+- `features/bms/` — reads stored sessions whose ruleset short name is `bms`
 
 ## Related knowledge
 

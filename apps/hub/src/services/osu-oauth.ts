@@ -5,6 +5,8 @@ export interface OsuUser {
   id: number;
   username: string;
   avatar_url: string;
+  country_code?: string | null;
+  country?: { code?: string | null } | null;
 }
 
 /**
@@ -49,7 +51,8 @@ export async function fetchOsuMe(accessToken: string): Promise<OsuUser> {
   }
 
   const data = (await res.json()) as OsuUser;
-  return data;
+  const code = data.country_code ?? data.country?.code ?? null;
+  return { ...data, country_code: code && /^[A-Za-z]{2}$/.test(code) ? code.toUpperCase() : null };
 }
 
 /**

@@ -17,6 +17,7 @@ import { runRetryEngine } from "./retry";
 import { runSessionEngine } from "./session";
 import { runMasteryEngine } from "./mastery/engine";
 import { runStatisticsEngine } from "./statistics";
+import { deriveBmsScores } from "../bms/derive";
 
 const DEBOUNCE_MS = 250;
 const IMPORT_WAIT_MS = 1_000;
@@ -226,6 +227,7 @@ export async function runAnalyticsPipeline(
         await runSessionEngine(db);
         await runMasteryEngine(db);
         await runStatisticsEngine(db);
+        await deriveBmsScores(db, null);
       } else {
         const scoresChanged = (delta.scoreIds?.length ?? 0) > 0;
         const beatmapIds = await resolveAffectedBeatmapIds(db, delta);
@@ -260,6 +262,7 @@ export async function runAnalyticsPipeline(
             await runMasteryEngine(db, { beatmapIds });
           }
           await runStatisticsEngine(db, { scoreIds: delta.scoreIds ?? [] });
+          await deriveBmsScores(db, delta.scoreIds ?? []);
         } else {
           // Mapper username/online id may have changed on the map.
           const mapperRows = await db

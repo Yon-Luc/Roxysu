@@ -255,7 +255,7 @@ export function hubStatusClearsJwt(httpStatus: number, sentToken: boolean): bool
   return sentToken && httpStatus === 401;
 }
 
-async function hubFetch<T>(
+export async function hubFetch<T>(
   hubUrl: string,
   path: string,
   init?: RequestInit & { token?: string | null },
@@ -291,6 +291,8 @@ export type HubMe = {
   username: string;
   avatarUrl: string | null;
   role: string;
+  countryCode?: string | null;
+  bmsProfilePublic?: boolean;
 };
 
 export type HubCollectionListItem = {

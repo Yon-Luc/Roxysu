@@ -115,7 +115,7 @@ Local mirror tables written only by realm-reader: `beatmaps`, `scores`, `imports
 
 ### Derived tables
 
-Local mirror tables written only by the client app server: sessions, mastery, stats, score_metrics, collections, settings, notes, tags.
+Local mirror tables written only by the client app server: sessions, mastery, stats, score_metrics, collections, settings, notes, tags, and the BMS rows `bms_score_details`, `bms_sync_queue`, `bms_table_cache`.
 
 **See:** [architecture/data-ownership.md](architecture/data-ownership.md)
 
@@ -174,6 +174,28 @@ One canonical lowercase label from `HUB_TAGS_BY_MODE` / `VALID_TAGS` that a shar
 **In code:** `packages/db/src/hub/schema.ts:HUB_TAG_GROUPS_BY_MODE`, `apps/server/public/lib/hub.ts:HUB_TAG_GROUPS_BY_MODE`
 
 **See:** [features/hub/](features/hub/index.md)
+
+---
+
+### BMS
+
+The osu!lazer BMS ruleset (`ruleset_short_name = bms`). Roxysu keeps the raw score from Realm extraction and derives EX score, judgements, variant, gauge, DJ grade, and combo lamp on the client app. Clear lamps stay unknown. Community copies are Hub scores with trust `community_submitted`.
+
+**Not:** mania, a second Realm extraction path
+
+**In code:** `packages/db/src/bmsInterpret.ts`, `bms_score_details`, `apps/hub/src/services/bms.ts`
+
+**See:** [features/bms/](features/bms/index.md)
+
+---
+
+### BMS variant
+
+The sorted set of BMS partitioning mods (`HS`, `AS`, `CN`, `HT`, `DT`, `2P`, `L1`, `L2`, `L3`). No partitioning mods means variant id `standard`. Gauge mods are not part of the variant.
+
+**Not:** a single scratch flag, a clear lamp
+
+**See:** [features/bms/](features/bms/index.md)
 
 ---
 

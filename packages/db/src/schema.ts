@@ -6,6 +6,7 @@ import {
   real,
   primaryKey,
   index,
+  uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
 // ---------------------------------------------------------------------------
@@ -567,6 +568,97 @@ export const onlineScoreCandidates = sqliteTable("online_score_candidates", {
     .notNull()
     .default(sql`(unixepoch() * 1000)`),
 });
+
+// ---------------------------------------------------------------------------
+// BMS — derived by the client app server, never by realm-reader
+// ---------------------------------------------------------------------------
+
+/** One interpreted BMS score. Rebuilt from `scores` where ruleset is `bms`. */
+export const bmsScoreDetails = sqliteTable(
+  "bms_score_details",
+  {
+    scoreId: text("score_id")
+      .primaryKey()
+      .references(() => scores.id, { onDelete: "cascade" }),
+    exScore: integer("ex_score"),
+    maxExScore: integer("max_ex_score"),
+    normalizedScore: integer("normalized_score").notNull(),
+    accuracy: real("accuracy").notNull(),
+    pgreat: integer("pgreat"),
+    great: integer("great"),
+    good: integer("good"),
+    bad: integer("bad"),
+    poor: integer("poor"),
+    /** Combined miss and empty poor. The ruleset stores both under `miss`. */
+    miss: integer("miss"),
+    variantId: text("variant_id").notNull(),
+    gaugeId: text("gauge_id"),
+    comboLampId: text("combo_lamp_id"),
+    /** Always null in this release: clear/fail is not stored on the score. */
+    clearLampId: text("clear_lamp_id"),
+    djGrade: text("dj_grade"),
+    /** JSON string array of mod acronyms, in source order. */
+    modAcronyms: text("mod_acronyms").notNull(),
+    autoplay: integer("autoplay", { mode: "boolean" }).notNull().default(false),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => ({
+    variantIdx: index("bms_score_details_variant_idx").on(t.variantId),
+  }),
+);
+
+/**
+ * Durable Hub upload queue. Unique on the local score id.
+ * A rescan must not move `synced` or `rejected` rows back to `pending`.
+ */
+export const bmsSyncQueue = sqliteTable(
+  "bms_sync_queue",
+  {
+    scoreId: text("score_id")
+      .primaryKey()
+      .references(() => scores.id, { onDelete: "cascade" }),
+    state: text("state", {
+      enum: ["pending", "uploading", "retry_wait", "synced", "rejected"],
+    }).notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    nextAttemptAt: integer("next_attempt_at", { mode: "timestamp_ms" }),
+    lastError: text("last_error"),
+    hubScoreId: text("hub_score_id"),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => ({
+    stateNextIdx: index("bms_sync_queue_state_next_idx").on(
+      t.state,
+      t.nextAttemptAt,
+    ),
+  }),
+);
+
+/** Immutable difficulty-table versions pulled from the Hub for offline completion. */
+export const bmsTableCache = sqliteTable(
+  "bms_table_cache",
+  {
+    versionId: text("version_id").primaryKey(),
+    tableId: text("table_id").notNull(),
+    name: text("name").notNull(),
+    symbol: text("symbol").notNull().default(""),
+    sourceUrl: text("source_url").notNull(),
+    importedAt: integer("imported_at", { mode: "timestamp_ms" }).notNull(),
+    levelOrderJson: text("level_order_json").notNull(),
+    entriesJson: text("entries_json").notNull(),
+    unresolvedCount: integer("unresolved_count").notNull().default(0),
+  },
+  (t) => ({
+    tableImportedIdx: index("bms_table_cache_table_imported_idx").on(
+      t.tableId,
+      t.importedAt,
+    ),
+    sourceUnique: uniqueIndex("bms_table_cache_source_version_unique").on(
+      t.tableId,
+      t.versionId,
+    ),
+  }),
+);
 
 /** Local play results recorded by Roxysu Play (not lazer-imported scores). */
 export const playSessions = sqliteTable(

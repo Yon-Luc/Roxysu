@@ -44,7 +44,7 @@ export const SCORES_USERNAME_ALL = "*";
  * Gamemode / ruleset filter preference.
  * - missing / "auto" → ruleset with the most scores
  * - "*" → show all gamemodes
- * - a ruleset short name → exact match (`osu` / `taiko` / `fruits` / `mania`)
+ * - a ruleset short name → exact match (`osu` / `taiko` / `fruits` / `mania` / `bms`)
  */
 export const SCORES_GAMEMODE_FILTER_KEY = "scores.gamemode_filter";
 
@@ -111,4 +111,22 @@ export const JOBS_CALC_BUNDLE_APPLIED_VERSION_KEY =
  * "1" once the first-sync Jobs onboarding modal was accepted or dismissed.
  */
 export const JOBS_ONBOARDING_COMPLETED_KEY = "jobs.onboarding_completed";
+
+/** Stable id for this installation, sent with BMS score uploads. */
+export const BMS_INSTALLATION_ID_KEY = "bms.installation_id";
+
+/** "1" uploads newly imported BMS scores. Missing / "0" does not. */
+export const BMS_AUTO_UPLOAD_KEY = "bms.auto_upload";
+
+/** "1" enqueues every eligible local BMS score that is not already queued. */
+export const BMS_HISTORICAL_UPLOAD_KEY = "bms.historical_upload";
+
+/** "running" while historical enqueue is in progress, "done" when caught up. */
+export const BMS_BACKFILL_STATUS_KEY = "bms.backfill_status";
+
+/** Hub JWT used by the background uploader. Never returned to the browser. */
+export const BMS_HUB_JWT_KEY = "bms.hub_jwt";
+
+/** "1" after the Hub rejects the stored JWT. Cleared when a new token is saved. */
+export const BMS_SYNC_AUTH_PAUSED_KEY = "bms.sync_auth_paused";
 

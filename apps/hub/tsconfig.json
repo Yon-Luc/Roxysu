@@ -10,7 +10,8 @@
     "paths": {
       "@roxysu/db": ["../../packages/db/src/index.ts"],
       "@roxysu/db/hub": ["../../packages/db/src/hub/index.ts"],
-      "@roxysu/db/hub/schema": ["../../packages/db/src/hub/schema.ts"]
+      "@roxysu/db/hub/schema": ["../../packages/db/src/hub/schema.ts"],
+      "@roxysu/db/bms": ["../../packages/db/src/bmsInterpret.ts"]
     }
   },
   "include": ["src/**/*", "../../packages/db/src/hub/**/*"],

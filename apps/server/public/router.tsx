@@ -16,6 +16,12 @@ import { CollectionResultsPage } from "./features/collections/CollectionResultsP
 import { HubCallbackPage } from "./features/hub/HubCallbackPage";
 import { NowSelectedPage } from "./features/now-selected/NowSelectedPage";
 
+const BmsLocalPage = lazy(() =>
+  import("./features/bms/BmsLocalPage").then((m) => ({ default: m.BmsLocalPage })),
+);
+const BmsPlayerPage = lazy(() =>
+  import("./features/bms/BmsPlayerPage").then((m) => ({ default: m.BmsPlayerPage })),
+);
 const OverlayEditorPage = lazy(() =>
   import("./features/overlay-editor/OverlayEditorPage").then((m) => ({
     default: m.OverlayEditorPage,
@@ -312,6 +318,39 @@ const hubDetailRoute = createRoute({
   },
 });
 
+const bmsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/bms",
+  component: BmsLocalPage,
+});
+
+const bmsPlayerRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/bms/players/$username",
+  component: function BmsPlayerRoute() {
+    const { username } = bmsPlayerRoute.useParams();
+    return <BmsPlayerPage username={username} view="overview" />;
+  },
+});
+
+const bmsPlayerScoresRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/bms/players/$username/scores",
+  component: function BmsPlayerScoresRoute() {
+    const { username } = bmsPlayerScoresRoute.useParams();
+    return <BmsPlayerPage username={username} view="scores" />;
+  },
+});
+
+const bmsPlayerTablesRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/bms/players/$username/tables",
+  component: function BmsPlayerTablesRoute() {
+    const { username } = bmsPlayerTablesRoute.useParams();
+    return <BmsPlayerPage username={username} view="tables" />;
+  },
+});
+
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/settings",
@@ -395,6 +434,10 @@ const routeTree = rootRoute.addChildren([
     ...(isDesktopShell() ? [] : [ratingLabRoute]),
     skinRoute,
     settingsRoute,
+    bmsRoute,
+    bmsPlayerRoute,
+    bmsPlayerScoresRoute,
+    bmsPlayerTablesRoute,
   ]),
   overlayRoute,
   overlayEditorRoute,

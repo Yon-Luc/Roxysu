@@ -129,6 +129,7 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
           .set({
             username: osuUser.username,
             avatarUrl: osuUser.avatar_url,
+            countryCode: osuUser.country_code ?? null,
             role,
           })
           .where(eq(hubUsers.osuId, osuUser.id));
@@ -140,6 +141,7 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
             osuId: osuUser.id,
             username: osuUser.username,
             avatarUrl: osuUser.avatar_url,
+            countryCode: osuUser.country_code ?? null,
             role,
           })
           .returning({ id: hubUsers.id })
@@ -223,6 +225,8 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
       osuId: row.osuId,
       username: row.username,
       avatarUrl: row.avatarUrl,
+      countryCode: row.countryCode,
+      bmsProfilePublic: row.bmsProfilePublic,
       role: row.role,
       createdAt: row.createdAt,
     };

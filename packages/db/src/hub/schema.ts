@@ -12,6 +12,12 @@ export const hubUsers = sqliteTable("hub_users", {
   role: text("role", { enum: ["user", "admin"] })
     .notNull()
     .default("user"),
+  /** osu! account country code. Null when the profile did not include one. */
+  countryCode: text("country_code"),
+  /** Public BMS profile. Enforced on public BMS reads, not only in the UI. */
+  bmsProfilePublic: integer("bms_profile_public", { mode: "boolean" })
+    .notNull()
+    .default(true),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),
@@ -468,3 +474,155 @@ export const osuApiPark = sqliteTable("osu_api_park", {
   id: integer("id").primaryKey(),
   parkedUntil: integer("parked_until"),
 });
+
+// ---------------------------------------------------------------------------
+// BMS community scores — community-submitted, not server-verified
+// ---------------------------------------------------------------------------
+
+export const bmsCharts = sqliteTable(
+  "bms_charts",
+  {
+    md5: text("md5").primaryKey(),
+    sha256: text("sha256"),
+    title: text("title"),
+    artist: text("artist"),
+    keyCount: integer("key_count"),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (t) => ({
+    shaIdx: index("bms_charts_sha256_idx").on(t.sha256),
+  }),
+);
+
+export const bmsScores = sqliteTable(
+  "bms_scores",
+  {
+    id: text("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => hubUsers.id, { onDelete: "cascade" }),
+    installationId: text("installation_id").notNull(),
+    localScoreId: text("local_score_id").notNull(),
+    chartMd5: text("chart_md5")
+      .notNull()
+      .references(() => bmsCharts.md5),
+    achievedAt: integer("achieved_at", { mode: "timestamp" }).notNull(),
+    exScore: integer("ex_score"),
+    maxExScore: integer("max_ex_score"),
+    normalizedScore: integer("normalized_score"),
+    accuracy: real("accuracy"),
+    pgreat: integer("pgreat"),
+    great: integer("great"),
+    good: integer("good"),
+    bad: integer("bad"),
+    poor: integer("poor"),
+    miss: integer("miss"),
+    variantId: text("variant_id").notNull(),
+    gaugeId: text("gauge_id"),
+    comboLampId: text("combo_lamp_id"),
+    clearLampId: text("clear_lamp_id"),
+    djGrade: text("dj_grade"),
+    modsJson: text("mods_json").notNull(),
+    trust: text("trust").notNull().default("community_submitted"),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (t) => ({
+    sourceUnique: uniqueIndex("bms_scores_source_unique").on(
+      t.userId,
+      t.installationId,
+      t.localScoreId,
+    ),
+    userVariantIdx: index("bms_scores_user_variant_idx").on(
+      t.userId,
+      t.variantId,
+      t.achievedAt,
+    ),
+    chartIdx: index("bms_scores_chart_idx").on(t.chartMd5),
+  }),
+);
+
+export const bmsScoreSubmissions = sqliteTable(
+  "bms_score_submissions",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => hubUsers.id, { onDelete: "cascade" }),
+    installationId: text("installation_id").notNull(),
+    localScoreId: text("local_score_id").notNull(),
+    scoreId: text("score_id").references(() => bmsScores.id),
+    payloadHash: text("payload_hash").notNull(),
+    status: text("status", {
+      enum: ["accepted", "duplicate", "rejected"],
+    }).notNull(),
+    receivedAt: integer("received_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (t) => ({
+    sourceUnique: uniqueIndex("bms_score_submissions_source_unique").on(
+      t.userId,
+      t.installationId,
+      t.localScoreId,
+    ),
+  }),
+);
+
+export const bmsTables = sqliteTable("bms_tables", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  symbol: text("symbol").notNull().default(""),
+  sourceUrl: text("source_url").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});
+
+export const bmsTableVersions = sqliteTable(
+  "bms_table_versions",
+  {
+    id: text("id").primaryKey(),
+    tableId: text("table_id")
+      .notNull()
+      .references(() => bmsTables.id, { onDelete: "cascade" }),
+    sourceUrl: text("source_url").notNull(),
+    levelOrderJson: text("level_order_json").notNull(),
+    unresolvedCount: integer("unresolved_count").notNull().default(0),
+    importedAt: integer("imported_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (t) => ({
+    tableImportedIdx: index("bms_table_versions_table_imported_idx").on(
+      t.tableId,
+      t.importedAt,
+    ),
+  }),
+);
+
+export const bmsTableEntries = sqliteTable(
+  "bms_table_entries",
+  {
+    versionId: text("version_id")
+      .notNull()
+      .references(() => bmsTableVersions.id, { onDelete: "cascade" }),
+    chartHash: text("chart_hash").notNull(),
+    hashKind: text("hash_kind", { enum: ["md5", "sha256"] }).notNull(),
+    sha256: text("sha256"),
+    level: text("level").notNull(),
+    levelIndex: integer("level_index").notNull(),
+    title: text("title"),
+    artist: text("artist"),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.versionId, t.chartHash] }),
+    versionLevelIdx: index("bms_table_entries_version_level_idx").on(
+      t.versionId,
+      t.levelIndex,
+    ),
+  }),
+);

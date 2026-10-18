@@ -18,6 +18,7 @@ One subdirectory per product surface. Terms: [vocabulary.md](../vocabulary.md).
 | Download mirrors | [download-mirrors/](download-mirrors/index.md) |
 | Map marathon | [map-marathon/](map-marathon/index.md) |
 | Hub | [hub/](hub/index.md) |
+| BMS profile | [bms/](bms/index.md) |
 | Desktop | [desktop/](desktop/index.md) |
 | tosu live overlay input | [tosu-live/](tosu-live/index.md) |
 | Now selected | [now-selected/](now-selected/index.md) |

@@ -1,5 +1,7 @@
 import { Link } from "@tanstack/react-router";
+import { BeatmapCover } from "../../components/BeatmapCover";
 import { PageTitle } from "../../components/PageTitle";
+import { formatAccuracy, formatRelativeTime } from "../../lib/format";
 import { t, useAppDict } from "../../lib/i18n";
 import type { BmsScoreRow, BmsSessionRow, BmsTableBlock, BmsVariantCount } from "./types";
 import { BMS_ACHIEVEMENTS } from "./types";
@@ -11,8 +13,68 @@ function when(value: number | string | null | undefined): string {
   return date.toLocaleString();
 }
 
-function gradeLabel(score: BmsScoreRow): string {
-  return score.djGrade ?? "—";
+function playedIso(score: BmsScoreRow): string | null {
+  const value = score.playedAt ?? score.achievedAt;
+  if (value == null) return null;
+  if (typeof value === "number") return new Date(value).toISOString();
+  return value;
+}
+
+function exLabel(score: BmsScoreRow): string {
+  if (score.exScore == null) return "—";
+  if (score.maxExScore == null) return String(score.exScore);
+  return `${score.exScore} / ${score.maxExScore}`;
+}
+
+function ScoreStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <div className="truncate text-[10px] font-medium uppercase tracking-wide text-faint">
+        {label}
+      </div>
+      <div className="mt-0.5 truncate tabular-nums text-subtle">{value}</div>
+    </div>
+  );
+}
+
+function BmsScoreCard({ score, priority }: { score: BmsScoreRow; priority: boolean }) {
+  const { dict } = useAppDict();
+  const copy = dict?.bms;
+  const meta = [score.gaugeId, formatRelativeTime(playedIso(score), dict?.common)]
+    .filter((part) => part && part !== "—")
+    .join(" · ");
+
+  return (
+    <li className="rx-card flex flex-col">
+      <BeatmapCover
+        backgroundFileHash={score.backgroundFileHash}
+        setOnlineId={score.setOnlineId}
+        size="card"
+        className="aspect-[2.2/1] w-full"
+        alt=""
+        priority={priority}
+      />
+      <div className="p-4">
+        <div className="truncate text-sm text-muted">
+          {score.artist ?? dict?.practice.unknownArtist ?? "Unknown artist"}
+        </div>
+        <div className="truncate font-bold text-ink">{score.title ?? score.id}</div>
+        {score.difficulty ? (
+          <div className="mt-1 truncate text-xs text-muted">[{score.difficulty}]</div>
+        ) : null}
+        {meta ? <div className="mt-1 truncate text-xs text-muted">{meta}</div> : null}
+        <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+          <ScoreStat label={copy?.grade ?? "Grade"} value={score.djGrade ?? "—"} />
+          <ScoreStat label="EX" value={exLabel(score)} />
+          <ScoreStat
+            label={dict?.practice.detail.statBestAcc ?? "Best acc"}
+            value={formatAccuracy(score.accuracy)}
+          />
+          <ScoreStat label={copy?.lamp ?? "Combo"} value={score.comboLampId ?? "—"} />
+        </div>
+      </div>
+    </li>
+  );
 }
 
 export function BmsProfileView({
@@ -128,31 +190,14 @@ export function BmsProfileView({
       ) : null}
 
       {showScores ? (
-        <section className="rx-panel p-4">
+        <section>
           <h2 className="font-display text-lg font-semibold">{copy?.recent ?? "Recent scores"}</h2>
           {scores.length === 0 ? (
             <p className="mt-3 text-sm text-muted">{copy?.noScores ?? "No BMS scores yet."}</p>
           ) : (
-            <ul className="mt-3 space-y-1">
-              {scores.map((score) => (
-                <li key={score.id} className="flex flex-wrap items-baseline justify-between gap-2 py-2">
-                  <div>
-                    <div className="font-medium text-ink">{score.title ?? score.id}</div>
-                    <div className="text-xs text-muted">
-                      {[score.artist, score.variantId, score.gaugeId, when(score.playedAt ?? score.achievedAt)]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </div>
-                  </div>
-                  <div className="text-right text-sm tabular-nums">
-                    <div className="font-semibold">{gradeLabel(score)}</div>
-                    <div className="text-muted">
-                      {score.exScore ?? "—"}
-                      {score.maxExScore != null ? ` / ${score.maxExScore}` : ""}
-                      {score.comboLampId ? ` · ${score.comboLampId}` : ""}
-                    </div>
-                  </div>
-                </li>
+            <ul className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {scores.map((score, index) => (
+                <BmsScoreCard key={score.id} score={score} priority={index < 6} />
               ))}
             </ul>
           )}
@@ -187,7 +232,7 @@ export function BmsProfileView({
             <label className="flex items-center gap-2 text-sm text-muted">
               {copy?.achievement ?? "Achievement"}
               <select
-                className="rounded-lg border border-line bg-base px-2 py-1 text-ink"
+                className="rx-select"
                 value={achievement}
                 onChange={(event) => onAchievement(event.target.value)}
               >

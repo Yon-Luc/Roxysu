@@ -1,4 +1,5 @@
 import {
+  beatmapSets,
   beatmaps,
   bmsScoreDetails,
   bmsTableCache,
@@ -100,10 +101,13 @@ export async function listLocalScores(
     .select({
       id: scores.id,
       playedAt: scores.playedAt,
+      beatmapId: beatmaps.id,
       title: beatmaps.title,
       artist: beatmaps.artist,
       difficulty: beatmaps.difficultyName,
       md5: beatmaps.md5Hash,
+      backgroundFileHash: beatmaps.backgroundFileHash,
+      setOnlineId: beatmapSets.onlineId,
       exScore: bmsScoreDetails.exScore,
       maxExScore: bmsScoreDetails.maxExScore,
       normalizedScore: bmsScoreDetails.normalizedScore,
@@ -117,6 +121,7 @@ export async function listLocalScores(
     .from(bmsScoreDetails)
     .innerJoin(scores, eq(scores.id, bmsScoreDetails.scoreId))
     .leftJoin(beatmaps, eq(beatmaps.id, scores.beatmapId))
+    .leftJoin(beatmapSets, eq(beatmapSets.id, beatmaps.setId))
     .where(and(...filters))
     .orderBy(desc(scores.playedAt), desc(scores.id))
     .limit(limit + 1);

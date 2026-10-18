@@ -221,8 +221,24 @@ a {
   padding: 0.5rem 0.75rem;
   font-size: 0.875rem;
   color: var(--color-ink);
+  color-scheme: dark;
   outline: none;
   transition: box-shadow 0.15s ease;
+}
+
+/* Native option popups ignore inherited CSS variables and stay white. */
+.rx-select option {
+  background-color: #242424;
+  color: #ffffff;
+}
+
+html.light .rx-select {
+  color-scheme: light;
+}
+
+html.light .rx-select option {
+  background-color: #f0f0f0;
+  color: #121212;
 }
 
 .rx-select:focus {

@@ -2,9 +2,12 @@ export type BmsScoreRow = {
   id: string;
   playedAt?: number;
   achievedAt?: string;
+  beatmapId?: string | null;
   title: string | null;
   artist: string | null;
   difficulty?: string | null;
+  backgroundFileHash?: string | null;
+  setOnlineId?: number | null;
   exScore: number | null;
   maxExScore: number | null;
   normalizedScore: number | null;

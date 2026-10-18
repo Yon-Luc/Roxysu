@@ -99,6 +99,13 @@ export const beatmaps = sqliteTable(
     onlineIdIdx: index("beatmaps_online_id_idx").on(t.onlineId),
     md5HashIdx: index("beatmaps_md5_hash_idx").on(t.md5Hash),
     setIdIdx: index("beatmaps_set_id_idx").on(t.setId),
+    lastLocalUpdateIdx: index("beatmaps_last_local_update_idx").on(
+      t.lastLocalUpdate,
+    ),
+    rulesetCsIdx: index("beatmaps_ruleset_cs_idx").on(
+      t.rulesetShortName,
+      t.circleSize,
+    ),
   }),
 );
 
@@ -212,6 +219,10 @@ export const mastery = sqliteTable("mastery", {
   playCount: integer("play_count").notNull().default(0),
   bestAccuracy: real("best_accuracy"),
   bestPp: real("best_pp"),
+  /** Max total_score across non-deleted plays (Practice / QL). */
+  bestScore: integer("best_score"),
+  /** Min miss count from scores.statistics (Practice / QL). */
+  bestMisses: integer("best_misses"),
   lastPlayedAt: integer("last_played_at", { mode: "timestamp_ms" }),
   formulaId: text("formula_id").notNull().default("simple"),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),

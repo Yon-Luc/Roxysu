@@ -231,7 +231,8 @@ export function scoresGamemodeSqlLiteral(
   columnExpr = "s.ruleset_short_name",
 ): string {
   if (gamemode == null) return "";
-  return ` AND lower(COALESCE(${columnExpr}, '')) = ${sqlStringLiteral(gamemode)}`;
+  // Bare equality — ShortName is stored lowercase; LOWER() would defeat indexes.
+  return ` AND ${columnExpr} = ${sqlStringLiteral(gamemode)}`;
 }
 
 export function scoresGamemodeCacheKey(

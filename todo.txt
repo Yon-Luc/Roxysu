@@ -71,3 +71,59 @@ New Features:
   - Export all their local scores to a file.
   - Import a file containing scores in the same format.
   - Transfer and synchronize their local scores between different PCs using this file format.
+
+
+
+BMS SUPPORT
+
+- Support BMS scores and maps.
+
+PROFILE PAGE
+
+- List of scores:
+  - Recent scores.
+  - Score history.
+- Dan rankings.
+- Difficulty table completion (SL1, SL2, SL3, etc.):
+  - AA
+  - AAA
+  - MAX
+  - FC (Full Combo)
+  - HARD
+  - EASY
+- Session history and statistics.
+- Total number of plays.
+- Separate profiles and statistics for each play mode:
+  - All Mods
+  - No-Scratch
+  - Scratch
+  - Constant Score
+- Scratch and No-Scratch modes can fundamentally change a map's gameplay and difficulty. They must be tracked and analyzed separately.
+
+MAP PAGE AND LEADERBOARDS
+
+- Each map must have its own leaderboard.
+- Leaderboards must be filterable by:
+  - Achievement type: AA, AAA, MAX, FC, HARD, EASY.
+  - Play mode: All Mods, Scratch, No-Scratch, Constant Score, etc.
+  - Gauge type: Easy, Hard, Random, etc.
+- Users should be able to select a play mode, an achievement type, and a gauge type to filter the leaderboard.
+- Country rankings.
+
+PROFILE COMPARISON
+
+- Compare two player profiles.
+- Compare scores, rankings, statistics, and table completion.
+- Compare results across different play modes.
+
+SCORE FEED
+
+- Dedicated feed page displaying submitted scores.
+- Show recent scores from players.
+- Allow users to browse score submissions.
+
+GLOBAL STATISTICS
+
+- Total number of plays submitted.
+- Track the number of submitted scores over time.
+- Provide global statistics about player activity and score submissions.

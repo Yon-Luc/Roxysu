@@ -384,7 +384,7 @@ describe("compileQuery", () => {
   test("compiles NOT played:lastNd with correct parentheses", () => {
     const ast = parseQuery("acc:90..93 NOT played:last14d");
     const compiled = compileQuery(ast);
-    expect(compiled.sql).toContain("NOT (ps.last_played_at IS NOT NULL AND");
+    expect(compiled.sql).toContain("NOT (m.last_played_at IS NOT NULL AND");
   });
 
   test("parses grade filter", () => {

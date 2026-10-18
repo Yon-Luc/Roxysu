@@ -110,8 +110,8 @@ export function SessionSevenKRecommend({
   const ratingMode = useRatingDisplayMode();
   const [prefs, setPrefs] = useState<RecPrefs>(() => loadPrefs(keyCount));
   const [shuffleKey, setShuffleKey] = useState(0);
-  const excludeKey = useMemo(
-    () => [...excludeBeatmapIds].sort().join(","),
+  const excludeSet = useMemo(
+    () => new Set(excludeBeatmapIds),
     [excludeBeatmapIds],
   );
 
@@ -129,6 +129,7 @@ export function SessionSevenKRecommend({
   const skillTopPlays =
     settings?.recommendFocus?.topPlays ?? readSkillTopPlays();
 
+  // Exclude is filtered client-side so each new session map does not refetch.
   const { data, isLoading, error, isFetching } = useQuery({
     queryKey: [
       "practice-recommend",
@@ -137,14 +138,12 @@ export function SessionSevenKRecommend({
       prefs.skillset,
       skillTopPlays,
       shuffleKey,
-      excludeKey,
     ],
     queryFn: () =>
       fetchPracticeRecommend({
         focus: prefs.focus,
         skillset: prefs.focus === "deficit" ? undefined : prefs.skillset,
-        count: 8,
-        exclude: excludeBeatmapIds,
+        count: 16,
         topPlays: skillTopPlays,
         keyCount,
       }),
@@ -152,7 +151,10 @@ export function SessionSevenKRecommend({
 
   const batch =
     data && !("error" in data) ? (data as PracticeRecommend) : null;
-  const items = batch?.recommendations ?? [];
+  const items = useMemo(() => {
+    const all = batch?.recommendations ?? [];
+    return all.filter((item) => !excludeSet.has(item.id)).slice(0, 8);
+  }, [batch, excludeSet]);
   const skill = batch?.skill;
   const requiredMaps = batch?.skillTopPlays ?? skillTopPlays;
   const focusHint =

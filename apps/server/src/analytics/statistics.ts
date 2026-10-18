@@ -1,6 +1,6 @@
 import type { Db } from "@roxysu/db/types";
 import { beatmaps, dailyStats, mapperStats, scores, weeklyStats } from "@roxysu/db/schema";
-import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, lt, or } from "drizzle-orm";
 import {
   loadManiaPpCurves,
   resolveScorePp,
@@ -178,11 +178,46 @@ async function rebuildPartitionsForScores(db: Db, scoreIds: string[]) {
 
   if (dayKeys.size === 0 && weekKeys.size === 0 && mapperIds.size === 0) return;
 
-  // Re-aggregate from all non-deleted scores that fall in the touched partitions.
+  // Bound the score read to the touched day/week window and/or mappers.
+  let minMs = Number.POSITIVE_INFINITY;
+  let maxMs = Number.NEGATIVE_INFINITY;
+  for (const d of dayKeys) {
+    const start = Date.parse(`${d}T00:00:00.000Z`);
+    if (!Number.isFinite(start)) continue;
+    minMs = Math.min(minMs, start);
+    maxMs = Math.max(maxMs, start + 86_400_000);
+  }
+  for (const w of weekKeys) {
+    const start = Date.parse(`${w}T00:00:00.000Z`);
+    if (!Number.isFinite(start)) continue;
+    minMs = Math.min(minMs, start);
+    maxMs = Math.max(maxMs, start + 7 * 86_400_000);
+  }
+  const hasTimeWindow = Number.isFinite(minMs) && Number.isFinite(maxMs);
+  const mapperList = [...mapperIds];
+
   const [usernames, gamemode] = await Promise.all([
     resolveScoresUsernames(db),
     resolveScoresGamemode(db),
   ]);
+  const partitionFilter =
+    hasTimeWindow && mapperList.length > 0
+      ? or(
+          and(
+            gte(scores.playedAt, new Date(minMs)),
+            lt(scores.playedAt, new Date(maxMs)),
+          ),
+          inArray(beatmaps.mapperOnlineId, mapperList),
+        )
+      : hasTimeWindow
+        ? and(
+            gte(scores.playedAt, new Date(minMs)),
+            lt(scores.playedAt, new Date(maxMs)),
+          )
+        : mapperList.length > 0
+          ? inArray(beatmaps.mapperOnlineId, mapperList)
+          : undefined;
+
   const all = await db
     .select({
       accuracy: scores.accuracy,
@@ -202,6 +237,7 @@ async function rebuildPartitionsForScores(db: Db, scoreIds: string[]) {
         isNotNull(scores.beatmapId),
         scoresUsernameCondition(usernames),
         scoresGamemodeCondition(gamemode),
+        partitionFilter,
       ),
     );
 

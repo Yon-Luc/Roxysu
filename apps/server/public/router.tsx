@@ -13,18 +13,39 @@ import { SessionsPage } from "./features/sessions/SessionsPage";
 import { SessionDetailPage } from "./features/sessions/SessionDetailPage";
 import { CollectionsPage } from "./features/collections/CollectionsPage";
 import { CollectionResultsPage } from "./features/collections/CollectionResultsPage";
-import { HubBrowsePage } from "./features/hub/HubBrowsePage";
 import { HubCallbackPage } from "./features/hub/HubCallbackPage";
-import { HubDetailPage } from "./features/hub/HubDetailPage";
-import { SettingsPage } from "./features/settings/SettingsPage";
-import { SkinPage } from "./features/settings/SkinPage";
-import { OverlayPage } from "./features/overlay/OverlayPage";
+import { NowSelectedPage } from "./features/now-selected/NowSelectedPage";
+
 const OverlayEditorPage = lazy(() =>
   import("./features/overlay-editor/OverlayEditorPage").then((m) => ({
     default: m.OverlayEditorPage,
   })),
 );
-import { NowSelectedPage } from "./features/now-selected/NowSelectedPage";
+const HubBrowsePage = lazy(() =>
+  import("./features/hub/HubBrowsePage").then((m) => ({
+    default: m.HubBrowsePage,
+  })),
+);
+const HubDetailPage = lazy(() =>
+  import("./features/hub/HubDetailPage").then((m) => ({
+    default: m.HubDetailPage,
+  })),
+);
+const SettingsPage = lazy(() =>
+  import("./features/settings/SettingsPage").then((m) => ({
+    default: m.SettingsPage,
+  })),
+);
+const SkinPage = lazy(() =>
+  import("./features/settings/SkinPage").then((m) => ({
+    default: m.SkinPage,
+  })),
+);
+const OverlayPage = lazy(() =>
+  import("./features/overlay/OverlayPage").then((m) => ({
+    default: m.OverlayPage,
+  })),
+);
 
 const DashboardPage = lazy(() =>
   import("./features/dashboard/DashboardPage").then((m) => ({

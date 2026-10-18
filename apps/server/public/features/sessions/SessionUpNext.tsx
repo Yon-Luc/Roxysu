@@ -178,8 +178,8 @@ export function SessionUpNext({
   const [debouncedQuery, setDebouncedQuery] = useState(() =>
     loadPrefs().query.trim(),
   );
-  const excludeKey = useMemo(
-    () => [...excludeBeatmapIds].sort().join(","),
+  const excludeSet = useMemo(
+    () => new Set(excludeBeatmapIds),
     [excludeBeatmapIds],
   );
 
@@ -232,19 +232,24 @@ export function SessionUpNext({
 
   const sampleQuery = debouncedQuery;
 
+  // Keep exclude out of the queryKey so each new session map does not refetch.
+  // Over-fetch a little and filter client-side.
   const { data, isLoading, error, isFetching } = useQuery({
-    queryKey: ["practice-sample", sampleQuery, shuffleKey, excludeKey],
+    queryKey: ["practice-sample", sampleQuery, shuffleKey],
     queryFn: () =>
       fetchPracticeSample({
         q: sampleQuery || undefined,
-        count: 3,
-        exclude: excludeBeatmapIds,
+        count: 12,
       }),
     enabled: sampleQuery.length > 0,
   });
 
-  const items =
-    data && !("error" in data) ? (data.items as PracticeItem[]) : [];
+  const items = useMemo(() => {
+    if (!data || "error" in data) return [] as PracticeItem[];
+    return (data.items as PracticeItem[])
+      .filter((item) => !excludeSet.has(item.id))
+      .slice(0, 3);
+  }, [data, excludeSet]);
   const total = data && !("error" in data) ? data.total : 0;
 
   return (

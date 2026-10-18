@@ -3,6 +3,7 @@ import type { Db } from "@roxysu/db/types";
 import { mastery, scoreMetrics, scores, settings } from "@roxysu/db/schema";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { publish } from "../../shared/events";
+import { parseScoreStatistics } from "../../scores/parseStatistics";
 import {
   resolveScoresGamemode,
   scoresGamemodeCondition,
@@ -73,6 +74,8 @@ export async function runMasteryEngine(
       beatmapId: scores.beatmapId,
       accuracy: scores.accuracy,
       pp: scores.pp,
+      totalScore: scores.totalScore,
+      statistics: scores.statistics,
       mods: scores.mods,
       rulesetShortName: scores.rulesetShortName,
       playedAt: scores.playedAt,
@@ -110,6 +113,8 @@ export async function runMasteryEngine(
     maxRetryIndex: number;
     bestAccuracy: number | null;
     bestPp: number | null;
+    bestScore: number | null;
+    bestMisses: number | null;
     lastPlayedAt: Date | null;
   };
 
@@ -130,6 +135,8 @@ export async function runMasteryEngine(
         maxRetryIndex: 0,
         bestAccuracy: null,
         bestPp: null,
+        bestScore: null,
+        bestMisses: null,
         lastPlayedAt: null,
       };
       byBeatmap.set(row.beatmapId, agg);
@@ -145,6 +152,13 @@ export async function runMasteryEngine(
     }
     if (pp != null && (agg.bestPp == null || pp > agg.bestPp)) {
       agg.bestPp = pp;
+    }
+    if (agg.bestScore == null || row.totalScore > agg.bestScore) {
+      agg.bestScore = row.totalScore;
+    }
+    const misses = parseScoreStatistics(row.statistics)?.miss;
+    if (misses != null && (agg.bestMisses == null || misses < agg.bestMisses)) {
+      agg.bestMisses = misses;
     }
     const played = new Date(toMs(row.playedAt));
     if (!agg.lastPlayedAt || played > agg.lastPlayedAt) {
@@ -169,6 +183,8 @@ export async function runMasteryEngine(
       playCount: agg.scores.length,
       bestAccuracy: agg.bestAccuracy,
       bestPp: agg.bestPp,
+      bestScore: agg.bestScore,
+      bestMisses: agg.bestMisses,
       lastPlayedAt: agg.lastPlayedAt,
       formulaId,
       updatedAt: now,

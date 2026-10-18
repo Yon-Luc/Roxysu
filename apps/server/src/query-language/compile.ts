@@ -92,7 +92,7 @@ function compileNumericColumn(
   return "1=1";
 }
 
-/** Positional `?` binders. Alias contract: b=beatmaps, m=mastery, ps=play_stats, rs=retry_stats */
+/** Positional `?` binders. Alias contract: b=beatmaps, m=mastery (incl. play aggregates), rs=retry_stats */
 function compileTerm(
   term: FieldTerm,
   params: unknown[],
@@ -107,7 +107,8 @@ function compileTerm(
 
   switch (term.type) {
     case "mode":
-      return `lower(b.ruleset_short_name) = lower(${push(term.value)})`;
+      // Bare equality so SQLite can use ruleset indexes (lazer ShortName is lowercase).
+      return `b.ruleset_short_name = ${push(String(term.value).toLowerCase())}`;
     case "mapper":
       return `b.mapper_username LIKE ${push(likePattern(term.value))} ESCAPE '\\'`;
     case "title":
@@ -128,7 +129,7 @@ function compileTerm(
       return compileNumericColumn("b.drain_rate", term, push);
     case "key": {
       // Mania key count is stored as circle size; key filters always imply mania.
-      const mania = `lower(b.ruleset_short_name) = lower(${push("mania")})`;
+      const mania = `b.ruleset_short_name = ${push("mania")}`;
       if (term.min != null && term.max != null) {
         return `(${mania} AND b.circle_size BETWEEN ${push(term.min)} AND ${push(term.max)})`;
       }
@@ -139,7 +140,7 @@ function compileTerm(
     }
     case "ln": {
       // LN% = end-time objects / total objects * 100 (osu! formula); implies mania.
-      const mania = `lower(b.ruleset_short_name) = lower(${push("mania")})`;
+      const mania = `b.ruleset_short_name = ${push("mania")}`;
       const lnPct = `(b.end_time_object_count * 100.0 / MAX(1, b.total_object_count))`;
       if (term.min != null && term.max != null) {
         return `(${mania} AND ${lnPct} BETWEEN ${push(term.min)} AND ${push(term.max)})`;
@@ -159,7 +160,7 @@ function compileTerm(
       }
       const gamemodeClause =
         gamemode != null
-          ? `AND lower(COALESCE(s.ruleset_short_name, '')) = lower(${push(gamemode)})`
+          ? `AND s.ruleset_short_name = ${push(gamemode.toLowerCase())}`
           : "";
       return `EXISTS (
         SELECT 1 FROM scores s
@@ -172,28 +173,28 @@ function compileTerm(
     }
     case "acc": {
       if (term.min != null && term.max != null) {
-        return `ps.best_accuracy BETWEEN ${push(term.min / 100)} AND ${push(term.max / 100)}`;
+        return `m.best_accuracy BETWEEN ${push(term.min / 100)} AND ${push(term.max / 100)}`;
       }
       if (term.op != null && term.value != null) {
-        return `ps.best_accuracy ${term.op} ${push(term.value / 100)}`;
+        return `m.best_accuracy ${term.op} ${push(term.value / 100)}`;
       }
       return "1=1";
     }
     case "misses": {
       if (term.min != null && term.max != null) {
-        return `ps.best_misses BETWEEN ${push(term.min)} AND ${push(term.max)}`;
+        return `m.best_misses BETWEEN ${push(term.min)} AND ${push(term.max)}`;
       }
       if (term.op != null && term.value != null) {
-        return `ps.best_misses ${term.op} ${push(term.value)}`;
+        return `m.best_misses ${term.op} ${push(term.value)}`;
       }
       return "1=1";
     }
     case "score": {
       if (term.min != null && term.max != null) {
-        return `ps.best_score BETWEEN ${push(term.min)} AND ${push(term.max)}`;
+        return `m.best_score BETWEEN ${push(term.min)} AND ${push(term.max)}`;
       }
       if (term.op != null && term.value != null) {
-        return `ps.best_score ${term.op} ${push(term.value)}`;
+        return `m.best_score ${term.op} ${push(term.value)}`;
       }
       return "1=1";
     }
@@ -202,14 +203,14 @@ function compileTerm(
     case "mastery":
       return `COALESCE(m.level, 0) ${term.op} ${push(term.value)}`;
     case "pp":
-      return `COALESCE(ps.best_pp, 0) ${term.op} ${push(term.value)}`;
+      return `COALESCE(m.best_pp, 0) ${term.op} ${push(term.value)}`;
     case "played": {
       if ("never" in term && term.never) {
-        return `(ps.play_count IS NULL OR ps.play_count = 0)`;
+        return `(m.play_count IS NULL OR m.play_count = 0)`;
       }
       if (!("days" in term)) return "1=1";
       const since = Date.now() - term.days * 24 * 60 * 60 * 1000;
-      return `(ps.last_played_at IS NOT NULL AND ps.last_played_at >= ${push(since)})`;
+      return `(m.last_played_at IS NOT NULL AND m.last_played_at >= ${push(since)})`;
     }
     case "dan": {
       // Sunny tiers (4K Reform/LN/Intro, 7K Regular/LN) stay searchable even
@@ -279,7 +280,7 @@ function compileTerm(
       };
       const modeFilter = (alias: string) =>
         gamemode != null
-          ? `AND lower(COALESCE(${alias}.ruleset_short_name, '')) = lower(${push(gamemode)})`
+          ? `AND ${alias}.ruleset_short_name = ${push(gamemode.toLowerCase())}`
           : "";
       const nomod = nomodOrMirrorOnlySql("s");
       const rowGrade = scoreRowGradeSql("s");

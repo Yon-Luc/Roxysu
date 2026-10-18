@@ -2,14 +2,6 @@
 import type { Db } from "@roxysu/db/types";
 import { SUNNY_ALGORITHM } from "../../map-analysis/computeSunnyDan";
 import {
-  resolveScoresGamemodeSync,
-  scoresGamemodeSql,
-} from "../scoreGamemode";
-import {
-  resolveScoresUsernamesSync,
-  scoresUsernameSql,
-} from "../scoreUsername";
-import {
   DEFAULT_AXIS_THRESHOLDS,
   type AxisThresholds,
 } from "./axisThresholds";
@@ -54,7 +46,7 @@ export function countMissingSunnyDan(db: Db, keyCount?: number): number {
       LEFT JOIN beatmap_dan_ratings dr
         ON dr.beatmap_id = b.id AND dr.algorithm = ?
       WHERE b.hidden = 0
-        AND lower(COALESCE(b.ruleset_short_name, '')) = 'mania'
+        AND b.ruleset_short_name = 'mania'
         ${keySql}
         AND (
           dr.beatmap_id IS NULL
@@ -116,17 +108,7 @@ export function loadCandidates(
   excludeIds: string[],
   limit: number,
 ): CandidateRow[] {
-  const user = scoresUsernameSql(
-    resolveScoresUsernamesSync(db),
-    "user_username",
-  );
-  const mode = scoresGamemodeSql(
-    resolveScoresGamemodeSync(db),
-    "ruleset_short_name",
-  );
   const bind: Array<string | number | bigint | boolean | null> = [
-    ...user.params,
-    ...mode.params,
     SUNNY_ALGORITHM,
     ...(filterParams as Array<string | number | bigint | boolean | null>),
   ];
@@ -151,12 +133,12 @@ export function loadCandidates(
       CASE WHEN b.online_id > 0 THEN b.online_id ELSE NULL END AS onlineId,
       CASE WHEN bs.online_id > 0 THEN bs.online_id ELSE NULL END AS setOnlineId,
       b.background_file_hash AS backgroundFileHash,
-      COALESCE(ps.play_count, 0) AS playCount,
-      ps.best_accuracy AS bestAccuracy,
-      ps.best_pp AS bestPp,
-      ps.best_score AS bestScore,
-      ps.best_misses AS bestMisses,
-      ps.last_played_at AS lastPlayedAt,
+      COALESCE(m.play_count, 0) AS playCount,
+      m.best_accuracy AS bestAccuracy,
+      m.best_pp AS bestPp,
+      m.best_score AS bestScore,
+      m.best_misses AS bestMisses,
+      m.last_played_at AS lastPlayedAt,
       m.level AS masteryLevel,
       dr.est_diff AS sunnyEstDiff,
       dr.sunny_star AS sunnyStar,
@@ -164,26 +146,6 @@ export function loadCandidates(
       CAST(b.circle_size AS INTEGER) AS keyCount
     FROM beatmaps b
     LEFT JOIN mastery m ON m.beatmap_id = b.id
-    LEFT JOIN (
-      SELECT
-        beatmap_id,
-        COUNT(*) AS play_count,
-        MAX(accuracy) AS best_accuracy,
-        MAX(pp) AS best_pp,
-        MAX(total_score) AS best_score,
-        MIN(
-          CASE
-            WHEN statistics IS NOT NULL
-            THEN COALESCE(json_extract(statistics, '$.miss'), 0)
-          END
-        ) AS best_misses,
-        MAX(played_at) AS last_played_at
-      FROM scores
-      WHERE delete_pending = 0 AND beatmap_id IS NOT NULL
-        ${user.sql}
-        ${mode.sql}
-      GROUP BY beatmap_id
-    ) ps ON ps.beatmap_id = b.id
     LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
     LEFT JOIN beatmap_dan_ratings dr
       ON dr.beatmap_id = b.id AND dr.algorithm = ?

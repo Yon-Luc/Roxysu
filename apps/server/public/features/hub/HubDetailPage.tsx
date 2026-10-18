@@ -73,26 +73,41 @@ function hashSetIds(ids: number[]): string {
   return `${ids.length}:${h >>> 0}`;
 }
 
-async function loadCollectionSetCards(setIds: number[]): Promise<{
+type CollectionCardsPayload = {
   items: OnlineBeatmapSet[];
   missing: number[];
-}> {
+};
+
+/**
+ * Load set cards in batches. Emits a partial payload after each batch so the
+ * first page can paint before the full pack is fetched (filters/sort fill in
+ * as metadata arrives).
+ */
+async function loadCollectionSetCardsProgressive(
+  setIds: number[],
+  onPartial: (partial: CollectionCardsPayload) => void,
+): Promise<CollectionCardsPayload> {
   const unique = [...new Set(setIds.filter((id) => id > 0))];
   const byId = new Map<number, OnlineBeatmapSet>();
   const missing: number[] = [];
-  const chunks: number[][] = [];
+
+  const emit = () => {
+    onPartial({
+      items: unique
+        .map((id) => byId.get(id))
+        .filter((s): s is OnlineBeatmapSet => s != null),
+      missing: [...missing],
+    });
+  };
 
   for (let i = 0; i < unique.length; i += INFO_BATCH) {
-    chunks.push(unique.slice(i, i + INFO_BATCH));
+    const chunk = unique.slice(i, i + INFO_BATCH);
+    if (chunk.length === 0) continue;
+    const res = await fetchBeatmapsetInfo(chunk);
+    for (const set of res.items) byId.set(set.id, set);
+    missing.push(...res.missing);
+    emit();
   }
-  await Promise.all(
-    chunks.map(async (chunk) => {
-      if (chunk.length === 0) return;
-      const res = await fetchBeatmapsetInfo(chunk);
-      for (const set of res.items) byId.set(set.id, set);
-      missing.push(...res.missing);
-    }),
-  );
 
   return {
     items: unique
@@ -260,7 +275,10 @@ export function HubDetailPage({ id }: { id: string }) {
     ],
     enabled: detailQuery.isSuccess && setIds.length > 0,
     staleTime: 5 * 60_000,
-    queryFn: () => loadCollectionSetCards(setIds),
+    queryFn: async ({ queryKey }) =>
+      loadCollectionSetCardsProgressive(setIds, (partial) => {
+        queryClient.setQueryData(queryKey, partial);
+      }),
   });
 
   const ownership = ownedCountForSets(setIds, ownedSetIds);

@@ -672,6 +672,22 @@ function encodeChangedIds(ids: string[] | null): string | null {
   return JSON.stringify(ids);
 }
 
+/** Retain recent import journal rows; drop older history to bound WAL growth. */
+const IMPORTS_RETAIN = 500;
+
+function pruneImports(db: Db) {
+  withBusyRetry(() => {
+    db.$client
+      .query(
+        `DELETE FROM imports
+         WHERE id NOT IN (
+           SELECT id FROM imports ORDER BY id DESC LIMIT ?
+         )`,
+      )
+      .run(IMPORTS_RETAIN);
+  });
+}
+
 function finishImport(
   db: Db,
   importId: number,
@@ -709,6 +725,7 @@ function finishImport(
       .where(eq(imports.id, importId))
       .run(),
   );
+  pruneImports(db);
 }
 
 function failImport(db: Db, importId: number, err: unknown) {
@@ -975,9 +992,11 @@ export function runReconcileSync(db: Db, realmPath: string): SyncResult {
       }
     }
 
-    // Soft-delete count gate: if pending counts diverge, map those objects.
+    // Soft-delete / hide count gates: if pending counts diverge, map those objects.
+    // Realm Beatmap has no DeletePending — difficulty hide uses Hidden.
     let softScoreChanged = 0;
     let softSetChanged = 0;
+    let softBeatmapHiddenChanged = 0;
     const changedScoreIds: string[] = [
       ...deleted.deletedScoreIds,
       ...caughtUp.changedScoreIds,
@@ -993,6 +1012,9 @@ export function runReconcileSync(db: Db, realmPath: string): SyncResult {
     const realmSoftSets = realm
       .objects("BeatmapSet")
       .filtered("DeletePending == true");
+    const realmHiddenBeatmaps = realm
+      .objects("Beatmap")
+      .filtered("Hidden == true");
     const sqliteSoftScores =
       db
         .select({ n: count() })
@@ -1004,6 +1026,12 @@ export function runReconcileSync(db: Db, realmPath: string): SyncResult {
         .select({ n: count() })
         .from(beatmapSets)
         .where(eq(beatmapSets.deletePending, true))
+        .get()?.n ?? 0;
+    const sqliteHiddenBeatmaps =
+      db
+        .select({ n: count() })
+        .from(beatmaps)
+        .where(eq(beatmaps.hidden, true))
         .get()?.n ?? 0;
 
     if (realmSoftScores.length !== sqliteSoftScores) {
@@ -1033,6 +1061,23 @@ export function runReconcileSync(db: Db, realmPath: string): SyncResult {
         db,
         beatmapSets,
         setRows as Record<string, unknown>[],
+        ["id"],
+      ).changed;
+    }
+
+    if (realmHiddenBeatmaps.length !== sqliteHiddenBeatmaps) {
+      const mapRows: BeatmapRow[] = [];
+      for (const obj of realmHiddenBeatmaps) {
+        const row = mapBeatmap(obj as never);
+        if (row) {
+          mapRows.push(row);
+          changedBeatmapIds.push(row.id);
+        }
+      }
+      softBeatmapHiddenChanged = upsertBatches(
+        db,
+        beatmaps,
+        mapRows as Record<string, unknown>[],
         ["id"],
       ).changed;
     }
@@ -1074,6 +1119,7 @@ export function runReconcileSync(db: Db, realmPath: string): SyncResult {
       caughtUp.rowsChanged +
       softScoreChanged +
       softSetChanged +
+      softBeatmapHiddenChanged +
       replayBackfillUpserted;
 
     finishImport(
@@ -1081,7 +1127,8 @@ export function runReconcileSync(db: Db, realmPath: string): SyncResult {
       importRow.id,
       {
         beatmapSetsUpserted: caughtUp.beatmapSetsUpserted,
-        beatmapsUpserted: caughtUp.beatmapsUpserted,
+        beatmapsUpserted:
+          caughtUp.beatmapsUpserted + softBeatmapHiddenChanged,
         scoresUpserted: caughtUp.scoresUpserted + replayBackfillUpserted,
         rowsChanged,
         scoresDeleted: deleted.scoresDeleted,
@@ -1186,13 +1233,17 @@ export function runIncrementalSync(db: Db, realmPath: string): SyncResult {
       }
     }
 
-    // Soft-delete: only scan when Realm pending count ≠ SQLite pending count.
+    // Soft-delete / hide: only scan when Realm pending count ≠ SQLite pending count.
+    // Realm Beatmap has no DeletePending — difficulty hide uses Hidden.
     const realmSoftScores = realm
       .objects("Score")
       .filtered("DeletePending == true");
     const realmSoftSets = realm
       .objects("BeatmapSet")
       .filtered("DeletePending == true");
+    const realmHiddenBeatmaps = realm
+      .objects("Beatmap")
+      .filtered("Hidden == true");
     const sqliteSoftScores =
       db
         .select({ n: count() })
@@ -1204,6 +1255,12 @@ export function runIncrementalSync(db: Db, realmPath: string): SyncResult {
         .select({ n: count() })
         .from(beatmapSets)
         .where(eq(beatmapSets.deletePending, true))
+        .get()?.n ?? 0;
+    const sqliteHiddenBeatmaps =
+      db
+        .select({ n: count() })
+        .from(beatmaps)
+        .where(eq(beatmaps.hidden, true))
         .get()?.n ?? 0;
 
     if (realmSoftScores.length !== sqliteSoftScores) {
@@ -1221,6 +1278,18 @@ export function runIncrementalSync(db: Db, realmPath: string): SyncResult {
       for (const obj of realmSoftSets) {
         const row = mapBeatmapSet(obj as never);
         if (row) setIdsNeeded.add(row.id);
+      }
+    }
+
+    if (realmHiddenBeatmaps.length !== sqliteHiddenBeatmaps) {
+      for (const obj of realmHiddenBeatmaps) {
+        const row = mapBeatmap(obj as never);
+        if (!row) continue;
+        if (!beatmapIds.has(row.id)) {
+          beatmapRows.push(row);
+          beatmapIds.add(row.id);
+          setIdsNeeded.add(row.setId);
+        }
       }
     }
 

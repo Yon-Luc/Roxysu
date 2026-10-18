@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 import { BeatmapCover } from "./BeatmapCover";
 import { ModBadges } from "./ModBadges";
 import { ScoreReplayButton } from "./ScoreReplayButton";
@@ -247,7 +247,7 @@ function BeatmapIdentity({
   );
 }
 
-export function ScoreCard({
+export const ScoreCard = memo(function ScoreCard({
   score,
   variant = "compact",
   beatmap,
@@ -357,4 +357,4 @@ export function ScoreCard({
       )}
     </li>
   );
-}
+});

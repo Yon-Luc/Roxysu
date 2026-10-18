@@ -478,50 +478,31 @@ function coldStartFromMastery(
   keyCount: number,
   thresholds: AxisThresholds = DEFAULT_AXIS_THRESHOLDS,
 ): SevenKSkillProfile {
-  const user = scoresUsernameSql(
-    resolveScoresUsernamesSync(db),
-    "user_username",
-  );
-  const mode = scoresGamemodeSql(
-    resolveScoresGamemodeSync(db),
-    "ruleset_short_name",
-  );
   const rows = db.$client
     .query(
       `
       SELECT
-        COALESCE(ps.best_accuracy, m.best_accuracy) AS bestAccuracy,
-        COALESCE(ps.play_count, m.play_count, 0) AS playCount,
+        m.best_accuracy AS bestAccuracy,
+        COALESCE(m.play_count, 0) AS playCount,
         dr.sunny_star AS sunnyStar,
         dr.ln_ratio AS lnRatio
       FROM beatmaps b
       JOIN beatmap_dan_ratings dr
         ON dr.beatmap_id = b.id AND dr.algorithm = 'sunny'
       LEFT JOIN mastery m ON m.beatmap_id = b.id
-      LEFT JOIN (
-        SELECT
-          beatmap_id,
-          COUNT(*) AS play_count,
-          MAX(accuracy) AS best_accuracy
-        FROM scores
-        WHERE delete_pending = 0 AND beatmap_id IS NOT NULL
-          ${user.sql}
-          ${mode.sql}
-        GROUP BY beatmap_id
-      ) ps ON ps.beatmap_id = b.id
       LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
       WHERE b.hidden = 0
         AND COALESCE(bs.delete_pending, 0) = 0
-        AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
+        AND b.ruleset_short_name = 'mania'
         AND b.circle_size = ?
         AND dr.sunny_star IS NOT NULL
         AND (dr.error IS NULL OR dr.error = '')
-        AND COALESCE(ps.play_count, m.play_count, 0) > 0
-      ORDER BY COALESCE(ps.best_accuracy, m.best_accuracy, 0) DESC
+        AND COALESCE(m.play_count, 0) > 0
+      ORDER BY COALESCE(m.best_accuracy, 0) DESC
       LIMIT 80
     `,
     )
-    .all(...user.params, ...mode.params, keyCount) as Array<{
+    .all(keyCount) as Array<{
     bestAccuracy: number | null;
     playCount: number;
     sunnyStar: number;
@@ -771,7 +752,7 @@ export function loadSevenKPlays(
         ${mode.sql}
         AND b.hidden = 0
         AND COALESCE(bs.delete_pending, 0) = 0
-        AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
+        AND b.ruleset_short_name = 'mania'
         AND b.circle_size = ?
         AND s.beatmap_id IS NOT NULL
       ORDER BY s.played_at DESC

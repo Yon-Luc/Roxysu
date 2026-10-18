@@ -13,8 +13,9 @@ import { ScoreListElement } from "./OverlayElements";
 const DEFAULT_LIMIT = 8;
 const OVERLAY_CLASS = "overlay-mode";
 /** OBS Browser Sources often background the page; poll instead of relying on SSE alone. */
-const LIVE_POLL_MS = 2_000;
-const IDLE_POLL_MS = 8_000;
+// SSE already refreshes on score.imported; poll is a CEF/OBS safety net.
+const LIVE_POLL_MS = 4_000;
+const IDLE_POLL_MS = 15_000;
 
 type OverlayBg = "solid" | "clear";
 

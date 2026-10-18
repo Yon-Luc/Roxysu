@@ -143,13 +143,237 @@ export type SessionEngineResult = {
   finished: number[];
 };
 
+export type SessionEngineOptions = {
+  /**
+   * When set, try to only attach these scores to the open session (or open a
+   * new one). Falls back to a full rebuild when history would need reshaping.
+   */
+  scoreIds?: string[];
+};
+
+/**
+ * Fast path: new plays that clearly belong on the open session (or start one).
+ * Returns null when a full rebuild is required.
+ */
+async function tryAppendSessionDelta(
+  db: Db,
+  scoreIds: string[],
+): Promise<SessionEngineResult | null> {
+  if (scoreIds.length === 0) return null;
+
+  const [usernames, gamemode] = await Promise.all([
+    resolveScoresUsernames(db),
+    resolveScoresGamemode(db),
+  ]);
+  const newRows = await db
+    .select({
+      id: scores.id,
+      playedAt: scores.playedAt,
+      rulesetShortName: scores.rulesetShortName,
+    })
+    .from(scores)
+    .where(
+      and(
+        inArray(scores.id, scoreIds),
+        eq(scores.deletePending, false),
+        scoresUsernameCondition(usernames),
+        scoresGamemodeCondition(gamemode),
+      ),
+    )
+    .orderBy(asc(scores.playedAt), asc(scores.id));
+
+  if (newRows.length === 0) return { started: [], finished: [] };
+
+  const [open] = await db
+    .select()
+    .from(sessions)
+    .where(isNull(sessions.endedAt))
+    .orderBy(desc(sessions.startedAt))
+    .limit(1);
+
+  const firstPlayed = toMs(newRows[0]!.playedAt);
+  const lastPlayed = toMs(newRows[newRows.length - 1]!.playedAt);
+  const now = Date.now();
+
+  // Intra-batch gap larger than session gap → needs full rebuild.
+  for (let i = 1; i < newRows.length; i++) {
+    if (
+      toMs(newRows[i]!.playedAt) - toMs(newRows[i - 1]!.playedAt) >
+      SESSION_GAP_MS
+    ) {
+      return null;
+    }
+  }
+
+  const started: number[] = [];
+  const finished: number[] = [];
+
+  if (open) {
+    const openStart = toMs(open.startedAt);
+    // Scores older than the open session → reshaping history.
+    if (firstPlayed < openStart) return null;
+
+    const [anchor] = await db
+      .select({ playedAt: scores.playedAt })
+      .from(scores)
+      .innerJoin(scoreMetrics, eq(scoreMetrics.scoreId, scores.id))
+      .where(
+        and(
+          eq(scoreMetrics.sessionId, open.id),
+          eq(scores.deletePending, false),
+        ),
+      )
+      .orderBy(desc(scores.playedAt), desc(scores.id))
+      .limit(1);
+
+    const openEnd = anchor ? toMs(anchor.playedAt) : openStart;
+    if (firstPlayed - openEnd > SESSION_GAP_MS) {
+      // Close open session, start a new one for the delta batch.
+      await db
+        .update(sessions)
+        .set({ endedAt: new Date(openEnd) })
+        .where(eq(sessions.id, open.id));
+      finished.push(open.id);
+
+      const existingNames = await db
+        .select({ name: sessions.name })
+        .from(sessions);
+      const taken = collectTakenNames(existingNames);
+      const inserted = await db
+        .insert(sessions)
+        .values({
+          startedAt: new Date(firstPlayed),
+          endedAt: now - lastPlayed <= SESSION_GAP_MS ? null : new Date(lastPlayed),
+          scoreCount: newRows.length,
+          rulesetShortName: newRows.find((r) => r.rulesetShortName)?.rulesetShortName ?? null,
+        })
+        .returning({ id: sessions.id });
+      const sessionId = inserted[0]!.id;
+      const name = generateSessionName(sessionId, taken);
+      await db
+        .update(sessions)
+        .set({ name })
+        .where(eq(sessions.id, sessionId));
+      if (now - lastPlayed <= SESSION_GAP_MS) started.push(sessionId);
+
+      await assignScoresToSession(
+        db,
+        sessionId,
+        newRows.map((r) => r.id),
+      );
+
+      for (const id of started) publish({ type: "session.started", sessionId: id });
+      for (const id of finished) publish({ type: "session.finished", sessionId: id });
+      return { started, finished };
+    }
+
+    // Append into open session.
+    const ruleset =
+      open.rulesetShortName ??
+      newRows.find((r) => r.rulesetShortName)?.rulesetShortName ??
+      null;
+    await db
+      .update(sessions)
+      .set({
+        scoreCount: open.scoreCount + newRows.length,
+        rulesetShortName: ruleset,
+        endedAt: null,
+      })
+      .where(eq(sessions.id, open.id));
+
+    await assignScoresToSession(
+      db,
+      open.id,
+      newRows.map((r) => r.id),
+    );
+    return { started, finished };
+  }
+
+  // No open session — open one for this contiguous batch.
+  const existingNames = await db.select({ name: sessions.name }).from(sessions);
+  const taken = collectTakenNames(existingNames);
+  const inserted = await db
+    .insert(sessions)
+    .values({
+      startedAt: new Date(firstPlayed),
+      endedAt: now - lastPlayed <= SESSION_GAP_MS ? null : new Date(lastPlayed),
+      scoreCount: newRows.length,
+      rulesetShortName:
+        newRows.find((r) => r.rulesetShortName)?.rulesetShortName ?? null,
+    })
+    .returning({ id: sessions.id });
+  const sessionId = inserted[0]!.id;
+  await db
+    .update(sessions)
+    .set({ name: generateSessionName(sessionId, taken) })
+    .where(eq(sessions.id, sessionId));
+  if (now - lastPlayed <= SESSION_GAP_MS) started.push(sessionId);
+
+  await assignScoresToSession(
+    db,
+    sessionId,
+    newRows.map((r) => r.id),
+  );
+
+  for (const id of started) publish({ type: "session.started", sessionId: id });
+  return { started, finished };
+}
+
+async function assignScoresToSession(
+  db: Db,
+  sessionId: number,
+  scoreIds: string[],
+): Promise<void> {
+  if (scoreIds.length === 0) return;
+  const existing = await db
+    .select({
+      scoreId: scoreMetrics.scoreId,
+      sessionId: scoreMetrics.sessionId,
+    })
+    .from(scoreMetrics)
+    .where(inArray(scoreMetrics.scoreId, scoreIds));
+  const byId = new Map(existing.map((e) => [e.scoreId, e.sessionId] as const));
+  const patches: Array<{ scoreId: string; sessionId: number }> = [];
+  const inserts: Array<{
+    scoreId: string;
+    retryIndex: number;
+    isPb: boolean;
+    sessionId: number;
+  }> = [];
+  for (const scoreId of scoreIds) {
+    const prev = byId.get(scoreId);
+    if (prev !== undefined) {
+      if (prev !== sessionId) patches.push({ scoreId, sessionId });
+    } else {
+      inserts.push({
+        scoreId,
+        retryIndex: 0,
+        isPb: false,
+        sessionId,
+      });
+    }
+  }
+  applySessionIdPatches(db, patches);
+  if (inserts.length > 0) {
+    await db.insert(scoreMetrics).values(inserts);
+  }
+}
+
 /**
  * Group scores into sessions by 30-minute inactivity gaps.
  * Reuses existing session IDs when buckets still map to the same scores,
  * so IDs stay stable across sync/analytics rebuilds.
  */
-export async function runSessionEngine(db: Db): Promise<SessionEngineResult> {
+export async function runSessionEngine(
+  db: Db,
+  options?: SessionEngineOptions,
+): Promise<SessionEngineResult> {
   await backfillSessionNames(db);
+
+  if (options?.scoreIds && options.scoreIds.length > 0) {
+    const delta = await tryAppendSessionDelta(db, options.scoreIds);
+    if (delta) return delta;
+  }
 
   const [usernames, gamemode] = await Promise.all([
     resolveScoresUsernames(db),

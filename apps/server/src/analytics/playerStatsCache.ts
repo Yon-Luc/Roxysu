@@ -45,8 +45,9 @@ export function invalidatePlayerStatsCache(): void {
 }
 
 function shouldInvalidate(type: string): boolean {
+  // Do not clear on dashboard.updated — jobs publish that often without
+  // changing player stats. Score/sync/mastery events cover real invalidation.
   return (
-    type === "dashboard.updated" ||
     type === "score.imported" ||
     type === "score.updated" ||
     type === "sync.finished" ||

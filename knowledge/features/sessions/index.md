@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-10
+last_verified: 2026-04
 confidence: verified
 touches:
   - apps/server/src/analytics/session.ts
@@ -47,7 +47,7 @@ Live sessions keep the **Current session** label in headings; the generated name
 6. A session display name always starts with a capital letter (`capitalizeSessionName()`).
 7. Session detail windows the newest scores (`GET /api/sessions/:id?limit=`, default 50, max 500) with Load more. PB count is for the whole session, not the window.
 8. OBS overlay uses `GET /api/overlay?limit=` (header + last N scores, no PP curves for the rest of the session) and must not poll `["dashboard"]` or full current-session detail.
-9. Up Next samples debounce the query string; recommend/Up Next query keys include excluded beatmap IDs. Shuffle bumps a key instead of double-fetching.
+9. Up Next samples debounce the query string. Suggest/recommend over-fetch and **client-filter** session-played beatmap IDs so each new play does not change the React Query key. Shuffle bumps a key instead of double-fetching.
 10. Session score rows whose beatmap was removed from the game (`beatmapId` null after Realm orphan cleanup) display as “Beatmap deleted” / “Removed from the game”, not Untitled/Unknown.
 11. The Current session **Now selected** panel follows Settings difficulty display: when `rework` is selected it shows ephemeral tosu `analysis.rework` (Rework dan), not Sunny dan.
 12. Sessions list page keeps the current-session CTA at the top, then recent sessions (default **7**), then a GitHub-style activity calendar from `daily_stats` (~53 weeks UTC). The CTA uses the same panel as Home. The calendar says that a day click filters the list above.

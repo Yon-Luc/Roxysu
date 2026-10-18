@@ -44,13 +44,21 @@ export function connectLiveUpdates(queryClient: QueryClient): () => void {
   const inv = (key: unknown[]) =>
     void queryClient.invalidateQueries({ queryKey: key });
 
-  // score.imported: new play landed — refresh session feed + dashboard.
-  // Practice list is marked stale but not refetched immediately (refetchType: "none")
-  // so it picks up the update on the next user interaction rather than mid-browse.
+  // score.imported: new play landed — refresh live current session + dashboard.
+  // Historical session detail stays cached (immutable). Practice marked stale
+  // but not refetched mid-browse (refetchType: "none").
   const onScoreImported = () => {
     inv(["dashboard"]);
-    inv(["sessions"]);
     inv(["overlay"]);
+    void queryClient.invalidateQueries({
+      queryKey: ["sessions", "current"],
+      refetchType: "active",
+    });
+    void queryClient.invalidateQueries({
+      queryKey: ["sessions"],
+      exact: true,
+      refetchType: "active",
+    });
     void queryClient.invalidateQueries({
       queryKey: ["practice"],
       refetchType: "none",

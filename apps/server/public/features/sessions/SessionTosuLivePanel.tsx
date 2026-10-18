@@ -34,7 +34,7 @@ function loadVisible(): boolean {
 
 function statusLabel(
   dict: Dictionary["app"] | undefined,
-  data: TosuLive | undefined,
+  data: Pick<TosuLive, "enabled" | "status"> | undefined,
 ): {
   text: string;
   className: string;
@@ -86,7 +86,9 @@ function isManiaBeatmap(
   );
 }
 
-function liveBackgroundSources(data: TosuLive | undefined): string[] {
+function liveBackgroundSources(
+  data: Pick<TosuLive, "beatmap" | "connected" | "host" | "backgroundFileHash"> | undefined,
+): string[] {
   if (!data?.beatmap) return [];
   const urls: string[] = [];
   const checksum = data.beatmap.checksum;
@@ -101,6 +103,46 @@ function liveBackgroundSources(data: TosuLive | undefined): string[] {
   return urls;
 }
 
+/** Live combo/acc strip — isolated so ~2Hz play ticks do not re-render the map panel. */
+function SessionTosuLivePlayStrip({
+  beatmapState,
+}: {
+  beatmapState: string | null | undefined;
+}) {
+  const { dict } = useAppDict();
+  const { data: play } = useTosuLiveQuery({
+    select: (snap) => snap.play,
+  });
+
+  if (play?.active) {
+    return (
+      <p className="text-sm text-muted">
+        {t(dict?.session.tosu.liveCombo, {
+          combo: play.combo ?? 0,
+        }) || `Live · combo ${play.combo ?? 0}`}
+        {play.maxCombo != null ? ` / ${play.maxCombo}` : ""}
+        {" · "}
+        {play.accuracy != null ? formatAccuracy(play.accuracy) : "—"}
+        {" · "}
+        {t(dict?.session.tosu.misses, {
+          count: play.misses ?? 0,
+        }) || `${play.misses ?? 0} miss`}
+        {play.pp != null ? ` · ${Math.round(play.pp)}pp` : ""}
+      </p>
+    );
+  }
+
+  return (
+    <p className="text-sm text-faint">
+      {beatmapState
+        ? t(dict?.session.tosu.state, {
+            state: beatmapState,
+          }) || `State: ${beatmapState}`
+        : (dict?.session.tosu.songSelect ?? "Song select")}
+    </p>
+  );
+}
+
 export function SessionTosuLivePanel() {
   const { dict } = useAppDict();
   const queryClient = useQueryClient();
@@ -113,6 +155,10 @@ export function SessionTosuLivePanel() {
 
   const { data, isLoading, error } = useTosuLiveQuery({
     enabled: visible,
+    select: (snap) => {
+      const { play: _play, ...rest } = snap;
+      return rest;
+    },
   });
 
   const startMut = useMutation({
@@ -125,7 +171,6 @@ export function SessionTosuLivePanel() {
   const ratingMode = useRatingDisplayMode();
   const chip = statusLabel(dict, data);
   const beatmap = data?.beatmap;
-  const play = data?.play;
   const sunny = data?.analysis.sunny;
   const rework = data?.analysis.rework;
   const pattern = data?.analysis.pattern;
@@ -384,31 +429,7 @@ export function SessionTosuLivePanel() {
                   </div>
                 ) : null}
 
-                {play?.active ? (
-                  <p className="text-sm text-muted">
-                    {t(dict?.session.tosu.liveCombo, {
-                      combo: play.combo ?? 0,
-                    }) || `Live · combo ${play.combo ?? 0}`}
-                    {play.maxCombo != null ? ` / ${play.maxCombo}` : ""}
-                    {" · "}
-                    {play.accuracy != null
-                      ? formatAccuracy(play.accuracy)
-                      : "—"}
-                    {" · "}
-                    {t(dict?.session.tosu.misses, {
-                      count: play.misses ?? 0,
-                    }) || `${play.misses ?? 0} miss`}
-                    {play.pp != null ? ` · ${Math.round(play.pp)}pp` : ""}
-                  </p>
-                ) : (
-                  <p className="text-sm text-faint">
-                    {beatmap?.state
-                      ? t(dict?.session.tosu.state, {
-                          state: beatmap.state,
-                        }) || `State: ${beatmap.state}`
-                      : dict?.session.tosu.songSelect ?? "Song select"}
-                  </p>
-                )}
+                <SessionTosuLivePlayStrip beatmapState={beatmap?.state} />
 
                 {data?.matchedBeatmapId ? (
                   <div className="flex flex-wrap items-center gap-2">

@@ -1,7 +1,17 @@
 
 import type { Db } from "@roxysu/db/types";
-import { beatmaps, imports, scores } from "@roxysu/db/schema";
-import { and, count, desc, eq, inArray, isNotNull, max } from "drizzle-orm";
+import { beatmaps, imports, mastery, scores } from "@roxysu/db/schema";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  max,
+} from "drizzle-orm";
 import { subscribe, publish, type AppEvent } from "../shared/events";
 import { runRetryEngine } from "./retry";
 import { runSessionEngine } from "./session";
@@ -223,14 +233,31 @@ export async function runAnalyticsPipeline(
         if (!scoresChanged && beatmapIds.length === 0) {
           console.log("[analytics] delta empty — skip engines");
         } else if (scoresChanged) {
-          // retry_index / session gaps need the global timeline.
-          await runRetryEngine(db);
-          await runSessionEngine(db);
-
+          // Retry still walks the timeline for correctness, but only rewrites
+          // metrics for affected beatmaps. Session engine stays full for now.
           if (beatmapIds.length > 0) {
-            await runMasteryEngine(db, { beatmapIds });
+            await runRetryEngine(db, { beatmapIds });
           } else {
+            await runRetryEngine(db);
+          }
+          await runSessionEngine(db, {
+            scoreIds: delta.scoreIds ?? undefined,
+          });
+
+          // After migration 0026, backfill best_score/best_misses once for the
+          // whole library instead of leaving NULL on untouched maps.
+          const needsPlayStatBackfill = db
+            .select({ beatmapId: mastery.beatmapId })
+            .from(mastery)
+            .where(
+              and(gt(mastery.playCount, 0), isNull(mastery.bestScore)),
+            )
+            .limit(1)
+            .get();
+          if (needsPlayStatBackfill || beatmapIds.length === 0) {
             await runMasteryEngine(db);
+          } else {
+            await runMasteryEngine(db, { beatmapIds });
           }
           await runStatisticsEngine(db, { scoreIds: delta.scoreIds ?? [] });
         } else {

@@ -127,31 +127,11 @@ function retryJoin(ctx: QueryContext, includeRetry: boolean): string {
 }
 
 function baseFrom(ctx: QueryContext, includeRetry = false): string {
-  const userFilter = scoresUsernameSqlLiteral(ctx.usernames, "user_username");
-  const modeFilter = scoresGamemodeSqlLiteral(ctx.gamemode, "ruleset_short_name");
+  // Play aggregates live on mastery (filled by analytics). Avoid per-request
+  // GROUP BY scores + json_extract — that used to dominate Practice/Search cost.
   return `
   FROM beatmaps b
   LEFT JOIN mastery m ON m.beatmap_id = b.id
-  LEFT JOIN (
-    SELECT
-      beatmap_id,
-      COUNT(*) AS play_count,
-      MAX(accuracy) AS best_accuracy,
-      MAX(pp) AS best_pp,
-      MAX(total_score) AS best_score,
-      MIN(
-        CASE
-          WHEN statistics IS NOT NULL
-          THEN COALESCE(json_extract(statistics, '$.miss'), 0)
-        END
-      ) AS best_misses,
-      MAX(played_at) AS last_played_at
-    FROM scores
-    WHERE delete_pending = 0 AND beatmap_id IS NOT NULL
-      ${userFilter}
-      ${modeFilter}
-    GROUP BY beatmap_id
-  ) ps ON ps.beatmap_id = b.id
   ${retryJoin(ctx, includeRetry)}
   LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
   LEFT JOIN beatmap_dan_ratings dr
@@ -178,12 +158,12 @@ const SELECT_COLS = `
   CASE WHEN b.online_id > 0 THEN b.online_id ELSE NULL END AS onlineId,
   CASE WHEN bs.online_id > 0 THEN bs.online_id ELSE NULL END AS setOnlineId,
   b.background_file_hash AS backgroundFileHash,
-  COALESCE(ps.play_count, 0) AS playCount,
-  ps.best_accuracy AS bestAccuracy,
-  ps.best_pp AS bestPp,
-  ps.best_score AS bestScore,
-  ps.best_misses AS bestMisses,
-  ps.last_played_at AS lastPlayedAt,
+  COALESCE(m.play_count, 0) AS playCount,
+  m.best_accuracy AS bestAccuracy,
+  m.best_pp AS bestPp,
+  m.best_score AS bestScore,
+  m.best_misses AS bestMisses,
+  m.last_played_at AS lastPlayedAt,
   m.level AS masteryLevel,
   dr.est_diff AS sunnyEstDiff,
   dr.sunny_star AS sunnyStar,
@@ -210,36 +190,36 @@ function orderBySql(sortBy: PracticeSortBy, sortDir: PracticeSortDir): string {
   const dir = sortDir === "asc" ? "ASC" : "DESC";
   // Keep unplayed after played when sorting by score-derived metrics so
   // "lowest accuracy first" surfaces weak plays instead of empty maps.
-  const playedFirst = `CASE WHEN ps.play_count IS NULL OR ps.play_count = 0 THEN 1 ELSE 0 END ASC`;
+  const playedFirst = `CASE WHEN m.play_count IS NULL OR m.play_count = 0 THEN 1 ELSE 0 END ASC`;
   switch (sortBy) {
     case "accuracy":
-      return `${playedFirst}, ps.best_accuracy ${dir} NULLS LAST, b.id`;
+      return `${playedFirst}, m.best_accuracy ${dir} NULLS LAST, b.id`;
     case "misses":
-      return `${playedFirst}, ps.best_misses ${dir} NULLS LAST, b.id`;
+      return `${playedFirst}, m.best_misses ${dir} NULLS LAST, b.id`;
     case "score":
-      return `${playedFirst}, ps.best_score ${dir} NULLS LAST, b.id`;
+      return `${playedFirst}, m.best_score ${dir} NULLS LAST, b.id`;
     case "pp":
-      return `${playedFirst}, ps.best_pp ${dir} NULLS LAST, b.id`;
+      return `${playedFirst}, m.best_pp ${dir} NULLS LAST, b.id`;
     case "mastery":
       return `COALESCE(m.level, -1) ${dir}, b.id`;
     case "stars":
       return `b.star_rating ${dir}, b.id`;
     case "lastPlayed":
     default:
-      return `COALESCE(ps.last_played_at, b.last_played) ${dir} NULLS LAST, b.id`;
+      return `COALESCE(m.last_played_at, b.last_played) ${dir} NULLS LAST, b.id`;
   }
 }
 
 function missesBucketExpr(): string {
   return `
     CASE
-      WHEN ps.best_misses IS NULL THEN 'unplayed'
-      WHEN ps.best_misses = 0 THEN '0'
-      WHEN ps.best_misses = 1 THEN '1'
-      WHEN ps.best_misses <= 5 THEN '2-5'
-      WHEN ps.best_misses <= 10 THEN '6-10'
-      WHEN ps.best_misses <= 25 THEN '11-25'
-      WHEN ps.best_misses <= 50 THEN '26-50'
+      WHEN m.best_misses IS NULL THEN 'unplayed'
+      WHEN m.best_misses = 0 THEN '0'
+      WHEN m.best_misses = 1 THEN '1'
+      WHEN m.best_misses <= 5 THEN '2-5'
+      WHEN m.best_misses <= 10 THEN '6-10'
+      WHEN m.best_misses <= 25 THEN '11-25'
+      WHEN m.best_misses <= 50 THEN '26-50'
       ELSE '51+'
     END
   `;
@@ -666,10 +646,10 @@ function distributionAccuracy(
 ): DistributionBin[] {
   const rangeSql = `
     SELECT
-      MIN(ps.best_accuracy) AS min_acc,
-      MAX(ps.best_accuracy) AS max_acc,
-      SUM(CASE WHEN ps.best_accuracy IS NULL THEN 1 ELSE 0 END) AS unplayed,
-      SUM(CASE WHEN ps.best_accuracy IS NOT NULL THEN 1 ELSE 0 END) AS played
+      MIN(m.best_accuracy) AS min_acc,
+      MAX(m.best_accuracy) AS max_acc,
+      SUM(CASE WHEN m.best_accuracy IS NULL THEN 1 ELSE 0 END) AS unplayed,
+      SUM(CASE WHEN m.best_accuracy IS NOT NULL THEN 1 ELSE 0 END) AS played
     ${baseFrom(ctx, includeRetry)}
     ${where}
   `;
@@ -698,11 +678,11 @@ function distributionAccuracy(
   const pRow = db.$client
     .query(
       `
-      SELECT ps.best_accuracy AS acc
+      SELECT m.best_accuracy AS acc
       ${baseFrom(ctx, includeRetry)}
       ${where}
-        AND ps.best_accuracy IS NOT NULL
-      ORDER BY ps.best_accuracy ASC
+        AND m.best_accuracy IS NOT NULL
+      ORDER BY m.best_accuracy ASC
       LIMIT 1 OFFSET ?
     `,
     )
@@ -714,11 +694,11 @@ function distributionAccuracy(
 
   const distSql = `
     SELECT
-      CAST(FLOOR(ps.best_accuracy * 1000.0 / ?) * ? AS INTEGER) AS bucket_tenths,
+      CAST(FLOOR(m.best_accuracy * 1000.0 / ?) * ? AS INTEGER) AS bucket_tenths,
       COUNT(*) AS count
     ${baseFrom(ctx, includeRetry)}
     ${where}
-      AND ps.best_accuracy IS NOT NULL
+      AND m.best_accuracy IS NOT NULL
     GROUP BY bucket_tenths
     ORDER BY bucket_tenths ASC
   `;
@@ -762,10 +742,10 @@ function distributionScore(
 ): DistributionBin[] {
   const rangeSql = `
     SELECT
-      MIN(ps.best_score) AS min_score,
-      MAX(ps.best_score) AS max_score,
-      SUM(CASE WHEN ps.best_score IS NULL THEN 1 ELSE 0 END) AS unplayed,
-      SUM(CASE WHEN ps.best_score IS NOT NULL THEN 1 ELSE 0 END) AS played
+      MIN(m.best_score) AS min_score,
+      MAX(m.best_score) AS max_score,
+      SUM(CASE WHEN m.best_score IS NULL THEN 1 ELSE 0 END) AS unplayed,
+      SUM(CASE WHEN m.best_score IS NOT NULL THEN 1 ELSE 0 END) AS played
     ${baseFrom(ctx, includeRetry)}
     ${where}
   `;
@@ -792,11 +772,11 @@ function distributionScore(
   const pRow = db.$client
     .query(
       `
-      SELECT ps.best_score AS score
+      SELECT m.best_score AS score
       ${baseFrom(ctx, includeRetry)}
       ${where}
-        AND ps.best_score IS NOT NULL
-      ORDER BY ps.best_score ASC
+        AND m.best_score IS NOT NULL
+      ORDER BY m.best_score ASC
       LIMIT 1 OFFSET ?
     `,
     )
@@ -806,11 +786,11 @@ function distributionScore(
 
   const distSql = `
     SELECT
-      CAST(FLOOR(ps.best_score * 1.0 / ?) * ? AS INTEGER) AS bucket_start,
+      CAST(FLOOR(m.best_score * 1.0 / ?) * ? AS INTEGER) AS bucket_start,
       COUNT(*) AS count
     ${baseFrom(ctx, includeRetry)}
     ${where}
-      AND ps.best_score IS NOT NULL
+      AND m.best_score IS NOT NULL
     GROUP BY bucket_start
     ORDER BY bucket_start ASC
   `;

@@ -30,7 +30,7 @@ Continuously extract Realm beatmaps and scores into the local mirror; surface Sy
 ## Business rules
 
 1. Prefer watermark incremental extraction; reconcile periodically; full remap only on first import / one-shot `REALM_FULL_SYNC=1` (consumed after the first successful full cycle).
-2. Soft-deleted Realm **Score** and **BeatmapSet** objects upsert with `delete_pending = true`. Realm Beatmap has no `DeletePending`; difficulty hide uses `hidden`.
+2. Soft-deleted Realm **Score** and **BeatmapSet** objects upsert with `delete_pending = true`. Realm Beatmap has no `DeletePending`; difficulty hide uses `hidden`. Incremental and full sync compare Realm `Hidden == true` counts to local `beatmaps.hidden` and remap when they diverge. Successful imports prune the `imports` journal to the newest 500 rows.
 3. Incremental cursor is the last successful import's `watermark_played_at` / `watermark_last_local_update`, not `MAX()` from data tables.
 4. Stuck pause cleared on server/reader startup (`clearStuckRealmReaderPause`). Stale `running` imports are marked failed (`failStaleRunningImports`).
 5. Collection write-back sets `sync.realm_reader_paused` for the duration of the write.

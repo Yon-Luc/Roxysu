@@ -3,14 +3,6 @@ import type { Db } from "@roxysu/db/types";
 import { SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
 import { PATTERN_ALGORITHM } from "@roxysu/mania-pattern-analysis";
 import {
-  resolveScoresGamemodeSync,
-  scoresGamemodeSqlLiteral,
-} from "../analytics/scoreGamemode";
-import {
-  resolveScoresUsernamesSync,
-  scoresUsernameSqlLiteral,
-} from "../analytics/scoreUsername";
-import {
   DEFAULT_AXIS_THRESHOLDS,
   readAxisThresholdsSync,
   type AxisThresholds,
@@ -79,38 +71,10 @@ function patternsForKeymode(_keymode: PatternKeymode): readonly string[] {
   return PATTERNS_FOR_KEYMODE;
 }
 
-function baseFrom(db: Db): string {
-  const userFilter = scoresUsernameSqlLiteral(
-    resolveScoresUsernamesSync(db),
-    "user_username",
-  );
-  const modeFilter = scoresGamemodeSqlLiteral(
-    resolveScoresGamemodeSync(db),
-    "ruleset_short_name",
-  );
+function baseFrom(_db: Db): string {
   return `
   FROM beatmaps b
   LEFT JOIN mastery m ON m.beatmap_id = b.id
-  LEFT JOIN (
-    SELECT
-      beatmap_id,
-      COUNT(*) AS play_count,
-      MAX(accuracy) AS best_accuracy,
-      MAX(pp) AS best_pp,
-      MAX(total_score) AS best_score,
-      MIN(
-        CASE
-          WHEN statistics IS NOT NULL
-          THEN COALESCE(json_extract(statistics, '$.miss'), 0)
-        END
-      ) AS best_misses,
-      MAX(played_at) AS last_played_at
-    FROM scores
-    WHERE delete_pending = 0 AND beatmap_id IS NOT NULL
-      ${userFilter}
-      ${modeFilter}
-    GROUP BY beatmap_id
-  ) ps ON ps.beatmap_id = b.id
   LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
   LEFT JOIN beatmap_dan_ratings dr
     ON dr.beatmap_id = b.id AND dr.algorithm = ?
@@ -132,12 +96,12 @@ const SELECT_COLS = `
   CASE WHEN b.online_id > 0 THEN b.online_id ELSE NULL END AS onlineId,
   CASE WHEN bs.online_id > 0 THEN bs.online_id ELSE NULL END AS setOnlineId,
   b.background_file_hash AS backgroundFileHash,
-  COALESCE(ps.play_count, 0) AS playCount,
-  ps.best_accuracy AS bestAccuracy,
-  ps.best_pp AS bestPp,
-  ps.best_score AS bestScore,
-  ps.best_misses AS bestMisses,
-  ps.last_played_at AS lastPlayedAt,
+  COALESCE(m.play_count, 0) AS playCount,
+  m.best_accuracy AS bestAccuracy,
+  m.best_pp AS bestPp,
+  m.best_score AS bestScore,
+  m.best_misses AS bestMisses,
+  m.last_played_at AS lastPlayedAt,
   m.level AS masteryLevel,
   dr.est_diff AS sunnyEstDiff,
   dr.sunny_star AS sunnyStar
@@ -147,7 +111,7 @@ function maniaKeymodeWhere(keymode: PatternKeymode): string {
   return `
   b.hidden = 0
   AND COALESCE(bs.delete_pending, 0) = 0
-  AND lower(COALESCE(b.ruleset_short_name, '')) = 'mania'
+  AND b.ruleset_short_name = 'mania'
   AND ROUND(COALESCE(b.circle_size, 0)) = ${keymode}
 `;
 }
@@ -242,7 +206,7 @@ function buildPatternsForCounts(
           ${axisFilter}
         ORDER BY
           CASE WHEN pa.dominant_pattern = ? THEN 0 ELSE 1 END,
-          COALESCE(ps.last_played_at, b.last_played) DESC NULLS LAST,
+          COALESCE(m.last_played_at, b.last_played) DESC NULLS LAST,
           b.id
         LIMIT ?
       `,

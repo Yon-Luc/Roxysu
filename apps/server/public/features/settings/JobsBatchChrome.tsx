@@ -79,25 +79,35 @@ export function JobsBatchChrome() {
   const onSettings = pathname === "/settings";
   const queryClient = useQueryClient();
 
+  // SSE `jobs.updated` already invalidates these keys; poll slowly as a backup
+  // and pause entirely when the tab is hidden.
+  const jobsPollMs = (busy: boolean) => {
+    if (!busy) return false;
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+      return false;
+    }
+    return 2_500;
+  };
+
   const sunnyQuery = useQuery({
     queryKey: ["settings", "sunny-dan"],
     queryFn: fetchSunnyDanJob,
-    refetchInterval: (q) => (isBusy(q.state.data?.status) ? 1000 : false),
+    refetchInterval: (q) => jobsPollMs(isBusy(q.state.data?.status)),
   });
   const danielQuery = useQuery({
     queryKey: ["settings", "daniel-dan"],
     queryFn: fetchDanielDanJob,
-    refetchInterval: (q) => (isBusy(q.state.data?.status) ? 1000 : false),
+    refetchInterval: (q) => jobsPollMs(isBusy(q.state.data?.status)),
   });
   const reworkQuery = useQuery({
     queryKey: ["settings", "rework-dan"],
     queryFn: fetchReworkDanJob,
-    refetchInterval: (q) => (isBusy(q.state.data?.status) ? 1000 : false),
+    refetchInterval: (q) => jobsPollMs(isBusy(q.state.data?.status)),
   });
   const patternQuery = useQuery({
     queryKey: ["settings", "pattern-analysis"],
     queryFn: fetchPatternAnalysisJob,
-    refetchInterval: (q) => (isBusy(q.state.data?.status) ? 1000 : false),
+    refetchInterval: (q) => jobsPollMs(isBusy(q.state.data?.status)),
   });
 
   const sunny = sunnyQuery.data;

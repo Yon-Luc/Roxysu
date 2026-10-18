@@ -77,8 +77,14 @@ export function HubBrowsePage() {
     return [...ids];
   }, [addedQuery.data]);
 
+  const addedSetIdsKey = useMemo(() => {
+    let h = addedSetIds.length;
+    for (const id of addedSetIds) h = Math.imul(h, 31) + id;
+    return `${addedSetIds.length}:${h >>> 0}`;
+  }, [addedSetIds]);
+
   const addedOwnedQuery = useQuery({
-    queryKey: ["hub-added-owned", addedSetIds],
+    queryKey: ["hub-added-owned", addedSetIdsKey],
     enabled: tab === "added" && addedSetIds.length > 0,
     queryFn: () => diffSetOwnership(addedSetIds),
     staleTime: 60_000,

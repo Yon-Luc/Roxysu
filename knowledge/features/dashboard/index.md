@@ -5,7 +5,11 @@ touches:
   - apps/server/public/features/dashboard/DashboardPage.tsx
   - apps/server/src/routes/dashboard.ts
   - apps/server/src/analytics/practiceSnapshot.ts
+  - apps/server/src/analytics/scoreAutoFilterCache.ts
+  - apps/server/src/analytics/scoreUsername.ts
+  - apps/server/src/analytics/scoreGamemode.ts
   - apps/server/src/routes/overlay.ts
+  - apps/desktop/main.js
 ---
 
 # Dashboard
@@ -34,12 +38,20 @@ The OBS overlay must not poll this dashboard payload. Overlay idle recent scores
 ## Main flows
 
 - Open app → dashboard loads summary APIs + SSE extraction status.
+- Desktop: splash shows “Opening Home” after the server is healthy, then the UI loads; Home shows a branded “Loading practice summary…” state with layout skeletons until `GET /api/dashboard` returns.
+
+## Implementation
+
+- `GET /api/dashboard` resolves auto username/gamemode filters first (most-common `GROUP BY` results are cached ~60s in `scoreAutoFilterCache`, cleared on score/sync/mastery events and when the filter settings change).
+- After recent scores, independent work (PP curves, counts, last import, current session, weekly activity, practice snapshot) runs in parallel.
+- Home does not wait on Realm extraction; sync status is shell chrome + SSE refetch.
 
 ## Important symbols
 
 - `apps/server/public/features/dashboard/DashboardPage.tsx`
 - `apps/server/src/routes/dashboard.ts`
 - `apps/server/src/analytics/practiceSnapshot.ts:getPracticeSnapshot()`
+- `apps/server/src/analytics/scoreAutoFilterCache.ts`
 
 ## Dependencies
 
@@ -54,5 +66,6 @@ The OBS overlay must not poll this dashboard payload. Overlay idle recent scores
 ## Related knowledge
 
 - [flows/realm-extraction-to-ui.md](../../flows/realm-extraction-to-ui.md)
+- [features/desktop/index.md](../desktop/index.md) — splash → server ready → loadURL
 
-**In UI:** current session leads, then the practice snapshot, weekly activity, and recent scores. Indexed counts and last sync stay as a quiet line under the title. Extraction status labels use "Live sync".
+**In UI:** current session leads, then the practice snapshot, weekly activity, and recent scores. Indexed counts and last sync stay as a quiet line under the title. Extraction status labels use "Live sync". While the summary is loading, Home shows the Roxysu mark, title, loading copy, and skeletons (not a second full-screen splash).

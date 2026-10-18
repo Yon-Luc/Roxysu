@@ -76,7 +76,8 @@
     "unknown": "Desconhecido",
     "beatmapDeleted": "Beatmap apagada",
     "removedFromGame": "Removida do jogo",
-    "noDerivedStats": "Ainda sem stats derivadas — o pipeline de analytics preenche isso depois da sync."
+    "noDerivedStats": "Ainda sem stats derivadas — o pipeline de analytics preenche isso depois da sync.",
+    "loadingSummary": "A carregar resumo de prática…"
   },
   "stats": {
     "pageHint": "{{keyCount}}K · horários em UTC",

@@ -30,6 +30,7 @@ import {
 } from "../analytics/mastery/engine";
 import { runAnalyticsPipeline } from "../analytics/pipeline";
 import { invalidateQueryContextCache } from "../query-language/execute";
+import { invalidateScoreAutoFilterCache } from "../analytics/scoreAutoFilterCache";
 import {
   buildScoresGamemodeSettings,
   normalizeScoresGamemodeFilterInput,
@@ -557,6 +558,7 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
       }
 
       if (scoresFilterChanged) {
+        invalidateScoreAutoFilterCache();
         invalidateQueryContextCache();
         await runAnalyticsPipeline(db, { forceFull: true });
         publish({ type: "dashboard.updated" });

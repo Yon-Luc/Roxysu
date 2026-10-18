@@ -7,6 +7,11 @@ import {
 } from "@roxysu/db/settings-keys";
 import { desc, eq, sql, type SQL } from "drizzle-orm";
 
+import {
+  getCachedMostCommonGamemode,
+  setCachedMostCommonGamemode,
+} from "./scoreAutoFilterCache";
+
 /** Canonical osu!lazer ruleset short names. */
 export const SCORE_GAMEMODE_IDS = ["osu", "taiko", "fruits", "mania"] as const;
 export type ScoreGamemodeId = (typeof SCORE_GAMEMODE_IDS)[number];
@@ -149,13 +154,21 @@ export function listScoreGamemodesSync(db: Db): ScoreGamemodeCount[] {
 export async function getMostCommonGamemode(
   db: Db,
 ): Promise<ScoreGamemodeId | null> {
+  const cached = getCachedMostCommonGamemode();
+  if (cached !== undefined) return cached;
   const [top] = await listScoreGamemodes(db);
-  return top && top.count > 0 ? top.id : null;
+  const value = top && top.count > 0 ? top.id : null;
+  setCachedMostCommonGamemode(value);
+  return value;
 }
 
 export function getMostCommonGamemodeSync(db: Db): ScoreGamemodeId | null {
+  const cached = getCachedMostCommonGamemode();
+  if (cached !== undefined) return cached;
   const [top] = listScoreGamemodesSync(db);
-  return top && top.count > 0 ? top.id : null;
+  const value = top && top.count > 0 ? top.id : null;
+  setCachedMostCommonGamemode(value);
+  return value;
 }
 
 export async function readScoresGamemodeFilter(

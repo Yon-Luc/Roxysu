@@ -85,45 +85,35 @@ export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
       .where(scoreScope)
       .orderBy(desc(scores.playedAt))
       .limit(8);
-    const curves = await loadManiaPpCurves(
-      db,
-      recentScores
-        .map((score) => score.beatmapId)
-        .filter((beatmapId): beatmapId is string => beatmapId != null),
-    );
 
     const beatmapScope = and(
       eq(beatmaps.hidden, false),
       gamemode ? eq(beatmaps.rulesetShortName, gamemode) : undefined,
     );
-    const [beatmapCount] = await db
-      .select({ n: count() })
-      .from(beatmaps)
-      .where(beatmapScope);
-    const [scoreCount] = await db
-      .select({ n: count() })
-      .from(scores)
-      .where(scoreScope);
-    const [lastImport] = await db
-      .select()
-      .from(imports)
-      .orderBy(desc(imports.id))
-      .limit(1);
+    const recentBeatmapIds = recentScores
+      .map((score) => score.beatmapId)
+      .filter((beatmapId): beatmapId is string => beatmapId != null);
 
-    const current = await getCurrentSession(db);
-    const [weeklyActivity, practiceSnapshot] = await Promise.all([
+    const [
+      curves,
+      [beatmapCount],
+      [scoreCount],
+      [lastImport],
+      current,
+      weeklyActivity,
+      practiceSnapshot,
+    ] = await Promise.all([
+      loadManiaPpCurves(db, recentBeatmapIds),
+      db.select({ n: count() }).from(beatmaps).where(beatmapScope),
+      db.select({ n: count() }).from(scores).where(scoreScope),
+      db.select().from(imports).orderBy(desc(imports.id)).limit(1),
+      getCurrentSession(db),
       getWeeklyActivity(db, 12),
       getPracticeSnapshot(db),
     ]);
 
     // Modded plays show their dan difficulty variant labels when computed.
-    const ratedIds = [
-      ...new Set(
-        recentScores
-          .map((s) => s.beatmapId)
-          .filter((id): id is string => id != null),
-      ),
-    ];
+    const ratedIds = [...new Set(recentBeatmapIds)];
     const sunnyVariants = loadDanVariantRatingsSync(db, ratedIds, SUNNY_ALGORITHM);
     const danielVariants = loadDanVariantRatingsSync(db, ratedIds, DANIEL_ALGORITHM);
 

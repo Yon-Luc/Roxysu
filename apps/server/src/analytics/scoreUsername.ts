@@ -7,6 +7,11 @@ import {
 } from "@roxysu/db/settings-keys";
 import { and, desc, eq, inArray, isNotNull, ne, sql, type SQL } from "drizzle-orm";
 
+import {
+  getCachedMostCommonUsername,
+  setCachedMostCommonUsername,
+} from "./scoreAutoFilterCache";
+
 export type ScoreUsernameCount = {
   username: string;
   count: number;
@@ -131,13 +136,21 @@ export function listScoreUsernamesSync(db: Db): ScoreUsernameCount[] {
 }
 
 export async function getMostCommonUsername(db: Db): Promise<string | null> {
+  const cached = getCachedMostCommonUsername();
+  if (cached !== undefined) return cached;
   const [top] = await listScoreUsernames(db);
-  return top?.username ?? null;
+  const value = top?.username ?? null;
+  setCachedMostCommonUsername(value);
+  return value;
 }
 
 export function getMostCommonUsernameSync(db: Db): string | null {
+  const cached = getCachedMostCommonUsername();
+  if (cached !== undefined) return cached;
   const [top] = listScoreUsernamesSync(db);
-  return top?.username ?? null;
+  const value = top?.username ?? null;
+  setCachedMostCommonUsername(value);
+  return value;
 }
 
 export async function readScoresUsernameFilter(

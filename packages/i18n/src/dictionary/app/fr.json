@@ -76,7 +76,8 @@
     "unknown": "Inconnu",
     "beatmapDeleted": "Beatmap supprimée",
     "removedFromGame": "Retirée du jeu",
-    "noDerivedStats": "Pas encore de stats dérivées — le pipeline d'analytique les remplira après la synchro."
+    "noDerivedStats": "Pas encore de stats dérivées — le pipeline d'analytique les remplira après la synchro.",
+    "loadingSummary": "Chargement du résumé d’entraînement…"
   },
   "stats": {
     "pageHint": "{{keyCount}}K · horaires UTC",

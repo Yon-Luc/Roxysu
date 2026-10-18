@@ -76,7 +76,8 @@
     "unknown": "Unknown",
     "beatmapDeleted": "Beatmap deleted",
     "removedFromGame": "Removed from the game",
-    "noDerivedStats": "No derived stats yet — analytics pipeline will fill this after sync."
+    "noDerivedStats": "No derived stats yet — analytics pipeline will fill this after sync.",
+    "loadingSummary": "Loading practice summary…"
   },
   "stats": {
     "pageHint": "{{keyCount}}K · times in UTC",

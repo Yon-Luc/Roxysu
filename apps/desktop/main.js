@@ -710,7 +710,7 @@ if (!gotLock) {
     }
 
     desktopLog("waitForServer ok");
-    await setSplashStatus("Loading");
+    await setSplashStatus("Opening Home");
     await maybeClearHttpCache(paths);
     await loadAppIntoWindow();
     desktopLog("ready");

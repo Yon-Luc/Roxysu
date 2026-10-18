@@ -13,7 +13,6 @@ import { BeatmapCover } from "../../components/BeatmapCover";
 import {
   ChartGridSkeleton,
   ListSkeleton,
-  PageHeaderSkeleton,
   StatGridSkeleton,
 } from "../../components/LoadingSkeleton";
 import { ModBadges } from "../../components/ModBadges";
@@ -35,6 +34,7 @@ import {
 } from "../../lib/ratingDisplay";
 import { useChartStyles } from "../../lib/chartStyles";
 import { formatDuration } from "../stats/statsHelpers";
+import roxyIcon from "../../roxy.png";
 
 export function DashboardPage() {
   const ratingMode = useRatingDisplayMode();
@@ -48,7 +48,19 @@ export function DashboardPage() {
   if (isLoading) {
     return (
       <div className="space-y-10">
-        <PageHeaderSkeleton />
+        <div className="flex items-center gap-3">
+          <img
+            src={roxyIcon}
+            alt=""
+            className="size-10 shrink-0 rounded-full object-cover"
+          />
+          <div className="min-w-0">
+            <PageTitle>{dict?.nav.home ?? "Home"}</PageTitle>
+            <p className="rx-subtitle" aria-live="polite">
+              {dict?.dashboard.loadingSummary ?? "Loading practice summary…"}
+            </p>
+          </div>
+        </div>
         <StatGridSkeleton />
         <ChartGridSkeleton />
         <section>

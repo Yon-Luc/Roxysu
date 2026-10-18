@@ -34,6 +34,8 @@ type FileMap = Map<string, Uint8Array>;
 
 let spriteCache: StdPlayfieldSprites | null = null;
 let loadStarted = false;
+/** Bumped on apply/reset so a stale hydrate cannot overwrite fresher sprites. */
+let spriteEpoch = 0;
 
 function normalizePath(path: string): string {
   return path.replace(/\\/g, "/").replace(/^\/+/, "");
@@ -122,12 +124,37 @@ function lookupImage(
   return null;
 }
 
-async function decodeImage(bytes: Uint8Array): Promise<ImageBitmap | null> {
-  if (typeof createImageBitmap !== "function") return null;
+type DecodedSkinImage = ImageBitmap | HTMLImageElement;
+
+async function decodeImage(bytes: Uint8Array): Promise<DecodedSkinImage | null> {
+  const copy = Uint8Array.from(bytes);
+  const blob = new Blob([copy.buffer.slice(
+    copy.byteOffset,
+    copy.byteOffset + copy.byteLength,
+  )]);
+  if (typeof createImageBitmap === "function") {
+    try {
+      const bmp = await createImageBitmap(blob);
+      if (bmp.width > 0 && bmp.height > 0) return bmp;
+      bmp.close?.();
+    } catch {
+      // fall through to HTMLImageElement
+    }
+  }
+  if (typeof Image === "undefined" || typeof URL === "undefined") return null;
   try {
-    const copy = Uint8Array.from(bytes);
-    const blob = new Blob([copy]);
-    return await createImageBitmap(blob);
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error("image decode failed"));
+      img.src = url;
+    });
+    // Keep object URL alive for the image lifetime (session).
+    (img as HTMLImageElement & { __blobUrl?: string }).__blobUrl = url;
+    if (img.naturalWidth > 0 && img.naturalHeight > 0) return img;
+    URL.revokeObjectURL(url);
+    return null;
   } catch {
     return null;
   }
@@ -143,10 +170,10 @@ async function resolveNamedImage(
   files: FileMap,
   root: string,
   names: string[],
-  cache: Map<string, Promise<ImageBitmap | null>>,
+  cache: Map<string, Promise<DecodedSkinImage | null>>,
   blobs: StdSkinBlobs,
   id: string,
-): Promise<ImageBitmap | null> {
+): Promise<DecodedSkinImage | null> {
   for (const name of names) {
     const bytes = lookupImage(files, root, name);
     if (!bytes) continue;
@@ -196,10 +223,10 @@ async function resolveAnimationFrames(
   files: FileMap,
   root: string,
   kind: "sliderball" | "followpoint",
-  cache: Map<string, Promise<ImageBitmap | null>>,
+  cache: Map<string, Promise<DecodedSkinImage | null>>,
   blobs: StdSkinBlobs,
-): Promise<ImageBitmap[]> {
-  const frames: ImageBitmap[] = [];
+): Promise<DecodedSkinImage[]> {
+  const frames: DecodedSkinImage[] = [];
   for (let i = 0; i < 60; i += 1) {
     const img = await resolveNamedImage(
       files,
@@ -309,7 +336,7 @@ async function buildDraftFromFiles(
   if (!iniBytes) throw new Error("No skin.ini found");
   const parsed = parseSkinIni(decodeSkinIniBytes(iniBytes));
   const root = dirname(iniPath);
-  const cache = new Map<string, Promise<ImageBitmap | null>>();
+  const cache = new Map<string, Promise<DecodedSkinImage | null>>();
   const blobs: StdSkinBlobs = {};
   const sprites = emptySprites();
 
@@ -431,9 +458,12 @@ function coloursToSkinPatch(colours: SkinIniColours): Partial<StdSkin> {
 export async function applyImportedStdSkin(
   draft: StdSkinImportDraft,
 ): Promise<void> {
+  spriteEpoch += 1;
+  const epoch = spriteEpoch;
   await idbClear();
   const entries = Object.entries(draft.blobs);
   await idbPut(entries);
+  if (epoch !== spriteEpoch) return;
   spriteCache = draft.sprites;
   const meta: ImportedStdSkinMeta = {
     name: draft.name,
@@ -456,6 +486,7 @@ export async function applyImportedStdSkin(
 }
 
 export async function resetImportedStdSkin(): Promise<void> {
+  spriteEpoch += 1;
   await idbClear();
   spriteCache = null;
   const defaults = defaultStdSkin();
@@ -472,15 +503,27 @@ export async function resetImportedStdSkin(): Promise<void> {
   emitSprites();
 }
 
+async function decodeBlob(
+  blob: Blob,
+): Promise<DecodedSkinImage | null> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  return decodeImage(bytes);
+}
+
 async function hydrateSpritesFromRows(
   rows: Array<[string, Blob]>,
+  epoch: number,
 ): Promise<void> {
   const sprites = emptySprites();
-  const assign = async (key: string, setter: (img: ImageBitmap) => void) => {
+  const assign = async (
+    key: string,
+    setter: (img: DecodedSkinImage) => void,
+  ) => {
     const row = rows.find(([k]) => k === key);
     if (!row) return;
     try {
-      setter(await createImageBitmap(row[1]));
+      const img = await decodeBlob(row[1]);
+      if (img) setter(img);
     } catch {
       // skip
     }
@@ -524,16 +567,15 @@ async function hydrateSpritesFromRows(
       sprites.hit0 = img;
     }),
   ]);
+  if (epoch !== spriteEpoch) return;
 
-  const ballFrames: ImageBitmap[] = [];
+  const ballFrames: DecodedSkinImage[] = [];
   for (let i = 0; i < 60; i += 1) {
     const row = rows.find(([k]) => k === blobKey("sliderball", i));
     if (!row) break;
-    try {
-      ballFrames.push(await createImageBitmap(row[1]));
-    } catch {
-      break;
-    }
+    const img = await decodeBlob(row[1]);
+    if (!img) break;
+    ballFrames.push(img);
   }
   if (ballFrames.length === 0) {
     await assign(blobKey("sliderball"), (img) => {
@@ -544,16 +586,15 @@ async function hydrateSpritesFromRows(
     sprites.sliderballFrames = ballFrames;
     sprites.sliderball = ballFrames[0]!;
   }
+  if (epoch !== spriteEpoch) return;
 
-  const followFrames: ImageBitmap[] = [];
+  const followFrames: DecodedSkinImage[] = [];
   for (let i = 0; i < 60; i += 1) {
     const row = rows.find(([k]) => k === blobKey("followpoint", i));
     if (!row) break;
-    try {
-      followFrames.push(await createImageBitmap(row[1]));
-    } catch {
-      break;
-    }
+    const img = await decodeBlob(row[1]);
+    if (!img) break;
+    followFrames.push(img);
   }
   if (followFrames.length === 0) {
     await assign(blobKey("followpoint"), (img) => {
@@ -564,6 +605,7 @@ async function hydrateSpritesFromRows(
     sprites.followpointFrames = followFrames;
     sprites.followpoint = followFrames[0]!;
   }
+  if (epoch !== spriteEpoch) return;
 
   const defaults: Array<CanvasImageSource | null> = [];
   for (let d = 0; d <= 9; d += 1) {
@@ -572,19 +614,19 @@ async function hydrateSpritesFromRows(
       defaults.push(null);
       continue;
     }
-    try {
-      defaults.push(await createImageBitmap(row[1]));
-    } catch {
-      defaults.push(null);
-    }
+    defaults.push(await decodeBlob(row[1]));
   }
+  if (epoch !== spriteEpoch) return;
   sprites.defaults = defaults;
   spriteCache = sprites;
   emitSprites();
 }
 
 async function hydrateFromIdb(): Promise<void> {
-  await hydrateSpritesFromRows(await idbGetAll());
+  const epoch = spriteEpoch;
+  const rows = await idbGetAll();
+  if (epoch !== spriteEpoch) return;
+  await hydrateSpritesFromRows(rows, epoch);
 }
 
 export function ensureImportedStdSpritesLoaded(): void {
@@ -650,7 +692,8 @@ export async function applyOverlayStdSpriteEntries(
   }
   if (rows.length === 0) return;
   loadStarted = true;
-  await hydrateSpritesFromRows(rows);
+  const epoch = spriteEpoch;
+  await hydrateSpritesFromRows(rows, epoch);
 }
 
 function subscribeSprites(onStoreChange: () => void): () => void {

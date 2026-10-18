@@ -321,43 +321,113 @@ function playfieldTransform(w: number, h: number) {
 }
 
 /** Scratch canvas reused for multiplicative combo tint (osu AccentColour). */
-let tintScratch: OffscreenCanvas | HTMLCanvasElement | null = null;
-let tintScratchCtx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null =
-  null;
+let tintScratch: HTMLCanvasElement | OffscreenCanvas | null = null;
+let tintScratchCtx:
+  | CanvasRenderingContext2D
+  | OffscreenCanvasRenderingContext2D
+  | null = null;
 
 function getTintScratch(
   width: number,
   height: number,
 ): {
-  canvas: OffscreenCanvas | HTMLCanvasElement;
-  ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
-} {
+  canvas: HTMLCanvasElement | OffscreenCanvas;
+  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+} | null {
   const w = Math.max(1, Math.ceil(width));
   const h = Math.max(1, Math.ceil(height));
-  if (!tintScratch || !tintScratchCtx) {
-    if (typeof OffscreenCanvas !== "undefined") {
-      tintScratch = new OffscreenCanvas(w, h);
-      tintScratchCtx = tintScratch.getContext("2d");
-    } else if (typeof document !== "undefined") {
-      const c = document.createElement("canvas");
-      c.width = w;
-      c.height = h;
-      tintScratch = c;
-      tintScratchCtx = c.getContext("2d");
+  try {
+    if (!tintScratch || !tintScratchCtx) {
+      // Prefer HTMLCanvasElement — more reliable when blitting onto a page canvas.
+      if (typeof document !== "undefined") {
+        const c = document.createElement("canvas");
+        c.width = w;
+        c.height = h;
+        const c2d = c.getContext("2d");
+        if (!c2d) return null;
+        tintScratch = c;
+        tintScratchCtx = c2d;
+      } else if (typeof OffscreenCanvas !== "undefined") {
+        const c = new OffscreenCanvas(w, h);
+        const c2d = c.getContext("2d");
+        if (!c2d) return null;
+        tintScratch = c;
+        tintScratchCtx = c2d;
+      } else {
+        return null;
+      }
+    } else if (tintScratch.width !== w || tintScratch.height !== h) {
+      tintScratch.width = w;
+      tintScratch.height = h;
     }
-  } else if (tintScratch.width !== w || tintScratch.height !== h) {
-    tintScratch.width = w;
-    tintScratch.height = h;
+    return { canvas: tintScratch, ctx: tintScratchCtx };
+  } catch {
+    tintScratch = null;
+    tintScratchCtx = null;
+    return null;
   }
-  if (!tintScratch || !tintScratchCtx) {
-    throw new Error("tint scratch unavailable");
+}
+
+function spriteSize(
+  img: CanvasImageSource,
+  size: number,
+): { dw: number; dh: number } | null {
+  try {
+    const w =
+      "width" in img && typeof img.width === "number" ? img.width : size;
+    const h =
+      "height" in img && typeof img.height === "number" ? img.height : size;
+    if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) {
+      return null;
+    }
+    const dw = size;
+    const dh = size * (h / w);
+    if (!Number.isFinite(dw) || !Number.isFinite(dh) || dw <= 0 || dh <= 0) {
+      return null;
+    }
+    return { dw, dh };
+  } catch {
+    return null;
   }
-  return { canvas: tintScratch, ctx: tintScratchCtx };
+}
+
+/**
+ * Draw a sprite centered. Returns false if the image cannot be drawn
+ * (closed ImageBitmap, decode failure, etc.) so callers can fall back.
+ */
+function drawSpriteCentered(
+  ctx: PaintContext2D,
+  img: CanvasImageSource,
+  cx: number,
+  cy: number,
+  size: number,
+  alpha: number,
+  rotation = 0,
+): boolean {
+  const dims = spriteSize(img, size);
+  if (!dims) return false;
+  const { dw, dh } = dims;
+  try {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(cx, cy);
+    if (rotation !== 0) ctx.rotate(rotation);
+    ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
+    ctx.restore();
+    return true;
+  } catch {
+    try {
+      ctx.restore();
+    } catch {
+      // ignore
+    }
+    return false;
+  }
 }
 
 /**
  * Draw a sprite with multiplicative combo tint (osu!stable/lazer AccentColour).
- * Untinted when `tint` is null.
+ * Returns false when the sprite cannot be drawn.
  */
 function drawTintedImage(
   ctx: PaintContext2D,
@@ -367,45 +437,49 @@ function drawTintedImage(
   size: number,
   tint: string | null,
   alpha: number,
-): void {
-  const w =
-    "width" in img && typeof img.width === "number" ? img.width : size;
-  const h =
-    "height" in img && typeof img.height === "number" ? img.height : size;
-  const dw = size;
-  const dh = size * (h / Math.max(1, w));
+): boolean {
+  const dims = spriteSize(img, size);
+  if (!dims) return false;
+  const { dw, dh } = dims;
 
   if (!tint) {
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.translate(cx, cy);
-    ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
-    ctx.restore();
-    return;
+    return drawSpriteCentered(ctx, img, cx, cy, size, alpha);
+  }
+
+  const scratch = getTintScratch(dw, dh);
+  if (!scratch) {
+    // No scratch — still try untinted sprite rather than blanking the frame.
+    return drawSpriteCentered(ctx, img, cx, cy, size, alpha);
   }
 
   try {
-    const { canvas, ctx: sctx } = getTintScratch(dw, dh);
+    const { canvas, ctx: sctx } = scratch;
     sctx.setTransform(1, 0, 0, 1, 0, 0);
-    sctx.clearRect(0, 0, canvas.width, canvas.height);
     sctx.globalCompositeOperation = "source-over";
     sctx.globalAlpha = 1;
+    sctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Multiplicative AccentColour (stable/lazer): multiply RGB, then restore
+    // the sprite's alpha mask so the tint doesn't fill a solid rectangle.
     sctx.drawImage(img, 0, 0, dw, dh);
-    sctx.globalCompositeOperation = "source-in";
+    sctx.globalCompositeOperation = "multiply";
     sctx.fillStyle = tint;
     sctx.fillRect(0, 0, dw, dh);
+    sctx.globalCompositeOperation = "destination-in";
+    sctx.drawImage(img, 0, 0, dw, dh);
     sctx.globalCompositeOperation = "source-over";
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.drawImage(canvas, 0, 0, dw, dh, cx - dw / 2, cy - dh / 2, dw, dh);
     ctx.restore();
+    return true;
   } catch {
-    // Fallback: draw untinted if scratch unavailable (e.g. some workers).
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.translate(cx, cy);
-    ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
-    ctx.restore();
+    try {
+      ctx.restore();
+    } catch {
+      // ignore
+    }
+    // Never rethrow — a bad sprite must not wipe the whole playfield.
+    return drawSpriteCentered(ctx, img, cx, cy, size, alpha);
   }
 }
 
@@ -428,29 +502,6 @@ export function darkenHex(hex: string, factor = 0.35): string {
   return `#${[r, g, b].map((c) => c.toString(16).padStart(2, "0")).join("")}`;
 }
 
-function drawSpriteCentered(
-  ctx: PaintContext2D,
-  img: CanvasImageSource,
-  cx: number,
-  cy: number,
-  size: number,
-  alpha: number,
-  rotation = 0,
-): void {
-  const w =
-    "width" in img && typeof img.width === "number" ? img.width : size;
-  const h =
-    "height" in img && typeof img.height === "number" ? img.height : size;
-  const dw = size;
-  const dh = size * (h / Math.max(1, w));
-  ctx.save();
-  ctx.globalAlpha = alpha;
-  ctx.translate(cx, cy);
-  if (rotation !== 0) ctx.rotate(rotation);
-  ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
-  ctx.restore();
-}
-
 function drawComboDigits(
   ctx: PaintContext2D,
   combo: number,
@@ -465,29 +516,37 @@ function drawComboDigits(
   if (defaults && defaults.some(Boolean)) {
     const digits = text.split("").map((ch) => defaults[Number(ch)] ?? null);
     if (digits.every(Boolean)) {
-      const widths = digits.map((img) => {
-        const w =
-          img && "width" in img && typeof img.width === "number"
-            ? img.width
-            : digitH;
-        const h =
-          img && "height" in img && typeof img.height === "number"
-            ? img.height
-            : digitH;
-        return digitH * (w / Math.max(1, h));
-      });
-      const total = widths.reduce((a, b) => a + b, 0);
-      let x = sx - total / 2;
-      for (let i = 0; i < digits.length; i += 1) {
-        const img = digits[i]!;
-        const dw = widths[i]!;
-        ctx.save();
-        ctx.globalAlpha = alpha;
-        ctx.drawImage(img, x, sy - digitH / 2, dw, digitH);
-        ctx.restore();
-        x += dw;
+      try {
+        const widths = digits.map((img) => {
+          const dims = spriteSize(img!, digitH);
+          return dims ? dims.dw : digitH * 0.6;
+        });
+        const total = widths.reduce((a, b) => a + b, 0);
+        let x = sx - total / 2;
+        let ok = true;
+        for (let i = 0; i < digits.length; i += 1) {
+          const img = digits[i]!;
+          const dw = widths[i]!;
+          try {
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.drawImage(img, x, sy - digitH / 2, dw, digitH);
+            ctx.restore();
+          } catch {
+            try {
+              ctx.restore();
+            } catch {
+              // ignore
+            }
+            ok = false;
+            break;
+          }
+          x += dw;
+        }
+        if (ok) return;
+      } catch {
+        // fall through to text
       }
-      return;
     }
   }
   ctx.globalAlpha = alpha;
@@ -586,10 +645,25 @@ export type PaintStdPlayfieldArgs = {
 
 /** Paint one standard playfield frame at `tMs`. */
 export function paintStdPlayfield(args: PaintStdPlayfieldArgs): void {
+  try {
+    paintStdPlayfieldInner(args);
+  } catch {
+    // Last resort: a bad imported sprite must never blank the playfield.
+    if (args.sprites) {
+      try {
+        paintStdPlayfieldInner({ ...args, sprites: null });
+      } catch {
+        // ignore — better a stale frame than a hard crash loop
+      }
+    }
+  }
+}
+
+function paintStdPlayfieldInner(args: PaintStdPlayfieldArgs): void {
   const {
     ctx,
-    width: w,
-    height: h,
+    width: rawW,
+    height: rawH,
     tMs: t,
     hitObjects: objs,
     circleSize: cs,
@@ -601,6 +675,9 @@ export function paintStdPlayfield(args: PaintStdPlayfieldArgs): void {
     beatmapComboColors = null,
     sprites = null,
   } = args;
+  const w = Math.max(1, rawW || 1);
+  const h = Math.max(1, rawH || 1);
+  if (!Array.isArray(objs)) return;
 
   const preempt = approachPreemptMs(ar);
   const fadeIn = approachFadeInMs(ar);
@@ -689,7 +766,7 @@ export function paintStdPlayfield(args: PaintStdPlayfieldArgs): void {
 
   // Pass 1: slider bodies (+ ticks) under everything else.
   for (const { obj, index } of visible) {
-    if (obj.type !== "slider" || obj.path.length < 2) continue;
+    if (obj.type !== "slider" || !obj.path || obj.path.length < 2) continue;
     const baseAlpha = alphaFor(obj, index);
     if (baseAlpha <= 0) continue;
     const r = radius * scale;
@@ -844,10 +921,12 @@ export function paintStdPlayfield(args: PaintStdPlayfieldArgs): void {
       continue;
     }
 
-    const hx = obj.stackX;
-    const hy = obj.stackY;
+    const hx = Number.isFinite(obj.stackX) ? obj.stackX : obj.x;
+    const hy = Number.isFinite(obj.stackY) ? obj.stackY : obj.y;
+    if (!Number.isFinite(hx) || !Number.isFinite(hy)) continue;
     const { sx, sy } = toScreen(hx, hy);
     const r = radius * scale;
+    if (!Number.isFinite(r) || r <= 0) continue;
     const fillColor = colorFor(index);
     const isSlider = obj.type === "slider";
 
@@ -857,7 +936,8 @@ export function paintStdPlayfield(args: PaintStdPlayfieldArgs): void {
       const approachR = r * (1 + 3 * Math.max(0, remain));
       const approachColor = approachOverride ?? fillColor;
       const approachAlpha = Math.min(0.9, baseAlpha);
-      if (sprites?.approachcircle) {
+      const drewApproach =
+        !!sprites?.approachcircle &&
         drawTintedImage(
           ctx,
           sprites.approachcircle,
@@ -867,7 +947,7 @@ export function paintStdPlayfield(args: PaintStdPlayfieldArgs): void {
           approachColor,
           approachAlpha,
         );
-      } else {
+      if (!drewApproach) {
         ctx.globalAlpha = approachAlpha;
         ctx.strokeStyle = approachColor;
         ctx.lineWidth = 2.5 * scale;
@@ -885,7 +965,8 @@ export function paintStdPlayfield(args: PaintStdPlayfieldArgs): void {
     if (headAlpha > 0 && (!judged || (judgment && t < judgment.tMs + 150))) {
       const headColor =
         judged && judgment ? JUDGMENT_COLORS[judgment.result] : fillColor;
-      if (sprites?.hitcircle) {
+      const drewHead =
+        !!sprites?.hitcircle &&
         drawTintedImage(
           ctx,
           sprites.hitcircle,
@@ -895,7 +976,7 @@ export function paintStdPlayfield(args: PaintStdPlayfieldArgs): void {
           headColor,
           headAlpha,
         );
-      } else {
+      if (!drewHead) {
         ctx.globalAlpha = headAlpha;
         ctx.fillStyle = headColor;
         ctx.beginPath();

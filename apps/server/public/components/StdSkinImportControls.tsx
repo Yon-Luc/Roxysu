@@ -11,8 +11,32 @@ import {
   draftFromDroppedFiles,
   type StdSkinImportDraft,
 } from "../lib/stdSkinImport";
+import { defaultStdSkin, type StdSkin } from "../lib/stdSkin";
 import { StdPlayfield } from "./StdPlayfield";
 import type { StdHitObject, StdPlayfieldJudgment } from "./StdPlayfield";
+
+function skinFromDraft(draft: StdSkinImportDraft): StdSkin {
+  const base = defaultStdSkin();
+  const c = draft.colours;
+  return {
+    ...base,
+    comboColors:
+      c.comboColors.length > 0 ? c.comboColors : base.comboColors,
+    sliderTrack: c.sliderBorder ?? base.sliderTrack,
+    sliderFill: c.sliderTrackOverride ?? base.sliderFill,
+    cursor: c.cursor ?? base.cursor,
+    hitCircleScale: 1,
+    imported: {
+      name: draft.name,
+      colours: {
+        comboColors: c.comboColors,
+        sliderBorder: c.sliderBorder,
+        sliderTrackOverride: c.sliderTrackOverride,
+        cursor: c.cursor,
+      },
+    },
+  };
+}
 
 const DEMO: StdHitObject[] = [
   {
@@ -166,6 +190,7 @@ export function StdSkinImportModal({
             approachRate={7}
             getCurrentTimeMs={() => timeRef.current}
             judgments={DEMO_JUDGMENTS}
+            skin={skinFromDraft(draft)}
             sprites={draft.sprites}
           />
         </div>

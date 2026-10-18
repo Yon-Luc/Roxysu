@@ -110,14 +110,21 @@ Playfield = the visual layer for that ruleset (notefield, 512×384, or taiko lan
     `roxysu:std-skin` `imported`. `skin.ini` `[Colours]` feeds combo / slider /
     cursor colours. Missing sprites fall back per element. Overlay push includes
     `std:*` sprite keys alongside mania sprites.
-    Fidelity notes: hitcircle/approach use **multiplicative** combo tint;
-    slider ball loads `sliderb` / `sliderbN`; followpoints rotate along the
-    segment; slider body fill uses combo colour unless `SliderTrackOverride`
-    is set; import sets `hitCircleScale` to 1.0; draw order is body →
-    followpoints → approach → circle → numbers → overlay → reverse → ball.
+    Fidelity notes: hitcircle/approach use **multiplicative** combo tint
+    (`multiply` + `destination-in` alpha restore); slider ball loads
+    `sliderb` / `sliderbN`; followpoints rotate along the segment; slider
+    body fill uses combo colour unless `SliderTrackOverride` is set; import
+    sets `hitCircleScale` to 1.0; draw order is body → followpoints →
+    approach → circle → numbers → overlay → reverse → ball.
+    Bad/closed sprites never blank the playfield — paint falls back to
+    procedural drawing per element (and retries without sprites on throw).
+    Standard/catch rewatch letterbox uses `useAspectFit` with a **state**
+    outer element so ResizeObserver attaches after replay data mounts
+    (a mount-time null ref left the stage `visibility: hidden` forever).
     **Source:** `stdSkinImport.ts`, `paintStdPlayfield.ts`,
-    `StdSkinImportControls.tsx`, `overlaySkins.ts` — status: verified by
-    `stdSkinImport.names.test.ts`, `paintStdPlayfield.test.ts`.
+    `ScoreReplayModal.tsx`, `StdSkinImportControls.tsx`, `overlaySkins.ts`
+    — status: verified by `stdSkinImport.names.test.ts`,
+    `paintStdPlayfield.test.ts`.
 
 5b. **Keybinds** are browser-local: column keys (`roxysu:keybinds`) per keymode
     and playback **action keybinds** (`roxysu:action-keybinds`) for preview /

@@ -6,8 +6,11 @@ export function resizePlayfieldCanvas(
   const parent = canvas.parentElement;
   if (!parent) return;
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  // Parent can briefly report 0×0 during flex layout; keep the previous CSS
+  // size rather than collapsing the canvas to an invisible 0×0 box.
   const w = parent.clientWidth;
   const h = parent.clientHeight;
+  if (w <= 0 || h <= 0) return;
   const nextW = Math.max(1, Math.floor(w * dpr));
   const nextH = Math.max(1, Math.floor(h * dpr));
   canvas.style.width = `${w}px`;

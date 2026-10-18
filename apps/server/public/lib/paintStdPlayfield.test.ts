@@ -6,6 +6,7 @@ import {
   followPointAngle,
   followPointPositions,
   objectEndPos,
+  paintStdPlayfield,
   snakeFracAt,
   type StdHitObject,
 } from "./paintStdPlayfield";
@@ -81,6 +82,80 @@ describe("followPointPositions / followPointAngle", () => {
 describe("darkenHex", () => {
   test("darkens combo red for slider body fill", () => {
     expect(darkenHex("#ff0000", 0.35)).toBe("#590000");
+  });
+});
+
+describe("paintStdPlayfield resilience", () => {
+  test("broken sprites do not blank the playfield", () => {
+    const ops: string[] = [];
+    const ctx = {
+      globalAlpha: 1,
+      globalCompositeOperation: "source-over",
+      fillStyle: "",
+      strokeStyle: "",
+      lineWidth: 1,
+      lineCap: "",
+      lineJoin: "",
+      font: "",
+      textAlign: "",
+      textBaseline: "",
+      clearRect: () => ops.push("clear"),
+      fillRect: () => ops.push("fillRect"),
+      strokeRect: () => ops.push("strokeRect"),
+      beginPath: () => ops.push("begin"),
+      moveTo: () => undefined,
+      lineTo: () => undefined,
+      arc: () => ops.push("arc"),
+      stroke: () => ops.push("stroke"),
+      fill: () => ops.push("fill"),
+      fillText: () => ops.push("text"),
+      save: () => undefined,
+      restore: () => undefined,
+      translate: () => undefined,
+      rotate: () => undefined,
+      setTransform: () => undefined,
+      drawImage: () => {
+        throw new Error("closed bitmap");
+      },
+    };
+    const objs = [
+      circle(1000, { newCombo: true }),
+    ];
+    // Should not throw; should still draw procedural arcs after sprite failure.
+    paintStdPlayfield({
+      ctx: ctx as unknown as CanvasRenderingContext2D,
+      width: 512,
+      height: 384,
+      tMs: 900,
+      hitObjects: objs,
+      circleSize: 4,
+      approachRate: 7,
+      skin: {
+        comboColors: ["#ff0000"],
+        sliderTrack: "#fff",
+        sliderFill: "#000",
+        sliderBall: "#fff",
+        spinner: "#fff",
+        approach: "#ffffff",
+        cursor: "#fff",
+        trail: "#fff",
+        hitCircleScale: 1,
+        showComboNumbers: true,
+        showSliderTicks: true,
+        showFollowCircle: true,
+        showHitPopups: true,
+        imported: { name: "broken" },
+      },
+      sprites: {
+        // Invalid drawable — drawImage will throw
+        hitcircle: {} as CanvasImageSource,
+        approachcircle: {} as CanvasImageSource,
+      },
+      comboInfo: buildComboInfo(objs),
+    });
+    expect(ops).toContain("clear");
+    expect(ops).toContain("arc");
+    expect(ops).toContain("fill");
   });
 });
 

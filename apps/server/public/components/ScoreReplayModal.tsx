@@ -185,26 +185,29 @@ function formatRateLabel(rate: number): string {
 }
 
 /**
- * Measures `outerRef`'s box via ResizeObserver and returns the largest
- * `ratio`-shaped rect (in px) that fits inside it, centered. Mirrors the
- * ResizeObserver technique StdPlayfield's own canvas uses internally —
- * more reliable across browsers than CSS `aspect-ratio` on a flex-grow
- * item, whose cross-axis resolution against a flex-basis:0% main size
- * isn't consistently supported.
+ * Measures the stage box via ResizeObserver and returns the largest
+ * `ratio`-shaped rect (in px) that fits inside it, centered. Uses a state
+ * element (not a mount-time ref) so observation starts after replay data
+ * mounts the stage. More reliable than CSS `aspect-ratio` on a flex-grow
+ * item whose cross-axis resolution against flex-basis:0% isn't consistent.
  */
 function useAspectFit(ratio: number) {
-  const outerRef = useRef<HTMLDivElement>(null);
+  // Element is tracked in state so the ResizeObserver attaches when the stage
+  // mounts after replay data loads (a bare ref stays null on first layout).
+  const [outerEl, setOuterEl] = useState<HTMLDivElement | null>(null);
   const [size, setSize] = useState<{ width: number; height: number } | null>(
     null,
   );
 
   useLayoutEffect(() => {
-    const el = outerRef.current;
-    if (!el) return;
+    if (!outerEl) {
+      setSize(null);
+      return;
+    }
 
     const compute = () => {
-      const w = el.clientWidth;
-      const h = el.clientHeight;
+      const w = outerEl.clientWidth;
+      const h = outerEl.clientHeight;
       if (w <= 0 || h <= 0) return;
       const fitW = Math.min(w, h * ratio);
       const fitH = fitW / ratio;
@@ -217,11 +220,11 @@ function useAspectFit(ratio: number) {
 
     compute();
     const ro = new ResizeObserver(compute);
-    ro.observe(el);
+    ro.observe(outerEl);
     return () => ro.disconnect();
-  }, [ratio]);
+  }, [outerEl, ratio]);
 
-  return { outerRef, size };
+  return { setOuterEl, size };
 }
 
 export function ScoreReplayModal({
@@ -1071,11 +1074,11 @@ export function ScoreReplayModal({
     replayData.beatmap.rulesetShortName === "fruits" &&
     (replayData.beatmap.catchHitObjects?.length ?? 0) > 0;
   const isLetterboxReplay = isStdReplay || isCatchReplay;
-  const { outerRef: stdFitRef, size: stdFitSize } = useAspectFit(4 / 3);
+  const { setOuterEl: setStdFitEl, size: stdFitSize } = useAspectFit(4 / 3);
   const setStageNode = useCallback((node: HTMLDivElement | null) => {
-    stdFitRef.current = node;
+    setStdFitEl(node);
     setStageEl((prev) => (prev === node ? prev : node));
-  }, [stdFitRef]);
+  }, [setStdFitEl]);
   const canLivePlay = isManiaReplay;
   const showAnalysis = analysisOn && !isPlay && isManiaReplay;
 

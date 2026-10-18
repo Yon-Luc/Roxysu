@@ -115,8 +115,8 @@ export function StdPlayfield({
       paint: (tMs) => {
         paintStdPlayfield({
           ctx: ctx!,
-          width: canvas!.clientWidth,
-          height: canvas!.clientHeight,
+          width: Math.max(1, canvas!.clientWidth),
+          height: Math.max(1, canvas!.clientHeight),
           tMs,
           hitObjects: objectsRef.current,
           circleSize: csRef.current,

@@ -15,7 +15,7 @@ touches:
 
 ## Purpose
 
-Per-beatmap deep dive: cover, core stats, recent scores with judgment detail, sessions on that map, mania Sunny/Daniel/Rework estimates, copyable in-game search string, mania pattern detail (density over time, pattern weights, hotspots).
+Per-beatmap deep dive: cover, core stats, recent scores with judgment detail, sessions on that map, mania Sunny/Daniel/Rework estimates, copyable in-game search string, mania pattern detail (chart shape, density over time, hotspots).
 
 ## Business meaning
 

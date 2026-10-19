@@ -268,7 +268,7 @@ export function NowSelectedPage({
     patternWeights:
       showMania && patternDetail && !patternDetail.error ? (
         <PatternWeightsPanel
-          composition={patternDetail.composition}
+          composition={patternDetail.shapeComposition ?? {}}
           keyCount={patternDetail.columnCount ?? keyCount}
           accentColor={charts.chartAlt}
         />

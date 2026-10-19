@@ -19,7 +19,7 @@ touches:
 
 ## Purpose
 
-Second-monitor companion page for the beatmap currently selected in osu! (via **tosu live**): identity, auto preview, mania pattern weights, density over time, and live play stats. Layout is user-configurable.
+Second-monitor companion page for the beatmap currently selected in osu! (via **tosu live**): identity, auto preview, chart shape, density over time, and live play stats. Layout is user-configurable.
 
 ## Business meaning
 
@@ -32,7 +32,7 @@ While song-selecting or playing, open **Now selected** (optionally `#/now-select
 3. Preview auto-starts when the map is matched in the local mirror and in-game play is not active (configurable). Pause — the user Pause control, or pause while `play.active` — freezes the playfield clock and the audio so game audio is not doubled. While that hold is set, tosu time must not move or seek the preview. Playback resumes from the frozen time. The hold clears only once local time and tosu time are already within ~2s; a new map starts the hold clear.
 4. While the preview is playing and not held, position syncs with tosu `beatmap.time.live`: while tosu samples are fresh (≤1.5s old), `BeatmapPreviewEmbed` drives its playfield clock from the live time (interpolated at the tosu rate); small transport-latency offsets are ignored — the clock keeps gliding — and clock + audio hard-resync only when drift exceeds ~2s; otherwise it falls back to independent playback from the preview point.
 5. The embed volume slider writes `volume` on the shared preview prefs store (`rx-beatmap-preview`). Changing maps remounts the embed and reloads that value, so a volume the user set stays. The slider is shown for every ruleset.
-6. Pattern weights / density / hotspots use the same `ManiaPatternDetail` path as the practice profile (unrated chart).
+6. Chart shape bars, density, and hotspots use the same `ManiaPatternDetail` path as the practice profile (unrated chart). The shape widget lists chart-shape families for the key count (`shapeComposition`). Density and hotspots still label each time window with the dominant skill.
 7. Maps not in the local mirror still show identity + ephemeral mania analysis from tosu `.osu` text; preview is skipped.
 8. Widget visibility and order are page-local (`localStorage` key `roxysu:now-selected-layout`), not the Settings HTTP store.
 9. Focus layout (`?focus=1`) hides AppShell chrome (sidebar, mobile nav) for a second monitor. While no map is selected, connection status and Start tosu share one panel. Live play shows combo, accuracy, misses, and PP as separate figures.
@@ -52,7 +52,7 @@ tosu WS frame
 tosu live adapter (lean snapshot + cached ManiaPatternDetail on checksum change)
   ↓
 GET /api/tosu/live  →  NowSelectedPage (SSE tosu.updated; poll only if SSE down)
-GET /api/tosu/live/analysis  →  pattern weights / density (when checksum stable)
+GET /api/tosu/live/analysis  →  chart shape / density (when checksum stable)
 matchedBeatmapId  →  GET /api/beatmaps/:id/stats (play count / best acc / best PP)
 matchedBeatmapId  →  BeatmapPreviewEmbed → GET /api/beatmaps/:id/preview
 beatmap.time.live (SSE play ticks) → BeatmapPreviewEmbed clock sync

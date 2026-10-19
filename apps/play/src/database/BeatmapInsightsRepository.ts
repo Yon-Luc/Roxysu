@@ -102,8 +102,8 @@ export class BeatmapInsightsRepository {
         pattern: patternRow
           ? {
               beatmapId,
-              dominantPattern: patternRow.dominantPattern,
-              secondaryPattern: patternRow.secondaryPattern,
+              dominantPattern: patternRow.shapePattern || null,
+              secondaryPattern: patternRow.secondaryShape,
               confidence: patternRow.confidence,
             }
           : null,

@@ -250,6 +250,8 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
           algorithm: string;
           dominantPattern: string | null;
           secondaryPattern: string | null;
+          shapePattern: string | null;
+          secondaryShape: string | null;
           confidence: number | null;
           jackDensity: number | null;
           chordDensity: number | null;
@@ -469,30 +471,37 @@ export function PracticeProfilePage({ beatmapId }: { beatmapId: string }) {
             <h3 className="text-sm font-bold text-ink">
               {dict?.practice.detail.pattern}
             </h3>
-            {patternAnalysis.dominantPattern ? (
+            {patternAnalysis.shapePattern || sevenKAnalysis?.shapePattern ? (
               <div className="mt-3 space-y-1">
                 <div className="font-display text-2xl font-extrabold text-accent">
                   {formatPatternLabel(
-                    patternAnalysis.dominantPattern,
+                    patternAnalysis.shapePattern ||
+                      sevenKAnalysis?.shapePattern ||
+                      "",
                     dict?.practice.detail.patterns,
                   )}
                 </div>
                 <p className="text-xs text-muted">
-                  {patternAnalysis.secondaryPattern
-                    ? t(dict?.practice.detail.patternPlus, {
-                        pattern: formatPatternLabel(
-                          patternAnalysis.secondaryPattern,
-                          dict?.practice.detail.patterns,
-                        ),
-                      })
-                    : null}
-                  {patternAnalysis.confidence != null
-                    ? t(dict?.practice.detail.confidencePct, {
-                        pct: Math.round(patternAnalysis.confidence * 100),
-                      })
-                    : null}
+                  {(patternAnalysis.secondaryShape ||
+                    sevenKAnalysis?.secondaryShape) &&
+                    t(dict?.practice.detail.patternPlus, {
+                      pattern: formatPatternLabel(
+                        patternAnalysis.secondaryShape ||
+                          sevenKAnalysis?.secondaryShape ||
+                          "",
+                        dict?.practice.detail.patterns,
+                      ),
+                    })}
                 </p>
-                <PatternDensityHints pattern={patternAnalysis} />
+                <PatternDensityHints
+                  pattern={{
+                    ...patternAnalysis,
+                    dominantPattern:
+                      patternAnalysis.shapePattern ||
+                      sevenKAnalysis?.shapePattern ||
+                      null,
+                  }}
+                />
               </div>
             ) : (
               <p className="mt-3 text-sm text-faint">
@@ -614,7 +623,7 @@ function PatternDensityHints({
     | Record<string, string>
     | undefined;
   const hints: string[] = [];
-  const dominant = pattern.dominantPattern;
+  const dominant = pattern.dominantPattern === "stream" ? "delay" : pattern.dominantPattern;
   const fallback: Record<string, string> = {
     jack: "jack",
     chord: "chord",

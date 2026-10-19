@@ -104,6 +104,8 @@ describe("analyzeManiaSkillNotes", () => {
   test("an empty chart has no dominant skill", () => {
     const result = analyzeManiaSkillNotes([], 4);
     expect(result.dominantPattern).toBeNull();
+    expect(result.shapePattern).toBeNull();
+    expect(result.shapeComposition).toEqual({});
     expect(result.sections).toEqual([]);
     expect(result.starRating).toBe(0);
   });

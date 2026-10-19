@@ -592,7 +592,7 @@ client app process model yet.
 
 ### Now selected
 
-Client-app page that displays the in-game selected beatmap from **tosu live**, with optional embedded beatmap preview and mania pattern detail (pattern weights, density over time). Supports a Focus layout for a second monitor.
+Client-app page that displays the in-game selected beatmap from **tosu live**, with optional embedded beatmap preview and mania pattern detail (chart shape, density over time). Supports a Focus layout for a second monitor.
 
 **Not:** Current session compact panel alone, OBS `/overlay`, score rewatch
 

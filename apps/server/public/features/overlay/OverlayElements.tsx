@@ -218,7 +218,7 @@ export function IdentityElement({
             {opts.showAnalysis && opts.showPattern ? <span>·</span> : null}
             {opts.showAnalysis && opts.showPattern ? (
               <span className="capitalize">
-                {ctx.snapshot?.analysis.pattern?.dominantPattern ?? "—"}
+                {ctx.snapshot?.analysis.pattern?.shapePattern || "—"}
               </span>
             ) : null}
           </div>
@@ -319,10 +319,10 @@ export function AnalysisElement({ ctx }: { ctx: OverlayElementContext }) {
             {sunny.sunnyStar != null ? ` ${sunny.sunnyStar.toFixed(2)}★` : ""}
           </span>
         ) : null}
-        {pattern?.dominantPattern ? (
+        {pattern?.shapePattern ? (
           <span className="text-xs capitalize text-white/70 overlay-text">
-            {pattern.dominantPattern}
-            {pattern.secondaryPattern ? ` + ${pattern.secondaryPattern}` : ""}
+            {pattern.shapePattern}
+            {pattern.secondaryShape ? ` + ${pattern.secondaryShape}` : ""}
           </span>
         ) : null}
         {sunny?.lnRatio != null ? (

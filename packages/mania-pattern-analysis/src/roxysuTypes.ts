@@ -89,6 +89,10 @@ export type StructuralPatternResult = PatternAnalysisResult & {
   algorithm: typeof PATTERN_ALGORITHM;
   sections: PatternSection[];
   composition: PatternComposition;
+  /** Note share of each chart-shape family. */
+  shapeComposition: Partial<Record<ShapeLabel, number>>;
+  /** How far the leading shape is ahead of the rest. */
+  shapeConfidence: number | null;
   /** Every skill's star rating, highest first. */
   skillStars: SkillStar[];
   /** Chart star rating the skills came from. */

@@ -96,6 +96,8 @@ function patternFromDb(
   return {
     dominantPattern: rating.dominantPattern,
     secondaryPattern: rating.secondaryPattern,
+    shapePattern: rating.shapePattern || null,
+    secondaryShape: rating.secondaryShape || null,
     confidence: rating.confidence,
     columnCount: rating.columnCount,
     error: rating.error,
@@ -176,6 +178,8 @@ function patternFromText(osuText: string): TosuLivePattern {
     return {
       dominantPattern: result.dominantPattern,
       secondaryPattern: result.secondaryPattern,
+      shapePattern: result.shapePattern,
+      secondaryShape: result.secondaryShape,
       confidence: result.confidence,
       columnCount: result.columnCount,
       error: null,
@@ -185,6 +189,8 @@ function patternFromText(osuText: string): TosuLivePattern {
     return {
       dominantPattern: null,
       secondaryPattern: null,
+      shapePattern: null,
+      secondaryShape: null,
       confidence: null,
       columnCount: null,
       error: err instanceof Error ? err.message : String(err),
@@ -230,6 +236,10 @@ function patternDetailFromText(osuText: string): ManiaPatternDetail | null {
       dominantPattern: null,
       secondaryPattern: null,
       confidence: null,
+      shapePattern: null,
+      secondaryShape: null,
+      shapeConfidence: null,
+      shapeComposition: {},
       composition: {
         speed: 0,
         jack: 0,
@@ -329,7 +339,9 @@ export async function analyzeLiveMap(
       pattern = {
         dominantPattern: patternDetail.dominantPattern,
         secondaryPattern: patternDetail.secondaryPattern,
-        confidence: patternDetail.confidence,
+        shapePattern: patternDetail.shapePattern,
+        secondaryShape: patternDetail.secondaryShape,
+        confidence: patternDetail.shapeConfidence ?? patternDetail.confidence,
         columnCount: patternDetail.columnCount,
         error: null,
         source: matchedBeatmapId ? "db" : "osu-text",

@@ -32,6 +32,10 @@ export type ManiaPatternDetailView = {
   dominantPattern: string | null;
   secondaryPattern: string | null;
   confidence: number | null;
+  shapePattern: string | null;
+  secondaryShape: string | null;
+  shapeConfidence: number | null;
+  shapeComposition: Record<string, number>;
   composition: Record<string, number>;
   samples: ManiaDensitySampleView[];
   hotspots: ManiaHotspotView[];

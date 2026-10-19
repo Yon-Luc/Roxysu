@@ -1,16 +1,16 @@
 import { useAppDict } from "../../lib/i18n";
 import {
   formatPatternLabel,
-  weightPatternsForKeyCount,
+  shapePatternsForKeyCount,
 } from "./formatPatternLabel";
 
 export function PatternWeightsPanel({
   composition,
+  keyCount,
   accentColor,
   title,
 }: {
   composition: Record<string, number>;
-  /** Retained for call-site compatibility; the skill list is key-count agnostic. */
   keyCount?: number | null;
   accentColor: string;
   /** Override title; defaults to practice.detail.patternWeights */
@@ -18,11 +18,12 @@ export function PatternWeightsPanel({
 }) {
   const { dict } = useAppDict();
   const detail = dict?.practice.detail;
-  const patterns = weightPatternsForKeyCount();
+  const patterns = shapePatternsForKeyCount(keyCount);
+  const shares = composition ?? {};
   const rows = patterns.map((pattern) => ({
     pattern,
     label: formatPatternLabel(pattern, detail?.patterns),
-    value: composition[pattern] ?? 0,
+    value: shares[pattern] ?? 0,
   }));
 
   return (

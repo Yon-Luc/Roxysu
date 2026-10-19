@@ -59,6 +59,9 @@ export type TosuLiveRework = {
 export type TosuLivePattern = {
   dominantPattern: string | null;
   secondaryPattern: string | null;
+  /** Chart shape shown on live surfaces. Empty string is stored as no family. */
+  shapePattern: string | null;
+  secondaryShape: string | null;
   confidence: number | null;
   columnCount: number | null;
   error: string | null;

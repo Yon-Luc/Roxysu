@@ -46,13 +46,12 @@ export function ManiaPatternDetailPanel({
             {detail?.sevenkTitle}
           </div>
           <h2 className="mt-2 font-display text-3xl font-extrabold tracking-tight text-ink">
-            {formatPatternLabel(
-              analysis.dominantPattern ?? "mixed",
-              detail?.patterns,
-            )}
-            {analysis.secondaryPattern
+            {analysis.shapePattern
+              ? formatPatternLabel(analysis.shapePattern, detail?.patterns)
+              : "—"}
+            {analysis.secondaryShape
               ? ` · ${formatPatternLabel(
-                  analysis.secondaryPattern,
+                  analysis.secondaryShape,
                   detail?.patterns,
                 )}`
               : ""}
@@ -77,8 +76,8 @@ export function ManiaPatternDetailPanel({
           <HeroMetric
             label={detail?.confidence}
             value={
-              analysis.confidence != null
-                ? `${Math.round(analysis.confidence * 100)}%`
+              analysis.shapeConfidence != null
+                ? `${Math.round(analysis.shapeConfidence * 100)}%`
                 : "—"
             }
           />
@@ -112,8 +111,8 @@ export function ManiaPatternDetailPanel({
         <DensityOverTimeChart samples={analysis.samples} />
         <aside className="space-y-4">
           <PatternWeightsPanel
-            composition={analysis.composition}
-            keyCount={keyCount}
+            composition={analysis.shapeComposition}
+            keyCount={keyCount ?? analysis.columnCount}
             accentColor={charts.chartAlt}
           />
           <HotspotsList hotspots={analysis.hotspots} />

@@ -87,6 +87,12 @@ export type ManiaPatternDetail = {
   dominantPattern: PatternLabel | null;
   secondaryPattern: PatternLabel | null;
   confidence: number | null;
+  /** Chart shape family. Null when the walk found no family. */
+  shapePattern: string | null;
+  secondaryShape: string | null;
+  shapeConfidence: number | null;
+  /** Note share of each chart-shape family. */
+  shapeComposition: Record<string, number>;
   composition: SevenKPatternBreakdown;
   samples: SevenKDensitySample[];
   hotspots: SevenKPatternHotspot[];
@@ -140,6 +146,10 @@ function emptyManiaPatternDetail(error: string): ManiaPatternDetail {
     dominantPattern: null,
     secondaryPattern: null,
     confidence: null,
+    shapePattern: null,
+    secondaryShape: null,
+    shapeConfidence: null,
+    shapeComposition: {},
     composition: { ...EMPTY_BREAKDOWN },
     samples: [],
     hotspots: [],
@@ -305,6 +315,10 @@ export function analyzeManiaPatternDetail(osuText: string): ManiaPatternDetail {
     dominantPattern: result.dominantPattern,
     secondaryPattern: result.secondaryPattern,
     confidence: result.confidence,
+    shapePattern: result.shapePattern,
+    secondaryShape: result.secondaryShape,
+    shapeConfidence: result.shapeConfidence,
+    shapeComposition: result.shapeComposition,
     composition: normalizeBreakdown(result.composition),
     samples,
     hotspots: buildHotspots(samples),

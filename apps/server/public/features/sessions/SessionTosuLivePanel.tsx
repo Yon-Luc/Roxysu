@@ -412,9 +412,9 @@ export function SessionTosuLivePanel() {
                         {dict?.session.tosu.patterns ?? "Patterns"}
                       </div>
                       <p className="mt-1 text-sm text-ink">
-                        {formatPattern(pattern?.dominantPattern) ?? "—"}
-                        {pattern?.secondaryPattern
-                          ? ` / ${formatPattern(pattern.secondaryPattern)}`
+                        {formatPattern(pattern?.shapePattern) ?? "—"}
+                        {pattern?.secondaryShape
+                          ? ` / ${formatPattern(pattern.secondaryShape)}`
                           : ""}
                         {pattern?.confidence != null
                           ? ` · ${Math.round(pattern.confidence * 100)}%`

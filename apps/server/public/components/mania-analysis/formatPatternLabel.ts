@@ -44,3 +44,38 @@ export const SKILL_LABEL_ORDER = [
 export function weightPatternsForKeyCount(): readonly (typeof SKILL_LABEL_ORDER)[number][] {
   return SKILL_LABEL_ORDER;
 }
+
+/** Chart-shape families shown as pattern weights. Bracket is 7K; handstream is 4K. */
+const SHAPE_LABEL_ORDER_4K = [
+  "stream",
+  "trill",
+  "jumptrill",
+  "jumpstream",
+  "handstream",
+  "chordjack",
+  "chordstream",
+] as const;
+
+const SHAPE_LABEL_ORDER_7K = [
+  "stream",
+  "trill",
+  "jumptrill",
+  "jumpstream",
+  "chordjack",
+  "chordstream",
+  "bracket",
+] as const;
+
+const SHAPE_LABEL_ORDER = [
+  ...SHAPE_LABEL_ORDER_4K,
+  "bracket",
+] as const;
+
+export function shapePatternsForKeyCount(
+  keyCount: number | null | undefined,
+): readonly string[] {
+  const keys = keyCount != null ? Math.round(keyCount) : null;
+  if (keys === 4) return SHAPE_LABEL_ORDER_4K;
+  if (keys === 7) return SHAPE_LABEL_ORDER_7K;
+  return SHAPE_LABEL_ORDER;
+}

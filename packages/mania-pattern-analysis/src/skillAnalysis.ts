@@ -16,6 +16,7 @@ import {
   type SkillLabel,
   type SkillStar,
 } from "@roxysu/mania-difficulty";
+import { SHAPE_LABELS } from "@roxysu/mania-difficulty/shape";
 import type { ChartNote } from "@roxysu/osu-chart";
 import {
   PATTERN_ALGORITHM,
@@ -34,6 +35,19 @@ const ZERO_DENSITIES = {
   jumpstreamScore: 0,
   chordstreamScore: 0,
 };
+
+function shapeShares(
+  shape: ShapeProfile | undefined,
+): Partial<Record<(typeof SHAPE_LABELS)[number], number>> {
+  if (!shape) return {};
+  let total = 0;
+  for (const label of SHAPE_LABELS) total += shape.counts[label];
+  const shares: Partial<Record<(typeof SHAPE_LABELS)[number], number>> = {};
+  for (const label of SHAPE_LABELS) {
+    shares[label] = total > 0 ? shape.counts[label] / total : 0;
+  }
+  return shares;
+}
 
 function densitiesOf(shape: ShapeProfile | undefined) {
   if (!shape) return { ...ZERO_DENSITIES };
@@ -97,6 +111,8 @@ function emptyResult(columnCount: number): StructuralPatternResult {
     confidence: 0,
     sections: [],
     composition: {},
+    shapeComposition: {},
+    shapeConfidence: null,
     skillStars: SKILL_LABELS.map((skill) => ({ skill, star: 0 })),
     starRating: 0,
   };
@@ -167,6 +183,8 @@ export function analyzeManiaSkillNotes(
     confidence: profile.confidence ?? 0,
     sections: buildSections(profile.windows),
     composition: profile.composition as PatternComposition,
+    shapeComposition: shapeShares(shape),
+    shapeConfidence: shape?.confidence ?? null,
     skillStars: profile.skills,
     starRating: profile.starRating,
   };

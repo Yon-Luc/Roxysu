@@ -6,6 +6,8 @@ import {
 } from "../lib/osuUrls";
 
 type BeatmapCoverProps = {
+  /** Tried before the hashed background and the osu! CDN cover. */
+  src?: string | null;
   backgroundFileHash?: string | null;
   setOnlineId?: number | null | undefined;
   size?: OsuCoverSize;
@@ -16,11 +18,13 @@ type BeatmapCoverProps = {
 };
 
 function coverSources(
+  src: string | null | undefined,
   backgroundFileHash: string | null | undefined,
   setOnlineId: number | null | undefined,
   size: OsuCoverSize,
 ): string[] {
   const urls: string[] = [];
+  if (src) urls.push(src);
   const local = localBeatmapCoverUrl(backgroundFileHash);
   if (local) urls.push(local);
   const cdn = osuBeatmapCoverUrl(setOnlineId, size);
@@ -29,6 +33,7 @@ function coverSources(
 }
 
 export function BeatmapCover({
+  src,
   backgroundFileHash,
   setOnlineId,
   size = "card",
@@ -36,7 +41,7 @@ export function BeatmapCover({
   alt = "",
   priority = false,
 }: BeatmapCoverProps) {
-  const sources = coverSources(backgroundFileHash, setOnlineId, size);
+  const sources = coverSources(src, backgroundFileHash, setOnlineId, size);
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);

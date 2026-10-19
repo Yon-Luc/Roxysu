@@ -26,6 +26,32 @@ function exLabel(score: BmsScoreRow): string {
   return `${score.exScore} / ${score.maxExScore}`;
 }
 
+const GAUGE_LABELS: Record<string, string> = {
+  assist_easy: "Assist Easy",
+  easy: "Easy",
+  normal: "Normal",
+  hard: "Hard",
+  ex_hard: "EX Hard",
+  hazard: "Hazard",
+  class: "Class",
+  ex_class: "EX Class",
+  ex_hard_class: "EX Hard Class",
+};
+
+const JUDGEMENTS = [
+  { key: "pgreat", label: "PGREAT", color: "text-accent" },
+  { key: "great", label: "GREAT", color: "text-warning" },
+  { key: "good", label: "GOOD", color: "text-ink" },
+  { key: "bad", label: "BAD", color: "text-subtle" },
+  { key: "poor", label: "POOR", color: "text-muted" },
+  { key: "miss", label: "MISS", color: "text-danger" },
+] as const;
+
+function gaugeLabel(gaugeId: string | null): string | null {
+  if (!gaugeId) return null;
+  return GAUGE_LABELS[gaugeId] ?? gaugeId;
+}
+
 function ScoreStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
@@ -37,23 +63,47 @@ function ScoreStat({ label, value }: { label: string; value: string }) {
   );
 }
 
+function JudgementStrip({ score }: { score: BmsScoreRow }) {
+  const entries = JUDGEMENTS.filter((item) => score[item.key] != null);
+  if (entries.length === 0) return null;
+  return (
+    <div className="mt-3 flex flex-wrap gap-x-2.5 gap-y-0.5 text-xs tabular-nums">
+      {entries.map((item) => (
+        <span key={item.key} className={item.color}>
+          <span className="font-semibold">{score[item.key]}</span>
+          <span className="ml-0.5 text-[10px] font-medium uppercase tracking-wide opacity-70">
+            {item.label}
+          </span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function BmsScoreCard({ score, priority }: { score: BmsScoreRow; priority: boolean }) {
   const { dict } = useAppDict();
   const copy = dict?.bms;
-  const meta = [score.gaugeId, formatRelativeTime(playedIso(score), dict?.common)]
-    .filter((part) => part && part !== "—")
-    .join(" · ");
+  const gauge = gaugeLabel(score.gaugeId);
+  const played = formatRelativeTime(playedIso(score), dict?.common);
 
   return (
     <li className="rx-card flex flex-col">
-      <BeatmapCover
-        backgroundFileHash={score.backgroundFileHash}
-        setOnlineId={score.setOnlineId}
-        size="card"
-        className="aspect-[2.2/1] w-full"
-        alt=""
-        priority={priority}
-      />
+      <div className="relative">
+        <BeatmapCover
+          src={score.beatmapId ? `/api/bms/covers/${score.beatmapId}` : null}
+          backgroundFileHash={score.backgroundFileHash}
+          setOnlineId={score.setOnlineId}
+          size="card"
+          className="aspect-[2.2/1] w-full"
+          alt=""
+          priority={priority}
+        />
+        {gauge ? (
+          <span className="absolute bottom-2 left-2 max-w-[calc(100%-1rem)] truncate rounded bg-canvas/85 px-2 py-1 text-[11px] font-semibold leading-none text-ink shadow-sm ring-1 ring-border backdrop-blur-sm">
+            {gauge}
+          </span>
+        ) : null}
+      </div>
       <div className="p-4">
         <div className="truncate text-sm text-muted">
           {score.artist ?? dict?.practice.unknownArtist ?? "Unknown artist"}
@@ -62,7 +112,7 @@ function BmsScoreCard({ score, priority }: { score: BmsScoreRow; priority: boole
         {score.difficulty ? (
           <div className="mt-1 truncate text-xs text-muted">[{score.difficulty}]</div>
         ) : null}
-        {meta ? <div className="mt-1 truncate text-xs text-muted">{meta}</div> : null}
+        {played !== "—" ? <div className="mt-1 truncate text-xs text-muted">{played}</div> : null}
         <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
           <ScoreStat label={copy?.grade ?? "Grade"} value={score.djGrade ?? "—"} />
           <ScoreStat label="EX" value={exLabel(score)} />
@@ -71,7 +121,9 @@ function BmsScoreCard({ score, priority }: { score: BmsScoreRow; priority: boole
             value={formatAccuracy(score.accuracy)}
           />
           <ScoreStat label={copy?.lamp ?? "Combo"} value={score.comboLampId ?? "—"} />
+          <ScoreStat label={copy?.gauge ?? "Gauge"} value={gauge ?? "—"} />
         </div>
+        <JudgementStrip score={score} />
       </div>
     </li>
   );

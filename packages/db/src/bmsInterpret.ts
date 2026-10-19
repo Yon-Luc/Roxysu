@@ -405,6 +405,35 @@ export type BmsSessionScore = {
   normalizedScore: number;
 };
 
+const BMS_IMAGE_EXT = /\.(png|jpe?g|gif|bmp|webp)$/i;
+
+/**
+ * Song-select image from a BMS header.
+ * Stage file, then banner, then back bitmap, then the first still `#BMPxx`.
+ * Video BGA is ignored.
+ */
+export function parseBmsImageFilename(text: string): string | null {
+  let stage: string | null = null;
+  let banner: string | null = null;
+  let back: string | null = null;
+  let bitmap: string | null = null;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line.startsWith("#")) continue;
+    if (/^#\d{3}[0-9A-Za-z]{2}:/.test(line)) break;
+    const space = line.indexOf(" ");
+    if (space < 0) continue;
+    const key = line.slice(1, space).toUpperCase();
+    const value = line.slice(space + 1).trim();
+    if (!value || !BMS_IMAGE_EXT.test(value)) continue;
+    if (key === "STAGEFILE") stage = value;
+    else if (key === "BANNER") banner = value;
+    else if (key === "BACKBMP") back = value;
+    else if (!bitmap && /^BMP[0-9A-F]{2}$/.test(key)) bitmap = value;
+  }
+  return stage ?? banner ?? back ?? bitmap;
+}
+
 const SESSION_GAP_MS = 30 * 60 * 1000;
 
 export function groupBmsSessions<T extends BmsSessionScore>(

@@ -1,4 +1,9 @@
+import { createReadStream } from "node:fs";
+import { open } from "node:fs/promises";
+import { Readable } from "node:stream";
 import { Elysia, t } from "elysia";
+import { eq } from "drizzle-orm";
+import { beatmaps } from "@roxysu/db/schema";
 import {
   BMS_AUTO_UPLOAD_KEY,
   BMS_BACKFILL_STATUS_KEY,
@@ -17,6 +22,8 @@ import {
   replaceTableCache,
 } from "../bms/localProfile";
 import { deleteSetting, readSetting, writeSetting } from "../bms/settings";
+import { resolveBmsStageImage, sniffStageMime } from "../bms/stageImage";
+import { getOsuDataPath } from "../shared/osu-paths";
 import {
   bmsSyncStatus,
   drainBmsQueue,
@@ -67,6 +74,46 @@ async function refreshTableCache(db: Parameters<typeof replaceTableCache>[0]) {
 
 export const bmsRoutes = new Elysia({ prefix: "/bms" })
   .use(dbPlugin)
+  .get(
+    "/covers/:beatmapId",
+    async ({ db, params, set }) => {
+      const row = await db
+        .select({
+          source: beatmaps.source,
+          hash: beatmaps.hash,
+          ruleset: beatmaps.rulesetShortName,
+        })
+        .from(beatmaps)
+        .where(eq(beatmaps.id, params.beatmapId))
+        .get();
+      if (!row || row.ruleset !== "bms") {
+        set.status = 404;
+        return { error: "Cover not found" };
+      }
+      const filePath = resolveBmsStageImage({
+        sourceDir: row.source,
+        chartHash: row.hash,
+        osuDataPath: getOsuDataPath(),
+      });
+      if (!filePath) {
+        set.status = 404;
+        return { error: "Cover not found" };
+      }
+      const handle = await open(filePath, "r");
+      const head = Buffer.alloc(16);
+      await handle.read(head, 0, 16, 0);
+      await handle.close();
+      const mime = sniffStageMime(head);
+      if (!mime) {
+        set.status = 415;
+        return { error: "Not an image" };
+      }
+      set.headers["content-type"] = mime;
+      set.headers["cache-control"] = "private, max-age=86400";
+      return Readable.toWeb(createReadStream(filePath));
+    },
+    { params: t.Object({ beatmapId: t.String() }) },
+  )
   .get(
     "/profile",
     async ({ db, query }) => {

@@ -12,6 +12,12 @@ export type BmsScoreRow = {
   maxExScore: number | null;
   normalizedScore: number | null;
   accuracy: number | null;
+  pgreat?: number | null;
+  great?: number | null;
+  good?: number | null;
+  bad?: number | null;
+  poor?: number | null;
+  miss?: number | null;
   variantId: string;
   gaugeId: string | null;
   comboLampId: string | null;

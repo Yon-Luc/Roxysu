@@ -14,6 +14,7 @@ touches:
   - apps/hub/src/services/bms.ts
   - apps/hub/src/routes/bms.ts
   - apps/server/public/features/bms
+  - apps/server/src/bms/stageImage.ts
 ---
 
 # BMS
@@ -44,6 +45,9 @@ BMS is a ruleset already present in the local mirror. This feature interprets th
    **Status:** verified
 8. Chart pages, leaderboards, player comparison, the score feed, and global statistics are out of this release.
    **Status:** verified
+9. A chart image is the stage file, then the banner, then the back bitmap, then the first still bitmap. Video BGA is not an image. The file is read from the chart's source folder, which Realm extraction already stores. The response stays inside that folder.
+   **Status:** verified
+   **Enforced by:** `apps/server/src/bms/stageImage.ts:resolveBmsStageImage()` and `GET /api/bms/covers/:beatmapId`
 
 ## Security rules
 

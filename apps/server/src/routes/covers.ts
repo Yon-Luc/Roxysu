@@ -44,6 +44,9 @@ function sniffImageMime(bytes: Uint8Array): string | null {
   ) {
     return "image/avif";
   }
+  if (bytes.length >= 2 && bytes[0] === 0x42 && bytes[1] === 0x4d) {
+    return "image/bmp";
+  }
   return null;
 }
 

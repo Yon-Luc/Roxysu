@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { parseStdChart, circleRadius, approachPreemptMs } from "@roxysu/osu-chart";
 import { compress } from "@napi-rs/lzma/lzma";
 import { decodeLegacyReplay } from "./decode";
-import { simulateStdJudgments } from "./stdJudge";
+import { simulateStdJudgments, stdAccuracySlice } from "./stdJudge";
 import { parseScoreMods } from "./mods";
 
 const MINIMAL_STD = `osu file format v14
@@ -259,6 +259,187 @@ describe("simulateStdJudgments", () => {
     expect(spin).toBeDefined();
     expect(spin!.result).not.toBe("miss");
     expect(spin!.kind).toBe("head");
+    expect(spin!.accuracyMax).toBe(0);
     expect(summary.counts.miss).toBe(0);
+    expect(summary.accuracy).toBe(1);
+  });
+
+  test("perfect and great are both full 300s", () => {
+    const { judgments, summary } = simulateStdJudgments({
+      hitObjects: [
+        {
+          type: "circle",
+          x: 100,
+          y: 100,
+          timeMs: 1000,
+          stackX: 100,
+          stackY: 100,
+        },
+        {
+          type: "circle",
+          x: 100,
+          y: 100,
+          timeMs: 2000,
+          stackX: 100,
+          stackY: 100,
+        },
+      ],
+      frames: [
+        { tMs: 0, x: 100, y: 100, buttons: 0 },
+        { tMs: 1000, x: 100, y: 100, buttons: 1 },
+        { tMs: 1010, x: 100, y: 100, buttons: 0 },
+        { tMs: 2029, x: 100, y: 100, buttons: 0 },
+        { tMs: 2030, x: 100, y: 100, buttons: 1 },
+      ],
+      circleSize: 4,
+      overallDifficulty: 5,
+      mods: parseScoreMods("[]"),
+    });
+    expect(judgments.map((j) => j.result)).toEqual(["perfect", "great"]);
+    expect(judgments.every((j) => j.accuracyPoints === 300)).toBe(true);
+    expect(judgments.every((j) => j.accuracyMax === 300)).toBe(true);
+    expect(summary.accuracy).toBe(1);
+  });
+
+  test("a 100 is one third of a 300", () => {
+    const { judgments, summary } = simulateStdJudgments({
+      hitObjects: [
+        {
+          type: "circle",
+          x: 100,
+          y: 100,
+          timeMs: 1000,
+          stackX: 100,
+          stackY: 100,
+        },
+      ],
+      frames: [
+        { tMs: 0, x: 100, y: 100, buttons: 0 },
+        { tMs: 1069, x: 100, y: 100, buttons: 0 },
+        { tMs: 1070, x: 100, y: 100, buttons: 1 },
+      ],
+      circleSize: 4,
+      overallDifficulty: 5,
+      mods: parseScoreMods("[]"),
+    });
+    expect(judgments[0]!.result).toBe("good");
+    expect(summary.accuracy).toBeCloseTo(100 / 300);
+  });
+
+  test("a tick miss costs 30, a tail miss and a spinner do not", () => {
+    const slider = {
+      type: "slider" as const,
+      x: 100,
+      y: 100,
+      timeMs: 1000,
+      endMs: 2000,
+      repeats: 1,
+      pixelLength: 400,
+      stackX: 100,
+      stackY: 100,
+      path: [
+        { x: 100, y: 100 },
+        { x: 500, y: 100 },
+      ],
+      ticks: [{ frac: 0.5, tMs: 1500 }],
+    };
+    const followed = simulateStdJudgments({
+      hitObjects: [slider],
+      frames: [
+        { tMs: 0, x: 100, y: 100, buttons: 0 },
+        { tMs: 1000, x: 100, y: 100, buttons: 1 },
+        { tMs: 1500, x: 300, y: 100, buttons: 1 },
+        { tMs: 1600, x: 100, y: 300, buttons: 0 },
+        { tMs: 2000, x: 100, y: 300, buttons: 0 },
+      ],
+      circleSize: 4,
+      overallDifficulty: 5,
+      mods: parseScoreMods("[]"),
+    });
+    const tail = followed.judgments.find((j) => j.kind === "tail");
+    const tick = followed.judgments.find((j) => j.kind === "tick");
+    expect(tick!.result).not.toBe("miss");
+    expect(tick!.accuracyPoints).toBe(30);
+    expect(tail!.result).not.toBe("great");
+    expect(tail!.accuracyMax).toBe(0);
+    expect(followed.summary.accuracy).toBe(1);
+
+    const droppedTick = simulateStdJudgments({
+      hitObjects: [slider],
+      frames: [
+        { tMs: 0, x: 100, y: 100, buttons: 0 },
+        { tMs: 1000, x: 100, y: 100, buttons: 1 },
+        { tMs: 1010, x: 100, y: 100, buttons: 0 },
+      ],
+      circleSize: 4,
+      overallDifficulty: 5,
+      mods: parseScoreMods("[]"),
+    });
+    const missed = droppedTick.judgments.find((j) => j.kind === "tick");
+    expect(missed!.result).toBe("miss");
+    expect(missed!.accuracyMax).toBe(30);
+    expect(missed!.accuracyPoints).toBe(0);
+    expect(droppedTick.summary.accuracy).toBeCloseTo(300 / 330);
+    expect(droppedTick.summary.accuracy).not.toBeCloseTo(300 / 600);
+
+    const withSpinner = simulateStdJudgments({
+      hitObjects: [
+        slider,
+        { type: "spinner", timeMs: 2500, endMs: 3000 },
+      ],
+      frames: [
+        { tMs: 0, x: 100, y: 100, buttons: 0 },
+        { tMs: 1000, x: 100, y: 100, buttons: 1 },
+        { tMs: 1500, x: 300, y: 100, buttons: 1 },
+        { tMs: 1600, x: 100, y: 300, buttons: 0 },
+        { tMs: 2000, x: 100, y: 300, buttons: 0 },
+      ],
+      circleSize: 4,
+      overallDifficulty: 5,
+      mods: parseScoreMods("[]"),
+    });
+    const spin = withSpinner.judgments.find((j) => j.noteIndex === 1);
+    expect(spin!.result).toBe("miss");
+    expect(spin!.accuracyMax).toBe(0);
+    expect(withSpinner.summary.accuracy).toBe(followed.summary.accuracy);
+  });
+
+  test("classic tail miss counts as 0/10", () => {
+    const { judgments, summary } = simulateStdJudgments({
+      hitObjects: [
+        {
+          type: "slider",
+          x: 100,
+          y: 100,
+          timeMs: 1000,
+          endMs: 2000,
+          repeats: 1,
+          pixelLength: 400,
+          stackX: 100,
+          stackY: 100,
+          path: [
+            { x: 100, y: 100 },
+            { x: 500, y: 100 },
+          ],
+          ticks: [{ frac: 0.5, tMs: 1500 }],
+        },
+      ],
+      frames: [
+        { tMs: 0, x: 100, y: 100, buttons: 0 },
+        { tMs: 1000, x: 100, y: 100, buttons: 1 },
+        { tMs: 1500, x: 300, y: 100, buttons: 1 },
+        { tMs: 1600, x: 100, y: 300, buttons: 0 },
+        { tMs: 2000, x: 100, y: 300, buttons: 0 },
+      ],
+      circleSize: 4,
+      overallDifficulty: 5,
+      mods: parseScoreMods('[{"acronym":"CL"}]'),
+    });
+    const tail = judgments.find((j) => j.kind === "tail");
+    expect(tail!.accuracyPoints).toBe(0);
+    expect(tail!.accuracyMax).toBe(10);
+    expect(summary.accuracy).toBeCloseTo(330 / 340);
+    expect(stdAccuracySlice("tail", "miss", true).accuracyMax).toBe(10);
+    expect(stdAccuracySlice("tail", "miss", false).accuracyMax).toBe(0);
   });
 });

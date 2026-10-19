@@ -54,6 +54,8 @@ touches:
   - apps/server/src/replay/stdJudge.ts
   - apps/server/src/replay/taikoJudge.ts
   - apps/server/src/replay/catchJudge.ts
+  - apps/server/src/replay/accuracy.ts
+  - apps/server/public/lib/replayAccuracy.ts
   - apps/server/src/replay/loadStdChart.ts
   - apps/server/src/replay/loadTaikoChart.ts
   - apps/server/src/replay/loadCatchChart.ts
@@ -83,12 +85,19 @@ Playfield = the visual layer for that ruleset (notefield, 512×384, or taiko lan
 
 ## Business rules
 
-1. Accuracy weights are per-ruleset. Mania: 305/300/200/100/50 on a 305 scale.
-   Standard: 300/100/50 on a 300 scale. Taiko: Great 300, Ok 150, Miss 0.
-   Catch: fruit 300, droplet/banana 100 (caught), miss 0.
-   **Source:** `stdJudge.ts`, `taikoJudge.ts`, `catchJudge.ts`, HUD tables in
-   `ScoreReplayModal.tsx` — status: verified by `std.test.ts`, `taiko.test.ts`,
-   `catch.test.ts`.
+1. Accuracy is per-ruleset. Mania is the only ruleset where marvelous
+   (`perfect`, 305) is worth more than a 300 (`great`); the rest of the mania
+   scale is 200/100/50 on 305. Standard circles and slider heads are 300/100/50
+   out of 300, and `perfect` equals `great`. Slider ticks are 30/30. A tail
+   catch is 150/150; a tail miss is excluded unless CL, where the tail is a
+   10-point tick. Spinners are excluded. Taiko: Great 300, Ok 150, Miss 0, on
+   hits only. Catch: each fruit, large droplet, and tiny droplet is 1 if caught
+   and 0 if missed. Bananas are excluded, including misses. Rewatch and video
+   export sum `accuracyPoints` / `accuracyMax` when a judgment has a slice.
+   **Source:** `stdJudge.ts:stdAccuracySlice`, `catchJudge.ts:catchAccuracySlice`,
+   `lib/replayAccuracy.ts`, `ScoreReplayModal.tsx` HUD scan,
+   `replayVideoExport.ts:computeHud` — status: verified by `std.test.ts`,
+   `catch.test.ts`, `replayAccuracy.test.ts`, `taiko.test.ts`.
 
 2. **HR** on standard flips Y and raises AR/OD, but does **not** shrink CS.
    **HR** on catch flips X and **does** scale CS (smaller plate). Taiko has no
@@ -316,7 +325,7 @@ Beatmap preview:
 Score rewatch:
   user selects score
     → fetchScoreReplay → load*Chart + *Judge (mania chart pre-converted per score IN/HO mods)
-    → ScoreReplayModal HUD uses per-ruleset weights
+    → ScoreReplayModal HUD sums accuracy slices (std/catch) or result weights (mania/taiko)
     → matching playfield draws frames + judgments
 
 Imported mania skin:

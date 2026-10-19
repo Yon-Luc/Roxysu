@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { parseCatchChart } from "@roxysu/osu-chart";
 import { compress } from "@napi-rs/lzma/lzma";
 import { decodeLegacyReplay } from "./decode";
-import { simulateCatchJudgments } from "./catchJudge";
+import { catchAccuracySlice, simulateCatchJudgments } from "./catchJudge";
 import { parseScoreMods } from "./mods";
 
 const MINIMAL_CATCH = `osu file format v14
@@ -135,5 +135,100 @@ describe("simulateCatchJudgments", () => {
     });
     expect(judgments[0]!.result).toBe("great");
     expect(summary.counts.miss).toBe(0);
+    expect(summary.accuracy).toBe(1);
+  });
+
+  test("a missed droplet hurts as much as a missed fruit", () => {
+    const missedDroplet = simulateCatchJudgments({
+      hitObjects: [
+        {
+          type: "fruit",
+          x: 200,
+          timeMs: 1000,
+          hyperDash: false,
+          indexInBeatmap: 0,
+        },
+        { type: "droplet", x: 400, timeMs: 1500, kind: "large" },
+      ],
+      frames: [
+        { tMs: 1000, x: 200, dashing: false },
+        { tMs: 1500, x: 200, dashing: false },
+      ],
+      circleSize: 4,
+      mods: parseScoreMods("[]"),
+    });
+    const missedFruit = simulateCatchJudgments({
+      hitObjects: [
+        {
+          type: "fruit",
+          x: 400,
+          timeMs: 1000,
+          hyperDash: false,
+          indexInBeatmap: 0,
+        },
+        { type: "droplet", x: 200, timeMs: 1500, kind: "large" },
+      ],
+      frames: [
+        { tMs: 1000, x: 200, dashing: false },
+        { tMs: 1500, x: 200, dashing: false },
+      ],
+      circleSize: 4,
+      mods: parseScoreMods("[]"),
+    });
+    expect(missedDroplet.summary.accuracy).toBeCloseTo(0.5);
+    expect(missedFruit.summary.accuracy).toBeCloseTo(0.5);
+    expect(missedDroplet.summary.accuracy).toBe(missedFruit.summary.accuracy);
+  });
+
+  test("a caught droplet equals a caught fruit, including tiny droplets", () => {
+    const both = simulateCatchJudgments({
+      hitObjects: [
+        {
+          type: "fruit",
+          x: 200,
+          timeMs: 1000,
+          hyperDash: false,
+          indexInBeatmap: 0,
+        },
+        { type: "droplet", x: 200, timeMs: 1500, kind: "tiny" },
+      ],
+      frames: [
+        { tMs: 1000, x: 200, dashing: false },
+        { tMs: 1500, x: 200, dashing: false },
+      ],
+      circleSize: 4,
+      mods: parseScoreMods("[]"),
+    });
+    expect(both.judgments.every((j) => j.result !== "miss")).toBe(true);
+    expect(both.judgments.every((j) => j.accuracyPoints === 1)).toBe(true);
+    expect(both.summary.accuracy).toBe(1);
+    expect(catchAccuracySlice("fruit", "great")).toEqual(
+      catchAccuracySlice("droplet", "ok"),
+    );
+  });
+
+  test("a banana miss leaves accuracy at 100% when everything else is caught", () => {
+    const { judgments, summary } = simulateCatchJudgments({
+      hitObjects: [
+        {
+          type: "fruit",
+          x: 200,
+          timeMs: 1000,
+          hyperDash: false,
+          indexInBeatmap: 0,
+        },
+        { type: "banana", x: 400, timeMs: 1500 },
+      ],
+      frames: [
+        { tMs: 1000, x: 200, dashing: false },
+        { tMs: 1500, x: 200, dashing: false },
+      ],
+      circleSize: 4,
+      mods: parseScoreMods("[]"),
+    });
+    const banana = judgments.find((j) => j.kind === "banana");
+    expect(banana!.result).toBe("miss");
+    expect(banana!.accuracyMax).toBe(0);
+    expect(summary.accuracy).toBe(1);
   });
 });

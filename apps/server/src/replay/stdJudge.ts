@@ -1,7 +1,6 @@
 import { circleRadius, type StdHitObject, type StdPoint } from "@roxysu/osu-chart";
 import {
   emptyJudgmentCounts,
-  type JudgmentCounts,
   type JudgmentResult,
   type JudgmentSummary,
 } from "@roxysu/mania-judge";
@@ -9,6 +8,7 @@ import {
   adjustOverallDifficulty,
   type ModAcronyms,
 } from "@roxysu/mania-judge/mods";
+import { accuracyFromSlices } from "./accuracy";
 import type { StdReplayFrame } from "./decode";
 
 export type StdReplayJudgment = {
@@ -17,10 +17,14 @@ export type StdReplayJudgment = {
   result: JudgmentResult;
   errorMs: number | null;
   isTail: boolean;
-  /** Slider sub-part this entry describes. */
+  /** Slider sub-part this entry describes. Spinners stay `head` and are excluded from accuracy. */
   kind: "head" | "tick" | "tail";
   /** Path fraction for tick entries (0 = head, 1 = tail). */
   frac?: number;
+  /** Points this judgment adds toward accuracy. */
+  accuracyPoints: number;
+  /** Max points. 0 excludes the judgment (spinner, non-classic tail miss). */
+  accuracyMax: number;
 };
 
 /** Stable-style osu! hit windows (half-widths) from OD. */
@@ -57,32 +61,37 @@ function judgementResult(
   return "miss";
 }
 
-/** Standard (osu!) accuracy weights — 300/100/50 on a 300 scale. */
-const STD_RESULT_WEIGHT: Record<JudgmentResult, number> = {
-  perfect: 300,
-  great: 300,
-  good: 100,
-  ok: 50,
-  meh: 50,
-  miss: 0,
-};
-const STD_ACC_SCALE = 300;
-
-function stdAccuracyFromCounts(counts: JudgmentCounts): number {
-  const totalWeight =
-    counts.perfect * STD_RESULT_WEIGHT.perfect +
-    counts.great * STD_RESULT_WEIGHT.great +
-    counts.good * STD_RESULT_WEIGHT.good +
-    counts.ok * STD_RESULT_WEIGHT.ok +
-    counts.meh * STD_RESULT_WEIGHT.meh;
-  const judged =
-    counts.perfect +
-    counts.great +
-    counts.good +
-    counts.ok +
-    counts.meh +
-    counts.miss;
-  return judged > 0 ? totalWeight / (judged * STD_ACC_SCALE) : 1;
+/**
+ * Lazer standard accuracy slice.
+ * Circles and slider heads are 300/100/50. Ticks are 30. A tail catch is 150
+ * (10 with CL); a tail miss is ignored unless CL. `perfect` is not worth more
+ * than `great`. Spinners are bonus.
+ */
+export function stdAccuracySlice(
+  kind: "head" | "tick" | "tail" | "spinner",
+  result: JudgmentResult,
+  classic: boolean,
+): { accuracyPoints: number; accuracyMax: number } {
+  if (kind === "spinner") return { accuracyPoints: 0, accuracyMax: 0 };
+  if (kind === "tick") {
+    const hit = result !== "miss";
+    return { accuracyPoints: hit ? 30 : 0, accuracyMax: 30 };
+  }
+  if (kind === "tail") {
+    const hit = result === "great" || result === "perfect";
+    if (classic) return { accuracyPoints: hit ? 10 : 0, accuracyMax: 10 };
+    if (!hit) return { accuracyPoints: 0, accuracyMax: 0 };
+    return { accuracyPoints: 150, accuracyMax: 150 };
+  }
+  const points =
+    result === "perfect" || result === "great"
+      ? 300
+      : result === "good"
+        ? 100
+        : result === "ok" || result === "meh"
+          ? 50
+          : 0;
+  return { accuracyPoints: points, accuracyMax: 300 };
 }
 
 function adjustAr(ar: number, mods: ModAcronyms): number {
@@ -206,8 +215,9 @@ function bounceFracAt(u: number, repeats: number): number {
  * Circles: OD window + CS radius on click edge.
  * Sliders: head like circle; ticks sampled on the path; tail by follow.
  * Spinners: held for most of the duration.
- * Ticks and tails are emitted as separate entries so combo/accuracy match
- * real osu! semantics (approximations, documented in knowledge/).
+ * Ticks and tails are emitted as separate entries. Accuracy uses each
+ * entry's slice (300/100/50 heads, 30 ticks, 150 tails) rather than a
+ * single mania-style scale. Documented in knowledge/.
  */
 export function simulateStdJudgments(args: {
   hitObjects: StdHitObject[];
@@ -239,15 +249,23 @@ export function simulateStdJudgments(args: {
   };
   const radius = circleRadius(diff.cs);
   const frames = args.frames;
+  const classic = mods.acronyms.includes("CL");
   const judgments: StdReplayJudgment[] = [];
   const counts = emptyJudgmentCounts();
   let combo = 0;
   let maxCombo = 0;
 
-  function push(j: StdReplayJudgment) {
-    judgments.push(j);
-    counts[j.result] += 1;
-    if (j.result === "miss") combo = 0;
+  function push(
+    j: Omit<StdReplayJudgment, "accuracyPoints" | "accuracyMax">,
+    sliceKind: "head" | "tick" | "tail" | "spinner" = j.kind,
+  ) {
+    const full: StdReplayJudgment = {
+      ...j,
+      ...stdAccuracySlice(sliceKind, j.result, classic),
+    };
+    judgments.push(full);
+    counts[full.result] += 1;
+    if (full.result === "miss") combo = 0;
     else {
       combo += 1;
       if (combo > maxCombo) maxCombo = combo;
@@ -286,14 +304,17 @@ export function simulateStdJudgments(args: {
       let result: JudgmentResult = "miss";
       if (samples > 0 && dur > 100 && holdRatio >= 0.5) result = "great";
       else if (samples > 0 && holdRatio > 0) result = "ok";
-      push({
-        noteIndex: i,
-        tMs: end,
-        result,
-        errorMs: null,
-        isTail: false,
-        kind: "head",
-      });
+      push(
+        {
+          noteIndex: i,
+          tMs: end,
+          result,
+          errorMs: null,
+          isTail: false,
+          kind: "head",
+        },
+        "spinner",
+      );
       continue;
     }
 
@@ -425,7 +446,7 @@ export function simulateStdJudgments(args: {
   return {
     judgments,
     summary: {
-      accuracy: stdAccuracyFromCounts(counts),
+      accuracy: accuracyFromSlices(judgments),
       combo,
       maxCombo,
       counts,

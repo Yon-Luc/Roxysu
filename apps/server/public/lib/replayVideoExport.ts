@@ -20,6 +20,11 @@ import {
   getFirstEncodableVideoCodec,
 } from "mediabunny";
 import { formatModAcronym, parseModEntries } from "@server/replay/mods";
+import {
+  addReplayAccuracy,
+  emptyReplayAccuracy,
+  replayAccuracy,
+} from "./replayAccuracy";
 import type { ScoreReplay } from "./api";
 import {
   formatAccuracy,
@@ -395,17 +400,6 @@ const MANIA_RESULT_WEIGHT: Record<ReplayJudgmentResult, number> = {
 };
 const MANIA_ACC_SCALE = 305;
 
-/** Standard accuracy contribution — 300/100/50 on a 300 scale. */
-const STD_RESULT_WEIGHT: Record<ReplayJudgmentResult, number> = {
-  perfect: 300,
-  great: 300,
-  good: 100,
-  ok: 50,
-  meh: 50,
-  miss: 0,
-};
-const STD_ACC_SCALE = 300;
-
 const TAIKO_RESULT_WEIGHT: Record<ReplayJudgmentResult, number> = {
   perfect: 300,
   great: 300,
@@ -414,15 +408,7 @@ const TAIKO_RESULT_WEIGHT: Record<ReplayJudgmentResult, number> = {
   meh: 0,
   miss: 0,
 };
-
-const CATCH_RESULT_WEIGHT: Record<ReplayJudgmentResult, number> = {
-  perfect: 300,
-  great: 300,
-  good: 100,
-  ok: 100,
-  meh: 100,
-  miss: 0,
-};
+const TAIKO_ACC_SCALE = 300;
 
 const HEADER_H = 88;
 const FOOTER_H = 64;
@@ -674,39 +660,36 @@ function hudWeights(ruleset: string | null | undefined): {
   weight: Record<ReplayJudgmentResult, number>;
   scale: number;
 } {
-  if (isStdRuleset(ruleset)) {
-    return { weight: STD_RESULT_WEIGHT, scale: STD_ACC_SCALE };
-  }
   if (isTaikoRuleset(ruleset)) {
-    return { weight: TAIKO_RESULT_WEIGHT, scale: STD_ACC_SCALE };
-  }
-  if (isFruitsRuleset(ruleset)) {
-    return { weight: CATCH_RESULT_WEIGHT, scale: STD_ACC_SCALE };
+    return { weight: TAIKO_RESULT_WEIGHT, scale: TAIKO_ACC_SCALE };
   }
   return { weight: MANIA_RESULT_WEIGHT, scale: MANIA_ACC_SCALE };
 }
 
 function computeHud(
-  judgments: Array<{ tMs: number; result: ReplayJudgmentResult }>,
+  judgments: Array<{
+    tMs: number;
+    result: ReplayJudgmentResult;
+    accuracyPoints?: number;
+    accuracyMax?: number;
+  }>,
   tMs: number,
   ruleset: string | null | undefined,
 ): HudState {
   const { weight, scale } = hudWeights(ruleset);
   let combo = 0;
   let last: ReplayJudgmentResult | null = null;
-  let accWeight = 0;
-  let judged = 0;
+  const acc = emptyReplayAccuracy();
   for (const j of judgments) {
     if (j.tMs > tMs) break;
     last = j.result;
     if (j.result === "miss") combo = 0;
     else combo += 1;
-    accWeight += weight[j.result];
-    judged += 1;
+    addReplayAccuracy(acc, j, weight);
   }
   return {
     combo,
-    accuracy: judged > 0 ? accWeight / (judged * scale) : 1,
+    accuracy: replayAccuracy(acc, scale),
     last,
   };
 }

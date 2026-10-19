@@ -1,11 +1,11 @@
 import { catcherWidth, type CatchHitObject } from "@roxysu/osu-chart";
 import {
   emptyJudgmentCounts,
-  type JudgmentCounts,
   type JudgmentResult,
   type JudgmentSummary,
 } from "@roxysu/mania-judge";
 import type { ModAcronyms } from "@roxysu/mania-judge/mods";
+import { accuracyFromSlices } from "./accuracy";
 import type { CatchReplayFrame } from "./decode";
 
 export type CatchReplayJudgment = {
@@ -15,18 +15,23 @@ export type CatchReplayJudgment = {
   errorMs: number | null;
   isTail: boolean;
   kind: "fruit" | "droplet" | "banana";
+  /** Points this judgment adds toward accuracy. Caught objects that count are 1. */
+  accuracyPoints: number;
+  /** Max points. 0 excludes bananas. */
+  accuracyMax: number;
 };
 
-const CATCH_RESULT_WEIGHT: Record<JudgmentResult, number> = {
-  perfect: 300,
-  great: 300,
-  good: 100,
-  ok: 100,
-  meh: 100,
-  miss: 0,
-};
-const CATCH_ACC_SCALE = 300;
 const OSU_WIDTH = 512;
+
+/** Fruits and droplets count equally. Bananas are bonus and are excluded. */
+export function catchAccuracySlice(
+  kind: CatchReplayJudgment["kind"],
+  result: JudgmentResult,
+): { accuracyPoints: number; accuracyMax: number } {
+  if (kind === "banana") return { accuracyPoints: 0, accuracyMax: 0 };
+  const caught = result !== "miss";
+  return { accuracyPoints: caught ? 1 : 0, accuracyMax: 1 };
+}
 
 export function adjustCatchDifficulty(
   args: { cs: number; ar: number; od: number },
@@ -85,23 +90,6 @@ function catcherAt(
   };
 }
 
-function catchAccuracyFromCounts(counts: JudgmentCounts): number {
-  const totalWeight =
-    counts.perfect * CATCH_RESULT_WEIGHT.perfect +
-    counts.great * CATCH_RESULT_WEIGHT.great +
-    counts.good * CATCH_RESULT_WEIGHT.good +
-    counts.ok * CATCH_RESULT_WEIGHT.ok +
-    counts.meh * CATCH_RESULT_WEIGHT.meh;
-  const judged =
-    counts.perfect +
-    counts.great +
-    counts.good +
-    counts.ok +
-    counts.meh +
-    counts.miss;
-  return judged > 0 ? totalWeight / (judged * CATCH_ACC_SCALE) : 1;
-}
-
 export function simulateCatchJudgments(args: {
   hitObjects: CatchHitObject[];
   frames: CatchReplayFrame[];
@@ -118,10 +106,17 @@ export function simulateCatchJudgments(args: {
   let combo = 0;
   let maxCombo = 0;
 
-  function push(j: CatchReplayJudgment, breaksCombo: boolean) {
-    judgments.push(j);
-    counts[j.result] += 1;
-    if (j.result === "miss") {
+  function push(
+    j: Omit<CatchReplayJudgment, "accuracyPoints" | "accuracyMax">,
+    breaksCombo: boolean,
+  ) {
+    const full: CatchReplayJudgment = {
+      ...j,
+      ...catchAccuracySlice(j.kind, j.result),
+    };
+    judgments.push(full);
+    counts[full.result] += 1;
+    if (full.result === "miss") {
       if (breaksCombo) combo = 0;
     } else {
       combo += 1;
@@ -186,7 +181,7 @@ export function simulateCatchJudgments(args: {
   return {
     judgments,
     summary: {
-      accuracy: catchAccuracyFromCounts(counts),
+      accuracy: accuracyFromSlices(judgments),
       combo,
       maxCombo,
       counts,

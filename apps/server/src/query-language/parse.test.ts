@@ -210,6 +210,14 @@ describe("compileQuery", () => {
     expect(compiled.params).toEqual(["mania", 5, 6]);
   });
 
+  test("compiles catch and ctb as fruits", () => {
+    for (const query of ["mode:ctb", "mode:catch", "mode=CTB", "mode:fruits"]) {
+      const compiled = compileQuery(parseQuery(query));
+      expect(compiled.sql).toContain("b.ruleset_short_name = ?");
+      expect(compiled.params).toEqual(["fruits"]);
+    }
+  });
+
   test("compiles mastery and acc comparisons", () => {
     const ast = parseQuery("mastery>80 acc>98");
     const compiled = compileQuery(ast);

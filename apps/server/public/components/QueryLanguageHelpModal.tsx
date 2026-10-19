@@ -1,7 +1,11 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 const FIELDS: { field: string; meaning: string; example: string }[] = [
-  { field: "mode", meaning: "Ruleset short name", example: "mode:mania" },
+  {
+    field: "mode",
+    meaning: "Ruleset short name. catch and ctb match fruits.",
+    example: "mode:ctb",
+  },
   {
     field: "status / ranked / loved",
     meaning:

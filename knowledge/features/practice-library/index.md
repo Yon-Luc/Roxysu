@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-04
+last_verified: 2026-10
 confidence: verified
 touches:
   - apps/server/public/features/practice/PracticeListPage.tsx
@@ -34,7 +34,7 @@ The searchable practice catalog — same query language powers collections and g
 7. Primary dan display on 4K prefers an in-band Daniel label (Alpha+). Out-of-band Daniel sentinels (`< …` / `> …`) fall back to Sunny so Reform / Intro / LN remain visible. **Enforced by:** `primaryDanLabel` / `primaryDanSource` in `apps/server/public/lib/ratingDisplay.ts`.
 8. Username/gamemode query context is resolved once and reused until settings change or a new import lands. The retry subselect is built only when the AST uses `retry:`.
 9. Play aggregates used by Practice/Search (`play_count`, best accuracy/pp/score/misses, `last_played_at`) are read from the `mastery` row, not rebuilt from `scores` on each request. Mastery must be refreshed by analytics after imports for those fields to stay current.
-10. Ruleset equality filters (`mode:`, `key:`, `ln:`, gamemode clauses) use bare `ruleset_short_name = ?` (lowercase) so SQLite can use `beatmaps_ruleset_cs_idx`.
+10. Ruleset equality filters (`mode:`, `key:`, `ln:`, gamemode clauses) use bare `ruleset_short_name = ?` (lowercase) so SQLite can use `beatmaps_ruleset_cs_idx`. `mode:catch` and `mode:ctb` compile to the stored short name `fruits`.
 11. The map page back control returns to the previous in-app page when one exists. With no previous page it opens Practice. The cover shows the map title only; preview, open in osu!, and more actions sit under it.
 
 ## Main flows

@@ -24,6 +24,17 @@ function likePattern(value: string, prefix?: boolean): string {
   return prefix ? `${escaped}%` : `%${escaped}%`;
 }
 
+/** User-facing mode tokens that are not the stored ruleset short name. */
+const MODE_ALIASES: Record<string, string> = {
+  catch: "fruits",
+  ctb: "fruits",
+};
+
+function normalizeMode(raw: string): string {
+  const key = raw.trim().toLowerCase();
+  return MODE_ALIASES[key] ?? key;
+}
+
 /** Dan tier labels end with a space + digit (e.g. "Regular 1", "LN 10"). */
 function isDanTierLabel(value: string): boolean {
   return / \d+$/.test(value);
@@ -108,7 +119,8 @@ function compileTerm(
   switch (term.type) {
     case "mode":
       // Bare equality so SQLite can use ruleset indexes (lazer ShortName is lowercase).
-      return `b.ruleset_short_name = ${push(String(term.value).toLowerCase())}`;
+      // catch / ctb are aliases for the stored short name fruits.
+      return `b.ruleset_short_name = ${push(normalizeMode(String(term.value)))}`;
     case "mapper":
       return `b.mapper_username LIKE ${push(likePattern(term.value))} ESCAPE '\\'`;
     case "title":

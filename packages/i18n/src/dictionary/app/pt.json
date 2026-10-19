@@ -1364,7 +1364,7 @@
     "scores": "Pontuações",
     "overview": "Visão geral",
     "achievement": "Resultado",
-    "noTables": "Nenhuma tabela está em cache ainda. A conclusão aparece quando o Hub tem uma tabela e este app consegue alcançá-la.",
+    "noTables": "Nenhuma tabela de dificuldade está disponível.",
     "unresolved": "{{count}} charts desta tabela não têm um hash utilizável.",
     "cleared": "{{cleared}} / {{total}}",
     "gauge": "Gauge",

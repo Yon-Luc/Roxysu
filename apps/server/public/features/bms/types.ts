@@ -36,12 +36,20 @@ export type BmsSessionRow = {
   titles: string[];
 };
 
+export type BmsTableSong = {
+  title: string | null;
+  artist: string | null;
+  md5: string | null;
+  cleared: boolean;
+};
+
 export type BmsTableLevel = {
   level: string;
   index?: number;
   levelIndex?: number;
   total: number;
   cleared: number;
+  songs?: BmsTableSong[];
 };
 
 export type BmsTableBlock = {

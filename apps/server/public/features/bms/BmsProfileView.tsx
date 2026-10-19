@@ -347,18 +347,43 @@ export function BmsProfileView({
                     {t(copy?.unresolved, { count: table.unresolvedCount })}
                   </p>
                 ) : null}
-                <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+                <div className="mt-2 flex flex-col gap-2">
                   {table.levels.map((level) => (
-                    <li key={level.level} className="rounded-lg bg-base px-3 py-2 text-sm">
-                      <div className="flex justify-between">
+                    <details key={level.level} className="rounded-lg bg-base px-3 py-2 text-sm">
+                      <summary className="flex cursor-pointer justify-between gap-3">
                         <span>{level.level}</span>
                         <span className="tabular-nums">
                           {t(copy?.cleared, { cleared: level.cleared, total: level.total })}
                         </span>
-                      </div>
-                    </li>
+                      </summary>
+                      {(level.songs ?? []).length > 0 ? (
+                        <ul className="mt-2 space-y-1">
+                          {(level.songs ?? []).map((song) => (
+                            <li
+                              key={`${song.md5 ?? ""}-${song.title ?? ""}`}
+                              className={song.cleared ? "text-ink" : "text-muted"}
+                            >
+                              <span className="mr-2 inline-block w-3">{song.cleared ? "●" : "○"}</span>
+                              {song.md5 ? (
+                                <Link
+                                  to="/bms/charts/$chartId"
+                                  params={{ chartId: song.md5 }}
+                                  search={{}}
+                                  className="hover:text-accent"
+                                >
+                                  {song.title ?? song.md5}
+                                </Link>
+                              ) : (
+                                <span>{song.title ?? "—"}</span>
+                              )}
+                              {song.artist ? <span className="text-muted"> · {song.artist}</span> : null}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </details>
                   ))}
-                </ul>
+                </div>
               </div>
             ))
           )}

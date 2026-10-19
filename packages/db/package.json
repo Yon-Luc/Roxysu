@@ -12,6 +12,7 @@
     "./client.bun": "./src/client.bun.ts",
     "./settings-keys": "./src/settings-keys.ts",
     "./bms": "./src/bmsInterpret.ts",
+    "./bms-tables": "./src/bmsTables.ts",
     "./path": "./src/path.ts"
   },
   "scripts": {

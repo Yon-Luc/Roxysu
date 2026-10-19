@@ -12,6 +12,7 @@ import {
   groupBmsSessions,
   type BmsDjGrade,
 } from "@roxysu/db/bms";
+import { loadBundledBmsTables } from "@roxysu/db/bms-tables";
 import { and, asc, desc, eq, lt, or, sql } from "drizzle-orm";
 import type { Db } from "@roxysu/db/types";
 import {
@@ -202,7 +203,38 @@ type CacheEntry = {
   levelIndex: number;
   md5: string | null;
   sha256: string | null;
+  title?: string | null;
+  artist?: string | null;
 };
+
+let bundledTablesSeeded = false;
+
+/** Insane, Satellite, and Stella ship with the app, so the song list works offline. */
+export async function seedBundledLocalTables(db: Db): Promise<void> {
+  if (bundledTablesSeeded) return;
+  const now = Date.now();
+  for (const table of loadBundledBmsTables()) {
+    await replaceTableCache(db, {
+      versionId: table.versionId,
+      tableId: table.tableId,
+      name: table.parsed.name,
+      symbol: table.parsed.symbol,
+      sourceUrl: table.sourceUrl,
+      importedAt: now,
+      levelOrder: table.parsed.levelOrder,
+      entries: table.parsed.entries.map((entry) => ({
+        level: entry.level,
+        levelIndex: entry.levelIndex,
+        md5: entry.md5,
+        sha256: entry.sha256,
+        title: entry.title,
+        artist: entry.artist,
+      })),
+      unresolvedCount: table.parsed.unresolvedCount,
+    });
+  }
+  bundledTablesSeeded = true;
+}
 
 function achievementHit(
   row: { djGrade: string | null; comboLampId: string | null },
@@ -251,17 +283,35 @@ export async function localTableCompletion(
 
   return [...latest.values()].map((version) => {
     const entries = JSON.parse(version.entriesJson) as CacheEntry[];
-    const levels = new Map<string, { level: string; index: number; total: number; cleared: number }>();
+    const levels = new Map<
+      string,
+      {
+        level: string;
+        index: number;
+        total: number;
+        cleared: number;
+        songs: Array<{ title: string | null; artist: string | null; md5: string | null; cleared: boolean }>;
+      }
+    >();
     for (const entry of entries) {
       const bucket = levels.get(entry.level) ?? {
         level: entry.level,
         index: entry.levelIndex,
         total: 0,
         cleared: 0,
+        songs: [],
       };
+      const cleared = [entry.md5, entry.sha256].some(
+        (hash) => !!hash && hits.has(hash.toLowerCase()),
+      );
       bucket.total += 1;
-      const hash = (entry.md5 ?? entry.sha256 ?? "").toLowerCase();
-      if (hash && hits.has(hash)) bucket.cleared += 1;
+      if (cleared) bucket.cleared += 1;
+      bucket.songs.push({
+        title: entry.title ?? null,
+        artist: entry.artist ?? null,
+        md5: entry.md5,
+        cleared,
+      });
       levels.set(entry.level, bucket);
     }
     return {
@@ -270,7 +320,12 @@ export async function localTableCompletion(
       name: version.name,
       symbol: version.symbol,
       unresolvedCount: version.unresolvedCount,
-      levels: [...levels.values()].sort((a, b) => a.index - b.index || a.level.localeCompare(b.level)),
+      levels: [...levels.values()]
+        .sort((a, b) => a.index - b.index || a.level.localeCompare(b.level))
+        .map((level) => ({
+          ...level,
+          songs: level.songs.sort((a, b) => (a.title ?? "").localeCompare(b.title ?? "")),
+        })),
     };
   });
 }
@@ -299,7 +354,7 @@ export async function replaceTableCache(
     sourceUrl: string;
     importedAt: number;
     levelOrder: string[];
-    entries: CacheEntry[];
+    entries: Array<CacheEntry & { title?: string | null; artist?: string | null }>;
     unresolvedCount: number;
   },
 ) {

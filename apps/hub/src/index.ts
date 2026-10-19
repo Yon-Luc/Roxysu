@@ -1,7 +1,7 @@
 import { Elysia } from "elysia";
 import { cors } from "@elysiajs/cors";
 import { cron } from "@elysiajs/cron";
-import { runMigrations } from "./db";
+import { db, runMigrations } from "./db";
 import { resolveJwtSecret } from "./services/jwtSecret";
 import { resolveCorsOrigin } from "./services/hubEnv";
 import { migrateBlobsToRows, rehashSearchCacheKeys } from "./services/cache";
@@ -13,6 +13,7 @@ import { adminRoutes } from "./routes/admin";
 import { calcBundleRoutes } from "./routes/calcBundles";
 import { osuBudgetAdminRoutes, osuScoreRoutes } from "./routes/osuScores";
 import { bmsPublicRoutes, bmsRoutes } from "./routes/bms";
+import { seedBundledBmsTables } from "./services/bms";
 
 // Fail closed on missing/weak JWT secret before binding the port.
 resolveJwtSecret();
@@ -22,6 +23,7 @@ const corsOrigin = resolveCorsOrigin();
 runMigrations();
 await rehashSearchCacheKeys();
 await migrateBlobsToRows();
+await seedBundledBmsTables(db);
 
 const PORT = parseInt(process.env.PORT ?? "4322", 10);
 

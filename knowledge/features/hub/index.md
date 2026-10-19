@@ -30,6 +30,10 @@ touches:
   - apps/hub/src/services/bms.ts
   - apps/hub/src/services/bmsCommunity.ts
   - apps/hub/drizzle/0008_bms.sql
+  - packages/db/src/bmsTables.ts
+  - packages/db/bms-tables/insane.json
+  - packages/db/bms-tables/satellite.json
+  - packages/db/bms-tables/stella.json
   - apps/hub/Dockerfile
   - apps/hub/docker-compose.yml
   - knowledge/decisions/hub-search-base-index.md
@@ -112,6 +116,9 @@ Networked collaboration / discovery — not required for offline practice analyt
 16. Public BMS chart leaderboards, the score feed, and global statistics count public profiles only. Comparison and score detail hide a private profile from everyone except its owner.
     **Enforced by:** `apps/hub/src/services/bmsCommunity.ts` — status: verified
     **Unauthorized result:** 404
+
+17. Insane, Satellite, and Stella are stored when the Hub starts, from the catalogues shipped in `packages/db/bms-tables`. Their identity is the bundled source name, so a later start does not add a second version of the same catalogue.
+    **Enforced by:** `apps/hub/src/services/bms.ts:seedBundledBmsTables()` — status: verified
 
 ## Important symbols
 

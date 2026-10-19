@@ -20,6 +20,7 @@ import {
   localBmsOverview,
   localTableCompletion,
   replaceTableCache,
+  seedBundledLocalTables,
 } from "../bms/localProfile";
 import { deleteSetting, readSetting, writeSetting } from "../bms/settings";
 import { resolveBmsStageImage, sniffStageMime } from "../bms/stageImage";
@@ -150,10 +151,11 @@ export const bmsRoutes = new Elysia({ prefix: "/bms" })
   .get(
     "/tables",
     async ({ db, query }) => {
+      await seedBundledLocalTables(db);
       try {
         await refreshTableCache(db);
       } catch {
-        // Offline profile still reads the last pulled versions.
+        // Offline profile still reads the bundled catalogues and the last pulled versions.
       }
       return {
         tables: await localTableCompletion(

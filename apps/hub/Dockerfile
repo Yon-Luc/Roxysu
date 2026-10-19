@@ -29,6 +29,7 @@ WORKDIR /app
 
 COPY --from=base /app/apps/hub/dist ./dist
 COPY --from=base /app/apps/hub/drizzle ./drizzle
+COPY --from=base /app/packages/db/bms-tables ./bms-tables
 
 # Data directory — mount a Coolify persistent volume here
 RUN mkdir -p /app/data

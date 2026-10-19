@@ -22,6 +22,7 @@ import {
   type BmsDjGrade,
   type BmsParsedTable,
 } from "@roxysu/db/bms";
+import { bundledTableIdentity, loadBundledBmsTables } from "@roxysu/db/bms-tables";
 
 export type HubDb = BunSQLiteDatabase<typeof hubSchema>;
 
@@ -510,19 +511,42 @@ export async function tableCompletion(
     .select()
     .from(bmsTableEntries)
     .where(eq(bmsTableEntries.versionId, version.id));
-  const levels = new Map<string, { level: string; levelIndex: number; total: number; cleared: number }>();
+  const levels = new Map<
+    string,
+    {
+      level: string;
+      levelIndex: number;
+      total: number;
+      cleared: number;
+      songs: Array<{ title: string | null; artist: string | null; md5: string | null; cleared: boolean }>;
+    }
+  >();
   for (const entry of entries) {
     const bucket = levels.get(entry.level) ?? {
       level: entry.level,
       levelIndex: entry.levelIndex,
       total: 0,
       cleared: 0,
+      songs: [],
     };
+    const hashes = [entry.chartHash, entry.sha256].filter((hash): hash is string => !!hash);
+    const cleared = hashes.some((hash) => hits.has(hash.toLowerCase()));
     bucket.total += 1;
-    if (hits.has(entry.chartHash.toLowerCase())) bucket.cleared += 1;
+    if (cleared) bucket.cleared += 1;
+    bucket.songs.push({
+      title: entry.title,
+      artist: entry.artist,
+      md5: entry.hashKind === "md5" ? entry.chartHash : null,
+      cleared,
+    });
     levels.set(entry.level, bucket);
   }
-  const rows = [...levels.values()].sort((a, b) => a.levelIndex - b.levelIndex);
+  const rows = [...levels.values()]
+    .sort((a, b) => a.levelIndex - b.levelIndex)
+    .map((level) => ({
+      ...level,
+      songs: level.songs.sort((a, b) => (a.title ?? "").localeCompare(b.title ?? "")),
+    }));
   return {
     tableId,
     versionId: version.id,
@@ -658,11 +682,17 @@ export async function importTable(
   return storeTable(db, sourceUrl, parsed);
 }
 
+export async function seedBundledBmsTables(db: HubDb) {
+  const tables = loadBundledBmsTables();
+  const stored = [];
+  for (const table of tables) {
+    stored.push(await storeTable(db, table.sourceUrl, table.parsed));
+  }
+  return stored;
+}
+
 async function storeTable(db: HubDb, sourceUrl: string, parsed: BmsParsedTable) {
-  const tableId = createHash("sha256").update(sourceUrl).digest("hex").slice(0, 16);
-  const versionId = createHash("sha256")
-    .update(JSON.stringify({ sourceUrl, levelOrder: parsed.levelOrder, entries: parsed.entries }))
-    .digest("hex");
+  const { tableId, versionId } = bundledTableIdentity(sourceUrl, parsed);
   await db
     .insert(bmsTables)
     .values({
@@ -681,30 +711,32 @@ async function storeTable(db: HubDb, sourceUrl: string, parsed: BmsParsedTable) 
     .where(eq(bmsTableVersions.id, versionId))
     .get();
   if (!existing) {
-    await db.insert(bmsTableVersions).values({
-      id: versionId,
-      tableId,
-      sourceUrl,
-      levelOrderJson: JSON.stringify(parsed.levelOrder),
-      unresolvedCount: parsed.unresolvedCount,
+    await db.transaction(async (tx) => {
+      await tx.insert(bmsTableVersions).values({
+        id: versionId,
+        tableId,
+        sourceUrl,
+        levelOrderJson: JSON.stringify(parsed.levelOrder),
+        unresolvedCount: parsed.unresolvedCount,
+      });
+      for (const entry of parsed.entries) {
+        const chartHash = entry.md5 ?? entry.sha256;
+        if (!chartHash) continue;
+        await tx
+          .insert(bmsTableEntries)
+          .values({
+            versionId,
+            chartHash,
+            hashKind: entry.md5 ? "md5" : "sha256",
+            sha256: entry.sha256,
+            level: entry.level,
+            levelIndex: entry.levelIndex,
+            title: entry.title,
+            artist: entry.artist,
+          })
+          .onConflictDoNothing();
+      }
     });
-    for (const entry of parsed.entries) {
-      const chartHash = entry.md5 ?? entry.sha256;
-      if (!chartHash) continue;
-      await db
-        .insert(bmsTableEntries)
-        .values({
-          versionId,
-          chartHash,
-          hashKind: entry.md5 ? "md5" : "sha256",
-          sha256: entry.sha256,
-          level: entry.level,
-          levelIndex: entry.levelIndex,
-          title: entry.title,
-          artist: entry.artist,
-        })
-        .onConflictDoNothing();
-    }
   }
   return {
     tableId,

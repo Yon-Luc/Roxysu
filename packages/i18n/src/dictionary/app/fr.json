@@ -1364,7 +1364,7 @@
     "scores": "Scores",
     "overview": "Aperçu",
     "achievement": "Résultat",
-    "noTables": "Aucune table n'est encore en cache. La progression apparaît quand le Hub a une table et que cette application peut l'atteindre.",
+    "noTables": "Aucune table de difficulté n'est disponible.",
     "unresolved": "{{count}} charts de cette table n'ont pas de hash utilisable.",
     "cleared": "{{cleared}} / {{total}}",
     "gauge": "Jauge",

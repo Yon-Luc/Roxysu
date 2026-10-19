@@ -1370,7 +1370,7 @@
     "scores": "Scores",
     "overview": "Overview",
     "achievement": "Achievement",
-    "noTables": "No table is cached yet. Table completion appears after the Hub has a table and this app can reach it.",
+    "noTables": "No difficulty table is available.",
     "unresolved": "{{count}} charts in this table have no usable hash.",
     "cleared": "{{cleared}} / {{total}}",
     "gauge": "Gauge",

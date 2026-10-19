@@ -1363,7 +1363,7 @@
     "scores": "Puntuaciones",
     "overview": "Resumen",
     "achievement": "Logro",
-    "noTables": "Todavía no hay ninguna tabla en caché. La completitud aparece cuando el Hub tiene una tabla y esta app puede alcanzarla.",
+    "noTables": "No hay ninguna tabla de dificultad disponible.",
     "unresolved": "{{count}} charts de esta tabla no tienen un hash usable.",
     "cleared": "{{cleared}} / {{total}}",
     "gauge": "Gauge",

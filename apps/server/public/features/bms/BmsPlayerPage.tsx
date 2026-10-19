@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchHubMe, useHubJwt, useHubUrl } from "../../lib/hub";
 import { useAppDict } from "../../lib/i18n";
 import {
@@ -56,12 +56,15 @@ export function BmsPlayerPage({
     queryFn: () => fetchPublicBmsCatalogue(hubUrl),
     enabled: view === "tables",
   });
-  const firstTable = catalogue.data?.tables.find((table) => table.latestVersionId) ?? null;
-  const table = useQuery({
-    queryKey: ["bms-public-table", hubUrl, username, firstTable?.id, selected, achievement, token],
-    queryFn: () =>
-      fetchPublicBmsTables(hubUrl, username, firstTable!.id, selected, achievement, token),
-    enabled: view === "tables" && !!firstTable && profile.isSuccess,
+  const tableQueries = useQueries({
+    queries: (view === "tables" ? (catalogue.data?.tables ?? []) : [])
+      .filter((table) => table.latestVersionId)
+      .map((table) => ({
+        queryKey: ["bms-public-table", hubUrl, username, table.id, selected, achievement, token],
+        queryFn: () =>
+          fetchPublicBmsTables(hubUrl, username, table.id, selected, achievement, token),
+        enabled: profile.isSuccess,
+      })),
   });
   const privacy = useMutation({
     mutationFn: (profilePublic: boolean) => patchBmsPrivacy(hubUrl, token!, profilePublic),
@@ -99,7 +102,7 @@ export function BmsPlayerPage({
         variants={profile.data?.variants ?? []}
         scores={scores.data?.scores ?? []}
         sessions={sessions.data?.sessions ?? []}
-        tables={table.data ? [table.data] : []}
+        tables={tableQueries.flatMap((query) => (query.data ? [query.data] : []))}
         activity={view === "overview" ? activity.data?.days : undefined}
         achievement={achievement}
         onVariant={setVariant}

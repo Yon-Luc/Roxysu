@@ -16,6 +16,10 @@ touches:
   - apps/hub/src/routes/bms.ts
   - apps/server/public/features/bms
   - apps/server/src/bms/stageImage.ts
+  - packages/db/src/bmsTables.ts
+  - packages/db/bms-tables/insane.json
+  - packages/db/bms-tables/satellite.json
+  - packages/db/bms-tables/stella.json
 ---
 
 # BMS
@@ -42,8 +46,9 @@ BMS is a ruleset already present in the local mirror. This feature interprets th
    **Status:** verified
 6. Disabling upload stops new sends. It does not delete local or Hub scores.
    **Status:** verified
-7. Table completion counts DJ grades and combo lamps. Clear-type lamps are not counted as clears.
+7. Table completion counts DJ grades and combo lamps. Clear-type lamps are not counted as clears. Insane, Satellite, and Stella ship with the app. Each level lists that table's charts, and a chart counts when the player has a matching score.
    **Status:** verified
+   **Enforced by:** `packages/db/src/bmsTables.ts:loadBundledBmsTables()` and `apps/server/src/bms/localProfile.ts:seedBundledLocalTables()`
 8. A public chart leaderboard is one best score per player for one variant. Achievement, gauge, and country are filters on that board. Scratch and other variants do not share a board.
    **Status:** verified
    **Enforced by:** `apps/hub/src/services/bmsCommunity.ts:chartLeaderboard()`
@@ -89,7 +94,7 @@ worker posts a batch to Hub /api/bms/scores/batch
 accepted and duplicate become synced; rejected stops; retryable waits
 ```
 
-Local `/bms` reads the local mirror and still renders when the Hub is unreachable. Public `/bms/players/:username` reads the Hub. `/bms/charts/:chartId`, `/bms/compare/:playerA/:playerB`, `/bms/feed`, and `/bms/statistics` also read the Hub. The feed polls the first page. Leaderboard filters stay in the URL.
+Local `/bms` reads the local mirror and still renders when the Hub is unreachable. Insane, Satellite, and Stella are read from `packages/db/bms-tables` and written into `bms_table_cache` on the first tables read, so their song lists do not depend on a Hub fetch. The Hub stores the same three catalogues when it starts. Public `/bms/players/:username` reads the Hub. `/bms/charts/:chartId`, `/bms/compare/:playerA/:playerB`, `/bms/feed`, and `/bms/statistics` also read the Hub. The feed polls the first page. Leaderboard filters stay in the URL.
 
 ## Important symbols
 
@@ -98,6 +103,7 @@ Local `/bms` reads the local mirror and still renders when the Hub is unreachabl
 - `apps/server/src/bms/sync.ts:drainBmsQueue()`
 - `apps/hub/src/services/bms.ts:ingestBmsBatch()`
 - `apps/hub/src/services/bmsCommunity.ts:chartLeaderboard()`
+- `packages/db/src/bmsTables.ts:loadBundledBmsTables()`
 
 ## Dependencies
 

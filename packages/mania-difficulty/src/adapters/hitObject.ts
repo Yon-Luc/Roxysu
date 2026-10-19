@@ -18,6 +18,8 @@ export type ManiaDifficultyHitObject = {
   Index: number;
   ManipulationFactor: number;
   EnduranceFactor: number;
+  /** Long notes held at this hit, as a multiplier of at least 1. */
+  HeldNoteMultiplier: number;
   IsHoldNote: boolean;
   BaseObject: { IsHoldNote: boolean };
   Row: ManiaRow;
@@ -533,7 +535,7 @@ const continuesHandLocal = (_c: ManiaRow | null, _f: ManiaRow, to: ManiaRow) =>
 const continuesAlways = () => true;
 
 function plateauOf(row: ManiaRow, onset: number, strength: number): number {
-  const offset_ms = 30.0;
+  const offset_ms = 75.0;
   const gap = row.GapBefore;
   if (strength <= 0 || gap >= onset) return 1.0;
   const ratio = (gap + offset_ms) / (onset + offset_ms);
@@ -899,6 +901,61 @@ function applyPatternContext(mapData: MapData): void {
       note.EnduranceFactor = endurance;
     }
   }
+
+  assignHeldNoteMultipliers(mapData);
+}
+
+const HOLD_RAMP_MS = 800.0;
+const HOLD_END_RAMP_MS = 180.0;
+const HOLD_EDGE_FACTOR = 0.4;
+const SHORT_HOLD_MS = 110.90068;
+const SHORT_HOLD_STEEPNESS = 0.07;
+const HOLD_WEIGHT = 1.0;
+const HOLD_PRESSURE_CAP = 1.0;
+const HOLD_PRESSURE_SOFTNESS = 0.3;
+
+/** Port of HeldNoteMultiplier.ProcessAndAssign. */
+function assignHeldNoteMultipliers(mapData: MapData): void {
+  for (const row of mapData.rows) {
+    for (const note of row.Objects) {
+      note.HeldNoteMultiplier = evaluateHeldNoteMultiplier(note);
+    }
+  }
+}
+
+function evaluateHeldNoteMultiplier(current: ManiaDifficultyHitObject): number {
+  let pressure = 0;
+  for (const hold of current.HeadOverlappedHolds) {
+    if (hold == null) continue;
+    pressure += heldNoteFactor(hold.StartTime, hold.EndTime, current.StartTime);
+  }
+  if (current.BaseObject.IsHoldNote) {
+    pressure += heldNoteFactor(current.StartTime, current.EndTime, current.StartTime);
+  }
+  return 1.0 + HOLD_WEIGHT * softCapHoldPressure(pressure);
+}
+
+function softCapHoldPressure(pressure: number): number {
+  if (pressure <= HOLD_PRESSURE_CAP) return pressure;
+  return (
+    HOLD_PRESSURE_CAP +
+    HOLD_PRESSURE_SOFTNESS *
+      Math.log(1.0 + (pressure - HOLD_PRESSURE_CAP) / HOLD_PRESSURE_SOFTNESS)
+  );
+}
+
+function heldNoteFactor(startTime: number, endTime: number, time: number): number {
+  const heldFor = time - startTime;
+  const stillToGo = endTime - time;
+  if (heldFor < 0.0 || stillToGo < 0.0) return 0.0;
+  const rampIn = DiffUtils.Smoothstep(heldFor, 0.0, HOLD_RAMP_MS);
+  const rampOut = DiffUtils.Smoothstep(stillToGo, 0.0, HOLD_END_RAMP_MS);
+  const shortHoldGate = DiffUtils.Logistic(
+    endTime - startTime,
+    SHORT_HOLD_MS,
+    SHORT_HOLD_STEEPNESS,
+  );
+  return (HOLD_EDGE_FACTOR + (1.0 - HOLD_EDGE_FACTOR) * rampIn * rampOut) * shortHoldGate;
 }
 
 /**
@@ -1004,6 +1061,7 @@ function buildHitObjectGraphBody(
       Index: idx,
       ManipulationFactor: 1,
       EnduranceFactor: 1,
+      HeldNoteMultiplier: 1,
       IsHoldNote: isHold,
       BaseObject: { IsHoldNote: isHold },
       Row: null as unknown as ManiaRow,

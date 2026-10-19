@@ -24,7 +24,7 @@ export type DifficultyProcessor = {
 
 export function createSpeedProcessor(): DifficultyProcessor {
   const multipliers = accuracyValueMultipliers(
-    1.2, 1.125, 1.05, 1.0, 0.84, 0.65, 0.4, 0.1,
+    0.9375, 0.875, 0.833, 0.7, 0.54, 0.33, 0.083,
   );
   const strain_decay_base = 0.05007;
   let CurrentStrain = 0;
@@ -45,7 +45,7 @@ export function createSpeedProcessor(): DifficultyProcessor {
 
 export function createJackProcessor(): DifficultyProcessor {
   const multipliers = accuracyValueMultipliers(
-    1.01, 1.0075, 1.005, 1.0, 0.97, 0.84, 0.6, 0.28,
+    0.9975, 0.995, 0.99, 0.96, 0.83, 0.59, 0.27,
   );
   const strain_decay_base = 0.50497;
   let CurrentStrain = 0;
@@ -66,7 +66,7 @@ export function createJackProcessor(): DifficultyProcessor {
 
 export function createCoordinationProcessor(): DifficultyProcessor {
   const multipliers = accuracyValueMultipliers(
-    1.22, 1.15, 1.1, 1.0, 0.94, 0.83, 0.72, 0.32,
+    0.94, 0.9, 0.82, 0.77, 0.68, 0.59, 0.26,
   );
   const strain_decay_base = 0.52909;
   let CurrentStrain = 0;
@@ -87,7 +87,7 @@ export function createCoordinationProcessor(): DifficultyProcessor {
 
 export function createReleaseProcessor(): DifficultyProcessor {
   const multipliers = accuracyValueMultipliers(
-    1.55, 1.31, 1.2, 1.0, 0.91, 0.7, 0.45, 0.2,
+    0.845, 0.77, 0.645, 0.59, 0.45, 0.29, 0.13,
   );
   const strain_decay_base = 0.89647;
   let CurrentStrain = 0;
@@ -108,7 +108,7 @@ export function createReleaseProcessor(): DifficultyProcessor {
 
 export function createTechnicalProcessor(): DifficultyProcessor {
   const multipliers = accuracyValueMultipliers(
-    1.46, 1.38, 1.25, 1.1, 0.88, 0.7, 0.55, 0.25,
+    0.945, 0.85, 0.75, 0.6, 0.48, 0.38, 0.17,
   );
   const strain_decay_base = 0.06696;
   const rhythm_window = 10;

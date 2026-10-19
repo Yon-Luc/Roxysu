@@ -61,6 +61,8 @@ touches:
   - packages/osu-chart/src/stdTypes.ts
   - packages/osu-chart/src/parseTaiko.ts
   - packages/osu-chart/src/parseCatch.ts
+  - packages/osu-chart/src/parseCatch.combo.test.ts
+  - packages/osu-chart/src/parseCatch.droplet.test.ts
   - packages/osu-chart/src/catchTypes.ts
   - packages/osu-chart/src/osuFileParser.js
 ---
@@ -187,9 +189,22 @@ Playfield = the visual layer for that ruleset (notefield, 512×384, or taiko lan
    droplets so it sits on each object at hit time. Default catcher is a
    **procedural plate** (CS-scaled capsule + body, face-flipped from motion);
    imported `fruit-catcher-*` / `fruit-ryuuta` sprites replace it. Hyperdash
-   draws a dashed path to the next fruit, afterimage trail tint, and fruit
-   outline from `[CatchTheBeat]` / skin HyperDash* colours. Caught fruit /
-   large droplets flash a catch-line explode (optional `lighting` sprite).
+   does not draw a connector: the fruit keeps its combo colour and gains an
+   additive `HyperDashFruit` border (or an additive copy of the fruit sprite).
+   While the catcher is on a hyperdash segment and `showTrail` is on, faded
+   catcher copies follow the plate (dash ghosts ~800ms, one rising afterimage
+   ~1200ms). Idle movement leaves no line. Caught fruit / large droplets flash
+   a catch-line explode (optional `lighting` sprite).
+   Fruit diameter is `128 * |(1 - 0.7 * (cs - 5) / 5) / 2|` (64 at CS 5).
+   Droplets are a quarter of that; tiny droplets half again. Procedural fruits
+   use lazer pulp layouts (pear / grape / pineapple / raspberry) for the
+   pear → grapes → apple → orange cycle, with a white ring that fades in the
+   last 500ms. Droplets take the combo colour of the juice-stream fruit they
+   follow. Tiny droplets are generated only when the gap between juice-stream
+   events exceeds 80ms, subdivided until the step is at most 100ms, and offset
+   by at most 20px on X.
+   **Source:** `paintCatchPlayfield.ts`, `parseCatch.ts` — status: verified by
+   `paintCatchPlayfield.test.ts`, `parseCatch.droplet.test.ts`.
 
 8b. **Catch playfield fidelity:** `parseCatch` keeps `newCombo` / `comboOffset`
     / `indexInBeatmap` on fruits and beatmap `[Colours]` ComboN. Combo colour

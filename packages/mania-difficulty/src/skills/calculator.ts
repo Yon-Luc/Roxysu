@@ -20,6 +20,7 @@ import { createManiaSkill, createProcessorSkill } from "./maniaSkill";
 import {
   accuracyAdd,
   accuracyPow,
+  accuracyPowInt,
   accuracyScale,
 } from "./accuracy";
 
@@ -155,12 +156,12 @@ export function calculateWithSkills(
     const powerSum = accuracyAdd(
       accuracyAdd(
         accuracyAdd(
-          accuracyPow(speedDifficulty, COMBINE_LAMBDA),
-          accuracyPow(jackDifficulty, COMBINE_LAMBDA),
+          accuracyPowInt(speedDifficulty, COMBINE_LAMBDA),
+          accuracyPowInt(jackDifficulty, COMBINE_LAMBDA),
         ),
-        accuracyPow(coordinationDifficulty, COMBINE_LAMBDA),
+        accuracyPowInt(coordinationDifficulty, COMBINE_LAMBDA),
       ),
-      accuracyPow(technicalDifficulty, COMBINE_LAMBDA),
+      accuracyPowInt(technicalDifficulty, COMBINE_LAMBDA),
     );
 
     const tapDifficulty =

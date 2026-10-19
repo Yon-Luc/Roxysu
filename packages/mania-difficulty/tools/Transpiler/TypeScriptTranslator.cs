@@ -15,6 +15,7 @@ public sealed class TypeScriptTranslator
     private readonly List<string> _diagnostics;
     private readonly HashSet<string> _imports = new(StringComparer.Ordinal);
     private readonly HashSet<string> _boundPatternNames = new(StringComparer.Ordinal);
+    private readonly Stack<HashSet<string>> _patternScopes = new();
     private readonly HashSet<string> _locals = new(StringComparer.Ordinal);
     private readonly HashSet<string> _nullableValueLocals = new(StringComparer.Ordinal);
     private readonly HashSet<string> _intNames = new(StringComparer.Ordinal);
@@ -258,6 +259,8 @@ public sealed class TypeScriptTranslator
         var paramList = new List<string>();
         _locals.Clear();
         _boundPatternNames.Clear();
+        _patternScopes.Clear();
+        _patternScopes.Push(new HashSet<string>(StringComparer.Ordinal));
         _nullableValueLocals.Clear();
         _intNames.Clear();
         _currentMethod = method;
@@ -434,9 +437,11 @@ public sealed class TypeScriptTranslator
                 EmitPatternBindings(ws.Condition);
                 EmitLine($"while ({Expr(ws.Condition)}) {{");
                 Indent();
+                PushPatternScope();
                 // re-bind patterns each iteration for is-patterns in condition
                 EmitPatternBindings(ws.Condition, rebind: true);
                 TranslateEmbedded(ws.Statement);
+                PopPatternScope();
                 Dedent();
                 EmitLine("}");
                 break;
@@ -446,7 +451,9 @@ public sealed class TypeScriptTranslator
                     _nullableValueLocals.Add(fe.Identifier.Text);
                 EmitLine($"for (const {fe.Identifier.Text} of {Expr(fe.Expression)}) {{");
                 Indent();
+                PushPatternScope();
                 TranslateEmbedded(fe.Statement);
+                PopPatternScope();
                 Dedent();
                 EmitLine("}");
                 break;
@@ -552,12 +559,14 @@ public sealed class TypeScriptTranslator
 
             EmitLine("for (;;) {");
             Indent();
+            PushPatternScope();
             // Extract non-pattern parts and pattern bindings
             EmitPatternBindings(fs.Condition);
             EmitLine($"if (!({Expr(fs.Condition)})) break;");
             TranslateEmbedded(fs.Statement);
             foreach (var inc in fs.Incrementors)
-                EmitLine($"{Expr(inc)};");
+                EmitLine($"{ForIncrement(inc)};");
+            PopPatternScope();
             Dedent();
             EmitLine("}");
             return;
@@ -587,13 +596,42 @@ public sealed class TypeScriptTranslator
         }
 
         var cond = fs.Condition != null ? Expr(fs.Condition) : "true";
-        var incStr = string.Join(", ", fs.Incrementors.Select(Expr));
+        var incStr = string.Join(", ", fs.Incrementors.Select(ForIncrement));
         EmitLine($"for (let {inits}; {cond}; {incStr}) {{");
         Indent();
+        PushPatternScope();
         TranslateEmbedded(fs.Statement);
+        PopPatternScope();
         Dedent();
         EmitLine("}");
     }
+
+    /// <summary>
+    /// A <c>var</c> loop variable keeps the initializer's non-null type, while the
+    /// step often assigns a nullable walk (<c>PrevInColumn</c>). The assertion is
+    /// erased, so a null step still fails the loop condition.
+    /// </summary>
+    private string ForIncrement(ExpressionSyntax inc)
+    {
+        if (inc is AssignmentExpressionSyntax
+            {
+                RawKind: (int)SyntaxKind.SimpleAssignmentExpression,
+            } assign)
+        {
+            var left = Expr(assign.Left);
+            return $"{left} = {Expr(assign.Right)} as typeof {left}";
+        }
+
+        return Expr(inc);
+    }
+
+    private void PushPatternScope() =>
+        _patternScopes.Push(new HashSet<string>(StringComparer.Ordinal));
+
+    private void PopPatternScope() => _patternScopes.Pop();
+
+    private bool PatternNameInCurrentScope(string name) =>
+        _patternScopes.Count > 0 && _patternScopes.Peek().Contains(name);
 
     private static bool ContainsIsPattern(ExpressionSyntax expr) =>
         expr.DescendantNodesAndSelf().Any(n => n is IsPatternExpressionSyntax);
@@ -610,7 +648,9 @@ public sealed class TypeScriptTranslator
                 continue;
 
             var name = SafeName(designation);
-            if (!rebind && _boundPatternNames.Contains(name))
+            // A name bound in a finished sibling block (another loop) must be
+            // declared again. Skipping it reuses a binding that is out of scope.
+            if (!rebind && PatternNameInCurrentScope(name))
                 continue;
 
             var rhs = Expr(isPat.Expression);
@@ -635,6 +675,11 @@ public sealed class TypeScriptTranslator
             boundThisPass.Add(name);
             _boundPatternNames.Add(name);
             _boundPatternNames.Add(designation);
+            if (_patternScopes.Count > 0)
+            {
+                _patternScopes.Peek().Add(name);
+                _patternScopes.Peek().Add(designation);
+            }
             _locals.Add(name);
             _locals.Add(designation);
         }

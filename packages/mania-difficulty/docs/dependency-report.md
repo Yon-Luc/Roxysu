@@ -2,7 +2,7 @@
 
 - **Upstream:** https://github.com/loleur362/osu
 - **Branch:** mania-difficulty
-- **SHA:** `bd6bbda8e649a806371d784a485d5962f709089e`
+- **SHA:** `1859fda79775fabbd451b625b7fef6f90aabab13`
 - **Checkout:** `MANIA_DIFFICULTY_UPSTREAM` or `.cache/upstream` (via `bun run upstream:pin`)
 - **Report command:** `bun run port:report`
 
@@ -10,7 +10,7 @@
 
 | Class | Count | Action |
 |---|---|---|
-| generate | 64 | Roslyn → `generated/` |
+| generate | 66 | Roslyn → `generated/` |
 | shim | 19 | Handwritten `src/adapters/` + minimal types |
 | out-of-scope | 14 | Skip (PP, drawables, legacy) |
 
@@ -32,6 +32,7 @@
 - `osu.Game.Rulesets.Mania/Difficulty/Evaluators/Jack/AnchorEvaluator.cs`
 - `osu.Game.Rulesets.Mania/Difficulty/Evaluators/Jack/FullChordJackEvaluator.cs`
 - `osu.Game.Rulesets.Mania/Difficulty/Evaluators/Jack/JackSpacingEvaluator.cs`
+- `osu.Game.Rulesets.Mania/Difficulty/Evaluators/Jack/SameColumnPressureEvaluator.cs`
 - `osu.Game.Rulesets.Mania/Difficulty/Evaluators/Jack/SpeedjackEvaluator.cs`
 - `osu.Game.Rulesets.Mania/Difficulty/Evaluators/JackEvaluator.cs`
 - `osu.Game.Rulesets.Mania/Difficulty/Evaluators/ReleaseEvaluator.cs`
@@ -39,6 +40,7 @@
 - `osu.Game.Rulesets.Mania/Difficulty/Evaluators/TechnicalEvaluator.cs`
 - `osu.Game.Rulesets.Mania/Difficulty/ManiaDifficultyAttributes.cs`
 - `osu.Game.Rulesets.Mania/Difficulty/ManiaDifficultyCalculator.cs`
+- `osu.Game.Rulesets.Mania/Difficulty/Preprocessing/HeldNoteMultiplier.cs`
 - `osu.Game.Rulesets.Mania/Difficulty/Preprocessing/ManiaDifficultyHitObject.cs`
 - `osu.Game.Rulesets.Mania/Difficulty/Preprocessing/ManiaMapData.cs`
 - `osu.Game.Rulesets.Mania/Difficulty/Preprocessing/ManiaPatternContextPreprocessor.cs`

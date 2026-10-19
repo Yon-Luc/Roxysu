@@ -1,5 +1,5 @@
 // @generated from osu.Game.Rulesets.Mania/Difficulty/Evaluators/TechnicalEvaluator.cs
-// upstream sha: bd6bbda8e649a806371d784a485d5962f709089e
+// upstream sha: 1859fda79775fabbd451b625b7fef6f90aabab13
 // generator: 0.5.0
 // Do not edit by hand — regenerate with: bun run port:generate
 
@@ -9,22 +9,20 @@ import { ColumnPatternUtils } from "../Utils/ColumnPatternUtils";
 import { CrossColumnUtils } from "../Utils/CrossColumnUtils";
 import { DiffUtils } from "../../../osu.Game/Rulesets/Difficulty/Utils/DiffUtils";
 
+const technical_weight = 4.04;
 const variety_gap_log_base = 1.18;
 
 /** Generated from C# class TechnicalEvaluator */
 export const TechnicalEvaluator = {
   EvaluateDifficultyOf(hitObject: ManiaDifficultyHitObject, rhythmIrregularity: number, patternVariety: number, windowedIrregularity: number): number {
-    const pattern_buff = 0.69740;
-    const technical_weight = 2.6;
-    const total_weight = 1.58087;
     let columnComplexity = TechnicalEvaluator.evaluateColumnComplexityOf(hitObject);
     let speedFactor = (1.0 / (((hitObject.DeltaTime / 1000.0) + 0.060)));
     let readingPressure = TechnicalEvaluator.readingPressureOf(hitObject);
     let rhythmAmplifier = (1.0 + ((0.9 * readingPressure) * DiffUtils.BellCurve(windowedIrregularity, 0.15, 0.085)));
     let varietyFloor = (((1.55 * patternVariety) * readingPressure) * DiffUtils.Smoothstep(windowedIrregularity, 0.04, 0.12));
     let rhythmShare = DiffUtils.Smoothstep(hitObject.DeltaTime, 8.0, 30.0);
-    let complexity = (Math.max((rhythmIrregularity + columnComplexity), varietyFloor) * rhythmShare);
-    return (((((((pattern_buff * complexity) * speedFactor) * technical_weight) * rhythmAmplifier) * TechnicalEvaluator.chordWidth(hitObject)) * hitObject.ManipulationFactor) * total_weight);
+    let complexity = (((Math.max((rhythmIrregularity + columnComplexity), varietyFloor) + TechnicalEvaluator.burstReward(patternVariety, windowedIrregularity))) * rhythmShare);
+    return (((((complexity * speedFactor) * rhythmAmplifier) * TechnicalEvaluator.chordWidth(hitObject)) * hitObject.ManipulationFactor) * technical_weight);
   },
 
   EvaluateRhythmIrregularityOf(hitObject: ManiaDifficultyHitObject, previousDeltaTime: number): number {
@@ -118,6 +116,11 @@ export const TechnicalEvaluator = {
     }
     let spanDamper = (1.0 - (0.60 * DiffUtils.Smoothstep(Math.abs(currentDirection), 3.0, 5.5)));
     return (columnComplexity * spanDamper);
+  },
+
+  burstReward(patternVariety: number, windowedIrregularity: number): number {
+    const burst_weight = 1.75;
+    return ((burst_weight * patternVariety) * DiffUtils.Smoothstep(windowedIrregularity, 0.16, 0.30));
   },
 
 };

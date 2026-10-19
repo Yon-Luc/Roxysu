@@ -1,5 +1,5 @@
 // @generated from osu.Game.Rulesets.Mania/Difficulty/Evaluators/SpeedEvaluator.cs
-// upstream sha: bd6bbda8e649a806371d784a485d5962f709089e
+// upstream sha: 1859fda79775fabbd451b625b7fef6f90aabab13
 // generator: 0.5.0
 // Do not edit by hand — regenerate with: bun run port:generate
 
@@ -9,6 +9,7 @@ import { ColumnPatternUtils } from "../Utils/ColumnPatternUtils";
 import { DiffUtils } from "../../../osu.Game/Rulesets/Difficulty/Utils/DiffUtils";
 import { TrillUtils } from "../Utils/TrillUtils";
 
+const speed_weight = 2.55;
 
 /** Generated from C# class SpeedEvaluator */
 export const SpeedEvaluator = {
@@ -17,15 +18,25 @@ export const SpeedEvaluator = {
       return 0.0;
     }
     const tap_rate_offset_ms = 36;
-    const speed_weight = 1.74;
     const jack_speed_nerf = 0.5;
-    const total_weight = 1.3;
     let tapRate = (1000.0 / ((hitObject.DeltaTime + tap_rate_offset_ms)));
     tapRate *= SpeedEvaluator.speedGrowth(hitObject);
     const previous = hitObject.Previous();
     let isJack = ((previous != null) && (previous.Column == hitObject.Column));
     let patternMultiplier = (isJack ? jack_speed_nerf : TrillUtils.TrillFactor(hitObject));
-    return (((((tapRate * patternMultiplier) * speed_weight) * hitObject.ManipulationFactor) * hitObject.EnduranceFactor) * total_weight);
+    return (((((tapRate * patternMultiplier) * SpeedEvaluator.previousRowMultiplier(hitObject)) * hitObject.ManipulationFactor) * hitObject.EnduranceFactor) * speed_weight);
+  },
+
+  previousRowMultiplier(hitObject: ManiaDifficultyHitObject): number {
+    const min_share = 0.85;
+    const idle_ratio = 3.0;
+    const idle_ratio_full = 6.0;
+    let flow = hitObject.DeltaTime;
+    if ((flow <= 0.0)) {
+      return 1.0;
+    }
+    let ratio = (hitObject.ColumnDelta / flow);
+    return (1.0 - (DiffUtils.Smoothstep(ratio, idle_ratio, idle_ratio_full) * ((1 - min_share))));
   },
 
   speedGrowth(hitObject: ManiaDifficultyHitObject): number {
@@ -34,7 +45,7 @@ export const SpeedEvaluator = {
     let rows = 0;
     let longRows = 0;
     let longShared = 0;
-    for (let p = hitObject.Row.Previous(); ((p != null) && ((hitObject.StartTime - p.StartTime) <= sustain_window_ms)); p = p.Previous()) {
+    for (let p = hitObject.Row.Previous(); ((p != null) && ((hitObject.StartTime - p.StartTime) <= sustain_window_ms)); p = p.Previous() as typeof p) {
       (longRows++);
       if (ColumnPatternUtils.SharesColumn(hitObject.Row.Columns, p.Columns)) {
         (longShared++);
@@ -54,7 +65,7 @@ export const SpeedEvaluator = {
     let sustainReward = 0.0;
     if ((longRows >= 20)) {
       let longEven = (1.0 - (Number(longShared) / longRows));
-      sustainReward = (((0.85 * DiffUtils.Smoothstep(longRows, 20.0, 30.0)) * DiffUtils.Smoothstep(longEven, 0.6, 0.8)) * hitObject.ManipulationFactor);
+      sustainReward = (((0.75 * DiffUtils.Smoothstep(longRows, 20.0, 30.0)) * DiffUtils.Smoothstep(longEven, 0.6, 0.8)) * hitObject.ManipulationFactor);
     }
     return (spikeNerf * ((1.0 + sustainReward)));
   },

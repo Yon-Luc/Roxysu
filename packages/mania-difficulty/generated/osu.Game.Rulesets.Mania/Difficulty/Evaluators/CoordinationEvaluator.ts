@@ -1,5 +1,5 @@
 // @generated from osu.Game.Rulesets.Mania/Difficulty/Evaluators/CoordinationEvaluator.cs
-// upstream sha: bd6bbda8e649a806371d784a485d5962f709089e
+// upstream sha: 1859fda79775fabbd451b625b7fef6f90aabab13
 // generator: 0.5.0
 // Do not edit by hand — regenerate with: bun run port:generate
 
@@ -10,23 +10,24 @@ import { CrossColumnUtils } from "../Utils/CrossColumnUtils";
 import { DiffUtils } from "../../../osu.Game/Rulesets/Difficulty/Utils/DiffUtils";
 import { TrillUtils } from "../Utils/TrillUtils";
 
+const coordination_multiplier = 2.22;
 
 /** Generated from C# class CoordinationEvaluator */
 export const CoordinationEvaluator = {
   EvaluateDifficultyOf(current: ManiaDifficultyHitObject): number {
-    const total_weight = 1.81659;
     let coordinationDifficulty = CoordinationEvaluator.calculateBoundaryPressure(current);
     let columnDelta = current.ColumnDelta;
     let depthInChord = ChordUtils.DepthInChord(current);
     coordinationDifficulty += CoordinationEvaluator.calculateChordDifficulty(current, depthInChord, columnDelta);
     coordinationDifficulty += CoordinationEvaluator.calculateShieldDifficulty(current);
+    coordinationDifficulty *= CoordinationEvaluator.minijackPressure(current);
     coordinationDifficulty *= (current.ManipulationFactor * current.EnduranceFactor);
-    return CoordinationEvaluator.saturate((coordinationDifficulty * total_weight));
+    return CoordinationEvaluator.saturate((coordinationDifficulty * coordination_multiplier));
   },
 
   saturate(strain: number): number {
-    const threshold = 13.0;
-    const strength = 0.75;
+    const threshold = 20.0;
+    const strength = 0.5;
     const width = 1.5;
     let z = (((strain - threshold)) / width);
     let softExcess = (width * ((Math.max(z, 0.0) + Math.log((1.0 + Math.exp((-Math.abs(z))))))));
@@ -67,28 +68,46 @@ export const CoordinationEvaluator = {
     let intensity = Math.min((scale_ms / ((adjacentDelta + min_delta_ms))), 20.0);
     let coefficient = CrossColumnUtils.ColumnBoundaryMultiplier(boundaryIndex, totalColumns);
     let otherActive = (adjacentDelta <= activity_window_ms);
-    return (((intensity * coefficient) * ((otherActive ? 1.0 : ((1.0 - coefficient))))) * CoordinationEvaluator.previousRowMultiplier(current, adjacentDelta));
+    return (((intensity * coefficient) * ((otherActive ? 1.0 : ((1.0 - coefficient))))) * CoordinationEvaluator.previousGapMultiplier(current, adjacentDelta));
   },
 
-  previousRowMultiplier(current: ManiaDifficultyHitObject, adjacentDelta: number): number {
-    const min_share = 0.3;
+  previousGapMultiplier(current: ManiaDifficultyHitObject, adjacentDelta: number): number {
+    const min_share = 0.2;
     let ratio = (current.ColumnDelta / adjacentDelta);
-    return (1.0 - (DiffUtils.Smoothstep(ratio, 2.0, 6.0) * ((1 - min_share))));
+    return (1.0 - (DiffUtils.Smoothstep(ratio, 2.5, 5.0) * ((1 - min_share))));
   },
 
   calculateChordDifficulty(current: ManiaDifficultyHitObject, depthInChord: number, columnDelta: number): number {
-    const load_per_extra_column = 1.5;
-    const shapeBonusWeight = 2.5;
+    const load_per_extra_column = 2.75;
+    const shapeBonusWeight = 3.0;
     if ((depthInChord < 2)) {
       return 0.0;
     }
-    const previousShape = current.Row.Previous();
-    let isChordjack = ((previousShape != null) && ColumnPatternUtils.SameColumns(previousShape.Columns, current.Row.Columns));
-    let difficulty = (((((load_per_extra_column * ((depthInChord - 1))) * ChordUtils.ChordRepeatNerf(current, columnDelta)) * ((isChordjack ? ChordUtils.CHORDJACK_NERF : 1.0))) * ChordUtils.ChordSpeedFactor(columnDelta)) + (shapeBonusWeight * CoordinationEvaluator.calculateShapeBonus(current, columnDelta)));
-    if (isChordjack) {
-      difficulty *= 0.5;
+    let chordjackValue = CoordinationEvaluator.calculateChordjackValue(current);
+    const previous = current.Row.Previous();
+    let balanceRatio = ((previous != null) ? (Number(Math.min(previous.Size, current.Row.Size)) / Math.max(previous.Size, current.Row.Size)) : 1.0);
+    let difficulty = (((((load_per_extra_column * ((depthInChord - 1))) * balanceRatio) * ChordUtils.ChordRepeatNerf(current, columnDelta)) * ChordUtils.ChordSpeedFactor(columnDelta)) + (shapeBonusWeight * CoordinationEvaluator.calculateShapeBonus(current, columnDelta)));
+    return (difficulty * CoordinationEvaluator.chordjackMultiplier(chordjackValue));
+  },
+
+  calculateChordjackValue(current: ManiaDifficultyHitObject): number {
+    const previous = current.Row.Previous();
+    if ((previous == null)) {
+      return 0.0;
     }
-    return difficulty;
+    let shared = ColumnPatternUtils.SharedColumnCount(previous.Columns, current.Row.Columns);
+    let averageSize = (((previous.Size + current.Row.Size)) / 2.0);
+    return ((averageSize > 0.0) ? (shared / averageSize) : 0.0);
+  },
+
+  chordjackMultiplier(chordjackValue: number): number {
+    if ((chordjackValue <= 0.0)) {
+      return 1.0;
+    }
+    const centre = 0.5;
+    const buff = 0.48;
+    const nerf = 0.6;
+    return ((chordjackValue < centre) ? (1.0 + ((buff * ((centre - chordjackValue))) / centre)) : (1.0 - ((nerf * ((chordjackValue - centre))) / ((1.0 - centre)))));
   },
 
   calculateShapeBonus(current: ManiaDifficultyHitObject, columnDelta: number): number {
@@ -120,6 +139,72 @@ export const CoordinationEvaluator = {
     }
     let intensity = Math.min((scale_ms / ((current.DeltaTime + min_delta_ms))), 20.0);
     return ((shield_weight * intensity) * DiffUtils.ReverseLerp(holdLength, min_shield_ms, full_shield_ms));
+  },
+
+  minijackPressure(hitObject: ManiaDifficultyHitObject): number {
+    const minijack_pressure_weight = 2.5;
+    const minijack_other_penalty = 0.9;
+    const minijack_mult_floor = 0.02;
+    const window_ms_minijack = 300.0;
+    const minijack_fast_ms = 60.0;
+    const minijack_slow_ms = 120.0;
+    const acceleration_min = 1.0;
+    const acceleration_max = 2.5;
+    const density_window_ms = 400.0;
+    const density_low = 2.0;
+    const density_high = 4.0;
+    const similar_gap_margin = 1.0;
+    const runup_short_ms = 200.0;
+    const runup_long_ms = 800.0;
+    const runup_floor = 1.0;
+    const runup_reward_weight = 0.5;
+    const local_density_window_ms = 250.0;
+    const local_density_low = 1.5;
+    const local_density_high = 3.5;
+    const previousNote = hitObject.PrevInColumn(0);
+    if ((previousNote == null)) {
+      return 1.0;
+    }
+    let jackDelta = (hitObject.StartTime - previousNote.StartTime);
+    const beforePrevious = previousNote.PrevInColumn(0);
+    let previousPartDelta = ((beforePrevious != null) ? (previousNote.StartTime - beforePrevious.StartTime) : 0.0);
+    let acceleration = ((previousPartDelta > 0.0) ? (previousPartDelta / Math.max(jackDelta, 1.0)) : 1.0);
+    let speedUp = DiffUtils.Smoothstep(acceleration, acceleration_min, acceleration_max);
+    let runUpFactor = (runup_floor + (runup_reward_weight * DiffUtils.Smoothstep(previousPartDelta, runup_short_ms, runup_long_ms)));
+    let localNotes = 0;
+    for (let row = hitObject.Row.Previous(); ((row != null) && ((hitObject.StartTime - row.StartTime) <= local_density_window_ms)); row = row.Previous() as typeof row) {
+      localNotes += row.Size;
+    }
+    let localDensity = DiffUtils.Smoothstep(localNotes, local_density_low, local_density_high);
+    let minijackMult = 1.0;
+    for (const column of hitObject.Row.Columns) {
+      if ((column == hitObject.Column)) {
+        continue;
+      }
+      const neighbour = hitObject.PrevInColumnBefore(column, hitObject.Index);
+      const before = neighbour != null ? hitObject.PrevInColumnBefore(column, neighbour.Index) : null;
+      if (((neighbour == null) || (before == null))) {
+        continue;
+      }
+      let otherDelta = (neighbour.StartTime - before.StartTime);
+      if ((otherDelta > window_ms_minijack)) {
+        continue;
+      }
+      minijackMult -= (DiffUtils.Smoothstep(otherDelta, minijack_fast_ms, minijack_slow_ms) * minijack_other_penalty);
+    }
+    let similarOrFaster = 0;
+    for (let earlier = previousNote; ((earlier != null) && ((hitObject.StartTime - earlier.StartTime) <= density_window_ms)); earlier = earlier.PrevInColumn(0) as typeof earlier) {
+      const before = earlier.PrevInColumn(0);
+      if ((before == null)) {
+        break;
+      }
+      let gap = (earlier.StartTime - before.StartTime);
+      if ((gap <= (jackDelta * similar_gap_margin))) {
+        (similarOrFaster++);
+      }
+    }
+    let densityGate = (1.0 - DiffUtils.Smoothstep(similarOrFaster, density_low, density_high));
+    return (1.0 + (((((minijack_pressure_weight * speedUp) * runUpFactor) * localDensity) * densityGate) * Math.max(minijackMult, minijack_mult_floor)));
   },
 
 };

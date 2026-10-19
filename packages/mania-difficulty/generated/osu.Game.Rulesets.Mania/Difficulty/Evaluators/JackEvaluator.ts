@@ -1,5 +1,5 @@
 // @generated from osu.Game.Rulesets.Mania/Difficulty/Evaluators/JackEvaluator.cs
-// upstream sha: bd6bbda8e649a806371d784a485d5962f709089e
+// upstream sha: 1859fda79775fabbd451b625b7fef6f90aabab13
 // generator: 0.5.0
 // Do not edit by hand — regenerate with: bun run port:generate
 
@@ -13,6 +13,7 @@ import { JackSpacingEvaluator } from "./Jack/JackSpacingEvaluator";
 import { SpeedjackEvaluator } from "./Jack/SpeedjackEvaluator";
 import { TrillUtils } from "../Utils/TrillUtils";
 
+const jack_multiplier = 0.9144;
 export const JACK_WINDOW_MS = 350.0;
 
 /** Generated from C# class JackEvaluator */
@@ -22,8 +23,6 @@ export const JackEvaluator = {
   EvaluateDifficultyOf(current: ManiaDifficultyHitObject): number {
     const tap_rate_offset_ms = 60;
     const strain_exponent = 1.29407;
-    const jack_multiplier = 0.92;
-    const total_weight = 1.19496;
     let columnDelta = current.ColumnDelta;
     if ((columnDelta > JACK_WINDOW_MS)) {
       return 0.0;
@@ -39,11 +38,11 @@ export const JackEvaluator = {
     jackDifficulty *= FullChordJackEvaluator.EvaluateMultiplierOf(current, columnDelta, (jackDifficulty * jack_multiplier));
     jackDifficulty *= (((current.ManipulationFactor * current.EnduranceFactor) * SpeedjackEvaluator.EvaluateMultiplierOf(current)) * AnchorEvaluator.EvaluateMultiplierOf(current));
     jackDifficulty *= JackSpacingEvaluator.EvaluateMultiplierOf(current, chordDepth, columnDelta, tapRate);
-    return (((jackDifficulty * jack_multiplier) * total_weight) * JackEvaluator.minijackPressure(current));
+    return JackEvaluator.speedCap((jackDifficulty * jack_multiplier));
   },
 
   calculateChordJackBonus(current: ManiaDifficultyHitObject, chordDepth: number, columnDelta: number): number {
-    return Math.max(0.1, (((1.0 + ((0.14 * ChordUtils.ChordSpeedFactor(columnDelta)) * ((chordDepth - 1))))) * ChordUtils.ChordRepeatNerf(current, columnDelta)));
+    return Math.max(0.1, (((1.0 + ((0.05 * ChordUtils.ChordSpeedFactor(columnDelta)) * ((chordDepth - 1))))) * ChordUtils.ChordRepeatNerf(current, columnDelta)));
   },
 
   calculateChordDepthMultiplier(current: ManiaDifficultyHitObject, chordDepth: number, columnDelta: number, sharesColumn: boolean): number {
@@ -98,8 +97,8 @@ export const JackEvaluator = {
   },
 
   calculateConcurrentHoldBonus(current: ManiaDifficultyHitObject): number {
-    const held_bonus_weight = 0.785;
-    const held_neighbour_weight = 0.95;
+    const held_neighbour_weight = 0.7;
+    const held_note_weight = 1.0;
     let totalColumns = current.PreviousHitObjects.length;
     if ((totalColumns == 1)) {
       return 1.0;
@@ -117,47 +116,13 @@ export const JackEvaluator = {
         (heldNeighbours++);
       }
     }
-    return (held_bonus_weight * ((1 + (heldNeighbours * held_neighbour_weight))));
+    return (((1 + (heldNeighbours * held_neighbour_weight))) * ((1.0 + (held_note_weight * ((current.HeldNoteMultiplier - 1.0))))));
   },
 
-  minijackPressure(hitObject: ManiaDifficultyHitObject): number {
-    const minijack_pressure_weight = 0.4;
-    const minijack_other_penalty = 0.25;
-    const minijack_mult_floor = 0.1;
-    const window_ms_minijack = 300.0;
-    const minijack_fast_ms = 60.0;
-    const minijack_slow_ms = 120.0;
-    const chordjack_repeat_window_ms = 400.0;
-    const previousNote = hitObject.PrevInColumn(0);
-    if ((previousNote == null)) {
-      return 1.0;
-    }
-    if ((hitObject.Row.Size > 1)) {
-      for (let row = hitObject.Row.Previous(); ((row != null) && ((hitObject.StartTime - row.StartTime) <= chordjack_repeat_window_ms)); row = row.Previous()) {
-        if (ColumnPatternUtils.SameColumns(row.Columns, hitObject.Row.Columns)) {
-          return 1.0;
-        }
-      }
-    }
-    let jackDelta = (hitObject.StartTime - previousNote.StartTime);
-    let jackSpeed = DiffUtils.ReverseLerp(jackDelta, minijack_fast_ms, minijack_slow_ms);
-    let minijackMult = 1.0;
-    for (const column of hitObject.Row.Columns) {
-      if ((column == hitObject.Column)) {
-        continue;
-      }
-      const neighbour = hitObject.PrevInColumnBefore(column, hitObject.Index);
-      const before = neighbour != null ? hitObject.PrevInColumnBefore(column, neighbour.Index) : null;
-      if (((neighbour == null) || (before == null))) {
-        continue;
-      }
-      let otherDelta = (neighbour.StartTime - before.StartTime);
-      if ((otherDelta > window_ms_minijack)) {
-        continue;
-      }
-      minijackMult -= (DiffUtils.Smoothstep(otherDelta, minijack_fast_ms, minijack_slow_ms) * minijack_other_penalty);
-    }
-    return (1.0 + ((minijack_pressure_weight * jackSpeed) * Math.max(minijackMult, minijack_mult_floor)));
+  speedCap(value: number): number {
+    const knee = 12.0;
+    const past_knee_slope = 0.5;
+    return ((value <= knee) ? value : (knee + (past_knee_slope * ((value - knee)))));
   },
 
 };

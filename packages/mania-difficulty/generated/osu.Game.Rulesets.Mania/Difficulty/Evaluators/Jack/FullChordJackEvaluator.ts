@@ -1,5 +1,5 @@
 // @generated from osu.Game.Rulesets.Mania/Difficulty/Evaluators/Jack/FullChordJackEvaluator.cs
-// upstream sha: bd6bbda8e649a806371d784a485d5962f709089e
+// upstream sha: 1859fda79775fabbd451b625b7fef6f90aabab13
 // generator: 0.5.0
 // Do not edit by hand — regenerate with: bun run port:generate
 
@@ -31,7 +31,7 @@ export const FullChordJackEvaluator = {
     let sizeDampen = (DiffUtils.Smoothstep(localSize, 1.90, 2.25) * DiffUtils.Smoothstep(localSize, 3.6, 2.5));
     let strainDampen = (1.0 - ((0.9 * DiffUtils.Smoothstep(baseStrain, 12, 15)) * DiffUtils.Smoothstep(localSize, 1.6, 2.0)));
     let looseDampen = (1.0 - (0.11 * DiffUtils.Smoothstep(FullChordJackEvaluator.chordlessJackTexture(current, fullChord), 0.45, 0.05)));
-    return (1.0 + (((((((2.5 * speedGate) * manipGate) * runGate) * recurGate) * sizeDampen) * strainDampen) * looseDampen));
+    return (1.0 + (((((((3.0 * speedGate) * manipGate) * runGate) * recurGate) * sizeDampen) * strainDampen) * looseDampen));
   },
 
   chordlessJackTexture(current: ManiaDifficultyHitObject, fullChord: number): number {

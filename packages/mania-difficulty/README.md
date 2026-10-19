@@ -68,8 +68,8 @@ import { skillProfile } from "@roxysu/mania-difficulty/skill-profile";
 Includes pattern preprocessor (roll/jumptrill/mash/vibro/endurance) and C#-faithful
 hit-object construction (skip first note, ColumnDelta null-coalesce, chord/hold arrays).
 
-Fixture parity (vs pinned C# baselines): SR and main skills within ~0.1% on synthetic
-maps. Score-loss polynomial coeffs still not emitted.
+Fixture parity (vs pinned C# baselines): SR and main skills within 2% relative or
+0.05 absolute on synthetic maps. Score-loss polynomial coeffs still not emitted.
 
 Generated modules (generator 0.5.0): utils + all five evaluators (+ Jack/* helpers).
 
@@ -121,7 +121,7 @@ OSU_GAME_PATH=/path/to/checkout dotnet run --project tools/ReferenceRunner -- \
 {
   "repository": "https://github.com/loleur362/osu",
   "branch": "mania-difficulty",
-  "sha": "bd6bbda8e649a806371d784a485d5962f709089e"
+  "sha": "1859fda79775fabbd451b625b7fef6f90aabab13"
 }
 ```
 

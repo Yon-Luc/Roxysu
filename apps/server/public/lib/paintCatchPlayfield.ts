@@ -50,7 +50,14 @@ export type CatchPlayfieldJudgment = {
   kind?: "fruit" | "droplet" | "banana";
 };
 
-export type CatcherTrailPoint = { x: number; t: number; dashing?: boolean };
+export type CatcherTrailPoint = {
+  x: number;
+  t: number;
+  dashing?: boolean;
+  /** Dash ghost, or the single rising copy spawned when a hyperdash starts. */
+  kind?: "dash" | "afterimage";
+  facing?: 1 | -1;
+};
 
 export type CatchFruitKind = "pear" | "grapes" | "apple" | "orange";
 
@@ -116,6 +123,104 @@ function approachPreemptMs(ar: number): number {
 
 function catcherWidth(cs: number): number {
   return 106.75 * Math.abs(1 - (0.7 * (cs - 5)) / 5);
+}
+
+/** Lazer `CalculateScaleFromCircleSize`. At CS 5 this is 0.5. */
+export function circleSizeScale(cs: number): number {
+  return Math.abs(1 - (0.7 * (cs - 5)) / 5) / 2;
+}
+
+/** Fruit diameter in osu! pixels. 128 × circle-size scale (64 at CS 5). */
+export function fruitDiameter(cs: number): number {
+  return 128 * circleSizeScale(cs);
+}
+
+/** Droplet diameter in osu! pixels. Tiny droplets are half of that. */
+export function dropletDiameter(cs: number, tiny = false): number {
+  const d = 32 * circleSizeScale(cs);
+  return tiny ? d / 2 : d;
+}
+
+const FRUIT_DRAW_SPACE = 128;
+const FRUIT_RADIUS_ADJUST = 1.1;
+const LARGE_PULP_3 = (16 * FRUIT_RADIUS_ADJUST) / FRUIT_DRAW_SPACE;
+const SMALL_PULP = LARGE_PULP_3 / 2;
+const LARGE_PULP_4 = LARGE_PULP_3 * 0.925;
+const PULP_DIST_3 = 0.15;
+const PULP_DIST_4 = PULP_DIST_3 / 0.925;
+const WHITE_BORDER = (6 * FRUIT_RADIUS_ADJUST) / FRUIT_DRAW_SPACE;
+const HYPER_BORDER = (12 * FRUIT_RADIUS_ADJUST) / FRUIT_DRAW_SPACE;
+const DASH_TRAIL_MS = 800;
+const AFTERIMAGE_MS = 1200;
+const TRAIL_INTERVAL_MS = 16;
+
+type PulpSpec = { x: number; y: number; w: number; h: number };
+
+function pulpAt(angleDeg: number, distance: number, size: number): PulpSpec {
+  const rad = (angleDeg * Math.PI) / 180;
+  return {
+    x: distance * Math.sin(rad),
+    y: distance * Math.cos(rad),
+    w: size,
+    h: size,
+  };
+}
+
+function pulpsForKind(kind: CatchFruitKind): PulpSpec[] {
+  switch (kind) {
+    case "pear":
+      return [
+        { x: 0, y: -0.33, w: SMALL_PULP, h: SMALL_PULP },
+        pulpAt(60, PULP_DIST_3, LARGE_PULP_3),
+        pulpAt(180, PULP_DIST_3, LARGE_PULP_3),
+        pulpAt(300, PULP_DIST_3, LARGE_PULP_3),
+      ];
+    case "grapes":
+      return [
+        { x: 0, y: -0.25, w: SMALL_PULP, h: SMALL_PULP },
+        pulpAt(0, PULP_DIST_3, LARGE_PULP_3),
+        pulpAt(120, PULP_DIST_3, LARGE_PULP_3),
+        pulpAt(240, PULP_DIST_3, LARGE_PULP_3),
+      ];
+    case "apple":
+      return [
+        { x: 0, y: -0.3, w: SMALL_PULP, h: SMALL_PULP },
+        pulpAt(45, PULP_DIST_4, LARGE_PULP_4),
+        pulpAt(135, PULP_DIST_4, LARGE_PULP_4),
+        pulpAt(225, PULP_DIST_4, LARGE_PULP_4),
+        pulpAt(315, PULP_DIST_4, LARGE_PULP_4),
+      ];
+    case "orange":
+      return [
+        { x: 0, y: -0.34, w: SMALL_PULP, h: SMALL_PULP },
+        pulpAt(0, PULP_DIST_4, LARGE_PULP_4),
+        pulpAt(90, PULP_DIST_4, LARGE_PULP_4),
+        pulpAt(180, PULP_DIST_4, LARGE_PULP_4),
+        pulpAt(270, PULP_DIST_4, LARGE_PULP_4),
+      ];
+  }
+}
+
+const BANANA_PULPS: PulpSpec[] = [
+  { x: 0, y: -0.3, w: SMALL_PULP, h: SMALL_PULP },
+  { x: 0, y: 0.05, w: LARGE_PULP_4 * 0.8, h: LARGE_PULP_4 * 2.5 },
+];
+
+function unitHash(n: number): number {
+  const x = Math.imul(n | 0, 1103515245) + 12345;
+  return ((x >>> 0) % 10000) / 10000;
+}
+
+/** About ±20°, stable for a given hit time. */
+function fruitRotation(timeMs: number): number {
+  return (unitHash(Math.floor(timeMs)) - 0.5) * ((40 * Math.PI) / 180);
+}
+
+function dropletRotation(timeMs: number, t: number, preempt: number): number {
+  const start =
+    unitHash(Math.floor(timeMs) ^ 0x9e3779b9) * ((20 * Math.PI) / 180);
+  const progress = (t - (timeMs - preempt)) / (preempt + 2000);
+  return start + ((720 * Math.PI) / 180) * progress;
 }
 
 function spriteNaturalSize(
@@ -342,6 +447,45 @@ function drawTintedImage(
   }
 }
 
+function drawAdditiveImage(
+  ctx: PaintContext2D,
+  img: CanvasImageSource,
+  cx: number,
+  cy: number,
+  size: number,
+  tint: string,
+  alpha: number,
+): boolean {
+  const dims = spriteNaturalSize(img);
+  if (!dims) return false;
+  const dw = size;
+  const dh = size * (dims.h / dims.w);
+  const x = cx - dw / 2;
+  const y = cy - dh / 2;
+  const scratch = getTintScratch(dw, dh);
+  if (!scratch) return false;
+  try {
+    const { canvas, ctx: sctx } = scratch;
+    sctx.setTransform(1, 0, 0, 1, 0, 0);
+    sctx.globalCompositeOperation = "source-over";
+    sctx.globalAlpha = 1;
+    sctx.clearRect(0, 0, canvas.width, canvas.height);
+    sctx.fillStyle = tint;
+    sctx.fillRect(0, 0, dw, dh);
+    sctx.globalCompositeOperation = "destination-in";
+    sctx.drawImage(img, 0, 0, dw, dh);
+    sctx.globalCompositeOperation = "source-over";
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(canvas, 0, 0, dw, dh, x, y, dw, dh);
+    ctx.restore();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function drawSpriteCentered(
   ctx: PaintContext2D,
   img: CanvasImageSource,
@@ -360,17 +504,6 @@ function hexToRgba(hex: string, alpha: number): string {
   const g = Number.parseInt(h.slice(2, 4), 16);
   const b = Number.parseInt(h.slice(4, 6), 16);
   return `rgba(${r},${g},${b},${alpha})`;
-}
-
-function nextHyperFruit(
-  objects: CatchHitObject[],
-  fromIndex: number,
-): Extract<CatchHitObject, { type: "fruit" }> | null {
-  for (let i = fromIndex + 1; i < objects.length; i += 1) {
-    const o = objects[i]!;
-    if (o.type === "fruit") return o;
-  }
-  return null;
 }
 
 function fruitSpritesFor(
@@ -471,6 +604,8 @@ function drawCatcherSprite(
   facing: 1 | -1,
   dashing: boolean,
   skin: CatchSkin,
+  tint?: string | null,
+  alpha = 1,
 ): boolean {
   const dims = spriteNaturalSize(img);
   if (!dims) return false;
@@ -479,9 +614,8 @@ function drawCatcherSprite(
   const spriteH = spriteW * (dims.h / dims.w);
   // Legacy catcher: first ~16px transparent at top; origin near top of plate
   const spriteY = plate.y - 16 * scale;
-  const spriteX = plate.x - spriteW / 2;
 
-  if (dashing) {
+  if (dashing && !tint) {
     ctx.fillStyle = hexToRgba(skin.hyperDash, 0.28);
     ctx.beginPath();
     ctx.ellipse(
@@ -499,6 +633,12 @@ function drawCatcherSprite(
   ctx.save();
   ctx.translate(plate.x, spriteY + spriteH / 2);
   ctx.scale(facing, 1);
+  if (tint) {
+    const drew = drawAdditiveImage(ctx, img, 0, 0, spriteW, tint, alpha);
+    ctx.restore();
+    return drew;
+  }
+  ctx.globalAlpha = alpha;
   try {
     ctx.drawImage(img, -spriteW / 2, -spriteH / 2, spriteW, spriteH);
   } catch {
@@ -506,8 +646,6 @@ function drawCatcherSprite(
     return false;
   }
   ctx.restore();
-  // Keep unused spriteX referenced for lint clarity — position via translate.
-  void spriteX;
   return true;
 }
 
@@ -531,6 +669,64 @@ export type PaintCatchPlayfieldArgs = {
   beatmapComboColors?: string[] | null;
   sprites?: CatchPlayfieldSprites | null;
 };
+
+function drawPulps(
+  ctx: PaintContext2D,
+  pulps: PulpSpec[],
+  diameter: number,
+  colour: string,
+): void {
+  ctx.fillStyle = colour;
+  for (const p of pulps) {
+    ctx.beginPath();
+    ctx.ellipse(
+      p.x * diameter,
+      p.y * diameter,
+      (p.w * diameter) / 2,
+      (p.h * diameter) / 2,
+      0,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+  }
+}
+
+function drawWhiteRing(
+  ctx: PaintContext2D,
+  diameter: number,
+  alpha: number,
+): void {
+  if (alpha <= 0) return;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = Math.max(1, WHITE_BORDER * diameter);
+  ctx.beginPath();
+  ctx.arc(0, 0, diameter / 2 - ctx.lineWidth / 2, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawHyperBorder(
+  ctx: PaintContext2D,
+  diameter: number,
+  colour: string,
+  alpha: number,
+): void {
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.strokeStyle = colour;
+  ctx.lineWidth = Math.max(1.5, HYPER_BORDER * diameter);
+  ctx.globalAlpha = alpha * 0.9;
+  ctx.beginPath();
+  ctx.arc(0, 0, diameter / 2, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.globalAlpha = alpha * 0.3;
+  ctx.fillStyle = colour;
+  ctx.fill();
+  ctx.restore();
+}
 
 export function paintCatchPlayfield(args: PaintCatchPlayfieldArgs): void {
   try {
@@ -586,73 +782,128 @@ function paintCatchPlayfieldInner(args: PaintCatchPlayfieldArgs): void {
   const facing = catcher?.facing ?? 1;
   const dashing = catcher?.dashing ?? false;
 
-  // Hyperdash path lines (fruit → next fruit)
-  for (let i = 0; i < objs.length; i += 1) {
-    const obj = objs[i]!;
-    if (obj.type !== "fruit" || !obj.hyperDash) continue;
-    const next = nextHyperFruit(objs, i);
-    if (!next) continue;
-    if (obj.timeMs < t - 80 || next.timeMs > t + preempt) continue;
-    if (obj.timeMs > t + preempt) continue;
-    const judged = judgmentMap.get(i);
-    if (judged && judged.tMs <= t && judged.result !== "miss") continue;
-    const a = toScreen(tf, obj.x, CATCHER_Y * Math.max(0, 1 - (obj.timeMs - t) / preempt));
-    // Line from current fruit fall position toward next fruit's catch point
-    const fruitY = (() => {
-      const dt = obj.timeMs - t;
-      if (dt > preempt || dt < -80) return null;
-      return (1 - dt / preempt) * CATCHER_Y;
-    })();
-    if (fruitY == null) continue;
-    const from = toScreen(tf, obj.x, fruitY);
-    const to = toScreen(tf, next.x, CATCHER_Y);
-    ctx.strokeStyle = hexToRgba(skin.hyperDashFruit || skin.hyperDash, 0.55);
-    ctx.lineWidth = 2 * tf.scale;
-    ctx.setLineDash([6 * tf.scale, 4 * tf.scale]);
-    ctx.beginPath();
-    ctx.moveTo(from.x, from.y);
-    ctx.lineTo(to.x, to.y);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    void a;
+  const ghostSprite = sprites?.catcherIdle || sprites?.catcherKiai || null;
+
+  function comboColourAt(index: number): string {
+    return catchComboColorAtIndex(palette, comboInfo.colourIndexes[index] ?? 0);
+  }
+
+  function dropletColour(index: number): string {
+    for (let j = index; j >= 0; j -= 1) {
+      if (objs[j]?.type === "fruit") return comboColourAt(j);
+    }
+    return skin.droplet;
+  }
+
+  function stampCatcher(
+    xOsu: number,
+    yOsu: number,
+    alpha: number,
+    tint: string | null,
+    sizeScale: number,
+    ghostFacing: 1 | -1,
+  ): void {
+    if (alpha <= 0.02) return;
+    const pos = toScreen(tf, xOsu, yOsu);
+    const w = plateW * sizeScale;
+    ctx.save();
+    if (tint) ctx.globalCompositeOperation = "lighter";
+    let drew = false;
+    if (ghostSprite) {
+      drew = drawCatcherSprite(
+        ctx,
+        ghostSprite,
+        pos,
+        w,
+        tf.scale,
+        ghostFacing,
+        false,
+        skin,
+        tint,
+        alpha,
+      );
+    }
+    if (!drew) {
+      ctx.globalAlpha = alpha;
+      drawProceduralPlate(
+        ctx,
+        pos,
+        w,
+        tf.scale,
+        ghostFacing,
+        false,
+        tint ? { ...skin, catcher: tint } : skin,
+      );
+    }
+    ctx.restore();
   }
 
   if (trail && catcher) {
-    trail.push({ x: catcher.x, t, dashing });
-    while (trail.length > 0 && t - trail[0]!.t > 220) trail.shift();
+    const last = trail[trail.length - 1];
+    if (last && t < last.t - 1) trail.length = 0;
+    const prev = trail[trail.length - 1];
+    if (dashing && skin.showTrail) {
+      if (!prev?.dashing) {
+        trail.push({
+          x: catcher.x,
+          t,
+          dashing: true,
+          kind: "afterimage",
+          facing,
+        });
+      }
+      const lastStamp = trail[trail.length - 1];
+      if (
+        !lastStamp ||
+        lastStamp.kind === "afterimage" ||
+        t - lastStamp.t >= TRAIL_INTERVAL_MS
+      ) {
+        trail.push({
+          x: catcher.x,
+          t,
+          dashing: true,
+          kind: "dash",
+          facing,
+        });
+      }
+    } else if (prev?.dashing) {
+      trail.push({ x: catcher.x, t, dashing: false, facing });
+    }
+    while (trail.length > 0 && t - trail[0]!.t > AFTERIMAGE_MS) trail.shift();
   }
 
-  // Hyperdash afterimage / trail
-  if (skin.showTrail || dashing) {
-    const pts =
-      trail && trail.length > 1
-        ? trail
-        : frames
-            .filter((f) => f.tMs <= t && t - f.tMs <= 220)
-            .map((f) => ({ x: f.x, t: f.tMs, dashing: f.dashing }));
-    if (pts.length > 1) {
-      for (let i = 1; i < pts.length; i += 1) {
-        const p0 = pts[i - 1]!;
-        const p1 = pts[i]!;
-        const age = t - p1.t;
-        const a = Math.max(0, 1 - age / 220) * (p1.dashing || dashing ? 0.55 : 0.22);
-        if (a <= 0) continue;
-        const s0 = toScreen(tf, p0.x, CATCHER_Y);
-        const s1 = toScreen(tf, p1.x, CATCHER_Y);
-        ctx.strokeStyle = hexToRgba(
-          p1.dashing || dashing
-            ? skin.hyperDashAfterImage || skin.hyperDash
-            : "#ffffff",
-          a,
+  if (skin.showTrail && trail) {
+    for (const p of trail) {
+      if (!p.dashing) continue;
+      const age = t - p.t;
+      const ghostFacing = p.facing ?? facing;
+      if (p.kind === "afterimage") {
+        if (age < 0 || age > AFTERIMAGE_MS) continue;
+        const u = age / AFTERIMAGE_MS;
+        stampCatcher(
+          p.x,
+          CATCHER_Y - 10 * u,
+          (1 - u) * 0.9,
+          skin.hyperDashAfterImage || skin.hyperDash,
+          0.95 + 0.25 * u,
+          ghostFacing,
         );
-        ctx.lineWidth = (p1.dashing || dashing ? 4 : 2) * tf.scale;
-        ctx.beginPath();
-        ctx.moveTo(s0.x, s0.y);
-        ctx.lineTo(s1.x, s1.y);
-        ctx.stroke();
+      } else {
+        if (age < 0 || age > DASH_TRAIL_MS) continue;
+        const u = age / DASH_TRAIL_MS;
+        stampCatcher(
+          p.x,
+          CATCHER_Y,
+          0.4 * (1 - u),
+          skin.hyperDash,
+          1,
+          ghostFacing,
+        );
       }
     }
   }
+
+  const fruitD = fruitDiameter(cs);
 
   // Falling objects
   for (let i = 0; i < objs.length; i += 1) {
@@ -672,94 +923,78 @@ function paintCatchPlayfieldInner(args: PaintCatchPlayfieldArgs): void {
     if (alpha <= 0) continue;
 
     const pos = toScreen(tf, obj.x, y);
-    ctx.globalAlpha = alpha;
+    const rot = fruitRotation(obj.timeMs);
 
     if (obj.type === "banana") {
-      const size = 28 * tf.scale;
+      const size = fruitD * tf.scale;
+      ctx.save();
+      ctx.translate(pos.x, pos.y);
+      ctx.rotate(rot);
       const drawn =
         sprites?.bananas &&
-        drawSpriteCentered(ctx, sprites.bananas, pos.x, pos.y, size, alpha);
+        drawSpriteCentered(ctx, sprites.bananas, 0, 0, size, alpha);
       if (drawn && sprites?.bananasOverlay) {
-        drawSpriteCentered(
-          ctx,
-          sprites.bananasOverlay,
-          pos.x,
-          pos.y,
-          size,
-          alpha,
-        );
+        drawSpriteCentered(ctx, sprites.bananasOverlay, 0, 0, size, alpha);
       }
       if (!drawn) {
-        const r = 7 * tf.scale;
-        ctx.beginPath();
-        ctx.ellipse(pos.x, pos.y, r * 0.7, r, -0.4, 0, Math.PI * 2);
-        ctx.fillStyle = skin.banana;
-        ctx.fill();
+        ctx.globalAlpha = alpha;
+        drawPulps(ctx, BANANA_PULPS, size, skin.banana);
+        drawWhiteRing(ctx, size, alpha * Math.min(1, Math.max(0, dt / 500)));
       }
+      ctx.restore();
     } else if (obj.type === "droplet") {
-      const size = (obj.kind === "large" ? 22 : 14) * tf.scale;
+      const size = dropletDiameter(cs, obj.kind === "tiny") * tf.scale;
+      const colour = dropletColour(i);
+      const spin = dropletRotation(obj.timeMs, t, preempt);
+      ctx.save();
+      ctx.translate(pos.x, pos.y);
+      ctx.rotate(spin);
       const drawn =
         sprites?.drop &&
-        drawTintedImage(
-          ctx,
-          sprites.drop,
-          pos.x,
-          pos.y,
-          size,
-          skin.droplet,
-          alpha,
-        );
+        drawTintedImage(ctx, sprites.drop, 0, 0, size, colour, alpha);
       if (drawn && sprites?.dropOverlay) {
-        drawSpriteCentered(
-          ctx,
-          sprites.dropOverlay,
-          pos.x,
-          pos.y,
-          size,
-          alpha,
-        );
+        drawSpriteCentered(ctx, sprites.dropOverlay, 0, 0, size, alpha);
       }
       if (!drawn) {
-        const r = (obj.kind === "large" ? 6 : 3.5) * tf.scale;
+        const r = size / 2;
+        ctx.globalAlpha = alpha;
         ctx.beginPath();
-        ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
-        ctx.fillStyle = skin.droplet;
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.fillStyle = colour;
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(-r * 0.22, -r * 0.22, r * 0.38, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(255,255,255,0.45)";
         ctx.fill();
       }
+      ctx.restore();
     } else {
-      const colourIndex = comboInfo.colourIndexes[i] ?? 0;
-      const comboColor = catchComboColorAtIndex(palette, colourIndex);
+      const comboColor = comboColourAt(i);
       const kind = fruitKindForIndex(obj.indexInBeatmap ?? i);
       const { base, overlay } = fruitSpritesFor(sprites, kind);
-      const size = 36 * tf.scale;
-      const tint = obj.hyperDash ? null : comboColor;
+      const size = fruitD * tf.scale;
+      const hyperColour = skin.hyperDashFruit || skin.hyperDash;
+      ctx.save();
+      ctx.translate(pos.x, pos.y);
+      ctx.rotate(rot);
       let drawn = false;
       if (base) {
-        drawn = drawTintedImage(ctx, base, pos.x, pos.y, size, tint, alpha);
+        if (obj.hyperDash) {
+          drawAdditiveImage(ctx, base, 0, 0, size * 1.1, hyperColour, alpha);
+        }
+        drawn = drawTintedImage(ctx, base, 0, 0, size, comboColor, alpha);
         if (drawn && overlay) {
-          drawSpriteCentered(ctx, overlay, pos.x, pos.y, size, alpha);
+          drawSpriteCentered(ctx, overlay, 0, 0, size, alpha);
         }
       }
       if (!drawn) {
-        const r = 11 * tf.scale;
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
-        ctx.fillStyle = obj.hyperDash
-          ? skin.hyperDashFruit || skin.hyperDash
-          : comboColor;
-        ctx.fill();
-        ctx.strokeStyle = "rgba(0,0,0,0.35)";
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
+        ctx.globalAlpha = alpha;
+        drawPulps(ctx, pulpsForKind(kind), size, comboColor);
+        const borderAlpha = Math.min(1, Math.max(0, dt / 500));
+        drawWhiteRing(ctx, size, alpha * borderAlpha);
+        if (obj.hyperDash) drawHyperBorder(ctx, size, hyperColour, alpha);
       }
-      if (obj.hyperDash) {
-        const r = 13 * tf.scale;
-        ctx.strokeStyle = skin.hyperDashFruit || skin.hyperDash;
-        ctx.lineWidth = 2.5 * tf.scale;
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
-        ctx.stroke();
-      }
+      ctx.restore();
     }
     ctx.globalAlpha = 1;
   }

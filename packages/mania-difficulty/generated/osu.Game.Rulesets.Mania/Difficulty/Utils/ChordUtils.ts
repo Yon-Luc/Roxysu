@@ -1,5 +1,5 @@
 // @generated from osu.Game.Rulesets.Mania/Difficulty/Utils/ChordUtils.cs
-// upstream sha: bd6bbda8e649a806371d784a485d5962f709089e
+// upstream sha: 1859fda79775fabbd451b625b7fef6f90aabab13
 // generator: 0.5.0
 // Do not edit by hand — regenerate with: bun run port:generate
 
@@ -42,9 +42,9 @@ export const ChordUtils = {
   },
 
   ChordRepeatNerf(current: ManiaDifficultyHitObject, columnDelta: number): number {
-    const full_chord_nerf = 0.50;
+    const full_chord_nerf = 0.24;
     const full_chord_run_ramp = 2.0;
-    const near_full_chord_nerf = 0.085;
+    const near_full_chord_nerf = 0.045;
     const near_full_chord_run_ramp = 12.0;
     let totalColumns = current.Row.TotalColumns;
     let speedScale = DiffUtils.ReverseLerp(columnDelta, 0.0, chord_speed_threshold_ms);
@@ -68,7 +68,7 @@ export const ChordUtils = {
       const earlier = row.Previous();
       if (!((((run <= cap) && (earlier != null)) && (earlier.Size >= minSize)))) break;
       (run++);
-      row = earlier;
+      row = earlier as typeof row;
     }
     return RunDampenUtils.Dampen(run, runRamp, ceiling);
   },

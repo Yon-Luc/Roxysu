@@ -85,7 +85,8 @@ Three estimators write to the same store, keyed by `algorithm`: `sunny`, `daniel
 7. `rework:` matches only `algorithm = 'mania-difficulty'` rows; `dan:` matches
    Sunny and Daniel only. The two never mix.
 8. The mania difficulty port pin is `packages/mania-difficulty/upstream/revision.json`
-   (`loleur362/osu` branch `mania-difficulty`). A new pin changes star ratings.
+   (`loleur362/osu` branch `mania-difficulty`, currently `1859fda`, whose skill
+   curves use 100% accuracy as the base difficulty). A new pin changes star ratings.
    **Calculate missing dans** only fills missing rows and rows whose beatmap
    hash changed. **Recalculate all** (`POST /api/settings/rework-dan/recompute`)
    deletes `mania-difficulty` dan rows and `mania-skill-v1` pattern rows, then

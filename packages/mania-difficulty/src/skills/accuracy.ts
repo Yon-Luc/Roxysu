@@ -1,18 +1,21 @@
 /** Port of AccuracyValueMultipliers + AccuracyDifficulties (value semantics). */
 
+import { DiffUtils } from "../../generated/osu.Game/Rulesets/Difficulty/Utils/DiffUtils";
+
 export const ACCURACY_VALUES = [
   1.0, 0.995, 0.99, 0.98, 0.95, 0.9, 0.85, 0.8, 0.75,
 ] as const;
-
-const BASE_DIFFICULTY_INDEX = 3; // 98%
 
 export type AccuracyValueMultipliers = {
   AccuracyMultipliers: number[];
 };
 
+/**
+ * SS (index 0) is always 1: the raw strain is the difficulty of a 100% hit.
+ * The last slot is the floor accuracy, which asks for no skill.
+ */
 export function accuracyValueMultipliers(
-  multiplierAtSS: number,
-  multiplierAt99_5: number,
+  multiplierAt995: number,
   multiplierAt99: number,
   multiplierAt98: number,
   multiplierAt95: number,
@@ -22,8 +25,8 @@ export function accuracyValueMultipliers(
 ): AccuracyValueMultipliers {
   return {
     AccuracyMultipliers: [
-      multiplierAtSS,
-      multiplierAt99_5,
+      1.0,
+      multiplierAt995,
       multiplierAt99,
       multiplierAt98,
       multiplierAt95,
@@ -41,69 +44,86 @@ export type AccuracyDifficulties = {
 };
 
 export function accuracyDifficulties(
-  difficulty: number,
+  baseDifficulty: number,
   multipliers: AccuracyValueMultipliers,
 ): AccuracyDifficulties {
   return {
-    BaseDifficulty: difficulty,
+    BaseDifficulty: baseDifficulty,
     Multipliers: [...multipliers.AccuracyMultipliers],
   };
 }
 
+/** Index 0 is the base (SS). Every other index is relative to it. */
 function getDifficulty(d: AccuracyDifficulties, index: number): number {
-  return d.BaseDifficulty * d.Multipliers[index]!;
+  return index === 0
+    ? d.BaseDifficulty
+    : d.BaseDifficulty * d.Multipliers[index]!;
 }
 
-function fromDifficultyArray(difficulties: number[]): AccuracyDifficulties {
-  const baseDifficulty = difficulties[BASE_DIFFICULTY_INDEX]!;
-  const multipliers = difficulties.map((v) =>
-    baseDifficulty !== 0 ? v / baseDifficulty : 0,
-  );
-  return { BaseDifficulty: baseDifficulty, Multipliers: multipliers };
+/** Integer overload of DiffUtils.Pow, used by AccuracyDifficulties.Pow(int). */
+function powInt(x: number, exponent: number): number {
+  switch (exponent) {
+    case 0:
+      return 1;
+    case 1:
+      return x;
+    case 2:
+      return x * x;
+    case 3:
+      return x * x * x;
+    case 4:
+      return x * x * x * x;
+    case 5:
+      return x * x * x * x * x;
+    default:
+      return DiffUtils.Pow(x, exponent);
+  }
 }
 
 export function accuracyPowInt(
   base: AccuracyDifficulties,
   exponent: number,
 ): AccuracyDifficulties {
-  const n = ACCURACY_VALUES.length;
-  const next = new Array<number>(n).fill(0);
-  for (let i = 0; i < n - 1; i++) {
-    const v = getDifficulty(base, i);
-    next[i] = exponent === 2 ? v * v : Math.pow(v, exponent);
-  }
-  return fromDifficultyArray(next);
+  const multipliers = base.Multipliers.map((m) => powInt(m, exponent));
+  return {
+    BaseDifficulty: powInt(base.BaseDifficulty, exponent),
+    Multipliers: multipliers,
+  };
 }
 
 export function accuracyPow(
   base: AccuracyDifficulties,
   exponent: number,
 ): AccuracyDifficulties {
-  return accuracyPowInt(base, exponent);
+  return {
+    BaseDifficulty: Math.pow(base.BaseDifficulty, exponent),
+    Multipliers: base.Multipliers.map((m) => Math.pow(m, exponent)),
+  };
 }
 
 export function accuracyAdd(
   left: AccuracyDifficulties,
   right: AccuracyDifficulties,
 ): AccuracyDifficulties {
-  const n = ACCURACY_VALUES.length;
-  const next = new Array<number>(n).fill(0);
-  for (let i = 0; i < n - 1; i++) {
-    next[i] = getDifficulty(left, i) + getDifficulty(right, i);
+  const newBase = left.BaseDifficulty + right.BaseDifficulty;
+  const multipliers = new Array<number>(left.Multipliers.length).fill(0);
+  for (let i = 0; i < left.Multipliers.length - 1; i++) {
+    multipliers[i] =
+      newBase > 0
+        ? (getDifficulty(left, i) + getDifficulty(right, i)) / newBase
+        : 1;
   }
-  return fromDifficultyArray(next);
+  return { BaseDifficulty: newBase, Multipliers: multipliers };
 }
 
 export function accuracyScale(
   left: AccuracyDifficulties,
   right: number,
 ): AccuracyDifficulties {
-  const n = ACCURACY_VALUES.length;
-  const next = new Array<number>(n).fill(0);
-  for (let i = 0; i < n - 1; i++) {
-    next[i] = getDifficulty(left, i) * right;
-  }
-  return fromDifficultyArray(next);
+  return {
+    BaseDifficulty: left.BaseDifficulty * right,
+    Multipliers: left.Multipliers,
+  };
 }
 
 function lerp(a: number, b: number, t: number): number {

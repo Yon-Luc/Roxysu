@@ -1,5 +1,5 @@
 // @generated from osu.Game.Rulesets.Mania/Difficulty/Evaluators/Jack/SpeedjackEvaluator.cs
-// upstream sha: bd6bbda8e649a806371d784a485d5962f709089e
+// upstream sha: 1859fda79775fabbd451b625b7fef6f90aabab13
 // generator: 0.5.0
 // Do not edit by hand — regenerate with: bun run port:generate
 
@@ -34,13 +34,13 @@ export const SpeedjackEvaluator = {
       return 1.0;
     }
     let sizeGate = ((row.Size <= 1) ? 0.5 : (1.0 - (0.8 * DiffUtils.Smoothstep(row.Size, 2.0, 4.0))));
-    return (1.0 + (((0.35 * speedScale) * sizeGate) * clean));
+    return (1.0 + (((0.55 * speedScale) * sizeGate) * clean));
   },
 
   localJumptrillRollDensity(row: ManiaRow): number {
     let window = 0;
     let manipulable = 0;
-    for (let current: ManiaRow | null = row; ((current != null) && (window < 6)); current = current.Previous()) {
+    for (let current: ManiaRow | null = row; ((current != null) && (window < 6)); current = current.Previous() as typeof current) {
       (window++);
       let previous = current.Previous();
       let previous2 = current.Previous(1);

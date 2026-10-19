@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import * as paint from "./paintCatchPlayfield";
 import {
   buildCatchComboInfo,
+  circleSizeScale,
+  dropletDiameter,
+  fruitDiameter,
   fruitKindForIndex,
   type CatchHitObject,
 } from "./paintCatchPlayfield";
@@ -60,5 +64,18 @@ describe("fruitKindForIndex", () => {
     expect(fruitKindForIndex(2)).toBe("apple");
     expect(fruitKindForIndex(3)).toBe("orange");
     expect(fruitKindForIndex(4)).toBe("pear");
+  });
+});
+
+describe("catch object size", () => {
+  test("CS 5 fruit diameter is 64 osu pixels", () => {
+    expect(circleSizeScale(5)).toBe(0.5);
+    expect(fruitDiameter(5)).toBe(64);
+    expect(dropletDiameter(5)).toBe(16);
+    expect(dropletDiameter(5, true)).toBe(8);
+  });
+
+  test("does not export a hyperdash connector", () => {
+    expect("nextHyperFruit" in paint).toBe(false);
   });
 });

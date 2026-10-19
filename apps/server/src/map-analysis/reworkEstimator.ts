@@ -2,10 +2,10 @@ import { parseOsuChart } from "@roxysu/osu-chart";
 import {
   reworkDanLabel,
   skillProfile,
+  type ShapeLabel,
   type SkillLabel,
   type SkillStar,
 } from "@roxysu/mania-difficulty";
-import { noteDensities } from "@roxysu/mania-pattern-analysis";
 import type { ChartNote } from "@roxysu/osu-chart";
 
 /** Estimator id stored in the Sunny dan ratings store. */
@@ -33,6 +33,8 @@ export type ReworkPatternValues = {
   chordjackScore: number;
   jumpstreamScore: number;
   chordstreamScore: number;
+  shapePattern: ShapeLabel | null;
+  secondaryShape: ShapeLabel | null;
 };
 
 export type ReworkEstimatorResult = ReworkDanValues & {
@@ -155,7 +157,7 @@ export function analyzeManiaOnceFromText(
     windowMs: options.windowMs ?? null,
     shouldContinue: options.shouldContinue,
   });
-  const densities = noteDensities(chart.notes);
+  const shape = profile.attributes.shape;
   return {
     ...danValues(
       profile.attributes,
@@ -169,7 +171,15 @@ export function analyzeManiaOnceFromText(
       dominantPattern: profile.dominant,
       secondaryPattern: profile.secondary,
       confidence: profile.confidence,
-      ...densities,
+      jackDensity: shape?.jackDensity ?? 0,
+      chordDensity: shape?.chordDensity ?? 0,
+      streamDensity: shape?.streamDensity ?? 0,
+      bracketDensity: shape?.bracketDensity ?? 0,
+      chordjackScore: shape?.chordjackScore ?? 0,
+      jumpstreamScore: shape?.jumpstreamScore ?? 0,
+      chordstreamScore: shape?.chordstreamScore ?? 0,
+      shapePattern: shape?.dominant ?? null,
+      secondaryShape: shape?.secondary ?? null,
     },
   };
 }

@@ -7,7 +7,9 @@
     ".": "./src/index.ts",
     "./dans": "./src/dans.ts",
     "./skills": "./src/skills.ts",
-    "./skill-profile": "./src/skillProfile.ts"
+    "./skill-profile": "./src/skillProfile.ts",
+    "./shape": "./src/shape.ts",
+    "./shape-profile": "./src/shapeProfile.ts"
   },
   "scripts": {
     "test": "bun test",

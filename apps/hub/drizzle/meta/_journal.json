@@ -64,6 +64,13 @@
       "when": 1788114400000,
       "tag": "0008_bms",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1788118000000,
+      "tag": "0009_pattern_shape",
+      "breakpoints": true
     }
   ]
 }

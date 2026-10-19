@@ -249,13 +249,25 @@ Dan tier derived from the **mania difficulty port** star rating. Tiers are floor
 
 ### Dominant skill
 
-The one **mania difficulty port** skill a chart leans on hardest (`speed`, `jack`, `coordination`, `technical`, `release`). Replaced the Interlude/YAVSRG pattern families as the active pattern algorithm `mania-skill-v1`. The runner-up becomes the secondary skill when it reaches 85% of the top skill; confidence is the gap between them. `pattern:` / `dominant:` / `style:` query fields match it, and retired Interlude names still resolve to their nearest skill.
+The one **mania difficulty port** skill a chart leans on hardest (`speed`, `jack`, `coordination`, `technical`, `release`). Stored as `dominant_pattern` on the pattern algorithm `mania-skill-v1`. The runner-up becomes the secondary skill when it reaches 85% of the top skill; confidence is the gap between them. `pattern:speed` and `pattern:jack` match this label. Family names such as jumpstream match **chart shape** instead.
 
-**Not:** pattern, pattern label, style tag, skillset (recommendation axis)
+**Not:** pattern, pattern label, style tag, skillset (recommendation axis), chart shape
 
 **In code:** `packages/mania-difficulty/src/skills.ts`, `skillProfile()`, `packages/mania-pattern-analysis/src/skillAnalysis.ts`
 
 **See:** [features/sunny-dan-recommendations/](features/sunny-dan-recommendations/index.md)
+
+---
+
+### Chart shape
+
+The column pattern a mania chart is built from (`stream`, `trill`, `jumptrill`, `jumpstream`, `handstream`, `chordjack`, `chordstream`, `bracket`), counted on the mania difficulty port's row graph during the same pass as star rating. Stored as `shape_pattern` / `secondary_shape` on the `mania-skill-v1` row. An empty `shape_pattern` means the walk ran and no family led. Null means the row has not been classified yet. `pattern:jumpstream` matches it. `pattern:delay` is the 7K name for `stream`. `pattern:jack` stays the jack **dominant skill**.
+
+**Not:** dominant skill, Interlude recogniser, skillset
+
+**In code:** `packages/mania-difficulty/src/shape.ts`, `chartShapeWalk()`, `beatmap_pattern_analysis.shape_pattern`
+
+**See:** [features/sunny-dan-recommendations/](features/sunny-dan-recommendations/index.md), [features/practice-library/](features/practice-library/index.md)
 
 ---
 

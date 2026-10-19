@@ -6,6 +6,11 @@
 import { ColumnPatternUtils } from "../../generated/osu.Game.Rulesets.Mania/Difficulty/Utils/ColumnPatternUtils";
 import { DiffUtils } from "../../generated/osu.Game/Rulesets/Difficulty/Utils/DiffUtils";
 import { ChordUtils } from "../../generated/osu.Game.Rulesets.Mania/Difficulty/Utils/ChordUtils";
+import {
+  emptyShapeCounts,
+  type ShapeLabel,
+  type ShapeWalk,
+} from "../shape";
 
 export type ManiaHand = "Left" | "Right" | "Both";
 
@@ -1161,4 +1166,115 @@ export function meanManipulation(objects: ManiaDifficultyHitObject[]): number {
   let sum = 0;
   for (const o of objects) sum += o.ManipulationFactor;
   return sum / objects.length;
+}
+
+function rowsInOrder(objects: ManiaDifficultyHitObject[]): ManiaRow[] {
+  const rows: ManiaRow[] = [];
+  let last = -1;
+  for (const obj of objects) {
+    const row = obj.Row;
+    if (!row || row.RowIndex === last) continue;
+    rows.push(row);
+    last = row.RowIndex;
+  }
+  return rows;
+}
+
+function sharesColumn(a: ManiaRow, b: ManiaRow): boolean {
+  return ColumnPatternUtils.SharesColumn(a.Columns, b.Columns);
+}
+
+/** Three dense chords with no jack and no column-shift roll. */
+function isBracketWindow(a: ManiaRow, b: ManiaRow, c: ManiaRow): boolean {
+  if (a.Size <= 2 || b.Size <= 2 || c.Size <= 2) return false;
+  if (a.Size + b.Size + c.Size <= 9) return false;
+  if (sharesColumn(a, b) || sharesColumn(b, c)) return false;
+  if (ColumnPatternUtils.IsRoll(a.Columns, b.Columns)) return false;
+  if (ColumnPatternUtils.IsRoll(b.Columns, c.Columns)) return false;
+  return true;
+}
+
+function rowInBracket(rows: ManiaRow[], index: number): boolean {
+  const windows: Array<[number, number, number]> = [];
+  if (index >= 2) windows.push([index - 2, index - 1, index]);
+  if (index >= 1 && index + 1 < rows.length) {
+    windows.push([index - 1, index, index + 1]);
+  }
+  if (index + 2 < rows.length) windows.push([index, index + 1, index + 2]);
+  return windows.some(([a, b, c]) =>
+    isBracketWindow(rows[a]!, rows[b]!, rows[c]!),
+  );
+}
+
+function besideSingle(row: ManiaRow, other: ManiaRow | undefined): boolean {
+  return other != null && other.IsSingleNote && !sharesColumn(row, other);
+}
+
+/**
+ * One family per row, first match wins.
+ *
+ * A jump sitting next to a single is jumpstream even when `jumptrillStrength`
+ * also fires: that detector treats every cross-hand jump as a jumptrill step.
+ * Jumptrill is reserved for jump rows whose neighbors are not those singles.
+ * Single-note trills are claimed before that detector so a two-column
+ * alternation stays a trill.
+ */
+function shapeLabelAt(rows: ManiaRow[], index: number): ShapeLabel | null {
+  const row = rows[index]!;
+  const prev = index > 0 ? rows[index - 1] : undefined;
+  const next = index + 1 < rows.length ? rows[index + 1] : undefined;
+  const jumpBesideSingle =
+    row.IsJump && (besideSingle(row, prev) || besideSingle(row, next));
+
+  if (isNarrowTrill(row)) return "trill";
+  if (row.IsJump && jumptrillStrength(row) > 0 && !jumpBesideSingle) {
+    return "jumptrill";
+  }
+  if (row.IsChord && prev?.IsChord && sharesColumn(prev, row)) return "chordjack";
+  if (rowInBracket(rows, index)) return "bracket";
+  if (
+    row.TotalColumns === 4 &&
+    row.Size === 3 &&
+    (prev == null || !sharesColumn(prev, row)) &&
+    (next == null || !sharesColumn(row, next))
+  ) {
+    return "handstream";
+  }
+  if (jumpBesideSingle) return "jumpstream";
+  if (row.IsChord && prev != null && !sharesColumn(prev, row)) return "chordstream";
+  if (row.IsSingleNote && prev != null && !sharesColumn(prev, row)) return "stream";
+  return null;
+}
+
+/**
+ * Count chart-shape families on a live hit-object graph.
+ *
+ * Call before `releaseHitObjectGraph`. The walk is linear and stores only
+ * counters.
+ */
+export function chartShapeWalk(objects: ManiaDifficultyHitObject[]): ShapeWalk {
+  const counts = emptyShapeCounts();
+  const rows = rowsInOrder(objects);
+  let jackSteps = 0;
+  let chordRows = 0;
+  for (const row of rows) {
+    if (row.IsChord) chordRows += 1;
+  }
+  for (let i = 1; i < rows.length; i++) {
+    const prev = rows[i - 1]!;
+    const row = rows[i]!;
+    if (sharesColumn(prev, row)) jackSteps += 1;
+    const label = shapeLabelAt(rows, i);
+    // Weight by notes in the row so a jump or a 3-note chord outweighs the
+    // single sitting next to it. An even jump/single split would otherwise
+    // tie as stream.
+    if (label) counts[label] += row.Size;
+  }
+  return {
+    rowCount: rows.length,
+    stepCount: Math.max(0, rows.length - 1),
+    chordRows,
+    jackSteps,
+    counts,
+  };
 }

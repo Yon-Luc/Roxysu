@@ -510,6 +510,9 @@ export const beatmapPatternAnalysis = sqliteTable(
     columnCount: integer("column_count"),
     dominantPattern: text("dominant_pattern"),
     secondaryPattern: text("secondary_pattern"),
+    /** Chart shape family (jumpstream, chordjack, trill, …). */
+    shapePattern: text("shape_pattern"),
+    secondaryShape: text("secondary_shape"),
     confidence: real("confidence"),
     jackDensity: real("jack_density"),
     chordDensity: real("chord_density"),

@@ -43,6 +43,8 @@ export type CalcBundleEntry = {
   estDiff?: string | null;
   dominantPattern?: string | null;
   secondaryPattern?: string | null;
+  shapePattern?: string | null;
+  secondaryShape?: string | null;
   confidence?: number | null;
   jackDensity?: number | null;
   chordDensity?: number | null;
@@ -162,6 +164,8 @@ export async function exportCalcBundleEntries(
       columnCount: beatmapPatternAnalysis.columnCount,
       dominantPattern: beatmapPatternAnalysis.dominantPattern,
       secondaryPattern: beatmapPatternAnalysis.secondaryPattern,
+      shapePattern: beatmapPatternAnalysis.shapePattern,
+      secondaryShape: beatmapPatternAnalysis.secondaryShape,
       confidence: beatmapPatternAnalysis.confidence,
       jackDensity: beatmapPatternAnalysis.jackDensity,
       chordDensity: beatmapPatternAnalysis.chordDensity,
@@ -205,6 +209,8 @@ export async function exportCalcBundleEntries(
       columnCount: row.columnCount,
       dominantPattern: row.dominantPattern,
       secondaryPattern: row.secondaryPattern,
+      shapePattern: row.shapePattern,
+      secondaryShape: row.secondaryShape,
       confidence: row.confidence,
       jackDensity: row.jackDensity,
       chordDensity: row.chordDensity,
@@ -334,6 +340,7 @@ export async function applyCalcBundle(
         .select({
           error: beatmapPatternAnalysis.error,
           dominantPattern: beatmapPatternAnalysis.dominantPattern,
+          shapePattern: beatmapPatternAnalysis.shapePattern,
         })
         .from(beatmapPatternAnalysis)
         .where(
@@ -348,7 +355,8 @@ export async function applyCalcBundle(
         !options?.replaceAlgorithms?.has(PATTERN_ALGORITHM) &&
         existing &&
         existing.error == null &&
-        existing.dominantPattern != null
+        existing.dominantPattern != null &&
+        (existing.shapePattern != null || entry.shapePattern == null)
       ) {
         stats.skipped++;
         continue;
@@ -363,6 +371,8 @@ export async function applyCalcBundle(
           columnCount: entry.columnCount ?? null,
           dominantPattern: entry.dominantPattern ?? null,
           secondaryPattern: entry.secondaryPattern ?? null,
+          shapePattern: entry.shapePattern ?? null,
+          secondaryShape: entry.secondaryShape ?? null,
           confidence: entry.confidence ?? null,
           jackDensity: entry.jackDensity ?? null,
           chordDensity: entry.chordDensity ?? null,
@@ -384,6 +394,8 @@ export async function applyCalcBundle(
             columnCount: entry.columnCount ?? null,
             dominantPattern: entry.dominantPattern ?? null,
             secondaryPattern: entry.secondaryPattern ?? null,
+            shapePattern: entry.shapePattern ?? null,
+            secondaryShape: entry.secondaryShape ?? null,
             confidence: entry.confidence ?? null,
             jackDensity: entry.jackDensity ?? null,
             chordDensity: entry.chordDensity ?? null,

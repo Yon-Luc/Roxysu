@@ -388,6 +388,8 @@ export const calcBundleEntries = sqliteTable(
     estDiff: text("est_diff"),
     dominantPattern: text("dominant_pattern"),
     secondaryPattern: text("secondary_pattern"),
+    shapePattern: text("shape_pattern"),
+    secondaryShape: text("secondary_shape"),
     confidence: real("confidence"),
     jackDensity: real("jack_density"),
     chordDensity: real("chord_density"),

@@ -1,3 +1,5 @@
+import type { ShapeProfile } from "./shape";
+
 export type ManiaDifficultyOptions = {
   mods?: string[];
   clockRate?: number;
@@ -36,4 +38,9 @@ export type ManiaDifficultyAttributes = {
   scoreLossCoefficientD?: number;
   upstreamSha?: string;
   generatorVersion?: string;
+  /**
+   * Chart-shape classification from the same row graph. Absent only on the
+   * empty-beatmap stub that never builds a graph.
+   */
+  shape?: ShapeProfile;
 };

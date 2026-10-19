@@ -116,8 +116,7 @@ describe("noteDensities", () => {
     expect(d.jackDensity).toBe(0);
   });
 
-  test("detects chords and same-column repeats", () => {
-    // alternating chord / same-column pair
+  test("scores overlapping chords as chordjacks", () => {
     const notes = [
       note(0, 0),
       note(1, 0),
@@ -127,9 +126,10 @@ describe("noteDensities", () => {
       note(2, 400),
     ];
     const d = noteDensities(notes);
-    expect(d.chordDensity).toBeCloseTo(1, 10);
+    expect(d.chordDensity).toBeGreaterThan(0);
     expect(d.jackDensity).toBeGreaterThan(0);
-    expect(d.chordstreamScore).toBeCloseTo(1, 10);
+    expect(d.chordjackScore).toBeGreaterThan(0);
+    expect(d.chordstreamScore).toBe(0);
   });
 
   test("a single-column stream is all jacks", () => {

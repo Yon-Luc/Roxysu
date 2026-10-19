@@ -109,38 +109,41 @@ function parsePlayed(rest: string): number | null {
 }
 
 /**
- * Normalize pattern synonyms to canonical skill labels.
+ * Normalize pattern synonyms.
  *
- * Retired Interlude names still resolve, so old searches keep working and land
- * on the skill that replaced them.
+ * Skill tokens stay skills. Family names stay chart shapes (`delay` is the
+ * 7K name for `stream`). `jack` stays the jack skill.
  */
 function normalizePatternValue(raw: string): string {
   const compact = raw.trim().toLowerCase().replace(/[\s_-]+/g, "");
   const aliases: Record<string, string> = {
-    // current skill labels
     speed: "speed",
     jack: "jack",
     jacks: "jack",
     coordination: "coordination",
-    chord: "coordination",
     technical: "technical",
     tech: "technical",
     release: "release",
-    // retired Interlude names
-    jumpstream: "speed",
-    js: "speed",
-    handstream: "speed",
-    hs: "speed",
-    chordjack: "coordination",
-    cj: "coordination",
-    chordstream: "coordination",
-    cs: "coordination",
-    bracket: "technical",
-    brackets: "technical",
-    delay: "technical",
-    delays: "technical",
-    stream: "speed",
-    streams: "speed",
+    jumpstream: "jumpstream",
+    js: "jumpstream",
+    handstream: "handstream",
+    hs: "handstream",
+    chordjack: "chordjack",
+    cj: "chordjack",
+    chordstream: "chordstream",
+    cs: "chordstream",
+    chord: "chordstream",
+    bracket: "bracket",
+    brackets: "bracket",
+    stream: "stream",
+    streams: "stream",
+    delay: "stream",
+    delays: "stream",
+    trill: "trill",
+    trills: "trill",
+    thrill: "trill",
+    jumptrill: "jumptrill",
+    jt: "jumptrill",
   };
   return aliases[compact] ?? raw.trim().toLowerCase();
 }

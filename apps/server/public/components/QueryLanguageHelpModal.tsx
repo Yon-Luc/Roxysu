@@ -29,7 +29,7 @@ const FIELDS: { field: string; meaning: string; example: string }[] = [
   {
     field: "cs / circlesize",
     meaning:
-      "Circle size on any ruleset. Not mania keys (use key:) and not pattern:cs (coordination). Local library only.",
+      "Circle size on any ruleset. Not mania keys (use key:) and not pattern:cs (chordstream). Local library only.",
     example: "cs:4..4.5",
   },
   {
@@ -71,8 +71,8 @@ const FIELDS: { field: string; meaning: string; example: string }[] = [
   {
     field: "pattern / dominant / style",
     meaning:
-      "Dominant skill (speed, jack, coordination, technical, release). Retired Interlude names still resolve.",
-    example: "pattern:speed key=4",
+      "Skill (speed, jack, coordination, technical, release) or chart shape (jumpstream, chordstream, chordjack, bracket, handstream, stream, trill, jumptrill). pattern:jack is the jack skill. pattern:delay matches stream.",
+    example: "pattern:jumpstream key=4",
   },
   {
     field: "rework / reworkdan",
@@ -129,6 +129,8 @@ const EXAMPLES = [
   "pattern:speed stars:4..6",
   "pattern:technical key=7",
   "pattern:jack OR pattern:coordination",
+  "pattern:jumpstream",
+  "key=7 pattern:chordjack",
   "dan:Alpha OR dan:Beta",
   "rework:Alpha",
   'rework:"Regular Zenith"',

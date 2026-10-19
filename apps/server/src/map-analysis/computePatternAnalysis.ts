@@ -31,6 +31,8 @@ export type PatternAnalysisRating = {
   columnCount: number | null;
   dominantPattern: PatternLabel | null;
   secondaryPattern: PatternLabel | null;
+  shapePattern: string | null;
+  secondaryShape: string | null;
   confidence: number | null;
   jackDensity: number | null;
   chordDensity: number | null;
@@ -324,6 +326,8 @@ function rowToResult(
     columnCount: row.columnCount,
     dominantPattern: (row.dominantPattern as PatternLabel | null) ?? null,
     secondaryPattern: (row.secondaryPattern as PatternLabel | null) ?? null,
+    shapePattern: row.shapePattern ?? null,
+    secondaryShape: row.secondaryShape ?? null,
     confidence: row.confidence,
     jackDensity: row.jackDensity,
     chordDensity: row.chordDensity,
@@ -355,6 +359,8 @@ async function upsertRating(
         columnCount: values.columnCount,
         dominantPattern: values.dominantPattern,
         secondaryPattern: values.secondaryPattern,
+        shapePattern: values.shapePattern,
+        secondaryShape: values.secondaryShape,
         confidence: values.confidence,
         jackDensity: values.jackDensity,
         chordDensity: values.chordDensity,
@@ -376,6 +382,8 @@ async function upsertRating(
       columnCount: values.columnCount ?? null,
       dominantPattern: values.dominantPattern ?? null,
       secondaryPattern: values.secondaryPattern ?? null,
+      shapePattern: values.shapePattern ?? null,
+      secondaryShape: values.secondaryShape ?? null,
       confidence: values.confidence ?? null,
       jackDensity: values.jackDensity ?? null,
       chordDensity: values.chordDensity ?? null,
@@ -499,6 +507,8 @@ async function computeOnePattern(
       columnCount: null,
       dominantPattern: null,
       secondaryPattern: null,
+      shapePattern: null,
+      secondaryShape: null,
       confidence: null,
       jackDensity: null,
       chordDensity: null,
@@ -520,6 +530,8 @@ async function computeOnePattern(
       columnCount: null,
       dominantPattern: null,
       secondaryPattern: null,
+      shapePattern: null,
+      secondaryShape: null,
       confidence: null,
       jackDensity: null,
       chordDensity: null,
@@ -542,6 +554,8 @@ async function computeOnePattern(
       columnCount: null,
       dominantPattern: null,
       secondaryPattern: null,
+      shapePattern: null,
+      secondaryShape: null,
       confidence: null,
       jackDensity: null,
       chordDensity: null,
@@ -566,6 +580,8 @@ async function computeOnePattern(
       columnCount: null,
       dominantPattern: null,
       secondaryPattern: null,
+      shapePattern: null,
+      secondaryShape: null,
       confidence: null,
       jackDensity: null,
       chordDensity: null,
@@ -590,6 +606,9 @@ async function computeOnePattern(
       columnCount: result.columnCount,
       dominantPattern: result.dominantPattern,
       secondaryPattern: result.secondaryPattern,
+      // Empty string means the walk ran and no family led. Null means not computed yet.
+      shapePattern: result.shapePattern ?? "",
+      secondaryShape: result.secondaryShape,
       confidence: result.confidence,
       jackDensity: result.jackDensity,
       chordDensity: result.chordDensity,
@@ -610,6 +629,8 @@ async function computeOnePattern(
       columnCount: null,
       dominantPattern: null,
       secondaryPattern: null,
+      shapePattern: null,
+      secondaryShape: null,
       confidence: null,
       jackDensity: null,
       chordDensity: null,
@@ -632,6 +653,8 @@ function upsertRatingSync(
     columnCount: number | null;
     dominantPattern: string | null;
     secondaryPattern: string | null;
+    shapePattern: string | null;
+    secondaryShape: string | null;
     confidence: number | null;
     jackDensity: number | null;
     chordDensity: number | null;
@@ -649,16 +672,19 @@ function upsertRatingSync(
       `
       INSERT INTO beatmap_pattern_analysis (
         beatmap_id, algorithm, beatmap_hash, column_count,
-        dominant_pattern, secondary_pattern, confidence,
+        dominant_pattern, secondary_pattern, shape_pattern, secondary_shape,
+        confidence,
         jack_density, chord_density, stream_density, bracket_density,
         chordjack_score, jumpstream_score, chordstream_score,
         error, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(beatmap_id, algorithm) DO UPDATE SET
         beatmap_hash = excluded.beatmap_hash,
         column_count = excluded.column_count,
         dominant_pattern = excluded.dominant_pattern,
         secondary_pattern = excluded.secondary_pattern,
+        shape_pattern = excluded.shape_pattern,
+        secondary_shape = excluded.secondary_shape,
         confidence = excluded.confidence,
         jack_density = excluded.jack_density,
         chord_density = excluded.chord_density,
@@ -678,6 +704,8 @@ function upsertRatingSync(
       values.columnCount,
       values.dominantPattern,
       values.secondaryPattern,
+      values.shapePattern,
+      values.secondaryShape,
       values.confidence,
       values.jackDensity,
       values.chordDensity,
@@ -708,6 +736,8 @@ function computeOnePatternSync(
       columnCount: null,
       dominantPattern: null,
       secondaryPattern: null,
+      shapePattern: null,
+      secondaryShape: null,
       confidence: null,
       jackDensity: null,
       chordDensity: null,
@@ -729,6 +759,8 @@ function computeOnePatternSync(
       columnCount: null,
       dominantPattern: null,
       secondaryPattern: null,
+      shapePattern: null,
+      secondaryShape: null,
       confidence: null,
       jackDensity: null,
       chordDensity: null,
@@ -751,6 +783,8 @@ function computeOnePatternSync(
       columnCount: null,
       dominantPattern: null,
       secondaryPattern: null,
+      shapePattern: null,
+      secondaryShape: null,
       confidence: null,
       jackDensity: null,
       chordDensity: null,
@@ -775,6 +809,8 @@ function computeOnePatternSync(
       columnCount: null,
       dominantPattern: null,
       secondaryPattern: null,
+      shapePattern: null,
+      secondaryShape: null,
       confidence: null,
       jackDensity: null,
       chordDensity: null,
@@ -801,6 +837,9 @@ function computeOnePatternSync(
       columnCount: result.columnCount,
       dominantPattern: result.dominantPattern,
       secondaryPattern: result.secondaryPattern,
+      // Empty string means the walk ran and no family led. Null means not computed yet.
+      shapePattern: result.shapePattern ?? "",
+      secondaryShape: result.secondaryShape,
       confidence: result.confidence,
       jackDensity: result.jackDensity,
       chordDensity: result.chordDensity,
@@ -820,6 +859,8 @@ function computeOnePatternSync(
       columnCount: null,
       dominantPattern: null,
       secondaryPattern: null,
+      shapePattern: null,
+      secondaryShape: null,
       confidence: null,
       jackDensity: null,
       chordDensity: null,
@@ -872,6 +913,11 @@ export async function backfillPatternAnalysis(
           pa.beatmap_id IS NULL
           OR pa.dominant_pattern IS NULL
           OR (
+            pa.error IS NULL
+            AND pa.dominant_pattern IS NOT NULL
+            AND pa.shape_pattern IS NULL
+          )
+          OR (
             b.hash IS NOT NULL
             AND pa.beatmap_hash IS NOT NULL
             AND pa.beatmap_hash != b.hash
@@ -881,6 +927,11 @@ export async function backfillPatternAnalysis(
     : `
         (
           pa.beatmap_id IS NULL
+          OR (
+            pa.error IS NULL
+            AND pa.dominant_pattern IS NOT NULL
+            AND pa.shape_pattern IS NULL
+          )
           OR (
             b.hash IS NOT NULL
             AND pa.beatmap_hash IS NOT NULL

@@ -2,12 +2,14 @@ import type { ManiaBeatmapInput } from "../types";
 import type { ManiaDifficultyAttributes } from "../types";
 import {
   buildHitObjectGraph,
+  chartShapeWalk,
   ChartMemoryError,
   GRAPH_CHECK_EVERY,
   meanManipulation,
   releaseHitObjectGraph,
   type ManiaDifficultyHitObject,
 } from "../adapters/hitObject";
+import { shapeProfileFromWalk } from "../shape";
 import { DiffUtils } from "../../generated/osu.Game/Rulesets/Difficulty/Utils/DiffUtils";
 import {
   createCoordinationProcessor,
@@ -230,6 +232,9 @@ export function calculateWithSkills(
     scaleToStarRating(ssSkill * consistencyMult) * odMult * lengthBonus;
 
   const meanManip = meanManipulation(objects);
+  // Shape uses the live rows. `finally` releases the graph after this return
+  // value is built, so the walk has to finish first.
+  const shape = shapeProfileFromWalk(chartShapeWalk(objects));
 
   const holdNoteCount = beatmap.notes.filter((n) => n.endMs > n.startMs).length;
   // Attributes use full beatmap note counts (C# CreateDifficultyAttributes),
@@ -257,6 +262,7 @@ export function calculateWithSkills(
     noteCount: totalNotes,
     holdNoteCount,
     overallDifficulty: beatmap.overallDifficulty,
+    shape,
   };
   } finally {
     // Sever the graph even when the backfill aborts mid-chart. Otherwise the

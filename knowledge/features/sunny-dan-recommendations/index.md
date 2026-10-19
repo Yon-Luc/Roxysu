@@ -32,7 +32,7 @@ touches:
 
 Parse `.osu` charts from lazer storage, run Sunny Rework–style estimates, persist to the Sunny dan ratings store, expose them in the query language, and power 4K and 7K smart recommendations (Push / Accuracy / Consistency / Deficit / Skillset).
 
-Three estimators write to the same store, keyed by `algorithm`: `sunny`, `daniel`, and `mania-difficulty` (rework dan). `pattern:` labels now come from the **dominant skill** algorithm instead of Interlude.
+Three estimators write to the same store, keyed by `algorithm`: `sunny`, `daniel`, and `mania-difficulty` (rework dan). `pattern:` matches either the **dominant skill** or the **chart shape**, both written by algorithm `mania-skill-v1`.
 
 ## Business rules
 
@@ -98,7 +98,8 @@ Three estimators write to the same store, keyed by `algorithm`: `sunny`, `daniel
    not replace the dev library. A Hub bundle for the same product version can
    still gap-fill old numbers back in if a Recalculate all pass is restarted
    before it finishes.
-9. The `rework` rating display mode is client-side (`roxysu:rating-display`).
+9. Chart shape is counted on the difficulty row graph in the same calculator pass as the dominant skill (`chartShapeWalk` before the graph is released). It does not change star rating. Labels are `stream`, `trill`, `jumptrill`, `jumpstream`, `handstream` (4K), `chordjack`, `chordstream`, and `bracket` (7K). Stored on `shape_pattern` / `secondary_shape`. A pattern row with a skill and a null shape is missing and is filled by the pattern job without a new algorithm id. An empty `shape_pattern` means the walk ran and no family led (a pure jack chart), so the job does not recompute it. Cards, overlay, and tosu live keep showing the dominant skill.
+10. The `rework` rating display mode is client-side (`roxysu:rating-display`).
    Practice/search/collection list cards and the beatmap detail panel must pass
    `reworkStar` / `reworkEstDiff` / `reworkLnRatio` into `formatPrimaryRating`
    and `primaryDanSource`. The practice list serializer (`mapCard`) and

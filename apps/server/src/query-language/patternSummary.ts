@@ -1,4 +1,5 @@
 
+import { isShapeLabel } from "@roxysu/mania-difficulty";
 import type { Db } from "@roxysu/db/types";
 import { SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
 import { PATTERN_ALGORITHM } from "@roxysu/mania-pattern-analysis";
@@ -55,11 +56,13 @@ const PATTERN_DISPLAY: Record<string, string> = {
   chordstream: "Chordstream",
   stream: "Stream",
   delay: "Delay",
+  trill: "Trill",
+  jumptrill: "Jumptrill",
   mixed: "Mixed",
 };
 
-/** Skill labels summarised per key mode — the same five for 4K and 7K. */
-const PATTERNS_FOR_KEYMODE: readonly string[] = [
+/** Skill labels, the same five for 4K and 7K. */
+const SKILL_PATTERNS: readonly string[] = [
   "speed",
   "jack",
   "coordination",
@@ -67,8 +70,36 @@ const PATTERNS_FOR_KEYMODE: readonly string[] = [
   "release",
 ];
 
-function patternsForKeymode(_keymode: PatternKeymode): readonly string[] {
-  return PATTERNS_FOR_KEYMODE;
+/** Chart shapes the classifier emits for that key count. */
+const SHAPE_PATTERNS: Record<PatternKeymode, readonly string[]> = {
+  4: [
+    "stream",
+    "trill",
+    "jumptrill",
+    "jumpstream",
+    "handstream",
+    "chordjack",
+    "chordstream",
+  ],
+  7: [
+    "stream",
+    "trill",
+    "jumptrill",
+    "jumpstream",
+    "chordjack",
+    "chordstream",
+    "bracket",
+  ],
+};
+
+function patternsForKeymode(keymode: PatternKeymode): readonly string[] {
+  return [...SKILL_PATTERNS, ...SHAPE_PATTERNS[keymode]];
+}
+
+function patternColumns(pattern: string): { primary: string; secondary: string } {
+  return isShapeLabel(pattern)
+    ? { primary: "pa.shape_pattern", secondary: "pa.secondary_shape" }
+    : { primary: "pa.dominant_pattern", secondary: "pa.secondary_pattern" };
 }
 
 function baseFrom(_db: Db): string {
@@ -191,8 +222,9 @@ function buildPatternsForCounts(
   );
   const patterns: PatternSummaryItem[] = [];
 
-  const fetchSamples = (pattern: string) =>
-    db.$client
+  const fetchSamples = (pattern: string) => {
+    const columns = patternColumns(pattern);
+    return db.$client
       .query(
         `
         SELECT ${SELECT_COLS}
@@ -200,12 +232,12 @@ function buildPatternsForCounts(
         WHERE ${scopeWhere}
           AND pa.error IS NULL
           AND (
-            pa.dominant_pattern = ?
-            OR pa.secondary_pattern = ?
+            ${columns.primary} = ?
+            OR ${columns.secondary} = ?
           )
           ${axisFilter}
         ORDER BY
-          CASE WHEN pa.dominant_pattern = ? THEN 0 ELSE 1 END,
+          CASE WHEN ${columns.primary} = ? THEN 0 ELSE 1 END,
           COALESCE(m.last_played_at, b.last_played) DESC NULLS LAST,
           b.id
         LIMIT ?
@@ -220,6 +252,7 @@ function buildPatternsForCounts(
         ...axisParams,
         samplesPerPattern,
       ) as PracticeCardRow[];
+  };
 
   for (const pattern of patternsForKeymode(keymode)) {
     const row = countByPattern.get(pattern);
@@ -349,11 +382,46 @@ export function practicePatternSummary(
           AND pa.secondary_pattern != pa.dominant_pattern
           AND pa.error IS NULL
           ${axisFilter}
+
+        UNION ALL
+
+        SELECT pa.shape_pattern AS pattern, 'primary' AS role
+        FROM beatmaps b
+        LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
+        LEFT JOIN beatmap_dan_ratings dr
+          ON dr.beatmap_id = b.id AND dr.algorithm = ?
+        JOIN beatmap_pattern_analysis pa
+          ON pa.beatmap_id = b.id AND pa.algorithm = ?
+        WHERE ${scopeWhere}
+          AND pa.shape_pattern IS NOT NULL
+          AND pa.error IS NULL
+          ${axisFilter}
+
+        UNION ALL
+
+        SELECT pa.secondary_shape AS pattern, 'secondary' AS role
+        FROM beatmaps b
+        LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
+        LEFT JOIN beatmap_dan_ratings dr
+          ON dr.beatmap_id = b.id AND dr.algorithm = ?
+        JOIN beatmap_pattern_analysis pa
+          ON pa.beatmap_id = b.id AND pa.algorithm = ?
+        WHERE ${scopeWhere}
+          AND pa.secondary_shape IS NOT NULL
+          AND pa.secondary_shape != pa.shape_pattern
+          AND pa.error IS NULL
+          ${axisFilter}
       )
       GROUP BY pattern
     `,
     )
     .all(
+      SUNNY_ALGORITHM,
+      PATTERN_ALGORITHM,
+      ...axisParams,
+      SUNNY_ALGORITHM,
+      PATTERN_ALGORITHM,
+      ...axisParams,
       SUNNY_ALGORITHM,
       PATTERN_ALGORITHM,
       ...axisParams,

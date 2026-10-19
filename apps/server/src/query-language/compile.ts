@@ -1,3 +1,4 @@
+import { isShapeLabel } from "@roxysu/mania-difficulty";
 import type { AstNode, FieldTerm } from "./ast";
 import {
   DEFAULT_AXIS_THRESHOLDS,
@@ -260,13 +261,16 @@ function compileTerm(
     }
     case "pattern": {
       const pattern = likePattern(term.value, term.prefix);
-      const dominantPat = push(pattern);
+      const primaryPat = push(pattern);
       const secondaryPat = push(pattern);
+      const [primaryCol, secondaryCol] = isShapeLabel(term.value)
+        ? ["pa.shape_pattern", "pa.secondary_shape"]
+        : ["pa.dominant_pattern", "pa.secondary_pattern"];
       return `(
-        pa.dominant_pattern IS NOT NULL
+        ${primaryCol} IS NOT NULL
         AND (
-          lower(pa.dominant_pattern) LIKE lower(${dominantPat}) ESCAPE '\\'
-          OR lower(COALESCE(pa.secondary_pattern, '')) LIKE lower(${secondaryPat}) ESCAPE '\\'
+          lower(${primaryCol}) LIKE lower(${primaryPat}) ESCAPE '\\'
+          OR lower(COALESCE(${secondaryCol}, '')) LIKE lower(${secondaryPat}) ESCAPE '\\'
         )
       )`;
     }

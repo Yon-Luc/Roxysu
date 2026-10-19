@@ -49,7 +49,7 @@ export type FieldTerm =
       op?: ComparisonOp;
       value?: number;
     }
-  /** Dominant skill label (speed, jack, coordination, technical, release). */
+  /** Skill label or chart-shape family. Compile picks the column. */
   | { type: "pattern"; value: string; prefix?: boolean }
   /** RC vs LN map axis from Sunny ln_ratio (20% split, same as dan). */
   | { type: "axis"; value: "rc" | "ln" | "fln" }

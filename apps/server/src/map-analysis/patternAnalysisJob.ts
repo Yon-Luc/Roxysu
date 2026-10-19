@@ -87,6 +87,11 @@ export function countPatternAnalysisMissing(db: Db): number {
         AND (
           pa.beatmap_id IS NULL
           OR (
+            pa.error IS NULL
+            AND pa.dominant_pattern IS NOT NULL
+            AND pa.shape_pattern IS NULL
+          )
+          OR (
             b.hash IS NOT NULL
             AND pa.beatmap_hash IS NOT NULL
             AND pa.beatmap_hash != b.hash
@@ -107,6 +112,7 @@ export function getPatternAnalysisCoverage(db: Db): PatternAnalysisCoverage {
         SUM(
           CASE
             WHEN pa.dominant_pattern IS NOT NULL
+              AND pa.shape_pattern IS NOT NULL
               AND (
                 b.hash IS NULL
                 OR pa.beatmap_hash IS NULL

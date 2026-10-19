@@ -19,6 +19,8 @@ export type CalcBundleEntryInput = {
   estDiff?: string | null;
   dominantPattern?: string | null;
   secondaryPattern?: string | null;
+  shapePattern?: string | null;
+  secondaryShape?: string | null;
   confidence?: number | null;
   jackDensity?: number | null;
   chordDensity?: number | null;
@@ -106,6 +108,8 @@ function normalizeEntry(input: CalcBundleEntryInput): CalcBundleEntryInput | nul
     estDiff: input.estDiff ?? null,
     dominantPattern: input.dominantPattern ?? null,
     secondaryPattern: input.secondaryPattern ?? null,
+    shapePattern: input.shapePattern ?? null,
+    secondaryShape: input.secondaryShape ?? null,
     confidence: input.confidence ?? null,
     jackDensity: input.jackDensity ?? null,
     chordDensity: input.chordDensity ?? null,
@@ -194,6 +198,8 @@ export async function upsertCalcBundleChunk(opts: {
             estDiff: e.estDiff ?? null,
             dominantPattern: e.dominantPattern ?? null,
             secondaryPattern: e.secondaryPattern ?? null,
+            shapePattern: e.shapePattern ?? null,
+            secondaryShape: e.secondaryShape ?? null,
             confidence: e.confidence ?? null,
             jackDensity: e.jackDensity ?? null,
             chordDensity: e.chordDensity ?? null,
@@ -265,6 +271,8 @@ export function serializeEntry(row: typeof calcBundleEntries.$inferSelect) {
     estDiff: row.estDiff,
     dominantPattern: row.dominantPattern,
     secondaryPattern: row.secondaryPattern,
+    shapePattern: row.shapePattern,
+    secondaryShape: row.secondaryShape,
     confidence: row.confidence,
     jackDensity: row.jackDensity,
     chordDensity: row.chordDensity,

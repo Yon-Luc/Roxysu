@@ -130,6 +130,8 @@ function upsertPatternSync(
     columnCount: number | null;
     dominantPattern: string | null;
     secondaryPattern: string | null;
+    shapePattern: string | null;
+    secondaryShape: string | null;
     confidence: number | null;
     jackDensity: number | null;
     chordDensity: number | null;
@@ -147,16 +149,19 @@ function upsertPatternSync(
       `
       INSERT INTO beatmap_pattern_analysis (
         beatmap_id, algorithm, beatmap_hash, column_count,
-        dominant_pattern, secondary_pattern, confidence,
+        dominant_pattern, secondary_pattern, shape_pattern, secondary_shape,
+        confidence,
         jack_density, chord_density, stream_density, bracket_density,
         chordjack_score, jumpstream_score, chordstream_score,
         error, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(beatmap_id, algorithm) DO UPDATE SET
         beatmap_hash = excluded.beatmap_hash,
         column_count = excluded.column_count,
         dominant_pattern = excluded.dominant_pattern,
         secondary_pattern = excluded.secondary_pattern,
+        shape_pattern = excluded.shape_pattern,
+        secondary_shape = excluded.secondary_shape,
         confidence = excluded.confidence,
         jack_density = excluded.jack_density,
         chord_density = excluded.chord_density,
@@ -176,6 +181,8 @@ function upsertPatternSync(
       values.columnCount,
       values.dominantPattern,
       values.secondaryPattern,
+      values.shapePattern,
+      values.secondaryShape,
       values.confidence,
       values.jackDensity,
       values.chordDensity,
@@ -235,6 +242,8 @@ export function computeReworkDanSync(
         columnCount: null,
         dominantPattern: null,
         secondaryPattern: null,
+        shapePattern: null,
+        secondaryShape: null,
         confidence: null,
         jackDensity: null,
         chordDensity: null,
@@ -292,6 +301,9 @@ export function computeReworkDanSync(
         columnCount: p.columnCount,
         dominantPattern: p.dominantPattern,
         secondaryPattern: p.secondaryPattern,
+        // Empty string means the walk ran and no family led. Null means not computed yet.
+        shapePattern: p.shapePattern ?? "",
+        secondaryShape: p.secondaryShape,
         confidence: p.confidence,
         jackDensity: p.jackDensity,
         chordDensity: p.chordDensity,

@@ -19,6 +19,8 @@ const FALLBACK: Record<string, string> = {
   chordstream: "Chordstream",
   stream: "Stream",
   delay: "Delay",
+  trill: "Trill",
+  jumptrill: "Jumptrill",
   mixed: "Mixed",
 };
 

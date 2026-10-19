@@ -296,6 +296,10 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
             secondaryPattern: t.Optional(
               t.Nullable(t.String({ maxLength: 64 })),
             ),
+            shapePattern: t.Optional(t.Nullable(t.String({ maxLength: 64 }))),
+            secondaryShape: t.Optional(
+              t.Nullable(t.String({ maxLength: 64 })),
+            ),
             confidence: t.Optional(t.Nullable(t.Numeric())),
             jackDensity: t.Optional(t.Nullable(t.Numeric())),
             chordDensity: t.Optional(t.Nullable(t.Numeric())),

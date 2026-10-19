@@ -1,4 +1,9 @@
-import { SKILL_LABELS, type SkillLabel, type SkillStar } from "@roxysu/mania-difficulty";
+import {
+  SKILL_LABELS,
+  type ShapeLabel,
+  type SkillLabel,
+  type SkillStar,
+} from "@roxysu/mania-difficulty";
 
 /**
  * Dominant gameplay skill for a mania chart (Roxysu query/filter labels).
@@ -63,7 +68,12 @@ export type PatternAnalysisResult = PatternMetrics & {
   dominantPattern: PatternLabel | null;
   secondaryPattern: PatternLabel | null;
   confidence: number;
+  /** Chart shape family, counted on the difficulty row graph. */
+  shapePattern: ShapeLabel | null;
+  secondaryShape: ShapeLabel | null;
 };
+
+export type { ShapeLabel };
 
 export type PatternSection = {
   startMs: number;

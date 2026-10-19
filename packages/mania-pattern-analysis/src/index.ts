@@ -39,6 +39,7 @@ export type {
   PatternLabelV2,
   PatternMetrics,
   PatternSection,
+  ShapeLabel,
   SkillStar,
   StructuralPatternResult,
 } from "./roxysuTypes.js";

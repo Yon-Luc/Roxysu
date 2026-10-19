@@ -298,7 +298,8 @@ describe("backfillReworkDanSync", () => {
     const rows = db.$client
       .query(
         `SELECT beatmap_id AS id, dominant_pattern AS dominant,
-                secondary_pattern AS secondary, algorithm AS algorithm,
+                secondary_pattern AS secondary, shape_pattern AS shape,
+                algorithm AS algorithm,
                 chord_density AS chordDensity
          FROM beatmap_pattern_analysis WHERE algorithm = ?`,
       )
@@ -306,6 +307,7 @@ describe("backfillReworkDanSync", () => {
       id: string;
       dominant: string | null;
       secondary: string | null;
+      shape: string | null;
       algorithm: string;
       chordDensity: number | null;
     }>;
@@ -315,6 +317,7 @@ describe("backfillReworkDanSync", () => {
     for (const row of rated) {
       expect(row.algorithm).toBe(PATTERN_ALGORITHM);
       expect(SKILL_LABELS).toContain(row.dominant as never);
+      expect(row.shape).not.toBeNull();
       expect(row.chordDensity).not.toBeNull();
     }
   });

@@ -60,6 +60,15 @@ export {
 } from "./skillProfile";
 export type { SkillProfile, SkillWindow } from "./skillProfile";
 
+export { shapeProfile } from "./shapeProfile";
+export {
+  emptyShapeProfile,
+  isShapeLabel,
+  shapeProfileFromWalk,
+  SHAPE_LABELS,
+} from "./shape";
+export type { ShapeDensities, ShapeLabel, ShapeProfile, ShapeWalk } from "./shape";
+
 export {
   DiffUtils,
   SQRT2,

@@ -104,15 +104,15 @@ describe("parseQuery", () => {
     });
     expect(parseQuery("dominant:jumpstream")).toEqual({
       type: "term",
-      term: { type: "pattern", value: "speed", prefix: false },
+      term: { type: "pattern", value: "jumpstream", prefix: false },
     });
     expect(parseQuery("style:chordjack")).toEqual({
       type: "term",
-      term: { type: "pattern", value: "coordination", prefix: false },
+      term: { type: "pattern", value: "chordjack", prefix: false },
     });
     expect(parseQuery("pattern:^bracket")).toEqual({
       type: "term",
-      term: { type: "pattern", value: "technical", prefix: true },
+      term: { type: "pattern", value: "bracket", prefix: true },
     });
     expect(parseQuery("pattern:release")).toEqual({
       type: "term",
@@ -258,10 +258,10 @@ describe("compileQuery", () => {
     });
   });
 
-  test("keeps pattern:cs as coordination, not circle size", () => {
+  test("keeps pattern:cs as chordstream, not circle size", () => {
     expect(parseQuery("pattern:cs")).toEqual({
       type: "term",
-      term: { type: "pattern", value: "coordination", prefix: false },
+      term: { type: "pattern", value: "chordstream", prefix: false },
     });
   });
 
@@ -314,10 +314,9 @@ describe("compileQuery", () => {
   test("compiles pattern label against pattern analysis", () => {
     const ast = parseQuery("pattern:jumpstream");
     const compiled = compileQuery(ast);
-    expect(compiled.sql).toContain("pa.dominant_pattern");
-    expect(compiled.sql).toContain("pa.secondary_pattern");
-    // retired Interlude name resolves to the skill that replaced it
-    expect(compiled.params).toEqual(["%speed%", "%speed%"]);
+    expect(compiled.sql).toContain("pa.shape_pattern");
+    expect(compiled.sql).toContain("pa.secondary_shape");
+    expect(compiled.params).toEqual(["%jumpstream%", "%jumpstream%"]);
     expect((compiled.sql.match(/\?/g) ?? []).length).toBe(compiled.params.length);
   });
 
@@ -328,8 +327,8 @@ describe("compileQuery", () => {
     expect(compiled.params).toEqual([
       "mania",
       7,
-      "%coordination%",
-      "%coordination%",
+      "%chordstream%",
+      "%chordstream%",
     ]);
   });
 
@@ -337,6 +336,7 @@ describe("compileQuery", () => {
     const ast = parseQuery("key=7 axis:rc pattern:jack");
     const compiled = compileQuery(ast);
     expect(compiled.sql).toContain("dr.ln_ratio");
+    expect(compiled.sql).toContain("pa.dominant_pattern");
     expect((compiled.sql.match(/\?/g) ?? []).length).toBe(compiled.params.length);
     expect(compiled.params).toEqual(["mania", 7, 0.2, "%jack%", "%jack%"]);
   });

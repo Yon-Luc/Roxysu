@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 const STATE_TTL_MS = 10 * 60 * 1000;
 const HANDOFF_TTL_MS = 5 * 60 * 1000;
@@ -10,11 +10,15 @@ type StateEntry = {
   client: OAuthClientKind;
   /** Desktop handoff id from Roxysu begin — optional for web. */
   handoffId: string | null;
+  /** Handoff challenge: base64url SHA-256 of the initiating client's verifier. */
+  challenge: string;
   expiresAt: number;
 };
 
 type HandoffEntry = {
   token: string;
+  /** base64url SHA-256 of the verifier required to redeem. */
+  challenge: string;
   expiresAt: number;
 };
 
@@ -41,16 +45,44 @@ function randomId(): string {
   return randomBytes(24).toString("base64url");
 }
 
-/** Create a CSRF-bound OAuth `state` value echoed by osu!. */
+/** base64url SHA-256 is always 43 characters. */
+const CHALLENGE_RE = /^[A-Za-z0-9_-]{43}$/;
+const VERIFIER_RE = /^[A-Za-z0-9_-]{43,128}$/;
+
+export function isValidHandoffChallenge(value: string | undefined | null): value is string {
+  return typeof value === "string" && CHALLENGE_RE.test(value);
+}
+
+export function isValidHandoffVerifier(value: string | undefined | null): value is string {
+  return typeof value === "string" && VERIFIER_RE.test(value);
+}
+
+/** Challenge a client sends at login for a verifier it keeps private. */
+export function handoffChallengeFor(verifier: string): string {
+  return createHash("sha256").update(verifier).digest("base64url");
+}
+
+function challengeMatches(storedChallenge: string, verifier: string): boolean {
+  const a = Buffer.from(storedChallenge);
+  const b = Buffer.from(handoffChallengeFor(verifier));
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/** Create a CSRF-bound OAuth `state` value echoed by osu!; carries the handoff challenge. */
 export function createOAuthState(
   client: OAuthClientKind,
-  handoffId?: string | null,
+  handoffId: string | null | undefined,
+  challenge: string,
 ): string {
+  if (!isValidHandoffChallenge(challenge)) {
+    throw new Error("Invalid handoff challenge");
+  }
   pruneMap(oauthStates);
   const id = randomId();
   oauthStates.set(id, {
     client,
     handoffId: handoffId?.trim() || null,
+    challenge,
     expiresAt: Date.now() + STATE_TTL_MS,
   });
   return id;
@@ -73,8 +105,12 @@ export function consumeOAuthState(state: string | undefined): StateEntry | null 
  */
 export function createHandoff(
   token: string,
-  preferredId?: string | null,
+  preferredId: string | null | undefined,
+  challenge: string,
 ): string {
+  if (!isValidHandoffChallenge(challenge)) {
+    throw new Error("Invalid handoff challenge");
+  }
   pruneMap(handoffs);
   const id =
     preferredId &&
@@ -86,19 +122,33 @@ export function createHandoff(
       : randomId();
   handoffs.set(id, {
     token,
+    challenge,
     expiresAt: Date.now() + HANDOFF_TTL_MS,
   });
   return id;
 }
 
-/** One-time redeem of a handoff JWT. */
-export function consumeHandoff(id: string | undefined): string | null {
+/**
+ * One-time redeem of a handoff JWT. Requires the verifier whose SHA-256 was
+ * registered at login. A wrong or malformed verifier returns null and does
+ * NOT consume the handoff, so a third party that learned the id cannot burn
+ * it; the caller still counts the attempt toward the rate limit.
+ */
+export function consumeHandoff(
+  id: string | undefined,
+  verifier: string | undefined,
+): string | null {
   if (!id?.trim()) return null;
   pruneMap(handoffs);
   const entry = handoffs.get(id);
-  handoffs.delete(id);
   if (!entry) return null;
-  if (entry.expiresAt <= Date.now()) return null;
+  if (entry.expiresAt <= Date.now()) {
+    handoffs.delete(id);
+    return null;
+  }
+  if (!isValidHandoffVerifier(verifier)) return null;
+  if (!challengeMatches(entry.challenge, verifier)) return null;
+  handoffs.delete(id);
   return entry.token;
 }
 

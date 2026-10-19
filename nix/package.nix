@@ -346,6 +346,8 @@ in
          apps/desktop/auto-update.js \
          apps/desktop/preload.js \
          apps/desktop/paths.js \
+         apps/desktop/respawnPolicy.js \
+         apps/desktop/overlayApplyPolicy.js \
          apps/desktop/splash.html \
          apps/desktop/package.json \
          "$appdir/"

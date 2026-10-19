@@ -3,9 +3,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { and, eq } from "drizzle-orm";
-import { beatmaps, scores, settings } from "@roxysu/db/schema";
-import { SYNC_REALM_READER_PAUSED_KEY } from "@roxysu/db/settings-keys";
+import { and, asc, eq, gt, type SQL } from "drizzle-orm";
+import { beatmaps, scores } from "@roxysu/db/schema";
 import { defaultDbPath } from "@roxysu/db/path";
 import type { Db } from "@roxysu/db/types";
 import {
@@ -25,8 +24,12 @@ import {
   type ScoreTransferFile,
   type ScoreTransferRow,
 } from "./format";
+import {
+  realmWriteBusyMessage,
+  tryAcquireRealmWriteLock,
+  type RealmWriteLease,
+} from "../shared/realmWriteLock";
 
-const PAUSE_SETTLE_MS = 2_000;
 const MAX_UPLOAD_BYTES = 256 * 1024 * 1024;
 
 export type TransferPreview = {
@@ -41,12 +44,6 @@ export type TransferPreview = {
 export type TransferWriteResult =
   | { ok: true; added: number; skipped: number; backupPath: string; scoreIds: string[] }
   | { ok: false; error: string; code: "locked" | "schema_mismatch" | "in_flight" | "other" };
-
-let writeInFlight: Promise<TransferWriteResult> | null = null;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 function isBunRuntime(): boolean {
   return typeof (process.versions as { bun?: string }).bun === "string";
@@ -69,13 +66,6 @@ function toMs(value: Date | number | null | undefined): number {
   if (value instanceof Date) return value.getTime();
   if (typeof value === "number" && Number.isFinite(value)) return value;
   return 0;
-}
-
-async function setSetting(db: Db, key: string, value: string): Promise<void> {
-  await db
-    .insert(settings)
-    .values({ key, value })
-    .onConflictDoUpdate({ target: settings.key, set: { value } });
 }
 
 async function loadIndex(db: Db) {
@@ -154,14 +144,19 @@ function summarize(file: ScoreTransferFile, invalid: number, index: ReturnType<t
   };
 }
 
-export async function exportScoreTransfer(db: Db): Promise<ScoreTransferFile> {
-  const usernames = await resolveScoresUsernames(db);
-  const userCond = scoresUsernameCondition(usernames);
-  const where = userCond
-    ? and(eq(scores.deletePending, false), userCond)
-    : eq(scores.deletePending, false);
+/** Rows read from the local mirror per keyset page while exporting. */
+export const EXPORT_CHUNK_ROWS = 1_000;
+
+async function loadExportPage(
+  db: Db,
+  where: SQL | undefined,
+  afterId: string | null,
+  limit: number,
+): Promise<{ lastId: string | null; count: number; rows: ScoreTransferRow[] }> {
+  const pageWhere = afterId == null ? where : and(where, gt(scores.id, afterId));
   const rows = await db
     .select({
+      id: scores.id,
       onlineId: scores.onlineId,
       legacyOnlineId: scores.legacyOnlineId,
       beatmapHash: scores.beatmapHash,
@@ -188,12 +183,13 @@ export async function exportScoreTransfer(db: Db): Promise<ScoreTransferFile> {
     })
     .from(scores)
     .leftJoin(beatmaps, eq(scores.beatmapId, beatmaps.id))
-    .where(where);
+    .where(pageWhere)
+    .orderBy(asc(scores.id))
+    .limit(limit);
   return {
-    format: SCORE_TRANSFER_FORMAT,
-    version: SCORE_TRANSFER_VERSION,
-    exportedAt: new Date().toISOString(),
-    scores: rows.flatMap((row) => {
+    lastId: rows.length > 0 ? rows[rows.length - 1]!.id : null,
+    count: rows.length,
+    rows: rows.flatMap((row) => {
       if (!row.ruleset) return [];
       return [
         {
@@ -223,6 +219,67 @@ export async function exportScoreTransfer(db: Db): Promise<ScoreTransferFile> {
       ];
     }),
   };
+}
+
+/**
+ * Export as a lazily produced sequence of JSON text pieces. Concatenated, they
+ * are byte-identical to `JSON.stringify(file)` of a `ScoreTransferFile`
+ * (same key order, no whitespace), so the import path is unchanged. Rows are
+ * read in keyset pages of `chunkRows` (ordered by score id) and each page is
+ * encoded and yielded before the next is read, so memory is bounded by one
+ * page instead of the whole library.
+ */
+export async function* exportScoreTransferChunks(
+  db: Db,
+  opts: { chunkRows?: number; exportedAt?: string } = {},
+): AsyncGenerator<string, void, void> {
+  const chunkRows = Math.max(1, opts.chunkRows ?? EXPORT_CHUNK_ROWS);
+  const usernames = await resolveScoresUsernames(db);
+  const userCond = scoresUsernameCondition(usernames);
+  const where = userCond
+    ? and(eq(scores.deletePending, false), userCond)
+    : eq(scores.deletePending, false);
+
+  yield `{"format":${JSON.stringify(SCORE_TRANSFER_FORMAT)},"version":${SCORE_TRANSFER_VERSION},"exportedAt":${JSON.stringify(
+    opts.exportedAt ?? new Date().toISOString(),
+  )},"scores":[`;
+  let afterId: string | null = null;
+  let first = true;
+  for (;;) {
+    const page = await loadExportPage(db, where, afterId, chunkRows);
+    if (page.count === 0) break;
+    afterId = page.lastId;
+    if (page.rows.length > 0) {
+      const body = page.rows.map((row) => JSON.stringify(row)).join(",");
+      yield first ? body : `,${body}`;
+      first = false;
+    }
+    if (page.count < chunkRows) break;
+  }
+  yield "]}";
+}
+
+/** Same document as `exportScoreTransferChunks`, as a pull-based byte stream. */
+export function exportScoreTransferStream(
+  db: Db,
+  opts: { chunkRows?: number; exportedAt?: string } = {},
+): ReadableStream<Uint8Array> {
+  const chunks = exportScoreTransferChunks(db, opts);
+  const encoder = new TextEncoder();
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const next = await chunks.next();
+        if (next.done) controller.close();
+        else controller.enqueue(encoder.encode(next.value));
+      } catch (err) {
+        controller.error(err);
+      }
+    },
+    async cancel() {
+      await chunks.return();
+    },
+  });
 }
 
 export async function previewScoreTransfer(
@@ -330,16 +387,16 @@ function runWriteCli(payloadPath: string): Promise<{ stdout: string; stderr: str
 }
 
 export async function commitScoreTransfer(db: Db): Promise<TransferWriteResult> {
-  if (writeInFlight) return { ok: false, error: "Score write already running", code: "in_flight" };
-  writeInFlight = runCommit(db);
+  const lease = tryAcquireRealmWriteLock(db, "score_transfer_commit");
+  if (!lease) return { ok: false, error: realmWriteBusyMessage(), code: "in_flight" };
   try {
-    return await writeInFlight;
+    return await runCommit(db, lease);
   } finally {
-    writeInFlight = null;
+    await lease.release();
   }
 }
 
-async function runCommit(db: Db): Promise<TransferWriteResult> {
+async function runCommit(db: Db, lease: RealmWriteLease): Promise<TransferWriteResult> {
   const stored = uploadPath();
   if (!existsSync(stored)) {
     return { ok: false, error: "Choose the score file again.", code: "other" };
@@ -358,8 +415,7 @@ async function runCommit(db: Db): Promise<TransferWriteResult> {
     return { ok: false, error: "No scores waiting to add.", code: "other" };
   }
 
-  await setSetting(db, SYNC_REALM_READER_PAUSED_KEY, "1");
-  await sleep(PAUSE_SETTLE_MS);
+  await lease.pauseExtraction();
   try {
     let result: TransferWriteResult;
     if (!isBunRuntime()) {
@@ -399,6 +455,6 @@ async function runCommit(db: Db): Promise<TransferWriteResult> {
     if (result.ok) rmSync(stored, { force: true });
     return result;
   } finally {
-    await setSetting(db, SYNC_REALM_READER_PAUSED_KEY, "0");
+    await lease.release();
   }
 }

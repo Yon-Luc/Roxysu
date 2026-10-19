@@ -4,8 +4,11 @@ confidence: verified
 touches:
   - apps/hub/src/routes/osuScores.ts
   - apps/hub/src/services/osuScores.ts
+  - apps/hub/src/services/singleFlight.ts
   - apps/hub/src/services/osuBudget.ts
   - apps/server/src/online-scores/pull.ts
+  - apps/server/src/shared/realmWriteLock.ts
+  - apps/realm-reader/src/backupBeforeWrite.ts
   - apps/realm-reader/src/writeOnlineScores.ts
   - apps/server/public/features/settings/sections/OnlineScorePullSection.tsx
 ---
@@ -28,9 +31,13 @@ A manual, ruleset-scoped fetch. Loved and pending maps are out. The player previ
 4. Outbound osu! calls stay at or under 50 per rolling minute, with at most 4 in flight. A 429 parks the token until `Retry-After`.
 5. Ranked bests are stored on the Hub by score id. A scan younger than 24 hours refetches only page 0 unless the top score id changed or the user forces a refresh.
 6. A score can be added when its beatmap online id is in the Realm. A checksum mismatch still attaches to the current file and is counted separately.
-7. The write is manual. Lazer must be closed. `client.realm` is copied first (last 5 backups kept). Extraction is paused for the write.
+7. The write is manual. Lazer must be closed. `client.realm` is copied first, before the write connection opens (last 5 backups kept). Extraction is paused for the write.
 8. Written scores use the website score ids, standardised `total_score`, and `TotalScoreVersion` 30000019. There is no replay.
 9. The write process upserts those rows into the local mirror and records an import whose watermark is copied from the previous successful extraction.
+10. The commit holds the shared Realm write lock (see `features/smart-collections/` rule 7). A second Realm write gets HTTP 409 `in_flight`. Preview is also rejected with HTTP 409 `in_flight` while a commit is in flight, and a commit is rejected while preview is replacing the candidate rows.
+11. A commit writes the candidate rows it read at its start and, on success, deletes only those rows by score id. It never empties the candidate table, so rows from a newer preview survive.
+
+12. Ranked-best pulls are single-flight per osu! id and ruleset (key `osuUserId:ruleset`). A second caller, including a forced refresh arriving mid-pull, awaits the in-flight pull and receives its result, so one crawl and one delete-then-insert of the stored bests run and the osu! budget is spent once. The entry is cleared when the pull settles; an error reaches every waiter. The map is in Hub process memory (one Hub process).
 
 ## Security rules
 
@@ -46,14 +53,18 @@ A manual, ruleset-scoped fetch. Loved and pending maps are out. The player previ
 
 ## Important symbols
 
-- `apps/hub/src/services/osuScores.ts:pullRankedBests()`
+- `apps/hub/src/services/osuScores.ts:pullRankedBests()` — coalesces per `pullKey()`; crawl body is `runPullRankedBests()`
+- `apps/hub/src/services/singleFlight.ts:createKeyedFlights()`
 - `apps/hub/src/services/osuBudget.ts:acquireOsuSlot()`
 - `apps/server/src/online-scores/pull.ts:previewOnlineScores()`
+- `apps/server/src/online-scores/pull.ts:commitOnlineScores()`
+- `apps/server/src/shared/realmWriteLock.ts` — `tryAcquireRealmWriteLock()`
 - `apps/realm-reader/src/writeOnlineScores.ts:runOnlineScoreWrite()`
 
 ## Dependencies
 
 - `features/live-sync/` — extraction must be paused; the following import picks up written scores
+- `features/smart-collections/` — owns the shared Realm write lock rule (rule 7) and the backup-before-open order
 - `features/hub/` — OAuth identity and osu! client credentials
 
 ## Depended on by

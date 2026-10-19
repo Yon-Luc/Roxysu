@@ -24,6 +24,7 @@ Marathon:
 
 Skin:
 - Allow users to import skins directly from the game using the Realm database.
+- Skin fusion (.osk export from several skins) is implemented; still to do: manual import check in lazer, BMS asset names.
 
 Map Page:
 - Combine all additional action buttons (Export Map, Export Set, etc.) into a single dropdown menu.

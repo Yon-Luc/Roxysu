@@ -4,6 +4,7 @@ feature: overlay-editor
 kind: design-gap
 severity: medium
 confidence: verified
+status: fixed
 ---
 
 # Overlay editor offers “create profile” while profiles are still loading
@@ -31,3 +32,7 @@ Opening the editor does not invite a duplicate profile.
 
 - `apps/server/public/features/overlay-editor/OverlayEditorPage.tsx` (lines 102–106): `profilesQuery.data?.profiles ?? []`.
 - Lines 328–338: “No overlay profile yet.” and `makeProfile("New overlay")` with no `isLoading` check.
+
+## Status
+
+Fixed. `OverlayEditorPage.tsx` shows a spinner while `profilesQuery.isLoading`, an inline error with Retry on `profilesQuery.isError`, and the create call-to-action only after a successful empty list. The button is disabled while a save or refetch is in flight.

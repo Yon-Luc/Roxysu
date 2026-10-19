@@ -4,6 +4,7 @@ feature: tosu-live
 kind: correctness
 severity: medium
 confidence: verified
+status: fixed
 ---
 
 # Tosu v2 key count ignores `stats.cs` objects
@@ -28,3 +29,7 @@ Now selected and the overlay show the key count the player is actually on.
 
 - `apps/server/src/tosu/client.ts` (about lines 147–162): `const keys = asFinite(bm?.stats?.cs)`.
 - `apps/tosu-counter/src/live.ts` `keysFromCs` (lines 83–98): object form with `converted` and `original`.
+
+## Status
+
+Fixed. Added exported `keysFromCs` (number or `{ original, converted }`, converted preferred when an integer 1-10) to `apps/server/src/tosu/client.ts` and used it in `parseTosuV2Message`. Tests in `apps/server/src/tosu/client.test.ts`.

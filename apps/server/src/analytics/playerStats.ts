@@ -1,7 +1,7 @@
 
 
 import type { Db } from "@roxysu/db/types";
-import { beatmaps, scoreMetrics, sessions } from "@roxysu/db/schema";
+import { beatmaps } from "@roxysu/db/schema";
 import { and, count, eq, sql } from "drizzle-orm";
 import { SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
 import {
@@ -46,11 +46,13 @@ import {
   type MapperAgg,
 } from "./mapperUsername";
 
+type ScoreScope = { sql: string; params: string[] };
+
 /** Username + gamemode SQL fragments for score-scoped analytics queries. */
 function scoreScopeFilter(
   db: Db,
   opts?: { userColumn?: string; modeColumn?: string },
-) {
+): ScoreScope {
   const user = scoresUsernameSql(
     resolveScoresUsernamesSync(db),
     opts?.userColumn ?? "s.user_username",
@@ -116,8 +118,7 @@ function weekStartKey(d: Date): string {
   return copy.toISOString().slice(0, 10);
 }
 
-function listPlayedKeyCounts(db: Db): number[] {
-  const user = scoreScopeFilter(db);
+function listPlayedKeyCounts(db: Db, user: ScoreScope): number[] {
   const rows = db.$client
     .query(
       `
@@ -145,10 +146,22 @@ function listPlayedKeyCounts(db: Db): number[] {
 }
 
 /**
- * Rank distribution with SH→S. SS = X/XH grade (Perfect/Marvelous). X = 1,000,000 only.
- * Fails (rank F / -1) are excluded. Each score is counted once.
+ * Compact per-play input for skill history and skillset mix: non-hidden plays
+ * of mapped beatmaps, with the base Sunny rating joined. Everything else a play
+ * contributes (summary, rank mix, play-time, progression, mapper ranks) is
+ * folded into running aggregates while the rows stream, so the full row set is
+ * never held in memory.
  */
-type ManiaAnalyticsRow = {
+type PlayCandidate = {
+  beatmapId: string;
+  mods: string | null;
+  accuracy: number;
+  playedAt: number;
+  sunnyStar: number | null;
+  lnRatio: number | null;
+};
+
+type StreamedManiaRow = {
   beatmapId: string | null;
   playedAt: number;
   mods: string | null;
@@ -164,11 +177,41 @@ type ManiaAnalyticsRow = {
   hidden: number;
 };
 
-function loadManiaAnalyticsRows(db: Db, keyCount: number): ManiaAnalyticsRow[] {
-  const user = scoreScopeFilter(db);
-  return db.$client
-    .query(
-      `
+type ProgressionBucket = { playCount: number; totalPp: number; accSum: number };
+
+type ManiaPass = {
+  summary: {
+    scoreCount: number;
+    distinctMapsPlayed: number;
+    firstPlayedAt: number | null;
+    lastPlayedAt: number | null;
+  };
+  rankByLabel: Map<string, number>;
+  byHour: number[];
+  byDayOfWeek: number[];
+  daily: Map<string, ProgressionBucket>;
+  weekly: Map<string, ProgressionBucket>;
+  byMapper: Map<string, MapperAgg>;
+  candidates: PlayCandidate[];
+};
+
+type StatementWithIterate = {
+  iterate(...params: unknown[]): IterableIterator<unknown>;
+};
+
+/**
+ * Stream every scoped play of one keymode once and fold it into `ManiaPass`.
+ * Row order is unchanged, so order-dependent results (mapper ties, skill
+ * history) match the former load-then-loop implementation.
+ */
+function streamManiaPass(
+  db: Db,
+  user: ScoreScope,
+  keyCount: number,
+  curves: Map<string, ManiaPpCurve>,
+): ManiaPass {
+  const stmt = db.$client.query(
+    `
       SELECT
         s.beatmap_id AS beatmapId,
         s.played_at AS playedAt,
@@ -194,8 +237,97 @@ function loadManiaAnalyticsRows(db: Db, keyCount: number): ManiaAnalyticsRow[] {
         AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
         AND b.circle_size = ?
     `,
-    )
-    .all(SUNNY_ALGORITHM, ...user.params, keyCount) as ManiaAnalyticsRow[];
+  ) as unknown as StatementWithIterate;
+
+  const maps = new Set<string>();
+  const pass: ManiaPass = {
+    summary: {
+      scoreCount: 0,
+      distinctMapsPlayed: 0,
+      firstPlayedAt: null,
+      lastPlayedAt: null,
+    },
+    rankByLabel: new Map(),
+    byHour: Array.from({ length: 24 }, () => 0),
+    byDayOfWeek: Array.from({ length: 7 }, () => 0), // 0 = Sunday UTC
+    daily: new Map(),
+    weekly: new Map(),
+    byMapper: new Map(),
+    candidates: [],
+  };
+
+  for (const raw of stmt.iterate(SUNNY_ALGORITHM, ...user.params, keyCount)) {
+    const row = raw as StreamedManiaRow;
+    pass.summary.scoreCount += 1;
+    if (row.beatmapId) maps.add(row.beatmapId);
+
+    if (row.rank !== -1) {
+      const label = classifyScoreGrade(Number(row.totalScore), row.rank);
+      if (label) {
+        pass.rankByLabel.set(label, (pass.rankByLabel.get(label) ?? 0) + 1);
+      }
+    }
+
+    const accuracy = Number(row.accuracy ?? 0);
+    const pp =
+      resolveScorePp({
+        pp: row.pp,
+        accuracy: row.accuracy,
+        mods: row.mods,
+        rulesetShortName: row.rulesetShortName,
+        curve: row.beatmapId ? curves.get(row.beatmapId) : undefined,
+      }) ?? 0;
+
+    const ms = Number(row.playedAt ?? 0);
+    if (Number.isFinite(ms) && ms > 0) {
+      const { summary } = pass;
+      if (summary.firstPlayedAt == null || ms < summary.firstPlayedAt) {
+        summary.firstPlayedAt = ms;
+      }
+      if (summary.lastPlayedAt == null || ms > summary.lastPlayedAt) {
+        summary.lastPlayedAt = ms;
+      }
+      const played = new Date(ms);
+      pass.byHour[played.getUTCHours()]! += 1;
+      pass.byDayOfWeek[played.getUTCDay()]! += 1;
+      bumpBucket(pass.daily, dayKey(played), pp, accuracy);
+      bumpBucket(pass.weekly, weekStartKey(played), pp, accuracy);
+    }
+
+    const mapperKey = mapperGroupKey(row.mapperOnlineId, row.mapperUsername);
+    if (mapperKey) {
+      const cur = pass.byMapper.get(mapperKey) ?? createMapperAgg();
+      bumpMapperAgg(cur, accuracy, pp, row.mapperUsername);
+      pass.byMapper.set(mapperKey, cur);
+    }
+
+    if (!row.hidden && row.beatmapId != null) {
+      pass.candidates.push({
+        beatmapId: row.beatmapId,
+        mods: row.mods,
+        accuracy,
+        playedAt: Number(row.playedAt ?? 0),
+        sunnyStar: row.sunnyStar,
+        lnRatio: row.lnRatio,
+      });
+    }
+  }
+
+  pass.summary.distinctMapsPlayed = maps.size;
+  return pass;
+}
+
+function bumpBucket(
+  map: Map<string, ProgressionBucket>,
+  key: string,
+  pp: number,
+  accuracy: number,
+) {
+  const b = map.get(key) ?? { playCount: 0, totalPp: 0, accSum: 0 };
+  b.playCount += 1;
+  b.totalPp += pp;
+  b.accSum += accuracy;
+  map.set(key, b);
 }
 
 /** Variant rating (star + LN ratio) for a modded play, or null for NM plays. */
@@ -203,19 +335,19 @@ type DanVariantRating = { star: number; lnRatio: number };
 
 function loadDanVariantLookup(
   db: Db,
-  rows: ManiaAnalyticsRow[],
-): (row: ManiaAnalyticsRow) => DanVariantRating | null {
+  plays: PlayCandidate[],
+): (play: PlayCandidate) => DanVariantRating | null {
+  // Only modded plays read the variants store; NM plays use the base rating.
   const beatmapIds = [
     ...new Set(
-      rows.map((r) => r.beatmapId).filter((id): id is string => id != null),
+      plays.filter((p) => resolveDanVariant(p.mods)).map((p) => p.beatmapId),
     ),
   ];
   const ratings = loadDanVariantRatingsSync(db, beatmapIds, SUNNY_ALGORITHM);
-  return (row) => {
-    if (!row.beatmapId) return null;
-    const variant = resolveDanVariant(row.mods);
+  return (play) => {
+    const variant = resolveDanVariant(play.mods);
     if (!variant) return null;
-    const stored = ratings.get(danVariantKey(row.beatmapId, variant));
+    const stored = ratings.get(danVariantKey(play.beatmapId, variant));
     if (!stored) return null;
     return { star: stored.star!, lnRatio: stored.lnRatio! };
   };
@@ -223,28 +355,22 @@ function loadDanVariantLookup(
 
 /** Dan rating (base or variant) for a play; null when unrated. */
 function danRatingFor(
-  row: ManiaAnalyticsRow,
-  variantOf: (row: ManiaAnalyticsRow) => DanVariantRating | null,
+  play: PlayCandidate,
+  variantOf: (play: PlayCandidate) => DanVariantRating | null,
 ): { star: number; lnRatio: number } | null {
-  if (row.beatmapId == null) return null;
-  const variant = variantOf(row);
+  const variant = variantOf(play);
   if (variant) return variant;
   // NM-equivalent play: read the base Sunny ratings store.
-  if (resolveDanVariant(row.mods)) return null;
-  if (row.sunnyStar == null || row.lnRatio == null) return null;
-  return { star: Number(row.sunnyStar), lnRatio: Number(row.lnRatio) };
+  if (resolveDanVariant(play.mods)) return null;
+  if (play.sunnyStar == null || play.lnRatio == null) return null;
+  return { star: Number(play.sunnyStar), lnRatio: Number(play.lnRatio) };
 }
 
-async function getRankDistribution(rows: ManiaAnalyticsRow[]) {
-
-  const byLabel = new Map<string, number>();
-  for (const row of rows) {
-    if (row.rank === -1) continue;
-    const label = classifyScoreGrade(Number(row.totalScore), row.rank);
-    if (!label) continue;
-    byLabel.set(label, (byLabel.get(label) ?? 0) + 1);
-  }
-
+/**
+ * Rank distribution with SH→S. SS = X/XH grade (Perfect/Marvelous). X = 1,000,000 only.
+ * Fails (rank F / -1) are excluded. Each score is counted once.
+ */
+function getRankDistribution(byLabel: Map<string, number>) {
   return RANK_BUCKETS.map((b, i) => ({
     rank: i,
     label: b.key,
@@ -252,17 +378,16 @@ async function getRankDistribution(rows: ManiaAnalyticsRow[]) {
   }));
 }
 
-async function getSkillsetMix(
-  rows: ManiaAnalyticsRow[],
-  variantOf: (row: ManiaAnalyticsRow) => DanVariantRating | null,
+function getSkillsetMix(
+  plays: PlayCandidate[],
+  variantOf: (play: PlayCandidate) => DanVariantRating | null,
   thresholds: AxisThresholds = DEFAULT_AXIS_THRESHOLDS,
 ) {
   let rc = 0;
   let ln = 0;
   let fln = 0;
-  for (const row of rows) {
-    if (row.hidden) continue;
-    const rating = danRatingFor(row, variantOf);
+  for (const play of plays) {
+    const rating = danRatingFor(play, variantOf);
     if (!rating) continue;
     const axis = classifyMapAxis(rating.lnRatio, thresholds);
     if (axis === "fln") fln += 1;
@@ -282,23 +407,11 @@ async function getSkillsetMix(
   };
 }
 
-async function getPlayTimePatterns(rows: ManiaAnalyticsRow[]) {
-
-  const byHour = Array.from({ length: 24 }, () => 0);
-  const byDayOfWeek = Array.from({ length: 7 }, () => 0); // 0 = Sunday UTC
-
-  for (const row of rows) {
-    const ms = Number(row.playedAt ?? 0);
-    if (!Number.isFinite(ms) || ms <= 0) continue;
-    const d = new Date(ms);
-    byHour[d.getUTCHours()]! += 1;
-    byDayOfWeek[d.getUTCDay()]! += 1;
-  }
-
+function getPlayTimePatterns(pass: ManiaPass) {
   const dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   return {
-    byHour: byHour.map((count, hour) => ({ hour, count })),
-    byDayOfWeek: byDayOfWeek.map((count, day) => ({
+    byHour: pass.byHour.map((count, hour) => ({ hour, count })),
+    byDayOfWeek: pass.byDayOfWeek.map((count, day) => ({
       day,
       label: dayLabels[day]!,
       count,
@@ -306,11 +419,45 @@ async function getPlayTimePatterns(rows: ManiaAnalyticsRow[]) {
   };
 }
 
-async function getSessionStats(db: Db) {
-  const allSessions = await db.select().from(sessions);
+/**
+ * Session header stats under the active score scope (username, gamemode,
+ * `delete_pending`), like `countSessionPbs` in session.ts. Only sessions that
+ * contain at least one scoped play count, and each session's play count is its
+ * scoped plays, so the header matches the scoped charts.
+ */
+function getSessionStats(db: Db, user: ScoreScope) {
+  // One grouped pass: per-session scoped play and PB counts. The null group
+  // holds PBs that belong to no session; they count toward pbCount only.
+  const groups = db.$client
+    .query(
+      `
+      SELECT sm.session_id AS id,
+             ss.started_at AS startedAt,
+             ss.ended_at AS endedAt,
+             COUNT(*) AS scoreCount,
+             SUM(sm.is_pb) AS pbCount
+      FROM score_metrics sm
+      JOIN scores s ON s.id = sm.score_id
+      LEFT JOIN sessions ss ON ss.id = sm.session_id
+      WHERE s.delete_pending = 0
+        ${user.sql}
+      GROUP BY sm.session_id
+      ORDER BY sm.session_id ASC
+    `,
+    )
+    .all(...user.params) as Array<{
+    id: number | null;
+    startedAt: number | null;
+    endedAt: number | null;
+    scoreCount: number;
+    pbCount: number | null;
+  }>;
+
   let totalDurationMs = 0;
   let durationCount = 0;
   let totalScores = 0;
+  let sessionCount = 0;
+  let pbCount = 0;
   let longest: {
     id: number;
     scoreCount: number;
@@ -318,65 +465,39 @@ async function getSessionStats(db: Db) {
     endedAt: number | null;
   } | null = null;
 
-  for (const s of allSessions) {
-    totalScores += s.scoreCount;
-    const start = toMs(s.startedAt);
-    const end = toMs(s.endedAt);
+  for (const g of groups) {
+    pbCount += Number(g.pbCount ?? 0);
+    if (g.id == null) continue;
+    sessionCount += 1;
+    const scoreCount = Number(g.scoreCount);
+    totalScores += scoreCount;
+    const start = toMs(g.startedAt);
+    const end = toMs(g.endedAt);
     if (start != null && end != null && end >= start) {
       const dur = end - start;
       totalDurationMs += dur;
       durationCount += 1;
     }
-    if (!longest || s.scoreCount > longest.scoreCount) {
+    if (!longest || scoreCount > longest.scoreCount) {
       longest = {
-        id: s.id,
-        scoreCount: s.scoreCount,
+        id: g.id,
+        scoreCount,
         startedAt: start ?? 0,
         endedAt: end,
       };
     }
   }
 
-  const [pbRow] = await db
-    .select({ n: count() })
-    .from(scoreMetrics)
-    .where(eq(scoreMetrics.isPb, true));
-
-  const sessionCount = allSessions.length;
   return {
     sessionCount,
-    pbCount: pbRow?.n ?? 0,
+    pbCount,
     avgPlaysPerSession: sessionCount > 0 ? totalScores / sessionCount : 0,
     avgDurationMs: durationCount > 0 ? totalDurationMs / durationCount : null,
     longest,
   };
 }
 
-async function getTopMappers(
-  rows: ManiaAnalyticsRow[],
-  curves: Map<string, ManiaPpCurve>,
-  limit = 10,
-) {
-  const byMapper = new Map<string, MapperAgg>();
-  for (const row of rows) {
-    const key = mapperGroupKey(row.mapperOnlineId, row.mapperUsername);
-    if (!key) continue;
-    const cur = byMapper.get(key) ?? createMapperAgg();
-    bumpMapperAgg(
-      cur,
-      Number(row.accuracy ?? 0),
-      resolveScorePp({
-        pp: row.pp,
-        accuracy: row.accuracy,
-        mods: row.mods,
-        rulesetShortName: row.rulesetShortName,
-        curve: row.beatmapId ? curves.get(row.beatmapId) : undefined,
-      }) ?? 0,
-      row.mapperUsername,
-    );
-    byMapper.set(key, cur);
-  }
-
+function getTopMappers(byMapper: Map<string, MapperAgg>, limit = 10) {
   return [...byMapper.entries()]
     .sort(([, a], [, b]) => compareMapperAgg(a, b))
     .slice(0, limit)
@@ -389,41 +510,12 @@ async function getTopMappers(
     }));
 }
 
-async function getKeymodeProgression(
-  rows: ManiaAnalyticsRow[],
+function getKeymodeProgression(
+  daily: Map<string, ProgressionBucket>,
+  weekly: Map<string, ProgressionBucket>,
   days: number,
   weeks: number,
-  curves: Map<string, ManiaPpCurve>,
 ) {
-  type Bucket = { playCount: number; totalPp: number; accSum: number };
-  const daily = new Map<string, Bucket>();
-  const weekly = new Map<string, Bucket>();
-
-  for (const row of rows) {
-    const ms = Number(row.playedAt ?? 0);
-    if (!Number.isFinite(ms) || ms <= 0) continue;
-    const played = new Date(ms);
-    const pp =
-      resolveScorePp({
-        pp: row.pp,
-        accuracy: row.accuracy,
-        mods: row.mods,
-        rulesetShortName: row.rulesetShortName,
-        curve: row.beatmapId ? curves.get(row.beatmapId) : undefined,
-      }) ?? 0;
-    const dKey = dayKey(played);
-    const wKey = weekStartKey(played);
-    const bump = (map: Map<string, Bucket>, key: string) => {
-      const b = map.get(key) ?? { playCount: 0, totalPp: 0, accSum: 0 };
-      b.playCount += 1;
-      b.totalPp += pp;
-      b.accSum += Number(row.accuracy ?? 0);
-      map.set(key, b);
-    };
-    bump(daily, dKey);
-    bump(weekly, wKey);
-  }
-
   const ppTrend = [...daily.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .slice(-days)
@@ -455,27 +547,6 @@ async function getKeymodeProgression(
   return { ppTrend, accuracyTrend, weeklyActivity };
 }
 
-function getSummaryFromRows(rows: ManiaAnalyticsRow[]) {
-  const maps = new Set<string>();
-  let scoreCount = 0;
-  let firstAt: number | null = null;
-  let lastAt: number | null = null;
-  for (const row of rows) {
-    scoreCount += 1;
-    if (row.beatmapId) maps.add(row.beatmapId);
-    const ms = Number(row.playedAt ?? 0);
-    if (!Number.isFinite(ms) || ms <= 0) continue;
-    if (firstAt == null || ms < firstAt) firstAt = ms;
-    if (lastAt == null || ms > lastAt) lastAt = ms;
-  }
-  return {
-    scoreCount,
-    distinctMapsPlayed: maps.size,
-    firstPlayedAt: firstAt,
-    lastPlayedAt: lastAt,
-  };
-}
-
 export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
   const granularity = parseGranularity(query.granularity);
   const range = parseRange(query.range);
@@ -484,67 +555,60 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
 
   const trendDays = range;
   const weekCount = Math.max(12, Math.ceil(range / 7));
-  const availableKeyCounts = listPlayedKeyCounts(db);
+  // Resolve the score scope (username + gamemode) once for every query below.
+  const scope = scoreScopeFilter(db);
+  const availableKeyCounts = listPlayedKeyCounts(db, scope);
   const curves = loadManiaPpCurvesSync(db);
-  const rows = loadManiaAnalyticsRows(db, keyCount);
-  const variantOf = loadDanVariantLookup(db, rows);
+  const pass = streamManiaPass(db, scope, keyCount, curves);
+  const variantOf = loadDanVariantLookup(db, pass.candidates);
   const axisThresholds = readAxisThresholdsSync(db);
   const focusSettings = readFocusSettingsSync(db);
 
-  const [
-    beatmapCountRow,
-    skillBundle,
-    progression,
-    rankDistribution,
-    skillsetMix,
-    playPatterns,
-    sessionStats,
-    topMappers,
-  ] = await Promise.all([
-    db
-      .select({ n: count() })
-      .from(beatmaps)
-      .where(
-        and(
-          eq(beatmaps.hidden, false),
-          sql`lower(coalesce(${beatmaps.rulesetShortName}, '')) = 'mania'`,
-          eq(beatmaps.circleSize, keyCount),
-        ),
-      )
-      .then((rows) => rows[0]),
-    Promise.resolve().then(() => {
-      const plays = [];
-      for (const row of rows) {
-        if (row.hidden || row.beatmapId == null) continue;
-        const rating = danRatingFor(row, variantOf);
-        if (!rating) continue;
-        plays.push({
-          beatmapId: row.beatmapId,
-          accuracy: Number(row.accuracy ?? 0),
-          playedAt: Number(row.playedAt ?? 0),
-          sunnyStar: rating.star,
-          lnRatio: rating.lnRatio,
-        });
-      }
-      return estimateSevenKSkillWithHistoryFromPlays(plays, {
-        granularity,
-        rangeDays: range,
-        topPlays: skillTopPlays || focusSettings.topPlays,
-        keyCount,
-        axisThresholds,
-        focusSettings,
-      });
-    }),
-    getKeymodeProgression(rows, trendDays, weekCount, curves),
-    getRankDistribution(rows),
-    getSkillsetMix(rows, variantOf, axisThresholds),
-    getPlayTimePatterns(rows),
-    getSessionStats(db),
-    getTopMappers(rows, curves, 10),
-  ]);
+  const [beatmapCountRow] = await db
+    .select({ n: count() })
+    .from(beatmaps)
+    .where(
+      and(
+        eq(beatmaps.hidden, false),
+        sql`lower(coalesce(${beatmaps.rulesetShortName}, '')) = 'mania'`,
+        eq(beatmaps.circleSize, keyCount),
+      ),
+    );
+
+  const skillPlays = [];
+  for (const play of pass.candidates) {
+    const rating = danRatingFor(play, variantOf);
+    if (!rating) continue;
+    skillPlays.push({
+      beatmapId: play.beatmapId,
+      accuracy: play.accuracy,
+      playedAt: play.playedAt,
+      sunnyStar: rating.star,
+      lnRatio: rating.lnRatio,
+    });
+  }
+  const skillBundle = estimateSevenKSkillWithHistoryFromPlays(skillPlays, {
+    granularity,
+    rangeDays: range,
+    topPlays: skillTopPlays || focusSettings.topPlays,
+    keyCount,
+    axisThresholds,
+    focusSettings,
+  });
+  const progression = getKeymodeProgression(
+    pass.daily,
+    pass.weekly,
+    trendDays,
+    weekCount,
+  );
+  const rankDistribution = getRankDistribution(pass.rankByLabel);
+  const skillsetMix = getSkillsetMix(pass.candidates, variantOf, axisThresholds);
+  const playPatterns = getPlayTimePatterns(pass);
+  const sessionStats = getSessionStats(db, scope);
+  const topMappers = getTopMappers(pass.byMapper, 10);
 
   const summary = {
-    ...getSummaryFromRows(rows),
+    ...pass.summary,
     beatmapCount: beatmapCountRow?.n ?? 0,
   };
 

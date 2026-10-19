@@ -154,7 +154,7 @@ export function BeatmapPreviewModal({
   const livePlayModsRef = useRef("");
 
   const previewModsKey = previewMods.join(",");
-  const { data, error, isLoading } = useQuery({
+  const { data, error, isLoading, refetch } = useQuery({
     queryKey: ["beatmap-preview", beatmapId, previewModsKey],
     queryFn: () =>
       fetchBeatmapPreview(beatmapId, previewMods) as Promise<BeatmapPreview>,
@@ -1043,11 +1043,28 @@ export function BeatmapPreviewModal({
               Loading preview…
             </p>
           ) : error ? (
-            <p className="px-5 py-10 text-center text-sm text-rose-300">
-              {error instanceof Error
-                ? error.message
-                : "Failed to load preview"}
-            </p>
+            <div
+              role="alert"
+              className="flex flex-1 flex-col items-center justify-center gap-3 px-5 py-10 text-center"
+            >
+              <div className="max-w-md rounded-xl border border-white/10 bg-black/55 px-5 py-4 shadow-lg shadow-black/40">
+                <p className="text-sm font-semibold text-on-media">
+                  Preview failed to load
+                </p>
+                <p className="mt-1 text-sm text-on-media-danger">
+                  {error instanceof Error
+                    ? error.message
+                    : "Failed to load preview"}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void refetch()}
+                  className="mt-3 rounded-full bg-white/10 px-4 py-1.5 text-sm text-on-media transition hover:bg-white/20"
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
           ) : data ? (
             <>
               <div

@@ -4,6 +4,7 @@ feature: overlay-editor
 kind: design-gap
 severity: medium
 confidence: verified
+status: fixed
 ---
 
 # Overlay profile and layer deletes have no confirm
@@ -31,3 +32,7 @@ A mis-click does not drop a multi-element HUD.
 
 - `apps/server/public/features/overlay-editor/OverlayEditorPage.tsx` (about lines 405–411): delete button.
 - Same file (about lines 490–495): `removeElement(el.instanceId)` on the layer button.
+
+## Status
+
+Fixed. `OverlayEditorPage.tsx`: profile Delete opens `ConfirmModal` naming the profile and its layer count, busy until the profiles refetch finishes, errors shown in the modal. Layer remove keeps working at once (it edits the unsaved draft) and pushes an 8 s Undo toast that reinserts the layer at its original position; the other option (confirm) was not used because the toast already exists in the app and the edit is reversible.

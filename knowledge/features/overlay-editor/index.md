@@ -88,6 +88,8 @@ evaluated against **tosu live**. The editor stays dark so the canvas matches the
     (`OverlaySkinSyncCard.tsx`) with this browser's sprite count vs the
     published snapshot — the way to locate which browser/app actually owns the
     imported sprites (IndexedDB is per browser, per origin).
+12. The editor never offers *Create overlay profile* while the profile list is loading. Loading shows a spinner; a failed load shows the error with Retry; the create button appears only after a successful empty list and is disabled while a save or refetch is in flight, so a returning user cannot create a second profile by racing the load.
+13. Deleting an **Overlay profile** asks first (`ConfirmModal` naming the profile and its layer count) and stays busy until the profiles list refreshes. Removing a layer edits the unsaved draft only, so it shows an Undo toast (8 s) that reinserts the layer at its stack position; it does not ask first.
 
 ## Main flows
 

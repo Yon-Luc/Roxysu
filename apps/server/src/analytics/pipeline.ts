@@ -1,5 +1,6 @@
 
 import type { Db } from "@roxysu/db/types";
+import { STALE_RUNNING_MS } from "@roxysu/db/stale-imports";
 import { beatmaps, imports, mastery, scores } from "@roxysu/db/schema";
 import {
   and,
@@ -21,14 +22,17 @@ import { deriveBmsScores } from "../bms/derive";
 
 const DEBOUNCE_MS = 250;
 const IMPORT_WAIT_MS = 1_000;
-const IMPORT_WAIT_MAX_MS = 5 * 60_000;
-const STALE_RUNNING_MS = 10 * 60_000;
-
 let running = false;
 let pending = false;
 let pendingForceFull = false;
 let pendingImportId: number | null = null;
 let timer: ReturnType<typeof setTimeout> | null = null;
+let bootTimer: ReturnType<typeof setTimeout> | null = null;
+/** Set by `shutdownAnalyticsPipeline`: no new run starts, the wait loop exits. */
+let stopping = false;
+/** Resolves when the current run (if any) has fully finished. */
+let runIdle: Promise<void> = Promise.resolve();
+let resolveRunIdle: (() => void) | null = null;
 
 export type AnalyticsDelta = {
   /** null → full rebuild for that dimension */
@@ -60,12 +64,30 @@ function latestImport(db: Db): {
   );
 }
 
+type ImportGateRow = { status: string; startedAt: Date | number };
+
 function isStaleRunning(
-  row: { status: string; startedAt: Date | number } | null,
+  row: ImportGateRow | null,
+  now: number = Date.now(),
 ): boolean {
   if (!row || row.status !== "running") return false;
   const started = playedAtMs(row.startedAt);
-  return started != null && Date.now() - started > STALE_RUNNING_MS;
+  return started != null && now - started > STALE_RUNNING_MS;
+}
+
+/**
+ * Whether the analytics pipeline may read the local mirror now.
+ * "wait" while the latest import is `running` and not stale: raw rows are
+ * committed in batches before `finishImport`, so a rebuild would read a
+ * partial library. A stale `running` row no longer blocks (the writer is
+ * presumed dead); `importNeedsForcedFull` then forces a full rebuild.
+ */
+export function importGateDecision(
+  row: ImportGateRow | null,
+  now: number = Date.now(),
+): "proceed" | "wait" {
+  if (!row || row.status !== "running") return "proceed";
+  return isStaleRunning(row, now) ? "proceed" : "wait";
 }
 
 /** Latest import failed/stuck while scores moved past the last successful cursor. */
@@ -129,17 +151,38 @@ export function loadAnalyticsDelta(
   };
 }
 
-/** Avoid racing realm-reader's write lock during an active sync. */
-async function waitForIdleImport(db: Db): Promise<void> {
-  const deadline = Date.now() + IMPORT_WAIT_MAX_MS;
-  while (Date.now() < deadline) {
-    const row = latestImport(db);
-    if (!row || row.status !== "running" || isStaleRunning(row)) return;
-    await new Promise((r) => setTimeout(r, IMPORT_WAIT_MS));
+/**
+ * Block until the latest import is not `running` (or has gone stale).
+ * There is no wait cap that proceeds anyway: the loop ends only when
+ * `importGateDecision` says "proceed", which is bounded by the stale
+ * threshold measured from the import's `startedAt`. Covers every entry point
+ * (SSE-scheduled runs, boot debounce, forced full rebuilds).
+ */
+export async function waitForIdleImport(
+  readLatest: () => ImportGateRow | null,
+  deps: {
+    now?: () => number;
+    sleep?: (ms: number) => Promise<void>;
+    pollMs?: number;
+    /** Defaults to the pipeline's shutdown flag. */
+    shouldStop?: () => boolean;
+  } = {},
+): Promise<{ waited: boolean }> {
+  const now = deps.now ?? Date.now;
+  const sleep =
+    deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const pollMs = deps.pollMs ?? IMPORT_WAIT_MS;
+  let waited = false;
+  const shouldStop = deps.shouldStop ?? (() => stopping);
+  while (!shouldStop() && importGateDecision(readLatest(), now()) === "wait") {
+    if (!waited) {
+      console.log("[analytics] import running - deferring pipeline");
+      waited = true;
+    }
+    await sleep(pollMs);
   }
-  console.warn(
-    "[analytics] import still running after wait — proceeding anyway",
-  );
+  if (waited) console.log("[analytics] import settled - resuming pipeline");
+  return { waited };
 }
 
 function needsFullRebuild(delta: AnalyticsDelta | null): boolean {
@@ -188,6 +231,7 @@ export async function runAnalyticsPipeline(
   db: Db,
   opts?: { importId?: number | null; forceFull?: boolean },
 ): Promise<void> {
+  if (stopping) return;
   if (running) {
     pending = true;
     pendingForceFull ||= opts?.forceFull === true;
@@ -195,6 +239,9 @@ export async function runAnalyticsPipeline(
     return;
   }
   running = true;
+  runIdle = new Promise<void>((resolve) => {
+    resolveRunIdle = resolve;
+  });
   try {
     let useForceFull = opts?.forceFull === true || pendingForceFull;
     pendingForceFull = false;
@@ -208,7 +255,8 @@ export async function runAnalyticsPipeline(
         : pendingImportId ?? opts?.importId ?? null;
       pendingImportId = null;
 
-      await waitForIdleImport(db);
+      await waitForIdleImport(() => latestImport(db));
+      if (stopping) break;
       const forceFromStale = !forceFull && importNeedsForcedFull(db);
       const delta =
         forceFull || forceFromStale
@@ -236,7 +284,8 @@ export async function runAnalyticsPipeline(
           console.log("[analytics] delta empty — skip engines");
         } else if (scoresChanged) {
           // Retry still walks the timeline for correctness, but only rewrites
-          // metrics for affected beatmaps. Session engine stays full for now.
+          // metrics for affected beatmaps. The session engine repairs only the
+          // sessions these scores touch (full rebuild if they do not add up).
           if (beatmapIds.length > 0) {
             await runRetryEngine(db, { beatmapIds });
           } else {
@@ -289,15 +338,64 @@ export async function runAnalyticsPipeline(
 
       publish({ type: "dashboard.updated" });
       console.log("[analytics] pipeline done");
-    } while (pending);
+    } while (pending && !stopping);
   } catch (err) {
     console.error("[analytics] pipeline error", err);
   } finally {
     running = false;
+    resolveRunIdle?.();
+    resolveRunIdle = null;
   }
 }
 
+/** Whether a pipeline run is in flight (including waiting for an import). */
+export function isAnalyticsPipelineRunning(): boolean {
+  return running;
+}
+
+/**
+ * Stop the pipeline for process shutdown: clear the debounce and boot timers,
+ * refuse new runs, and wait for the in-flight run to finish (bounded). A run
+ * waiting on a `running` import exits immediately; a run inside an engine
+ * finishes that engine pass (engines have no abort hook) and then stops.
+ * Returns false when the timeout elapsed with the run still in flight.
+ * `startAnalyticsPipeline` clears the stopping flag again.
+ */
+export async function shutdownAnalyticsPipeline(
+  opts: { timeoutMs?: number } = {},
+): Promise<boolean> {
+  stopping = true;
+  if (timer) {
+    clearTimeout(timer);
+    timer = null;
+  }
+  if (bootTimer) {
+    clearTimeout(bootTimer);
+    bootTimer = null;
+  }
+  pending = false;
+  pendingForceFull = false;
+  if (!running) return true;
+  const timeoutMs = opts.timeoutMs ?? 3_000;
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  const drained = await Promise.race([
+    runIdle.then(() => true),
+    new Promise<boolean>((resolve) => {
+      timeoutHandle = setTimeout(() => resolve(false), timeoutMs);
+    }),
+  ]);
+  if (timeoutHandle) clearTimeout(timeoutHandle);
+  if (!drained) console.warn("[analytics] shutdown timed out with a run in flight");
+  return drained;
+}
+
+/** Test-only: clear the shutdown flag so other tests can run the pipeline. */
+export function resetAnalyticsPipelineShutdownForTests(): void {
+  stopping = false;
+}
+
 function schedule(db: Db, importId?: number) {
+  if (stopping) return;
   if (importId != null) pendingImportId = importId;
   if (timer) clearTimeout(timer);
   timer = setTimeout(() => {
@@ -319,7 +417,10 @@ export function startAnalyticsPipeline(db: Db): () => void {
   // Defer boot work so Home's first paint is not fighting a full SQLite wipe.
   // Use delta / needsFullRebuild — never forceFull on every launch.
   const BOOT_IDLE_MS = 8_000;
-  setTimeout(() => {
+  stopping = false;
+  if (bootTimer) clearTimeout(bootTimer);
+  bootTimer = setTimeout(() => {
+    bootTimer = null;
     void runAnalyticsPipeline(db);
   }, BOOT_IDLE_MS);
 

@@ -1,4 +1,4 @@
-import { backupRealmFile } from "@roxysu/realm-backup";
+import { backupThenOpenForWrite } from "./backupBeforeWrite";
 import { imports, scores, eq, desc, type Db } from "@roxysu/db/client.node";
 import Realm from "realm";
 import { mapScore } from "./map";
@@ -179,12 +179,17 @@ export function runScoreTransferWrite(
 ): ScoreTransferWriteResult {
   let realm: Realm | null = null;
   try {
-    realm = openRealmForWrite(realmPath);
-    const expected = loadOsuSchema().schemaVersion;
-    if (realm.schemaVersion !== expected) {
-      throw new SchemaVersionMismatchError(expected, realm.schemaVersion);
-    }
-    const backupPath = backupRealmFile(realmPath, dbPath);
+    const opened = backupThenOpenForWrite(realmPath, dbPath, {
+      openForWrite: openRealmForWrite,
+      assertSchema: (probe) => {
+        const expected = loadOsuSchema().schemaVersion;
+        if (probe.schemaVersion !== expected) {
+          throw new SchemaVersionMismatchError(expected, probe.schemaVersion);
+        }
+      },
+    });
+    realm = opened.realm;
+    const backupPath = opened.backupPath;
     const realmScores = realm.objects<RealmObj>("Score");
     const realmMaps = realm.objects<RealmObj>("Beatmap");
     const fingers: TransferFinger[] = [];

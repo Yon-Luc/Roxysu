@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { PageTitle } from "../../components/PageTitle";
@@ -14,6 +14,7 @@ import {
 } from "../../lib/api";
 import {
   generateMarathonOsz,
+  partitionByKeyCount,
   type MarathonExportProgress,
 } from "../../lib/marathonExport";
 import { useAppDict, t } from "../../lib/i18n";
@@ -90,8 +91,28 @@ export function MarathonPage() {
   const [recCount, setRecCount] = useState(4);
   const [recDan, setRecDan] = useState("");
   const [progress, setProgress] = useState<MarathonExportProgress | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const keyCount = tracks.find((t) => t.keyCount != null)?.keyCount ?? null;
+
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+  function rejectKeyMismatch(
+    rejected: MarathonSource[],
+    referenceKeyCount: number | null,
+  ) {
+    if (rejected.length === 0) return;
+    const other = String(rejected[0]!.keyCount ?? "?");
+    pushToast({
+      title: dict?.marathon.sameKeys ?? "All maps must use the same key count",
+      detail:
+        t(dict?.marathon.keyMismatch, {
+          keys: String(referenceKeyCount ?? "?"),
+          other,
+        }) || `This marathon is ${referenceKeyCount}K; that map is ${other}K`,
+      tone: "error",
+    });
+  }
 
   useEffect(() => {
     const tmr = window.setTimeout(() => setDebouncedQ(searchQ.trim()), 250);
@@ -181,7 +202,13 @@ export function MarathonPage() {
   const addIds = useMutation({
     mutationFn: async (ids: string[]) => {
       const unique = ids.filter((id) => !tracks.some((t) => t.id === id));
-      if (unique.length === 0) return [] as MarathonSource[];
+      if (unique.length === 0) {
+        return {
+          accepted: [] as MarathonSource[],
+          rejected: [] as MarathonSource[],
+          referenceKeyCount: null as number | null,
+        };
+      }
       if (tracks.length + unique.length > MAX_MAPS) {
         throw new Error(
           t(dict?.marathon.tooMany, { max: String(MAX_MAPS) }) ||
@@ -189,9 +216,13 @@ export function MarathonPage() {
         );
       }
       const data = await fetchMarathonSources(unique);
-      return data.sources.filter(isPlayableSource);
+      return partitionByKeyCount(
+        tracks,
+        data.sources.filter(isPlayableSource),
+      );
     },
-    onSuccess: (sources) => {
+    onSuccess: ({ accepted: sources, rejected, referenceKeyCount }) => {
+      rejectKeyMismatch(rejected, referenceKeyCount);
       setTracks((prev) => {
         const next = [...prev];
         for (const src of sources) {
@@ -218,9 +249,10 @@ export function MarathonPage() {
         );
       }
       const data = await fetchMarathonSources(ids);
-      return data.sources.filter(isPlayableSource);
+      return partitionByKeyCount([], data.sources.filter(isPlayableSource));
     },
-    onSuccess: (sources) => {
+    onSuccess: ({ accepted: sources, rejected, referenceKeyCount }) => {
+      rejectKeyMismatch(rejected, referenceKeyCount);
       setTracks(sources);
       setTitle("");
       setVersion(`[Roxysu] ${recKey}K`);
@@ -254,21 +286,33 @@ export function MarathonPage() {
           dict?.marathon.sameKeys ?? "All maps must use the same key count",
         );
       }
-      const packed = await generateMarathonOsz({
-        sources: ready.map((t) => ({
-          osuText: t.osuText!,
-          audioFileHash: t.audioFileHash!,
-          backgroundFileHash: t.backgroundFileHash,
-        })),
-        pauseMs,
-        title: title.trim() || "Marathon",
-        artist: artist.trim() || "Various Artists",
-        version: marathonDiffName(version, keyCount),
-        onProgress: setProgress,
-      });
-      setProgress({ phase: "import" });
-      await openMarathonInOsu(packed.blob, packed.filename);
-      return packed.filename;
+      const controller = new AbortController();
+      abortRef.current = controller;
+      try {
+        const packed = await generateMarathonOsz({
+          sources: ready.map((t) => ({
+            osuText: t.osuText!,
+            audioFileHash: t.audioFileHash!,
+            backgroundFileHash: t.backgroundFileHash,
+          })),
+          pauseMs,
+          title: title.trim() || "Marathon",
+          artist: artist.trim() || "Various Artists",
+          version: marathonDiffName(version, keyCount),
+          signal: controller.signal,
+          onProgress: setProgress,
+        });
+        // The export is cancellable up to here; once the .osz is packed the
+        // import request is sent and no longer aborted.
+        if (controller.signal.aborted) {
+          throw new DOMException("Export cancelled", "AbortError");
+        }
+        setProgress({ phase: "import" });
+        await openMarathonInOsu(packed.blob, packed.filename);
+        return packed.filename;
+      } finally {
+        if (abortRef.current === controller) abortRef.current = null;
+      }
     },
     onSuccess: (filename) => {
       setProgress({ phase: "done" });
@@ -361,6 +405,16 @@ export function MarathonPage() {
             ? (dict?.marathon.generating ?? "Generating…")
             : (dict?.marathon.generate ?? "Generate and open in osu!")}
         </button>
+        {generate.isPending ? (
+          <button
+            type="button"
+            className="rx-btn ml-2"
+            disabled={progress?.phase === "import"}
+            onClick={() => abortRef.current?.abort()}
+          >
+            {dict?.marathon.cancel ?? "Cancel"}
+          </button>
+        ) : null}
         {progress ? (
           <p className="text-sm text-muted">{progressLabel(progress, dict)}</p>
         ) : null}

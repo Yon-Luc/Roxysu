@@ -1,15 +1,19 @@
 
 import type { Db } from "@roxysu/db/types";
 import { publish, subscribe } from "../shared/events";
+import { invalidatePlayerStatsCache } from "../analytics/playerStatsCache";
 import {
-  backfillDanVariantsSync,
+  backfillDanVariants,
   collectDanVariantCombos,
   type DanVariantCombo,
 } from "./computeDanVariants";
+import { isMemoryPressure } from "./memoryPressure";
 
 export type DanVariantJobStatus =
   | "idle"
   | "running"
+  /** Waiting for the machine to free memory; resumes automatically. */
+  | "paused"
   | "stopping"
   | "completed"
   | "error";
@@ -27,6 +31,14 @@ export type DanVariantJobState = {
 const BATCH_SIZE = 20;
 const YIELD_MS = 10;
 const DEBOUNCE_MS = 2_000;
+/** How often a paused job re-checks for recovered memory. */
+const PAUSE_POLL_MS = 5_000;
+
+/** Seams for tests; production always uses the defaults. */
+const deps = {
+  isMemoryPressure: (): boolean => isMemoryPressure(),
+  yieldBetween: undefined as (() => Promise<void>) | undefined,
+};
 
 type JobRuntime = {
   status: DanVariantJobStatus;
@@ -39,6 +51,11 @@ type JobRuntime = {
   debounceTimer: ReturnType<typeof setTimeout> | null;
   db: Db | null;
   lastImportId: number;
+  /**
+   * Fingerprint of the mania score set the last full combo scan covered, or
+   * null when no full scan has run in this process.
+   */
+  fullScanFingerprint: string | null;
 };
 
 let job: JobRuntime = {
@@ -52,6 +69,7 @@ let job: JobRuntime = {
   debounceTimer: null,
   db: null,
   lastImportId: -1,
+  fullScanFingerprint: null,
 };
 
 function clearTimers(): void {
@@ -83,8 +101,35 @@ export function getDanVariantJobState(): DanVariantJobState {
 }
 
 /**
- * Combos changed by imports newer than the watermark (null changed_score_ids
- * means "large import" → fall back to a full score scan).
+ * Cheap identity of the mania score set a full scan reads: row count, newest
+ * play, and total mods length (so a remap that rewrites mods is noticed).
+ */
+function maniaScoreFingerprint(db: Db): string {
+  const row = db.$client
+    .query(
+      `
+      SELECT COUNT(*) AS n,
+             COALESCE(MAX(s.played_at), 0) AS newest,
+             COALESCE(SUM(LENGTH(COALESCE(s.mods, ''))), 0) AS modsLen
+      FROM scores s
+      JOIN beatmaps b ON b.id = s.beatmap_id
+      WHERE s.delete_pending = 0
+        AND s.beatmap_id IS NOT NULL
+        AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
+    `,
+    )
+    .get() as { n: number; newest: number; modsLen: number };
+  return `${row.n}:${row.newest}:${row.modsLen}`;
+}
+
+/**
+ * Combos changed by imports newer than the watermark.
+ *
+ * A null changed_score_ids means "unknown delta" (bootstrap or a large
+ * reconcile), not "every score". The full scan runs for it only when no full
+ * scan has covered the current mania score set yet; otherwise the boot scan
+ * (or an earlier null-delta scan) already queued those combos and re-running
+ * it would just re-queue the whole library.
  */
 function enqueueNewImports(db: Db): void {
   const imports = db.$client
@@ -103,14 +148,21 @@ function enqueueNewImports(db: Db): void {
 
   for (const row of imports) {
     job.lastImportId = Math.max(job.lastImportId, row.id);
-    const scoreIds =
-      row.changedScoreIds == null
-        ? null
-        : (JSON.parse(row.changedScoreIds) as string[]);
-    for (const combo of collectDanVariantCombos(db, scoreIds ?? undefined)) {
-      job.queue.set(`${combo.beatmapId}|${combo.rate}|${combo.lnOnly ? 1 : 0}`, combo);
+    if (row.changedScoreIds == null) {
+      if (job.fullScanFingerprint !== maniaScoreFingerprint(db)) {
+        enqueueFullScan(db);
+      }
+      continue;
+    }
+    const scoreIds = JSON.parse(row.changedScoreIds) as string[];
+    for (const combo of collectDanVariantCombos(db, scoreIds)) {
+      job.queue.set(comboKey(combo), combo);
     }
   }
+}
+
+function comboKey(combo: DanVariantCombo): string {
+  return `${combo.beatmapId}|${combo.rate}|${combo.lnOnly ? 1 : 0}`;
 }
 
 function finish(status: "completed" | "idle" | "error", error?: string): void {
@@ -120,9 +172,43 @@ function finish(status: "completed" | "idle" | "error", error?: string): void {
   job.error = error ?? null;
   job.db = null;
   publish({ type: "dashboard.updated" });
+  // Skill axes skip a modded play until its variant row exists, and the player
+  // stats cache ignores dashboard.updated; drop it when rows were written.
+  if (job.computedThisRun > 0) invalidatePlayerStatsCache();
 }
 
-function runBatch(): void {
+/**
+ * Refuse to start another batch while the machine is low on memory, so an
+ * unattended backfill cannot push the desktop into swap exhaustion.
+ */
+function memoryGuard(): boolean {
+  if (!deps.isMemoryPressure()) return false;
+  if (job.status === "running") {
+    job.status = "paused";
+    publish({ type: "dashboard.updated" });
+    publish({ type: "jobs.updated" });
+  }
+  scheduleNext(PAUSE_POLL_MS);
+  return true;
+}
+
+function scheduleNext(delayMs = YIELD_MS): void {
+  if (job.timer != null) clearTimeout(job.timer);
+  job.timer = setTimeout(() => {
+    job.timer = null;
+    void runBatch();
+  }, delayMs);
+}
+
+/** Re-read after an await: stopDanVariantJob() may have flipped the status. */
+function isStopping(): boolean {
+  return job.status === "stopping";
+}
+
+/** Guards against a second batch starting while one is in flight. */
+let busy = false;
+
+async function runBatch(): Promise<void> {
   const db = job.db;
   if (!db) {
     finish("error", "Dan variant job lost database handle");
@@ -134,40 +220,74 @@ function runBatch(): void {
     return;
   }
 
-  if (job.status !== "running") return;
-
-  try {
-    const result = backfillDanVariantsSync(db, {
-      limit: BATCH_SIZE,
-      combos: [...job.queue.values()],
-    });
-
-    // Drop processed combos from the queue (recomputed rows are now fresh).
-    let dropped = 0;
-    for (const key of [...job.queue.keys()]) {
-      if (dropped >= BATCH_SIZE) break;
-      job.queue.delete(key);
-      dropped += 1;
+  if (job.status === "paused") {
+    // Resume on our own once the machine has room.
+    if (deps.isMemoryPressure()) {
+      scheduleNext(PAUSE_POLL_MS);
+      return;
     }
+    job.status = "running";
+  }
+
+  if (job.status !== "running" || busy) return;
+
+  if (memoryGuard()) return;
+
+  busy = true;
+  try {
+    const batch = [...job.queue.values()].slice(0, BATCH_SIZE);
+    const result = await backfillDanVariants(db, {
+      limit: BATCH_SIZE,
+      combos: batch,
+      // Checked before each combo: a whole batch can fill the heap before the
+      // next batch-level check ever runs.
+      shouldContinue: () => !deps.isMemoryPressure(),
+      yieldBetween: deps.yieldBetween,
+    });
 
     job.computedThisRun += result.succeeded;
 
-    if (job.queue.size === 0 || result.attempted === 0) {
+    if (result.stoppedEarly) {
+      // Drop only what ran; the rest (and any combo that was already fresh)
+      // is re-examined after the pause.
+      for (const combo of result.processed) job.queue.delete(comboKey(combo));
+      if (isStopping()) {
+        finish("idle");
+        return;
+      }
+      if (!memoryGuard()) scheduleNext();
+      return;
+    }
+
+    // Every combo in the batch was either computed or already fresh.
+    for (const combo of batch) job.queue.delete(comboKey(combo));
+
+    if (job.queue.size === 0) {
       finish("completed");
       return;
     }
 
-    job.timer = setTimeout(() => {
-      job.timer = null;
-      runBatch();
-    }, YIELD_MS);
+    if (isStopping()) {
+      finish("idle");
+      return;
+    }
+
+    scheduleNext();
   } catch (err) {
     finish("error", err instanceof Error ? err.message : String(err));
+  } finally {
+    busy = false;
   }
 }
 
 function startRun(db: Db): void {
-  if (job.status === "running" || job.status === "stopping") return;
+  if (
+    job.status === "running" ||
+    job.status === "paused" ||
+    job.status === "stopping"
+  ) {
+    return;
+  }
 
   job.status = job.queue.size > 0 ? "running" : "completed";
   job.computedThisRun = 0;
@@ -181,10 +301,7 @@ function startRun(db: Db): void {
     return;
   }
 
-  job.timer = setTimeout(() => {
-    job.timer = null;
-    runBatch();
-  }, YIELD_MS);
+  scheduleNext();
 }
 
 function handleEvent(db: Db, importId?: number): void {
@@ -274,15 +391,57 @@ export function startDanVariantJob(db: Db): () => void {
 }
 
 function enqueueFullScan(db: Db): void {
+  // Fingerprint first: scores written while this synchronous scan runs cannot
+  // exist, so the fingerprint always describes what the scan read.
+  job.fullScanFingerprint = maniaScoreFingerprint(db);
   for (const combo of collectDanVariantCombos(db)) {
-    job.queue.set(`${combo.beatmapId}|${combo.rate}|${combo.lnOnly ? 1 : 0}`, combo);
+    job.queue.set(comboKey(combo), combo);
   }
 }
 
 /** Request stop; current batch finishes, then job goes idle. */
 export function stopDanVariantJob(): DanVariantJobState {
-  if (job.status === "running") {
+  if (job.status === "running" || job.status === "paused") {
     job.status = "stopping";
   }
   return toState();
 }
+
+/** Test seams: drive the job with a fake memory probe and a fresh runtime. */
+export const __danVariantJobTesting = {
+  reset(): void {
+    clearTimers();
+    busy = false;
+    job = {
+      status: "idle",
+      queue: new Map(),
+      computedThisRun: 0,
+      startedAt: null,
+      finishedAt: null,
+      error: null,
+      timer: null,
+      debounceTimer: null,
+      db: null,
+      lastImportId: -1,
+      fullScanFingerprint: null,
+    };
+    deps.isMemoryPressure = () => isMemoryPressure();
+    deps.yieldBetween = undefined;
+  },
+  setMemoryPressure(fn: () => boolean): void {
+    deps.isMemoryPressure = fn;
+  },
+  setYieldBetween(fn: (() => Promise<void>) | undefined): void {
+    deps.yieldBetween = fn;
+  },
+  queueSize(): number {
+    return job.queue.size;
+  },
+  enqueueFullScan,
+  enqueueNewImports,
+  startRun,
+  runBatch,
+  finish,
+  cancelTimers: clearTimers,
+  state: () => job,
+};

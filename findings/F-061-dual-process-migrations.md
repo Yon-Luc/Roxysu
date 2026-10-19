@@ -4,6 +4,7 @@ feature: live-sync
 kind: correctness
 severity: medium
 confidence: likely
+status: fixed
 ---
 
 # Server and realm-reader both migrate the same SQLite file on startup
@@ -30,3 +31,7 @@ Upgrades that start both processes at once do not race the migrator.
 - `packages/db/src/client.node.ts` has the same `ensureDb` pattern.
 - `apps/realm-reader/src/index.ts` (about line 191): `ensureDb(dbPath)` at reader start.
 - `knowledge/architecture/process-model.md`: desktop starts both processes.
+
+## Status
+
+Fixed. `apps/server` is the single migrator (desktop spawns it first and defers the reader until it serves). `ensureDb(path, { migrate })` takes an option (default migrate, or skip with `ROXYSU_SKIP_MIGRATE=1`); the realm-reader opens with `migrate: false` and calls `waitForSchema()` (`packages/db/src/schemaVersion.ts`), which polls `__drizzle_migrations` against the journal for up to 60 s and then throws `SchemaNotCurrentError`. `ROXYSU_READER_MIGRATE=1` restores migrate-on-open for the reader. Tests: `packages/db/src/schemaVersion.test.ts`.

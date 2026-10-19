@@ -5,7 +5,7 @@ import {
   isManagedCollectionName,
   lazerCollectionName,
 } from "@roxysu/collection-sync";
-import { backupRealmFile } from "@roxysu/realm-backup";
+import { backupThenOpenForWrite } from "./backupBeforeWrite";
 import Realm from "realm";
 import { loadOsuSchema } from "./schema";
 import {
@@ -110,10 +110,12 @@ export function runCollectionSync(
   let realm: Realm | null = null;
 
   try {
-    realm = openRealmForWrite(realmPath);
-    assertSchemaVersion(realm);
-
-    const backupPath = backupRealmFile(realmPath, dbPath);
+    const opened = backupThenOpenForWrite(realmPath, dbPath, {
+      openForWrite: openRealmForWrite,
+      assertSchema: assertSchemaVersion,
+    });
+    realm = opened.realm;
+    const backupPath = opened.backupPath;
     const syncedAt = new Date();
     const trackedIds = new Set<string>();
     const newLazerIds = new Map<number, string>();

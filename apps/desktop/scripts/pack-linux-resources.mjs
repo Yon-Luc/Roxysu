@@ -95,6 +95,8 @@ const appFiles = [
   "auto-update.js",
   "preload.js",
   "paths.js",
+  "respawnPolicy.js",
+  "overlayApplyPolicy.js",
   "splash.html",
   "package.json",
 ];

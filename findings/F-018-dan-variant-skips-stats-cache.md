@@ -4,6 +4,7 @@ feature: stats
 kind: logic-gap
 severity: medium
 confidence: verified
+status: fixed
 ---
 
 # Finished dan-variant job does not refresh stats
@@ -29,3 +30,7 @@ Skill charts update when mod ratings land, without waiting up to ten minutes.
 - `apps/server/src/map-analysis/danVariantJob.ts` `finish` (lines 116–122): `publish({ type: "dashboard.updated" })`.
 - `apps/server/src/analytics/playerStatsCache.ts` (lines 47–50): comment and check that skip `dashboard.updated`.
 - `apps/server/src/analytics/playerStats.ts` `danRatingFor` (about lines 224–235): missing variant drops the play.
+
+## Status
+
+Fixed. `finish()` in `apps/server/src/map-analysis/danVariantJob.ts` calls `invalidatePlayerStatsCache()` when the run wrote variant rows (`computedThisRun > 0`). Covered by `apps/server/src/map-analysis/danVariantJob.test.ts`.

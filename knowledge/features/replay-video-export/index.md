@@ -3,6 +3,8 @@ last_verified: 2026-10
 confidence: verified
 touches:
   - apps/server/public/lib/replayVideoExport.ts
+  - apps/server/public/lib/replayVideoExport.test.ts
+  - apps/server/public/lib/replayAccuracy.ts
   - apps/server/public/lib/paintStdPlayfield.ts
   - apps/server/public/lib/paintManiaNotefield.ts
   - apps/server/public/lib/paintTaikoPlayfield.ts
@@ -62,10 +64,30 @@ and not a live screen capture.
    `videoKeyFrameIntervalSec`, `computeFitBitrates`.
 
 6. Export is cancelable; closing the modal or changing score aborts the job.
-   **Status:** verified — `AbortSignal` in `ScoreReplayModal`.
+   An abort or encode error always tears the encoder down: `Output.cancel()`
+   runs, canvases are released, and a streamed partial file is aborted rather
+   than committed.
+   **Status:** verified — `AbortSignal` in `ScoreReplayModal`,
+   `teardownFailedOutput`, `createGuardedFileWritable`, `replayVideoExport.test.ts`.
 
 7. Output filename: `{artist} - {title} [{diff}] ({userUsername}).mp4`.
    **Status:** verified — `buildReplayVideoFilename`.
+
+8. Output sink: uncapped presets (no `fitUnderBytes`) stream to a file chosen
+   with the File System Access API when the browser has it; the save dialog is
+   opened in the Export click (transient activation). Dismissing the dialog
+   keeps the options modal open; a picker error falls back to the in-memory
+   download. Size-capped presets (Discord, Compact) always buffer in memory
+   (about 20 MB) with a fast-start MP4. Streamed MP4s keep the moov box at the
+   end. Without the API, the options modal warns and offers Compact when the
+   estimate exceeds 192 MiB (`REPLAY_VIDEO_MEMORY_WARN_BYTES`).
+   **Status:** verified — `shouldStreamToDisk`, `replayVideoMemoryRisk`,
+   `pickReplayVideoSaveHandle`, `replayVideoExport.test.ts`.
+
+9. Taiko HUD (combo, accuracy, last result) counts `hit` judgments only;
+   drumroll tick and swell rows are skipped, same as `taikoJudge.ts`.
+   **Status:** verified — `replayAccuracy.ts:taikoHudJudgments`,
+   `replayVideoExport.ts:computeHud`, `replayAccuracy.test.ts`.
 
 ## Security rules
 
@@ -78,7 +100,8 @@ no auth gate).
 - **Options** — quality preset modal (Discord / 720p / 1080p / Compact) with
   size estimate and hide-background toggle.
 - **Encoding** — overlay with progress; live audio paused.
-- **Done** — browser download of the MP4 blob.
+- **Done** — browser download of the MP4 blob, or the file already written
+  to the chosen location when streamed.
 - **Failed / cancelled** — error text or silent cancel; button re-enabled.
 
 ## Main flows
@@ -91,7 +114,8 @@ user opens score rewatch → clicks Export
         compose background + header + paintStd/paintMania/paintTaiko/paintCatch + HUD + stats
         CanvasSource.add(t, 1/fps)
   → AudioBufferSource.add(sliced buffer)
-  → finalize MP4 → downloadBlob
+  → finalize MP4 → downloadBlob (in-memory) or close the streamed file
+  → on abort / error: Output.cancel(), release canvases, abort partial file
 ```
 
 ## Implementation
@@ -105,6 +129,10 @@ user opens score rewatch → clicks Export
 
 - `apps/server/public/lib/replayVideoExport.ts:exportReplayVideo()`
 - `apps/server/public/lib/replayVideoExport.ts:downloadBlob()`
+- `apps/server/public/lib/replayVideoExport.ts:teardownFailedOutput()`
+- `apps/server/public/lib/replayVideoExport.ts:createGuardedFileWritable()`
+- `apps/server/public/lib/replayVideoExport.ts:shouldStreamToDisk()`
+- `apps/server/public/lib/replayVideoExport.ts:replayVideoMemoryRisk()`
 - `apps/server/public/lib/paintStdPlayfield.ts:paintStdPlayfield()`
 - `apps/server/public/lib/paintManiaNotefield.ts:paintManiaNotefield()`
 - `apps/server/public/lib/paintTaikoPlayfield.ts:paintTaikoPlayfield()`
@@ -122,13 +150,15 @@ None yet.
 
 ## Side effects
 
-Downloads a file in the browser; pauses rewatch audio while encoding. Does not
+Downloads a file in the browser, or writes one to a user-chosen location
+(File System Access API); pauses rewatch audio while encoding. Does not
 write to Realm, the local mirror, or the Hub store.
 
 ## Failure behavior
 
 - Missing audio / unsupported ruleset / no encodable codecs → user-visible error.
-- Abort → no download; overlay dismissed.
+- Abort → no download; overlay dismissed; encoder released; a streamed partial
+  file is aborted (the empty file created by the save dialog may remain).
 - Encoder empty buffer → throws.
 
 ## Related knowledge

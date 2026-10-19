@@ -3,6 +3,7 @@ last_verified: 2026-10
 confidence: verified
 touches:
   - apps/server/src/online-scores/pull.ts
+  - apps/server/src/shared/realmWriteLock.ts
   - apps/hub/src/services/osuScores.ts
   - apps/realm-reader/src/writeOnlineScores.ts
 ---
@@ -24,11 +25,15 @@ Hub pages scores/best (store by score id, 50/min, 4 in flight)
     ↓
 preview: already / can add / current version / not installed
     ↓
-confirm: lazer closed, backup client.realm
+confirm: Realm write lock (preview rejected while held), pause extraction
+    ↓
+probe (lazer closed) → backup client.realm → open for write
     ↓
 realm.write Score rows
     ↓
 upsert mirror + import row (watermark copied, not moved backward)
+    ↓
+delete only the committed candidate rows; release pause and lock
     ↓
 analytics sessions/mastery/stats
 ```

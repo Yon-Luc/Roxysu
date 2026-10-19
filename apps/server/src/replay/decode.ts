@@ -1,4 +1,4 @@
-import { decompress } from "@napi-rs/lzma/lzma";
+import { decompressStream } from "@napi-rs/lzma/lzma";
 import { OsuBinaryReader } from "./binaryReader";
 
 /** Mania key bitmask frame. */
@@ -52,6 +52,70 @@ export type DecodedReplay = {
   catchFrames: CatchReplayFrame[];
 };
 
+/**
+ * Upper bound on decompressed replay payload. Real replays are well under
+ * 2 MB; the cap keeps a hostile LZMA stream from exhausting memory.
+ */
+export const MAX_REPLAY_DECOMPRESSED_BYTES = 16 * 1024 * 1024;
+
+/** Upper bound on parsed frames (each frame needs at least 8 payload bytes). */
+export const MAX_REPLAY_FRAMES = 1_000_000;
+
+/** `.lzma` header: props (1) + dictionary size (4) + uncompressed size (8, LE). */
+const LZMA_HEADER_BYTES = 13;
+
+/**
+ * Decompress an `.lzma` (LZMA1) replay payload without ever buffering more
+ * than `maxBytes` of output.
+ *
+ * 1. The header's declared uncompressed size is checked first (cheap reject).
+ * 2. The declared size is untrusted (it can be "unknown" or lie), so the
+ *    payload is also decoded through the streaming decoder, counting output
+ *    and cancelling the stream as soon as the cap is crossed.
+ */
+export async function decompressReplayBounded(
+  compressed: Uint8Array,
+  maxBytes: number = MAX_REPLAY_DECOMPRESSED_BYTES,
+): Promise<Buffer> {
+  if (compressed.length < LZMA_HEADER_BYTES) {
+    throw new Error("Invalid compressed replay payload");
+  }
+  const declared = Buffer.from(
+    compressed.buffer,
+    compressed.byteOffset + 5,
+    8,
+  ).readBigUInt64LE(0);
+  // All-ones means "size unknown" (stream is end-marker terminated).
+  if (declared !== 0xffffffffffffffffn && declared > BigInt(maxBytes)) {
+    throw new Error("Replay data too large");
+  }
+
+  const input = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(compressed);
+      controller.close();
+    },
+  });
+  const reader = decompressStream(input).getReader();
+  const chunks: Buffer[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.length;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => {});
+        throw new Error("Replay data too large");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks, total);
+}
+
 const RULESET_OSU = 0;
 const RULESET_TAIKO = 1;
 const RULESET_FRUITS = 2;
@@ -92,7 +156,7 @@ export async function decodeLegacyReplay(
   const compressed = r.readBytes(compressedLen);
   // Online ID + optional trailing ScoreInfo payload — ignored for playback.
 
-  const decompressed = await decompress(compressed);
+  const decompressed = await decompressReplayBounded(compressed);
   const text = Buffer.from(decompressed).toString("ascii");
   const legacy = parseLegacyFrames(text);
 
@@ -157,6 +221,9 @@ function parseLegacyFrames(text: string): LegacyFrame[] {
     // Apply every delta — including negative. Skipping negatives (old bug)
     // permanently shifts the replay clock and destroys mania hit matching.
     lastTime += diff;
+    if (legacy.length >= MAX_REPLAY_FRAMES) {
+      throw new Error("Replay has too many frames");
+    }
     legacy.push({ time: lastTime, x, y, buttons });
   }
 

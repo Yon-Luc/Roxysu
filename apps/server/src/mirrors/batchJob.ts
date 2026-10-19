@@ -28,7 +28,7 @@ import {
   type MirrorSearchResult,
 } from "./searchOnline";
 import type { MirrorSearchParams, OnlineBeatmapSet } from "./search";
-import { diffAgainstLibrary } from "./ownership";
+import { MAX_OWNERSHIP_DIFF_IDS, diffAgainstLibrary } from "./ownership";
 
 export type MirrorBatchJobStatus =
   | "idle"
@@ -786,6 +786,11 @@ export function startMirrorBatchJob(
   if (mode === "setIds" && request.mode === "setIds") {
     if (!Array.isArray(request.setIds) || request.setIds.length === 0) {
       throw new Error("setIds is required for mode=setIds");
+    }
+    if (request.setIds.length > MAX_OWNERSHIP_DIFF_IDS) {
+      throw new Error(
+        `setIds is limited to ${MAX_OWNERSHIP_DIFF_IDS} ids per batch (got ${request.setIds.length}); split the request`,
+      );
     }
     resetJob({
       mode: "setIds",

@@ -4,6 +4,7 @@ feature: sunny-dan-recommendations
 kind: perf
 severity: medium
 confidence: verified
+status: fixed
 ---
 
 # A null score delta enqueues every mania mod combo
@@ -28,3 +29,7 @@ The post-full-sync pipeline does not repeat the boot scan or grow a queue of eve
 
 - `apps/server/src/map-analysis/danVariantJob.ts` (lines 104–112): `changedScoreIds == null` becomes an unrestricted `collectDanVariantCombos` call.
 - `apps/server/src/map-analysis/computeDanVariants.ts` (lines 68–79): unrestricted query selects every mania score’s beatmap id and mods.
+
+## Status
+
+Fixed. A null `changed_score_ids` is treated as an unknown delta: `enqueueNewImports` runs the unrestricted `collectDanVariantCombos` only when the mania score fingerprint (count, newest play, total mods length) differs from the one the last full scan recorded (the boot scan records it). An unchanged score set no longer re-queues the library. Judgement call: a fingerprint rather than a bare in-memory flag, so scores added by a large reconcile are still scanned. Covered by `danVariantJob.test.ts`.

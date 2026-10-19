@@ -4,6 +4,7 @@ feature: sessions
 kind: correctness
 severity: high
 confidence: verified
+status: fixed
 ---
 
 # Personal best uses raw PP while mastery uses estimated mania PP
@@ -31,3 +32,7 @@ Use one rank function. Extend the PB comparison so both `runRetryEngine` and mas
 - `apps/server/src/analytics/retry.ts` (lines 99–114): `const pp = row.pp ?? -Infinity`.
 - `apps/server/src/analytics/mastery/engine.ts` (lines 124–155): `resolveScorePp(...)` then `agg.bestPp`.
 - `apps/server/src/mania-rating/estimateScorePp.ts` `resolveScorePp`.
+
+## Status
+
+Fixed. `runRetryEngine` (`apps/server/src/analytics/retry.ts`) now loads lazer-master curves (`loadManiaPpCurves`, scoped to the scoped beatmaps on scoped runs) and ranks each score with `resolveScorePp`. It uses the shared `comparePbRank` from `apps/server/src/scores/pbCompare.ts`, whose `loadPbCompareForBeatmaps` also resolves PP before ranking, so `is_pb`, session `pbCompare`, and mastery `best_pp` agree. Tests: `analytics/retry.test.ts` (null-PP no-mod and mirror-only scores versus a tiny stored PP, rate-mod not estimated, no-curve fallback, ties, scoped run, pbCompare agreement). Knowledge: `features/sessions/` rule 16, `features/stats/`.

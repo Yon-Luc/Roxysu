@@ -4,6 +4,7 @@ feature: bms
 kind: security
 severity: medium
 confidence: verified
+status: fixed
 ---
 
 # Hub stores client DJ grade and combo lamp without checking judgements
@@ -29,3 +30,7 @@ Public grades and lamps follow the same rules as the local profile, including fo
 - `apps/hub/src/services/bms.ts` `validateInbound` (about lines 86–118): no grade or lamp enum check against judgements.
 - Insert (about lines 225–229): `comboLampId` and `djGrade` copied from `score.gameplay`.
 - `knowledge/features/bms/index.md` security rule 2: trust is `community_submitted`.
+
+## Status
+
+Fixed. Verified against the code on 2026-10-19: Hub ingest computes grade and combo lamp from judgement counts with `bmsScorePresentation`, ignoring client values (`apps/hub/src/services/bms.ts`, `bms.ingest.test.ts`).

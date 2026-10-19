@@ -1,7 +1,7 @@
 import { and, eq, gt, isNotNull } from "drizzle-orm";
 import { db } from "../db";
 import { searchCache } from "@roxysu/db/hub";
-import { refreshCache } from "./cache";
+import { refreshCacheSingleFlight } from "./cache";
 
 const FAILURE_BACKOFF_MS = 15 * 60 * 1000;
 
@@ -67,7 +67,7 @@ export async function tickSearchCacheRefreshes(): Promise<void> {
     );
     const beforeCount = due.totalCount;
     try {
-      await refreshCache(due.id);
+      await refreshCacheSingleFlight(due.id);
       const updated = await db
         .select({ totalCount: searchCache.totalCount })
         .from(searchCache)

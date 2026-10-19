@@ -1,5 +1,6 @@
 import { unzipSync } from "fflate";
 import { useSyncExternalStore } from "react";
+import { sanitizeZipEntryPath } from "../../src/shared/zipEntryPath";
 import {
   decodeSkinIniBytes,
   parseSkinIni,
@@ -52,7 +53,9 @@ export function unzipSkinArchive(data: Uint8Array): FileMap {
   const map: FileMap = new Map();
   for (const [path, bytes] of Object.entries(files)) {
     if (!bytes || bytes.length === 0) continue;
-    map.set(normalizePath(path), bytes);
+    const safe = sanitizeZipEntryPath(path);
+    if (!safe) continue;
+    map.set(safe, bytes);
   }
   return map;
 }

@@ -4,6 +4,7 @@ feature: sunny-dan-recommendations
 kind: perf
 severity: medium
 confidence: verified
+status: fixed
 ---
 
 # Dan-variant backfill blocks the server with no memory guard
@@ -28,3 +29,7 @@ Variant catch-up no longer stalls API responses on a large modded library.
 
 - `apps/server/src/map-analysis/danVariantJob.ts` `runBatch` (lines 125–143): synchronous `backfillDanVariantsSync`, then `setTimeout` only between batches.
 - `apps/server/src/map-analysis/computeDanVariants.ts` `computeOneComboSync` reads the `.osu` file and runs the estimator inline.
+
+## Status
+
+Fixed. The dan variant job now follows the Sunny/rework pattern: new `paused` status with `isMemoryPressure` guard and 5 s poll, async `backfillDanVariants` (`computeDanVariants.ts`) that checks `shouldContinue` before each combo and yields per combo via `yieldForBackfill`. The job drops only processed combos on an early stop, and also no longer drops the wrong queue keys when earlier combos were already fresh. Covered by `danVariantJob.test.ts`.

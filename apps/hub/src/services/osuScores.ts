@@ -22,6 +22,7 @@ import {
   type RankedBest,
   type ScoreRuleset,
 } from "./osuScoreShape";
+import { createKeyedFlights } from "./singleFlight";
 
 const TOKEN_URL = "https://osu.ppy.sh/oauth/token";
 const API = "https://osu.ppy.sh/api/v2";
@@ -354,11 +355,35 @@ async function walkPages(
 
 const OSU_PAGE_STRIDE = RANKED_BEST_PAGE * 4;
 
-export async function pullRankedBests(
+type PullResult = { scores: RankedBest[]; fromCache: boolean; budget: PullBudget };
+
+/** In-flight key: one ranked-best crawl per player and ruleset. */
+export function pullKey(osuUserId: number, ruleset: ScoreRuleset): string {
+  return `${osuUserId}:${ruleset}`;
+}
+
+const pullFlights = createKeyedFlights<string, PullResult>();
+
+/**
+ * Pull ranked bests for one player and ruleset. Overlapping callers for the
+ * same `osuUserId:ruleset` (including a force refresh that arrives mid-pull)
+ * share one crawl and one `replaceStored`; the entry is removed in finally.
+ */
+export function pullRankedBests(
   osuUserId: number,
   ruleset: ScoreRuleset,
   force = false,
-): Promise<{ scores: RankedBest[]; fromCache: boolean; budget: PullBudget }> {
+): Promise<PullResult> {
+  return pullFlights.run(pullKey(osuUserId, ruleset), () =>
+    runPullRankedBests(osuUserId, ruleset, force),
+  );
+}
+
+async function runPullRankedBests(
+  osuUserId: number,
+  ruleset: ScoreRuleset,
+  force: boolean,
+): Promise<PullResult> {
   await ensureBudgetSeeded();
   const existing = await db
     .select()

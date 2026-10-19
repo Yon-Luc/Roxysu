@@ -1,11 +1,12 @@
 ---
-last_verified: 2026-09
+last_verified: 2026-10
 confidence: verified
 touches:
   - docs/architecture.md
   - packages/collection-sync/src/index.ts
   - apps/realm-reader/src/syncCollections.ts
   - apps/server/src/shared/syncCollections.ts
+  - apps/server/src/shared/realmWriteLock.ts
   - packages/realm-backup
 ---
 
@@ -14,15 +15,15 @@ touches:
 ## Business rules
 
 1. Manual only — never background-write Realm.
-2. Pause Realm extraction (`sync.realm_reader_paused`) during write-back.
+2. Pause Realm extraction (`sync.realm_reader_paused`) during write-back. The pause is reference-counted and the Realm write lock is shared with the other Realm writers.
 3. Abort if lazer exclusive lock held.
 4. Schema version guard before write.
-5. Backup `client.realm` (keep last 5).
+5. Backup `client.realm` (keep last 5) before the write connection opens, after a probe connection has proven lazer is closed.
 6. Only names starting with `!Roxysu ` (`LAZER_COLLECTION_PREFIX`).
 7. Single `realm.write()` transaction.
 8. Managed collections missing from payload are deleted.
 9. Hub-added collections may use ids `HUB_SYNC_ID_BASE + hubId`.
-10. Only one write-back may run at a time; a second caller gets HTTP 409 `in_flight`.
+10. Only one Realm write (write-back, online score commit, or score transfer commit) may run at a time; a second caller gets HTTP 409 `in_flight`.
 11. A hub-added collection that lists beatmap online ids writes only those beatmaps into Realm. An empty list (collections shared before difficulty membership) writes every difficulty of each beatmapset.
 
 **Status:** verified

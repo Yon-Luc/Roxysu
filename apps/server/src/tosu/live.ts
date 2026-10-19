@@ -6,6 +6,13 @@ import { analyzeLiveMap, conversionCvtFlag } from "./analyze";
 import { connectTosuWs, type TosuWsClient } from "./client";
 import { readTosuSettings, type TosuSettings } from "./settings";
 import { spawnTosu } from "./spawn";
+import {
+  createSpawnGateState,
+  decideSpawn,
+  isPidAlive,
+  recordSpawn,
+  resetSpawnGate,
+} from "./spawnGate";
 import { probeTosuHttp } from "./status";
 import type {
   TosuConnectionStatus,
@@ -15,7 +22,6 @@ import type {
 } from "./types";
 
 const PLAY_PUBLISH_MS = 500;
-const SPAWN_COOLDOWN_MS = 60_000;
 const RATE_ANALYSIS_DEBOUNCE_MS = 150;
 
 let dbRef: Db | null = null;
@@ -43,7 +49,7 @@ let osuTextCache: string | null = null;
 let osuTextChecksum: string | null = null;
 let analysisToken = 0;
 let lastPlayPublishAt = 0;
-let lastSpawnAttemptAt = 0;
+const spawnGate = createSpawnGateState();
 let probeTimer: ReturnType<typeof setInterval> | null = null;
 let sunnyDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -59,12 +65,20 @@ function roundRate(rate: number): number {
   return Math.round(rate * 1000) / 1000;
 }
 
+/** Side-effecting collaborators, swappable in tests. */
+const deps = {
+  publish,
+  probeTosuHttp,
+  spawnTosu,
+  isPidAlive,
+};
+
 function emit(force = false): void {
   const now = Date.now();
   if (!force) {
     if (now - lastPlayPublishAt < PLAY_PUBLISH_MS) return;
     lastPlayPublishAt = now;
-    publish({
+    deps.publish({
       type: "tosu.updated",
       reason: "play",
       play,
@@ -74,7 +88,7 @@ function emit(force = false): void {
     return;
   }
   lastPlayPublishAt = now;
-  publish({ type: "tosu.updated", reason: "full" });
+  deps.publish({ type: "tosu.updated", reason: "full" });
 }
 
 export function getTosuLiveSnapshot(): TosuLiveSnapshot {
@@ -119,29 +133,50 @@ async function refreshProbeAndMaybeSpawn(opts: {
 }): Promise<void> {
   if (!settings?.enabled || !dbRef) return;
 
-  const probe = await probeTosuHttp(settings.host);
+  const probe = await deps.probeTosuHttp(settings.host);
   const nextWarnings = [...probe.warnings];
 
-  if (!probe.httpUp && opts.allowSpawn) {
-    const now = Date.now();
-    if (now - lastSpawnAttemptAt >= SPAWN_COOLDOWN_MS) {
-      lastSpawnAttemptAt = now;
-      if (!settings.executablePath) {
+  if (probe.httpUp) {
+    resetSpawnGate(spawnGate);
+  } else if (opts.allowSpawn) {
+    if (!settings.executablePath) {
+      nextWarnings.push(
+        "Tosu executable path is not configured. Set it in Settings to auto-start tosu.",
+      );
+    } else {
+      const now = Date.now();
+      const decision = decideSpawn(spawnGate, now, deps.isPidAlive);
+      if (decision.spawn) {
+        const result = deps.spawnTosu(settings.executablePath);
+        recordSpawn(spawnGate, now, result.ok ? result.pid : null);
         nextWarnings.push(
-          "Tosu executable path is not configured. Set it in Settings to auto-start tosu.",
+          result.ok
+            ? "Tosu was down — attempted to start it."
+            : result.warning,
         );
-      } else {
-        const result = spawnTosu(settings.executablePath);
-        if (result.ok) {
-          nextWarnings.push("Tosu was down — attempted to start it.");
-        } else {
-          nextWarnings.push(result.warning);
-        }
+      } else if (decision.warning) {
+        nextWarnings.push(decision.warning);
       }
     }
   }
 
   warnings = uniqueWarnings(nextWarnings);
+}
+
+function sameWarnings(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((w, i) => w === b[i]);
+}
+
+/**
+ * Periodic probe. Only warnings can change here (play, beatmap and analysis
+ * state publish themselves), so publish a full update only when the
+ * warning list actually changed.
+ */
+async function runProbeTick(): Promise<void> {
+  if (!settings?.enabled) return;
+  const before = warnings;
+  await refreshProbeAndMaybeSpawn({ allowSpawn: status !== "connected" });
+  if (!sameWarnings(before, warnings)) emit(true);
 }
 
 /** Sunny analysis inputs that force a recompute when they change. */
@@ -345,13 +380,7 @@ function startProbeLoop(): void {
   stopProbeLoop();
   probeTimer = setInterval(() => {
     if (!settings?.enabled) return;
-    if (status === "connected") {
-      void refreshProbeAndMaybeSpawn({ allowSpawn: false }).then(() =>
-        emit(true),
-      );
-      return;
-    }
-    void refreshProbeAndMaybeSpawn({ allowSpawn: true }).then(() => emit(true));
+    void runProbeTick();
   }, 15_000);
 }
 
@@ -427,7 +456,7 @@ export function stopTosuAdapter(): void {
 export async function requestTosuStart(db: Db): Promise<TosuLiveSnapshot> {
   dbRef = db;
   settings = await readTosuSettings(db);
-  lastSpawnAttemptAt = 0;
+  resetSpawnGate(spawnGate);
   await refreshProbeAndMaybeSpawn({ allowSpawn: true });
 
   if (settings.enabled && status !== "connected") {
@@ -437,3 +466,21 @@ export async function requestTosuStart(db: Db): Promise<TosuLiveSnapshot> {
   emit(true);
   return getTosuLiveSnapshot();
 }
+
+/** Test hooks: inject collaborators and drive the probe loop deterministically. */
+export const __tosuLiveTest = {
+  deps,
+  spawnGate,
+  init(next: TosuSettings, db: Db): void {
+    dbRef = db;
+    settings = next;
+    status = "disconnected";
+    warnings = [];
+    resetSpawnGate(spawnGate);
+  },
+  setStatus(next: TosuConnectionStatus): void {
+    status = next;
+  },
+  getWarnings: () => warnings,
+  runProbeTick,
+};

@@ -151,10 +151,11 @@ export function applyStdHardRockFlip(
   return { hitObjects: flippedObjects, frames: flippedFrames };
 }
 
+/** Cursor position at `tMs` (linear between frames). Buttons come from `buttonsHeldAt`. */
 function cursorAt(
   frames: StdReplayFrame[],
   tMs: number,
-): { x: number; y: number; buttons: number } | null {
+): { x: number; y: number } | null {
   if (frames.length === 0) return null;
   let lo = 0;
   let hi = frames.length;
@@ -172,8 +173,53 @@ function cursorAt(
   return {
     x: a.x + (b.x - a.x) * u,
     y: a.y + (b.y - a.y) * u,
-    buttons: a.buttons,
   };
+}
+
+/**
+ * A press or release seen at frame b happened somewhere in (a.tMs, b.tMs].
+ * Estimate it a few ms before b (never earlier than a, never more than half
+ * the gap back) so a tick that falls between frames sees the button state it
+ * actually had, instead of the previous frame's copy.
+ */
+export const BUTTON_EDGE_LOOKBACK_MS = 8;
+
+export type ButtonTimeline = {
+  initial: boolean;
+  /** Estimated edge times, ascending; `down` is the state after the edge. */
+  edges: Array<{ tMs: number; down: boolean }>;
+};
+
+export function buildButtonTimeline(frames: StdReplayFrame[]): ButtonTimeline {
+  const edges: ButtonTimeline["edges"] = [];
+  if (frames.length === 0) return { initial: false, edges };
+  let prev = frames[0]!;
+  const initial = (prev.buttons & 3) !== 0;
+  let state = initial;
+  for (let i = 1; i < frames.length; i += 1) {
+    const f = frames[i]!;
+    const down = (f.buttons & 3) !== 0;
+    if (down !== state) {
+      const back = Math.min(BUTTON_EDGE_LOOKBACK_MS, (f.tMs - prev.tMs) / 2);
+      edges.push({ tMs: Math.max(prev.tMs, f.tMs - back), down });
+      state = down;
+    }
+    prev = f;
+  }
+  return { initial, edges };
+}
+
+/** Whether a click button is held at `tMs`, from press/release edges. */
+export function buttonsHeldAt(timeline: ButtonTimeline, tMs: number): boolean {
+  const { edges } = timeline;
+  let lo = 0;
+  let hi = edges.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (edges[mid]!.tMs <= tMs) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo === 0 ? timeline.initial : edges[lo - 1]!.down;
 }
 
 function isClickEdge(
@@ -249,6 +295,7 @@ export function simulateStdJudgments(args: {
   };
   const radius = circleRadius(diff.cs);
   const frames = args.frames;
+  const buttonTimeline = buildButtonTimeline(frames);
   const classic = mods.acronyms.includes("CL");
   const judgments: StdReplayJudgment[] = [];
   const counts = emptyJudgmentCounts();
@@ -399,7 +446,7 @@ export function simulateStdJudgments(args: {
     for (const tick of obj.ticks ?? []) {
       const cur = cursorAt(frames, tick.tMs);
       const pt = pathPointAt(path, tick.frac);
-      const held = cur != null && (cur.buttons & 3) !== 0;
+      const held = buttonsHeldAt(buttonTimeline, tick.tMs);
       const near = cur != null && dist(cur.x, cur.y, pt.x, pt.y) <= radius * 2.5;
       push({
         noteIndex: i,
@@ -426,7 +473,7 @@ export function simulateStdJudgments(args: {
     }
     const bodyOk = sampleCount === 0 || nearCount / sampleCount >= 0.4;
     const curEnd = cursorAt(frames, obj.endMs);
-    const heldEnd = curEnd != null && (curEnd.buttons & 3) !== 0;
+    const heldEnd = buttonsHeldAt(buttonTimeline, obj.endMs);
     const nearEnd =
       curEnd != null &&
       dist(curEnd.x, curEnd.y, tailPoint.x, tailPoint.y) <= radius * 2.5;

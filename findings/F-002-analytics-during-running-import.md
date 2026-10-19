@@ -4,6 +4,7 @@ feature: live-sync
 kind: correctness
 severity: high
 confidence: verified
+status: fixed
 ---
 
 # Analytics rebuilds while an import is still running
@@ -34,3 +35,7 @@ Mastery, sessions, and stats are not computed from a partial library after the f
 - `loadAnalyticsDelta` (lines 107–120) returns null when `status !== "success"`.
 - `needsFullRebuild` treats a null delta as a full rebuild.
 - `apps/server/src/sse.ts` publishes `score.imported` from `max(played_at)` while an import can still be open.
+
+## Status
+
+Fixed. `apps/server/src/analytics/pipeline.ts`: removed the 5-minute `IMPORT_WAIT_MAX_MS` that proceeded anyway. `waitForIdleImport` now blocks until `importGateDecision` returns "proceed" (latest import is not `running`, or is stale by the 10-minute `isStaleRunning` rule), and applies to every entry point: SSE-scheduled runs (`score.imported`, `sync.finished`), the boot debounce, and forced full rebuilds. `score.imported` and `dashboard.updated` publication in `sse.ts` is unchanged, so UI refresh is unaffected. Tests: `apps/server/src/analytics/pipeline.test.ts`.

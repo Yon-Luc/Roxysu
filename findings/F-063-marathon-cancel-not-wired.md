@@ -4,6 +4,7 @@ feature: map-marathon
 kind: logic-gap
 severity: low
 confidence: verified
+status: fixed
 ---
 
 # Marathon export can be aborted in code and cannot be aborted from the page
@@ -28,3 +29,7 @@ A long or mistaken marathon can be stopped without reloading.
 
 - `apps/server/public/features/marathon/MarathonPage.tsx` (lines 257–268): `generateMarathonOsz({ ... })` with no `signal`.
 - `apps/server/public/lib/marathonExport.ts` `throwIfAborted` (lines 145–148).
+
+## Status
+
+Fixed. `MarathonPage.tsx` owns an `AbortController` ref, passes `signal` into `generateMarathonOsz`, shows a Cancel button while generating (disabled once the import request starts), aborts on unmount, and keeps `AbortError` out of the error toast. New dictionary key `marathon.cancel`.

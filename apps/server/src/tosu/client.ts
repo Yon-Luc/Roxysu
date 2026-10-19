@@ -18,7 +18,7 @@ type TosuV2Payload = {
     mode?: NumberName;
     stats?: {
       stars?: { total?: number } | number;
-      cs?: number;
+      cs?: number | { original?: number; converted?: number };
     };
     time?: { live?: number };
   };
@@ -38,6 +38,26 @@ type TosuV2Payload = {
 
 function asFinite(n: unknown): number | null {
   return typeof n === "number" && Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Mania key count from v2 `stats.cs` (number or `{ original, converted }`).
+ * Prefers an integer `converted` in 1-10, else `original`.
+ */
+export function keysFromCs(cs: unknown): number | null {
+  if (typeof cs === "number") return asFinite(cs);
+  if (!cs || typeof cs !== "object") return null;
+  const o = cs as { original?: unknown; converted?: unknown };
+  const converted = asFinite(o.converted);
+  if (
+    converted != null &&
+    Number.isInteger(converted) &&
+    converted >= 1 &&
+    converted <= 10
+  ) {
+    return converted;
+  }
+  return asFinite(o.original);
 }
 
 function starFromStats(stats: unknown): number | null {
@@ -144,7 +164,7 @@ export function parseTosuV2Message(raw: string): ParsedTosuFrame | null {
     stateNumber === 2 ||
     (typeof stateName === "string" && stateName.toLowerCase() === "play");
 
-  const keys = asFinite(bm?.stats?.cs);
+  const keys = keysFromCs(bm?.stats?.cs);
   const modsJson = modsToJson(data.play?.mods);
   const rate = rateFromMods(data.play?.mods, modsJson);
 

@@ -6,6 +6,10 @@ Severity is user-facing cost, not how large the patch would be. `likely` means t
 
 Intentionally not written up: localhost client API with no auth (`knowledge/business/local-no-auth.md`), Hub as its own process, analytics staying in the server, and poll-based Realm import. Those are decisions. A tosu host that is not loopback is a setting, not an SSRF bug.
 
+## Status
+
+A note with `status: fixed` in its frontmatter is closed. As of the 2026-10-19 fix pass, 69 of 70 notes are fixed. F-021 is `status: partial`: the stats load now streams and folds rows once, but every scoped play is still scanned and one compact record per non-hidden play is still held. F-039 (Wayland overlay) is fixed in code and still needs on-device validation. F-028 and F-034 are fixed with documented limits (see their Status sections).
+
 ## High
 
 | Id | Feature | Kind | Title |

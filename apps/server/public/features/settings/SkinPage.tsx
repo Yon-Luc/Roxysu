@@ -9,6 +9,7 @@ import { ManiaSkinRealmImportButton } from "../../components/ManiaSkinRealmImpor
 import { StandardSkinEditor } from "./sections/StandardSkinEditor";
 import { TaikoSkinEditor } from "./sections/TaikoSkinEditor";
 import { CatchSkinEditor } from "./sections/CatchSkinEditor";
+import { SkinFusionEditor } from "./sections/SkinFusionEditor";
 import {
   COLUMN_SPACING_MAX,
   COLUMN_SPACING_MIN,
@@ -200,14 +201,16 @@ export function SkinPage({ section }: { section?: string } = {}) {
   const [keys, setKeys] = useState<Keymode>(7);
   const [previewTimeMs, setPreviewTimeMs] = useState(800);
   const [playing, setPlaying] = useState(true);
-  const [tab, setTab] = useState<"mania" | "std" | "taiko" | "catch">(
+  const [tab, setTab] = useState<"mania" | "std" | "taiko" | "catch" | "fusion">(
     section === "std-skin"
       ? "std"
       : section === "taiko-skin"
         ? "taiko"
         : section === "catch-skin"
           ? "catch"
-          : "mania",
+          : section === "skin-fusion"
+            ? "fusion"
+            : "mania",
   );
   const timeRef = useRef(800);
 
@@ -391,6 +394,15 @@ export function SkinPage({ section }: { section?: string } = {}) {
           onClick={() => setTab("catch")}
         >
           {dict?.skin.tabCatch ?? "Catch"}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "fusion"}
+          className={tab === "fusion" ? "rx-btn-primary" : "rx-btn"}
+          onClick={() => setTab("fusion")}
+        >
+          {dict?.skin.tabFusion ?? "Fusion"}
         </button>
       </div>
 
@@ -889,6 +901,7 @@ export function SkinPage({ section }: { section?: string } = {}) {
       {tab === "std" ? <StandardSkinEditor /> : null}
       {tab === "taiko" ? <TaikoSkinEditor /> : null}
       {tab === "catch" ? <CatchSkinEditor /> : null}
+      {tab === "fusion" ? <SkinFusionEditor /> : null}
     </div>
   );
 }

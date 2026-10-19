@@ -12,6 +12,7 @@ import {
   consumeOAuthState,
   createHandoff,
   createOAuthState,
+  isValidHandoffChallenge,
 } from "../services/oauthState";
 import { allowRateLimit } from "../services/rateLimit";
 import { clientIp } from "../services/clientIp";
@@ -54,6 +55,8 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
   // -------------------------------------------------------------------------
   // GET /auth/login — redirect to osu! OAuth (public)
   // ?client=desktop&handoff=… → CSRF state bound to desktop handoff id
+  // ?challenge=… (required) → base64url SHA-256 of a verifier only the starting
+  // client holds; redeeming the handoff later needs that verifier.
   // -------------------------------------------------------------------------
   .get(
     "/login",
@@ -65,7 +68,12 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
           message: "Desktop login requires a handoff id from Roxysu",
         });
       }
-      const state = createOAuthState(client, handoffId);
+      if (!isValidHandoffChallenge(query.challenge)) {
+        return status(400, {
+          message: "Login requires a handoff challenge (base64url SHA-256)",
+        });
+      }
+      const state = createOAuthState(client, handoffId, query.challenge);
       return redirect(buildAuthorizationUrl(state));
     },
     {
@@ -73,6 +81,8 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
         client: t.Optional(t.String()),
         /** Desktop: opaque id from POST /api/system/hub-oauth/begin */
         handoff: t.Optional(t.String({ minLength: 16, maxLength: 128 })),
+        /** base64url SHA-256 of the client-held handoff verifier (43 chars). */
+        challenge: t.String({ minLength: 43, maxLength: 43 }),
       }),
     },
   )
@@ -161,7 +171,11 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
         return status(500, { message: "Failed to issue session token" });
       }
 
-      const handoffId = createHandoff(token, stateEntry.handoffId);
+      const handoffId = createHandoff(
+        token,
+        stateEntry.handoffId,
+        stateEntry.challenge,
+      );
 
       if (stateEntry.client === "desktop") {
         return redirect(buildDesktopRedirect(handoffId));
@@ -180,21 +194,23 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
   )
 
   // -------------------------------------------------------------------------
-  // GET /auth/handoff/:id — one-time JWT redeem (short TTL; rate limited)
+  // POST /auth/handoff/:id — one-time JWT redeem (short TTL; rate limited).
+  // Body { verifier } must hash to the challenge registered at /auth/login.
+  // A wrong verifier does not consume the handoff and looks like a miss.
   // -------------------------------------------------------------------------
-  .get(
+  .post(
     "/handoff/:id",
-    ({ params, request, server, set }) => {
+    ({ params, body, request, server, set }) => {
       const ip = clientIp(request, server);
       if (!allowRateLimit(`handoff:${ip}`, { limit: 30, windowMs: 60_000 })) {
         set.status = 429;
         return { message: "Too many handoff attempts" };
       }
 
-      const token = consumeHandoff(params.id);
+      const token = consumeHandoff(params.id, body.verifier);
       if (!token) {
         set.status = 404;
-        return { message: "Handoff expired or already used" };
+        return { message: "Handoff expired, already used, or verifier mismatch" };
       }
 
       set.headers["cache-control"] = "no-store";
@@ -203,6 +219,9 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
     {
       params: t.Object({
         id: t.String({ minLength: 16, maxLength: 128 }),
+      }),
+      body: t.Object({
+        verifier: t.String({ minLength: 43, maxLength: 128 }),
       }),
     },
   )

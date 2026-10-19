@@ -4,6 +4,7 @@ feature: smart-collections
 kind: design-gap
 severity: medium
 confidence: verified
+status: fixed
 ---
 
 # Collection result pages replace the whole screen while loading
@@ -31,3 +32,7 @@ Paging a large smart collection keeps the collection name and export action in p
 
 - `apps/server/public/features/collections/CollectionResultsPage.tsx` (lines 69–87): early return skeleton.
 - Same file (lines 139–141): `isFetching` opacity exists only on the success render.
+
+## Status
+
+Fixed. `CollectionResultsPage.tsx` uses `placeholderData` that keeps the previous payload only when it belongs to the same collection id, and shows the full-page skeleton only when there is no payload. Header, count and export stay put on a page change; the grid is dimmed (`opacity-70`, `aria-busy`) while fetching. Result cards use `rx-card-grid` (see F-070).

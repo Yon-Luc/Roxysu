@@ -16,14 +16,18 @@ import {
   QUALITY_MEDIUM,
   QUALITY_VERY_HIGH,
   Quality,
+  StreamTarget,
   getFirstEncodableAudioCodec,
   getFirstEncodableVideoCodec,
+  type StreamTargetChunk,
 } from "mediabunny";
 import { formatModAcronym, parseModEntries } from "@server/replay/mods";
 import {
   addReplayAccuracy,
   emptyReplayAccuracy,
+  hudJudgments,
   replayAccuracy,
+  taikoPlayfieldJudgments,
 } from "./replayAccuracy";
 import type { ScoreReplay } from "./api";
 import {
@@ -438,6 +442,12 @@ export type ReplayVideoExportOptions = {
   presetId?: ReplayVideoExportPresetId;
   /** Solid dark background instead of beatmap cover (smaller files). */
   hideBackground?: boolean;
+  /**
+   * Save target picked in the user's click (`pickReplayVideoSaveHandle`). When
+   * set and the preset is uncapped, the MP4 streams to disk instead of being
+   * held in memory. Ignored for size-capped presets (Discord / Compact).
+   */
+  saveHandle?: ReplayVideoSaveHandle;
   signal?: AbortSignal;
   onProgress?: (p: ReplayVideoExportProgress) => void;
   /** Override preset width (advanced). */
@@ -456,7 +466,9 @@ type LoadedScoreReplay = ScoreReplay & {
 };
 
 export type ReplayVideoExportResult = {
-  blob: Blob;
+  /** In-memory MP4. `null` when the file was streamed to disk (`savedToDisk`). */
+  blob: Blob | null;
+  savedToDisk: boolean;
   filename: string;
   mimeType: string;
 };
@@ -566,6 +578,134 @@ export function buildReplayVideoFilename(replay: LoadedScoreReplay): string {
   return `${artist} - ${title} [${diff}] (${player}).mp4`;
 }
 
+/**
+ * In-memory MP4 buffering (BufferTarget + Blob copy) peaks at a few times the
+ * file size. Above this estimate the options modal warns when streaming to disk
+ * is unavailable.
+ */
+export const REPLAY_VIDEO_MEMORY_WARN_BYTES = 192 * 1024 * 1024;
+
+/** Minimal File System Access surface used for streamed export. */
+export type ReplayVideoSaveHandle = {
+  createWritable(): Promise<WritableStream<StreamTargetChunk>>;
+};
+
+type SaveFilePickerWindow = {
+  showSaveFilePicker?: (options?: {
+    suggestedName?: string;
+    types?: Array<{ description?: string; accept: Record<string, string[]> }>;
+  }) => Promise<ReplayVideoSaveHandle>;
+};
+
+/** True when the browser can stream an export to a user-chosen file. */
+export function supportsStreamingSave(
+  host: object = globalThis,
+): boolean {
+  return (
+    typeof (host as SaveFilePickerWindow).showSaveFilePicker === "function"
+  );
+}
+
+/**
+ * Stream to disk only for uncapped presets. Size-capped presets (Discord,
+ * Compact) stay under ~20 MB, so they keep the in-memory path and its
+ * fast-start MP4 layout.
+ */
+export function shouldStreamToDisk(
+  preset: Pick<ReplayVideoExportPreset, "fitUnderBytes">,
+  canStream: boolean,
+): boolean {
+  return canStream && preset.fitUnderBytes == null;
+}
+
+export type ReplayVideoMemoryRisk = "stream" | "ok" | "warn";
+
+/**
+ * Pre-flight check for the options modal. `stream`: written to disk, no limit.
+ * `warn`: the whole file would be buffered and the estimate is large.
+ */
+export function replayVideoMemoryRisk(
+  estimateBytes: number,
+  preset: Pick<ReplayVideoExportPreset, "fitUnderBytes">,
+  canStream: boolean,
+): ReplayVideoMemoryRisk {
+  if (shouldStreamToDisk(preset, canStream)) return "stream";
+  return estimateBytes > REPLAY_VIDEO_MEMORY_WARN_BYTES ? "warn" : "ok";
+}
+
+/**
+ * Open the save dialog. Must run inside the user's click handler (transient
+ * activation), before any await. Rejects with `AbortError` when the user
+ * dismisses the dialog.
+ */
+export function pickReplayVideoSaveHandle(
+  filename: string,
+  host: object = globalThis,
+): Promise<ReplayVideoSaveHandle> {
+  const picker = (host as SaveFilePickerWindow).showSaveFilePicker;
+  if (typeof picker !== "function") {
+    return Promise.reject(new Error("File saving is not supported here"));
+  }
+  return picker.call(host, {
+    suggestedName: filename,
+    types: [{ description: "MP4 video", accept: { "video/mp4": [".mp4"] } }],
+  });
+}
+
+/**
+ * Wrap a file writable so a cancelled or failed export discards its partial
+ * data. mediabunny's `Output.cancel()` closes the target, and closing a
+ * `FileSystemWritableFileStream` would commit a truncated MP4. The guard
+ * turns that close into `abort()` unless `markComplete()` ran first.
+ */
+export function createGuardedFileWritable(
+  file: WritableStream<StreamTargetChunk>,
+): { stream: WritableStream<StreamTargetChunk>; markComplete: () => void } {
+  const writer = file.getWriter();
+  let complete = false;
+  const stream = new WritableStream<StreamTargetChunk>({
+    write: (chunk) => writer.write(chunk),
+    close: () =>
+      complete ? writer.close() : writer.abort("Export did not complete"),
+    abort: (reason) => writer.abort(reason),
+  });
+  return {
+    stream,
+    markComplete: () => {
+      complete = true;
+    },
+  };
+}
+
+/** Subset of mediabunny's `Output` needed for teardown. */
+export type CancelableOutput = {
+  state: string;
+  cancel(): Promise<void>;
+};
+
+/**
+ * Release the encoder and muxer after an abort or error. Safe to call from a
+ * `catch`: it never throws and does nothing once the output is finalized or
+ * already canceled.
+ */
+export async function teardownFailedOutput(
+  output: CancelableOutput,
+): Promise<void> {
+  if (output.state === "finalized" || output.state === "canceled") return;
+  try {
+    await output.cancel();
+  } catch {
+    // Teardown is best effort; the original error is what the caller reports.
+  }
+}
+
+/** Shrink a canvas backing store so the bitmap can be collected promptly. */
+function releaseCanvas(c: HTMLCanvasElement | null | undefined): void {
+  if (!c) return;
+  c.width = 0;
+  c.height = 0;
+}
+
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) {
     throw new DOMException("Export cancelled", "AbortError");
@@ -666,13 +806,40 @@ function hudWeights(ruleset: string | null | undefined): {
   return { weight: MANIA_RESULT_WEIGHT, scale: MANIA_ACC_SCALE };
 }
 
-function computeHud(
-  judgments: Array<{
-    tMs: number;
-    result: ReplayJudgmentResult;
-    accuracyPoints?: number;
-    accuracyMax?: number;
-  }>,
+type HudJudgmentRow = {
+  tMs: number;
+  result: ReplayJudgmentResult;
+  kind?: string;
+  accuracyPoints?: number;
+  accuracyMax?: number;
+};
+
+/** Filtered rows are reused across frames; the source array is fixed per export. */
+let hudRowsMemo: {
+  source: readonly HudJudgmentRow[];
+  ruleset: string | null | undefined;
+  rows: readonly HudJudgmentRow[];
+} | null = null;
+
+function hudRowsFor(
+  judgments: readonly HudJudgmentRow[],
+  ruleset: string | null | undefined,
+): readonly HudJudgmentRow[] {
+  if (
+    hudRowsMemo &&
+    hudRowsMemo.source === judgments &&
+    hudRowsMemo.ruleset === ruleset
+  ) {
+    return hudRowsMemo.rows;
+  }
+  const rows = hudJudgments(ruleset, judgments);
+  hudRowsMemo = { source: judgments, ruleset, rows };
+  return rows;
+}
+
+/** Combo / accuracy at `tMs`. Taiko skips drumroll and swell rows (see `hudJudgments`). */
+export function computeHud(
+  judgments: readonly HudJudgmentRow[],
   tMs: number,
   ruleset: string | null | undefined,
 ): HudState {
@@ -680,7 +847,7 @@ function computeHud(
   let combo = 0;
   let last: ReplayJudgmentResult | null = null;
   const acc = emptyReplayAccuracy();
-  for (const j of judgments) {
+  for (const j of hudRowsFor(judgments, ruleset)) {
     if (j.tMs > tMs) break;
     last = j.result;
     if (j.result === "miss") combo = 0;
@@ -1228,7 +1395,7 @@ function paintComposedFrame(args: {
   ctx.drawImage(playfield, rect.x, rect.y, rect.w, rect.h);
 
   const hud = computeHud(
-    replay.judgments as Array<{ tMs: number; result: ReplayJudgmentResult }>,
+    replay.judgments as HudJudgmentRow[],
     tMs,
     replay.beatmap.rulesetShortName,
   );
@@ -1330,7 +1497,10 @@ export async function exportReplayVideo(
   );
   const audioEncodeQuality = buildAudioEncodeQuality(preset, durationSec);
 
-  const mp4 = new Mp4OutputFormat();
+  const streamToDisk =
+    opts.saveHandle != null && shouldStreamToDisk(preset, true);
+  // Streamed output keeps moov at the end (no fast start) so no chunks are held in memory.
+  const mp4 = new Mp4OutputFormat(streamToDisk ? { fastStart: false } : {});
   const videoCodec = await getFirstEncodableVideoCodec(
     mp4.getSupportedVideoCodecs(),
     { width, height },
@@ -1356,153 +1526,177 @@ export async function exportReplayVideo(
   const playfieldCtx = playfield.getContext("2d", { alpha: false });
   if (!playfieldCtx) throw new Error("Could not create playfield context");
 
-  const target = new BufferTarget();
+  let guarded: ReturnType<typeof createGuardedFileWritable> | null = null;
+  let target: BufferTarget | StreamTarget;
+  if (streamToDisk && opts.saveHandle) {
+    guarded = createGuardedFileWritable(await opts.saveHandle.createWritable());
+    target = new StreamTarget(guarded.stream, { chunked: true });
+  } else {
+    target = new BufferTarget();
+  }
   const output = new Output({ format: mp4, target });
 
-  const videoSource = new CanvasSource(canvas, {
-    codec: videoCodec,
-    quality: encodeQuality,
-    keyFrameInterval: videoKeyFrameIntervalSec(preset),
-  });
-  const audioSource = new AudioBufferSource({
-    codec: audioCodec,
-    quality: audioEncodeQuality,
-  });
+  try {
 
-  output.addVideoTrack(videoSource, { frameRate: fps });
-  output.addAudioTrack(audioSource);
-  output.setMetadataTags({
-    title: `${replay.beatmap.artist} - ${replay.beatmap.title}`,
-    artist: replay.beatmap.artist ?? undefined,
-  });
-
-  await output.start();
-  throwIfAborted(signal);
-  await audioSource.add(audio);
-  throwIfAborted(signal);
-  onProgress?.({ phase: "encode", fraction: 0 });
-
-  const frameDuration = 1 / fps;
-  const totalFrames = Math.max(1, Math.ceil(durationSec * fps));
-
-  const stdPaint = std
-    ? {
-        trail: [] as CursorTrailPoint[],
-        comboInfo: buildComboInfo(replay.beatmap.hitObjects ?? []),
-        judgmentMaps: buildHeadMap(
-          replay.judgments as StdPlayfieldJudgment[],
-        ),
-        skin: opts.stdSkin ?? getStdSkin(),
-        hidden: replay.playback.acronyms.includes("HD"),
-        beatmapComboColors: replay.beatmap.comboColors ?? null,
-        sprites: opts.stdSprites ?? null,
-      }
-    : undefined;
-
-  const taikoPaint = taiko
-    ? {
-        skin: opts.taikoSkin ?? getTaikoSkin(),
-        hidden: replay.playback.acronyms.includes("HD"),
-        judgmentMap: buildTaikoJudgmentMap(
-          replay.judgments as TaikoPlayfieldJudgment[],
-        ),
-      }
-    : undefined;
-
-  const catchPaint = fruits
-    ? {
-        skin: opts.catchSkin ?? getCatchSkin(),
-        hidden: replay.playback.acronyms.includes("HD"),
-        trail: [] as CatcherTrailPoint[],
-        comboInfo: buildCatchComboInfo(replay.beatmap.catchHitObjects ?? []),
-        judgmentMap: buildCatchJudgmentMap(
-          replay.judgments as CatchPlayfieldJudgment[],
-        ),
-        beatmapComboColors: replay.beatmap.comboColors ?? null,
-        sprites: catchSprites,
-      }
-    : undefined;
-
-  const maniaPaint = mania
-    ? (() => {
-        const previewSkin = opts.previewSkin ?? getPreviewSkin();
-        const list = replay.beatmap.notes ?? [];
-        let notes = list;
-        if (list.length > 1) {
-          let sorted = true;
-          for (let i = 1; i < list.length; i += 1) {
-            if (list[i]!.startMs < list[i - 1]!.startMs) {
-              sorted = false;
-              break;
-            }
-          }
-          if (!sorted) notes = [...list].sort((a, b) => a.startMs - b.startMs);
-        }
-        const skin = resolveKeymodeSkin(previewSkin, replay.beatmap.columnCount);
-        return {
-          notes,
-          scrollSpeed: clampScrollSpeed(
-            opts.scrollSpeed ?? PREVIEW_SCROLL_DEFAULT,
-          ),
-          skin,
-          hitPosition: skin.imported
-            ? importedHitPositionFrac(skin.imported.hitPositionPx)
-            : clamp(skin.hitPosition, HIT_POSITION_MIN, HIT_POSITION_MAX),
-          laneCover: clamp(skin.laneCover, LANE_COVER_MIN, LANE_COVER_MAX),
-          headJudgments: buildHeadJudgmentMap(replay.judgments),
-          sprites: maniaSprites as ManiaNotefieldSprites | null,
-        };
-      })()
-    : undefined;
-
-  for (let i = 0; i < totalFrames; i += 1) {
-    throwIfAborted(signal);
-    const tSec = i * frameDuration;
-    const tMs = startMs + tSec * 1000;
-    paintComposedFrame({
-      ctx,
-      width,
-      height,
-      replay,
-      tMs,
-      std,
-      taiko,
-      fruits,
-      bg,
-      logo,
-      hideBackground,
-      hudPlacement,
-      playfield,
-      playfieldCtx,
-      rect,
-      stdPaint,
-      taikoPaint,
-      catchPaint,
-      maniaPaint,
+    const videoSource = new CanvasSource(canvas, {
+      codec: videoCodec,
+      quality: encodeQuality,
+      keyFrameInterval: videoKeyFrameIntervalSec(preset),
     });
-    await videoSource.add(tSec, frameDuration);
-    if (i % 15 === 0 || i === totalFrames - 1) {
-      onProgress?.({ phase: "encode", fraction: (i + 1) / totalFrames });
-      await new Promise<void>((r) => setTimeout(r, 0));
+    const audioSource = new AudioBufferSource({
+      codec: audioCodec,
+      quality: audioEncodeQuality,
+    });
+
+    output.addVideoTrack(videoSource, { frameRate: fps });
+    output.addAudioTrack(audioSource);
+    output.setMetadataTags({
+      title: `${replay.beatmap.artist} - ${replay.beatmap.title}`,
+      artist: replay.beatmap.artist ?? undefined,
+    });
+
+    await output.start();
+    throwIfAborted(signal);
+    await audioSource.add(audio);
+    throwIfAborted(signal);
+    onProgress?.({ phase: "encode", fraction: 0 });
+
+    const frameDuration = 1 / fps;
+    const totalFrames = Math.max(1, Math.ceil(durationSec * fps));
+
+    const stdPaint = std
+      ? {
+          trail: [] as CursorTrailPoint[],
+          comboInfo: buildComboInfo(replay.beatmap.hitObjects ?? []),
+          judgmentMaps: buildHeadMap(
+            replay.judgments as StdPlayfieldJudgment[],
+          ),
+          skin: opts.stdSkin ?? getStdSkin(),
+          hidden: replay.playback.acronyms.includes("HD"),
+          beatmapComboColors: replay.beatmap.comboColors ?? null,
+          sprites: opts.stdSprites ?? null,
+        }
+      : undefined;
+
+    const taikoPaint = taiko
+      ? {
+          skin: opts.taikoSkin ?? getTaikoSkin(),
+          hidden: replay.playback.acronyms.includes("HD"),
+          judgmentMap: buildTaikoJudgmentMap(
+            taikoPlayfieldJudgments(replay.judgments),
+          ),
+        }
+      : undefined;
+
+    const catchPaint = fruits
+      ? {
+          skin: opts.catchSkin ?? getCatchSkin(),
+          hidden: replay.playback.acronyms.includes("HD"),
+          trail: [] as CatcherTrailPoint[],
+          comboInfo: buildCatchComboInfo(replay.beatmap.catchHitObjects ?? []),
+          judgmentMap: buildCatchJudgmentMap(
+            replay.judgments as CatchPlayfieldJudgment[],
+          ),
+          beatmapComboColors: replay.beatmap.comboColors ?? null,
+          sprites: catchSprites,
+        }
+      : undefined;
+
+    const maniaPaint = mania
+      ? (() => {
+          const previewSkin = opts.previewSkin ?? getPreviewSkin();
+          const list = replay.beatmap.notes ?? [];
+          let notes = list;
+          if (list.length > 1) {
+            let sorted = true;
+            for (let i = 1; i < list.length; i += 1) {
+              if (list[i]!.startMs < list[i - 1]!.startMs) {
+                sorted = false;
+                break;
+              }
+            }
+            if (!sorted) notes = [...list].sort((a, b) => a.startMs - b.startMs);
+          }
+          const skin = resolveKeymodeSkin(previewSkin, replay.beatmap.columnCount);
+          return {
+            notes,
+            scrollSpeed: clampScrollSpeed(
+              opts.scrollSpeed ?? PREVIEW_SCROLL_DEFAULT,
+            ),
+            skin,
+            hitPosition: skin.imported
+              ? importedHitPositionFrac(skin.imported.hitPositionPx)
+              : clamp(skin.hitPosition, HIT_POSITION_MIN, HIT_POSITION_MAX),
+            laneCover: clamp(skin.laneCover, LANE_COVER_MIN, LANE_COVER_MAX),
+            headJudgments: buildHeadJudgmentMap(replay.judgments),
+            sprites: maniaSprites as ManiaNotefieldSprites | null,
+          };
+        })()
+      : undefined;
+
+    for (let i = 0; i < totalFrames; i += 1) {
+      throwIfAborted(signal);
+      const tSec = i * frameDuration;
+      const tMs = startMs + tSec * 1000;
+      paintComposedFrame({
+        ctx,
+        width,
+        height,
+        replay,
+        tMs,
+        std,
+        taiko,
+        fruits,
+        bg,
+        logo,
+        hideBackground,
+        hudPlacement,
+        playfield,
+        playfieldCtx,
+        rect,
+        stdPaint,
+        taikoPaint,
+        catchPaint,
+        maniaPaint,
+      });
+      await videoSource.add(tSec, frameDuration);
+      if (i % 15 === 0 || i === totalFrames - 1) {
+        onProgress?.({ phase: "encode", fraction: (i + 1) / totalFrames });
+        await new Promise<void>((r) => setTimeout(r, 0));
+      }
     }
+
+    onProgress?.({ phase: "finalize" });
+    throwIfAborted(signal);
+    guarded?.markComplete();
+    await output.finalize();
+
+    const mimeType = mp4.mimeType;
+    let blob: Blob | null = null;
+    if (target instanceof BufferTarget) {
+      const buffer = target.buffer;
+      if (!buffer) throw new Error("Encoder produced an empty file");
+      blob = new Blob([buffer], { type: mimeType });
+      // The Blob owns its own copy now; drop the muxer's buffer.
+      target.buffer = null;
+    }
+    onProgress?.({ phase: "done", fraction: 1 });
+
+    return {
+      blob,
+      savedToDisk: blob == null,
+      filename: buildReplayVideoFilename(replay),
+      mimeType,
+    };
+  } catch (err) {
+    // Abort or encode failure: release the encoder, and (when streaming) discard the partial file.
+    await teardownFailedOutput(output);
+    throw err;
+  } finally {
+    hudRowsMemo = null;
+    releaseCanvas(canvas);
+    releaseCanvas(playfield);
   }
-
-  onProgress?.({ phase: "finalize" });
-  throwIfAborted(signal);
-  await output.finalize();
-
-  const buffer = target.buffer;
-  if (!buffer) throw new Error("Encoder produced an empty file");
-
-  const mimeType = mp4.mimeType;
-  const blob = new Blob([buffer], { type: mimeType });
-  onProgress?.({ phase: "done", fraction: 1 });
-
-  return {
-    blob,
-    filename: buildReplayVideoFilename(replay),
-    mimeType,
-  };
 }
 
 /** Trigger a browser download for the exported blob. */

@@ -4,6 +4,7 @@ feature: live-sync
 kind: correctness
 severity: medium
 confidence: verified
+status: fixed
 ---
 
 # Full and reconcile extraction commit outside one import transaction
@@ -28,3 +29,7 @@ A killed bootstrap does not leave an ambiguous mirror that analytics then treats
 
 - `apps/realm-reader/src/sync.ts` `runIncrementalSync` (about lines 1352–1409) uses `withTransaction`.
 - `runFullSync` (about lines 785–882) calls `streamMappedUpsert` and `finishImport` without that wrapper.
+
+## Status
+
+Fixed. Evaluated one transaction around the streaming extraction and rejected it (holds the shared WAL write lock for the whole library). Chosen: batches keep autocommitting; the import stays `running` until a short immediate commit phase (`commitImport` in `apps/realm-reader/src/importJournal.ts`) that holds orphan deletes, the stall counter, the replay-backfill one-shot flag, watermarks and the `success` flip together. `getWatermarks` no longer derives a cursor from table `MAX()` when no successful import exists, so a bootstrap killed mid-run is re-run as a full extraction instead of an incremental. `runFullSync`, `runReconcileSync` and `runIncrementalSync` (`sync.ts`) use it. Tests: `importJournal.test.ts`. Decision: `knowledge/decisions/extraction-commit-phase.md`.

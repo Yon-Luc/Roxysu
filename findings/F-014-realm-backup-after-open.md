@@ -4,6 +4,7 @@ feature: smart-collections
 kind: correctness
 severity: medium
 confidence: verified
+status: fixed
 ---
 
 # Collection write-back copies Realm after opening it for write
@@ -28,3 +29,7 @@ The five kept backups are actually restorable if write-back fails mid-transactio
 
 - `apps/realm-reader/src/syncCollections.ts` `runCollectionSync` (lines 112–116): `openRealmForWrite`, then `assertSchemaVersion`, then `backupRealmFile`.
 - `packages/realm-backup/src/index.ts` `backupRealmFile` uses `copyFileSync`.
+
+## Status
+
+Fixed. New `apps/realm-reader/src/backupBeforeWrite.ts:backupThenOpenForWrite()`: a short probe connection (lazer-locked and schema checks, closed immediately), then `backupRealmFile`, then the real write connection. Used by `syncCollections.ts`, `writeOnlineScores.ts`, and `writeScoreTransfer.ts`. Test: `backupBeforeWrite.test.ts` (order, backup bytes equal pre-open bytes, locked/mismatch probe takes no backup).

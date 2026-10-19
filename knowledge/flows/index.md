@@ -13,5 +13,6 @@ End-to-end paths. Prefer these when changing behavior that spans modules. Terms:
 | Sunny backfill → recommend | [sunny-backfill-to-recommend.md](sunny-backfill-to-recommend.md) |
 | Hub calc bundle pull → gap-fill | [hub-calc-bundle-pull.md](hub-calc-bundle-pull.md) |
 | Export score rewatch as video | [export-replay-video.md](export-replay-video.md) |
+| Export a fused skin | [export-fused-skin.md](export-fused-skin.md) |
 | Share session as image | [session-share-image.md](session-share-image.md) |
 | Generate a map marathon | [generate-map-marathon.md](generate-map-marathon.md) |

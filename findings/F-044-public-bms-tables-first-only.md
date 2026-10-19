@@ -4,6 +4,7 @@ feature: bms
 kind: logic-gap
 severity: medium
 confidence: verified
+status: fixed
 ---
 
 # Public BMS tables tab loads only the first catalogue table
@@ -28,3 +29,7 @@ The public tables tab matches the local profile.
 
 - `apps/server/src/routes/bms.ts` (lines 150–164): `localTableCompletion` for the whole cache.
 - `apps/server/public/features/bms/BmsPlayerPage.tsx` (lines 54–64): `firstTable` and a single `fetchPublicBmsTables` call.
+
+## Status
+
+Fixed. Verified against the code on 2026-10-19: `BmsPlayerPage.tsx` loads every catalogue table with `useQueries`, not only the first.

@@ -7,6 +7,8 @@ touches:
   - apps/server/src/mirrors/downloadArchive.ts
   - apps/server/src/mirrors/onlineQuery.ts
   - apps/server/src/mirrors/searchOnline.ts
+  - apps/server/src/mirrors/ownership.ts
+  - apps/server/public/lib/api.ts
   - apps/server/src/mirrors/hubSearch.ts
   - apps/server/src/mirrors/onlineQuery.ts
   - apps/server/src/query-language/parse.ts
@@ -38,6 +40,9 @@ Fetch beatmap sets via configured mirrors (hinai / nerinyan / osu.direct) from t
 10. Single-save, batch pages/query, and Community collection `mode=setIds` downloads try the active mirror first, then fall back across the other configured providers. Hinai often 503s pending sets that osu.direct still serves; do not treat a single-provider failure as final. When every mirror fails, the API returns `code: "mirror_unavailable"`; Download Maps shows a toast: `{{map}} is not available for download right now.` (same toast path for single-save success/failure — not inline page text).
 11. Live mirror paging treats any non-empty page as “maybe more” (`mirrorPageSuggestsMore`). Graveyard upstream pages are routinely short (&lt;100) and must not end the crawl. Graveyard overfetch/collect stays sequential (no parallel page jumps — hinai’s cursor ledger returns empty on cold deep jumps).
 12. Import companions are fixed-size `import-into-osu.sh` / `.bat` plus `.roxysu-import-queue.txt` (pending relative paths). Scripts must not embed one open line per map — only the queue grows with batch size.
+13. A truncated Hub dump is never reported as the full match set. When Hub's own `GET /search/all` cap truncates the dump (`truncatedBy: "hub-max"`), `collectMatchingOnlineBeatmapsets` keeps the dump's sets and continues the live mirror crawl for the remainder, deduping by set id. If the union is still smaller than Hub's reported total, or the crawl hits its page cap, `hitPageCap` is set and the UI shows the safety-cap marker. A caller-imposed page cap (`request-max`) or a cancelled job (`stop`) does not trigger the crawl and stays flagged as capped.
+14. `setIds` in one batch download (`POST /mirrors/batch/start`, mode `setIds`) and in one ownership diff (`POST /mirrors/ownership/diff`) are limited to `MAX_OWNERSHIP_DIFF_IDS` (20,000). The batch route returns 400 before a job starts; `startMirrorBatchJob` enforces the same limit for in-process callers.
+15. `GET /mirrors/owned-set-ids` is keyset-paginated: `?after=<onlineId>&limit=<n>` (default 20,000, max 50,000), ascending ids, response `{ setIds, nextAfter, version }`. `nextAfter` is null on the last page. The weak `ETag` is built from an SQLite aggregate (count, id sum, max id) plus the cursor window; a matching `If-None-Match` returns 304 so clients skip the re-download. Clients must walk `nextAfter` (`fetchOwnedSetIds()` in `apps/server/public/lib/api.ts` does). Libraries above the default page size no longer get every id in one response.
 
 ## Important symbols
 
@@ -49,7 +54,8 @@ Fetch beatmap sets via configured mirrors (hinai / nerinyan / osu.direct) from t
 - `apps/server/src/mirrors/batchJob.ts` — `downloadingStartedAt`, `etaStartedAt`, `inFlight`; Stop aborts in-flight fetches
 - `apps/server/public/features/download/batchProgress.ts:estimateBatchEta()` / `batchProgressPct()`
 - `apps/server/public/features/download/batchProgress.ts:estimateBatchEta()`
-- `apps/server/src/mirrors/hubSearch.ts:tryFetchAllHubCachedIds()` — single `GET /search/all`
+- `apps/server/src/mirrors/hubSearch.ts:tryFetchAllHubCachedIds()` — single `GET /search/all`; reports `truncatedBy`
+- `apps/server/src/mirrors/ownership.ts:loadOwnedSetOnlineIdsPage()` / `loadOwnedSetIdsVersion()` / `MAX_OWNERSHIP_DIFF_IDS`
 - `apps/server/src/mirrors/hubSearch.ts:mirrorParamsToHubQuery()`
 - `apps/server/src/mirrors/hubSearch.ts:tryHubCachedSearch()` — paged `GET /search` + circuit breaker
 - `apps/server/src/mirrors/onlineQuery.ts:hubCacheKeymode()`

@@ -5,6 +5,7 @@ import {
   eq,
   failStaleRunningImports,
   settings,
+  waitForSchema,
   type Db,
 } from "@roxysu/db/client.node";
 import { defaultDbPath } from "@roxysu/db/path";
@@ -188,8 +189,27 @@ async function main() {
   console.log("  DB_PATH   ", dbPath);
   console.log("  FULL_EVERY", FULL_EVERY_N);
 
-  const db = ensureDb(dbPath);
-  console.log("SQLite ready (migrations applied)");
+  // apps/server is the single migrator (desktop starts it first); the reader
+  // opens the file without migrating and waits for the schema to be current.
+  // ROXYSU_READER_MIGRATE=1 restores migrate-on-open for standalone use.
+  const migrateHere = /^(1|true|yes)$/i.test(
+    process.env.ROXYSU_READER_MIGRATE?.trim() ?? "",
+  );
+  const db = ensureDb(dbPath, { migrate: migrateHere });
+  if (!migrateHere) {
+    await waitForSchema(db, {
+      onWaiting: (applied, expected) =>
+        console.log(
+          `waiting for apps/server to apply migrations (applied=${applied ?? "none"}, expected=${expected})`,
+        ),
+      isCancelled: () => shuttingDown,
+    });
+    if (shuttingDown) {
+      closeDb(db);
+      return;
+    }
+  }
+  console.log("SQLite ready (schema current)");
   logMemoryUsage("startup");
 
   if (clearStuckRealmReaderPause(db)) {

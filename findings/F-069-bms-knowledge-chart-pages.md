@@ -4,6 +4,7 @@ feature: bms
 kind: logic-gap
 severity: low
 confidence: verified
+status: fixed
 ---
 
 # BMS knowledge still says chart pages are out of this release
@@ -28,3 +29,7 @@ The next BMS change follows the routes that are actually shipped.
 
 - `knowledge/features/bms/index.md` business rule 8.
 - `apps/hub/src/routes/bms.ts` (about lines 242–277): chart read and `chartLeaderboard`.
+
+## Status
+
+Fixed. Verified against the code on 2026-10-19: `knowledge/features/bms/index.md` rules 8 to 11 document public chart pages, feed, stats and images.

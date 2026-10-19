@@ -17,6 +17,7 @@ import {
   fetchSessions,
 } from "../lib/api";
 import { isDesktopShell } from "../lib/desktop";
+import { focusTrapTarget, listFocusable } from "../lib/focusTrap";
 import { formatRelativeTime, formatStars } from "../lib/format";
 import {
   searchablePageSections,
@@ -71,6 +72,7 @@ const SKIN_SECTION_KEYS: Record<string, keyof Dictionary["app"]["skin"]> = {
   "std-skin": "tabStandard",
   "taiko-skin": "tabTaiko",
   "catch-skin": "tabCatch",
+  "skin-fusion": "tabFusion",
 };
 
 function sectionLabels(
@@ -210,6 +212,7 @@ export function CommandPalette({
   const navigate = useNavigate();
   const titleId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const { dict } = useAppDict();
   const [query, setQuery] = useState("");
@@ -246,11 +249,26 @@ export function CommandPalette({
       setSelectedIndex(0);
       return;
     }
+    // Remember the trigger so focus returns to it on close (mirrors ConfirmModal).
+    const previouslyFocused = document.activeElement as HTMLElement | null;
     inputRef.current?.focus();
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+
+    // Anything that moves focus behind the scrim (screen reader, click-through)
+    // is pulled back into the dialog.
+    function onFocusIn(e: FocusEvent) {
+      const dialog = dialogRef.current;
+      if (dialog && e.target instanceof Node && !dialog.contains(e.target)) {
+        inputRef.current?.focus();
+      }
+    }
+    document.addEventListener("focusin", onFocusIn);
+
     return () => {
+      document.removeEventListener("focusin", onFocusIn);
       document.body.style.overflow = previousOverflow;
+      if (previouslyFocused?.isConnected) previouslyFocused.focus();
     };
   }, [open]);
 
@@ -444,6 +462,21 @@ export function CommandPalette({
         close();
         return;
       }
+      if (e.key === "Tab") {
+        // Trap Tab / Shift+Tab between the input and the result buttons.
+        const dialog = dialogRef.current;
+        if (!dialog) return;
+        const target = focusTrapTarget(
+          listFocusable(dialog),
+          document.activeElement as HTMLElement | null,
+          e.shiftKey,
+        );
+        if (target) {
+          e.preventDefault();
+          target.focus();
+        }
+        return;
+      }
       if (e.key === "ArrowDown") {
         e.preventDefault();
         setSelectedIndex((i) => (items.length === 0 ? 0 : (i + 1) % items.length));
@@ -491,6 +524,7 @@ export function CommandPalette({
       role="presentation"
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -544,6 +578,7 @@ export function CommandPalette({
                             active ? "bg-accent/15 text-ink" : "text-muted hover:bg-highlight hover:text-ink"
                           }`}
                           onMouseEnter={() => setSelectedIndex(index)}
+                          onFocus={() => setSelectedIndex(index)}
                           onClick={item.onSelect}
                         >
                           {item.icon ?? (

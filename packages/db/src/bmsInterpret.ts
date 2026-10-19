@@ -456,6 +456,51 @@ export function parseBmsImageFilename(text: string): string | null {
 
 const SESSION_GAP_MS = 30 * 60 * 1000;
 
+/** Sessions a profile lists (most recent first). */
+export const BMS_SESSIONS_SHOWN = 20;
+/** Scores fetched per page while paging backward to close the oldest session. */
+export const BMS_SESSION_PAGE_SIZE = 400;
+/** Hard cap on scores read for one session list; a longer sitting is cut here. */
+export const BMS_SESSION_MAX_SCORES = 10_000;
+
+/**
+ * Newest-first page reader: up to `limit` scores starting `offset` rows from
+ * the newest. Must order by played time descending with a stable tie-break.
+ */
+export type BmsSessionPageReader<T> = (offset: number, limit: number) => Promise<T[]>;
+
+/**
+ * The most recent BMS sessions (newest first), each one complete.
+ *
+ * Reads pages backward until the oldest loaded session is closed by a gap
+ * longer than the session gap, more than `sessions` sessions are loaded (so
+ * the shown ones are all closed), history ends, or `maxScores` is reached. The
+ * `maxScores` cap is the only case where the oldest returned session can be
+ * cut short.
+ */
+export async function loadRecentBmsSessions<T extends BmsSessionScore>(
+  readPage: BmsSessionPageReader<T>,
+  opts: { sessions?: number; pageSize?: number; maxScores?: number } = {},
+): Promise<ReturnType<typeof groupBmsSessions<T>>> {
+  const sessions = opts.sessions ?? BMS_SESSIONS_SHOWN;
+  const pageSize = opts.pageSize ?? BMS_SESSION_PAGE_SIZE;
+  const maxScores = opts.maxScores ?? BMS_SESSION_MAX_SCORES;
+  const loaded: T[] = [];
+  for (;;) {
+    const room = Math.min(pageSize, maxScores - loaded.length);
+    // One extra row peeks past the page to see whether the oldest session continues.
+    const rows = await readPage(loaded.length, room + 1);
+    const page = rows.slice(0, room);
+    loaded.push(...page);
+    const peek = rows[room];
+    if (!peek || loaded.length >= maxScores) break;
+    const oldest = loaded[loaded.length - 1]!;
+    if (oldest.playedAt - peek.playedAt > SESSION_GAP_MS) break;
+    if (groupBmsSessions(loaded).length > sessions) break;
+  }
+  return groupBmsSessions(loaded).slice(0, sessions);
+}
+
 export function groupBmsSessions<T extends BmsSessionScore>(
   scores: readonly T[],
 ): Array<{

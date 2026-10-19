@@ -9,6 +9,12 @@ import {
   resolveScoresUsernames,
   scoresUsernameCondition,
 } from "./scoreUsername";
+import {
+  loadManiaPpCurves,
+  resolveScorePp,
+  type ManiaPpCurve,
+} from "../mania-rating/estimateScorePp";
+import { comparePbRank, type PbRankKey } from "../scores/pbCompare";
 
 export type RetryEngineOptions = {
   /**
@@ -17,6 +23,24 @@ export type RetryEngineOptions = {
    */
   beatmapIds?: string[];
 };
+
+const CURVE_CHUNK = 500;
+
+async function loadCurves(
+  db: Db,
+  beatmapIds: string[] | undefined,
+): Promise<Map<string, ManiaPpCurve>> {
+  if (!beatmapIds) return loadManiaPpCurves(db);
+  const out = new Map<string, ManiaPpCurve>();
+  for (let i = 0; i < beatmapIds.length; i += CURVE_CHUNK) {
+    const chunk = await loadManiaPpCurves(
+      db,
+      beatmapIds.slice(i, i + CURVE_CHUNK),
+    );
+    for (const [id, curve] of chunk) out.set(id, curve);
+  }
+  return out;
+}
 
 /**
  * Assign retry_index (consecutive same-beatmap plays in global timeline)
@@ -40,6 +64,8 @@ export async function runRetryEngine(
       beatmapId: scores.beatmapId,
       accuracy: scores.accuracy,
       pp: scores.pp,
+      mods: scores.mods,
+      rulesetShortName: scores.rulesetShortName,
       playedAt: scores.playedAt,
     })
     .from(scores)
@@ -83,10 +109,10 @@ export async function runRetryEngine(
   let prevBeatmapId: string | null = null;
   let retryIndex = 0;
 
-  const bestByBeatmap = new Map<
-    string,
-    { scoreId: string; pp: number; accuracy: number }
-  >();
+  // PB ranking uses resolved PP (stored, else NM/MR mania curve estimate), the
+  // value mastery best_pp ranks by. Scoped runs only need the scoped curves.
+  const curves = await loadCurves(db, scoped ? scopeIds : undefined);
+  const bestByBeatmap = new Map<string, PbRankKey>();
 
   for (const row of rows) {
     if (row.beatmapId && row.beatmapId === prevBeatmapId) {
@@ -97,19 +123,21 @@ export async function runRetryEngine(
     }
 
     if (row.beatmapId) {
-      const cur = bestByBeatmap.get(row.beatmapId);
-      const pp = row.pp ?? -Infinity;
-      const better =
-        !cur ||
-        pp > cur.pp ||
-        (pp === cur.pp && row.accuracy > cur.accuracy) ||
-        (cur.pp === -Infinity && row.accuracy > cur.accuracy);
-      if (better) {
-        bestByBeatmap.set(row.beatmapId, {
-          scoreId: row.id,
-          pp: row.pp ?? -Infinity,
+      const candidate: PbRankKey = {
+        id: row.id,
+        accuracy: row.accuracy,
+        pp: resolveScorePp({
+          pp: row.pp,
           accuracy: row.accuracy,
-        });
+          mods: row.mods,
+          rulesetShortName: row.rulesetShortName,
+          curve: curves.get(row.beatmapId),
+        }),
+        playedAt: row.playedAt,
+      };
+      const cur = bestByBeatmap.get(row.beatmapId);
+      if (!cur || comparePbRank(candidate, cur) < 0) {
+        bestByBeatmap.set(row.beatmapId, candidate);
       }
     }
 
@@ -123,7 +151,7 @@ export async function runRetryEngine(
   }
 
   const pbIds = new Set(
-    [...bestByBeatmap.values()].map((b) => b.scoreId),
+    [...bestByBeatmap.values()].map((b) => b.id),
   );
   for (const m of metrics) {
     if (pbIds.has(m.scoreId)) m.isPb = true;

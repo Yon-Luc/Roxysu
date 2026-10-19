@@ -51,7 +51,6 @@ export function HubAdminCalcBundlesPage() {
     mutationFn: () =>
       exportUploadCalcBundle({
         token: jwt!,
-        hubUrl,
         roxysuVersion: version.trim(),
         label: label.trim() || undefined,
       }),

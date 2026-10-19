@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-04
+last_verified: 2026-10
 confidence: verified
 touches:
   - apps/server/src/analytics/session.ts
@@ -7,6 +7,9 @@ touches:
   - apps/server/src/routes/sessions.ts
   - apps/server/src/routes/overlay.ts
   - apps/server/src/scores/pbCompare.ts
+  - apps/server/src/analytics/retry.ts
+  - apps/server/src/mania-rating/estimateScorePp.ts
+  - apps/server/public/components/PageTitle.tsx
   - apps/server/src/scores/parseStatistics.ts
   - apps/server/public/features/sessions
   - apps/server/public/features/sessions/SessionShareCard.tsx
@@ -57,18 +60,22 @@ Live sessions keep the **Current session** label in headings; the generated name
 16. Each session score may include `judgments` (from `scores.statistics`) and `pbCompare`:
     - when `isPb` — previous best on that beatmap (`kind: "previous"`), if one exists
     - when not PB — current PB on that beatmap (`kind: "current"`)
-    Ranking matches `runRetryEngine` (pp, then accuracy). Lookup is batched per distinct beatmap in the score window.
+    Ranking is the single `comparePbRank` shared with `runRetryEngine` (`is_pb`): resolved PP, then accuracy, then the earlier play. Resolved PP is `resolveScorePp` (stored Realm PP, else the lazer-master curve estimate for no-mod / mirror-only mania scores), the same value mastery `best_pp` ranks by. A null-PP no-mod mania score can therefore be the PB over a score with a tiny stored PP. Lookup is batched per distinct beatmap in the score window.
 17. Current session layout: stats → Now selected → recommendations → score cards at the bottom. 4K/7K recommend does not offer Send to marathon.
 18. Recommendation focus bands (Push / Accuracy / Consistency / Deficit) and topPlays are configured in Settings → Customize (`recommend.focus_settings`); session recommend reads those settings.
 19. Active session detail (live or closed, not idle) offers **Copy as image**: one dark branded PNG. Clipboard write is armed in the click turn via a deferred `ClipboardItem` promise (required by Chromium user activation), then the card is captured. Fallback: Electron `writeClipboardImage`, then download. Card header uses absolute dates (same calendar day → one date + time window; different days → full start/end datetimes). Plays / PBs / Duration are centered in the two-column layout. Up to **20** highlight scores with judgments and PB compare — no session display name, no ruleset, no relative “ago” times. With **9+** highlights the card goes **wider** (two even columns) instead of taller; “+N more plays” only when the session has more than 20 plays. Highlights prefer PBs by PP, then fill with non-PBs by PP (`pickSessionShareHighlights`). Share may refetch with `limit=500` when the UI score window is incomplete.
+20. Session rebuild after new scores is a **delta repair** first (`tryRepairSessionDelta`), full rebuild second. Sessions are blocks of the global timeline split by gaps over 30 minutes, so new scores can only reshape the sessions within one gap of them (plus the open session, which is always re-evaluated so it closes once stale). The repair re-buckets those sessions' scores together with the new scores and reconciles them with the same routine as the full rebuild, so gaps inside the batch, scores older than the open session, closing the open session, and merging or extending closed sessions all produce the same partition as a full rebuild. It returns null (full rebuild) only when `sessions.score_count` outside the repaired sessions plus the repaired scores does not equal the number of in-scope scores, i.e. the stored sessions are not a trustworthy partition. Deletes and watermark resets do not use the delta path (the pipeline forces a full rebuild).
+21. The full rebuild does not load `score_metrics` into memory: prior session ids are read in id chunks, metrics are written with insert-or-ignore plus `UPDATE ... WHERE session_id IS NOT ?`, and sessions that no bucket claims are deleted only after their metrics rows are nulled (foreign key).
+22. Long session names truncate: list rows clip the title and the open-session subtitle to one line (`truncate`, full name in `title`), and the detail header clamps the title to two lines (`line-clamp-2 min-w-0 break-words`, full name in `title`) so it wraps beside the Copy as image button instead of widening the page.
     **Status:** verified
 
 ## Important symbols
 
-- `apps/server/src/analytics/session.ts` — `SESSION_GAP_MS`, `runSessionEngine()` (global gap algorithm; session/metrics writes in one sync transaction callback — required by better-sqlite3 on desktop; name backfill skipped when every name is already capitalized)
+- `apps/server/src/analytics/session.ts` — `SESSION_GAP_MS`, `runSessionEngine()` (global gap algorithm; session/metrics writes in one sync transaction callback via `reconcileBuckets()` — required by better-sqlite3 on desktop; name backfill skipped when every name is already capitalized), `tryRepairSessionDelta()` (windowed delta repair)
+- `apps/server/src/analytics/retry.ts` — `runRetryEngine()` assigns `is_pb` via `comparePbRank` on resolved PP
 - `apps/server/src/analytics/progression.ts:getDailyActivity()` — per-day play counts for the list calendar
 - `apps/server/src/routes/sessions.ts` — `serializeSession()` includes `name`; score window via `limit`; list includes `activity`; detail attaches `judgments` + `pbCompare`
-- `apps/server/src/scores/pbCompare.ts` — batched top-2 PB ranking for session compare
+- `apps/server/src/scores/pbCompare.ts` — `comparePbRank()` (shared PB ranking) and batched top-2 lookup for session compare; PP resolved with `resolveScorePp`
 - `apps/server/src/routes/overlay.ts` — slim OBS payload
 - `packages/session-names/src/generate.ts` — `generateSessionName(sessionId, taken)`, `capitalizeSessionName()`
 - `packages/session-names/src/terms.json` — character, region, activity, modifier, style word lists
@@ -109,6 +116,8 @@ On new session insert, `runSessionEngine()` sets `name` immediately after alloca
 - `features/sunny-dan-recommendations/` — 4K/7K recommend
 - `@roxysu/session-names` — display name vocabulary and generator
 - `features/practice-profiles/` — shared `ScoreCard` (`variant="beatmap"` on session detail)
+- `features/stats/` — documents `resolveScorePp` (stored Realm PP, else NM/MR curve estimate); `is_pb` and `pbCompare` rank by it, like mastery `best_pp`
+- `features/mastery-settings/` — mastery `best_pp` ranks by the same resolved PP
 
 ## Depended on by
 

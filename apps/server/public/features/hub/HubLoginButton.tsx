@@ -6,6 +6,7 @@ import {
   beginHubOAuthHandoff,
   hubLoginUrl,
   pollHubOAuthPending,
+  prepareWebHubLoginChallenge,
   setHubJwt,
   useHubUrl,
 } from "../../lib/hub";
@@ -30,7 +31,10 @@ export function HubLoginButton({
   const queryClient = useQueryClient();
   const desktop = isDesktopShell();
   const [waiting, setWaiting] = useState(false);
-  const [handoff, setHandoff] = useState<string | null>(null);
+  const [handoff, setHandoff] = useState<{
+    id: string;
+    verifier: string;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { dict } = useAppDict();
   const label = children ?? (dict?.hub?.loginButtonLabel ?? "Log in with osu!");
@@ -45,7 +49,11 @@ export function HubLoginButton({
     const ac = new AbortController();
     void (async () => {
       try {
-        const token = await pollHubOAuthPending(handoff, ac.signal);
+        const token = await pollHubOAuthPending(
+          handoff.id,
+          handoff.verifier,
+          ac.signal,
+        );
         setHubJwt(token);
         setWaiting(false);
         setHandoff(null);
@@ -65,9 +73,31 @@ export function HubLoginButton({
 
   if (!desktop) {
     return (
-      <a href={hubLoginUrl(hubUrl)} className={className} title={title}>
-        {label}
-      </a>
+      <span className="inline-flex flex-col items-start gap-1">
+        <button
+          type="button"
+          className={className}
+          title={title}
+          onClick={() => {
+            setError(null);
+            void (async () => {
+              try {
+                const challenge = await prepareWebHubLoginChallenge();
+                window.location.assign(hubLoginUrl(hubUrl, { challenge }));
+              } catch (err: unknown) {
+                setError(
+                  err instanceof Error
+                    ? err.message
+                    : (dict?.hub?.loginFailed ?? "Login failed"),
+                );
+              }
+            })();
+          }}
+        >
+          {label}
+        </button>
+        {error ? <span className="text-xs text-danger">{error}</span> : null}
+      </span>
     );
   }
 
@@ -87,11 +117,15 @@ export function HubLoginButton({
           }
           void (async () => {
             try {
-              const id = await beginHubOAuthHandoff();
+              const begin = await beginHubOAuthHandoff();
               await open(
-                hubLoginUrl(hubUrl, { client: "desktop", handoff: id }),
+                hubLoginUrl(hubUrl, {
+                  client: "desktop",
+                  handoff: begin.handoff,
+                  challenge: begin.challenge,
+                }),
               );
-              setHandoff(id);
+              setHandoff({ id: begin.handoff, verifier: begin.verifier });
               setWaiting(true);
             } catch (err: unknown) {
               setError(

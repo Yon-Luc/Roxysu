@@ -7,7 +7,10 @@ import {
   getActiveBeatmapMirrorProvider,
   getMirrorBatchJobState,
   isMirrorArchiveUnavailableError,
-  loadOwnedSetOnlineIds,
+  loadOwnedSetIdsVersion,
+  loadOwnedSetOnlineIdsPage,
+  MAX_OWNERSHIP_DIFF_IDS,
+  OWNED_SET_IDS_MAX_LIMIT,
   openLastBatchArchivesInOsu,
   parsePositiveSetId,
   probeBeatmapsDownloadDir,
@@ -55,6 +58,7 @@ function httpStatusForMirrorError(err: unknown): number {
   if (isMirrorArchiveUnavailableError(err)) return 502;
   const message = err instanceof Error ? err.message : String(err);
   if (message.includes("already running")) return 409;
+  if (message.includes("setIds is limited to")) return 400;
   if (
     message.includes("No archives") ||
     message.includes("Cannot open archives")
@@ -109,10 +113,33 @@ export const mirrorRoutes = new Elysia({ prefix: "/mirrors" })
     },
   )
   .get("/batch", () => getMirrorBatchJobState())
-  .get("/owned-set-ids", async ({ db }) => {
-    const owned = await loadOwnedSetOnlineIds(db);
-    return { setIds: [...owned] };
-  })
+  .get(
+    "/owned-set-ids",
+    async ({ db, query, request, set }) => {
+      const after = query.after ?? 0;
+      const version = await loadOwnedSetIdsVersion(db);
+      // Weak validator: same owned set + same cursor window => same body.
+      const etag = `W/"owned-${version}-${after}-${query.limit ?? "d"}"`;
+      set.headers["etag"] = etag;
+      set.headers["cache-control"] = "no-cache";
+      if (request.headers.get("if-none-match") === etag) {
+        return new Response(null, { status: 304, headers: { etag } });
+      }
+      const page = await loadOwnedSetOnlineIdsPage(db, {
+        after,
+        limit: query.limit,
+      });
+      return { setIds: page.setIds, nextAfter: page.nextAfter, version };
+    },
+    {
+      query: t.Object({
+        after: t.Optional(t.Numeric({ minimum: 0 })),
+        limit: t.Optional(
+          t.Numeric({ minimum: 1, maximum: OWNED_SET_IDS_MAX_LIMIT }),
+        ),
+      }),
+    },
+  )
   .post(
     "/ownership/diff",
     async ({ db, body }) => {
@@ -127,7 +154,7 @@ export const mirrorRoutes = new Elysia({ prefix: "/mirrors" })
     },
     {
       body: t.Object({
-        setIds: t.Array(t.Number(), { maxItems: 20_000 }),
+        setIds: t.Array(t.Number(), { maxItems: MAX_OWNERSHIP_DIFF_IDS }),
       }),
     },
   )
@@ -169,6 +196,13 @@ export const mirrorRoutes = new Elysia({ prefix: "/mirrors" })
           if (!Array.isArray(body.setIds) || body.setIds.length === 0) {
             set.status = 400;
             return { error: "setIds is required for mode=setIds" };
+          }
+          // Reject before the job starts (also bounds the runner's dedupe/diff).
+          if (body.setIds.length > MAX_OWNERSHIP_DIFF_IDS) {
+            set.status = 400;
+            return {
+              error: `setIds is limited to ${MAX_OWNERSHIP_DIFF_IDS} ids per batch (got ${body.setIds.length}); split the request`,
+            };
           }
           return startMirrorBatchJob(db, {
             mode: "setIds",

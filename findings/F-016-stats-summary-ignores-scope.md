@@ -4,6 +4,7 @@ feature: stats
 kind: logic-gap
 severity: medium
 confidence: verified
+status: fixed
 ---
 
 # Stats summary counts sessions and PBs outside the score scope
@@ -28,3 +29,7 @@ The Stats header matches the charts and skill bands for the active Practice scor
 
 - `apps/server/src/analytics/playerStats.ts` `scoreScopeFilter` (lines 50–65) versus `getSessionStats` (lines 309–352), which selects all `sessions` and `eq(scoreMetrics.isPb, true)` with no join.
 - `apps/server/src/analytics/session.ts` `countSessionPbs` (about lines 673–690) applies the scope.
+
+## Status
+
+Fixed. `getSessionStats` in `apps/server/src/analytics/playerStats.ts` now groups `score_metrics` joined to `scores` with the same `delete_pending`, username, and gamemode scope as the rest of the Stats page (resolved once per request by `scoreScopeFilter`). Only sessions containing at least one scoped play are counted; a session's play count in the averages and the "longest" entry is its scoped plays, not the stored `sessions.score_count`; `pbCount` counts scoped `is_pb` rows (including PBs with no session). Session start/end times are still the stored values. Cost: one grouped join over `score_metrics` (about 170 ms at 200k scores), paid only on a Stats cache miss. Covered by `apps/server/src/analytics/playerStats.test.ts` (header counts vs a plain-JS reference for three scopes, and an empty scope).

@@ -4,6 +4,7 @@ feature: tosu-live
 kind: perf
 severity: medium
 confidence: verified
+status: fixed
 ---
 
 # Connected tosu probe still publishes a full live update
@@ -28,3 +29,7 @@ Less SSE refetch traffic and fewer HUD redraws that are not tied to gameplay.
 
 - `apps/server/src/tosu/live.ts` `startProbeLoop` (lines 344–355): connected branch ends in `emit(true)`.
 - `emit` (lines 62–77): `force` publishes `{ type: "tosu.updated", reason: "full" }`.
+
+## Status
+
+Fixed. The 15 s probe loop (`runProbeTick` in `apps/server/src/tosu/live.ts`) refreshes warnings only and publishes `tosu.updated` (`full`) only when the warning list changed; frames and analysis publish their own changes. Tests in `apps/server/src/tosu/live.probe.test.ts`.

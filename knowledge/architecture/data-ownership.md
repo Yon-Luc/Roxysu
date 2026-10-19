@@ -19,7 +19,7 @@ Prevent dual-writer corruption by assigning table ownership per process.
 2. **server** writes only **derived / user** tables: sessions, mastery, stats, score_metrics, collections, settings, notes/tags, and BMS derived rows (`bms_score_details`, `bms_sync_queue`, `bms_table_cache`).
 3. **Roxysu Play** (`apps/play`) writes only **`play_*`** tables: `play_settings`, `play_sessions`.
 4. Soft-deleted Realm Score and BeatmapSet objects are upserted with `delete_pending = true`; product queries filter them out. Realm Beatmap has no `DeletePending`.
-5. Server (Drizzle) owns schema/migrations for the whole local mirror.
+5. Server (Drizzle) owns schema/migrations for the whole local mirror; it is the only process that runs `migrate()` (realm-reader waits for it, see [decisions/dual-runtime-sqlite-bus.md](../decisions/dual-runtime-sqlite-bus.md)).
 
 ## Security rules
 

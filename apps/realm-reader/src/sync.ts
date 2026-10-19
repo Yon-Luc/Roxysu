@@ -1,24 +1,10 @@
 import {
   beatmapSets,
   beatmaps,
-  beatmapDanRatings,
-  beatmapManiaRatings,
-  beatmapPatternAnalysis,
-  imports,
-  mastery,
-  notes,
-  beatmapTags,
   rulesets,
-  scoreMetrics,
   scores,
   settings,
   eq,
-  max,
-  and,
-  desc,
-  inArray,
-  count,
-  sql,
   type Db,
 } from "@roxysu/db/client.node";
 import path from "node:path";
@@ -37,43 +23,50 @@ import { loadOsuSchema } from "./schema";
 import { platformDefaultOsuDataPath } from "./osu-paths";
 import { syncRealmCollectionsFromRealm } from "./syncRealmCollections";
 import { syncRealmSkinsFromRealm } from "./syncRealmSkins";
-import {
-  BATCH_SIZE,
-  chunk,
-  streamMappedUpsert,
-  upsertBatches,
-  withBusyRetry,
-  type UpsertResult,
-} from "./upsert";
-import {
-  SYNC_CATCHUP_STALLED_KEY,
-  SYNC_SCHEMA_OUTDATED_KEY,
-} from "@roxysu/db/settings-keys";
+import { streamMappedUpsert, upsertBatches, withBusyRetry } from "./upsert";
+import { SYNC_SCHEMA_OUTDATED_KEY } from "@roxysu/db/settings-keys";
 import {
   SchemaVersionMismatchError,
   toSchemaVersionMismatchError,
 } from "./schemaMismatch";
+import {
+  RealmLockedError,
+  claimImport,
+  commitImport,
+  failImport,
+  getWatermarks,
+  hasSuccessfulImport,
+  laterDate,
+  setImportSchemaVersion,
+  type SyncKind,
+} from "./importJournal";
+import {
+  clearCatchupStallIfSet,
+  finishCountGapRound,
+  reconcileDeletes,
+  startCountGapRound,
+  type RealmCounts,
+} from "./reconcileCore";
+import {
+  DeltaWriter,
+  healFlaggedRows,
+  streamIncrementalDelta,
+  type ExtractionSource,
+  type FlagKind,
+} from "./deltaCore";
 
 export { SchemaVersionMismatchError, toSchemaVersionMismatchError };
+export { RealmLockedError, hasSuccessfulImport };
+export type { SyncKind };
 
 export { defaultDbPath } from "@roxysu/db/path";
 
 /** One-shot flag: remapped scores after replay_file_hash column was added. */
 const REPLAY_HASH_BACKFILL_KEY = "sync.replay_hash_backfill_v1";
 
-/** Above this many changed IDs, analytics should full-rebuild (null delta payload). */
-const FULL_ANALYTICS_ID_THRESHOLD = 5_000;
-
 /** Realm uuid PKs require a BSON.UUID instance, not a plain string. */
 function realmUuid(id: string): Realm.BSON.UUID {
   return new Realm.BSON.UUID(id);
-}
-
-export class RealmLockedError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "RealmLockedError";
-  }
 }
 
 function isLockError(err: unknown): boolean {
@@ -88,37 +81,6 @@ function isLockError(err: unknown): boolean {
     lower.includes("eacces") ||
     lower.includes("permission denied")
   );
-}
-
-/** Reconcile catch-up stops retrying after this many fruitless rounds. */
-const CATCHUP_STALL_LIMIT = 3;
-
-function readStallCount(db: Db): number {
-  const raw = db
-    .select({ value: settings.value })
-    .from(settings)
-    .where(eq(settings.key, SYNC_CATCHUP_STALLED_KEY))
-    .get()?.value;
-  const n = Number(raw ?? "0");
-  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
-}
-
-function writeStallCount(db: Db, n: number) {
-  withBusyRetry(() =>
-    db
-      .insert(settings)
-      .values({ key: SYNC_CATCHUP_STALLED_KEY, value: String(n) })
-      .onConflictDoUpdate({
-        target: settings.key,
-        set: { value: String(n) },
-      })
-      .run(),
-  );
-}
-
-/** New rows landed → give reconcile catch-up another chance. */
-function clearCatchupStallIfSet(db: Db) {
-  if (readStallCount(db) > 0) writeStallCount(db, 0);
 }
 
 /** Realm file is newer than this build. The client app reads this row for the notice. */
@@ -148,38 +110,6 @@ export function clearSchemaOutdated(db: Db) {
     db.delete(settings).where(eq(settings.key, SYNC_SCHEMA_OUTDATED_KEY)).run(),
   );
 }
-
-function deleteByIds(
-  db: Db,
-  table:
-    | typeof scores
-    | typeof beatmaps
-    | typeof beatmapSets
-    | typeof scoreMetrics
-    | typeof mastery
-    | typeof notes
-    | typeof beatmapTags
-    | typeof beatmapDanRatings
-    | typeof beatmapManiaRatings
-    | typeof beatmapPatternAnalysis,
-  idColumn: { name: string },
-  ids: string[],
-) {
-  if (ids.length === 0) return 0;
-  let deleted = 0;
-  for (const batch of chunk(ids, BATCH_SIZE)) {
-    const result = withBusyRetry(() =>
-      db
-        .delete(table)
-        .where(inArray(idColumn as never, batch))
-        .run(),
-    );
-    deleted += result.changes;
-  }
-  return deleted;
-}
-
-export type SyncKind = "full" | "incremental" | "reconcile";
 
 export type SyncResult = {
   kind: SyncKind;
@@ -229,122 +159,6 @@ function assertSchemaVersion(realm: Realm) {
   return actual;
 }
 
-export function hasSuccessfulImport(db: Db): boolean {
-  const row = db
-    .select({ id: imports.id })
-    .from(imports)
-    .where(and(eq(imports.status, "success")))
-    .orderBy(desc(imports.id))
-    .limit(1)
-    .get();
-  return row != null;
-}
-
-function playedAtMs(value: Date | number | null | undefined): number | null {
-  if (value == null) return null;
-  if (value instanceof Date) {
-    const ms = value.getTime();
-    return Number.isFinite(ms) ? ms : null;
-  }
-  return Number.isFinite(value) ? value : null;
-}
-
-/** Rows that survived constraint bisect (skippedKeys are `id=…` from upsert). */
-function withoutSkipped<T extends { id: string }>(
-  rows: readonly T[],
-  skippedKeys: readonly string[],
-): T[] {
-  if (skippedKeys.length === 0) return [...rows];
-  const skipped = new Set(skippedKeys);
-  return rows.filter((row) => !skipped.has(`id=${row.id}`));
-}
-
-type ExtractionWatermarks = {
-  maxPlayedAt: Date | null;
-  maxLastLocalUpdate: Date | null;
-};
-
-function laterDate(
-  current: Date | null,
-  value: Date | number | null | undefined,
-): Date | null {
-  const ms = playedAtMs(value);
-  if (ms == null) return current;
-  if (current == null || ms > current.getTime()) return new Date(ms);
-  return current;
-}
-
-function advanceWatermarks(
-  previous: ExtractionWatermarks,
-  scoreRows: ReadonlyArray<{ playedAt?: Date | number | null }>,
-  beatmapRows: ReadonlyArray<{ lastLocalUpdate?: Date | number | null }>,
-): ExtractionWatermarks {
-  let maxPlayedAt = previous.maxPlayedAt;
-  let maxLastLocalUpdate = previous.maxLastLocalUpdate;
-  for (const row of scoreRows) maxPlayedAt = laterDate(maxPlayedAt, row.playedAt);
-  for (const row of beatmapRows) {
-    maxLastLocalUpdate = laterDate(maxLastLocalUpdate, row.lastLocalUpdate);
-  }
-  return { maxPlayedAt, maxLastLocalUpdate };
-}
-
-function fallbackWatermarksFromTables(db: Db): ExtractionWatermarks {
-  const [scoreRow] = db
-    .select({ maxPlayed: max(scores.playedAt) })
-    .from(scores)
-    .all();
-  const [beatmapRow] = db
-    .select({ maxUpdate: max(beatmaps.lastLocalUpdate) })
-    .from(beatmaps)
-    .all();
-
-  const playedMs = playedAtMs(scoreRow?.maxPlayed);
-  const updateMs = playedAtMs(beatmapRow?.maxUpdate);
-
-  return {
-    maxPlayedAt: playedMs != null ? new Date(playedMs) : null,
-    maxLastLocalUpdate: updateMs != null ? new Date(updateMs) : null,
-  };
-}
-
-function getWatermarks(db: Db): ExtractionWatermarks {
-  const lastSuccess = db
-    .select({
-      watermarkPlayedAt: imports.watermarkPlayedAt,
-      watermarkLastLocalUpdate: imports.watermarkLastLocalUpdate,
-    })
-    .from(imports)
-    .where(eq(imports.status, "success"))
-    .orderBy(desc(imports.id))
-    .limit(1)
-    .get();
-
-  if (
-    lastSuccess &&
-    (lastSuccess.watermarkPlayedAt != null ||
-      lastSuccess.watermarkLastLocalUpdate != null)
-  ) {
-    return {
-      maxPlayedAt:
-        playedAtMs(lastSuccess.watermarkPlayedAt) != null
-          ? new Date(playedAtMs(lastSuccess.watermarkPlayedAt)!)
-          : null,
-      maxLastLocalUpdate:
-        playedAtMs(lastSuccess.watermarkLastLocalUpdate) != null
-          ? new Date(playedAtMs(lastSuccess.watermarkLastLocalUpdate)!)
-          : null,
-    };
-  }
-
-  return fallbackWatermarksFromTables(db);
-}
-
-function withTransaction<T>(db: Db, fn: (tx: Db) => T): T {
-  return withBusyRetry(() =>
-    db.transaction((tx) => fn(tx as unknown as Db)),
-  );
-}
-
 function trySyncRealmCollections(
   db: Db,
   realm: Realm,
@@ -364,7 +178,6 @@ function trySyncRealmSkins(db: Db, realm: Realm) {
     console.error("realm skin extract failed:", err);
   }
 }
-
 /** Collect primary keys only — used by periodic reconcile / missing catch-up. */
 function collectRealmIdSets(realm: Realm): {
   realmScoreIds: Set<string>;
@@ -575,201 +388,41 @@ function catchUpMissingFromRealm(
   };
 }
 
-/** Remove SQLite rows that no longer exist in Realm (full/reconcile only). */
-function reconcileDeletes(
-  db: Db,
-  realmScoreIds: Set<string>,
-  realmBeatmapIds: Set<string>,
-  realmSetIds: Set<string>,
-): {
-  scoresDeleted: number;
-  beatmapsDeleted: number;
-  beatmapSetsDeleted: number;
-  deletedScoreIds: string[];
-  deletedBeatmapIds: string[];
-} {
-  const sqliteScoreIds = db
-    .select({ id: scores.id })
-    .from(scores)
-    .all()
-    .map((r) => r.id);
-  const orphanScores = sqliteScoreIds.filter((id) => !realmScoreIds.has(id));
-
-  if (orphanScores.length > 0) {
-    deleteByIds(db, scoreMetrics, scoreMetrics.scoreId as never, orphanScores);
-    deleteByIds(db, scores, scores.id as never, orphanScores);
-  }
-
-  const sqliteBeatmapIds = db
-    .select({ id: beatmaps.id })
-    .from(beatmaps)
-    .all()
-    .map((r) => r.id);
-  const orphanBeatmaps = sqliteBeatmapIds.filter(
-    (id) => !realmBeatmapIds.has(id),
-  );
-
-  if (orphanBeatmaps.length > 0) {
-    for (const batch of chunk(orphanBeatmaps, BATCH_SIZE)) {
-      withBusyRetry(() =>
-        db
-          .update(scores)
-          .set({ beatmapId: null })
-          .where(inArray(scores.beatmapId, batch))
-          .run(),
-      );
-    }
-    deleteByIds(db, mastery, mastery.beatmapId as never, orphanBeatmaps);
-    deleteByIds(db, notes, notes.beatmapId as never, orphanBeatmaps);
-    deleteByIds(
-      db,
-      beatmapTags,
-      beatmapTags.beatmapId as never,
-      orphanBeatmaps,
-    );
-    deleteByIds(
-      db,
-      beatmapDanRatings,
-      beatmapDanRatings.beatmapId as never,
-      orphanBeatmaps,
-    );
-    deleteByIds(
-      db,
-      beatmapManiaRatings,
-      beatmapManiaRatings.beatmapId as never,
-      orphanBeatmaps,
-    );
-    deleteByIds(
-      db,
-      beatmapPatternAnalysis,
-      beatmapPatternAnalysis.beatmapId as never,
-      orphanBeatmaps,
-    );
-    deleteByIds(db, beatmaps, beatmaps.id as never, orphanBeatmaps);
-  }
-
-  const sqliteSetIds = db
-    .select({ id: beatmapSets.id })
-    .from(beatmapSets)
-    .all()
-    .map((r) => r.id);
-  const orphanSets = sqliteSetIds.filter((id) => !realmSetIds.has(id));
-  if (orphanSets.length > 0) {
-    deleteByIds(db, beatmapSets, beatmapSets.id as never, orphanSets);
-  }
-
+/** Read-only view of an open Realm for `deltaCore` (kept thin: no logic here). */
+function realmSource(realm: Realm): ExtractionSource {
+  const flagFilter: Record<FlagKind, [string, string]> = {
+    softScore: ["Score", "DeletePending == true"],
+    softSet: ["BeatmapSet", "DeletePending == true"],
+    hiddenBeatmap: ["Beatmap", "Hidden == true"],
+  };
   return {
-    scoresDeleted: orphanScores.length,
-    beatmapsDeleted: orphanBeatmaps.length,
-    beatmapSetsDeleted: orphanSets.length,
-    deletedScoreIds: orphanScores,
-    deletedBeatmapIds: orphanBeatmaps,
+    beatmapsUpdatedAfter: (since) =>
+      realm.objects("Beatmap").filtered("LastLocalUpdate > $0", since),
+    scoresPlayedAfter: (since) =>
+      realm.objects("Score").filtered("Date > $0", since),
+    *flaggedIds(kind) {
+      const [cls, filter] = flagFilter[kind];
+      for (const obj of realm.objects(cls).filtered(filter)) {
+        const id = (obj as { ID?: unknown }).ID;
+        if (id != null) yield String(id);
+      }
+    },
+    objectById: (cls, id) =>
+      realm.objectForPrimaryKey(cls, realmUuid(id) as never),
+    rulesetsByShortName: (shortName) =>
+      realm.objects("Ruleset").filtered("ShortName == $0", shortName),
   };
 }
 
-function encodeChangedIds(ids: string[] | null): string | null {
-  if (ids == null) return null;
-  if (ids.length > FULL_ANALYTICS_ID_THRESHOLD) return null;
-  return JSON.stringify(ids);
-}
 
-/** Retain recent import journal rows; drop older history to bound WAL growth. */
-const IMPORTS_RETAIN = 500;
-
-function pruneImports(db: Db) {
-  // Use Drizzle `run(sql)` so this works on both the root db and a
-  // transaction (`tx` has no `$client` — incremental finishImport passes tx).
-  withBusyRetry(() => {
-    db.run(sql`
-      DELETE FROM imports
-      WHERE id NOT IN (
-        SELECT id FROM imports ORDER BY id DESC LIMIT ${IMPORTS_RETAIN}
-      )
-    `);
-  });
-}
-
-function finishImport(
-  db: Db,
-  importId: number,
-  counts: {
-    beatmapSetsUpserted: number;
-    beatmapsUpserted: number;
-    scoresUpserted: number;
-    rowsChanged: number;
-    scoresDeleted: number;
-    beatmapsDeleted: number;
-    beatmapSetsDeleted: number;
-    changedScoreIds: string[] | null;
-    changedBeatmapIds: string[] | null;
-  },
-  watermarks: ExtractionWatermarks,
-) {
-  withBusyRetry(() =>
-    db
-      .update(imports)
-      .set({
-        status: "success",
-        finishedAt: new Date(),
-        beatmapSetsUpserted: counts.beatmapSetsUpserted,
-        beatmapsUpserted: counts.beatmapsUpserted,
-        scoresUpserted: counts.scoresUpserted,
-        rowsChanged: counts.rowsChanged,
-        scoresDeleted: counts.scoresDeleted,
-        beatmapsDeleted: counts.beatmapsDeleted,
-        beatmapSetsDeleted: counts.beatmapSetsDeleted,
-        changedScoreIds: encodeChangedIds(counts.changedScoreIds),
-        changedBeatmapIds: encodeChangedIds(counts.changedBeatmapIds),
-        watermarkPlayedAt: watermarks.maxPlayedAt,
-        watermarkLastLocalUpdate: watermarks.maxLastLocalUpdate,
-      })
-      .where(eq(imports.id, importId))
-      .run(),
-  );
-  pruneImports(db);
-}
-
-function failImport(db: Db, importId: number, err: unknown) {
-  const status = err instanceof RealmLockedError ? "locked" : "failed";
-  withBusyRetry(() =>
-    db
-      .update(imports)
-      .set({
-        status,
-        finishedAt: new Date(),
-        error: err instanceof Error ? err.message : String(err),
-      })
-      .where(eq(imports.id, importId))
-      .run(),
-  );
-}
-
-function claimImport(db: Db, kind: SyncKind) {
-  return withBusyRetry(() =>
-    db
-      .insert(imports)
-      .values({
-        kind,
-        status: "running",
-        startedAt: new Date(),
-        realmSchemaVersion: 0,
-      })
-      .returning({ id: imports.id })
-      .get(),
-  );
-}
-
-function setImportSchemaVersion(db: Db, importId: number, version: number) {
-  withBusyRetry(() =>
-    db
-      .update(imports)
-      .set({ realmSchemaVersion: version })
-      .where(eq(imports.id, importId))
-      .run(),
-  );
-}
-
-/** Bootstrap / forced full: remap + upsert everything, then reconcile orphans. */
+/**
+ * Bootstrap / forced full: remap + upsert everything, then reconcile orphans.
+ *
+ * Write-lock shape: upserts stream with autocommit (one short lock per
+ * batch). The import row stays `running` until `commitImport`, a single short
+ * immediate transaction holding the orphan deletes and the `success` flip, so
+ * an interrupted run is never recorded as a finished extraction.
+ */
 export function runFullSync(db: Db, realmPath: string): SyncResult {
   const importRow = claimImport(db, "full");
 
@@ -847,39 +500,39 @@ export function runFullSync(db: Db, realmPath: string): SyncResult {
       },
     );
 
-    const deleted = reconcileDeletes(
-      db,
-      realmScoreIds,
-      realmBeatmapIds,
-      realmSetIds,
-    );
-
-    const rowsChanged =
-      rulesetsUpserted.changed +
-      beatmapSetsUpserted.changed +
-      beatmapsUpserted.changed +
-      scoresUpserted.changed +
-      deleted.scoresDeleted +
-      deleted.beatmapsDeleted +
-      deleted.beatmapSetsDeleted;
-
+    // Commit phase: orphan deletes + `success` flip + watermarks, atomically.
     // Full bootstrap → null delta (server runs full analytics).
-    finishImport(
-      db,
-      importRow.id,
-      {
-        beatmapSetsUpserted: beatmapSetsUpserted.attempted,
-        beatmapsUpserted: beatmapsUpserted.attempted,
-        scoresUpserted: scoresUpserted.attempted,
-        rowsChanged,
-        scoresDeleted: deleted.scoresDeleted,
-        beatmapsDeleted: deleted.beatmapsDeleted,
-        beatmapSetsDeleted: deleted.beatmapSetsDeleted,
-        changedScoreIds: null,
-        changedBeatmapIds: null,
-      },
-      { maxPlayedAt, maxLastLocalUpdate },
-    );
+    const { deleted, rowsChanged } = commitImport(db, importRow.id, (tx) => {
+      const deleted = reconcileDeletes(
+        tx,
+        realmScoreIds,
+        realmBeatmapIds,
+        realmSetIds,
+      );
+      const rowsChanged =
+        rulesetsUpserted.changed +
+        beatmapSetsUpserted.changed +
+        beatmapsUpserted.changed +
+        scoresUpserted.changed +
+        deleted.scoresDeleted +
+        deleted.beatmapsDeleted +
+        deleted.beatmapSetsDeleted;
+      return {
+        counts: {
+          beatmapSetsUpserted: beatmapSetsUpserted.attempted,
+          beatmapsUpserted: beatmapsUpserted.attempted,
+          scoresUpserted: scoresUpserted.attempted,
+          rowsChanged,
+          scoresDeleted: deleted.scoresDeleted,
+          beatmapsDeleted: deleted.beatmapsDeleted,
+          beatmapSetsDeleted: deleted.beatmapSetsDeleted,
+          changedScoreIds: null,
+          changedBeatmapIds: null,
+        },
+        watermarks: { maxPlayedAt, maxLastLocalUpdate },
+        result: { deleted, rowsChanged },
+      };
+    });
 
     trySyncRealmCollections(db, realm, true);
     trySyncRealmSkins(db, realm);
@@ -906,182 +559,42 @@ export function runFullSync(db: Db, realmPath: string): SyncResult {
 
 /**
  * Periodic orphan check + missing-ID catch-up (no full remapping of all rows).
- * Soft-delete flags are picked up on incremental when counts diverge.
+ * Soft-delete / hidden flags are healed by id-set comparison (not counts).
+ *
+ * Streaming phases (catch-up, flag heal, one-shot replay backfill) autocommit
+ * in bounded batches; orphan deletes, the stall counter, the one-shot flag and
+ * the `success` flip commit together in `commitImport`.
  */
 export function runReconcileSync(db: Db, realmPath: string): SyncResult {
   const importRow = claimImport(db, "reconcile");
 
   let realm: Realm | undefined;
   try {
-    realm = openRealm(realmPath, db);
-    const actual = assertSchemaVersion(realm);
+    const open = openRealm(realmPath, db);
+    realm = open;
+    const actual = assertSchemaVersion(open);
     setImportSchemaVersion(db, importRow.id, actual);
 
-    const sqliteScoreCount =
-      db.select({ n: count() }).from(scores).get()?.n ?? 0;
-    const sqliteBeatmapCount =
-      db.select({ n: count() }).from(beatmaps).get()?.n ?? 0;
-    const sqliteSetCount =
-      db.select({ n: count() }).from(beatmapSets).get()?.n ?? 0;
-
-    const realmScoreCount = realm.objects("Score").length;
-    const realmBeatmapCount = realm.objects("Beatmap").length;
-    const realmSetCount = realm.objects("BeatmapSet").length;
-
-    let deleted = {
-      scoresDeleted: 0,
-      beatmapsDeleted: 0,
-      beatmapSetsDeleted: 0,
-      deletedScoreIds: [] as string[],
-      deletedBeatmapIds: [] as string[],
-    };
-    let caughtUp = {
-      beatmapSetsUpserted: 0,
-      beatmapsUpserted: 0,
-      scoresUpserted: 0,
-      rulesetsUpserted: 0,
-      changedBeatmapIds: [] as string[],
-      changedScoreIds: [] as string[],
-      rowsChanged: 0,
+    const realmCounts: RealmCounts = {
+      scores: open.objects("Score").length,
+      beatmaps: open.objects("Beatmap").length,
+      sets: open.objects("BeatmapSet").length,
     };
 
-    // Counts differ → catch up missing Realm rows and/or delete SQLite orphans.
-    const countsDiffer =
-      sqliteScoreCount !== realmScoreCount ||
-      sqliteBeatmapCount !== realmBeatmapCount ||
-      sqliteSetCount !== realmSetCount;
+    // Counts differ → catch up missing Realm rows (unless the stall breaker
+    // tripped) and, in the commit phase, delete SQLite orphans.
+    const round = startCountGapRound(db, realmCounts, {
+      collectRealmIdSets: () => collectRealmIdSets(open),
+      catchUp: (ids) => catchUpMissingFromRealm(db, open, ids),
+    });
+    const caughtUp = round.caughtUp;
 
-    if (countsDiffer) {
-      const stallCount = readStallCount(db);
-      if (stallCount >= CATCHUP_STALL_LIMIT) {
-        console.log(
-          `reconcile: skipping catch-up — row-count gap survived ${stallCount} fruitless rounds (unmirrorable Realm rows?). Cleared automatically once new rows import.`,
-        );
-      } else {
-        const ids = collectRealmIdSets(realm);
-        caughtUp = catchUpMissingFromRealm(db, realm, ids);
-        deleted = reconcileDeletes(
-          db,
-          ids.realmScoreIds,
-          ids.realmBeatmapIds,
-          ids.realmSetIds,
-        );
-
-        // Track whether this round closed the gap; a gap that never moves
-        // must not force full-ID scans every reconcile forever.
-        const scoreCountAfter =
-          db.select({ n: count() }).from(scores).get()?.n ?? 0;
-        const beatmapCountAfter =
-          db.select({ n: count() }).from(beatmaps).get()?.n ?? 0;
-        const setCountAfter =
-          db.select({ n: count() }).from(beatmapSets).get()?.n ?? 0;
-        const stillDiffer =
-          scoreCountAfter !== realmScoreCount ||
-          beatmapCountAfter !== realmBeatmapCount ||
-          setCountAfter !== realmSetCount;
-
-        if (stillDiffer) {
-          const movedRows =
-            caughtUp.rowsChanged +
-            deleted.scoresDeleted +
-            deleted.beatmapsDeleted +
-            deleted.beatmapSetsDeleted;
-          writeStallCount(db, movedRows > 0 ? 0 : stallCount + 1);
-        } else {
-          writeStallCount(db, 0);
-        }
-      }
-    }
-
-    // Soft-delete / hide count gates: if pending counts diverge, map those objects.
-    // Realm Beatmap has no DeletePending — difficulty hide uses Hidden.
-    let softScoreChanged = 0;
-    let softSetChanged = 0;
-    let softBeatmapHiddenChanged = 0;
-    const changedScoreIds: string[] = [
-      ...deleted.deletedScoreIds,
-      ...caughtUp.changedScoreIds,
-    ];
-    const changedBeatmapIds: string[] = [
-      ...deleted.deletedBeatmapIds,
-      ...caughtUp.changedBeatmapIds,
-    ];
-
-    const realmSoftScores = realm
-      .objects("Score")
-      .filtered("DeletePending == true");
-    const realmSoftSets = realm
-      .objects("BeatmapSet")
-      .filtered("DeletePending == true");
-    const realmHiddenBeatmaps = realm
-      .objects("Beatmap")
-      .filtered("Hidden == true");
-    const sqliteSoftScores =
-      db
-        .select({ n: count() })
-        .from(scores)
-        .where(eq(scores.deletePending, true))
-        .get()?.n ?? 0;
-    const sqliteSoftSets =
-      db
-        .select({ n: count() })
-        .from(beatmapSets)
-        .where(eq(beatmapSets.deletePending, true))
-        .get()?.n ?? 0;
-    const sqliteHiddenBeatmaps =
-      db
-        .select({ n: count() })
-        .from(beatmaps)
-        .where(eq(beatmaps.hidden, true))
-        .get()?.n ?? 0;
-
-    if (realmSoftScores.length !== sqliteSoftScores) {
-      const scoreRows: ScoreRow[] = [];
-      for (const obj of realmSoftScores) {
-        const row = mapScore(obj as never);
-        if (row) {
-          scoreRows.push(row);
-          changedScoreIds.push(row.id);
-        }
-      }
-      softScoreChanged = upsertBatches(
-        db,
-        scores,
-        scoreRows as Record<string, unknown>[],
-        ["id"],
-      ).changed;
-    }
-
-    if (realmSoftSets.length !== sqliteSoftSets) {
-      const setRows: BeatmapSetRow[] = [];
-      for (const obj of realmSoftSets) {
-        const row = mapBeatmapSet(obj as never);
-        if (row) setRows.push(row);
-      }
-      softSetChanged = upsertBatches(
-        db,
-        beatmapSets,
-        setRows as Record<string, unknown>[],
-        ["id"],
-      ).changed;
-    }
-
-    if (realmHiddenBeatmaps.length !== sqliteHiddenBeatmaps) {
-      const mapRows: BeatmapRow[] = [];
-      for (const obj of realmHiddenBeatmaps) {
-        const row = mapBeatmap(obj as never);
-        if (row) {
-          mapRows.push(row);
-          changedBeatmapIds.push(row.id);
-        }
-      }
-      softBeatmapHiddenChanged = upsertBatches(
-        db,
-        beatmaps,
-        mapRows as Record<string, unknown>[],
-        ["id"],
-      ).changed;
-    }
+    // Soft-delete / hide flags: remap ids that differ between Realm and the
+    // local mirror. Realm Beatmap has no DeletePending — difficulty hide uses
+    // Hidden.
+    const source = realmSource(open);
+    const heal = new DeltaWriter(db, source, getWatermarks(db));
+    healFlaggedRows(heal, db, source);
 
     // One-shot: remap all scores so replay_file_hash is populated after migration.
     let replayBackfillUpserted = 0;
@@ -1096,54 +609,81 @@ export function runReconcileSync(db: Db, realmPath: string): SyncResult {
       replayBackfillUpserted = streamMappedUpsert(
         db,
         scores,
-        realm.objects("Score"),
+        open.objects("Score"),
         (obj) => mapScore(obj as never) as Record<string, unknown> | null,
         ["id"],
       ).changed;
-      withBusyRetry(() =>
-        db
-          .insert(settings)
+      replayBackfillRan = true;
+    }
+
+    const softScoreChanged = heal.totals.scores.changed;
+    const softSetChanged = heal.totals.sets.changed;
+    const softBeatmapHiddenChanged = heal.totals.beatmaps.changed;
+
+    const deleted = commitImport(db, importRow.id, (tx) => {
+      const deleted = finishCountGapRound(tx, round, realmCounts);
+      // The flag is written only with the commit: a crash after the backfill
+      // stream but before `success` must run the backfill (and its null
+      // analytics delta) again.
+      if (replayBackfillRan) {
+        tx.insert(settings)
           .values({ key: REPLAY_HASH_BACKFILL_KEY, value: "1" })
           .onConflictDoUpdate({
             target: settings.key,
             set: { value: "1" },
           })
-          .run(),
-      );
-      replayBackfillRan = true;
-    }
+          .run();
+      }
 
-    const rowsChanged =
-      deleted.scoresDeleted +
-      deleted.beatmapsDeleted +
-      deleted.beatmapSetsDeleted +
-      caughtUp.rowsChanged +
-      softScoreChanged +
-      softSetChanged +
-      softBeatmapHiddenChanged +
-      replayBackfillUpserted;
+      const rowsChanged =
+        deleted.scoresDeleted +
+        deleted.beatmapsDeleted +
+        deleted.beatmapSetsDeleted +
+        caughtUp.rowsChanged +
+        softScoreChanged +
+        softSetChanged +
+        softBeatmapHiddenChanged +
+        replayBackfillUpserted;
 
-    finishImport(
-      db,
-      importRow.id,
-      {
-        beatmapSetsUpserted: caughtUp.beatmapSetsUpserted,
-        beatmapsUpserted:
-          caughtUp.beatmapsUpserted + softBeatmapHiddenChanged,
-        scoresUpserted: caughtUp.scoresUpserted + replayBackfillUpserted,
-        rowsChanged,
-        scoresDeleted: deleted.scoresDeleted,
-        beatmapsDeleted: deleted.beatmapsDeleted,
-        beatmapSetsDeleted: deleted.beatmapSetsDeleted,
-        // Full remapping → null delta so analytics rebuilds.
-        changedScoreIds: replayBackfillRan ? null : changedScoreIds,
-        changedBeatmapIds,
-      },
-      advanceWatermarks(getWatermarks(db), [], []),
-    );
+      const healedScoreIds = heal.changedScores.toList();
+      const healedBeatmapIds = heal.changedBeatmaps.toList();
 
-    trySyncRealmCollections(db, realm, true);
-    trySyncRealmSkins(db, realm);
+      return {
+        counts: {
+          beatmapSetsUpserted: caughtUp.beatmapSetsUpserted,
+          beatmapsUpserted:
+            caughtUp.beatmapsUpserted + softBeatmapHiddenChanged,
+          scoresUpserted: caughtUp.scoresUpserted + replayBackfillUpserted,
+          rowsChanged,
+          scoresDeleted: deleted.scoresDeleted,
+          beatmapsDeleted: deleted.beatmapsDeleted,
+          beatmapSetsDeleted: deleted.beatmapSetsDeleted,
+          // Full remapping (or too many ids) → null delta so analytics rebuilds.
+          changedScoreIds:
+            replayBackfillRan || healedScoreIds == null
+              ? null
+              : [
+                  ...deleted.deletedScoreIds,
+                  ...caughtUp.changedScoreIds,
+                  ...healedScoreIds,
+                ],
+          changedBeatmapIds:
+            healedBeatmapIds == null
+              ? null
+              : [
+                  ...deleted.deletedBeatmapIds,
+                  ...caughtUp.changedBeatmapIds,
+                  ...healedBeatmapIds,
+                ],
+        },
+        // Reconcile never advances the incremental cursor.
+        watermarks: getWatermarks(tx),
+        result: { deleted, rowsChanged },
+      };
+    });
+
+    trySyncRealmCollections(db, open, true);
+    trySyncRealmSkins(db, open);
 
     return {
       kind: "reconcile",
@@ -1151,10 +691,10 @@ export function runReconcileSync(db: Db, realmPath: string): SyncResult {
       beatmapsUpserted: caughtUp.beatmapsUpserted,
       scoresUpserted: caughtUp.scoresUpserted + replayBackfillUpserted,
       rulesetsUpserted: caughtUp.rulesetsUpserted,
-      rowsChanged,
-      scoresDeleted: deleted.scoresDeleted,
-      beatmapsDeleted: deleted.beatmapsDeleted,
-      beatmapSetsDeleted: deleted.beatmapSetsDeleted,
+      rowsChanged: deleted.rowsChanged,
+      scoresDeleted: deleted.deleted.scoresDeleted,
+      beatmapsDeleted: deleted.deleted.beatmapsDeleted,
+      beatmapSetsDeleted: deleted.deleted.beatmapSetsDeleted,
       realmSchemaVersion: actual,
     };
   } catch (err) {
@@ -1165,6 +705,11 @@ export function runReconcileSync(db: Db, realmPath: string): SyncResult {
   }
 }
 
+/**
+ * Watermark delta, streamed in bounded batches with per-batch dependency
+ * hydration. Batches autocommit; the watermark lands only with the commit
+ * phase, so an interrupted run re-reads the same delta (upserts are idempotent).
+ */
 export function runIncrementalSync(db: Db, realmPath: string): SyncResult {
   const watermarks = getWatermarks(db);
   if (watermarks.maxPlayedAt == null && watermarks.maxLastLocalUpdate == null) {
@@ -1175,250 +720,43 @@ export function runIncrementalSync(db: Db, realmPath: string): SyncResult {
 
   let realm: Realm | undefined;
   try {
-    realm = openRealm(realmPath, db);
-    const actual = assertSchemaVersion(realm);
+    const open = openRealm(realmPath, db);
+    realm = open;
+    const actual = assertSchemaVersion(open);
     setImportSchemaVersion(db, importRow.id, actual);
 
-    const setIdsNeeded = new Set<string>();
-    const rulesetShortNames = new Set<string>();
-    const beatmapRows: BeatmapRow[] = [];
-    const scoreRows: ScoreRow[] = [];
-    const beatmapIds = new Set<string>();
-    const scoreIds = new Set<string>();
+    const writer = streamIncrementalDelta(db, realmSource(open), watermarks);
 
-    if (watermarks.maxLastLocalUpdate) {
-      const filtered = realm
-        .objects("Beatmap")
-        .filtered("LastLocalUpdate > $0", watermarks.maxLastLocalUpdate);
-      for (const obj of filtered) {
-        const row = mapBeatmap(obj as never);
-        if (!row) continue;
-        beatmapRows.push(row);
-        beatmapIds.add(row.id);
-        setIdsNeeded.add(row.setId);
-        if (row.rulesetShortName) rulesetShortNames.add(row.rulesetShortName);
-      }
-    }
-
-    if (watermarks.maxPlayedAt) {
-      const filtered = realm
-        .objects("Score")
-        .filtered("Date > $0", watermarks.maxPlayedAt);
-      for (const obj of filtered) {
-        const row = mapScore(obj as never);
-        if (!row) continue;
-        scoreRows.push(row);
-        scoreIds.add(row.id);
-        if (row.beatmapId) {
-          if (!beatmapIds.has(row.beatmapId)) {
-            const bm = realm.objectForPrimaryKey(
-              "Beatmap",
-              realmUuid(row.beatmapId),
-            );
-            if (bm) {
-              const mapped = mapBeatmap(bm as never);
-              if (mapped) {
-                beatmapRows.push(mapped);
-                beatmapIds.add(mapped.id);
-                setIdsNeeded.add(mapped.setId);
-                if (mapped.rulesetShortName) {
-                  rulesetShortNames.add(mapped.rulesetShortName);
-                }
-              }
-            } else {
-              row.beatmapId = null;
-            }
-          }
-        }
-        if (row.rulesetShortName) rulesetShortNames.add(row.rulesetShortName);
-      }
-    }
-
-    // Soft-delete / hide: only scan when Realm pending count ≠ SQLite pending count.
-    // Realm Beatmap has no DeletePending — difficulty hide uses Hidden.
-    const realmSoftScores = realm
-      .objects("Score")
-      .filtered("DeletePending == true");
-    const realmSoftSets = realm
-      .objects("BeatmapSet")
-      .filtered("DeletePending == true");
-    const realmHiddenBeatmaps = realm
-      .objects("Beatmap")
-      .filtered("Hidden == true");
-    const sqliteSoftScores =
-      db
-        .select({ n: count() })
-        .from(scores)
-        .where(eq(scores.deletePending, true))
-        .get()?.n ?? 0;
-    const sqliteSoftSets =
-      db
-        .select({ n: count() })
-        .from(beatmapSets)
-        .where(eq(beatmapSets.deletePending, true))
-        .get()?.n ?? 0;
-    const sqliteHiddenBeatmaps =
-      db
-        .select({ n: count() })
-        .from(beatmaps)
-        .where(eq(beatmaps.hidden, true))
-        .get()?.n ?? 0;
-
-    if (realmSoftScores.length !== sqliteSoftScores) {
-      for (const obj of realmSoftScores) {
-        const row = mapScore(obj as never);
-        if (!row) continue;
-        if (!scoreIds.has(row.id)) {
-          scoreRows.push(row);
-          scoreIds.add(row.id);
-        }
-      }
-    }
-
-    if (realmSoftSets.length !== sqliteSoftSets) {
-      for (const obj of realmSoftSets) {
-        const row = mapBeatmapSet(obj as never);
-        if (row) setIdsNeeded.add(row.id);
-      }
-    }
-
-    if (realmHiddenBeatmaps.length !== sqliteHiddenBeatmaps) {
-      for (const obj of realmHiddenBeatmaps) {
-        const row = mapBeatmap(obj as never);
-        if (!row) continue;
-        if (!beatmapIds.has(row.id)) {
-          beatmapRows.push(row);
-          beatmapIds.add(row.id);
-          setIdsNeeded.add(row.setId);
-        }
-      }
-    }
-
-    const setRows: BeatmapSetRow[] = [];
-    for (const setId of setIdsNeeded) {
-      const obj = realm.objectForPrimaryKey("BeatmapSet", realmUuid(setId));
-      if (!obj) continue;
-      const row = mapBeatmapSet(obj as never);
-      if (row) setRows.push(row);
-    }
-
-    const rulesetRows: RulesetRow[] = [];
-    for (const shortName of rulesetShortNames) {
-      const matches = realm
-        .objects("Ruleset")
-        .filtered("ShortName == $0", shortName);
-      for (const obj of matches) {
-        const row = mapRuleset(obj as never);
-        if (row) rulesetRows.push(row);
-      }
-    }
-
-    // Targeted FK check: only the beatmap IDs referenced by this delta.
-    const candidateBeatmapIds = [
-      ...new Set(
-        scoreRows
-          .map((r) => r.beatmapId)
-          .filter((id): id is string => id != null),
-      ),
-    ].filter((id) => !beatmapIds.has(id));
-
-    const knownBeatmapIds = new Set(beatmapIds);
-    for (const batch of chunk(candidateBeatmapIds, BATCH_SIZE)) {
-      const found = db
-        .select({ id: beatmaps.id })
-        .from(beatmaps)
-        .where(inArray(beatmaps.id, batch))
-        .all();
-      for (const row of found) knownBeatmapIds.add(row.id);
-    }
-    for (const row of scoreRows) {
-      if (row.beatmapId && !knownBeatmapIds.has(row.beatmapId)) {
-        row.beatmapId = null;
-      }
-    }
-
-    const emptyUpsert = (): UpsertResult => ({
-      attempted: 0,
-      changed: 0,
-      skipped: 0,
-      skippedKeys: [],
-    });
-    let rulesetsUpserted = emptyUpsert();
-    let beatmapSetsUpserted = emptyUpsert();
-    let beatmapsUpserted = emptyUpsert();
-    let scoresUpserted = emptyUpsert();
-    let rowsChanged = 0;
-
-    withTransaction(db, (tx) => {
-      rulesetsUpserted = upsertBatches(
-        tx,
-        rulesets,
-        rulesetRows as Record<string, unknown>[],
-        ["shortName"],
-      );
-      beatmapSetsUpserted = upsertBatches(
-        tx,
-        beatmapSets,
-        setRows as Record<string, unknown>[],
-        ["id"],
-      );
-      beatmapsUpserted = upsertBatches(
-        tx,
-        beatmaps,
-        beatmapRows as Record<string, unknown>[],
-        ["id"],
-      );
-      scoresUpserted = upsertBatches(
-        tx,
-        scores,
-        scoreRows as Record<string, unknown>[],
-        ["id"],
-      );
-
+    commitImport(db, importRow.id, (tx) => {
       // Missed rows (e.g. lazer wrote mid-window) are healed by the periodic
       // reconcile's catch-up — not re-scanned here every cycle.
-      rowsChanged =
-        rulesetsUpserted.changed +
-        beatmapSetsUpserted.changed +
-        beatmapsUpserted.changed +
-        scoresUpserted.changed;
-
-      const changedScoreIds = [...scoreIds];
-      const changedBeatmapIds = [...beatmapIds];
-
-      finishImport(
-        tx,
-        importRow.id,
-        {
-          beatmapSetsUpserted: beatmapSetsUpserted.attempted,
-          beatmapsUpserted: beatmapsUpserted.attempted,
-          scoresUpserted: scoresUpserted.attempted,
-          rowsChanged,
+      if (writer.rowsChanged > 0) clearCatchupStallIfSet(tx);
+      return {
+        counts: {
+          beatmapSetsUpserted: writer.totals.sets.attempted,
+          beatmapsUpserted: writer.totals.beatmaps.attempted,
+          scoresUpserted: writer.totals.scores.attempted,
+          rowsChanged: writer.rowsChanged,
           scoresDeleted: 0,
           beatmapsDeleted: 0,
           beatmapSetsDeleted: 0,
-          changedScoreIds,
-          changedBeatmapIds,
+          changedScoreIds: writer.changedScores.toList(),
+          changedBeatmapIds: writer.changedBeatmaps.toList(),
         },
-        advanceWatermarks(
-          watermarks,
-          withoutSkipped(scoreRows, scoresUpserted.skippedKeys),
-          withoutSkipped(beatmapRows, beatmapsUpserted.skippedKeys),
-        ),
-      );
+        watermarks: writer.watermarks,
+        result: undefined,
+      };
     });
 
-    if (rowsChanged > 0) clearCatchupStallIfSet(db);
-
-    trySyncRealmCollections(db, realm, false);
+    trySyncRealmCollections(db, open, false);
 
     return {
       kind: "incremental",
-      beatmapSetsUpserted: beatmapSetsUpserted.attempted,
-      beatmapsUpserted: beatmapsUpserted.attempted,
-      scoresUpserted: scoresUpserted.attempted,
-      rulesetsUpserted: rulesetsUpserted.attempted,
-      rowsChanged,
+      beatmapSetsUpserted: writer.totals.sets.attempted,
+      beatmapsUpserted: writer.totals.beatmaps.attempted,
+      scoresUpserted: writer.totals.scores.attempted,
+      rulesetsUpserted: writer.totals.rulesets.attempted,
+      rowsChanged: writer.rowsChanged,
       scoresDeleted: 0,
       beatmapsDeleted: 0,
       beatmapSetsDeleted: 0,

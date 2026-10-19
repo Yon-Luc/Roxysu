@@ -1,6 +1,6 @@
 # Skin fusion: per-ruleset skin export (`.osk`)
 
-Status: plan (not implemented). Decisions confirmed by the owner:
+Status: implemented (see "13. As built" for where the build deviates from this plan). Decisions confirmed by the owner:
 
 - Delivery is a downloaded `.osk` only. The user imports it in lazer. No Realm write (see `knowledge/business/realm-read-only.md`).
 - All rulesets are fusable: osu!, taiko, catch (`fruits`), mania (per key count), BMS. Taiko and BMS have no Roxysu import or preview today, so they are raw file copy only.
@@ -163,14 +163,16 @@ A donor whose `instantiationInfo` is not `LegacySkin` (Argon, ArgonPro, Triangle
 - Dedupe identical files across donors: **on**.
 - Keep `.psd`, `.sfk`, `Extra/`, `credits.txt` from donors: **drop**, listed in the report.
 
-## 8. Unknowns to verify before coding
+## 8. Unknowns (resolved against the lazer source)
 
-1. How lazer loads `DrawableInfo` entries with a stale assembly version or an unknown component `Type` (does it skip, or fail the whole file?). Test by importing a hand-built `.osk` in a throwaway lazer data folder.
-2. Whether lazer accepts a skin imported from `.osk` with `skininfo.json` present, and which fields it trusts (`InstantiationInfo`, `Name`, `Creator`) versus regenerating them.
-3. BMS ruleset asset names and layout key (`bms`?). Read from the BmsRuleset source, then mark `verified` in the knowledge doc.
-4. Taiko legacy lookup names in the pinned lazer version (`taiko-*`, `pippidon*`) for the ownership table.
-5. Whether `LightingN` / `LightingL` and `Hit*` mania images can live in subfolders per block (lazer resolves by name with `\`, but confirm).
-6. Whether `Version:` mismatch changes HUD positions enough to need a hard block instead of a warning.
+Checked in a local lazer checkout (`osu.Game`, `osu.Game.Rulesets.*`):
+
+1. **Unknown component `Type`:** lazer skips the WHOLE layout file for a ruleset if one component type cannot be resolved (for example a BMS component when the BMS ruleset is not installed). Layout JSON is still copied verbatim; the planner adds a warning when a composed entry uses a custom-ruleset type.
+2. **`skininfo.json`:** lazer reads `Name`, `Creator`, `InstantiationInfo`. The `.osk` file name is not used as the skin name. A fused skin is written as a legacy skin (`osu.Game.Skinning.LegacySkin, osu.Game`).
+3. **BMS:** the layout key is `bms` (custom ruleset short name). BMS asset names could not be verified (the ruleset is not in the lazer checkout), so BMS is a layout-only slot plus the base files; status `unknown`.
+4. **Taiko / catch names:** taiko uses `taiko-*`, `taikohit*`, `taikobig*`, `pippidon*`; catch uses `fruit-*`, `lighting`, `scoreboard-explosion-*`. Taiko also reads shared `hitcircle`, `approachcircle`, `sliderscorepoint`, `spinner-*` which stay with the osu! slot.
+5. **Subfolder mania images:** lazer returns the raw `[Mania]` value as the texture name, so `fusion/<donor>/...` paths resolve (backslash separators).
+6. **`Version:`:** global; it changes mania behaviour below 2.5 (hit lighting scale). Kept as a warning, not a block. Layout `Version` is the LOWEST among contributing donors so lazer's own migrations still run.
 
 ## 9. Implementation phases
 
@@ -205,3 +207,15 @@ A donor whose `instantiationInfo` is not `LegacySkin` (Argon, ArgonPro, Triangle
 - New `knowledge/flows/export-fused-skin.md`.
 - `findings/F-033-skin-archive-entry-names.md`: mark resolved when phase 1 lands.
 - Update `todo.txt` Skin section.
+
+## 13. As built
+
+- Modules live in `apps/server/src/shared/skinFusion/` (not `public/lib/`) so server tests and the client both import them. Files: `fileMap.ts`, `iniModel.ts`, `ownership.ts`, `layout.ts`, `plan.ts`, `zip.ts`, `summary.ts`.
+- The three importers were NOT refactored onto `fileMap.ts`; they keep their copies. The F-033 path fix uses `sanitizeZipEntryPath()`.
+- Conflict namespace folder is per donor (`fusion/d<index>-<slug>/`), not per slot. Layout sprites that clash are renamed `name__<donorDir>.ext` and the layout JSON is rewritten.
+- Mania image folders option: `auto` (isolate only when 2+ donors supply mania slots), `always`, `never`.
+- Taiko-prefixed hitsounds belong to the taiko slot.
+- Fusion runs on the main thread (no Web Worker); the plan preview is memoised and a 400 MB cap applies.
+- UI: Skin page, "Fusion" tab (`SkinFusionEditor.tsx`); donors from Realm skins, `.osk`/`.zip`, or a folder.
+- `GET /api/skins` now also returns `instantiationInfo`, `hasAssets`, `hasLayout`, `rulesets`, `keyCounts`.
+- Still open: manual import of a produced `.osk` into lazer (phase 8) and BMS asset names (phase 9).

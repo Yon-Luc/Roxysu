@@ -2,6 +2,8 @@
 last_verified: 2026-10
 confidence: verified
 touches:
+  - apps/server/public/components/CommandPalette.tsx
+  - apps/server/public/lib/focusTrap.ts
   - apps/server/public/features/dashboard/DashboardPage.tsx
   - apps/server/src/routes/dashboard.ts
   - apps/server/src/analytics/practiceSnapshot.ts
@@ -35,6 +37,9 @@ The OBS overlay must not poll this dashboard payload. Overlay idle recent scores
 3. Practice snapshot is local-only: derived from `daily_stats` plus the newest closed session (`endedAt` set). No remote news or osu! API.
    **Status:** verified
 
+4. The command palette (Ctrl/Cmd+K) is a modal dialog: it focuses its input on open, traps Tab / Shift+Tab inside the dialog (`focusTrapTarget()`), pulls focus back in if it lands behind the scrim, locks body scroll, and restores focus to the previously focused element on close.
+   **Status:** verified
+
 ## Main flows
 
 - Open app → dashboard loads summary APIs + SSE extraction status.
@@ -49,6 +54,8 @@ The OBS overlay must not poll this dashboard payload. Overlay idle recent scores
 ## Important symbols
 
 - `apps/server/public/features/dashboard/DashboardPage.tsx`
+- `apps/server/public/components/CommandPalette.tsx`
+- `apps/server/public/lib/focusTrap.ts:focusTrapTarget()`
 - `apps/server/src/routes/dashboard.ts`
 - `apps/server/src/analytics/practiceSnapshot.ts:getPracticeSnapshot()`
 - `apps/server/src/analytics/scoreAutoFilterCache.ts`

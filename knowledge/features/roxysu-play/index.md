@@ -1,11 +1,12 @@
 ---
-last_verified: 2026-08
+last_verified: 2026-10
 confidence: verified
 touches:
   - apps/play/
   - apps/play/src/app.tsx
   - apps/play/src/game/
   - apps/play/src/database/
+  - apps/play/src/songselect/SongSelect.ts
   - apps/play/src/assets/
   - apps/play/package.json
   - apps/play/scripts/dev.sh
@@ -34,6 +35,9 @@ until explicitly promoted.
 4. Play resolves osu!lazer binary assets via SHA-256 hashes through a lazer asset resolver — it does not duplicate the `files/` store.
 5. On NixOS, launch from the flake dev shell so GPUIX can `dlopen` Wayland /
    Vulkan / X11 (see Implementation).
+6. Song select narrows a Realm collection to mania beatmaps of the selected key count in one query: ruleset short name and `circle_size` are conditions on the join that resolves collection hashes to beatmap ids. It does not look beatmaps up one by one.
+   **Status:** verified
+   **Enforced by:** `apps/play/src/database/CollectionRepository.ts:getRealmBeatmapIds()` called from `apps/play/src/songselect/SongSelect.ts`; test `apps/play/src/songselect/SongSelect.test.ts`
 
 ## Security rules
 
@@ -89,7 +93,7 @@ bun --hot apps/play/src/app.tsx
 - `apps/play/src/audio/createAudioEngine.ts` — native vs timeline backend selection
 - `apps/play/src/integrations/miniaudio.ts` — miniaudio_node wrapper
 - `apps/play/src/database/BeatmapInsightsRepository.ts` — mastery, patterns, ratings
-- `apps/play/src/database/CollectionRepository.ts` — smart + Realm collections
+- `apps/play/src/database/CollectionRepository.ts` — smart + Realm collections; `getRealmBeatmapIds()` takes an optional ruleset / key count filter
 - `apps/play/src/songselect/BeatmapInsightsPanel.tsx` — Roxysu insights card
 - `apps/play/src/results/ResultsView.tsx` — post-play results screen
 - `apps/play/src/effects/JudgmentEffects.ts` — hit/miss popups from game events

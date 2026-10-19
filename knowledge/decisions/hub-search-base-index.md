@@ -1,8 +1,9 @@
 ---
-last_verified: 2026-08
+last_verified: 2026-10
 confidence: verified
 touches:
   - apps/hub/src/services/cache.ts
+  - apps/hub/src/services/singleFlight.ts
   - apps/hub/src/services/searchIndex.ts
   - apps/hub/src/routes/search.ts
   - apps/hub/src/services/hubEnv.ts
@@ -29,9 +30,11 @@ Exact-hash primes for every stars/bpm/query combo do not scale and force empty s
 - `hashQueryParams` ignores secondary filters; boot may strip them from stored `query_params`.
 - After deploy, boot migrates leftover `beatmapset_ids` JSON into index rows. Legacy id-only blobs get empty diffs until re-prime (star filters stay empty).
 - Star filter is any-difficulty-in-range (`EXISTS` on diffs), not set-level min/max overlap.
-- Count / download-all use `GET /search/all`, not N paged `GET /search` calls.
+- Count / download-all use `GET /search/all`, not N paged `GET /search` calls. When Hub's dump cap truncates it, the client app continues with the live mirror crawl rather than treating the dump as complete (download-mirrors rule 13).
 - Edge cache: JSON needs a CF Cache Rule (Eligible for cache on `/search*`); headers alone are insufficient.
 - Kill switches: `HUB_SEARCH_INDEX=0`, `HUB_SEARCH_HTTP_CACHE=0`, and CF Bypass — see Hub feature doc incident order.
+- Index refresh is single-flight per `search_cache` row (`refreshCacheSingleFlight`): `replaceSetsForCache` deletes then re-inserts, so two overlapping refreshes must never run. Do not call `refreshCache` directly from a route or the cron.
+- Only a fresh index hit may be edge cached. `hit-stale` responses and rows with a refresh in flight are `no-store`; the edge is not purged when a refresh commits, so pages cached before the commit live until their TTL.
 - Safe rollout: ship with `HUB_SEARCH_HTTP_CACHE=0` (compose default) until validated, then enable HTTP cache + CF rule.
 
 ## Relevant implementation

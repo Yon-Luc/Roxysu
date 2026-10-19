@@ -482,6 +482,15 @@ export type RealmSkinListItem = {
   id: string;
   name: string;
   creator: string | null;
+  /** Lazer `InstantiationInfo` (`LegacySkin`, `ArgonSkin`, ...). */
+  instantiationInfo?: string | null;
+  /** False for lazer layout-only "(modified)" skins. */
+  hasAssets?: boolean;
+  hasLayout?: boolean;
+  /** Rulesets with root-level files besides mania. */
+  rulesets?: Array<"osu" | "taiko" | "fruits">;
+  /** `[Mania] Keys:` counts defined in skin.ini. */
+  keyCounts?: number[];
 };
 
 export async function fetchRealmSkins(): Promise<{ items: RealmSkinListItem[] }> {
@@ -711,17 +720,30 @@ export async function fetchBeatmapsetInfo(setIds: number[]) {
   return data;
 }
 
+/** Walks the cursor-paginated owned-set-ids endpoint until `nextAfter` is null. */
 export async function fetchOwnedSetIds(): Promise<number[]> {
-  const res = await fetch("/api/mirrors/owned-set-ids", {
-    headers: { accept: "application/json" },
-  });
-  const data = (await res.json()) as { error?: string; setIds?: number[] };
-  if (!res.ok) {
-    throw new Error(
-      `/api/mirrors/owned-set-ids failed: ${data.error ?? res.status}`,
-    );
+  const all: number[] = [];
+  let after = 0;
+  for (;;) {
+    const res = await fetch(`/api/mirrors/owned-set-ids?after=${after}`, {
+      headers: { accept: "application/json" },
+    });
+    const data = (await res.json()) as {
+      error?: string;
+      setIds?: number[];
+      nextAfter?: number | null;
+    };
+    if (!res.ok) {
+      throw new Error(
+        `/api/mirrors/owned-set-ids failed: ${data.error ?? res.status}`,
+      );
+    }
+    for (const id of data.setIds ?? []) all.push(id);
+    const next = data.nextAfter;
+    // Guard against a non-advancing cursor.
+    if (next == null || next <= after) return all;
+    after = next;
   }
-  return data.setIds ?? [];
 }
 
 export async function diffSetOwnership(setIds: number[]) {
@@ -999,7 +1021,6 @@ export async function exportUploadCalcBundle(body: {
   token: string;
   roxysuVersion: string;
   label?: string;
-  hubUrl?: string;
 }) {
   return unwrap(
     await api.api.settings["calc-bundle"]["export-upload"].post(body),

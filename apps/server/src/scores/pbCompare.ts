@@ -9,6 +9,10 @@ import {
   resolveScoresUsernames,
   scoresUsernameCondition,
 } from "../analytics/scoreUsername";
+import {
+  loadManiaPpCurves,
+  resolveScorePp,
+} from "../mania-rating/estimateScorePp";
 
 export type PbCompareKind = "previous" | "current";
 
@@ -26,10 +30,19 @@ export type PbCompareResult = PbCompareScore & {
   kind: PbCompareKind;
 };
 
+/** Fields `comparePbRank` needs; `pp` must already be the resolved (stored or estimated) PP. */
+export type PbRankKey = {
+  id: string;
+  accuracy: number;
+  pp: number | null;
+  playedAt: Date;
+};
+
 type RankableScore = {
   id: string;
   beatmapId: string;
   accuracy: number;
+  /** Resolved PP (`resolveScorePp`): stored Realm PP, else the NM/MR mania curve estimate. */
   pp: number | null;
   maxCombo: number;
   mods: string | null;
@@ -37,8 +50,12 @@ type RankableScore = {
   playedAt: Date;
 };
 
-/** Same ranking as `runRetryEngine`: higher pp, then accuracy; earlier play wins ties. */
-export function comparePbRank(a: RankableScore, b: RankableScore): number {
+/**
+ * The one PB ranking, shared by `runRetryEngine` (is_pb) and session pbCompare:
+ * higher resolved pp, then accuracy; earlier play wins ties. Callers pass PP
+ * through `resolveScorePp` first, matching mastery `best_pp`.
+ */
+export function comparePbRank(a: PbRankKey, b: PbRankKey): number {
   const ppA = a.pp ?? Number.NEGATIVE_INFINITY;
   const ppB = b.pp ?? Number.NEGATIVE_INFINITY;
   if (ppA !== ppB) return ppB - ppA;
@@ -117,6 +134,7 @@ export async function loadPbCompareForBeatmaps(
       maxCombo: scores.maxCombo,
       mods: scores.mods,
       rank: scores.rank,
+      rulesetShortName: scores.rulesetShortName,
       playedAt: scores.playedAt,
     })
     .from(scores)
@@ -130,6 +148,7 @@ export async function loadPbCompareForBeatmaps(
     )
     .orderBy(asc(scores.playedAt), asc(scores.id));
 
+  const curves = await loadManiaPpCurves(db, unique);
   const rankable: RankableScore[] = [];
   for (const row of rows) {
     if (!row.beatmapId) continue;
@@ -137,7 +156,13 @@ export async function loadPbCompareForBeatmaps(
       id: row.id,
       beatmapId: row.beatmapId,
       accuracy: row.accuracy,
-      pp: row.pp,
+      pp: resolveScorePp({
+        pp: row.pp,
+        accuracy: row.accuracy,
+        mods: row.mods,
+        rulesetShortName: row.rulesetShortName,
+        curve: curves.get(row.beatmapId),
+      }),
       maxCombo: row.maxCombo,
       mods: row.mods,
       rank: row.rank,

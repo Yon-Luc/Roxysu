@@ -13,6 +13,7 @@ import {
   clearHubOAuthHandoff,
   markHubOAuthHandoffReady,
   peekHubOAuthHandoffReady,
+  verifyHubOAuthHandoffVerifier,
 } from "../hubOAuthPending";
 import { APP_VERSION } from "../appVersion";
 import { resolveHubBaseUrl } from "../hubUrl";
@@ -78,14 +79,16 @@ export const systemRoutes = new Elysia({ prefix: "/system" })
   .get("/healthz", () => ({ ok: true }))
   // -------------------------------------------------------------------------
   // Hub OAuth handoff (Electron system-browser flow)
-  // 1) POST /begin → handoff id
-  // 2) Open hub /auth/login?client=desktop&handoff=…
-  // 3) Browser lands on /complete?h=… (no JWT in URL)
-  // 4) UI polls /pending?h=… → server redeems JWT from hub once
+  // 1) POST /begin → { handoff, verifier, challenge }; verifier goes only to the
+  //    initiating UI (never in a URL or redirect)
+  // 2) Open hub /auth/login?client=desktop&handoff=…&challenge=…
+  // 3) Browser lands on /complete?h=… (no JWT, no verifier in URL)
+  // 4) UI POSTs /pending { handoff, verifier } → server checks the verifier,
+  //    then redeems the JWT from hub once, presenting the verifier to Hub
   // -------------------------------------------------------------------------
   .post("/hub-oauth/begin", ({ set }) => {
     set.headers["cache-control"] = "no-store";
-    return { handoff: beginHubOAuthHandoff() };
+    return beginHubOAuthHandoff();
   })
   .get(
     "/hub-oauth/complete",
@@ -123,14 +126,15 @@ export const systemRoutes = new Elysia({ prefix: "/system" })
       }),
     },
   )
-  .get(
+  .post(
     "/hub-oauth/pending",
-    async ({ query, set }) => {
+    async ({ body, set }) => {
       set.headers["cache-control"] = "no-store";
-      const handoff = query.h?.trim();
-      if (!handoff) {
-        set.status = 400;
-        return { error: "Missing handoff id", token: null };
+      const handoff = body.handoff.trim();
+      const verifier = body.verifier;
+      if (!verifyHubOAuthHandoffVerifier(handoff, verifier)) {
+        set.status = 403;
+        return { error: "Handoff verifier mismatch", token: null };
       }
       if (!peekHubOAuthHandoffReady(handoff)) {
         return { token: null };
@@ -140,7 +144,12 @@ export const systemRoutes = new Elysia({ prefix: "/system" })
         const res = await fetch(
           `${hubBaseUrl()}/auth/handoff/${encodeURIComponent(handoff)}`,
           {
-            headers: { accept: "application/json" },
+            method: "POST",
+            headers: {
+              accept: "application/json",
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({ verifier }),
             cache: "no-store",
           },
         );
@@ -159,8 +168,9 @@ export const systemRoutes = new Elysia({ prefix: "/system" })
       }
     },
     {
-      query: t.Object({
-        h: t.Optional(t.String({ minLength: 16, maxLength: 128 })),
+      body: t.Object({
+        handoff: t.String({ minLength: 16, maxLength: 128 }),
+        verifier: t.String({ minLength: 43, maxLength: 128 }),
       }),
     },
   )

@@ -36,6 +36,8 @@ The searchable practice catalog — same query language powers collections and g
 9. Play aggregates used by Practice/Search (`play_count`, best accuracy/pp/score/misses, `last_played_at`) are read from the `mastery` row, not rebuilt from `scores` on each request. Mastery must be refreshed by analytics after imports for those fields to stay current.
 10. Ruleset equality filters (`mode:`, `key:`, `ln:`, gamemode clauses) use bare `ruleset_short_name = ?` (lowercase) so SQLite can use `beatmaps_ruleset_cs_idx`. `mode:catch` and `mode:ctb` compile to the stored short name `fruits`.
 11. The map page back control returns to the previous in-app page when one exists. With no previous page it opens Practice. The cover shows the map title only; preview, open in osu!, and more actions sit under it.
+12. Changing page, sort, or query keeps the previous cards and result count on screen and dims the grid (`aria-busy`) until the new result arrives; the skeleton shows only on the first load. Page buttons are disabled while the shown result is stale, and the distribution chart query starts only after the list resolves.
+13. Practice and collection result cards (`rx-card rx-card-grid`) animate only `transform` and `opacity` on hover (accent ring and tint on a pseudo-element). Hover styling applies only under `@media (hover: hover)`. See `architecture/client-theme.md`.
 
 ## Main flows
 

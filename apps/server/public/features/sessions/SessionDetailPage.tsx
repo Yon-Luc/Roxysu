@@ -314,7 +314,10 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
         <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-3">
-              <PageTitle>
+              <PageTitle
+                className="line-clamp-2 min-w-0 break-words"
+                title={session.name}
+              >
                 {isLive ? dict?.session.currentSession : session.name}
               </PageTitle>
               {isLive ? (

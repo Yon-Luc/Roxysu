@@ -13,3 +13,4 @@ Constraints agents must not accidentally violate. Terms: [vocabulary.md](../voca
 | Hub calc bundle per Roxysu version | [hub-calc-bundle-version.md](hub-calc-bundle-version.md) |
 | Release tags include the linux-resources lock | [release-tag-includes-linux-resources.md](release-tag-includes-linux-resources.md) |
 | Streamed extraction + reconcile-only catch-up | [stream-extraction-stall-breaker.md](stream-extraction-stall-breaker.md) |
+| Streamed batches + one short commit phase | [extraction-commit-phase.md](extraction-commit-phase.md) |

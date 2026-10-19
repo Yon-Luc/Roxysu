@@ -4,6 +4,7 @@ feature: bms
 kind: logic-gap
 severity: medium
 confidence: verified
+status: fixed
 ---
 
 # Hub accepts autoplay scores that local derive refuses to upload
@@ -30,3 +31,7 @@ Public BMS stats match the local “no autoplay” rule.
 - `apps/server/src/bms/derive.ts` (about lines 139–141): `if (row.autoplay) continue` before queue insert.
 - `apps/hub/src/services/bms.ts`: no `AT` check in `validateInbound` or ingest.
 - `knowledge/features/bms/index.md` business rule 4.
+
+## Status
+
+Fixed. Verified against the code on 2026-10-19: `validateInbound` rejects `AT` in mods with reason `autoplay` (`apps/hub/src/services/bms.ts`, `bms.ingest.test.ts`).

@@ -5,6 +5,8 @@ const http = require("node:http");
 const fs = require("node:fs");
 const { resolveDesktopPaths, ensureParentDir, ensureRealmExtracted } = require("./paths");
 const { startAutoUpdate } = require("./auto-update");
+const { decideRespawn } = require("./respawnPolicy");
+const { decideOverlayApply } = require("./overlayApplyPolicy");
 
 // Stable userData folder: %APPDATA%\Roxysu (Windows) / XDG or Application Support.
 app.setName("Roxysu");
@@ -15,6 +17,12 @@ let mainWindow = null;
 let serverChild = null;
 /** @type {import("node:child_process").ChildProcess | null} */
 let realmChild = null;
+/** Timestamp of the last realm-reader spawn (stable-uptime check). */
+let realmSpawnedAt = 0;
+/** Consecutive short-lived realm-reader runs (respawnPolicy input). */
+let realmRespawnFailures = 0;
+/** Pending realm-reader respawn timer. @type {NodeJS.Timeout | null} */
+let realmRespawnTimer = null;
 /** @type {import("node:child_process").ChildProcess | null} */
 let overlayChild = null;
 /** Arg token the running overlay child was spawned with (--url=…). */
@@ -321,7 +329,10 @@ function createSplashWindow(paths) {
  * @param {NodeJS.ProcessEnv} sharedEnv
  */
 function spawnRealmReader(paths, sharedEnv) {
-  if (realmChild && !realmChild.killed) return;
+  // An exited child is not "killed", so check exit state, not `killed`.
+  if (realmChild && realmChild.exitCode === null && realmChild.signalCode === null) {
+    return;
+  }
   try {
     ensureRealmExtracted(paths);
   } catch (err) {
@@ -351,11 +362,44 @@ function spawnRealmReader(paths, sharedEnv) {
     "realm-reader",
     realmNodeArgs,
   );
-  realmChild.on("exit", (code, signal) => {
-    if (!shuttingDown) {
-      desktopLog(`realm-reader exited code=${code} signal=${signal}`);
-    }
+  const child = realmChild;
+  realmSpawnedAt = Date.now();
+  child.on("exit", (code, signal) => {
+    if (shuttingDown) return;
+    // A replaced/stopped child (not the current one) must not trigger respawn.
+    if (child !== realmChild) return;
+    desktopLog(`realm-reader exited code=${code} signal=${signal}`);
+    scheduleRealmRespawn(paths, sharedEnv);
   });
+}
+
+/**
+ * F-037: respawn realm-reader after an unexpected exit with exponential
+ * backoff (see respawnPolicy.js). Never runs during shutdown.
+ * @param {ReturnType<typeof resolveDesktopPaths>} paths
+ * @param {NodeJS.ProcessEnv} sharedEnv
+ */
+function scheduleRealmRespawn(paths, sharedEnv) {
+  if (shuttingDown || realmRespawnTimer) return;
+  const decision = decideRespawn({
+    failures: realmRespawnFailures,
+    uptimeMs: Date.now() - realmSpawnedAt,
+  });
+  realmRespawnFailures = decision.failures;
+  if (decision.action === "give-up") {
+    desktopLog(
+      `realm-reader respawn giving up after ${decision.failures - 1} consecutive short-lived runs — restart Roxysu to retry`,
+    );
+    return;
+  }
+  desktopLog(
+    `realm-reader respawn #${decision.failures} in ${decision.delayMs}ms`,
+  );
+  realmRespawnTimer = setTimeout(() => {
+    realmRespawnTimer = null;
+    if (shuttingDown) return;
+    spawnRealmReader(paths, sharedEnv);
+  }, decision.delayMs);
 }
 
 /**
@@ -461,41 +505,59 @@ function watchOverlayHostSetting(paths) {
   if (process.platform !== "linux" || !process.env.WAYLAND_DISPLAY) return;
   if (!resolveOverlayBin(paths)) return;
 
-  /** Enable flag applied to the running setup (setting default is on). */
-  let appliedEnabled = false;
+  /** Consecutive failed settings polls (F-066). */
+  let consecutiveFailures = 0;
+  /** Last successfully read enable toggle; null until the first read. */
+  let lastKnownEnabled = null;
 
   const apply = async () => {
     if (shuttingDown) return;
-    const overlaySettings = await fetchOverlaySettings();
-    if (!overlaySettings || shuttingDown) return;
-    const { enabled, hostUrl } = overlaySettings;
+    const settings = await fetchOverlaySettings();
+    if (shuttingDown) return;
 
-    if (!enabled) {
-      if (appliedEnabled || overlayChild) {
-        desktopLog("overlay disabled by setting — stopping host");
-        stopChild(overlayChild, "overlay");
-        overlayChild = null;
-        overlayAppliedUrlArg = null;
-        appliedEnabled = false;
-      }
+    // Decision logic lives in overlayApplyPolicy.js (pure, unit-tested):
+    // F-038 gap only for an unchanged URL, F-066 stop after repeated poll
+    // failures while the last known toggle was off.
+    const decision = decideOverlayApply({
+      settings,
+      defaultUrlArg: OVERLAY_URL_DEFAULT,
+      hasChild: overlayChild !== null,
+      childExited: overlayChild !== null && overlayChild.exitCode !== null,
+      appliedUrlArg: overlayAppliedUrlArg,
+      spawnedAt: overlaySpawnedAt,
+      now: Date.now(),
+      respawnGapMs: OVERLAY_RESPAWN_GAP_MS,
+      consecutiveFailures,
+      lastKnownEnabled,
+    });
+    consecutiveFailures = decision.consecutiveFailures;
+    lastKnownEnabled = decision.lastKnownEnabled;
+
+    if (decision.action === "stop") {
+      desktopLog(
+        decision.reason === "disabled"
+          ? "overlay disabled by setting — stopping host"
+          : `overlay settings unreachable (${consecutiveFailures} polls) while disabled — stopping host`,
+      );
+      stopChild(overlayChild, "overlay");
+      overlayChild = null;
+      overlayAppliedUrlArg = null;
       return;
     }
-    appliedEnabled = true;
-
-    // Host pre-splits argv on '=', so the URL rides in one --url=… token.
-    const nextArg =
-      hostUrl === null ? OVERLAY_URL_DEFAULT : `--url=${hostUrl}`;
-    if (overlayChild && overlayChild.exitCode !== null) {
-      if (Date.now() - overlaySpawnedAt < OVERLAY_RESPAWN_GAP_MS) return;
-      desktopLog(
-        `overlay liveness respawn (previous exit code=${overlayChild.exitCode})`,
-      );
+    if (decision.action === "spawn") {
+      if (decision.reason === "liveness-respawn") {
+        desktopLog(
+          `overlay liveness respawn (previous exit code=${overlayChild?.exitCode})`,
+        );
+      } else if (decision.reason === "url-changed") {
+        desktopLog("overlay url changed — restarting host");
+      }
+      // Host pre-splits argv on '=', so the URL rides in one --url=… token
+      // (decision.urlArg).
+      if (decision.stopRunning) stopChild(overlayChild, "overlay");
       overlayChild = null;
+      spawnOverlayHost(paths, decision.urlArg);
     }
-    if (nextArg === overlayAppliedUrlArg && overlayChild) return;
-    stopChild(overlayChild, "overlay");
-    overlayChild = null;
-    spawnOverlayHost(paths, nextArg);
   };
 
   void apply();
@@ -596,6 +658,10 @@ function shutdown() {
   if (overlayPollTimer) {
     clearInterval(overlayPollTimer);
     overlayPollTimer = null;
+  }
+  if (realmRespawnTimer) {
+    clearTimeout(realmRespawnTimer);
+    realmRespawnTimer = null;
   }
   const stops = [
     stopChild(overlayChild, "overlay"),

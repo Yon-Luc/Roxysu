@@ -9,6 +9,7 @@ import { maybePullCalcBundleOnBoot } from "./map-analysis/calcBundle";
 import { startCollectionMatchCache } from "./shared/collectionMatchCache";
 import { ensureTosuStarted, stopTosuAdapter } from "./tosu";
 import { clearStuckMirrorBatchLocks } from "./mirrors";
+import { shutdownBackgroundWork } from "./shutdownJobs";
 
 if (clearStuckRealmReaderPause(db)) {
   console.log(
@@ -60,6 +61,13 @@ async function shutdown(signal: string) {
     await app.stop(true);
   } catch (err) {
     console.error("[shutdown] app.stop failed", err);
+  }
+  // Background writers (analytics run, backfill jobs, mirror batch) must be
+  // idle before the local mirror closes under them.
+  try {
+    await shutdownBackgroundWork(db);
+  } catch (err) {
+    console.error("[shutdown] background work did not stop cleanly", err);
   }
   try {
     closeDb(db);

@@ -4,6 +4,7 @@ feature: live-sync
 kind: correctness
 severity: high
 confidence: verified
+status: fixed
 ---
 
 # Reconcile stall skips orphan deletes
@@ -31,3 +32,7 @@ Beatmaps and scores deleted in osu!lazer disappear from practice search, query r
 - `apps/realm-reader/src/sync.ts` `runReconcileSync` (about lines 948–993): the stall branch logs and returns without calling `reconcileDeletes`.
 - Stall reset: `writeStallCount(db, movedRows > 0 ? 0 : stallCount + 1)` treats any delete as progress and clears the breaker.
 - `collectRealmIdSets` (about lines 368–406) builds the full id sets only on the non-stalled path.
+
+## Status
+
+Fixed. `startCountGapRound` / `finishCountGapRound` (`apps/realm-reader/src/reconcileCore.ts`): a tripped stall breaker skips only `catchUpMissingFromRealm`; Realm id sets are still collected and orphans deleted (inside the commit phase). A round is fruitless only when catch-up moved zero rows; deletes never reset or advance the counter, and the counter resets when the gap closes. Cost while stalled is one Realm id scan per reconcile. Tests: `reconcileCore.test.ts`. Docs: live-sync rule 9, `stream-extraction-stall-breaker.md`.

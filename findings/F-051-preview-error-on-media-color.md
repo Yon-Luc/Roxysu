@@ -4,6 +4,7 @@ feature: preview-replay
 kind: design-gap
 severity: medium
 confidence: verified
+status: fixed
 ---
 
 # Preview errors use a rose color on the playfield
@@ -31,3 +32,7 @@ A failed preview stays readable on cover art in light and dark.
 
 - `apps/server/public/components/BeatmapPreviewModal.tsx` (about lines 1045–1049): `text-rose-300`.
 - `knowledge/architecture/client-theme.md` rules 2–3: on-media tokens for preview chrome.
+
+## Status
+
+Fixed. The preview load failure in `BeatmapPreviewModal.tsx` is now a titled panel ("Preview failed to load", the error, a Retry button) on a `bg-black/55` scrim. Error copy uses the new `text-on-media-danger` token (`--color-on-media-danger` in `global.css` `@theme` only, so `html.light` does not flip it). Rule 3 and the token are recorded in `knowledge/architecture/client-theme.md`.

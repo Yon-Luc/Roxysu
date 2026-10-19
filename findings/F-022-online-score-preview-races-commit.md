@@ -4,6 +4,7 @@ feature: online-score-pull
 kind: correctness
 severity: medium
 confidence: verified
+status: fixed
 ---
 
 # Online score preview can replace the rows a commit is writing
@@ -28,3 +29,7 @@ The scores written to lazer are the scores the user just confirmed.
 
 - `apps/server/src/online-scores/pull.ts` (lines 338–342): `delete(onlineScoreCandidates)` then insert.
 - `runCommit` (about lines 425–471): `select().from(onlineScoreCandidates)`, then `delete(onlineScoreCandidates)` on success, with no check that the set is unchanged.
+
+## Status
+
+Fixed. `previewOnlineScores` returns `in_flight` (HTTP 409) while a commit holds the Realm write lock, rechecked right before it replaces the candidate rows; commit is refused while preview is replacing them. Commit now deletes only the score ids it read and wrote instead of emptying `online_score_candidates`. No schema change: the per-session id was not added because deleting by committed score id gives the same protection without a migration. Tests: `online-scores/pull.commit.test.ts`.

@@ -4,6 +4,7 @@ feature: map-marathon
 kind: logic-gap
 severity: low
 confidence: verified
+status: fixed
 ---
 
 # Mixed key counts are rejected only when marathon generation starts
@@ -28,3 +29,7 @@ The list the user is ordering is always a legal marathon.
 
 - `apps/server/public/features/marathon/MarathonPage.tsx` (lines 194–200): append if the id is new.
 - Lines 251–256: `keys.size > 1` throws only in `generate`.
+
+## Status
+
+Fixed. `partitionByKeyCount` (`apps/server/public/lib/marathonExport.ts`) filters incoming sources against the first track's key count; `MarathonPage.tsx` applies it in `addIds` and `fillRecommend` and toasts the rejected maps (`marathon.keyMismatch` in all four app dictionaries). The `keys.size > 1` guard in `generate` stays as a backstop. Tests in `apps/server/public/lib/marathonExport.test.ts`.

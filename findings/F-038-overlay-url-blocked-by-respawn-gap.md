@@ -4,6 +4,7 @@ feature: in-game-overlay
 kind: logic-gap
 severity: medium
 confidence: verified
+status: fixed
 ---
 
 # Overlay URL changes wait out the crash respawn gap
@@ -29,3 +30,7 @@ Saving a new overlay URL after a crash takes effect on that save, not up to 15 s
 ## Evidence
 
 - `apps/desktop/main.js` (lines 471–496): disable returns early and stops the child; the `OVERLAY_RESPAWN_GAP_MS` return sits after that and before the URL comparison.
+
+## Status
+
+Fixed. The apply decision moved to `apps/desktop/overlayApplyPolicy.js` (`decideOverlayApply`); `OVERLAY_RESPAWN_GAP_MS` now applies only when the desired `--url=` token equals the applied one (plain liveness respawn). A changed URL stops the running child (if any) and spawns immediately, even inside the gap. `apps/desktop/main.js` `watchOverlayHostSetting.apply()` calls the helper. Tests: `apps/desktop/overlayApplyPolicy.test.js`. Knowledge: in-game-overlay rule 14 matches.

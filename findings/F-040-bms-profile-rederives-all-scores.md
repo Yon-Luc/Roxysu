@@ -4,6 +4,7 @@ feature: bms
 kind: perf
 severity: medium
 confidence: verified
+status: fixed
 ---
 
 # Opening the BMS profile re-derives every BMS score
@@ -28,3 +29,7 @@ The BMS page opens in a read, not a full rewrite of every BMS score.
 
 - `apps/server/src/routes/bms.ts` (lines 117–121): `await deriveBmsScores(db, null)` then `localBmsOverview`.
 - `apps/server/src/bms/derive.ts` (lines 31–47): pages all BMS scores when `scoreIds` is null.
+
+## Status
+
+Fixed. Verified against the code on 2026-10-19: `GET /bms/profile` reads `localBmsOverview` and no longer calls `deriveBmsScores`; derive runs on sync enable and backfill only (`apps/server/src/routes/bms.ts`).

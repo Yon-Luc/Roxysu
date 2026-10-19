@@ -4,6 +4,7 @@ feature: download-mirrors
 kind: perf
 severity: medium
 confidence: verified
+status: fixed
 ---
 
 # Mirror batch mode `setIds` has no maximum length
@@ -28,3 +29,7 @@ A batch download has a predictable upper cost.
 
 - `apps/server/src/routes/mirrors.ts` (about lines 217–235): `setIds: t.Optional(t.Array(t.Number()))`.
 - `apps/server/src/mirrors/batchJob.ts` (about lines 697–703): dedupes `request.setIds` with no cap.
+
+## Status
+
+Fixed. `MAX_OWNERSHIP_DIFF_IDS` (20,000) in `apps/server/src/mirrors/ownership.ts` is shared by `POST /ownership/diff`, `POST /batch/start` (mode `setIds`, checked in the handler so the response is 400 rather than Elysia's 422), and `startMirrorBatchJob`, all before any job state is created. Test: `apps/server/src/routes/mirrors.routes.test.ts`.

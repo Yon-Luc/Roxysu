@@ -268,15 +268,43 @@ static void inject_keepalive(void) {
                                       NULL, NULL, NULL);
 }
 
+/* Min gap between reasserts while the surface is already shown (the
+ * foreign-toplevel stream re-evaluates focus on every window event). */
+#define REASSERT_MIN_INTERVAL_US (1000 * 1000)
+static gint64 g_last_reassert_us = 0;
+
+/* Re-slot the surface above fullscreen windows: reapply anchors and bounce
+ * the layer TOP -> OVERLAY so the compositor re-stacks it (rule 9). */
+static void reassert_placement(void) {
+  gtk_layer_set_anchor(g_window, GTK_LAYER_SHELL_EDGE_TOP, g_cfg.anchor_top);
+  gtk_layer_set_anchor(g_window, GTK_LAYER_SHELL_EDGE_BOTTOM, !g_cfg.anchor_top);
+  gtk_layer_set_anchor(g_window, GTK_LAYER_SHELL_EDGE_LEFT, g_cfg.anchor_left);
+  gtk_layer_set_anchor(g_window, GTK_LAYER_SHELL_EDGE_RIGHT, !g_cfg.anchor_left);
+  gtk_layer_set_layer(g_window, GTK_LAYER_SHELL_LAYER_TOP);
+  gtk_layer_set_layer(g_window, GTK_LAYER_SHELL_LAYER_OVERLAY);
+  gtk_widget_queue_draw(GTK_WIDGET(g_view));
+  g_last_reassert_us = g_get_monotonic_time();
+}
+
 static void apply_visibility(int visible) {
   if (g_window == NULL || g_view == NULL || g_cfg.follow_focus == 0) return;
-  if (g_last_applied == visible) return;
+  if (g_last_applied == visible) {
+    /* Focus returned to a matching window while the surface is already
+     * shown: reassert placement (throttled) instead of ignoring the event,
+     * since compositors can drop a remapped overlay under fullscreen osu!. */
+    if (visible && g_mapped &&
+        g_get_monotonic_time() - g_last_reassert_us >=
+            REASSERT_MIN_INTERVAL_US)
+      reassert_placement();
+    return;
+  }
 
   if (visible && !g_mapped) {
+    /* The hide path sets the widget invisible; present() alone does not
+     * always map it again on GTK4 layer-shell, so undo the hide explicitly. */
+    gtk_widget_set_visible(GTK_WIDGET(g_window), TRUE);
     gtk_window_present(g_window);
-    gtk_layer_set_layer(g_window, GTK_LAYER_SHELL_LAYER_TOP);
-    gtk_layer_set_layer(g_window, GTK_LAYER_SHELL_LAYER_OVERLAY);
-    gtk_widget_queue_draw(GTK_WIDGET(g_view));
+    reassert_placement();
     set_page_hidden(0);
     inject_keepalive();
     g_mapped = 1;

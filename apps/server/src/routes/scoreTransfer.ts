@@ -2,15 +2,16 @@ import { Elysia } from "elysia";
 import { dbPlugin } from "../db-runtime";
 import {
   commitScoreTransfer,
-  exportScoreTransfer,
+  exportScoreTransferStream,
   previewScoreTransfer,
 } from "../score-transfer/transfer";
 
 export const scoreTransferRoutes = new Elysia({ prefix: "/score-transfer" })
   .use(dbPlugin)
-  .get("/export", async ({ db }) => {
-    const file = await exportScoreTransfer(db);
-    return new Response(JSON.stringify(file), {
+  .get("/export", ({ db }) => {
+    // Streamed in keyset pages: the response body is the same JSON document,
+    // never fully materialised in memory.
+    return new Response(exportScoreTransferStream(db), {
       headers: {
         "Content-Type": "application/json",
         "Content-Disposition": 'attachment; filename="roxysu-scores.json"',

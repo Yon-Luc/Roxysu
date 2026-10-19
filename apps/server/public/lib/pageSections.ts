@@ -249,6 +249,13 @@ export const PAGE_SECTIONS: PageSectionDef[] = [
     label: "Catch skin",
     keywords: ["skin", "catch", "ctb", "fruits", "catcher"],
   },
+  {
+    id: "skin-fusion",
+    to: "/skin",
+    pageLabel: "Skin",
+    label: "Skin fusion",
+    keywords: ["skin", "fusion", "merge", "combine", "export", "osk", "layout"],
+  },
 ];
 
 export function pageSectionDomId(sectionId: string): string {

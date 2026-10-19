@@ -4,6 +4,7 @@ feature: hub
 kind: security
 severity: medium
 confidence: verified
+status: fixed
 ---
 
 # Any signed-in Hub user can read the global osu! API budget

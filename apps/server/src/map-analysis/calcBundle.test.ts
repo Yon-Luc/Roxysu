@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -15,6 +15,7 @@ import {
   applyCalcBundle,
   exportCalcBundleEntries,
   reworkReplaceAlgorithmsForBoot,
+  uploadCalcBundleToHub,
 } from "./calcBundle";
 import { SUNNY_ALGORITHM } from "./computeSunnyDan";
 import { REWORK_ALGORITHM } from "./computeReworkDan";
@@ -289,5 +290,40 @@ describe("applyCalcBundle", () => {
     expect(sunny.some((e) => e.beatmapHash === HASH_A)).toBe(true);
     expect(sunny.some((e) => e.beatmapHash === HASH_B)).toBe(true);
     expect(sunny.every((e) => e.estDiff != null)).toBe(true);
+  });
+});
+
+describe("uploadCalcBundleToHub", () => {
+  const realFetch = globalThis.fetch;
+  const realHubUrl = process.env.HUB_URL;
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    if (realHubUrl === undefined) delete process.env.HUB_URL;
+    else process.env.HUB_URL = realHubUrl;
+  });
+
+  test("posts the admin bearer only to the configured Hub, never a caller URL", async () => {
+    process.env.HUB_URL = "https://configured-hub.test/";
+    const urls: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      urls.push(String(input));
+      return new Response(JSON.stringify({ entryCount: 1, algorithms: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    await uploadCalcBundleToHub({
+      db,
+      token: "admin-token",
+      roxysuVersion: "0.0.0-test",
+      // A stale or hostile caller passing a URL must have no effect.
+      ...({ hubUrl: "https://evil.example" } as object),
+    });
+
+    expect(urls.length).toBeGreaterThan(0);
+    for (const url of urls) {
+      expect(url).toBe("https://configured-hub.test/admin/calc-bundles");
+    }
   });
 });

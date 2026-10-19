@@ -4,6 +4,7 @@ feature: bms
 kind: design-gap
 severity: high
 confidence: verified
+status: fixed
 ---
 
 # BMS profile says there are no scores while the request is in flight
@@ -34,3 +35,7 @@ A player with BMS scores does not see a false empty profile on open. A failed lo
 - `apps/server/public/features/bms/BmsLocalPage.tsx` (lines 31–47): `plays={profile.data?.plays ?? 0}`, `scores={profile.data?.recent ?? []}`.
 - `apps/server/public/features/bms/BmsPlayerPage.tsx` (lines 34–37 and 93–97): public profile query has no `placeholderData`; same fallbacks.
 - `apps/server/public/features/bms/BmsProfileView.tsx` (about lines 200 and 247–248): warning-colored error, empty copy when `scores.length === 0`.
+
+## Status
+
+Fixed. Verified against the code on 2026-10-19: BMS profile pages show a skeleton while scores load; the empty copy renders only once the request settles (`BmsLocalPage.tsx`, `BmsPlayerPage.tsx`, `BmsProfileView.tsx`).

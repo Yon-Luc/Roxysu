@@ -9,7 +9,7 @@ import {
 import {
   comboLampMeets,
   gradeMeets,
-  groupBmsSessions,
+  loadRecentBmsSessions,
   type BmsDjGrade,
 } from "@roxysu/db/bms";
 import { loadBundledBmsTables } from "@roxysu/db/bms-tables";
@@ -150,27 +150,24 @@ export async function listLocalScores(
 
 export async function listLocalSessions(db: Db, variant: string | null) {
   const usernames = await resolveScoresUsernames(db);
-  const rows = await db
-    .select({
-      id: scores.id,
-      playedAt: scores.playedAt,
-      exScore: bmsScoreDetails.exScore,
-      normalizedScore: bmsScoreDetails.normalizedScore,
-      title: beatmaps.title,
-    })
-    .from(bmsScoreDetails)
-    .innerJoin(scores, eq(scores.id, bmsScoreDetails.scoreId))
-    .leftJoin(beatmaps, eq(beatmaps.id, scores.beatmapId))
-    .where(baseFilters(usernames, variant))
-    .orderBy(desc(scores.playedAt))
-    .limit(400);
-
-  const grouped = groupBmsSessions(
-    rows.map((row) => ({
-      ...row,
-      playedAt: playedMs(row.playedAt),
-    })),
-  );
+  const grouped = await loadRecentBmsSessions(async (offset, limit) => {
+    const rows = await db
+      .select({
+        id: scores.id,
+        playedAt: scores.playedAt,
+        exScore: bmsScoreDetails.exScore,
+        normalizedScore: bmsScoreDetails.normalizedScore,
+        title: beatmaps.title,
+      })
+      .from(bmsScoreDetails)
+      .innerJoin(scores, eq(scores.id, bmsScoreDetails.scoreId))
+      .leftJoin(beatmaps, eq(beatmaps.id, scores.beatmapId))
+      .where(baseFilters(usernames, variant))
+      .orderBy(desc(scores.playedAt), desc(scores.id))
+      .limit(limit)
+      .offset(offset);
+    return rows.map((row) => ({ ...row, playedAt: playedMs(row.playedAt) }));
+  });
   const stored = await db
     .select({
       id: sessions.id,
@@ -185,7 +182,7 @@ export async function listLocalSessions(db: Db, variant: string | null) {
     .limit(20);
 
   return {
-    sessions: grouped.slice(0, 20).map((session) => ({
+    sessions: grouped.map((session) => ({
       startedAt: session.startedAt,
       endedAt: session.endedAt,
       scoreCount: session.scoreCount,

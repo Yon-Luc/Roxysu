@@ -31,6 +31,12 @@ export {
 } from "./search";
 export {
   loadOwnedSetOnlineIds,
+  loadOwnedSetOnlineIdsPage,
+  loadOwnedSetIdsVersion,
+  MAX_OWNERSHIP_DIFF_IDS,
+  OWNED_SET_IDS_DEFAULT_LIMIT,
+  OWNED_SET_IDS_MAX_LIMIT,
+  type OwnedSetIdsPage,
   diffBeatmapsetIds,
   diffAgainstLibrary,
   countOwnedSetsMatchingMirrorParams,

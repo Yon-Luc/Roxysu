@@ -15,6 +15,7 @@ import {
   type OverlayElementInstance,
   type OverlayProfile,
 } from "../../lib/api";
+import { ConfirmModal } from "../../components/ConfirmModal";
 import { publishOverlaySkins } from "../../lib/overlaySkins";
 import { pushToast } from "../../lib/toasts";
 import { useAppDict } from "../../lib/i18n";
@@ -110,6 +111,9 @@ export function OverlayEditorPage() {
   const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(
     null,
   );
+  const [pendingDelete, setPendingDelete] = useState<OverlayProfile | null>(
+    null,
+  );
   const [fitMode, setFitMode] = useState(false);
   const [uiVisible, setUiVisible] = useState(false);
   const draggingRef = useRef(false);
@@ -176,11 +180,14 @@ export function OverlayEditorPage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteOverlayProfile(id),
-    onSuccess: () => {
+    // Awaiting the refetch keeps the confirm modal busy until the profile is
+    // gone from the list, so the deleted draft cannot flash back.
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["overlay", "profiles"] });
       setSelectedId(null);
       setDraft(null);
       setDraftForId(null);
-      queryClient.invalidateQueries({ queryKey: ["overlay", "profiles"] });
+      setPendingDelete(null);
     },
   });
 
@@ -235,17 +242,45 @@ export function OverlayEditorPage() {
     [],
   );
 
-  const removeElement = useCallback((instanceId: string) => {
-    setDraft((prev) =>
-      prev
-        ? {
-            ...prev,
-            elements: prev.elements.filter((el) => el.instanceId !== instanceId),
-          }
-        : prev,
-    );
+  // Layer removal edits the unsaved draft only, so it offers an undo toast
+  // instead of a confirm: reinsert at the same stack position.
+  function removeElement(instanceId: string) {
+    if (!draft) return;
+    const index = draft.elements.findIndex((el) => el.instanceId === instanceId);
+    if (index < 0) return;
+    const removed = draft.elements[index]!;
+    const profileId = draft.id;
+    const label =
+      OVERLAY_ELEMENT_DEFS.find((d) => d.type === removed.type)?.label ??
+      removed.type;
+    setDraft({
+      ...draft,
+      elements: draft.elements.filter((el) => el.instanceId !== instanceId),
+    });
     setSelectedInstanceId((prev) => (prev === instanceId ? null : prev));
-  }, []);
+    pushToast({
+      title: `Removed ${label} layer`,
+      durationMs: 8_000,
+      action: {
+        label: "Undo",
+        onClick: () => {
+          setDraft((prev) => {
+            if (
+              !prev ||
+              prev.id !== profileId ||
+              prev.elements.some((el) => el.instanceId === instanceId)
+            ) {
+              return prev;
+            }
+            const elements = [...prev.elements];
+            elements.splice(Math.min(index, elements.length), 0, removed);
+            return { ...prev, elements };
+          });
+          setSelectedInstanceId(instanceId);
+        },
+      },
+    });
+  }
 
   const canvasWrap = useFitScale(draft?.width ?? 1920);
   const activeScale = fitMode ? canvasWrap.scale || 1 : 1;
@@ -327,14 +362,40 @@ export function OverlayEditorPage() {
           </div>
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-white/50">
-            <span>No overlay profile yet.</span>
-            <button
-              type="button"
-              className="rx-btn-primary !px-4 !py-1.5 text-xs"
-              onClick={() => saveMutation.mutate(makeProfile("New overlay"))}
-            >
-              Create overlay profile
-            </button>
+            {profilesQuery.isLoading ? (
+              <div className="flex items-center gap-3" role="status">
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/20 border-t-white/70" />
+                <span>Loading overlay profiles…</span>
+              </div>
+            ) : profilesQuery.isError ? (
+              <>
+                <span role="alert" className="text-danger">
+                  Could not load overlay profiles: {profilesQuery.error.message}
+                </span>
+                <button
+                  type="button"
+                  className="rx-btn !px-4 !py-1.5 text-xs"
+                  disabled={profilesQuery.isFetching}
+                  onClick={() => void profilesQuery.refetch()}
+                >
+                  {profilesQuery.isFetching ? "Retrying…" : "Retry"}
+                </button>
+              </>
+            ) : (
+              <>
+                <span>No overlay profile yet.</span>
+                <button
+                  type="button"
+                  className="rx-btn-primary !px-4 !py-1.5 text-xs"
+                  disabled={saveMutation.isPending || profilesQuery.isFetching}
+                  onClick={() => saveMutation.mutate(makeProfile("New overlay"))}
+                >
+                  {saveMutation.isPending
+                    ? "Creating…"
+                    : "Create overlay profile"}
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -406,7 +467,11 @@ export function OverlayEditorPage() {
                   type="button"
                   className="rx-btn !px-3 !py-1 text-xs text-danger"
                   disabled={!draft || deleteMutation.isPending}
-                  onClick={() => draft && deleteMutation.mutate(draft.id)}
+                  onClick={() => {
+                    if (!draft) return;
+                    deleteMutation.reset();
+                    setPendingDelete(draft);
+                  }}
                 >
                   Delete
                 </button>
@@ -926,6 +991,28 @@ export function OverlayEditorPage() {
           Touch a screen edge to show the editor
         </div>
       ) : null}
+
+      <ConfirmModal
+        open={pendingDelete != null}
+        title="Delete overlay profile"
+        confirmLabel="Delete"
+        busy={deleteMutation.isPending}
+        onClose={() => {
+          if (!deleteMutation.isPending) setPendingDelete(null);
+        }}
+        onConfirm={() => {
+          if (pendingDelete) deleteMutation.mutate(pendingDelete.id);
+        }}
+      >
+        <p>
+          This deletes the overlay profile &ldquo;{pendingDelete?.name}&rdquo;
+          and its {pendingDelete?.elements.length ?? 0} layer(s). Any OBS or
+          in-game overlay source that uses it will render nothing.
+        </p>
+        {deleteMutation.error ? (
+          <p className="text-danger">{deleteMutation.error.message}</p>
+        ) : null}
+      </ConfirmModal>
     </div>
   );
 }

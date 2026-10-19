@@ -44,6 +44,8 @@ try {
     "main.js",
     "preload.js",
     "paths.js",
+    "respawnPolicy.js",
+    "overlayApplyPolicy.js",
     "package.json",
     "resources/splash.html",
     "resources/public/index.html",

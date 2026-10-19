@@ -37,6 +37,55 @@ export function useLiveSseOpen(): boolean {
   return open;
 }
 
+/**
+ * Apply a `tosu.updated` SSE payload. Play ticks patch the cached live
+ * snapshot in place; when no snapshot exists yet (cold load) `setQueryData`
+ * cannot create one, so fetch it instead of dropping the tick.
+ */
+export function applyTosuUpdated(
+  queryClient: QueryClient,
+  rawData: string,
+): void {
+  const key = ["tosu", "live"];
+  try {
+    const detail = JSON.parse(rawData) as {
+      reason?: "play" | "full";
+      play?: TosuLive["play"];
+      beatmapState?: string | null;
+      beatmapTimeMs?: number | null;
+    };
+    if (detail.reason === "play") {
+      if (queryClient.getQueryData<TosuLive>(key) === undefined) {
+        // An in-flight fetch already returns a fresh snapshot; restarting it
+        // on every tick would keep it from ever resolving.
+        if (queryClient.isFetching({ queryKey: key }) === 0) {
+          void queryClient.invalidateQueries({ queryKey: key });
+        }
+        return;
+      }
+      queryClient.setQueryData<TosuLive>(key, (prev) => {
+        if (!prev) return prev;
+        let beatmap = prev.beatmap;
+        if (beatmap && detail.beatmapState !== undefined) {
+          beatmap = { ...beatmap, state: detail.beatmapState };
+        }
+        if (beatmap && detail.beatmapTimeMs !== undefined) {
+          beatmap = { ...beatmap, timeLiveMs: detail.beatmapTimeMs };
+        }
+        return {
+          ...prev,
+          play: detail.play ?? prev.play,
+          beatmap,
+        };
+      });
+      return;
+    }
+  } catch {
+    // fall through to a full refetch
+  }
+  void queryClient.invalidateQueries({ queryKey: key });
+}
+
 /** Subscribe to server SSE and invalidate React Query caches on live events. */
 export function connectLiveUpdates(queryClient: QueryClient): () => void {
   const source = new EventSource("/api/events");
@@ -169,37 +218,8 @@ export function connectLiveUpdates(queryClient: QueryClient): () => void {
     });
   };
 
-  const onTosu = (event: Event) => {
-    try {
-      const detail = JSON.parse((event as MessageEvent).data) as {
-        reason?: "play" | "full";
-        play?: TosuLive["play"];
-        beatmapState?: string | null;
-        beatmapTimeMs?: number | null;
-      };
-      if (detail.reason === "play") {
-        queryClient.setQueryData<TosuLive>(["tosu", "live"], (prev) => {
-          if (!prev) return prev;
-          let beatmap = prev.beatmap;
-          if (beatmap && detail.beatmapState !== undefined) {
-            beatmap = { ...beatmap, state: detail.beatmapState };
-          }
-          if (beatmap && detail.beatmapTimeMs !== undefined) {
-            beatmap = { ...beatmap, timeLiveMs: detail.beatmapTimeMs };
-          }
-          return {
-            ...prev,
-            play: detail.play ?? prev.play,
-            beatmap,
-          };
-        });
-        return;
-      }
-    } catch {
-      // fall through to a full refetch
-    }
-    inv(["tosu", "live"]);
-  };
+  const onTosu = (event: Event) =>
+    applyTosuUpdated(queryClient, (event as MessageEvent).data);
 
   const HANDLERS: Record<string, (event: Event) => void> = {
     "score.imported": onScoreImported,

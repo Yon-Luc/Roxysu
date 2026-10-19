@@ -1,5 +1,4 @@
 import { Elysia, t } from "elysia";
-import { readFileSync } from "node:fs";
 import { dbPlugin } from "../db-runtime";
 import { toIso } from "../shared/serialize";
 import {
@@ -12,7 +11,6 @@ import type {
   TaikoHitObject,
 } from "@roxysu/osu-chart";
 import {
-  decodeLegacyReplay,
   isFruitsRulesetId,
   isManiaRulesetId,
   isOsuRulesetId,
@@ -35,6 +33,7 @@ import {
   applyCatchHardRockFlip,
   simulateCatchJudgments,
 } from "../replay/catchJudge";
+import { judgeCached, loadDecodedReplay } from "../replay/replayRuntime";
 import {
   loadManiaPpCurves,
   resolveScorePp,
@@ -97,26 +96,14 @@ export const scoreRoutes = new Elysia({ prefix: "/scores" })
         return { error: "Could not resolve replay file" };
       }
 
-      let replayBytes: Buffer;
-      try {
-        replayBytes = readFileSync(replayPath);
-      } catch {
-        set.status = 404;
-        return { error: "Replay file missing from lazer files store" };
+      // Async read + decode under a concurrency limiter; cached by score id
+      // + replay file mtime/size (replay/replayRuntime.ts).
+      const loaded = await loadDecodedReplay(score.id, replayPath);
+      if (!loaded.ok) {
+        set.status = loaded.status;
+        return { error: loaded.error };
       }
-
-      let decoded;
-      try {
-        decoded = await decodeLegacyReplay(replayBytes);
-      } catch (err) {
-        set.status = 422;
-        return {
-          error:
-            err instanceof Error
-              ? `Failed to decode replay: ${err.message}`
-              : "Failed to decode replay",
-        };
-      }
+      const { decoded, replayKey } = loaded;
 
       const scorePayload = {
         id: score.id,
@@ -165,13 +152,17 @@ export const scoreRoutes = new Elysia({ prefix: "/scores" })
           decoded.stdFrames,
           mods.hardRock,
         );
-        const { judgments, summary } = simulateStdJudgments({
-          hitObjects: flipped.hitObjects,
-          frames: flipped.frames,
-          circleSize: chart.circleSize,
-          overallDifficulty: chart.overallDifficulty,
-          mods,
-        });
+        const { judgments, summary } = await judgeCached(
+          `${replayKey}|osu|${score.mods}|${chart.beatmapId}:${chart.hitObjects.length}:${chart.circleSize}:${chart.overallDifficulty}:${chart.lengthMs}`,
+          () =>
+            simulateStdJudgments({
+              hitObjects: flipped.hitObjects,
+              frames: flipped.frames,
+              circleSize: chart.circleSize,
+              overallDifficulty: chart.overallDifficulty,
+              mods,
+            }),
+        );
 
         return {
           score: scorePayload,
@@ -224,12 +215,16 @@ export const scoreRoutes = new Elysia({ prefix: "/scores" })
         }
         const { chart } = chartResult;
         const mods = parseScoreMods(score.mods);
-        const { judgments, summary } = simulateTaikoJudgments({
-          hitObjects: chart.hitObjects,
-          frames: decoded.taikoFrames,
-          overallDifficulty: chart.overallDifficulty,
-          mods,
-        });
+        const { judgments, summary } = await judgeCached(
+          `${replayKey}|taiko|${score.mods}|${chart.beatmapId}:${chart.hitObjects.length}:${chart.overallDifficulty}:${chart.lengthMs}`,
+          () =>
+            simulateTaikoJudgments({
+              hitObjects: chart.hitObjects,
+              frames: decoded.taikoFrames,
+              overallDifficulty: chart.overallDifficulty,
+              mods,
+            }),
+        );
 
         return {
           score: scorePayload,
@@ -295,12 +290,16 @@ export const scoreRoutes = new Elysia({ prefix: "/scores" })
           decoded.catchFrames,
           mods.hardRock,
         );
-        const { judgments, summary } = simulateCatchJudgments({
-          hitObjects: flipped.hitObjects,
-          frames: flipped.frames,
-          circleSize: chart.circleSize,
-          mods,
-        });
+        const { judgments, summary } = await judgeCached(
+          `${replayKey}|fruits|${score.mods}|${chart.beatmapId}:${chart.hitObjects.length}:${chart.circleSize}:${chart.lengthMs}`,
+          () =>
+            simulateCatchJudgments({
+              hitObjects: flipped.hitObjects,
+              frames: flipped.frames,
+              circleSize: chart.circleSize,
+              mods,
+            }),
+        );
 
         return {
           score: scorePayload,
@@ -355,13 +354,17 @@ export const scoreRoutes = new Elysia({ prefix: "/scores" })
         return { error: chartResult.error };
       }
       const { chart } = chartResult;
-      const { judgments, summary } = simulateManiaJudgments({
-        notes: chart.notes,
-        frames: decoded.frames,
-        columnCount: chart.columnCount,
-        overallDifficulty: chart.overallDifficulty,
-        mods,
-      });
+      const { judgments, summary } = await judgeCached(
+        `${replayKey}|mania|${score.mods}|${chart.beatmapId}:${chart.notes.length}:${chart.columnCount}:${chart.overallDifficulty}:${chart.lengthMs}`,
+        () =>
+          simulateManiaJudgments({
+            notes: chart.notes,
+            frames: decoded.frames,
+            columnCount: chart.columnCount,
+            overallDifficulty: chart.overallDifficulty,
+            mods,
+          }),
+      );
 
       const displayNotes = mods.mirror
         ? chart.notes.map((n) => ({

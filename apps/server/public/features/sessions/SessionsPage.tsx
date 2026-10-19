@@ -182,7 +182,7 @@ export function SessionsPage() {
                     className="rx-row justify-between"
                   >
                     <div className="min-w-0">
-                      <div className="font-semibold text-ink">
+                      <div className="truncate font-semibold text-ink" title={s.name}>
                         {isOpen ? dict?.session.currentSession : s.name}
                         {isOpen ? (
                           <span className="ml-2 text-xs font-bold text-accent">
@@ -190,7 +190,7 @@ export function SessionsPage() {
                           </span>
                         ) : null}
                       </div>
-                      <div className="mt-0.5 text-sm text-muted">
+                      <div className="mt-0.5 truncate text-sm text-muted">
                         {isOpen ? `${s.name} · ` : ""}
                         {formatRelativeTime(s.startedAt, dict?.common)}
                         {s.endedAt

@@ -7,11 +7,45 @@ export function isHubProduction(
   return node === "production" || hub === "production";
 }
 
+/** Roxysu client origins (`ROXYSU_PORT` default 4321). Default non-production CORS allowlist. */
+export const HUB_DEFAULT_CLIENT_ORIGINS = [
+  "http://127.0.0.1:4321",
+  "http://localhost:4321",
+] as const;
+
+/** True for `localhost`, `127.0.0.0/8`, and `::1` (bracketed or not). */
+export function isLoopbackHost(host: string): boolean {
+  const h = host.trim().toLowerCase().replace(/^\[|\]$/g, "");
+  if (!h) return false;
+  if (h === "localhost" || h === "::1") return true;
+  return /^127(?:\.\d{1,3}){3}$/.test(h);
+}
+
+/**
+ * Hub listen host. Unset means the runtime default; any value other than a
+ * loopback host publishes the port and is treated like production for CORS.
+ */
+export function resolveHubListenHost(
+  env: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  const raw = env.HUB_LISTEN?.trim();
+  return raw ? raw : undefined;
+}
+
+/** True when CORS must be an explicit list: production, or a non-loopback `HUB_LISTEN`. */
+export function isHubPublished(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (isHubProduction(env)) return true;
+  const host = resolveHubListenHost(env);
+  return host != null && !isLoopbackHost(host);
+}
+
 export type CorsOrigin = string | string[];
 
 /**
- * CORS allowlist. Dev defaults to `*`. Production requires an explicit
- * origin list — `*` and unset are rejected.
+ * CORS allowlist. Production and a published port (`HUB_LISTEN` not loopback)
+ * require an explicit origin list; `*` and unset are rejected. Otherwise an
+ * unset `CORS_ORIGIN` defaults to the Roxysu client's loopback origins.
+ * An explicit `*` is honoured only on a non-published Hub, with a warning.
  */
 export function resolveCorsOrigin(
   raw: string | undefined = process.env.CORS_ORIGIN,
@@ -22,16 +56,24 @@ export function resolveCorsOrigin(
     .map((s) => s.trim())
     .filter(Boolean);
 
-  if (isHubProduction(env)) {
+  if (isHubPublished(env)) {
     if (parts.length === 0 || parts.includes("*")) {
       throw new Error(
-        "[hub] CORS_ORIGIN must be an explicit origin list in production (not *).",
+        isHubProduction(env)
+          ? "[hub] CORS_ORIGIN must be an explicit origin list in production (not *)."
+          : "[hub] CORS_ORIGIN must be an explicit origin list when HUB_LISTEN is not loopback (not *).",
       );
     }
     return parts.length === 1 ? parts[0]! : parts;
   }
 
-  if (parts.length === 0) return "*";
+  if (parts.length === 0) return [...HUB_DEFAULT_CLIENT_ORIGINS];
+  if (parts.includes("*")) {
+    console.warn(
+      "[hub] CORS_ORIGIN=* answers every website; use only for throwaway local testing.",
+    );
+    return "*";
+  }
   if (parts.length === 1) return parts[0]!;
   return parts;
 }

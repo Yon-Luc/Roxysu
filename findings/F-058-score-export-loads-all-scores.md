@@ -4,6 +4,7 @@ feature: score-transfer
 kind: perf
 severity: medium
 confidence: verified
+status: fixed
 ---
 
 # Score export loads the whole library into one JSON response
@@ -28,3 +29,7 @@ Exporting a large library does not pause the UI for a full-table stringify.
 
 - `apps/server/src/routes/scoreTransfer.ts` (lines 11–18): `JSON.stringify(file)` as the response body.
 - `apps/server/src/score-transfer/transfer.ts` (about lines 163–191): unbounded select of scores.
+
+## Status
+
+Fixed. `exportScoreTransferChunks()` / `exportScoreTransferStream()` (`apps/server/src/score-transfer/transfer.ts`) read the local mirror in keyset pages (ordered by `scores.id`, 1000 rows per page) and emit the same `roxysu-scores` JSON document piece by piece; `GET /api/score-transfer/export` (`apps/server/src/routes/scoreTransfer.ts`) returns a `Response` over that stream. The output is byte-identical to the old `JSON.stringify(file)`, so the import path and the Settings download link are unchanged. Tests: `apps/server/src/score-transfer/transfer.export.test.ts`.

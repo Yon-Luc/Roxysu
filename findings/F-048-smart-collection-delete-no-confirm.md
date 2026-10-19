@@ -4,6 +4,7 @@ feature: smart-collections
 kind: design-gap
 severity: medium
 confidence: verified
+status: fixed
 ---
 
 # Deleting a smart collection does not ask for confirmation
@@ -31,3 +32,7 @@ The same destructive bar as Community collections. Fewer accidental deletes.
 
 - `apps/server/public/features/collections/CollectionsPage.tsx` (about lines 347–356): direct `deleteMut.mutate(c.id)`.
 - Hub detail uses `ConfirmModal` (about lines 942–958 in `HubDetailPage.tsx`).
+
+## Status
+
+Fixed. `CollectionsPage.tsx` Delete opens `ConfirmModal` naming the collection (new i18n keys `collection.deleteTitle` / `collection.deleteBody` in en/es/fr/pt). The modal stays busy until the delete and the collections refetch complete; errors show inside the modal.

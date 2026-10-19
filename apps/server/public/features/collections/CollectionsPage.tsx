@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ConfirmModal } from "../../components/ConfirmModal";
 import { ListSkeleton } from "../../components/LoadingSkeleton";
 import { PageTitle } from "../../components/PageTitle";
 import { QueryLanguageHelpButton } from "../../components/QueryLanguageHelpModal";
@@ -34,6 +35,9 @@ export function CollectionsPage() {
   const [editName, setEditName] = useState("");
   const [editQuery, setEditQuery] = useState("");
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<SmartCollectionItem | null>(
+    null,
+  );
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["collections"],
@@ -80,8 +84,10 @@ export function CollectionsPage() {
     onSettled: () => {
       setDeletingId(null);
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["collections"] });
+    // Awaiting the refetch keeps the confirm modal busy until the row is gone.
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["collections"] });
+      setPendingDelete(null);
     },
   });
 
@@ -346,7 +352,10 @@ export function CollectionsPage() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => deleteMut.mutate(c.id)}
+                            onClick={() => {
+                              deleteMut.reset();
+                              setPendingDelete(c);
+                            }}
                             disabled={isDeleting || deleteMut.isPending}
                             className="text-xs font-medium text-danger/80 transition hover:text-danger disabled:opacity-60"
                           >
@@ -403,6 +412,29 @@ export function CollectionsPage() {
           ) : null}
         </div>
       )}
+      <ConfirmModal
+        open={pendingDelete != null}
+        title={dict?.collection.deleteTitle ?? "Delete collection"}
+        confirmLabel={dict?.collection.delete ?? "Delete"}
+        busy={deleteMut.isPending}
+        onClose={() => {
+          if (!deleteMut.isPending) setPendingDelete(null);
+        }}
+        onConfirm={() => {
+          if (pendingDelete) deleteMut.mutate(pendingDelete.id);
+        }}
+      >
+        <p>
+          {t(
+            dict?.collection.deleteBody ??
+              "This deletes {{name}} and its query. Matching maps are not affected.",
+            { name: pendingDelete?.name ?? "" },
+          )}
+        </p>
+        {deleteMut.error ? (
+          <p className="text-danger">{deleteMut.error.message}</p>
+        ) : null}
+      </ConfirmModal>
     </div>
   );
 }

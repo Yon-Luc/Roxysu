@@ -89,13 +89,16 @@ that would exhaust the heap is a failed row, not a dead server.
 ```
 server boot / sync.finished (debounced)
     ↓
-dan variant job scans mania scores (full scan at boot; changed_score_ids per import)
+dan variant job scans mania scores (full scan at boot; changed_score_ids per import;
+null delta -> full scan only if the mania score fingerprint changed)
     ↓
 resolveDanVariant() → distinct combos (beatmap × rate × Invert)
     ↓
-backfill reads .osu, estimates with { speedRate, cvtFlag: "IN" }
+backfill (memory-guarded, yields per combo) reads .osu, estimates with { speedRate, cvtFlag: "IN" }
     ↓
 persist beatmap_dan_rating_variants (sunny + daniel for 4K)
+    ↓
+run finished with rows written -> invalidatePlayerStatsCache()
     ↓
 skill axes / band plays / dashboard read variant stars per play
 ```

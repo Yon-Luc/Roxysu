@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   Bar,
   BarChart,
@@ -224,7 +224,7 @@ export function PracticeListPage() {
     writeStoredPracticeSearch(state);
   }
 
-  const { data, isLoading, error, isFetching } = useQuery({
+  const { data, isLoading, error, isFetching, isPlaceholderData } = useQuery({
     queryKey: ["practice", { page, q: submitted, sortBy, sortDir }],
     queryFn: () =>
       fetchPracticeList({
@@ -234,6 +234,9 @@ export function PracticeListPage() {
         sortBy,
         sortDir,
       }),
+    // Keep the previous page (cards and count) on screen while the next key
+    // loads; the grid is dimmed instead of replaced by a skeleton.
+    placeholderData: keepPreviousData,
   });
 
   const {
@@ -248,7 +251,7 @@ export function PracticeListPage() {
         metric,
       }),
     // Don't compete with the list fetch — start after the list resolves.
-    enabled: !isLoading,
+    enabled: !isLoading && !isPlaceholderData,
     // Distribution is derived from the same underlying data; stay in sync
     // with the global 60 s window and let SSE invalidations drive freshness.
     staleTime: 60_000,
@@ -525,7 +528,10 @@ export function PracticeListPage() {
         </p>
       ) : (
         <>
-          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <ul
+            className={`grid gap-4 transition-opacity duration-150 sm:grid-cols-2 lg:grid-cols-3 ${isFetching ? "opacity-70" : ""}`}
+            aria-busy={isFetching}
+          >
             {list.items.map((item: PracticeItem) => {
               const primarySource = primaryDanSource({
                 mode: ratingMode,
@@ -549,7 +555,7 @@ export function PracticeListPage() {
               });
 
               return (
-              <li key={item.id} className="rx-card flex flex-col">
+              <li key={item.id} className="rx-card rx-card-grid flex flex-col">
                 <Link
                   to="/practice/$beatmapId"
                   params={{ beatmapId: item.id }}
@@ -652,7 +658,7 @@ export function PracticeListPage() {
           <div className="flex justify-center gap-2">
             <button
               type="button"
-              disabled={page <= 1}
+              disabled={page <= 1 || isPlaceholderData}
               onClick={() => {
                 const next = Math.max(1, page - 1);
                 setPage(next);
@@ -664,7 +670,7 @@ export function PracticeListPage() {
             </button>
             <button
               type="button"
-              disabled={page >= totalPages}
+              disabled={page >= totalPages || isPlaceholderData}
               onClick={() => {
                 const next = page + 1;
                 setPage(next);

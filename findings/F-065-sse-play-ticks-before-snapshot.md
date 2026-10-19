@@ -4,6 +4,7 @@ feature: tosu-live
 kind: logic-gap
 severity: low
 confidence: verified
+status: fixed
 ---
 
 # Play ticks are dropped until the first live snapshot exists
@@ -27,3 +28,7 @@ The first seconds of an overlay do not skip play updates that arrived before the
 ## Evidence
 
 - `apps/server/public/lib/sse.ts` (about lines 172–196): `if (!prev) return prev` inside the `reason === "play"` branch.
+
+## Status
+
+Fixed. `apps/server/public/lib/sse.ts` now routes `tosu.updated` through exported `applyTosuUpdated`; a play tick with no cached `["tosu","live"]` snapshot invalidates the query (skipped while the first fetch is already in flight) instead of being dropped. Tests in `apps/server/public/lib/sse.test.ts`.

@@ -229,9 +229,18 @@ export type HubCachedIdList = {
   stale: boolean;
   label: string | null;
   pagesFetched: number;
-  /** True when we stopped before every hub page (cap / cancel). */
+  /** True when the dump does not cover every hub match (cap / cancel). */
   truncated: boolean;
+  /**
+   * Why `truncated` is true: `stop` (job cancelled), `request-max` (the caller
+   * asked for fewer sets than Hub matched), or `hub-max` (Hub's own dump cap,
+   * so the remainder must come from the live mirror crawl). Null when complete.
+   */
+  truncatedBy: "stop" | "request-max" | "hub-max" | null;
 };
+
+/** Hub `GET /search/all` hard cap (mirrors `SEARCH_ALL_MAX_SETS` on the Hub). */
+export const HUB_SEARCH_ALL_MAX_SETS = 100_000;
 
 function compactToOnlineSet(row: {
   id: number;
@@ -275,6 +284,7 @@ export async function tryFetchAllHubCachedIds(
       label: null,
       pagesFetched: 0,
       truncated: true,
+      truncatedBy: "stop",
     };
   }
   if (isHubSearchCircuitOpen()) return null;
@@ -288,7 +298,8 @@ export async function tryFetchAllHubCachedIds(
     url.searchParams.set(k, String(v));
   }
   url.searchParams.set("fields", "compact");
-  url.searchParams.set("max", String(Math.min(maxSets, 100_000)));
+  const requestedMax = Math.min(maxSets, HUB_SEARCH_ALL_MAX_SETS);
+  url.searchParams.set("max", String(requestedMax));
 
   try {
     const res = await fetch(url, {
@@ -321,14 +332,21 @@ export async function tryFetchAllHubCachedIds(
         ? compact.map((row) => compactToOnlineSet(row))
         : hubIdsToStubSets(ids);
 
+    const total = body.total ?? ids.length;
+    const truncated = body.truncated === true || ids.length < total;
     return {
       beatmapsetIds: ids,
       sets,
-      total: body.total ?? ids.length,
+      total,
       stale: !!body.stale,
       label: body.label ?? null,
       pagesFetched: 1,
-      truncated: body.truncated === true || ids.length < (body.total ?? ids.length),
+      truncated,
+      truncatedBy: !truncated
+        ? null
+        : requestedMax < HUB_SEARCH_ALL_MAX_SETS
+          ? "request-max"
+          : "hub-max",
     };
   } catch {
     noteHubFailure();

@@ -4,6 +4,7 @@ feature: hub
 kind: security
 severity: medium
 confidence: verified
+status: fixed
 ---
 
 # Calc-bundle upload posts the admin token to whatever Hub URL the body names
@@ -28,3 +29,7 @@ An admin token used for a calc-bundle upload cannot be sent to an arbitrary host
 
 - `apps/server/src/routes/settings.ts` (about lines 263–289): `hubUrl: body.hubUrl?.trim() || resolveHubBaseUrl()`.
 - `apps/server/src/map-analysis/calcBundle.ts` `uploadCalcBundleToHub` (lines 554–566): `fetch(\`${hubUrl}/admin/calc-bundles\`)` with the bearer.
+
+## Status
+
+Fixed. `uploadCalcBundleToHub` (`apps/server/src/map-analysis/calcBundle.ts`) no longer takes a `hubUrl`; it always posts to `resolveHubBaseUrl()`. The `hubUrl` field is removed from the `POST /calc-bundle/export-upload` body schema (`apps/server/src/routes/settings.ts`), `exportUploadCalcBundle` (`public/lib/api.ts`) and the admin page caller. Test in `calcBundle.test.ts` shows a caller-supplied URL is never used. Knowledge: hub feature rule 19, `business/hub-permissions.md` rule 10, `flows/hub-calc-bundle-pull.md`.

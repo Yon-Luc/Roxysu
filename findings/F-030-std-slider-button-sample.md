@@ -4,6 +4,7 @@ feature: preview-replay
 kind: correctness
 severity: medium
 confidence: likely
+status: fixed
 ---
 
 # Standard slider checks use the previous frame’s buttons
@@ -27,3 +28,7 @@ Standard sim stays closer to the stored score on maps where sliders are the accu
 ## Evidence
 
 - `apps/server/src/replay/stdJudge.ts` `cursorAt` (lines 161–167): interpolated `x`/`y`, `buttons: a.buttons`.
+
+## Status
+
+Fixed. `replay/stdJudge.ts` no longer copies the previous frame's buttons onto the interpolated cursor. `buildButtonTimeline` derives press/release edges from the frames (each edge estimated up to 8 ms, at most half the gap, before the frame that records it) and `buttonsHeldAt` answers held-at-time for slider ticks and the tail end. Cursor interpolation is position only. Tests: three inter-frame press/release cases in `replay/std.test.ts`. Judgement call: the 8 ms edge lookback is an estimate, since a replay only records the frame where a change was observed.

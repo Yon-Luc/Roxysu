@@ -2,6 +2,7 @@ import type { BeatmapInsightsRepository } from "../database/BeatmapInsightsRepos
 import type {
   CollectionRepository,
   CollectionFilter,
+  RealmBeatmapIdFilter,
 } from "../database/CollectionRepository";
 import type { PlaySessionRepository } from "../database/PlaySessionRepository";
 import type { ScoreRepository } from "../database/ScoreRepository";
@@ -34,8 +35,11 @@ export class RoxysuCatalog {
     return this.collections.resolveFilter(collection);
   }
 
-  getRealmBeatmapIds(collectionId: string): string[] {
-    return this.collections.getRealmBeatmapIds(collectionId);
+  getRealmBeatmapIds(
+    collectionId: string,
+    filter?: RealmBeatmapIdFilter,
+  ): string[] {
+    return this.collections.getRealmBeatmapIds(collectionId, filter);
   }
 
   getBeatmapInsights(beatmapId: string): BeatmapInsights {

@@ -51,6 +51,12 @@ export function CollectionResultsPage({
     queryKey: ["collections", id, "results", { page }],
     queryFn: () => fetchCollectionResults(id, { page, pageSize: PAGE_SIZE }),
     enabled: Number.isFinite(id),
+    // Page changes keep the previous page on screen (header, count, grid).
+    // Another collection's payload must never stand in for this one.
+    placeholderData: (previous) =>
+      previous && "collection" in previous && previous.collection?.id === id
+        ? previous
+        : undefined,
   });
 
   const payload =
@@ -66,7 +72,7 @@ export function CollectionResultsPage({
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  if (isLoading) {
+  if (isLoading && !payload) {
     return (
       <div className="space-y-8">
         <div>
@@ -137,14 +143,15 @@ export function CollectionResultsPage({
       ) : (
         <>
           <ul
-            className={`grid gap-4 sm:grid-cols-2 lg:grid-cols-3 ${isFetching ? "opacity-70" : ""}`}
+            className={`grid gap-4 transition-opacity duration-150 sm:grid-cols-2 lg:grid-cols-3 ${isFetching ? "opacity-70" : ""}`}
+            aria-busy={isFetching}
           >
             {items.map((item, index) => (
               <li key={item.id}>
                 <Link
                   to="/practice/$beatmapId"
                   params={{ beatmapId: item.id }}
-                  className="rx-card"
+                  className="rx-card rx-card-grid"
                 >
                   <BeatmapCover
                     backgroundFileHash={item.backgroundFileHash}

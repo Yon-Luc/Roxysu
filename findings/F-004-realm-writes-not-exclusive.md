@@ -4,6 +4,7 @@ feature: smart-collections
 kind: correctness
 severity: high
 confidence: verified
+status: fixed
 ---
 
 # Realm writes are not exclusive, and the extraction pause is not counted
@@ -29,3 +30,7 @@ Collection write-back and score writes cannot interleave. Extraction stays pause
 - `apps/server/src/shared/syncCollections.ts` `writeBackInFlight` (lines 327–342) and pause set/clear (lines 413–455).
 - `apps/server/src/online-scores/pull.ts` `writeInFlight` (lines 414–421) and pause clear in `finally` (lines 438–473).
 - `apps/server/src/score-transfer/transfer.ts` `writeInFlight` (lines 333–338) and the same pause key (lines 361–402).
+
+## Status
+
+Fixed. New `apps/server/src/shared/realmWriteLock.ts`: one exclusive Realm write lock (`tryAcquireRealmWriteLock`) and a reference-counted extraction pause (`acquireExtractionPause`; "1" on first acquire, "0" when the last holder releases, always in `finally`). `syncCollections.ts`, `online-scores/pull.ts`, and `score-transfer/transfer.ts` go through it; a second Realm write returns `in_flight` (HTTP 409 on all routes). Tests: `shared/realmWriteLock.test.ts`, `online-scores/pull.commit.test.ts`. Knowledge: smart-collections rule 7, live-sync rule 5, realm-access, realm-read-only, collection-lazer-sync, flows.

@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08
+last_verified: 2026-10
 confidence: verified
 touches:
   - apps/overlay/main.c
@@ -9,6 +9,7 @@ touches:
   - nix/prebuilt.nix
   - nix/package.nix
   - apps/desktop/main.js
+  - apps/desktop/overlayApplyPolicy.js
   - apps/server/src/routes/settings.ts
   - apps/server/public/features/settings/sections/OverlayHostSection.tsx
   - packages/db/src/settings-keys.ts
@@ -55,10 +56,13 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
    commits stall because the compositor never recomposes an unchanged-mapped
    overlay above fullscreen games (visual state lagged events by one
    focus-period until each fullscreen enter/exit forced recomposition).
-9. Every remap reasserts placement (`set_layer(TOP)` then
+9. Every remap reasserts placement (explicit `gtk_widget_set_visible(TRUE)`
+   before `present()` to undo the hide, then anchors, `set_layer(TOP)` then
    `set_layer(OVERLAY)`, plus queue_draw and page-visibility reset) so the
    compositor re-slots the fresh surface above fullscreen windows instead of
-   leaving remapped overlays below them.
+   leaving remapped overlays below them. A repeated focus event for an
+   already shown surface also reasserts placement (throttled to once per
+   second). Status: compiled, not yet validated on a compositor (F-039).
 10. While shown, a 300ms tick oscillates view opacity 1↔0.999 + requests a
     PAINT phase, and each show injects a permanent sub-visible CSS animation
     (`roxysu-keepalive`) so WebKit produces fresh frames continuously —
@@ -94,7 +98,16 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
    the host child exits on its own (crash or watchdog), it is respawned
    within ~4s, rate-limited to one auto-respawn per 15s
    (`OVERLAY_RESPAWN_GAP_MS`) so a crashing binary cannot spin the poll.
-   Settings-change restarts bypass that gap.
+   The gap applies only while the desired `--url=` token equals the one the
+   exited child was spawned with; when the URL changed, the shell stops any
+   running child and spawns at once, even inside the gap.
+   **Failed polls**: a failed settings read (HTTP error or 2s timeout) carries
+   no new intent. After 5 consecutive failures the shell stops the host if the
+   last successfully read `overlay.host_enabled` was off; if the last known
+   value was on (or no read has succeeded yet) the host keeps running. A
+   successful read resets the counter. Decision logic:
+   `apps/desktop/overlayApplyPolicy.js:decideOverlayApply()` (pure,
+   unit-tested).
 15. **Resource watchdog**: the host self-terminates before driver state
    degrades. Every 20s it sums RSS over its process tree (WebKit children)
    and takes the max open-fd count; measured on NVIDIA 595.84 + WebKitGTK,

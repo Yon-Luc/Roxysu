@@ -85,6 +85,18 @@ One completed Realm extraction cycle recorded in the local mirror's `imports` ta
 
 ---
 
+### Commit phase
+
+The final short transaction of a Realm extraction cycle that finishes the Import (`success`, watermarks, changed ids) together with orphan deletes and one-shot flags. Streaming batches before it commit on their own.
+
+**Not:** "sync commit", "transaction" alone
+
+**In code:** `commitImport` in `apps/realm-reader/src/importJournal.ts`
+
+**See:** [decisions/extraction-commit-phase.md](decisions/extraction-commit-phase.md)
+
+---
+
 ### Online score pull
 
 A manual fetch of one ruleset's ranked personal bests from osu!api, then an optional write of the missing ones into Realm so lazer lists them as local scores.
@@ -448,7 +460,52 @@ scanning, procedural PreviewSkin / StdSkin
 
 **In code:** Realm class `Skin`; `syncRealmSkins.ts`; `GET /api/skins`
 
+A Realm skin is also a **Fusion donor** (raw file map via `GET /api/skins/:id/archive`).
+
 **See:** [features/preview-replay/](features/preview-replay/index.md)
+
+---
+
+### Skin fusion
+
+Exporting ONE `.osk` composed from several **Fusion donors**, each supplying the
+assets and layout of chosen ruleset slots (osu!standard, taiko, catch, BMS, each
+mania key count). Delivery is a download only; **Realm** is never written.
+
+**Not:** "skin import", "skin merge", **Imported mania skin** (browser store)
+
+**In code:** `apps/server/src/shared/skinFusion/`, `SkinFusionEditor.tsx`
+
+**See:** [features/skin-fusion/](features/skin-fusion/index.md)
+
+---
+
+### Fusion donor
+
+A skin used as a source in **Skin fusion**: a **Realm skin**, a dropped `.osk` /
+`.zip`, or a folder, kept as its raw file map plus parsed `skin.ini` and **Layout
+JSON**.
+
+**Not:** "source skin" in UI copy only, **Imported mania skin**
+
+**In code:** `SkinDonor`, `buildDonor()` in `skinFusion/plan.ts`
+
+**See:** [features/skin-fusion/](features/skin-fusion/index.md)
+
+---
+
+### Layout JSON
+
+osu!lazer's skin layout files (`MainHUDComponents.json`, `Playfield.json`,
+`SongSelect.json`, plus `skininfo.json`). `DrawableInfo` is keyed per ruleset
+(`global`, `osu`, `taiko`, `fruits`, `mania`, `bms`); sprite components name
+files via `sprite_name`.
+
+**Not:** `skin.ini`
+
+**In code:** `skinFusion/layout.ts`
+
+**See:** [features/skin-fusion/](features/skin-fusion/index.md)
 
 ---
 

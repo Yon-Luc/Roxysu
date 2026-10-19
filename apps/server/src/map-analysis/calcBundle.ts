@@ -550,10 +550,13 @@ export async function maybePullCalcBundleOnBoot(db: Db): Promise<void> {
   }
 }
 
-/** Chunked admin upload of local export to Hub. */
+/**
+ * Chunked admin upload of local export to Hub.
+ * The target is always `resolveHubBaseUrl()`; the admin bearer is never sent
+ * to a caller-supplied host.
+ */
 export async function uploadCalcBundleToHub(opts: {
   db: Db;
-  hubUrl: string;
   token: string;
   roxysuVersion: string;
   label?: string;
@@ -563,7 +566,7 @@ export async function uploadCalcBundleToHub(opts: {
   algorithms: string[];
 }> {
   const entries = await exportCalcBundleEntries(opts.db);
-  const hubUrl = opts.hubUrl.replace(/\/$/, "");
+  const hubUrl = resolveHubBaseUrl().replace(/\/$/, "");
   let chunks = 0;
   let lastAlgorithms: string[] = [];
   let entryCount = 0;

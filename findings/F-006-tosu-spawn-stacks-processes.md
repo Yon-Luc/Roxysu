@@ -4,6 +4,7 @@ feature: tosu-live
 kind: correctness
 severity: high
 confidence: verified
+status: fixed
 ---
 
 # Tosu auto-start can stack detached processes
@@ -28,3 +29,7 @@ One tosu process instead of a growing set of copies. Live overlay, Now selected,
 
 - `apps/server/src/tosu/spawn.ts` `spawnTosu` (lines 32–41): `detached: true`, `child.unref()`, pid returned and then dropped by the caller.
 - `apps/server/src/tosu/live.ts` `refreshProbeAndMaybeSpawn` (lines 125–141): spawn when `!probe.httpUp` and `now - lastSpawnAttemptAt >= SPAWN_COOLDOWN_MS`.
+
+## Status
+
+Fixed. New pure gate `apps/server/src/tosu/spawnGate.ts` (`decideSpawn`, `recordSpawn`, `resetSpawnGate`): the spawned pid is remembered and a new spawn is skipped while it is alive (`process.kill(pid, 0)`); retries back off 60s/120s and stop after 3 consecutive attempts, with a warning in the live warnings list. A reachable HTTP probe or a manual `POST /api/tosu/start` resets the gate. `refreshProbeAndMaybeSpawn` in `apps/server/src/tosu/live.ts` uses it. Tests: `spawnGate.test.ts`, `live.probe.test.ts`.

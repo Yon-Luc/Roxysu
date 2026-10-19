@@ -4,6 +4,7 @@ feature: bms
 kind: perf
 severity: medium
 confidence: verified
+status: fixed
 ---
 
 # Every BMS tables request refreshes the Hub catalogue first
@@ -27,3 +28,7 @@ The tables tab opens from disk. Hub load drops to the refresh interval.
 ## Evidence
 
 - `apps/server/src/routes/bms.ts` `refreshTableCache` (lines 35–72) and the `/tables` handler (lines 151–157): `await refreshTableCache(db)` inside try/catch on every request.
+
+## Status
+
+Fixed. Verified against the code on 2026-10-19: BMS tables requests return the stored catalogue and refresh in the background on a 15 minute TTL (`apps/server/src/routes/bms.ts`, `scheduleTableRefresh`).

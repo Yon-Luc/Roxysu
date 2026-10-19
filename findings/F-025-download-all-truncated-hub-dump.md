@@ -4,6 +4,7 @@ feature: download-mirrors
 kind: correctness
 severity: medium
 confidence: verified
+status: fixed
 ---
 
 # Download-all treats a truncated Hub dump as the full match set
@@ -28,3 +29,7 @@ If `truncated` is true, either fall through to the mirror crawl for the remainde
 
 - `apps/server/src/mirrors/searchOnline.ts` (lines 486–519): on a hub hit, return `hitPageCap: hub.truncated` and do not crawl mirrors.
 - `apps/hub/src/services/searchIndex.ts` `querySearchIndexAll`: `truncated: total > rows.length` after `.limit(maxSets)`.
+
+## Status
+
+Fixed. `tryFetchAllHubCachedIds` now reports `truncatedBy` (`stop`, `request-max`, `hub-max`). When Hub's own dump cap (`hub-max`) truncated the list, `collectMatchingOnlineBeatmapsets` seeds the result from the dump and continues the live mirror crawl, deduping by set id. If the crawl still cannot cover Hub's reported total, `hitPageCap` is set so the UI shows the existing safety-cap marker instead of presenting the list as complete. A caller-imposed page cap or a cancel keeps the old behaviour (honest cap flag, no crawl). Files: `apps/server/src/mirrors/hubSearch.ts`, `apps/server/src/mirrors/searchOnline.ts`; test `apps/server/src/mirrors/searchOnline.hubTruncated.test.ts`.

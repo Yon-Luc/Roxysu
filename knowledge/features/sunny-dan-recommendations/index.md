@@ -13,6 +13,8 @@ touches:
   - apps/server/src/map-analysis/sunnyDanJob.ts
   - apps/server/src/map-analysis/computeDanVariants.ts
   - apps/server/src/map-analysis/danVariantJob.ts
+  - apps/server/src/analytics/playerStatsCache.ts
+  - apps/server/src/routes/settings.ts
   - apps/server/src/map-analysis/computeReworkDan.ts
   - apps/server/src/map-analysis/reworkDanJob.ts
   - apps/server/src/routes/practice.ts
@@ -65,6 +67,9 @@ Three estimators write to the same store, keyed by `algorithm`: `sunny`, `daniel
    `recommendPush|Accuracy|Consistency|Deficit` in
    `apps/server/src/analytics/recommend/focusSettings.ts` + `sevenKSkill.ts` +
    `strategies.ts`.
+   Changing either setting (`PATCH /api/settings`) also drops the player stats
+   cache (`invalidatePlayerStatsCache()` in `routes/settings.ts`) so the next
+   Stats view reflects the new bands.
 
 ## Rework dan rules
 
@@ -172,7 +177,8 @@ Three estimators write to the same store, keyed by `algorithm`: `sunny`, `daniel
     - Paused jobs set status `paused` and re-check every 5 s, resuming on their
       own. Wired into the rework, Sunny, Daniel and pattern jobs; the rework and
       pattern jobs check between maps via `shouldContinue`, the Sunny/Daniel
-      jobs between batches. A backfill must never be the process that pushes a
+      jobs between batches. The dan variant job pauses the same way (status
+      `paused`, 5 s poll) and also checks before every combo (rule 14). A backfill must never be the process that pushes a
       busy desktop into swap exhaustion — the OOM killer then takes arbitrary
       processes (observed: it killed the terminal, not the server). The Settings
       job panel shows `memory` (RSS · free · heap used/limit) and
@@ -195,6 +201,11 @@ Three estimators write to the same store, keyed by `algorithm`: `sunny`, `daniel
     timeline. Request-path fills (`computeOnePattern`) stay on the binning call
     because they never run in bulk. Covered by
     `computePatternAnalysis.integration.test.ts`.
+14. **The dan variant job is memory-aware, yields per combo, and does not re-scan on a null delta.**
+    - `backfillDanVariants` (async) checks `shouldContinue` (`isMemoryPressure`) before each combo and yields the event loop after each (`yieldForBackfill`). The job drops only combos that ran when a batch stops early, then pauses and resumes on its own. `backfillDanVariantsSync` remains for tests and one-shot callers.
+    - An import with `changed_score_ids = null` means "unknown delta", not "every score". The job runs the unrestricted `collectDanVariantCombos` for it only when the mania score fingerprint (count, newest play, total mods length) differs from the one the last full scan read; the boot scan records that fingerprint. Non-null deltas stay restricted to the listed score ids.
+    - When a run wrote variant rows (`computedThisRun > 0`), `finish()` calls `invalidatePlayerStatsCache()`: the stats cache ignores `dashboard.updated`, and skill axes drop modded plays until their variant exists.
+    - Covered by `danVariantJob.test.ts`.
 
 Benchmarks: `packages/mania-difficulty` `bun run bench` (per-phase calculator),
 `apps/server` `bun run bench:rework` (end-to-end backfill over a synthetic
@@ -230,7 +241,7 @@ old non-yielding loop).
 - `packages/mania-pattern-analysis/src/analyze.ts:analyzeManiaBackfillFromOsuText` — chart-level only, no timeline
 - `apps/server/src/map-analysis/computePatternAnalysis.ts:backfillPatternAnalysis` — async, yields per map, honours `shouldContinue`
 - `apps/server/src/map-analysis/computeDanVariants.ts` — combo collection, backfill, variant lookups
-- `apps/server/src/map-analysis/danVariantJob.ts` — post-import incremental job (also one-time recompute of pre-conversion Daniel variant rows, settings flag `dan_variants.daniel_cvt_recompute`)
+- `apps/server/src/map-analysis/danVariantJob.ts` — post-import incremental job (memory-guarded, per-combo yield; invalidates the player stats cache after writing rows; also one-time recompute of pre-conversion Daniel variant rows, settings flag `dan_variants.daniel_cvt_recompute`)
 - `apps/server/src/map-analysis/computeSunnyDan.ts:getSunnyDanForPatternMods` — mod-aware single-map reads
 - `apps/server/src/map-analysis/reworkEstimator.ts:analyzeManiaOnceFromText` — single pass, both stores
 - `apps/server/src/map-analysis/reworkEstimator.ts:runReworkEstimatorFromText` — dan only, no profile

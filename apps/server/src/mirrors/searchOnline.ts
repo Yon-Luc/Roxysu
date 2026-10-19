@@ -470,6 +470,17 @@ export async function collectMatchingOnlineBeatmapsets(
         hide: new Set<number>(),
       };
 
+  // Sets already collected from a truncated Hub dump (F-025). The live mirror
+  // crawl below continues from here so a capped dump is never reported as the
+  // full match set.
+  let hubSeed: {
+    sets: OnlineBeatmapSet[];
+    seen: Set<number>;
+    ownedSkipped: number;
+    pagesFetched: number;
+    total: number;
+  } | null = null;
+
   // Same eligibility as paginated Download search (exact key=N; Hub filters secondary).
   if (hubElig) {
     const hub = await tryFetchAllHubCachedIds(
@@ -510,21 +521,39 @@ export async function collectMatchingOnlineBeatmapsets(
         ownedSkipped,
       });
 
-      return {
-        sets: countOnly ? [] : matchedSets,
-        matched: matchedSets.length,
+      // Hub's own dump cap (not the caller's cap, not a cancel): the remainder
+      // exists only on the mirrors, so keep enumerating there.
+      const needsMirrorRemainder =
+        hub.truncated &&
+        hub.truncatedBy === "hub-max" &&
+        !hitSetCap &&
+        !opts.shouldStop?.();
+
+      if (!needsMirrorRemainder) {
+        return {
+          sets: countOnly ? [] : matchedSets,
+          matched: matchedSets.length,
+          ownedSkipped,
+          pagesScanned: hub.pagesFetched,
+          hitPageCap: hub.truncated,
+          hitSetCap,
+        };
+      }
+
+      hubSeed = {
+        sets: matchedSets,
+        seen,
         ownedSkipped,
-        pagesScanned: hub.pagesFetched,
-        hitPageCap: hub.truncated,
-        hitSetCap,
+        pagesFetched: hub.pagesFetched,
+        total: hub.total,
       };
     }
   }
 
-  const sets: OnlineBeatmapSet[] = [];
-  const seen = new Set<number>();
-  let matched = 0;
-  let ownedSkipped = 0;
+  const sets: OnlineBeatmapSet[] = hubSeed && !countOnly ? hubSeed.sets : [];
+  const seen = hubSeed ? hubSeed.seen : new Set<number>();
+  let matched = hubSeed ? hubSeed.sets.length : 0;
+  let ownedSkipped = hubSeed ? hubSeed.ownedSkipped : 0;
   let pagesScanned = 0;
   let hitPageCap = false;
   let hitSetCap = false;
@@ -594,6 +623,16 @@ export async function collectMatchingOnlineBeatmapsets(
     if (pagesScanned >= maxPages) {
       hitPageCap = true;
     }
+  }
+
+  if (hubSeed) {
+    // The crawl can end early (page fetch failures read as an empty page). If
+    // the union of ids is still smaller than what Hub says matches, the list is
+    // demonstrably incomplete: flag the cap rather than present it as full.
+    if (seen.size < hubSeed.total && !opts.shouldStop?.()) {
+      hitPageCap = true;
+    }
+    pagesScanned += hubSeed.pagesFetched;
   }
 
   return {

@@ -7,11 +7,17 @@ touches:
   - apps/hub/src/services/hubRole.ts
   - apps/hub/src/services/clientIp.ts
   - apps/hub/src/services/hubEnv.ts
+  - apps/hub/src/services/oauthState.ts
+  - apps/server/src/hubOAuthPending.ts
+  - apps/server/src/routes/system.ts
   - apps/hub/src/services/collectionWrite.ts
   - apps/hub/src/routes/collections.ts
   - apps/hub/src/routes/search.ts
   - apps/hub/src/routes/calcBundles.ts
   - apps/hub/src/services/cache.ts
+  - apps/hub/src/services/singleFlight.ts
+  - apps/hub/src/services/cacheRefreshCron.ts
+  - apps/hub/src/routes/admin.ts
   - apps/hub/src/services/calcBundles.ts
   - apps/hub/src/services/searchIndex.ts
   - apps/hub/src/services/hinamizawa.ts
@@ -81,8 +87,8 @@ Networked collaboration / discovery — not required for offline practice analyt
 6. Rate-limit identity ignores `X-Forwarded-For` / `X-Real-Ip` unless `HUB_TRUST_PROXY=1`.
    **Enforced by:** `apps/hub/src/services/clientIp.ts` — status: verified
 
-7. Production CORS must be an explicit origin list (`CORS_ORIGIN`); `*` and unset refuse to listen.
-   **Enforced by:** `apps/hub/src/services/hubEnv.ts:resolveCorsOrigin()` — status: verified
+7. CORS must be an explicit origin list (`CORS_ORIGIN`) in production and when `HUB_LISTEN` names a non-loopback host (a published port); `*` and unset refuse to listen. Otherwise an unset `CORS_ORIGIN` defaults to the Roxysu client loopback origins (`http://127.0.0.1:4321`, `http://localhost:4321`); an explicit `*` is honoured only on a non-published Hub and logs a warning.
+   **Enforced by:** `apps/hub/src/services/hubEnv.ts:resolveCorsOrigin()` / `isHubPublished()` — status: verified
    **Unauthorized result:** process does not bind
 
 8. Collection star/mode/key stats are computed from maps on the Hub; client-supplied stats are not accepted. When the collection lists beatmap online ids, only those difficulties are sampled; otherwise every difficulty of each beatmapset is sampled.
@@ -120,6 +126,18 @@ Networked collaboration / discovery — not required for offline practice analyt
 17. Insane, Satellite, and Stella are stored when the Hub starts, from the catalogues shipped in `packages/db/bms-tables`. Their identity is the bundled source name, so a later start does not add a second version of the same catalogue.
     **Enforced by:** `apps/hub/src/services/bms.ts:seedBundledBmsTables()` — status: verified
 
+18. Hub OAuth handoff redeem needs a handoff verifier. The client that starts login keeps a high-entropy verifier (never in a URL or redirect) and sends only its SHA-256 challenge to `GET /auth/login` (required). The Hub stores the challenge with the one-time JWT and redeems it only via `POST /auth/handoff/:id` with the matching verifier (constant-time compare). A wrong or missing verifier returns the same 404 as an unknown id, does not consume the handoff, and still counts toward the per-IP rate limit (30 per minute). Knowing the handoff id (visible in the redirect) is not enough. The `GET` redeem no longer exists.
+   **Enforced by:** `apps/hub/src/services/oauthState.ts:consumeHandoff()` and `apps/hub/src/routes/auth.ts` `/login`, `POST /handoff/:id` — status: verified
+   **Unauthorized result:** 404 (login without a valid challenge: 400)
+
+19. The client app's Hub calc bundle upload sends the admin bearer only to `resolveHubBaseUrl()`. A request body `hubUrl` does not exist and is ignored.
+   **Enforced by:** `apps/server/src/map-analysis/calcBundle.ts:uploadCalcBundleToHub()` — status: verified
+   **Unauthorized result:** N/A (no caller-selected target)
+
+20. Hub search index refresh is single-flight per `search_cache` row. Public stale refresh (`GET /search`, `GET /search/all`), admin prime and `POST /admin/cache/:id/refresh`, and the cron tick all call `refreshCacheSingleFlight(cacheId)`, so overlapping refreshes of one row share one crawl and one delete-then-insert of `search_index_sets`. A failure rejects every waiter and clears the entry. The map is in Hub process memory (one Hub process).
+   **Enforced by:** `apps/hub/src/services/cache.ts:refreshCacheSingleFlight` (built on `apps/hub/src/services/singleFlight.ts`) — status: verified
+   **Unauthorized result:** N/A (integrity rule: readers never see a half-replaced index from two overlapping refreshes)
+
 ## Important symbols
 
 - `apps/hub/src/*`
@@ -127,6 +145,7 @@ Networked collaboration / discovery — not required for offline practice analyt
 - `apps/hub/src/services/searchIndex.ts` — persist stubs as rows; `GET /search` pages in SQL; `GET /search/all` dumps ids/compact/full. Boot `migrateBlobsToRows()` lifts leftover JSON blobs.
 - `apps/hub/src/services/cache.ts:parseStoredStubs()` — dual-read leftover blob JSON for one-shot migration only
 - `apps/hub/src/services/hinamizawa.ts:fetchAllBeatmapsetStubs()` — cache refresh crawls Hinamizawa search pages into enriched stubs; optional `keymode` keeps sets using embedded `beatmaps[].cs`. Do not N+1 `/s/{id}` for key filter
+- `apps/hub/src/services/cache.ts:refreshCacheSingleFlight()` — the only entry point for index refresh (never call `refreshCache` directly from a route or the cron)
 - `apps/hub/src/services/hubEnv.ts:isHubSearchIndexEnabled()` / `isHubSearchHttpCacheEnabled()` — prod kill switches
 - `apps/server/public/features/hub/HubAdminCachePage.tsx` — admin prime UI: base fields only (mode, status, keys, sort, frequency); secondary filters are runtime on Download Maps
 - `apps/server/public/features/hub/HubAdminCalcBundlesPage.tsx` — admin Hub calc bundle upload/list/delete
@@ -136,7 +155,8 @@ Networked collaboration / discovery — not required for offline practice analyt
 - `apps/server/public/lib/hub.ts` — runtime Community client (clears JWT on Hub 401; delete + export). `packages/hub-client` is the Node Eden client and is not used in the browser
 - `apps/server/public/features/hub/HubSessionChip.tsx` — app-wide osu! OAuth state on the right of the sidebar scores/maps lines. On small screens it floats bottom-right above the tab bar, and sits in the More sheet while that sheet is open. Logged out shows Log in; logged in shows avatar and username. Same JWT as Community. Not client app auth.
 - `apps/server/src/mirrors/hubSearch.ts:mirrorParamsToHubQuery()` / `tryFetchAllHubCachedIds()` — maps Download params to Hub GET `/search` (page) or `/search/all` (count/download-all). Circuit breaker skips Hub for 30s after timeout/5xx.
-- `apps/server/src/routes/system.ts` — client app OAuth handoff helpers
+- `apps/server/src/routes/system.ts` — client app OAuth handoff helpers: `POST /hub-oauth/begin` returns `{ handoff, verifier, challenge }`; `POST /hub-oauth/pending` checks the verifier locally (`apps/server/src/hubOAuthPending.ts:verifyHubOAuthHandoffVerifier()`) and presents it to Hub
+- `apps/server/public/lib/hub.ts:prepareWebHubLoginChallenge()` — web login keeps the verifier in `sessionStorage` (same tab) and redeems it in `redeemHubHandoff()`
 - Community detail: owner or admin can edit/delete; Save calls `GET /collections/:id/export` so `downloadCount` increments
 - Browse mode chip (`q=mode=m`) matches `dominantMode` **or** the corresponding Hub tag (`mania` / `std` / `ctb` / `taiko`)
 - Community Favorites tab uses `GET /collections/me/favorites`
@@ -144,7 +164,7 @@ Networked collaboration / discovery — not required for offline practice analyt
 - A shared collection stores one `collection_maps` row per beatmapset (download / ownership) and one `collection_beatmaps` row per difficulty that was in the source collection. An empty difficulty list is legacy whole-set membership.
 - Publishing a smart or Realm collection sends those beatmap online ids. Saving it locally stores them on the hub-added row and collection write-back includes only those beatmaps.
 - Community Added tab renders from local hub-added rows; ownership uses `POST /api/mirrors/ownership/diff` rather than shipping every owned set ID.
-- OAuth callback accepts only `h=` (handoff id), never a JWT in the URL
+- OAuth callback accepts only `h=` (handoff id), never a JWT or verifier in the URL
 - `apps/hub/src/db.ts` — `bun run db:migrate` and Hub boot both apply Hub store migrations
 - `apps/hub/Dockerfile` — build context is repo root. Copy every `apps/*/package.json` so `bun.lock`'s workspace graph stays valid under `--frozen-lockfile`.
 - `apps/hub/docker-compose.yml` — Coolify run config: pull prebuilt image, named volume at `/app/data`, `expose` 4322 (no host `ports`), `HUB_TRUST_PROXY=1`, production CORS allowlist for local Community; defaults `HUB_SEARCH_HTTP_CACHE=0` for safe rollout.
@@ -153,7 +173,7 @@ Networked collaboration / discovery — not required for offline practice analyt
 
 Hub does not publish to Cloudflare Workers. When the Hub hostname is orange-cloud proxied:
 
-1. Origin hits set `CDN-Cache-Control: public, max-age=…` (capped by `HUB_SEARCH_EDGE_CACHE_MAX_AGE_SEC`, default 1h) when `HUB_SEARCH_HTTP_CACHE=1`; browsers get `private, no-store`.
+1. Origin **fresh** hits set `CDN-Cache-Control: public, max-age=…` (capped by `HUB_SEARCH_EDGE_CACHE_MAX_AGE_SEC`, default 1h) when `HUB_SEARCH_HTTP_CACHE=1`; browsers get `private, no-store`. A `hit-stale` response, a miss, and a fresh hit whose row has a refresh in flight are `no-store` on every header, so the edge does not pin the pre-refresh page list. Pages cached before a refresh commit still live until their TTL (no purge; bypass the CF rule to flush). `apps/hub/src/routes/search.ts:searchPageEdgeTtlSec()` decides.
 2. JSON is **not** CF-cacheable by default — ops must add a named Cache Rule: `GET` + path `/search*` → Eligible for cache, respect origin TTL. Bypass that rule for instant edge kill.
 3. Incident order: `HUB_SEARCH_INDEX=0` (live mirror) → CF Bypass `/search*` → `HUB_SEARCH_HTTP_CACHE=0` (+ Bypass until TTL/purge).
 
@@ -208,7 +228,7 @@ update tag validation — status: verified
 ## Failure behavior
 
 1. Community Log out removes the JWT from `localStorage` only. Hub does not keep a revoke list; a copied JWT stays valid until expiry (30 days). Hub 401 still clears the stored JWT.
-2. OAuth pending codes live in Hub process memory and are lost on restart.
+2. OAuth pending codes and handoffs live in Hub process memory and are lost on restart. A web login must finish in the same browser tab (its verifier is in `sessionStorage`); a login opened elsewhere cannot be redeemed.
 
 ## Related knowledge
 

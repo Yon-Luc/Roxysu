@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08
+last_verified: 2026-10
 confidence: verified
 touches:
   - apps/server/public/lib/replayVideoExport.ts
@@ -17,13 +17,17 @@ Download the current score rewatch as an MP4 to share or archive.
 ```text
 ScoreReplayModal (rewatch)
   → Export
-  → ReplayVideoExportOptionsModal (preset + hide background + size estimate)
+  → ReplayVideoExportOptionsModal (preset + hide background + size estimate,
+      memory warning when the browser cannot stream a large file)
+  → uncapped preset + File System Access API: showSaveFilePicker (in the click)
   → exportReplayVideo()
        ├── decodeAudioData(localBeatmapAudioUrl)
        ├── optional background (unless Discord / hide-bg)
        ├── paint composed frames @ preset fps
        ├── mediabunny CanvasSource + AudioBufferSource → Mp4OutputFormat
-       └── downloadBlob(filename)
+       │     (StreamTarget to the chosen file, or BufferTarget in memory)
+       ├── abort / error → Output.cancel(), release canvases
+       └── downloadBlob(filename) unless already written to disk
 ```
 
 ## Business guarantee

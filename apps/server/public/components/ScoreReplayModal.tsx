@@ -35,7 +35,9 @@ import { LiveManiaPlay, type PracticeRange } from "../lib/liveManiaPlay";
 import {
   addReplayAccuracy,
   emptyReplayAccuracy,
+  hudJudgments,
   replayAccuracy,
+  taikoPlayfieldJudgments,
 } from "../lib/replayAccuracy";
 import {
   emptyJudgmentCounts,
@@ -91,9 +93,15 @@ import {
   type PreviewRuleset,
 } from "./previewPrefs";
 import {
+  buildReplayVideoFilename,
   downloadBlob,
   exportReplayVideo,
+  getReplayVideoExportPreset,
+  pickReplayVideoSaveHandle,
+  shouldStreamToDisk,
+  supportsStreamingSave,
   type ReplayVideoExportProgress,
+  type ReplayVideoSaveHandle,
 } from "../lib/replayVideoExport";
 import {
   ReplayVideoExportOptionsModal,
@@ -318,6 +326,16 @@ export function ScoreReplayModal({
     }
     return buildReplayAnalysis(replayData);
   }, [analysisOn, replayData]);
+
+  // Taiko rows are the only ones the taiko playfield understands; narrow by
+  // ruleset instead of casting the mixed std/taiko judgment union.
+  const taikoJudgments = useMemo(
+    () =>
+      replayData?.beatmap.rulesetShortName === "taiko"
+        ? taikoPlayfieldJudgments(replayData.judgments)
+        : undefined,
+    [replayData],
+  );
 
   const chartEndMs = useMemo(
     () => chartEndMsFromReplay(replayData),
@@ -548,6 +566,29 @@ export function ScoreReplayModal({
 
   async function startExport(choices: ReplayVideoExportChoices) {
     if (!replayData || exporting || isPlay) return;
+    // The save dialog needs the click's transient activation, so open it
+    // before any await. Uncapped presets stream to the chosen file; capped
+    // presets (Discord / Compact) stay small enough to buffer in memory.
+    let saveHandle: ReplayVideoSaveHandle | undefined;
+    if (
+      shouldStreamToDisk(
+        getReplayVideoExportPreset(choices.presetId),
+        supportsStreamingSave(),
+      )
+    ) {
+      try {
+        saveHandle = await pickReplayVideoSaveHandle(
+          buildReplayVideoFilename(replayData),
+        );
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") {
+          // Dialog dismissed: leave the options modal open.
+          return;
+        }
+        // Picker unavailable or blocked: fall back to the in-memory download.
+        saveHandle = undefined;
+      }
+    }
     setExportOptionsOpen(false);
     setExportError(null);
     setExporting(true);
@@ -579,10 +620,11 @@ export function ScoreReplayModal({
         previewSkin,
         presetId: choices.presetId,
         hideBackground: choices.hideBackground,
+        saveHandle,
         signal: ac.signal,
         onProgress: setExportProgress,
       });
-      downloadBlob(result.blob, result.filename);
+      if (result.blob) downloadBlob(result.blob, result.filename);
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
         // cancelled
@@ -976,8 +1018,10 @@ export function ScoreReplayModal({
   // Live HUD from stored replay judgments (rewatch mode only).
   useEffect(() => {
     if (mode !== "rewatch" || !replayData) return;
-    const { judgments } = replayData;
     const ruleset = replayData.beatmap.rulesetShortName;
+    // Taiko: only `hit` rows count (drumroll ticks / swell rows are skipped),
+    // matching taikoJudge.ts accuracy and counts.
+    const judgments = hudJudgments(ruleset, replayData.judgments);
     const weight =
       ruleset === "taiko" ? TAIKO_RESULT_WEIGHT : MANIA_RESULT_WEIGHT;
     const scale = ruleset === "mania" ? MANIA_ACC_SCALE : TAIKO_ACC_SCALE;
@@ -1372,7 +1416,7 @@ export function ScoreReplayModal({
                       <TaikoPlayfield
                         hitObjects={replayData.beatmap.taikoHitObjects ?? []}
                         frames={replayData.taikoFrames ?? []}
-                        judgments={replayData.judgments}
+                        judgments={taikoJudgments}
                         getCurrentTimeMs={mapTimeMs}
                         hidden={replayData.playback.acronyms.includes("HD")}
                         skin={taikoSkin}

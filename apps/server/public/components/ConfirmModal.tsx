@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
+import { focusTrapTarget, listFocusable } from "../lib/focusTrap";
 
 export function ConfirmModal({
   open,
@@ -22,13 +23,42 @@ export function ConfirmModal({
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
 
+  // Callers pass inline closures; keep them in refs so a re-render does not
+  // re-run the effect and lose the element that must regain focus on close.
+  const onCloseRef = useRef(onClose);
+  const busyRef = useRef(busy);
+  onCloseRef.current = onClose;
+  busyRef.current = busy;
+
   useEffect(() => {
     if (!open) return;
     const prev = document.activeElement as HTMLElement | null;
     dialogRef.current?.focus();
 
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape" && !busy) onClose();
+      if (e.key === "Escape" && !busyRef.current) {
+        onCloseRef.current();
+        return;
+      }
+      if (e.key === "Tab" && dialogRef.current) {
+        const dialog = dialogRef.current;
+        const focusables = listFocusable(dialog);
+        const active = document.activeElement as HTMLElement | null;
+        // The dialog container itself is focused on open; treat it as outside
+        // the cycle so Tab lands on the first control.
+        const target = focusTrapTarget(
+          focusables,
+          active === dialog ? null : active,
+          e.shiftKey,
+        );
+        if (target) {
+          e.preventDefault();
+          target.focus();
+        } else if (focusables.length === 0) {
+          e.preventDefault();
+          dialog.focus();
+        }
+      }
     }
     document.addEventListener("keydown", onKeyDown);
     const previousOverflow = document.body.style.overflow;
@@ -39,7 +69,7 @@ export function ConfirmModal({
       document.body.style.overflow = previousOverflow;
       prev?.focus();
     };
-  }, [open, busy, onClose]);
+  }, [open]);
 
   if (!open) return null;
 

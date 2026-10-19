@@ -16,6 +16,7 @@ import {
   cacheHasIndexRows,
   replaceSetsForCache,
 } from "./searchIndex";
+import { createSingleFlight } from "./singleFlight";
 
 const KEY_FILTER_CONCURRENCY = 8;
 const UA = "roxysu-hub/0.1 (+https://github.com/Yon-Luc/Roxysu)";
@@ -639,6 +640,13 @@ export async function refreshCache(cacheId: number): Promise<void> {
         : ` across ${result.pages} pages`),
   );
 }
+
+/**
+ * Single-flight `refreshCache` per cache row. Public stale refresh, admin
+ * refresh/prime, and the cron tick all call this so two crawls of one row never
+ * interleave `replaceSetsForCache` (delete-then-insert). Errors reach every waiter.
+ */
+export const refreshCacheSingleFlight = createSingleFlight(refreshCache);
 
 /** One-shot: lift legacy `beatmapset_ids` JSON into search index rows. */
 export async function migrateBlobsToRows(): Promise<number> {

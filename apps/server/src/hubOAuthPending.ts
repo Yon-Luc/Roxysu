@@ -1,11 +1,13 @@
 /** In-memory one-shot hub OAuth handoff for Electron system-browser login. */
 
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 const TTL_MS = 5 * 60 * 1000;
 const MAX_PENDING = 64;
 
 type Pending = {
+  /** base64url SHA-256 of the verifier returned only to the initiating UI. */
+  challenge: string;
   /** Set when browser hits /complete with matching handoff id. */
   ready: boolean;
   expiresAt: number;
@@ -32,12 +34,48 @@ function randomHandoffId(): string {
   return randomBytes(24).toString("base64url");
 }
 
-/** Start a desktop login — returns an opaque handoff id the UI must poll. */
-export function beginHubOAuthHandoff(): string {
+export type HubOAuthBegin = {
+  /** Opaque id: appears in the login URL and the /complete redirect. */
+  handoff: string;
+  /** Secret kept by the initiating UI; never put in a URL or redirect. */
+  verifier: string;
+  /** base64url SHA-256 of `verifier`; safe to put in the Hub login URL. */
+  challenge: string;
+};
+
+function challengeFor(verifier: string): string {
+  return createHash("sha256").update(verifier).digest("base64url");
+}
+
+/** Start a desktop login. The verifier is returned once, to the caller only. */
+export function beginHubOAuthHandoff(): HubOAuthBegin {
   prune();
-  const id = randomHandoffId();
-  pendingById.set(id, { ready: false, expiresAt: Date.now() + TTL_MS });
-  return id;
+  const handoff = randomHandoffId();
+  const verifier = randomBytes(32).toString("base64url");
+  const challenge = challengeFor(verifier);
+  pendingById.set(handoff, {
+    challenge,
+    ready: false,
+    expiresAt: Date.now() + TTL_MS,
+  });
+  return { handoff, verifier, challenge };
+}
+
+/**
+ * Constant-time check that `verifier` belongs to this pending handoff.
+ * Does not consume or alter the handoff.
+ */
+export function verifyHubOAuthHandoffVerifier(
+  handoffId: string,
+  verifier: string,
+): boolean {
+  prune();
+  const entry = pendingById.get(handoffId.trim());
+  if (!entry || entry.expiresAt <= Date.now()) return false;
+  if (!/^[A-Za-z0-9_-]{43,128}$/.test(verifier)) return false;
+  const a = Buffer.from(entry.challenge);
+  const b = Buffer.from(challengeFor(verifier));
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 /**

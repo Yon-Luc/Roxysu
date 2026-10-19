@@ -3,7 +3,7 @@ import { cors } from "@elysiajs/cors";
 import { cron } from "@elysiajs/cron";
 import { db, runMigrations } from "./db";
 import { resolveJwtSecret } from "./services/jwtSecret";
-import { resolveCorsOrigin } from "./services/hubEnv";
+import { resolveCorsOrigin, resolveHubListenHost } from "./services/hubEnv";
 import { migrateBlobsToRows, rehashSearchCacheKeys } from "./services/cache";
 import { tickSearchCacheRefreshes } from "./services/cacheRefreshCron";
 import { authRoutes } from "./routes/auth";
@@ -26,6 +26,7 @@ await migrateBlobsToRows();
 await seedBundledBmsTables(db);
 
 const PORT = parseInt(process.env.PORT ?? "4322", 10);
+const LISTEN_HOST = resolveHubListenHost();
 
 const app = new Elysia()
   .use(
@@ -67,8 +68,8 @@ const app = new Elysia()
     set.status = 500;
     return { message: "Internal server error" };
   })
-  .listen(PORT);
+  .listen(LISTEN_HOST ? { port: PORT, hostname: LISTEN_HOST } : PORT);
 
-console.log(`[hub] Running at http://localhost:${PORT}`);
+console.log(`[hub] Running at http://${LISTEN_HOST ?? "localhost"}:${PORT}`);
 
 export type App = typeof app;

@@ -31,9 +31,23 @@ function fakeSet(i: number) {
   };
 }
 
+const PARENT_SET_ID = "00000000-0000-0000-0000-000000000002";
+
 describe("streamMappedUpsert", () => {
   let dir: string;
   let db: Db;
+
+  /** beatmaps.set_id is an enforced foreign key (F-012). */
+  function seedParentSet() {
+    db.insert(beatmapSets)
+      .values({
+        id: PARENT_SET_ID,
+        onlineId: 2,
+        dateAdded: new Date(2026, 0, 1),
+        status: 4,
+      })
+      .run();
+  }
 
   beforeEach(() => {
     dir = mkdtempSync(path.join(tmpdir(), "roxysu-stream-"));
@@ -109,6 +123,7 @@ describe("streamMappedUpsert", () => {
   });
 
   test("onUpserted skips rows that failed a NOT NULL constraint", () => {
+    seedParentSet();
     const seen: string[] = [];
     const rows = [0, 1, 2].map((i) => ({
       id: `${i.toString().padStart(8, "0")}-0000-0000-0000-0000000000aa`,
@@ -168,6 +183,7 @@ describe("streamMappedUpsert", () => {
   });
 
   test("a NOT NULL violation skips that row and inserts the rest", () => {
+    seedParentSet();
     const rows = [0, 1, 2, 3, 4].map((i) => ({
       id: `${i.toString().padStart(8, "0")}-0000-0000-0000-000000000001`,
       onlineId: i,

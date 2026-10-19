@@ -4,6 +4,7 @@ feature: live-sync
 kind: design-gap
 severity: medium
 confidence: verified
+status: fixed
 ---
 
 # The local mirror does not enforce foreign keys
@@ -29,3 +30,7 @@ A server delete that forgets a child table cannot leave derived rows pointing at
 - `packages/db/src/client.node.ts` `createDb` (about lines 20–25): journal, busy timeout, synchronous. No `foreign_keys` pragma.
 - `packages/db/src/client.bun.ts` (about lines 18–23): same pragmas.
 - Repository search for `foreign_keys` under `packages/db` returns no matches.
+
+## Status
+
+Fixed. Both clients (`packages/db/src/client.node.ts`, `client.bun.ts`) enable `PRAGMA foreign_keys = ON`; a migrating `ensureDb` keeps it OFF through `migrate()` and enables it afterwards, then logs `foreign_key_check` orphans as a warning without deleting or failing (`packages/db/src/foreignKeys.ts`). Delete-order audit: `reconcileDeletes` (`apps/realm-reader/src/reconcileCore.ts`) now also deletes `beatmap_dan_rating_variants` and `play_sessions` before beatmaps and keeps a set that a surviving beatmap still references; the session engine (`apps/server/src/analytics/session.ts`) detaches `score_metrics.session_id` before deleting orphan sessions. Tests: `packages/db/src/foreignKeys.test.ts`, `apps/realm-reader/src/reconcileForeignKeys.test.ts`; `stream.test.ts` and `map.test.ts` now seed parent rows. Knowledge: `architecture/local-mirror.md`, `features/live-sync/index.md`, `decisions/dual-runtime-sqlite-bus.md`.

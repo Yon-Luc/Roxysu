@@ -4,6 +4,7 @@ feature: practice-library
 kind: perf
 severity: low
 confidence: verified
+status: fixed
 ---
 
 # Practice cards animate shadow and background on hover
@@ -31,3 +32,7 @@ Scrolling and hovering a large practice grid does less paint work.
 
 - `apps/server/public/global.css` (about lines 388–404): `.rx-card` transition and `:hover` shadow.
 - `apps/server/public/features/practice/PracticeListPage.tsx` (about line 552): `className="rx-card flex flex-col"`.
+
+## Status
+
+Fixed. `global.css`: `.rx-card:hover` is now inside `@media (hover: hover)`; new `.rx-card.rx-card-grid` animates only `transform` (and an `::after` ring and tint fading via `opacity`), with background and box-shadow left alone; reduced motion drops the lift. Applied to practice cards (`PracticeListPage.tsx`) and collection result cards (`CollectionResultsPage.tsx`).

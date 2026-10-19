@@ -4,6 +4,7 @@ feature: hub
 kind: correctness
 severity: medium
 confidence: verified
+status: fixed
 ---
 
 # Edge cache can keep search pages after the index changes
@@ -28,3 +29,7 @@ Search pages follow the index that was just primed, without a manual CDN purge.
 
 - `apps/hub/src/routes/search.ts` (about lines 214–230): `setEdgeCache` on a hit, body includes `cached`, `stale`, and the beatmapset ids.
 - `knowledge/decisions/hub-search-base-index.md` treats the edge cache as killable; the refresh path does not kill it.
+
+## Status
+
+Fixed. `searchPageEdgeTtlSec()` in `apps/hub/src/routes/search.ts` allows the edge TTL only for a `hit-fresh` page whose row has no refresh in flight; `hit-stale` (and misses) use `setNoStore`. The edge is still not purged when a refresh commits, so a page cached just before the commit lives until its TTL. Tests: `routes/search.edgeCache.test.ts`.

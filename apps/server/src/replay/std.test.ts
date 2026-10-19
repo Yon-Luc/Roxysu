@@ -443,3 +443,70 @@ describe("simulateStdJudgments", () => {
     expect(stdAccuracySlice("tail", "miss", false).accuracyMax).toBe(0);
   });
 });
+
+describe("slider tick button state between frames", () => {
+  const slider = {
+    type: "slider" as const,
+    x: 100,
+    y: 100,
+    timeMs: 1000,
+    endMs: 2000,
+    repeats: 1,
+    pixelLength: 100,
+    stackX: 100,
+    stackY: 100,
+    path: [
+      { x: 100, y: 100 },
+      { x: 200, y: 100 },
+    ],
+    ticks: [{ frac: 0.25, tMs: 1250 }],
+  };
+  const run = (frames: Array<{ tMs: number; x: number; y: number; buttons: number }>) =>
+    simulateStdJudgments({
+      hitObjects: [slider],
+      frames,
+      circleSize: 4,
+      overallDifficulty: 5,
+      mods: parseScoreMods("[]"),
+    });
+
+  test("a release between frames before the tick drops it", () => {
+    // Held through 1000; release is recorded at 1254, estimated at ~1246,
+    // so the tick at 1250 is no longer held. The previous frame's copy
+    // (held) would have scored it.
+    const { judgments } = run([
+      { tMs: 0, x: 100, y: 100, buttons: 0 },
+      { tMs: 1000, x: 100, y: 100, buttons: 1 },
+      { tMs: 1254, x: 125, y: 100, buttons: 0 },
+      { tMs: 2000, x: 200, y: 100, buttons: 0 },
+    ]);
+    const tick = judgments.find((j) => j.kind === "tick");
+    expect(tick!.result).toBe("miss");
+  });
+
+  test("a press between frames before the tick holds it", () => {
+    // Head hit at 1000, released at 1100, pressed again at a frame recorded
+    // at 1254 (estimated ~1246). The tick at 1250 is held although the
+    // previous frame (1100) was not.
+    const { judgments } = run([
+      { tMs: 0, x: 100, y: 100, buttons: 0 },
+      { tMs: 1000, x: 100, y: 100, buttons: 1 },
+      { tMs: 1100, x: 110, y: 100, buttons: 0 },
+      { tMs: 1254, x: 125, y: 100, buttons: 1 },
+      { tMs: 2000, x: 200, y: 100, buttons: 1 },
+    ]);
+    const tick = judgments.find((j) => j.kind === "tick");
+    expect(tick!.result).toBe("great");
+  });
+
+  test("a release recorded after the tick does not drop it", () => {
+    const { judgments } = run([
+      { tMs: 0, x: 100, y: 100, buttons: 0 },
+      { tMs: 1000, x: 100, y: 100, buttons: 1 },
+      { tMs: 1262, x: 125, y: 100, buttons: 0 },
+      { tMs: 2000, x: 200, y: 100, buttons: 0 },
+    ]);
+    const tick = judgments.find((j) => j.kind === "tick");
+    expect(tick!.result).toBe("great");
+  });
+});

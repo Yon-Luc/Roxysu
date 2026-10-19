@@ -12,7 +12,6 @@ import {
 import { Elysia, t } from "elysia";
 import { eq } from "drizzle-orm";
 import { APP_VERSION } from "../appVersion";
-import { resolveHubBaseUrl } from "../hubUrl";
 import {
   exportCalcBundleEntries,
   getCalcBundleAppliedVersion,
@@ -31,6 +30,7 @@ import {
 import { runAnalyticsPipeline } from "../analytics/pipeline";
 import { invalidateQueryContextCache } from "../query-language/execute";
 import { invalidateScoreAutoFilterCache } from "../analytics/scoreAutoFilterCache";
+import { invalidatePlayerStatsCache } from "../analytics/playerStatsCache";
 import {
   buildScoresGamemodeSettings,
   normalizeScoresGamemodeFilterInput,
@@ -266,7 +266,6 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
       try {
         const result = await uploadCalcBundleToHub({
           db,
-          hubUrl: body.hubUrl?.trim() || resolveHubBaseUrl(),
           token: body.token,
           roxysuVersion: body.roxysuVersion.trim(),
           label: body.label,
@@ -285,7 +284,6 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
         token: t.String({ minLength: 1 }),
         roxysuVersion: t.String({ minLength: 1, maxLength: 32 }),
         label: t.Optional(t.String({ maxLength: 100 })),
-        hubUrl: t.Optional(t.String()),
       }),
     },
   )
@@ -565,6 +563,8 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
         publish({ type: "mastery.updated" });
       } else if (axisThresholdsChanged || focusSettingsChanged) {
         invalidateQueryContextCache();
+        // Skill history / skillset mix read thresholds + focus at compute time.
+        invalidatePlayerStatsCache();
       }
 
       return buildSettingsResponse(db);

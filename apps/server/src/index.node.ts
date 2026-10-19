@@ -12,6 +12,7 @@ import { maybePullCalcBundleOnBoot } from "./map-analysis/calcBundle";
 import { startCollectionMatchCache } from "./shared/collectionMatchCache";
 import { guardUpgradeSocketErrors } from "./shared/upgradeSocketGuard";
 import { clearStuckMirrorBatchLocks } from "./mirrors";
+import { shutdownBackgroundWork } from "./shutdownJobs";
 import { ensureTosuStarted, stopTosuAdapter } from "./tosu";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -84,6 +85,13 @@ async function main() {
       }
     } catch {
       // ignore — process is exiting anyway
+    }
+    // Background writers (analytics run, backfill jobs, mirror batch) must be
+    // idle before the local mirror closes under them.
+    try {
+      await shutdownBackgroundWork(db);
+    } catch (err) {
+      console.error("[shutdown] background work did not stop cleanly", err);
     }
     try {
       closeDb(db);

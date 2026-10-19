@@ -4,6 +4,7 @@ feature: hub
 kind: correctness
 severity: medium
 confidence: verified
+status: fixed
 ---
 
 # Search-index refresh is not single-flight per cache row
@@ -29,3 +30,7 @@ Download Maps and community browse do not briefly see an empty index while a pri
 - `apps/hub/src/routes/search.ts` `maybeRefreshStale` (about lines 85–97): local `refreshing` set only.
 - `apps/hub/src/routes/admin.ts` (about lines 186–198): `await refreshCache(params.id)` with no shared lock.
 - `apps/hub/src/services/cache.ts` (about lines 618–622): delete-and-replace inside the transaction.
+
+## Status
+
+Fixed. `refreshCacheSingleFlight(cacheId)` in `apps/hub/src/services/cache.ts` (built on the new `services/singleFlight.ts`) shares one in-flight promise per cache row; the entry is cleared when it settles and errors reach every waiter. `routes/search.ts` (public stale refresh, local `refreshing` set removed), `routes/admin.ts` (prime and manual refresh), and `services/cacheRefreshCron.ts` all use it. Tests: `services/singleFlight.test.ts`.

@@ -4,6 +4,7 @@ feature: preview-replay
 kind: security
 severity: medium
 confidence: verified
+status: fixed
 ---
 
 # Skin archive entry names are copied from Realm filenames
@@ -28,3 +29,7 @@ A skin export cannot carry a zip-slip name into osu! or an unzip tool.
 
 - `apps/server/src/routes/skins.ts` (lines 75–82): `zipEntries[file.filename] = ...`.
 - `apps/server/public/lib/maniaSkinImport.ts` `normalizePath` (lines 63–77): `replace(/^\/+/, "")` only.
+
+## Status
+
+Fixed. New pure `apps/server/src/shared/zipEntryPath.ts:sanitizeZipEntryPath()` (rejects `..`, absolute, drive prefix, NUL, empty; normalizes `\` and `.`/empty segments). `routes/skins.ts` skips unsafe Realm filenames when building the archive; the mania, standard, and catch `unzipSkinArchive()` in `public/lib/*SkinImport.ts` skip unsafe entries on read (client imports it via the `@server/` alias). Tests: `shared/zipEntryPath.test.ts`, `public/lib/maniaSkinImport.test.ts`. `apps/play` SkinLoader has a separate unzip not changed.

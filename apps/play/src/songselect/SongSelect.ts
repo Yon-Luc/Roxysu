@@ -82,12 +82,9 @@ export class SongSelect {
     if (!collection) return null;
     if (!this.catalog.canFilterCollection(collection)) return null;
 
-    const ids = this.catalog.getRealmBeatmapIds(collection.id);
-    return ids.filter((id) => {
-      const beatmap = this.beatmaps.getById(id);
-      return (
-        beatmap?.rulesetShortName === "mania" && beatmap.keyCount === this.keys
-      );
+    return this.catalog.getRealmBeatmapIds(collection.id, {
+      ruleset: "mania",
+      keys: this.keys,
     });
   }
 }

@@ -82,6 +82,17 @@ function fakeScore(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/** beatmaps.set_id is an enforced foreign key (F-012): parents go in first. */
+function seedSet(db: Db) {
+  streamMappedUpsert(
+    db,
+    beatmapSets,
+    [fakeSet()],
+    (obj) => mapBeatmapSet(obj as never) as Record<string, unknown> | null,
+    ["id"],
+  );
+}
+
 describe("mapBeatmap star rating", () => {
   let dir: string;
   let db: Db;
@@ -101,6 +112,7 @@ describe("mapBeatmap star rating", () => {
   });
 
   test("stores NaN and Infinity star ratings as 0 so the row can be inserted", () => {
+    seedSet(db);
     for (const starRating of [Number.NaN, Number.POSITIVE_INFINITY]) {
       const row = mapBeatmap(fakeBeatmap(starRating));
       expect(row?.starRating).toBe(0);
@@ -163,6 +175,14 @@ describe("map soft-skip and date sanitization", () => {
   test("Invalid score Date falls back to epoch so the score can insert", () => {
     const row = mapScore(fakeScore({ Date: new Date(Number.NaN) }));
     expect(row?.playedAt.getTime()).toBe(0);
+    seedSet(db);
+    streamMappedUpsert(
+      db,
+      beatmaps,
+      [fakeBeatmap(1)],
+      (obj) => mapBeatmap(obj as never) as Record<string, unknown> | null,
+      ["id"],
+    );
     streamMappedUpsert(
       db,
       scores,

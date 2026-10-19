@@ -63,6 +63,9 @@ BMS is a ruleset already present in the local mirror. This feature interprets th
 11. A chart image is the stage file, then the banner, then the back bitmap, then the first still bitmap. Video BGA is not an image. The file is read from the chart's source folder, which Realm extraction already stores. The response stays inside that folder.
    **Status:** verified
    **Enforced by:** `apps/server/src/bms/stageImage.ts:resolveBmsStageImage()` and `GET /api/bms/covers/:beatmapId`
+12. A BMS session is a run of non-autoplay plays with no gap longer than 30 minutes (`SESSION_GAP_MS`, exactly 30 minutes still joins). The client app and the Hub list the 20 most recent sessions. The session list reads scores newest first in pages of 400 and keeps paging until the oldest loaded session is closed by a longer gap, more than 20 sessions are loaded, history ends, or a hard cap of 10,000 scores is reached. So a session's start time and play count describe the whole sitting; only a sitting longer than the cap is cut, at its oldest end.
+   **Status:** verified
+   **Enforced by:** `packages/db/src/bmsInterpret.ts:loadRecentBmsSessions()`, used by `apps/server/src/bms/localProfile.ts:listLocalSessions()` and `apps/hub/src/services/bms.ts:profileSessions()`; tests `packages/db/src/bmsSessions.test.ts`, `apps/server/src/bms/localSessions.test.ts`, `apps/hub/src/services/bms.sessions.test.ts`
 
 ## Security rules
 
@@ -106,6 +109,7 @@ Local `/bms` reads the local mirror and still renders when the Hub is unreachabl
 - `apps/hub/src/services/bms.ts:ingestBmsBatch()`
 - `apps/hub/src/services/bmsCommunity.ts:chartLeaderboard()`
 - `packages/db/src/bmsTables.ts:loadBundledBmsTables()`
+- `packages/db/src/bmsInterpret.ts:loadRecentBmsSessions()`
 
 ## Dependencies
 

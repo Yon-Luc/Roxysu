@@ -5,7 +5,7 @@ import {
   capitalizeSessionName,
   generateSessionName,
 } from "@roxysu/session-names";
-import { and, asc, count, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { publish } from "../shared/events";
 import { SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
 import {
@@ -84,32 +84,6 @@ function toMs(value: Date | number): number {
   return value instanceof Date ? value.getTime() : value;
 }
 
-const METRICS_PATCH_CHUNK = 200;
-
-function applySessionIdPatches(
-  db: Db,
-  patches: Array<{ scoreId: string; sessionId: number }>,
-): void {
-  for (let i = 0; i < patches.length; i += METRICS_PATCH_CHUNK) {
-    const chunk = patches.slice(i, i + METRICS_PATCH_CHUNK);
-    if (chunk.length === 0) continue;
-    const cases = chunk.map(() => "WHEN ? THEN ?").join(" ");
-    const ids = chunk.map(() => "?").join(", ");
-    const params: Array<string | number> = [];
-    for (const p of chunk) {
-      params.push(p.scoreId, p.sessionId);
-    }
-    for (const p of chunk) {
-      params.push(p.scoreId);
-    }
-    db.$client
-      .query(
-        `UPDATE score_metrics SET session_id = CASE score_id ${cases} END WHERE score_id IN (${ids})`,
-      )
-      .run(...params);
-  }
-}
-
 function sessionRowChanged(
   prev:
     | {
@@ -145,299 +119,47 @@ export type SessionEngineResult = {
 
 export type SessionEngineOptions = {
   /**
-   * When set, try to only attach these scores to the open session (or open a
-   * new one). Falls back to a full rebuild when history would need reshaping.
+   * When set, repair only the sessions these scores touch (see
+   * `tryRepairSessionDelta`). Falls back to a full rebuild when the stored
+   * sessions are not consistent with the scoped scores.
    */
   scoreIds?: string[];
 };
 
-/**
- * Fast path: new plays that clearly belong on the open session (or start one).
- * Returns null when a full rebuild is required.
- */
-async function tryAppendSessionDelta(
-  db: Db,
-  scoreIds: string[],
-): Promise<SessionEngineResult | null> {
-  if (scoreIds.length === 0) return null;
+type SessionRow = typeof sessions.$inferSelect;
 
-  const [usernames, gamemode] = await Promise.all([
-    resolveScoresUsernames(db),
-    resolveScoresGamemode(db),
-  ]);
-  const newRows = await db
-    .select({
-      id: scores.id,
-      playedAt: scores.playedAt,
-      rulesetShortName: scores.rulesetShortName,
-    })
-    .from(scores)
-    .where(
-      and(
-        inArray(scores.id, scoreIds),
-        eq(scores.deletePending, false),
-        scoresUsernameCondition(usernames),
-        scoresGamemodeCondition(gamemode),
-      ),
-    )
-    .orderBy(asc(scores.playedAt), asc(scores.id));
+type ScopedScoreRow = {
+  id: string;
+  playedAt: Date | number;
+  rulesetShortName: string | null;
+};
 
-  if (newRows.length === 0) return { started: [], finished: [] };
+type Bucket = {
+  startedAt: Date;
+  endedAt: Date;
+  scoreIds: string[];
+  rulesetShortName: string | null;
+};
 
-  const [open] = await db
-    .select()
-    .from(sessions)
-    .where(isNull(sessions.endedAt))
-    .orderBy(desc(sessions.startedAt))
-    .limit(1);
+/** Keep bound-parameter counts well under SQLite's variable limit. */
+const ID_CHUNK = 500;
 
-  const firstPlayed = toMs(newRows[0]!.playedAt);
-  const lastPlayed = toMs(newRows[newRows.length - 1]!.playedAt);
-  const now = Date.now();
-
-  // Intra-batch gap larger than session gap → needs full rebuild.
-  for (let i = 1; i < newRows.length; i++) {
-    if (
-      toMs(newRows[i]!.playedAt) - toMs(newRows[i - 1]!.playedAt) >
-      SESSION_GAP_MS
-    ) {
-      return null;
-    }
+function chunked<T>(items: T[], size = ID_CHUNK): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    out.push(items.slice(i, i + size));
   }
-
-  const started: number[] = [];
-  const finished: number[] = [];
-
-  if (open) {
-    const openStart = toMs(open.startedAt);
-    // Scores older than the open session → reshaping history.
-    if (firstPlayed < openStart) return null;
-
-    const [anchor] = await db
-      .select({ playedAt: scores.playedAt })
-      .from(scores)
-      .innerJoin(scoreMetrics, eq(scoreMetrics.scoreId, scores.id))
-      .where(
-        and(
-          eq(scoreMetrics.sessionId, open.id),
-          eq(scores.deletePending, false),
-        ),
-      )
-      .orderBy(desc(scores.playedAt), desc(scores.id))
-      .limit(1);
-
-    const openEnd = anchor ? toMs(anchor.playedAt) : openStart;
-    if (firstPlayed - openEnd > SESSION_GAP_MS) {
-      // Close open session, start a new one for the delta batch.
-      await db
-        .update(sessions)
-        .set({ endedAt: new Date(openEnd) })
-        .where(eq(sessions.id, open.id));
-      finished.push(open.id);
-
-      const existingNames = await db
-        .select({ name: sessions.name })
-        .from(sessions);
-      const taken = collectTakenNames(existingNames);
-      const inserted = await db
-        .insert(sessions)
-        .values({
-          startedAt: new Date(firstPlayed),
-          endedAt: now - lastPlayed <= SESSION_GAP_MS ? null : new Date(lastPlayed),
-          scoreCount: newRows.length,
-          rulesetShortName: newRows.find((r) => r.rulesetShortName)?.rulesetShortName ?? null,
-        })
-        .returning({ id: sessions.id });
-      const sessionId = inserted[0]!.id;
-      const name = generateSessionName(sessionId, taken);
-      await db
-        .update(sessions)
-        .set({ name })
-        .where(eq(sessions.id, sessionId));
-      if (now - lastPlayed <= SESSION_GAP_MS) started.push(sessionId);
-
-      await assignScoresToSession(
-        db,
-        sessionId,
-        newRows.map((r) => r.id),
-      );
-
-      for (const id of started) publish({ type: "session.started", sessionId: id });
-      for (const id of finished) publish({ type: "session.finished", sessionId: id });
-      return { started, finished };
-    }
-
-    // Append into open session.
-    const ruleset =
-      open.rulesetShortName ??
-      newRows.find((r) => r.rulesetShortName)?.rulesetShortName ??
-      null;
-    await db
-      .update(sessions)
-      .set({
-        scoreCount: open.scoreCount + newRows.length,
-        rulesetShortName: ruleset,
-        endedAt: null,
-      })
-      .where(eq(sessions.id, open.id));
-
-    await assignScoresToSession(
-      db,
-      open.id,
-      newRows.map((r) => r.id),
-    );
-    return { started, finished };
-  }
-
-  // No open session — open one for this contiguous batch.
-  const existingNames = await db.select({ name: sessions.name }).from(sessions);
-  const taken = collectTakenNames(existingNames);
-  const inserted = await db
-    .insert(sessions)
-    .values({
-      startedAt: new Date(firstPlayed),
-      endedAt: now - lastPlayed <= SESSION_GAP_MS ? null : new Date(lastPlayed),
-      scoreCount: newRows.length,
-      rulesetShortName:
-        newRows.find((r) => r.rulesetShortName)?.rulesetShortName ?? null,
-    })
-    .returning({ id: sessions.id });
-  const sessionId = inserted[0]!.id;
-  await db
-    .update(sessions)
-    .set({ name: generateSessionName(sessionId, taken) })
-    .where(eq(sessions.id, sessionId));
-  if (now - lastPlayed <= SESSION_GAP_MS) started.push(sessionId);
-
-  await assignScoresToSession(
-    db,
-    sessionId,
-    newRows.map((r) => r.id),
-  );
-
-  for (const id of started) publish({ type: "session.started", sessionId: id });
-  return { started, finished };
+  return out;
 }
 
-async function assignScoresToSession(
-  db: Db,
-  sessionId: number,
-  scoreIds: string[],
-): Promise<void> {
-  if (scoreIds.length === 0) return;
-  const existing = await db
-    .select({
-      scoreId: scoreMetrics.scoreId,
-      sessionId: scoreMetrics.sessionId,
-    })
-    .from(scoreMetrics)
-    .where(inArray(scoreMetrics.scoreId, scoreIds));
-  const byId = new Map(existing.map((e) => [e.scoreId, e.sessionId] as const));
-  const patches: Array<{ scoreId: string; sessionId: number }> = [];
-  const inserts: Array<{
-    scoreId: string;
-    retryIndex: number;
-    isPb: boolean;
-    sessionId: number;
-  }> = [];
-  for (const scoreId of scoreIds) {
-    const prev = byId.get(scoreId);
-    if (prev !== undefined) {
-      if (prev !== sessionId) patches.push({ scoreId, sessionId });
-    } else {
-      inserts.push({
-        scoreId,
-        retryIndex: 0,
-        isPb: false,
-        sessionId,
-      });
-    }
-  }
-  applySessionIdPatches(db, patches);
-  if (inserts.length > 0) {
-    await db.insert(scoreMetrics).values(inserts);
-  }
+function compareScoreRows(a: ScopedScoreRow, b: ScopedScoreRow): number {
+  const delta = toMs(a.playedAt) - toMs(b.playedAt);
+  if (delta !== 0) return delta;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
-/**
- * Group scores into sessions by 30-minute inactivity gaps.
- * Reuses existing session IDs when buckets still map to the same scores,
- * so IDs stay stable across sync/analytics rebuilds.
- */
-export async function runSessionEngine(
-  db: Db,
-  options?: SessionEngineOptions,
-): Promise<SessionEngineResult> {
-  await backfillSessionNames(db);
-
-  if (options?.scoreIds && options.scoreIds.length > 0) {
-    const delta = await tryAppendSessionDelta(db, options.scoreIds);
-    if (delta) return delta;
-  }
-
-  const [usernames, gamemode] = await Promise.all([
-    resolveScoresUsernames(db),
-    resolveScoresGamemode(db),
-  ]);
-  const rows = await db
-    .select({
-      id: scores.id,
-      playedAt: scores.playedAt,
-      rulesetShortName: scores.rulesetShortName,
-    })
-    .from(scores)
-    .where(
-      and(
-        eq(scores.deletePending, false),
-        scoresUsernameCondition(usernames),
-        scoresGamemodeCondition(gamemode),
-      ),
-    )
-    .orderBy(asc(scores.playedAt), asc(scores.id));
-
-  const started: number[] = [];
-  const finished: number[] = [];
-
-  const existingSessions = await db.select().from(sessions);
-  const existingById = new Map(existingSessions.map((s) => [s.id, s]));
-  const takenNames = collectTakenNames(existingSessions);
-
-  const assignName = (sessionId: number): string => {
-    const name = generateSessionName(sessionId, takenNames);
-    takenNames.add(name);
-    return name;
-  };
-
-  const allMetrics = await db.select().from(scoreMetrics);
-  const metricsByScore = new Map(allMetrics.map((m) => [m.scoreId, m]));
-  const sessionByScore = new Map(
-    allMetrics.map((m) => [m.scoreId, m.sessionId] as const),
-  );
-
-  if (rows.length === 0) {
-    db.transaction((tx) => {
-      for (const m of allMetrics) {
-        if (m.sessionId != null) {
-          tx.update(scoreMetrics)
-            .set({ sessionId: null })
-            .where(eq(scoreMetrics.scoreId, m.scoreId))
-            .run();
-        }
-      }
-      if (existingSessions.length > 0) {
-        tx.delete(sessions).run();
-      }
-    });
-    return { started, finished };
-  }
-
-  type Bucket = {
-    startedAt: Date;
-    endedAt: Date;
-    scoreIds: string[];
-    rulesetShortName: string | null;
-  };
-
+/** Group time-ordered scores into buckets split by gaps larger than `SESSION_GAP_MS`. */
+function bucketScoreRows(rows: ScopedScoreRow[]): Bucket[] {
   const buckets: Bucket[] = [];
   let current: Bucket | null = null;
 
@@ -463,30 +185,109 @@ export async function runSessionEngine(
     }
   }
   if (current) buckets.push(current);
+  return buckets;
+}
 
-  const now = Date.now();
-  const scoreToSession = new Map<string, number>();
+/** Username + gamemode + not-deleted scope shared by every engine read. */
+async function scopedScoresWhere(db: Db) {
+  const [usernames, gamemode] = await Promise.all([
+    resolveScoresUsernames(db),
+    resolveScoresGamemode(db),
+  ]);
+  return and(
+    eq(scores.deletePending, false),
+    scoresUsernameCondition(usernames),
+    scoresGamemodeCondition(gamemode),
+  );
+}
+
+/**
+ * For each bucket, the distinct session ids its scores were previously
+ * attached to, in score order. Reads `score_metrics` in id chunks so memory
+ * stays bounded instead of selecting every metrics row.
+ */
+async function loadPriorSessionsByBucket(
+  db: Db,
+  buckets: Bucket[],
+): Promise<number[][]> {
+  const priors: number[][] = buckets.map(() => []);
+  const flat: Array<{ bucket: number; scoreId: string }> = [];
+  buckets.forEach((bucket, bucketIndex) => {
+    for (const scoreId of bucket.scoreIds) {
+      flat.push({ bucket: bucketIndex, scoreId });
+    }
+  });
+
+  for (const chunk of chunked(flat)) {
+    const rows = await db
+      .select({
+        scoreId: scoreMetrics.scoreId,
+        sessionId: scoreMetrics.sessionId,
+      })
+      .from(scoreMetrics)
+      .where(
+        inArray(
+          scoreMetrics.scoreId,
+          chunk.map((c) => c.scoreId),
+        ),
+      );
+    const byScore = new Map(rows.map((r) => [r.scoreId, r.sessionId] as const));
+    for (const { bucket, scoreId } of chunk) {
+      const prev = byScore.get(scoreId);
+      if (prev != null && !priors[bucket]!.includes(prev)) {
+        priors[bucket]!.push(prev);
+      }
+    }
+  }
+  return priors;
+}
+
+/**
+ * Write `buckets` as sessions and point their scores at them.
+ *
+ * `candidates` are the stored sessions the buckets may reuse; candidates that
+ * no bucket claims are deleted. Every write runs in one synchronous
+ * transaction callback (required by better-sqlite3 on desktop). Metrics are
+ * written with SQL (insert-or-ignore, then update where the session differs)
+ * rather than diffing an in-memory copy of `score_metrics`.
+ */
+function reconcileBuckets(
+  db: Db,
+  opts: {
+    buckets: Bucket[];
+    priorSessions: number[][];
+    candidates: SessionRow[];
+    takenNames: Set<string>;
+  },
+): SessionEngineResult {
+  const { buckets, priorSessions, candidates, takenNames } = opts;
+  const started: number[] = [];
+  const finished: number[] = [];
+  const candidateById = new Map(candidates.map((s) => [s.id, s]));
   const claimedSessionIds = new Set<number>();
+  const now = Date.now();
+
+  const assignName = (sessionId: number): string => {
+    const name = generateSessionName(sessionId, takenNames);
+    takenNames.add(name);
+    return name;
+  };
 
   db.transaction((tx) => {
-    for (const bucket of buckets) {
+    buckets.forEach((bucket, bucketIndex) => {
       const isOpen = now - bucket.endedAt.getTime() <= SESSION_GAP_MS;
 
       // Prefer the earliest score's prior session, then any unclaimed match.
       let sessionId: number | null = null;
-      for (const scoreId of bucket.scoreIds) {
-        const prev = sessionByScore.get(scoreId);
-        if (
-          prev != null &&
-          existingById.has(prev) &&
-          !claimedSessionIds.has(prev)
-        ) {
+      for (const prev of priorSessions[bucketIndex] ?? []) {
+        if (candidateById.has(prev) && !claimedSessionIds.has(prev)) {
           sessionId = prev;
           break;
         }
       }
 
-      const prevRow = sessionId != null ? existingById.get(sessionId) : undefined;
+      const prevRow =
+        sessionId != null ? candidateById.get(sessionId) : undefined;
       const wasOpen = prevRow != null && prevRow.endedAt == null;
 
       if (sessionId != null) {
@@ -529,43 +330,41 @@ export async function runSessionEngine(
         if (isOpen) started.push(sessionId);
       }
 
-      for (const scoreId of bucket.scoreIds) {
-        scoreToSession.set(scoreId, sessionId);
+      for (const ids of chunked(bucket.scoreIds)) {
+        tx.insert(scoreMetrics)
+          .values(
+            ids.map((scoreId) => ({
+              scoreId,
+              retryIndex: 0,
+              isPb: false,
+              sessionId: sessionId!,
+            })),
+          )
+          .onConflictDoNothing()
+          .run();
+        tx.update(scoreMetrics)
+          .set({ sessionId })
+          .where(
+            and(
+              inArray(scoreMetrics.scoreId, ids),
+              sql`${scoreMetrics.sessionId} IS NOT ${sessionId}`,
+            ),
+          )
+          .run();
       }
-    }
+    });
 
-    const orphanIds = existingSessions
+    // Delete only after every score was re-pointed; metrics rows of scores
+    // outside the scope may still reference an orphan (foreign key).
+    const orphanIds = candidates
       .map((s) => s.id)
       .filter((id) => !claimedSessionIds.has(id));
-    if (orphanIds.length > 0) {
-      tx.delete(sessions).where(inArray(sessions.id, orphanIds)).run();
-    }
-
-    const metricPatches: Array<{ scoreId: string; sessionId: number }> = [];
-    const metricInserts: Array<{
-      scoreId: string;
-      retryIndex: number;
-      isPb: boolean;
-      sessionId: number;
-    }> = [];
-    for (const [scoreId, sessionId] of scoreToSession) {
-      const existing = metricsByScore.get(scoreId);
-      if (existing) {
-        if (existing.sessionId !== sessionId) {
-          metricPatches.push({ scoreId, sessionId });
-        }
-      } else {
-        metricInserts.push({
-          scoreId,
-          retryIndex: 0,
-          isPb: false,
-          sessionId,
-        });
-      }
-    }
-    applySessionIdPatches(db, metricPatches);
-    if (metricInserts.length > 0) {
-      tx.insert(scoreMetrics).values(metricInserts).run();
+    for (const ids of chunked(orphanIds)) {
+      tx.update(scoreMetrics)
+        .set({ sessionId: null })
+        .where(inArray(scoreMetrics.sessionId, ids))
+        .run();
+      tx.delete(sessions).where(inArray(sessions.id, ids)).run();
     }
   });
 
@@ -577,6 +376,166 @@ export async function runSessionEngine(
   }
 
   return { started, finished };
+}
+
+/**
+ * Delta repair for newly extracted scores.
+ *
+ * Sessions are contiguous blocks of the global timeline split by gaps larger
+ * than `SESSION_GAP_MS`, so inserting scores can only reshape the sessions
+ * within one gap of them (plus the open session, which is always re-evaluated
+ * so it closes once it goes stale). This re-buckets just those sessions' scores
+ * together with the new scores and reconciles them with the same routine the
+ * full rebuild uses, which covers gaps inside the batch, scores older than the
+ * open session, closing the open session and opening a new one, and scores
+ * that merge or extend closed sessions.
+ *
+ * Returns null (caller does the full rebuild) when `sessions.score_count` does
+ * not add up to the scoped scores outside the repaired window, i.e. the stored
+ * sessions are not a trustworthy partition of the timeline.
+ */
+export async function tryRepairSessionDelta(
+  db: Db,
+  scoreIds: string[],
+): Promise<SessionEngineResult | null> {
+  if (scoreIds.length === 0) return null;
+
+  const scope = await scopedScoresWhere(db);
+  const scoreColumns = {
+    id: scores.id,
+    playedAt: scores.playedAt,
+    rulesetShortName: scores.rulesetShortName,
+  };
+
+  const deltaRows: ScopedScoreRow[] = [];
+  for (const ids of chunked([...new Set(scoreIds)])) {
+    deltaRows.push(
+      ...(await db
+        .select(scoreColumns)
+        .from(scores)
+        .where(and(inArray(scores.id, ids), scope))),
+    );
+  }
+  if (deltaRows.length === 0) return { started: [], finished: [] };
+  deltaRows.sort(compareScoreRows);
+
+  const allSessions = await db.select().from(sessions);
+  const deltaTimes = deltaRows.map((r) => toMs(r.playedAt));
+
+  // First delta time at or after `target`.
+  const lowerBound = (target: number): number => {
+    let lo = 0;
+    let hi = deltaTimes.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (deltaTimes[mid]! < target) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  };
+
+  const affectedIds = new Set<number>();
+  for (const session of allSessions) {
+    if (session.endedAt == null) {
+      affectedIds.add(session.id);
+      continue;
+    }
+    const idx = lowerBound(toMs(session.startedAt) - SESSION_GAP_MS);
+    if (
+      idx < deltaTimes.length &&
+      deltaTimes[idx]! <= toMs(session.endedAt) + SESSION_GAP_MS
+    ) {
+      affectedIds.add(session.id);
+    }
+  }
+
+  // Sessions the new scores are already attached to (re-extracted scores).
+  for (const ids of chunked(deltaRows.map((r) => r.id))) {
+    const attached = await db
+      .select({ sessionId: scoreMetrics.sessionId })
+      .from(scoreMetrics)
+      .where(inArray(scoreMetrics.scoreId, ids));
+    for (const row of attached) {
+      if (row.sessionId != null) affectedIds.add(row.sessionId);
+    }
+  }
+
+  const windowById = new Map(deltaRows.map((r) => [r.id, r] as const));
+  for (const ids of chunked([...affectedIds])) {
+    const rows = await db
+      .select(scoreColumns)
+      .from(scoreMetrics)
+      .innerJoin(scores, eq(scores.id, scoreMetrics.scoreId))
+      .where(and(inArray(scoreMetrics.sessionId, ids), scope));
+    for (const row of rows) windowById.set(row.id, row);
+  }
+  const windowRows = [...windowById.values()].sort(compareScoreRows);
+
+  const [totals] = await db.select({ n: count() }).from(scores).where(scope);
+  let outsideWindow = 0;
+  for (const session of allSessions) {
+    if (!affectedIds.has(session.id)) outsideWindow += session.scoreCount;
+  }
+  if (Number(totals?.n ?? 0) !== outsideWindow + windowRows.length) return null;
+
+  const buckets = bucketScoreRows(windowRows);
+  return reconcileBuckets(db, {
+    buckets,
+    priorSessions: await loadPriorSessionsByBucket(db, buckets),
+    candidates: allSessions.filter((s) => affectedIds.has(s.id)),
+    takenNames: collectTakenNames(allSessions),
+  });
+}
+
+/**
+ * Group scores into sessions by 30-minute inactivity gaps.
+ * Reuses existing session IDs when buckets still map to the same scores,
+ * so IDs stay stable across analytics rebuilds. With `scoreIds`, tries the
+ * delta repair first and falls back to the full rebuild.
+ */
+export async function runSessionEngine(
+  db: Db,
+  options?: SessionEngineOptions,
+): Promise<SessionEngineResult> {
+  await backfillSessionNames(db);
+
+  if (options?.scoreIds && options.scoreIds.length > 0) {
+    const delta = await tryRepairSessionDelta(db, options.scoreIds);
+    if (delta) return delta;
+  }
+
+  const rows = await db
+    .select({
+      id: scores.id,
+      playedAt: scores.playedAt,
+      rulesetShortName: scores.rulesetShortName,
+    })
+    .from(scores)
+    .where(await scopedScoresWhere(db))
+    .orderBy(asc(scores.playedAt), asc(scores.id));
+
+  const existingSessions = await db.select().from(sessions);
+
+  if (rows.length === 0) {
+    db.transaction((tx) => {
+      tx.update(scoreMetrics)
+        .set({ sessionId: null })
+        .where(isNotNull(scoreMetrics.sessionId))
+        .run();
+      if (existingSessions.length > 0) {
+        tx.delete(sessions).run();
+      }
+    });
+    return { started: [], finished: [] };
+  }
+
+  const buckets = bucketScoreRows(rows);
+  return reconcileBuckets(db, {
+    buckets,
+    priorSessions: await loadPriorSessionsByBucket(db, buckets),
+    candidates: existingSessions,
+    takenNames: collectTakenNames(existingSessions),
+  });
 }
 
 export async function getCurrentSession(db: Db) {

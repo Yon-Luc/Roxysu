@@ -7,7 +7,7 @@ import {
   baseParamsFromCacheQuery,
   hashQueryParams,
   normalizeRefreshIntervalMinutes,
-  refreshCache,
+  refreshCacheSingleFlight,
   searchCacheMetaColumns,
   type CacheQueryParams,
   type SearchCacheMeta,
@@ -106,7 +106,7 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
         .get();
 
       try {
-        await refreshCache(inserted.id);
+        await refreshCacheSingleFlight(inserted.id);
       } catch (err) {
         await db.delete(searchCache).where(eq(searchCache.id, inserted.id));
         console.error("[admin] Cache prime failed:", err);
@@ -195,7 +195,7 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
       if (!row) return status(404, { message: "Cache entry not found" });
 
       try {
-        await refreshCache(params.id);
+        await refreshCacheSingleFlight(params.id);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         await db

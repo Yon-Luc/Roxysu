@@ -25,6 +25,7 @@ One subdirectory per product surface. Terms: [vocabulary.md](../vocabulary.md).
 | In-game overlay (Wayland host) | [in-game-overlay/](in-game-overlay/index.md) |
 | Overlay editor | [overlay-editor/](overlay-editor/index.md) |
 | Preview, rewatch & playfield skins | [preview-replay/](preview-replay/index.md) |
+| Skin fusion (`.osk` export) | [skin-fusion/](skin-fusion/index.md) |
 | Replay video export | [replay-video-export/](replay-video-export/index.md) |
 | Standalone tosu counter (mania notefield) | [tosu-counter/](tosu-counter/index.md) |
 | Roxysu Play (GPUIX native UI playground) | [roxysu-play/](roxysu-play/index.md) |

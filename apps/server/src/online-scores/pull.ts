@@ -8,9 +8,7 @@ import {
   beatmaps,
   onlineScoreCandidates,
   scores,
-  settings,
 } from "@roxysu/db/schema";
-import { SYNC_REALM_READER_PAUSED_KEY } from "@roxysu/db/settings-keys";
 import { defaultDbPath } from "@roxysu/db/path";
 import type { Db } from "@roxysu/db/types";
 import { resolveScoresUsernames } from "../analytics/scoreUsername";
@@ -21,8 +19,15 @@ import {
   type LocalBeatmap,
   type RankedBest,
 } from "./match";
+import {
+  currentRealmWriteOwner,
+  realmWriteBusyMessage,
+  tryAcquireRealmWriteLock,
+  type RealmWriteLease,
+} from "../shared/realmWriteLock";
 
-const PAUSE_SETTLE_MS = 2_000;
+const PREVIEW_BLOCKED_BY_COMMIT = "Score write running. Try again when it finishes.";
+
 const RANK: Record<string, number> = {
   F: -1,
   D: 0,
@@ -53,11 +58,22 @@ type WriteResult =
   | { ok: true; added: number; skipped: number; backupPath: string }
   | { ok: false; error: string; code: "locked" | "schema_mismatch" | "in_flight" | "other" };
 
-let writeInFlight: Promise<WriteResult> | null = null;
+/** True while preview replaces the candidate rows; commit must not read a half-replaced set. */
+let candidatesReplacing = false;
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+export type CommitDeps = {
+  /** Realm write; defaults to the realm-reader write (in-process or CLI). */
+  write?: (db: Db, payload: WritePayload) => Promise<WriteResult>;
+  /** Wait after pausing extraction; defaults to the shared settle time. */
+  settleMs?: number;
+};
+
+type WritePayload = {
+  userOnlineId: number;
+  username: string;
+  countryCode: null;
+  rows: unknown[];
+};
 
 function isBunRuntime(): boolean {
   return typeof (process.versions as { bun?: string }).bun === "string";
@@ -68,13 +84,6 @@ function realmReaderDir(): string {
   if (fromEnv) return fromEnv;
   const here = path.dirname(fileURLToPath(import.meta.url));
   return path.resolve(here, "../../../realm-reader");
-}
-
-async function setSetting(db: Db, key: string, value: string): Promise<void> {
-  await db
-    .insert(settings)
-    .values({ key, value })
-    .onConflictDoUpdate({ target: settings.key, set: { value } });
 }
 
 export type LocalOsuPlayer = {
@@ -213,6 +222,9 @@ export async function previewOnlineScores(
   db: Db,
   input: { hubJwt: string; ruleset: string; force?: boolean; username?: string },
 ): Promise<PullPreview | { error: string; code: string }> {
+  if (currentRealmWriteOwner() === "online_score_commit") {
+    return { error: PREVIEW_BLOCKED_BY_COMMIT, code: "in_flight" };
+  }
   const local = await resolveLocalOsuUser(db, input.username);
   if ("error" in local) return { error: local.error, code: "local_user" };
   const pulled = await hubPull(input.hubJwt, input.ruleset, input.force === true);
@@ -335,10 +347,20 @@ export async function previewOnlineScores(
     });
   }
 
-  await db.delete(onlineScoreCandidates);
-  for (let i = 0; i < candidates.length; i += 80) {
-    const slice = candidates.slice(i, i + 80);
-    if (slice.length > 0) await db.insert(onlineScoreCandidates).values(slice);
+  // The hub pull above can take long; a commit may have started meanwhile. Check again, with no
+  // await between the check and the flag, so replace and commit never interleave.
+  if (currentRealmWriteOwner() === "online_score_commit" || candidatesReplacing) {
+    return { error: PREVIEW_BLOCKED_BY_COMMIT, code: "in_flight" };
+  }
+  candidatesReplacing = true;
+  try {
+    await db.delete(onlineScoreCandidates);
+    for (let i = 0; i < candidates.length; i += 80) {
+      const slice = candidates.slice(i, i + 80);
+      if (slice.length > 0) await db.insert(onlineScoreCandidates).values(slice);
+    }
+  } finally {
+    candidatesReplacing = false;
   }
 
   return {
@@ -410,19 +432,29 @@ function runWriteCli(payloadPath: string): Promise<{ stdout: string; stderr: str
   });
 }
 
-export async function commitOnlineScores(db: Db): Promise<WriteResult> {
-  if (writeInFlight) {
-    return { ok: false, error: "Score write already running", code: "in_flight" };
+export async function commitOnlineScores(
+  db: Db,
+  deps: CommitDeps = {},
+): Promise<WriteResult> {
+  if (candidatesReplacing) {
+    return { ok: false, error: "Score preview still running", code: "in_flight" };
   }
-  writeInFlight = runCommit(db);
+  const lease = tryAcquireRealmWriteLock(db, "online_score_commit");
+  if (!lease) {
+    return { ok: false, error: realmWriteBusyMessage(), code: "in_flight" };
+  }
   try {
-    return await writeInFlight;
+    return await runCommit(db, lease, deps);
   } finally {
-    writeInFlight = null;
+    await lease.release();
   }
 }
 
-async function runCommit(db: Db): Promise<WriteResult> {
+async function runCommit(
+  db: Db,
+  lease: RealmWriteLease,
+  deps: CommitDeps,
+): Promise<WriteResult> {
   const rows = await db.select().from(onlineScoreCandidates);
   if (rows.length === 0) {
     return { ok: false, error: "No scores waiting to add. Pull again first.", code: "other" };
@@ -435,43 +467,59 @@ async function runCommit(db: Db): Promise<WriteResult> {
     rows: rows.map((row) => JSON.parse(row.payloadJson)),
   };
 
-  await setSetting(db, SYNC_REALM_READER_PAUSED_KEY, "1");
-  await sleep(PAUSE_SETTLE_MS);
+  // Commit only the rows read above, and on success delete only those rows: the candidate table is
+  // never wiped wholesale, so rows from a newer preview survive.
+  const committedScoreIds = rows.map((row) => row.scoreId);
+
+  await lease.pauseExtraction(deps.settleMs);
   try {
-    let result: WriteResult;
-    if (!isBunRuntime()) {
-      const modPath = path.join(realmReaderDir(), "src", "writeOnlineScores.ts");
-      const packaged = path.join(realmReaderDir(), "writeOnlineScores.js");
-      const target = existsSync(packaged) ? packaged : modPath;
-      const mod = await import(pathToFileURL(target).href);
-      const { resolveRealmPath } = await import("../shared/osu-paths");
-      const { getCachedOsuDataOverride, resolveOsuDataPath } = await import("../shared/osu-paths");
-      const dataPath = resolveOsuDataPath(getCachedOsuDataOverride()).resolved;
-      const realmPath = process.env.REALM_PATH?.trim() || resolveRealmPath(dataPath);
-      result = mod.runOnlineScoreWrite(db, process.env.DB_PATH ?? defaultDbPath(), realmPath, payload);
-    } else {
-      const tempDir = mkdtempSync(path.join(tmpdir(), "roxysu-score-pull-"));
-      const payloadPath = path.join(tempDir, "payload.json");
-      try {
-        writeFileSync(payloadPath, JSON.stringify(payload));
-        const { stdout, stderr, exitCode } = await runWriteCli(payloadPath);
-        if (exitCode !== 0 && !stdout.includes("RESULT ")) {
-          return {
-            ok: false,
-            error: stderr.trim() || stdout.trim() || "Score write failed",
-            code: "other",
-          };
-        }
-        result = parseCliResult(stdout);
-      } finally {
-        rmSync(tempDir, { recursive: true, force: true });
-      }
-    }
-    if (result.ok) await db.delete(onlineScoreCandidates);
+    const result = await (deps.write ?? writeToRealm)(db, payload);
+    if (result.ok) await deleteCandidates(db, committedScoreIds);
     return result;
   } finally {
-    await setSetting(db, SYNC_REALM_READER_PAUSED_KEY, "0");
+    await lease.release();
   }
+}
+
+async function deleteCandidates(db: Db, scoreIds: number[]): Promise<void> {
+  for (let i = 0; i < scoreIds.length; i += 400) {
+    await db
+      .delete(onlineScoreCandidates)
+      .where(inArray(onlineScoreCandidates.scoreId, scoreIds.slice(i, i + 400)));
+  }
+}
+
+async function writeToRealm(db: Db, payload: WritePayload): Promise<WriteResult> {
+  let result: WriteResult;
+  if (!isBunRuntime()) {
+    const modPath = path.join(realmReaderDir(), "src", "writeOnlineScores.ts");
+    const packaged = path.join(realmReaderDir(), "writeOnlineScores.js");
+    const target = existsSync(packaged) ? packaged : modPath;
+    const mod = await import(pathToFileURL(target).href);
+    const { resolveRealmPath } = await import("../shared/osu-paths");
+    const { getCachedOsuDataOverride, resolveOsuDataPath } = await import("../shared/osu-paths");
+    const dataPath = resolveOsuDataPath(getCachedOsuDataOverride()).resolved;
+    const realmPath = process.env.REALM_PATH?.trim() || resolveRealmPath(dataPath);
+    result = mod.runOnlineScoreWrite(db, process.env.DB_PATH ?? defaultDbPath(), realmPath, payload);
+  } else {
+    const tempDir = mkdtempSync(path.join(tmpdir(), "roxysu-score-pull-"));
+    const payloadPath = path.join(tempDir, "payload.json");
+    try {
+      writeFileSync(payloadPath, JSON.stringify(payload));
+      const { stdout, stderr, exitCode } = await runWriteCli(payloadPath);
+      if (exitCode !== 0 && !stdout.includes("RESULT ")) {
+        return {
+          ok: false,
+          error: stderr.trim() || stdout.trim() || "Score write failed",
+          code: "other",
+        };
+      }
+      result = parseCliResult(stdout);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  }
+  return result;
 }
 
 export async function candidateSummary(db: Db) {

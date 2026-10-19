@@ -39,6 +39,13 @@ touches:
   - apps/server/public/components/StdSkinImportControls.tsx
   - apps/server/public/components/CatchSkinImportControls.tsx
   - apps/server/src/routes/skins.ts
+  - apps/server/src/shared/skinFusion/summary.ts
+  - apps/server/src/replay/decode.ts
+  - apps/server/src/replay/decode.test.ts
+  - apps/server/src/replay/replayRuntime.ts
+  - apps/server/src/replay/replayRuntime.test.ts
+  - apps/server/src/shared/zipEntryPath.ts
+  - apps/server/src/shared/zipEntryPath.test.ts
   - apps/realm-reader/src/syncRealmSkins.ts
   - packages/db/src/schema.ts
   - apps/server/public/lib/api.ts
@@ -98,6 +105,10 @@ Playfield = the visual layer for that ruleset (notefield, 512×384, or taiko lan
    `lib/replayAccuracy.ts`, `ScoreReplayModal.tsx` HUD scan,
    `replayVideoExport.ts:computeHud` — status: verified by `std.test.ts`,
    `catch.test.ts`, `replayAccuracy.test.ts`, `taiko.test.ts`.
+   Taiko rewatch and video export HUD (combo, accuracy, last result, counters)
+   score `hit` rows only and skip drumroll tick and swell rows, matching
+   `taikoJudge.ts`; the shared helper is `replayAccuracy.ts:taikoHudJudgments`.
+   The taiko playfield receives rows narrowed by `taikoPlayfieldJudgments`.
 
 2. **HR** on standard flips Y and raises AR/OD, but does **not** shrink CS.
    **HR** on catch flips X and **does** scale CS (smaller plate). Taiko has no
@@ -297,13 +308,53 @@ Playfield = the visual layer for that ruleset (notefield, 512×384, or taiko lan
     `SkinPage.tsx`, `ManiaNotefield.tsx` — status: verified by
     `previewSkin.test.ts`.
 
+15. **Standard slider button state:** a slider tick or tail end counts as held
+    from the button state at its own time, not from the preceding replay
+    frame. A press or release recorded at frame b is placed up to 8 ms before
+    b (at most half the gap to the previous frame), so ticks that fall between
+    frames see the edge. This is an estimate: replays record only the frame
+    that observed the change.
+    **Source:** `stdJudge.ts:buildButtonTimeline`, `buttonsHeldAt` — status:
+    verified by `std.test.ts` ("slider tick button state between frames").
+
 Volume, rate, fullscreen, HUD chip positions, blackBg, and analysis stay
 shared across rulesets and keymodes.
 
 ## Security rules
 
-None — no access control on preview/replay/skin data beyond existing score owner
-scope.
+No access control on preview/replay/skin data beyond existing score owner scope.
+Replay files and Realm skin metadata are still untrusted input:
+
+1. A replay file may not expand beyond `MAX_REPLAY_DECOMPRESSED_BYTES` (16 MiB)
+   of decoded payload, or beyond `MAX_REPLAY_FRAMES` (1,000,000) parsed frames.
+   **Enforced by:** `replay/decode.ts:decompressReplayBounded()` (header-declared
+   size check, then streaming decode that counts output and cancels past the
+   cap) and the frame counter in `parseLegacyFrames()` — status: verified by
+   `replay/decode.test.ts`.
+   **Over-limit result:** `decodeLegacyReplay` throws; `GET /scores/:id/replay`
+   returns 422 `Failed to decode replay: ...` (`routes/scores.ts`).
+
+2. A skin archive entry name must be a safe relative path: no `..` segment, no
+   absolute path, no drive prefix, no NUL byte, not empty. Unsafe names are
+   skipped, never rewritten into a different path.
+   **Enforced by:** `src/shared/zipEntryPath.ts:sanitizeZipEntryPath()`, applied
+   when `routes/skins.ts` writes the archive and when the mania / standard /
+   catch `unzipSkinArchive()` read one — status: verified by
+   `shared/zipEntryPath.test.ts` and `maniaSkinImport.test.ts`.
+   **Not covered:** `apps/play/src/skin/SkinLoader.ts` has its own unzip with the
+   old leading-slash-only normalizer (out of scope of F-033; map keys only, no
+   extraction to disk).
+
+3. Replay decode and judgment work must not monopolize the server process or
+   grow memory without bound. Decoded replays and judgment results are kept in
+   bounded in-memory LRUs (entry count and estimated bytes; an entry larger
+   than the byte budget is not kept), keyed by score id + replay file mtime +
+   size (+ mods and a chart fingerprint for judgments). File read is async;
+   decode and judging run under a FIFO limiter of 2 and judging yields to the
+   event loop first. There is no worker thread.
+   **Enforced by:** `replay/replayRuntime.ts:BoundedLru`,
+   `ConcurrencyLimiter`, `loadDecodedReplay()`, `judgeCached()` — status:
+   verified by `replay/replayRuntime.test.ts`.
 
 ## Important states
 
@@ -366,6 +417,9 @@ Realm skin extract (full / reconcile):
   only when combo / accuracy / last result change (counts ride the same update).
   Paused + unchanged time   skips the scan. Combo, accuracy, and running counts are draggable playfield
   chips (`ComboHudOverlay`, `AccuracyHudOverlay`, `JudgmentCounterOverlay`).
+- `GET /scores/:id/replay` reads the file async, then decodes and judges via
+  `replay/replayRuntime.ts`. The response still includes the full frame array
+  for the ruleset; the client needs it for rewatch and video export.
 - Fat API payload: unused `notes` / `hitObjects` / `taikoHitObjects` /
   `catchHitObjects` / frame arrays are `[]`. Preview responses echo
   `appliedMods` for the pattern conversions actually applied.
@@ -394,6 +448,7 @@ Realm skin extract (full / reconcile):
 
 - Skin stores consumed by playfields, preview/rewatch modals, embed, and editors.
 - [replay-video-export/](../replay-video-export/index.md)
+- [skin-fusion/](../skin-fusion/index.md) — reads Realm skin archives through `routes/skins.ts`; shares `sanitizeZipEntryPath()`.
 - [now-selected/](../now-selected/index.md)
 - [tosu-counter/](../tosu-counter/index.md) — standalone counter reuses the
   mania painter + skin defaults; the paint modules are dependency-free pure

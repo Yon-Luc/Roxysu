@@ -10,7 +10,6 @@ import {
   beatmapSets,
   collections,
   hubAddedCollections,
-  settings,
 } from "@roxysu/db/schema";
 import { SYNC_REALM_READER_PAUSED_KEY } from "@roxysu/db/settings-keys";
 import { defaultDbPath } from "@roxysu/db/path";
@@ -21,6 +20,11 @@ import type {
   LazerCollectionSyncSuccess,
 } from "@roxysu/collection-sync";
 import { hubSyncId } from "@roxysu/collection-sync";
+import {
+  realmWriteBusyMessage,
+  tryAcquireRealmWriteLock,
+  type RealmWriteLease,
+} from "./realmWriteLock";
 import { and, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import {
   listCollectionMd5Hashes,
@@ -36,12 +40,6 @@ import {
 export { SYNC_REALM_READER_PAUSED_KEY };
 export type { LazerCollectionSyncSuccess, LazerCollectionSyncError };
 
-const PAUSE_SETTLE_MS = 2_000;
-
-let writeBackInFlight: Promise<
-  | { ok: true; result: LazerCollectionSyncSuccess }
-  | { ok: false; error: LazerCollectionSyncError }
-> | null = null;
 
 type Md5List = { hashes: string[]; skippedNoMd5: number };
 type Md5CacheEntry = { value: Md5List; at: number };
@@ -91,10 +89,6 @@ function chunkIds(ids: number[]): number[][] {
     out.push(ids.slice(i, i + ONLINE_ID_CHUNK));
   }
   return out;
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function isBunRuntime(): boolean {
@@ -185,16 +179,6 @@ function parseCliResult(stdout: string): CollectionSyncResult {
   }
 
   return JSON.parse(line.slice("RESULT ".length)) as CollectionSyncResult;
-}
-
-async function setSetting(db: Db, key: string, value: string): Promise<void> {
-  await db
-    .insert(settings)
-    .values({ key, value })
-    .onConflictDoUpdate({
-      target: settings.key,
-      set: { value },
-    });
 }
 
 /** Distinct MD5 hashes for beatmaps in the given beatmapset online IDs. */
@@ -324,26 +308,27 @@ export async function syncCollectionsToLazer(
   | { ok: true; result: LazerCollectionSyncSuccess }
   | { ok: false; error: LazerCollectionSyncError }
 > {
-  if (writeBackInFlight) {
+  const lease = tryAcquireRealmWriteLock(db, "collection_write_back");
+  if (!lease) {
     return {
       ok: false,
       error: {
-        error: "Collection write-back already running",
+        error: realmWriteBusyMessage(),
         code: "in_flight",
       },
     };
   }
 
-  writeBackInFlight = runCollectionWriteBack(db);
   try {
-    return await writeBackInFlight;
+    return await runCollectionWriteBack(db, lease);
   } finally {
-    writeBackInFlight = null;
+    await lease.release();
   }
 }
 
 async function runCollectionWriteBack(
   db: Db,
+  lease: RealmWriteLease,
 ): Promise<
   | { ok: true; result: LazerCollectionSyncSuccess }
   | { ok: false; error: LazerCollectionSyncError }
@@ -410,8 +395,7 @@ async function runCollectionWriteBack(
     skippedNoMd5,
   };
 
-  await setSetting(db, SYNC_REALM_READER_PAUSED_KEY, "1");
-  await sleep(PAUSE_SETTLE_MS);
+  await lease.pauseExtraction();
 
   try {
     let syncResult: CollectionSyncResult;
@@ -452,6 +436,6 @@ async function runCollectionWriteBack(
     const { ok: _ok, ...result } = syncResult;
     return { ok: true, result };
   } finally {
-    await setSetting(db, SYNC_REALM_READER_PAUSED_KEY, "0");
+    await lease.release();
   }
 }

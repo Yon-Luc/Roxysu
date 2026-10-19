@@ -12,6 +12,7 @@ import {
 } from "../replay/mods";
 import { runSunnyEstimatorFromText } from "./sunnyEstimator";
 import { runDanielEstimatorFromText } from "./danielEstimator";
+import { yieldForBackfill } from "./jobYield";
 
 export const DAN_VARIANTS_ALGORITHM_SUNNY = "sunny";
 export const DAN_VARIANTS_ALGORITHM_DANIEL = "daniel";
@@ -260,25 +261,42 @@ function variantRowFor(
   } | null);
 }
 
-/**
- * Compute missing/stale dan variants for a batch of played-mods combos.
- * Rows that already succeeded for the current beatmap hash are skipped.
- */
-export function backfillDanVariantsSync(
-  db: Db,
-  opts: { limit?: number; combos?: DanVariantCombo[] } = {},
-): { attempted: number; succeeded: number; remaining: number } {
-  const limit = Math.max(1, Math.min(500, opts.limit ?? 40));
-  const candidates = opts.combos ?? collectDanVariantCombos(db);
+type PlannedCombo = {
+  combo: DanVariantCombo;
+  beatmap: VariantBeatmapRow;
+  algorithms: Array<"sunny" | "daniel">;
+};
 
-  const attemptedCombos: Array<{
-    combo: DanVariantCombo;
-    beatmap: VariantBeatmapRow;
-    algorithms: Array<"sunny" | "daniel">;
-  }> = [];
+export type DanVariantBackfillResult = {
+  attempted: number;
+  succeeded: number;
+  remaining: number;
+  /** True when `shouldContinue` stopped the batch before every combo ran. */
+  stoppedEarly: boolean;
+  /**
+   * Combos that were computed this call (a subset of the attempted combos when
+   * `stoppedEarly`). Combos skipped as already fresh are not listed.
+   */
+  processed: DanVariantCombo[];
+};
+
+export type DanVariantBackfillOptions = {
+  limit?: number;
+  combos?: DanVariantCombo[];
+  /** Checked before each combo; return false to stop the batch early. */
+  shouldContinue?: () => boolean;
+};
+
+/** Pick the combos in `candidates` that still need a sunny/daniel variant row. */
+function planDanVariantBackfill(
+  db: Db,
+  candidates: DanVariantCombo[],
+  limit: number,
+): PlannedCombo[] {
+  const planned: PlannedCombo[] = [];
 
   for (const combo of candidates) {
-    if (attemptedCombos.length >= limit) break;
+    if (planned.length >= limit) break;
 
     const [beatmap] = db.$client
       .query(
@@ -316,21 +334,100 @@ export function backfillDanVariantsSync(
     }
     if (algorithms.length === 0) continue;
 
-    attemptedCombos.push({ combo, beatmap, algorithms });
+    planned.push({ combo, beatmap, algorithms });
   }
+
+  return planned;
+}
+
+/** Compute one planned combo; true when a usable label was stored. */
+function runPlannedCombo(db: Db, item: PlannedCombo): boolean {
+  const { combo, beatmap, algorithms } = item;
+  computeOneComboSync(db, combo, beatmap, algorithms);
+  const after = variantRowFor(db, "sunny", combo);
+  const danielAfter = algorithms.includes("daniel")
+    ? variantRowFor(db, "daniel", combo)
+    : after;
+  return Boolean(after?.estDiff || danielAfter?.estDiff);
+}
+
+/**
+ * Compute missing/stale dan variants for a batch of played-mods combos.
+ * Rows that already succeeded for the current beatmap hash are skipped.
+ *
+ * Synchronous: it holds the event loop for the whole batch. Background jobs
+ * use {@link backfillDanVariants}, which yields between combos.
+ */
+export function backfillDanVariantsSync(
+  db: Db,
+  opts: DanVariantBackfillOptions = {},
+): DanVariantBackfillResult {
+  const limit = Math.max(1, Math.min(500, opts.limit ?? 40));
+  const candidates = opts.combos ?? collectDanVariantCombos(db);
+  const planned = planDanVariantBackfill(db, candidates, limit);
 
   let succeeded = 0;
-  for (const { combo, beatmap, algorithms } of attemptedCombos) {
-    computeOneComboSync(db, combo, beatmap, algorithms);
-    const after = variantRowFor(db, "sunny", combo);
-    const danielAfter = algorithms.includes("daniel")
-      ? variantRowFor(db, "daniel", combo)
-      : after;
-    if (after?.estDiff || danielAfter?.estDiff) succeeded += 1;
+  let stoppedEarly = false;
+  const processed: DanVariantCombo[] = [];
+  for (const item of planned) {
+    if (opts.shouldContinue && !opts.shouldContinue()) {
+      stoppedEarly = true;
+      break;
+    }
+    if (runPlannedCombo(db, item)) succeeded += 1;
+    processed.push(item.combo);
   }
 
-  const remaining = Math.max(0, candidates.length - attemptedCombos.length);
-  return { attempted: attemptedCombos.length, succeeded, remaining };
+  const remaining = Math.max(0, candidates.length - processed.length);
+  return {
+    attempted: planned.length,
+    succeeded,
+    remaining,
+    stoppedEarly,
+    processed,
+  };
+}
+
+/**
+ * Same as {@link backfillDanVariantsSync}, but hands the event loop a turn
+ * after every combo (and forces a periodic collection) so a modded library
+ * cannot stall API responses. `shouldContinue` is checked before each combo.
+ */
+export async function backfillDanVariants(
+  db: Db,
+  opts: DanVariantBackfillOptions & {
+    /** Override the per-combo yield (tests). */
+    yieldBetween?: () => Promise<void>;
+  } = {},
+): Promise<DanVariantBackfillResult> {
+  const limit = Math.max(1, Math.min(500, opts.limit ?? 40));
+  const candidates = opts.combos ?? collectDanVariantCombos(db);
+  const planned = planDanVariantBackfill(db, candidates, limit);
+  const yieldState = { count: 0 };
+  const yieldBetween =
+    opts.yieldBetween ?? (() => yieldForBackfill(yieldState));
+
+  let succeeded = 0;
+  let stoppedEarly = false;
+  const processed: DanVariantCombo[] = [];
+  for (const item of planned) {
+    if (opts.shouldContinue && !opts.shouldContinue()) {
+      stoppedEarly = true;
+      break;
+    }
+    if (runPlannedCombo(db, item)) succeeded += 1;
+    processed.push(item.combo);
+    await yieldBetween();
+  }
+
+  const remaining = Math.max(0, candidates.length - processed.length);
+  return {
+    attempted: planned.length,
+    succeeded,
+    remaining,
+    stoppedEarly,
+    processed,
+  };
 }
 
 /**

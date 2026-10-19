@@ -1,5 +1,5 @@
 import { beatmapSets, beatmaps } from "@roxysu/db/schema";
-import { and, eq, gt, gte, inArray, lte, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, gt, gte, inArray, lte, sql, type SQL } from "drizzle-orm";
 
 import type { Db } from "../db-runtime";
 import { BEATMAP_STATUS } from "../query-language/status";
@@ -20,6 +20,78 @@ export async function loadOwnedSetOnlineIds(db: Db): Promise<Set<number>> {
       and(gt(beatmapSets.onlineId, 0), eq(beatmapSets.deletePending, false)),
     );
   return new Set(rows.map((row) => row.onlineId));
+}
+
+/**
+ * Max candidate ids accepted by one ownership diff or one `setIds` batch
+ * download. Shared by `POST /mirrors/ownership/diff` and
+ * `POST /mirrors/batch/start` so both have the same predictable upper cost.
+ */
+export const MAX_OWNERSHIP_DIFF_IDS = 20_000;
+
+/** Default / maximum page size for `GET /mirrors/owned-set-ids`. */
+export const OWNED_SET_IDS_DEFAULT_LIMIT = 20_000;
+export const OWNED_SET_IDS_MAX_LIMIT = 50_000;
+
+export type OwnedSetIdsPage = {
+  /** Ascending owned beatmapset online IDs, all greater than the `after` cursor. */
+  setIds: number[];
+  /** Pass as `after` to fetch the next page; null when this is the last page. */
+  nextAfter: number | null;
+};
+
+/**
+ * One keyset page of owned beatmapset online IDs (ascending, `> after`).
+ * Bounds memory per request; clients walk `nextAfter` until it is null.
+ */
+export async function loadOwnedSetOnlineIdsPage(
+  db: Db,
+  opts: { after?: number; limit?: number } = {},
+): Promise<OwnedSetIdsPage> {
+  const after = Number.isFinite(opts.after) ? Math.max(0, opts.after!) : 0;
+  const limit = Math.min(
+    OWNED_SET_IDS_MAX_LIMIT,
+    Math.max(1, Math.floor(opts.limit ?? OWNED_SET_IDS_DEFAULT_LIMIT)),
+  );
+  const rows = await db
+    .selectDistinct({ onlineId: beatmapSets.onlineId })
+    .from(beatmapSets)
+    .where(
+      and(
+        gt(beatmapSets.onlineId, after),
+        eq(beatmapSets.deletePending, false),
+      ),
+    )
+    .orderBy(asc(beatmapSets.onlineId))
+    .limit(limit + 1);
+  const hasMore = rows.length > limit;
+  const page = (hasMore ? rows.slice(0, limit) : rows).map(
+    (row) => row.onlineId,
+  );
+  return {
+    setIds: page,
+    nextAfter: hasMore ? (page[page.length - 1] ?? null) : null,
+  };
+}
+
+/**
+ * Cheap fingerprint of the owned id set (row count, id sum, max id) so clients
+ * can skip re-downloading when nothing changed. Aggregates in SQLite; does not
+ * materialise the ids.
+ */
+export async function loadOwnedSetIdsVersion(db: Db): Promise<string> {
+  const rows = await db
+    .select({
+      count: sql<number>`count(*)`,
+      sum: sql<number>`coalesce(sum(${beatmapSets.onlineId}), 0)`,
+      max: sql<number>`coalesce(max(${beatmapSets.onlineId}), 0)`,
+    })
+    .from(beatmapSets)
+    .where(
+      and(gt(beatmapSets.onlineId, 0), eq(beatmapSets.deletePending, false)),
+    );
+  const row = rows[0];
+  return `${Number(row?.count ?? 0)}-${Number(row?.sum ?? 0)}-${Number(row?.max ?? 0)}`;
 }
 
 export type BeatmapsetOwnershipDiff = {

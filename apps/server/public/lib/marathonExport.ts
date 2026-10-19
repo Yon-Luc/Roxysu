@@ -3,6 +3,7 @@ import { fuseManiaCharts } from "@roxysu/osu-chart";
 import { localBeatmapAudioUrl, localBeatmapCoverUrl } from "./osuUrls";
 
 const TARGET_RATE = 44100;
+const SILENCE_PEAK = 0.0001;
 const COLLAGE_W = 1920;
 const COLLAGE_H = 1080;
 
@@ -60,6 +61,112 @@ export function encodePcmWav(
   return out;
 }
 
+const BYTES_PER_FRAME = 4;
+
+/**
+ * Longest marathon the browser export will build. 16-bit stereo 44.1 kHz PCM is
+ * about 10.6 MB per minute, so one hour is roughly 635 MB held in memory.
+ */
+export const MARATHON_MAX_DURATION_SEC = 60 * 60;
+
+/** Interleave a stereo pair as signed 16-bit little-endian PCM. */
+export function pcm16Interleave(
+  left: Float32Array,
+  right: Float32Array,
+): Uint8Array {
+  const frames = Math.min(left.length, right.length);
+  const out = new Uint8Array(frames * BYTES_PER_FRAME);
+  const view = new DataView(out.buffer);
+  let offset = 0;
+  for (let i = 0; i < frames; i += 1) {
+    const l = Math.max(-1, Math.min(1, left[i] ?? 0));
+    const r = Math.max(-1, Math.min(1, right[i] ?? 0));
+    view.setInt16(offset, l < 0 ? l * 0x8000 : l * 0x7fff, true);
+    view.setInt16(offset + 2, r < 0 ? r * 0x8000 : r * 0x7fff, true);
+    offset += BYTES_PER_FRAME;
+  }
+  return out;
+}
+
+/** Wrap already-encoded stereo 16-bit PCM chunks in one WAV file. */
+export function assembleStereoWav(
+  pcmChunks: Uint8Array[],
+  sampleRate: number,
+): Uint8Array {
+  let dataSize = 0;
+  for (const chunk of pcmChunks) dataSize += chunk.byteLength;
+  const out = new Uint8Array(44 + dataSize);
+  const view = new DataView(out.buffer);
+  writeAscii(out, 0, "RIFF");
+  view.setUint32(4, 36 + dataSize, true);
+  writeAscii(out, 8, "WAVE");
+  writeAscii(out, 12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 2, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * BYTES_PER_FRAME, true);
+  view.setUint16(32, BYTES_PER_FRAME, true);
+  view.setUint16(34, 16, true);
+  writeAscii(out, 36, "data");
+  view.setUint32(40, dataSize, true);
+  let offset = 44;
+  for (const chunk of pcmChunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out;
+}
+
+/**
+ * Concatenate tracks one at a time as 16-bit PCM chunks. Only one decoded
+ * track is alive at once and the mix is held as PCM16 (half the size of a
+ * float32 stereo pair), never as a float copy of the whole marathon.
+ */
+export async function mixTracksToWav(args: {
+  count: number;
+  /** Return one track already resampled to stereo `TARGET_RATE`. */
+  loadTrack: (index: number) => Promise<[Float32Array, Float32Array]>;
+  pauseMs: number;
+  maxDurationSec?: number;
+  signal?: AbortSignal;
+}): Promise<{ wav: Uint8Array; durationsMs: number[] }> {
+  const { count, loadTrack, pauseMs, signal } = args;
+  const maxFrames = Math.round(
+    (args.maxDurationSec ?? MARATHON_MAX_DURATION_SEC) * TARGET_RATE,
+  );
+  const pauseFrames = Math.max(0, Math.round((pauseMs / 1000) * TARGET_RATE));
+  const pauseChunk = new Uint8Array(pauseFrames * BYTES_PER_FRAME);
+  const chunks: Uint8Array[] = [];
+  const durationsMs: number[] = [];
+  let totalFrames = 0;
+  let peak = 0;
+
+  for (let i = 0; i < count; i += 1) {
+    throwIfAborted(signal);
+    const track = await loadTrack(i);
+    throwIfAborted(signal);
+    const frames = Math.min(track[0].length, track[1].length);
+    totalFrames += frames + (i < count - 1 ? pauseFrames : 0);
+    if (totalFrames > maxFrames) {
+      const limitMin = Math.round(maxFrames / TARGET_RATE / 60);
+      throw new Error(
+        `Marathon audio is longer than the ${limitMin} minute limit; remove some maps`,
+      );
+    }
+    durationsMs.push(Math.round((frames / TARGET_RATE) * 1000));
+    for (let f = 0; f < frames && peak <= SILENCE_PEAK; f += 1) {
+      peak = Math.max(peak, Math.abs(track[0][f] ?? 0), Math.abs(track[1][f] ?? 0));
+    }
+    chunks.push(pcm16Interleave(track[0], track[1]));
+    if (i < count - 1 && pauseFrames > 0) chunks.push(pauseChunk);
+  }
+
+  if (peak <= SILENCE_PEAK) throw new Error("Concatenated audio is silent");
+  throwIfAborted(signal);
+  return { wav: assembleStereoWav(chunks, TARGET_RATE), durationsMs };
+}
+
 export function sanitizeMarathonFilename(name: string): string {
   const base = name
     .replace(/[<>:"/\\|?*\x00-\x1f]/g, "_")
@@ -82,19 +189,18 @@ export async function generateMarathonOsz(args: {
   const { sources, pauseMs, title, artist, version, signal, onProgress } = args;
   if (sources.length < 2) throw new Error("Need at least two maps");
 
-  const decoded: AudioBuffer[] = [];
-  for (let i = 0; i < sources.length; i += 1) {
-    throwIfAborted(signal);
-    onProgress?.({ phase: "audio", index: i, total: sources.length });
-    const url = localBeatmapAudioUrl(sources[i]!.audioFileHash);
-    if (!url) throw new Error(`Audio missing for map ${i + 1}`);
-    decoded.push(await decodeAudio(url, signal));
-  }
-
-  throwIfAborted(signal);
-  onProgress?.({ phase: "encode" });
-  const mixed = mixAudio(decoded, pauseMs / 1000);
-  const encoded = encodeAudio(mixed.buffer);
+  const mixed = await mixTracksToWav({
+    count: sources.length,
+    pauseMs,
+    signal,
+    loadTrack: async (i) => {
+      onProgress?.({ phase: "audio", index: i, total: sources.length });
+      const url = localBeatmapAudioUrl(sources[i]!.audioFileHash);
+      if (!url) throw new Error(`Audio missing for map ${i + 1}`);
+      return toStereo44100(await decodeAudio(url, signal));
+    },
+  });
+  const encoded = { bytes: mixed.wav, filename: "audio.wav" };
   const durationsMs = mixed.durationsMs;
 
   throwIfAborted(signal);
@@ -157,7 +263,7 @@ async function decodeAudio(
   const raw = await res.arrayBuffer();
   const ctx = new AudioContext();
   try {
-    return await ctx.decodeAudioData(raw.slice(0));
+    return await ctx.decodeAudioData(raw);
   } finally {
     void ctx.close();
   }
@@ -186,60 +292,6 @@ function toStereo44100(buffer: AudioBuffer): [Float32Array, Float32Array] {
   const right = resample(rightSrc, buffer.sampleRate, TARGET_RATE);
   const n = Math.min(left.length, right.length);
   return [left.subarray(0, n), right.subarray(0, n)];
-}
-
-function mixAudio(
-  buffers: AudioBuffer[],
-  pauseSec: number,
-): { buffer: AudioBuffer; durationsMs: number[] } {
-  const parts: Array<[Float32Array, Float32Array]> = buffers.map(toStereo44100);
-  const pauseFrames = Math.max(0, Math.round(pauseSec * TARGET_RATE));
-  const durationsMs = parts.map((part) =>
-    Math.round((part[0].length / TARGET_RATE) * 1000),
-  );
-  let total = 0;
-  for (let i = 0; i < parts.length; i += 1) {
-    total += parts[i]![0].length;
-    if (i < parts.length - 1) total += pauseFrames;
-  }
-  const left = new Float32Array(total);
-  const right = new Float32Array(total);
-  let offset = 0;
-  for (let i = 0; i < parts.length; i += 1) {
-    const [l, r] = parts[i]!;
-    left.set(l, offset);
-    right.set(r, offset);
-    offset += l.length;
-    if (i < parts.length - 1) offset += pauseFrames;
-  }
-  const out = new AudioBuffer({
-    length: total,
-    numberOfChannels: 2,
-    sampleRate: TARGET_RATE,
-  });
-  out.copyToChannel(left, 0);
-  out.copyToChannel(right, 1);
-  return { buffer: out, durationsMs };
-}
-
-function encodeAudio(
-  buffer: AudioBuffer,
-): { bytes: Uint8Array; filename: string } {
-  const left = buffer.getChannelData(0);
-  const right =
-    buffer.numberOfChannels > 1 ? buffer.getChannelData(1) : left;
-  let peak = 0;
-  for (let i = 0; i < left.length; i += 1) {
-    peak = Math.max(peak, Math.abs(left[i] ?? 0), Math.abs(right[i] ?? 0));
-    if (peak > 0.0001) break;
-  }
-  if (peak <= 0.0001) {
-    throw new Error("Concatenated audio is silent");
-  }
-  return {
-    bytes: encodePcmWav([left, right], buffer.sampleRate),
-    filename: "audio.wav",
-  };
 }
 
 async function buildCollage(
@@ -337,4 +389,28 @@ function sanitizeArchiveStem(name: string): string {
     .replace(/\s+/g, " ")
     .trim();
   return cleaned.length > 0 ? cleaned : "map";
+}
+
+/**
+ * Keep only sources whose key count matches the marathon's key count. The
+ * reference is the first existing track with a key count, else the first
+ * incoming source. `referenceKeyCount` is null when nothing is constrained.
+ */
+export function partitionByKeyCount<T extends { keyCount: number | null }>(
+  existing: readonly { keyCount: number | null }[],
+  incoming: readonly T[],
+): { accepted: T[]; rejected: T[]; referenceKeyCount: number | null } {
+  const referenceKeyCount =
+    existing.find((t) => t.keyCount != null)?.keyCount ??
+    incoming.find((t) => t.keyCount != null)?.keyCount ??
+    null;
+  if (referenceKeyCount == null) {
+    return { accepted: [...incoming], rejected: [], referenceKeyCount };
+  }
+  const accepted: T[] = [];
+  const rejected: T[] = [];
+  for (const src of incoming) {
+    (src.keyCount === referenceKeyCount ? accepted : rejected).push(src);
+  }
+  return { accepted, rejected, referenceKeyCount };
 }

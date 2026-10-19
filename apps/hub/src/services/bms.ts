@@ -16,7 +16,7 @@ import {
   bmsScorePresentation,
   comboLampMeets,
   gradeMeets,
-  groupBmsSessions,
+  loadRecentBmsSessions,
   isAllowedBmsTableUrl,
   isKnownVariantId,
   parseBmsTableJson,
@@ -427,30 +427,31 @@ export async function profileSessions(
   if (!user || (!user.bmsProfilePublic && viewerId !== user.id)) return null;
   const filters = [eq(bmsScores.userId, user.id)];
   if (variant) filters.push(eq(bmsScores.variantId, variant));
-  const rows = await db
-    .select({
-      id: bmsScores.id,
-      playedAt: bmsScores.achievedAt,
-      exScore: bmsScores.exScore,
-      normalizedScore: bmsScores.normalizedScore,
-      title: bmsCharts.title,
-    })
-    .from(bmsScores)
-    .innerJoin(bmsCharts, eq(bmsCharts.md5, bmsScores.chartMd5))
-    .where(and(...filters))
-    .orderBy(desc(bmsScores.achievedAt))
-    .limit(400);
-  const grouped = groupBmsSessions(
-    rows.map((row) => ({
+  const grouped = await loadRecentBmsSessions(async (offset, limit) => {
+    const rows = await db
+      .select({
+        id: bmsScores.id,
+        playedAt: bmsScores.achievedAt,
+        exScore: bmsScores.exScore,
+        normalizedScore: bmsScores.normalizedScore,
+        title: bmsCharts.title,
+      })
+      .from(bmsScores)
+      .innerJoin(bmsCharts, eq(bmsCharts.md5, bmsScores.chartMd5))
+      .where(and(...filters))
+      .orderBy(desc(bmsScores.achievedAt), desc(bmsScores.id))
+      .limit(limit)
+      .offset(offset);
+    return rows.map((row) => ({
       id: row.id,
       playedAt: new Date(row.playedAt).getTime(),
       exScore: row.exScore,
       normalizedScore: row.normalizedScore ?? 0,
       title: row.title,
-    })),
-  );
+    }));
+  });
   return {
-    sessions: grouped.slice(0, 20).map((session) => ({
+    sessions: grouped.map((session) => ({
       startedAt: new Date(session.startedAt).toISOString(),
       endedAt: new Date(session.endedAt).toISOString(),
       scoreCount: session.scoreCount,

@@ -4,6 +4,7 @@ feature: live-sync
 kind: logic-gap
 severity: medium
 confidence: verified
+status: fixed
 ---
 
 # Soft-delete and hidden flags heal only when counts differ
@@ -27,3 +28,7 @@ Undo/redo of deletes and hides in lazer shows up in the practice library without
 ## Evidence
 
 - `apps/realm-reader/src/sync.ts` (about lines 1038–1069): three count comparisons before mapping `DeletePending` and `Hidden` objects.
+
+## Status
+
+Fixed. `healFlaggedRows` (`apps/realm-reader/src/deltaCore.ts`) compares the id sets of flagged Realm objects with flagged local-mirror rows and remaps the symmetric difference by primary key (this also unflags restored rows, which the old "map all flagged Realm objects" loop never did). Used by incremental and reconcile. Tests: `deltaCore.test.ts` (equal counts, different ids for scores, sets, hidden beatmaps).

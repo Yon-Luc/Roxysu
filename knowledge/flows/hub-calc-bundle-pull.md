@@ -43,6 +43,8 @@ Admin publish path:
 ```
 Settings/Hub admin → export successful local rows
   ↓
+upload target is always resolveHubBaseUrl() (no caller URL)
+  ↓
 chunked POST /admin/calc-bundles (replace then append)
   ↓
 Hub store calc_bundles + calc_bundle_entries

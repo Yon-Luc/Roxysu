@@ -4,6 +4,7 @@ feature: bms
 kind: logic-gap
 severity: medium
 confidence: likely
+status: fixed
 ---
 
 # Combo lamp treats a missing miss count as zero
@@ -27,3 +28,7 @@ Fewer false full-combo and perfect badges when Realm statistics are partial.
 ## Evidence
 
 - `packages/db/src/bmsInterpret.ts` `comboLamp` (lines 181–194): null miss becomes 0; the early null return ignores miss.
+
+## Status
+
+Fixed. Verified against the code on 2026-10-19: `packages/db/src/bmsInterpret.ts` returns a null lamp when bad, poor, or miss is missing; `interpret.test.ts` asserts it.

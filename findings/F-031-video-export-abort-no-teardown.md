@@ -4,6 +4,7 @@ feature: replay-video-export
 kind: design-gap
 severity: medium
 confidence: likely
+status: fixed
 ---
 
 # Cancelling a video export does not tear down the encoder
@@ -27,3 +28,7 @@ Cancelled exports release the encoder instead of stacking until the next navigat
 ## Evidence
 
 - `apps/server/public/lib/replayVideoExport.ts` (about lines 1396–1400 and 1475–1509): `output.start()`, `throwIfAborted` inside the frame loop, `output.finalize()` only on the success path.
+
+## Status
+
+Fixed. `exportReplayVideo` wraps the output in `try/catch/finally`. On abort or error `teardownFailedOutput()` calls mediabunny `Output.cancel()` (releases encoders and closes the target); the `finally` clears the HUD row memo and shrinks both canvases. Streamed output goes through `createGuardedFileWritable()` so the target's close during cancel aborts the file instead of committing a truncated MP4. Tests in `lib/replayVideoExport.test.ts` use a fake output and a recording writable.

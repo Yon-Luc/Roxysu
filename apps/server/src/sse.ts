@@ -5,6 +5,7 @@ import { Elysia } from "elysia";
 import { desc, eq, max } from "drizzle-orm";
 
 import { publish, subscribe, type AppEvent } from "./shared/events";
+import { createStaleImportSweep } from "./staleImportSweep";
 
 type PollState = {
   lastImportId: number;
@@ -87,10 +88,14 @@ async function readState(db: Db): Promise<PollState> {
 export function startPollLoop(db: Db, intervalMs = 1500): () => void {
   let prev: PollState | null = null;
   let stopped = false;
+  const sweepStaleImports = createStaleImportSweep(db);
 
   const tick = async () => {
     if (stopped) return;
     try {
+      // The reader may have died mid-import; fail abandoned `running` rows so
+      // the live-sync indicator and analytics gate do not wait forever (F-011).
+      sweepStaleImports();
       const next = await readState(db);
       latestSchemaOutdated = next.schemaOutdated != null;
       const schemaChanged = prev

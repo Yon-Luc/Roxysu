@@ -6,6 +6,8 @@ import {
   estimateReplayVideoBytes,
   formatExportByteSize,
   getReplayVideoExportPreset,
+  replayVideoMemoryRisk,
+  supportsStreamingSave,
   type ReplayVideoExportPresetId,
 } from "../lib/replayVideoExport";
 import { formatClock } from "../lib/format";
@@ -79,6 +81,8 @@ export function ReplayVideoExportOptionsModal({
     hideBackground,
   );
   const underDiscordLimit = estimateBytes <= DISCORD_UPLOAD_LIMIT_BYTES;
+  const canStream = supportsStreamingSave();
+  const memoryRisk = replayVideoMemoryRisk(estimateBytes, preset, canStream);
 
   if (!open) return null;
 
@@ -221,6 +225,35 @@ export function ReplayVideoExportOptionsModal({
                   ? `Likely under Discord’s ~${formatExportByteSize(DISCORD_UPLOAD_LIMIT_BYTES)} free upload limit.`
                   : `May exceed Discord’s ~${formatExportByteSize(DISCORD_UPLOAD_LIMIT_BYTES)} free upload limit — try Compact or a shorter map.`}
               </p>
+            ) : null}
+            {memoryRisk === "stream" ? (
+              <p className="mt-2 text-xs text-muted">
+                You will pick a save location; the video is written straight to
+                disk instead of being held in memory.
+              </p>
+            ) : null}
+            {memoryRisk === "warn" ? (
+              <div className="mt-2 text-xs text-warning/90">
+                <p>
+                  This browser cannot stream to disk, so the whole file is held
+                  in memory while encoding. A file this large can crash the
+                  tab on weaker machines.
+                </p>
+                <button
+                  type="button"
+                  className="rx-btn mt-2"
+                  disabled={busy}
+                  onClick={() => {
+                    setPresetId("compact");
+                    setHideBackground(
+                      getReplayVideoExportPreset("compact")
+                        .hideBackgroundDefault,
+                    );
+                  }}
+                >
+                  Switch to Compact
+                </button>
+              </div>
             ) : null}
           </div>
         </div>

@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { compress } from "@napi-rs/lzma/lzma";
-import { decodeLegacyReplay } from "./decode";
+import {
+  MAX_REPLAY_DECOMPRESSED_BYTES,
+  MAX_REPLAY_FRAMES,
+  decodeLegacyReplay,
+  decompressReplayBounded,
+} from "./decode";
 import { maniaHitWindows, simulateManiaJudgments } from "./judge";
 import { parseScoreMods } from "./mods";
 
@@ -16,11 +21,15 @@ function writeString(parts: Buffer[], s: string) {
   parts.push(bytes);
 }
 
-async function buildMinimalOsr(opts: {
-  rulesetId: number;
-  frameText: string;
-}): Promise<Buffer> {
-  const compressed = Buffer.from(await compress(Buffer.from(opts.frameText)));
+async function buildMinimalOsr(
+  opts: {
+    rulesetId: number;
+    frameText: string;
+  },
+  precompressed?: Buffer,
+): Promise<Buffer> {
+  const compressed =
+    precompressed ?? Buffer.from(await compress(Buffer.from(opts.frameText)));
   const parts: Buffer[] = [];
   parts.push(Buffer.from([opts.rulesetId]));
   const version = Buffer.alloc(4);
@@ -78,6 +87,58 @@ describe("decodeLegacyReplay", () => {
     expect(decoded.frames[0]!.tMs).toBe(-100);
     const press = decoded.frames.find((f) => f.keys === 1);
     expect(press?.tMs).toBe(0);
+  });
+});
+
+describe("decodeLegacyReplay size caps", () => {
+  test("rejects a payload that expands beyond the decompressed cap", async () => {
+    // ~20 MB of zeros compresses to a few KB.
+    const bomb = Buffer.alloc(MAX_REPLAY_DECOMPRESSED_BYTES + 4 * 1024 * 1024);
+    const compressed = Buffer.from(await compress(bomb));
+    expect(compressed.length).toBeLessThan(64 * 1024);
+    const buf = await buildMinimalOsr({ rulesetId: 3, frameText: "" }, compressed);
+    await expect(decodeLegacyReplay(buf)).rejects.toThrow(/too large/);
+  });
+
+  test("rejects when the header understates size but the stream is large", async () => {
+    const bomb = Buffer.alloc(2 * 1024 * 1024);
+    const compressed = Buffer.from(await compress(bomb));
+    // Header says "size unknown"; the bound must come from counting output.
+    const unknown = Buffer.from(compressed);
+    unknown.fill(0xff, 5, 13);
+    await expect(
+      decompressReplayBounded(unknown, 64 * 1024),
+    ).rejects.toThrow(/too large/);
+  });
+
+  test("rejects early when the header declares an oversized length", async () => {
+    const compressed = Buffer.from(await compress(Buffer.from("0|0|0|0")));
+    const declared = Buffer.from(compressed);
+    declared.writeBigUInt64LE(1n << 30n, 5);
+    await expect(decompressReplayBounded(declared)).rejects.toThrow(/too large/);
+  });
+
+  test("honours a custom cap and accepts payloads under it", async () => {
+    const payload = Buffer.from("0|0|0|0,10|1|0|0,-12345|0|0|0");
+    const compressed = Buffer.from(await compress(payload));
+    const out = await decompressReplayBounded(compressed, 1024);
+    expect(out.toString("ascii")).toBe(payload.toString("ascii"));
+    await expect(decompressReplayBounded(compressed, 8)).rejects.toThrow(
+      /too large/,
+    );
+  });
+
+  test("rejects truncated lzma header", async () => {
+    await expect(
+      decompressReplayBounded(new Uint8Array(4)),
+    ).rejects.toThrow(/Invalid/);
+  });
+
+  test("rejects replays with more frames than the frame cap", async () => {
+    const text = "1|1|0|0,".repeat(MAX_REPLAY_FRAMES + 1);
+    expect(text.length).toBeLessThan(MAX_REPLAY_DECOMPRESSED_BYTES);
+    const buf = await buildMinimalOsr({ rulesetId: 3, frameText: text });
+    await expect(decodeLegacyReplay(buf)).rejects.toThrow(/too many frames/);
   });
 });
 

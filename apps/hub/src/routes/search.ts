@@ -3,7 +3,7 @@ import {
   edgeCacheTtlSecondsForRow,
   lookupCacheByBase,
   parseStoredStubs,
-  refreshCache,
+  refreshCacheSingleFlight,
   secondaryFiltersFromQuery,
   type CacheQueryParams,
 } from "../services/cache";
@@ -20,8 +20,6 @@ import {
   isHubSearchIndexEnabled,
 } from "../services/hubEnv";
 import { db } from "../db";
-
-const refreshing = new Set<number>();
 
 const searchQueryFields = {
   query: t.Optional(t.String({ maxLength: 200 })),
@@ -87,14 +85,30 @@ async function maybeRefreshStale(
   status: "hit-fresh" | "hit-stale" | "miss",
   ip: string,
 ) {
-  if (status !== "hit-stale" || refreshing.has(rowId)) return;
+  if (status !== "hit-stale" || refreshCacheSingleFlight.has(rowId)) return;
   if (!allowRateLimit(`search-refresh:${ip}`, { limit: 10, windowMs: 60_000 })) {
     return;
   }
-  refreshing.add(rowId);
-  refreshCache(rowId)
-    .catch((err) => console.error("[search] Background refresh failed:", err))
-    .finally(() => refreshing.delete(rowId));
+  refreshCacheSingleFlight(rowId).catch((err) =>
+    console.error("[search] Background refresh failed:", err),
+  );
+}
+
+/**
+ * Edge TTL for a search page, or null for `no-store`. Only a fresh hit whose
+ * row is not being refreshed may be edge cached; a stale hit (refresh starting
+ * or running) must not pin the pre-refresh page list for a full TTL.
+ */
+export function searchPageEdgeTtlSec(
+  status: "hit-fresh" | "hit-stale" | "miss",
+  rowId: number,
+  httpCacheEnabled: boolean,
+  rowTtlSec: number,
+): number | null {
+  if (!httpCacheEnabled) return null;
+  if (status !== "hit-fresh") return null;
+  if (refreshCacheSingleFlight.has(rowId)) return null;
+  return rowTtlSec;
 }
 
 export const searchRoutes = new Elysia({ prefix: "/search" })
@@ -211,8 +225,14 @@ export const searchRoutes = new Elysia({ prefix: "/search" })
           limit,
         );
 
-        if (isHubSearchHttpCacheEnabled()) {
-          setEdgeCache(set, edgeCacheTtlSecondsForRow(row));
+        const edgeTtl = searchPageEdgeTtlSec(
+          status,
+          row.id,
+          isHubSearchHttpCacheEnabled(),
+          edgeCacheTtlSecondsForRow(row),
+        );
+        if (edgeTtl != null) {
+          setEdgeCache(set, edgeTtl);
         } else {
           setNoStore(set);
         }

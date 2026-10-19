@@ -32,6 +32,8 @@
   --color-info: #7dd3fc;
   --color-on-media: #ffffff;
   --color-on-media-muted: rgb(255 255 255 / 0.75);
+  /* Error copy on the dark preview/rewatch scrim; like on-media, not flipped by html.light. */
+  --color-on-media-danger: #fecdd3;
 }
 
 html.light {
@@ -397,10 +399,54 @@ html.light .rx-select option {
     transform 0.2s ease;
 }
 
-.rx-card:hover {
-  background: var(--color-elevated);
-  box-shadow: 0 12px 28px var(--color-card-shadow);
-  transform: translateY(-2px);
+/* Hover paint only on pointers that can hover; a tapped card must not stay lifted. */
+@media (hover: hover) {
+  .rx-card:hover {
+    background: var(--color-elevated);
+    box-shadow: 0 12px 28px var(--color-card-shadow);
+    transform: translateY(-2px);
+  }
+}
+
+/*
+ * Dense grid cards (practice, collection results): hover animates only
+ * transform and opacity so the cover image is never repainted. The highlight
+ * is a ring + tint on a pseudo-element whose opacity fades in. Add alongside
+ * `rx-card`.
+ */
+.rx-card.rx-card-grid {
+  position: relative;
+  transition: transform 0.2s ease;
+}
+
+.rx-card.rx-card-grid::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--color-accent-glow);
+  box-shadow: inset 0 0 0 1px var(--color-accent-dim);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+@media (hover: hover) {
+  .rx-card.rx-card-grid:hover {
+    background: var(--color-surface);
+    box-shadow: none;
+    transform: translateY(-2px);
+  }
+
+  .rx-card.rx-card-grid:hover::after {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rx-card.rx-card-grid:hover {
+    transform: none;
+  }
 }
 
 .rx-stat {

@@ -52,14 +52,13 @@ export function useHubUrl(): string {
 
 export function hubLoginUrl(
   hubUrl: string,
-  opts?: { client?: "desktop"; handoff?: string },
+  opts: { client?: "desktop"; handoff?: string; challenge: string },
 ): string {
   const base = `${hubUrl.replace(/\/$/, "")}/auth/login`;
-  const q = new URLSearchParams();
+  const q = new URLSearchParams({ challenge: opts.challenge });
   if (opts?.client === "desktop") q.set("client", "desktop");
   if (opts?.handoff) q.set("handoff", opts.handoff);
-  const qs = q.toString();
-  return qs ? `${base}?${qs}` : base;
+  return `${base}?${q.toString()}`;
 }
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
@@ -80,18 +79,33 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-/** Start a desktop OAuth handoff; returns opaque id for login URL + poll. */
-export async function beginHubOAuthHandoff(): Promise<string> {
+/**
+ * Start a desktop OAuth handoff. `handoff` and `challenge` go in the login URL;
+ * `verifier` stays in memory and is only sent to the local server when polling.
+ */
+export type HubOAuthBegin = {
+  handoff: string;
+  verifier: string;
+  challenge: string;
+};
+
+export async function beginHubOAuthHandoff(): Promise<HubOAuthBegin> {
   const res = await fetch("/api/system/hub-oauth/begin", {
     method: "POST",
     headers: { accept: "application/json" },
     cache: "no-store",
   });
-  const data = (await res.json()) as { handoff?: string; error?: string };
-  if (!res.ok || !data.handoff) {
+  const data = (await res.json()) as Partial<HubOAuthBegin> & {
+    error?: string;
+  };
+  if (!res.ok || !data.handoff || !data.verifier || !data.challenge) {
     throw new Error(data.error ?? `Hub OAuth begin failed: HTTP ${res.status}`);
   }
-  return data.handoff;
+  return {
+    handoff: data.handoff,
+    verifier: data.verifier,
+    challenge: data.challenge,
+  };
 }
 
 /**
@@ -100,18 +114,23 @@ export async function beginHubOAuthHandoff(): Promise<string> {
  */
 export async function pollHubOAuthPending(
   handoff: string,
+  verifier: string,
   signal?: AbortSignal,
   opts?: { intervalMs?: number; timeoutMs?: number },
 ): Promise<string> {
   const intervalMs = opts?.intervalMs ?? 1000;
   const timeoutMs = opts?.timeoutMs ?? 10 * 60 * 1000;
   const started = Date.now();
-  const q = new URLSearchParams({ h: handoff });
 
   while (!signal?.aborted) {
-    const res = await fetch(`/api/system/hub-oauth/pending?${q}`, {
+    const res = await fetch("/api/system/hub-oauth/pending", {
+      method: "POST",
       signal,
-      headers: { accept: "application/json" },
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ handoff, verifier }),
       cache: "no-store",
     });
     if (!res.ok) {
@@ -128,15 +147,50 @@ export async function pollHubOAuthPending(
   throw new DOMException("Aborted", "AbortError");
 }
 
+const WEB_HANDOFF_VERIFIER_KEY = "roxysu.hub.handoffVerifier";
+
+function toBase64Url(bytes: Uint8Array): string {
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/**
+ * Web login: create a verifier, keep it in `sessionStorage` (same tab only,
+ * never in a URL), and return its SHA-256 challenge for the Hub login URL.
+ * Requires a secure context (`localhost` / `127.0.0.1` qualify).
+ */
+export async function prepareWebHubLoginChallenge(): Promise<string> {
+  if (!globalThis.crypto?.subtle) {
+    throw new Error("Secure browser context required to sign in");
+  }
+  const verifier = toBase64Url(crypto.getRandomValues(new Uint8Array(32)));
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(verifier),
+  );
+  sessionStorage.setItem(WEB_HANDOFF_VERIFIER_KEY, verifier);
+  return toBase64Url(new Uint8Array(digest));
+}
+
 /** Redeem a one-time web OAuth handoff id for a JWT (hash callback). */
 export async function redeemHubHandoff(
   hubUrl: string,
   handoffId: string,
 ): Promise<string> {
+  const verifier = sessionStorage.getItem(WEB_HANDOFF_VERIFIER_KEY);
+  if (!verifier) {
+    throw new Error("Sign-in was not started in this tab — try again");
+  }
   const res = await fetch(
     `${hubUrl.replace(/\/$/, "")}/auth/handoff/${encodeURIComponent(handoffId)}`,
     {
-      headers: { accept: "application/json" },
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ verifier }),
       cache: "no-store",
     },
   );
@@ -147,6 +201,7 @@ export async function redeemHubHandoff(
   if (!res.ok || !data.token) {
     throw new Error(data.message ?? `Handoff failed: HTTP ${res.status}`);
   }
+  sessionStorage.removeItem(WEB_HANDOFF_VERIFIER_KEY);
   return data.token;
 }
 

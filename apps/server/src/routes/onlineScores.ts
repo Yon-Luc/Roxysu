@@ -42,7 +42,8 @@ export const onlineScoreRoutes = new Elysia({ prefix: "/online-scores" })
           username: body.username,
         });
         if ("error" in result) {
-          set.status = result.code === "account_mismatch" ? 409 : 400;
+          set.status =
+            result.code === "account_mismatch" || result.code === "in_flight" ? 409 : 400;
           return result;
         }
         return result;

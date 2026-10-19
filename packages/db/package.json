@@ -11,6 +11,7 @@
     "./client.node": "./src/client.node.ts",
     "./client.bun": "./src/client.bun.ts",
     "./settings-keys": "./src/settings-keys.ts",
+    "./stale-imports": "./src/failStaleRunningImports.ts",
     "./bms": "./src/bmsInterpret.ts",
     "./bms-tables": "./src/bmsTables.ts",
     "./path": "./src/path.ts"

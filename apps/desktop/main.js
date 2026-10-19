@@ -410,6 +410,8 @@ function spawnOverlayHost(paths, urlArg) {
 const OVERLAY_URL_DEFAULT = `--url=http://${HOST}:${PORT}/#/overlay?bg=clear`;
 const OVERLAY_SETTINGS_POLL_MS = 4000;
 const OVERLAY_RESPAWN_GAP_MS = 15000;
+/** How long a child gets to exit after SIGTERM before it is SIGKILLed. */
+const CHILD_STOP_GRACE_MS = 5000;
 
 /**
  * Read the In-game overlay host settings from the client app settings store
@@ -533,16 +535,40 @@ async function loadAppIntoWindow() {
 }
 
 /**
+ * SIGTERM the child, then SIGKILL after CHILD_STOP_GRACE_MS. Resolves once the
+ * child has exited (or could not be signalled). The server and realm-reader
+ * install cooperative SIGTERM handlers that may be slow (or, mid-extraction,
+ * unresponsive), so a bare SIGTERM can leave them alive after Electron exits.
  * @param {import("node:child_process").ChildProcess | null} child
  * @param {string} label
+ * @returns {Promise<void>}
  */
 function stopChild(child, label) {
-  if (!child || child.killed) return;
-  try {
-    child.kill("SIGTERM");
-  } catch (err) {
-    desktopLog(`failed to stop ${label}: ${err}`);
+  if (!child || child.exitCode !== null || child.signalCode !== null) {
+    return Promise.resolve();
   }
+  return new Promise((resolve) => {
+    const killTimer = setTimeout(() => {
+      desktopLog(`${label} ignored SIGTERM for ${CHILD_STOP_GRACE_MS}ms — SIGKILL`);
+      try {
+        child.kill("SIGKILL");
+      } catch (err) {
+        desktopLog(`failed to SIGKILL ${label}: ${err}`);
+        resolve();
+      }
+    }, CHILD_STOP_GRACE_MS);
+    child.once("exit", () => {
+      clearTimeout(killTimer);
+      resolve();
+    });
+    try {
+      child.kill("SIGTERM");
+    } catch (err) {
+      desktopLog(`failed to stop ${label}: ${err}`);
+      clearTimeout(killTimer);
+      resolve();
+    }
+  });
 }
 
 function closeChildLogs() {
@@ -556,20 +582,33 @@ function closeChildLogs() {
   }
 }
 
-async function shutdown() {
-  if (shuttingDown) return;
+/** @type {Promise<void> | null} */
+let shutdownPromise = null;
+
+/**
+ * Stops all children in parallel and resolves when they have exited. Safe to
+ * call repeatedly — later callers await the same shutdown.
+ * @returns {Promise<void>}
+ */
+function shutdown() {
+  if (shutdownPromise) return shutdownPromise;
   shuttingDown = true;
   if (overlayPollTimer) {
     clearInterval(overlayPollTimer);
     overlayPollTimer = null;
   }
-  stopChild(overlayChild, "overlay");
-  stopChild(realmChild, "realm-reader");
-  stopChild(serverChild, "server");
+  const stops = [
+    stopChild(overlayChild, "overlay"),
+    stopChild(realmChild, "realm-reader"),
+    stopChild(serverChild, "server"),
+  ];
   overlayChild = null;
   realmChild = null;
   serverChild = null;
-  closeChildLogs();
+  shutdownPromise = Promise.all(stops).then(() => {
+    closeChildLogs();
+  });
+  return shutdownPromise;
 }
 
 ipcMain.handle("roxysu:open-external", async (_event, url) => {
@@ -740,7 +779,16 @@ if (!gotLock) {
     if (process.platform !== "darwin") app.quit();
   });
 
-  app.on("before-quit", () => {
-    void shutdown();
+  // Hold the quit until every child has exited (SIGKILL after the grace
+  // period), otherwise they can outlive Electron and keep ROXYSU_PORT / the
+  // overlay layer surface.
+  let quitAfterShutdown = false;
+  app.on("before-quit", (event) => {
+    if (quitAfterShutdown) return;
+    event.preventDefault();
+    void shutdown().then(() => {
+      quitAfterShutdown = true;
+      app.quit();
+    });
   });
 }

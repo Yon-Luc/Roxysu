@@ -5,6 +5,7 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  useNavigate,
 } from "@tanstack/react-router";
 import { AppShell } from "./components/AppShell";
 import { PracticeListPage } from "./features/practice/PracticeListPage";
@@ -21,6 +22,18 @@ const BmsLocalPage = lazy(() =>
 );
 const BmsPlayerPage = lazy(() =>
   import("./features/bms/BmsPlayerPage").then((m) => ({ default: m.BmsPlayerPage })),
+);
+const BmsChartPage = lazy(() =>
+  import("./features/bms/BmsChartPage").then((m) => ({ default: m.BmsChartPage })),
+);
+const BmsComparePage = lazy(() =>
+  import("./features/bms/BmsComparePage").then((m) => ({ default: m.BmsComparePage })),
+);
+const BmsFeedPage = lazy(() =>
+  import("./features/bms/BmsFeedPage").then((m) => ({ default: m.BmsFeedPage })),
+);
+const BmsStatsPage = lazy(() =>
+  import("./features/bms/BmsStatsPage").then((m) => ({ default: m.BmsStatsPage })),
 );
 const OverlayEditorPage = lazy(() =>
   import("./features/overlay-editor/OverlayEditorPage").then((m) => ({
@@ -351,6 +364,129 @@ const bmsPlayerTablesRoute = createRoute({
   },
 });
 
+function readChartSearch(search: Record<string, unknown>): {
+  variant?: string;
+  achievement?: string;
+  gauge?: string;
+  country?: string;
+  cursor?: string;
+} {
+  return {
+    ...(typeof search.variant === "string" ? { variant: search.variant } : {}),
+    ...(typeof search.achievement === "string" ? { achievement: search.achievement } : {}),
+    ...(typeof search.gauge === "string" ? { gauge: search.gauge } : {}),
+    ...(typeof search.country === "string" ? { country: search.country } : {}),
+    ...(typeof search.cursor === "string" ? { cursor: search.cursor } : {}),
+  };
+}
+
+const bmsChartRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/bms/charts/$chartId",
+  validateSearch: readChartSearch,
+  component: function BmsChartRoute() {
+    const { chartId } = bmsChartRoute.useParams();
+    const search = bmsChartRoute.useSearch();
+    const navigate = useNavigate();
+    return (
+      <BmsChartPage
+        chartId={chartId}
+        search={search}
+        onSearch={(next) => {
+          void navigate({ to: "/bms/charts/$chartId", params: { chartId }, search: next });
+        }}
+      />
+    );
+  },
+});
+
+const bmsChartBoardRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/bms/charts/$chartId/leaderboard",
+  validateSearch: readChartSearch,
+  component: function BmsChartBoardRoute() {
+    const { chartId } = bmsChartBoardRoute.useParams();
+    const search = bmsChartBoardRoute.useSearch();
+    const navigate = useNavigate();
+    return (
+      <BmsChartPage
+        chartId={chartId}
+        search={search}
+        onSearch={(next) => {
+          void navigate({
+            to: "/bms/charts/$chartId/leaderboard",
+            params: { chartId },
+            search: next,
+          });
+        }}
+      />
+    );
+  },
+});
+
+function readCompareSearch(search: Record<string, unknown>): {
+  variant?: string;
+  tableId?: string;
+  achievement?: string;
+  playerA?: string;
+} {
+  return {
+    ...(typeof search.variant === "string" ? { variant: search.variant } : {}),
+    ...(typeof search.tableId === "string" ? { tableId: search.tableId } : {}),
+    ...(typeof search.achievement === "string" ? { achievement: search.achievement } : {}),
+    ...(typeof search.playerA === "string" ? { playerA: search.playerA } : {}),
+  };
+}
+
+const bmsCompareFormRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/bms/compare",
+  validateSearch: readCompareSearch,
+  component: function BmsCompareFormRoute() {
+    const search = bmsCompareFormRoute.useSearch();
+    return <BmsComparePage search={search} />;
+  },
+});
+
+const bmsCompareRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/bms/compare/$playerA/$playerB",
+  validateSearch: readCompareSearch,
+  component: function BmsCompareRoute() {
+    const { playerA, playerB } = bmsCompareRoute.useParams();
+    const search = bmsCompareRoute.useSearch();
+    return <BmsComparePage playerA={playerA} playerB={playerB} search={search} />;
+  },
+});
+
+const bmsFeedRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/bms/feed",
+  validateSearch: (search: Record<string, unknown>): { cursor?: string } =>
+    typeof search.cursor === "string" ? { cursor: search.cursor } : {},
+  component: function BmsFeedRoute() {
+    const { cursor } = bmsFeedRoute.useSearch();
+    const navigate = useNavigate();
+    return (
+      <BmsFeedPage
+        cursor={cursor}
+        onCursor={(next) => {
+          void navigate({
+            to: "/bms/feed",
+            search: next ? { cursor: next } : {},
+          });
+        }}
+      />
+    );
+  },
+});
+
+const bmsStatsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/bms/statistics",
+  component: BmsStatsPage,
+});
+
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/settings",
@@ -438,6 +574,12 @@ const routeTree = rootRoute.addChildren([
     bmsPlayerRoute,
     bmsPlayerScoresRoute,
     bmsPlayerTablesRoute,
+    bmsChartRoute,
+    bmsChartBoardRoute,
+    bmsCompareFormRoute,
+    bmsCompareRoute,
+    bmsFeedRoute,
+    bmsStatsRoute,
   ]),
   overlayRoute,
   overlayEditorRoute,

@@ -1391,6 +1391,23 @@
     "synced": "Uploaded",
     "rejected": "Rejected",
     "retryWait": "Retry later",
-    "country": "Country"
+    "country": "Country",
+    "feed": "Feed",
+    "feedHelp": "Recent public scores. A retry of a score already stored does not appear again.",
+    "statistics": "Statistics",
+    "compare": "Compare",
+    "chart": "Chart",
+    "leaderboard": "Leaderboard",
+    "pickVariant": "Choose a variant to open the leaderboard.",
+    "any": "Any",
+    "apply": "Apply",
+    "more": "More",
+    "newer": "Newer",
+    "player": "Player",
+    "uniqueScores": "Plays",
+    "submissions": "Submissions",
+    "activePlayers": "Active players",
+    "activity": "Activity",
+    "noActivity": "No plays in this period."
   }
 }

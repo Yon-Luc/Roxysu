@@ -1385,6 +1385,23 @@
     "synced": "Envoyés",
     "rejected": "Rejetés",
     "retryWait": "À réessayer",
-    "country": "Pays"
+    "country": "Pays",
+    "feed": "Fil",
+    "feedHelp": "Scores publics récents. Réessayer un score déjà stocké ne le fait pas réapparaître.",
+    "statistics": "Statistiques",
+    "compare": "Comparer",
+    "chart": "Chart",
+    "leaderboard": "Classement",
+    "pickVariant": "Choisissez une variante pour ouvrir le classement.",
+    "any": "Toutes",
+    "apply": "Appliquer",
+    "more": "Plus",
+    "newer": "Plus récents",
+    "player": "Joueur",
+    "uniqueScores": "Parties",
+    "submissions": "Envois",
+    "activePlayers": "Joueurs actifs",
+    "activity": "Activité",
+    "noActivity": "Aucune partie sur cette période."
   }
 }

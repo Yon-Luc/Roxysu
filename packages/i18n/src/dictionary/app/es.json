@@ -1384,6 +1384,23 @@
     "synced": "Subidas",
     "rejected": "Rechazadas",
     "retryWait": "Reintentar luego",
-    "country": "País"
+    "country": "País",
+    "feed": "Feed",
+    "feedHelp": "Puntuaciones públicas recientes. Reintentar una puntuación ya guardada no la vuelve a mostrar.",
+    "statistics": "Estadísticas",
+    "compare": "Comparar",
+    "chart": "Chart",
+    "leaderboard": "Clasificación",
+    "pickVariant": "Elige una variante para abrir la clasificación.",
+    "any": "Cualquiera",
+    "apply": "Aplicar",
+    "more": "Más",
+    "newer": "Más recientes",
+    "player": "Jugador",
+    "uniqueScores": "Partidas",
+    "submissions": "Envíos",
+    "activePlayers": "Jugadores activos",
+    "activity": "Actividad",
+    "noActivity": "No hay partidas en este periodo."
   }
 }

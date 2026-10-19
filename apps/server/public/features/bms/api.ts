@@ -1,5 +1,16 @@
 import { hubFetch } from "../../lib/hub";
-import type { BmsScoreRow, BmsSessionRow, BmsSyncStatus, BmsTableBlock, BmsVariantCount } from "./types";
+import type {
+  BmsChartInfo,
+  BmsDayPoint,
+  BmsFeedScore,
+  BmsGlobalStats,
+  BmsLeaderRow,
+  BmsScoreRow,
+  BmsSessionRow,
+  BmsSyncStatus,
+  BmsTableBlock,
+  BmsVariantCount,
+} from "./types";
 
 async function localGet<T>(path: string): Promise<T> {
   const res = await fetch(path, { headers: { accept: "application/json" } });
@@ -123,6 +134,93 @@ export function fetchPublicBmsCatalogue(hubUrl: string) {
   return hubFetch<{
     tables: Array<{ id: string; name: string; symbol: string; latestVersionId: string | null }>;
   }>(hubUrl, "/api/bms/tables");
+}
+
+export function fetchPublicBmsActivity(hubUrl: string, username: string, token: string | null) {
+  return hubFetch<{ days: BmsDayPoint[] }>(
+    hubUrl,
+    `/api/bms/profiles/${encodeURIComponent(username)}/activity`,
+    { token },
+  );
+}
+
+export function fetchBmsChart(hubUrl: string, chartId: string) {
+  return hubFetch<BmsChartInfo>(hubUrl, `/api/bms/charts/${encodeURIComponent(chartId)}`);
+}
+
+export function fetchBmsLeaderboard(
+  hubUrl: string,
+  chartId: string,
+  search: {
+    variant: string;
+    achievement?: string;
+    gauge?: string;
+    country?: string;
+    cursor?: string;
+  },
+) {
+  const q = new URLSearchParams({ variant: search.variant, limit: "20" });
+  if (search.achievement) q.set("achievement", search.achievement);
+  if (search.gauge) q.set("gauge", search.gauge);
+  if (search.country) q.set("country", search.country);
+  if (search.cursor) q.set("cursor", search.cursor);
+  return hubFetch<{ scores: BmsLeaderRow[]; nextCursor: string | null }>(
+    hubUrl,
+    `/api/bms/charts/${encodeURIComponent(chartId)}/leaderboard?${q}`,
+  );
+}
+
+export type BmsCompareResult = {
+  variantId: string;
+  players: Array<{
+    username: string;
+    countryCode: string | null;
+    plays: number;
+    bestEx: number | null;
+    recent: BmsScoreRow[];
+    table: BmsTableBlock | null;
+  }>;
+  charts: Array<{
+    chartMd5: string;
+    title: string | null;
+    artist: string | null;
+    ahead: "a" | "b" | "tie";
+    a: { exScore: number | null; djGrade: string | null } | null;
+    b: { exScore: number | null; djGrade: string | null } | null;
+  }>;
+};
+
+export function fetchBmsCompare(
+  hubUrl: string,
+  playerA: string,
+  playerB: string,
+  search: { variant: string; tableId?: string; achievement?: string },
+  token: string | null,
+) {
+  const q = new URLSearchParams({ variant: search.variant });
+  if (search.tableId) q.set("tableId", search.tableId);
+  if (search.achievement) q.set("achievement", search.achievement);
+  return hubFetch<BmsCompareResult>(
+    hubUrl,
+    `/api/bms/compare/${encodeURIComponent(playerA)}/${encodeURIComponent(playerB)}?${q}`,
+    { token },
+  );
+}
+
+export function fetchBmsFeed(hubUrl: string, cursor: string | null) {
+  const q = cursor ? `?cursor=${encodeURIComponent(cursor)}&limit=20` : "?limit=20";
+  return hubFetch<{ scores: BmsFeedScore[]; nextCursor: string | null }>(hubUrl, `/api/bms/feed${q}`);
+}
+
+export function fetchBmsStats(hubUrl: string) {
+  return hubFetch<BmsGlobalStats>(hubUrl, "/api/bms/stats");
+}
+
+export function fetchBmsTimeseries(hubUrl: string) {
+  return hubFetch<{ definition: string; series: BmsDayPoint[] }>(
+    hubUrl,
+    "/api/bms/stats/timeseries?interval=day",
+  );
 }
 
 export function patchBmsPrivacy(hubUrl: string, token: string, profilePublic: boolean) {

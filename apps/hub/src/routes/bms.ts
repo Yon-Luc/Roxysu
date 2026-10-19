@@ -17,6 +17,15 @@ import {
   tableCompletion,
   type BmsInbound,
 } from "../services/bms";
+import {
+  bmsFeed,
+  bmsGlobalStats,
+  bmsTimeseries,
+  chartLeaderboard,
+  compareBmsProfiles,
+  readBmsChart,
+  readChartScore,
+} from "../services/bmsCommunity";
 
 const scoreBody = t.Object({
   localScoreId: t.String(),
@@ -56,7 +65,17 @@ const scoreBody = t.Object({
   }),
 });
 
-const notFound = () => status(404, { message: "Profile not found" });
+const notFound = () => status(404, { message: "Not found" });
+
+function reject(set: { status?: number | string }, message: string) {
+  set.status = 400;
+  return { message };
+}
+
+function errorOf(result: object): string | null {
+  if ("error" in result && typeof result.error === "string") return result.error;
+  return null;
+}
 
 export const bmsRoutes = new Elysia()
   .use(jwtPlugin)
@@ -217,6 +236,109 @@ export const bmsPublicRoutes = new Elysia()
         versionId: t.Optional(t.String()),
         variant: t.Optional(t.String()),
         achievement: t.Optional(t.String()),
+      }),
+    },
+  )
+  .get("/api/bms/charts/:chartId", async ({ params, set }) => {
+    const chart = await readBmsChart(db, params.chartId);
+    if (!chart) return status(404, { message: "Chart not found" });
+    const chartError = errorOf(chart);
+    if (chartError) return reject(set, chartError);
+    return chart;
+  })
+  .get(
+    "/api/bms/charts/:chartId/leaderboard",
+    async ({ params, query, set }) => {
+      const board = await chartLeaderboard(db, params.chartId, {
+        variant: query.variant ?? null,
+        achievement: query.achievement ?? null,
+        gauge: query.gauge ?? null,
+        country: query.country ?? null,
+        cursor: query.cursor,
+        limit: query.limit ?? 20,
+      });
+      if (!board) return status(404, { message: "Chart not found" });
+      const boardError = errorOf(board);
+      if (boardError) return reject(set, boardError);
+      return board;
+    },
+    {
+      query: t.Object({
+        variant: t.Optional(t.String()),
+        achievement: t.Optional(t.String()),
+        gauge: t.Optional(t.String()),
+        country: t.Optional(t.String()),
+        cursor: t.Optional(t.String()),
+        limit: t.Optional(t.Numeric({ minimum: 1, maximum: 50 })),
+      }),
+    },
+  )
+  .get(
+    "/api/bms/charts/:chartId/scores/:scoreId",
+    async ({ params, jwt, bearer, set }) => {
+      const viewer = await optionalViewerUserId(jwt, bearer);
+      const score = await readChartScore(db, params.chartId, params.scoreId, viewer ?? null);
+      if (!score) return status(404, { message: "Score not found" });
+      const scoreError = errorOf(score);
+      if (scoreError) return reject(set, scoreError);
+      return score;
+    },
+  )
+  .get(
+    "/api/bms/compare/:playerA/:playerB",
+    async ({ params, query, jwt, bearer, set }) => {
+      const viewer = await optionalViewerUserId(jwt, bearer);
+      const compared = await compareBmsProfiles(db, params.playerA, params.playerB, viewer ?? null, {
+        variant: query.variant ?? null,
+        tableId: query.tableId ?? null,
+        achievement: query.achievement ?? null,
+      });
+      if (!compared) return notFound();
+      const comparedError = errorOf(compared);
+      if (comparedError) return reject(set, comparedError);
+      return compared;
+    },
+    {
+      query: t.Object({
+        variant: t.Optional(t.String()),
+        tableId: t.Optional(t.String()),
+        achievement: t.Optional(t.String()),
+      }),
+    },
+  )
+  .get(
+    "/api/bms/feed",
+    async ({ query, set }) => {
+      const feed = await bmsFeed(db, { cursor: query.cursor, limit: query.limit ?? 20 });
+      const feedError = errorOf(feed);
+      if (feedError) return reject(set, feedError);
+      return feed;
+    },
+    {
+      query: t.Object({
+        cursor: t.Optional(t.String()),
+        limit: t.Optional(t.Numeric({ minimum: 1, maximum: 50 })),
+      }),
+    },
+  )
+  .get("/api/bms/stats", async () => bmsGlobalStats(db))
+  .get(
+    "/api/bms/stats/timeseries",
+    async ({ query, set }) => {
+      const series = await bmsTimeseries(db, {
+        from: query.from,
+        to: query.to,
+        interval: query.interval,
+      });
+      const seriesError = errorOf(series);
+      if (seriesError) return reject(set, seriesError);
+      return series;
+    },
+    {
+      query: t.Object({
+        from: t.Optional(t.String()),
+        to: t.Optional(t.String()),
+        interval: t.Optional(t.String()),
       }),
     },
   );

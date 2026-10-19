@@ -28,6 +28,7 @@ touches:
   - packages/db/src/hub/schema.ts
   - apps/hub/src/routes/bms.ts
   - apps/hub/src/services/bms.ts
+  - apps/hub/src/services/bmsCommunity.ts
   - apps/hub/drizzle/0008_bms.sql
   - apps/hub/Dockerfile
   - apps/hub/docker-compose.yml
@@ -107,6 +108,10 @@ Networked collaboration / discovery — not required for offline practice analyt
 15. BMS table import accepts only HTTPS URLs on the allowlist, rejects redirects, and is admin-only.
     **Enforced by:** `apps/hub/src/routes/bms.ts` `POST /api/bms/tables/import` plus `isAllowedBmsTableUrl()` — status: verified
     **Unauthorized result:** 403 for non-admins; 400 for a disallowed URL
+
+16. Public BMS chart leaderboards, the score feed, and global statistics count public profiles only. Comparison and score detail hide a private profile from everyone except its owner.
+    **Enforced by:** `apps/hub/src/services/bmsCommunity.ts` — status: verified
+    **Unauthorized result:** 404
 
 ## Important symbols
 
@@ -191,7 +196,7 @@ update tag validation — status: verified
 - `features/download-mirrors/` — Download Maps search / count / download-all prefer primed Hub search index
 - `features/sunny-dan-recommendations/` — Hub calc bundle pull gap-fills dan/pattern rows before local backfill
 - `features/online-score-pull/` — Hub proxies ranked best fetches and holds the osu! usage ledger
-- `features/bms/` — public BMS profile, score batch, and table import
+- `features/bms/` — public BMS profile, score batch, table import, chart leaderboards, comparison, feed, and statistics
 
 ## Failure behavior
 

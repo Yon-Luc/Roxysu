@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchHubMe, useHubJwt, useHubUrl } from "../../lib/hub";
 import { useAppDict } from "../../lib/i18n";
 import {
+  fetchPublicBmsActivity,
   fetchPublicBmsCatalogue,
   fetchPublicBmsProfile,
   fetchPublicBmsScores,
@@ -39,6 +40,11 @@ export function BmsPlayerPage({
     queryKey: ["bms-public-scores", hubUrl, username, selected, token],
     queryFn: () => fetchPublicBmsScores(hubUrl, username, selected, token),
     enabled: profile.isSuccess && view !== "tables",
+  });
+  const activity = useQuery({
+    queryKey: ["bms-public-activity", hubUrl, username, token],
+    queryFn: () => fetchPublicBmsActivity(hubUrl, username, token),
+    enabled: profile.isSuccess && view === "overview",
   });
   const sessions = useQuery({
     queryKey: ["bms-public-sessions", hubUrl, username, selected, token],
@@ -94,6 +100,7 @@ export function BmsPlayerPage({
         scores={scores.data?.scores ?? []}
         sessions={sessions.data?.sessions ?? []}
         tables={table.data ? [table.data] : []}
+        activity={view === "overview" ? activity.data?.days : undefined}
         achievement={achievement}
         onVariant={setVariant}
         onAchievement={setAchievement}

@@ -3,7 +3,8 @@ import { BeatmapCover } from "../../components/BeatmapCover";
 import { PageTitle } from "../../components/PageTitle";
 import { formatAccuracy, formatRelativeTime } from "../../lib/format";
 import { t, useAppDict } from "../../lib/i18n";
-import type { BmsScoreRow, BmsSessionRow, BmsTableBlock, BmsVariantCount } from "./types";
+import { BmsCommunityNav } from "./BmsCommunityNav";
+import type { BmsDayPoint, BmsScoreRow, BmsSessionRow, BmsTableBlock, BmsVariantCount } from "./types";
 import { BMS_ACHIEVEMENTS } from "./types";
 
 function when(value: number | string | null | undefined): string {
@@ -108,7 +109,18 @@ function BmsScoreCard({ score, priority }: { score: BmsScoreRow; priority: boole
         <div className="truncate text-sm text-muted">
           {score.artist ?? dict?.practice.unknownArtist ?? "Unknown artist"}
         </div>
-        <div className="truncate font-bold text-ink">{score.title ?? score.id}</div>
+        {score.chartMd5 ? (
+          <Link
+            to="/bms/charts/$chartId"
+            params={{ chartId: score.chartMd5 }}
+            search={{ variant: score.variantId }}
+            className="block truncate font-bold text-ink"
+          >
+            {score.title ?? score.id}
+          </Link>
+        ) : (
+          <div className="truncate font-bold text-ink">{score.title ?? score.id}</div>
+        )}
         {score.difficulty ? (
           <div className="mt-1 truncate text-xs text-muted">[{score.difficulty}]</div>
         ) : null}
@@ -140,6 +152,7 @@ export function BmsProfileView({
   scores,
   sessions,
   tables,
+  activity,
   achievement,
   onVariant,
   onAchievement,
@@ -158,6 +171,7 @@ export function BmsProfileView({
   scores: BmsScoreRow[];
   sessions: BmsSessionRow[];
   tables: BmsTableBlock[];
+  activity?: BmsDayPoint[];
   achievement: string;
   onVariant: (variant: string) => void;
   onAchievement: (achievement: string) => void;
@@ -170,6 +184,7 @@ export function BmsProfileView({
   const copy = dict?.bms;
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-6">
+      <BmsCommunityNav />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <PageTitle>{title}</PageTitle>
@@ -238,7 +253,26 @@ export function BmsProfileView({
           >
             {copy?.tables ?? "Tables"}
           </Link>
+          <Link to="/bms/compare" search={{ playerA: username }} className="text-accent">
+            {copy?.compare ?? "Compare"}
+          </Link>
         </div>
+      ) : null}
+
+      {activity && activity.length > 0 ? (
+        <section>
+          <h2 className="font-display text-lg font-semibold">{copy?.activity ?? "Activity"}</h2>
+          <div className="mt-3 flex flex-wrap gap-1" aria-label={copy?.activity ?? "Activity"}>
+            {activity.slice(-120).map((day) => (
+              <span
+                key={day.day}
+                title={`${day.day}: ${day.plays}`}
+                className="h-3 w-3 rounded-sm bg-accent"
+                style={{ opacity: 0.2 + Math.min(0.8, day.plays / 8) }}
+              />
+            ))}
+          </div>
+        </section>
       ) : null}
 
       {showScores ? (

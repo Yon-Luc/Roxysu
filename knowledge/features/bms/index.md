@@ -12,6 +12,7 @@ touches:
   - apps/server/src/analytics/pipeline.ts
   - apps/server/src/analytics/scoreGamemode.ts
   - apps/hub/src/services/bms.ts
+  - apps/hub/src/services/bmsCommunity.ts
   - apps/hub/src/routes/bms.ts
   - apps/server/public/features/bms
   - apps/server/src/bms/stageImage.ts
@@ -21,7 +22,7 @@ touches:
 
 ## Purpose
 
-Show a local BMS profile from scores Realm extraction already stored, and optionally publish those scores to a public Hub profile with table completion.
+Show a local BMS profile from scores Realm extraction already stored, publish those scores to a public Hub profile, and read public charts, leaderboards, comparisons, the score feed, and global statistics from the Hub.
 
 ## Business meaning
 
@@ -43,9 +44,16 @@ BMS is a ruleset already present in the local mirror. This feature interprets th
    **Status:** verified
 7. Table completion counts DJ grades and combo lamps. Clear-type lamps are not counted as clears.
    **Status:** verified
-8. Chart pages, leaderboards, player comparison, the score feed, and global statistics are out of this release.
+8. A public chart leaderboard is one best score per player for one variant. Achievement, gauge, and country are filters on that board. Scratch and other variants do not share a board.
    **Status:** verified
-9. A chart image is the stage file, then the banner, then the back bitmap, then the first still bitmap. Video BGA is not an image. The file is read from the chart's source folder, which Realm extraction already stores. The response stays inside that folder.
+   **Enforced by:** `apps/hub/src/services/bmsCommunity.ts:chartLeaderboard()`
+9. Global plays count stored public scores. A retry of a score already stored does not add a play or a submission row. Recorded submissions count accepted and rejected source scores, not HTTP retries.
+   **Status:** verified
+   **Enforced by:** `apps/hub/src/services/bmsCommunity.ts:bmsGlobalStats()` and `BMS_STAT_DEFINITIONS`
+10. The score feed is ordered by stored time and score id. A cursor page does not repeat or skip rows already passed. New scores appear at the head.
+   **Status:** verified
+   **Enforced by:** `apps/hub/src/services/bmsCommunity.ts:bmsFeed()`
+11. A chart image is the stage file, then the banner, then the back bitmap, then the first still bitmap. Video BGA is not an image. The file is read from the chart's source folder, which Realm extraction already stores. The response stays inside that folder.
    **Status:** verified
    **Enforced by:** `apps/server/src/bms/stageImage.ts:resolveBmsStageImage()` and `GET /api/bms/covers/:beatmapId`
 
@@ -63,6 +71,9 @@ BMS is a ruleset already present in the local mirror. This feature interprets th
 4. Table import is admin-only. Fetch allows only HTTPS hosts on the allowlist and does not follow redirects.
    **Enforced by:** `apps/hub/src/routes/bms.ts` `POST /api/bms/tables/import` — status: verified
    **Unauthorized result:** 403 or 400
+5. Chart leaderboards, the score feed, chart play counts, and global statistics include only public profiles. A private score detail or a comparison that includes a hidden profile is 404 for everyone except that profile's owner, and the owner still does not appear on the public leaderboard or feed.
+   **Enforced by:** `apps/hub/src/services/bmsCommunity.ts` — status: verified
+   **Unauthorized result:** 404
 
 ## Main flows
 
@@ -78,7 +89,7 @@ worker posts a batch to Hub /api/bms/scores/batch
 accepted and duplicate become synced; rejected stops; retryable waits
 ```
 
-Local `/bms` reads the local mirror and still renders when the Hub is unreachable. Public `/bms/players/:username` reads the Hub.
+Local `/bms` reads the local mirror and still renders when the Hub is unreachable. Public `/bms/players/:username` reads the Hub. `/bms/charts/:chartId`, `/bms/compare/:playerA/:playerB`, `/bms/feed`, and `/bms/statistics` also read the Hub. The feed polls the first page. Leaderboard filters stay in the URL.
 
 ## Important symbols
 
@@ -86,6 +97,7 @@ Local `/bms` reads the local mirror and still renders when the Hub is unreachabl
 - `apps/server/src/bms/derive.ts:deriveBmsScores()`
 - `apps/server/src/bms/sync.ts:drainBmsQueue()`
 - `apps/hub/src/services/bms.ts:ingestBmsBatch()`
+- `apps/hub/src/services/bmsCommunity.ts:chartLeaderboard()`
 
 ## Dependencies
 

@@ -1401,6 +1401,11 @@
     "submissions": "Envíos",
     "activePlayers": "Jugadores activos",
     "activity": "Actividad",
-    "noActivity": "No hay partidas en este periodo."
+    "noActivity": "No hay partidas en este periodo.",
+    "findChart": "Buscar un chart",
+    "titleCol": "Título",
+    "artistCol": "Artista",
+    "noMatches": "Ningún chart coincide.",
+    "ofLevel": "{{shown}} de {{total}}"
   }
 }

@@ -94,7 +94,7 @@ worker posts a batch to Hub /api/bms/scores/batch
 accepted and duplicate become synced; rejected stops; retryable waits
 ```
 
-Local `/bms` reads the local mirror and still renders when the Hub is unreachable. Insane, Satellite, and Stella are read from `packages/db/bms-tables` and written into `bms_table_cache` on the first tables read, so their song lists do not depend on a Hub fetch. The Hub stores the same three catalogues when it starts. Public `/bms/players/:username` reads the Hub. `/bms/charts/:chartId`, `/bms/compare/:playerA/:playerB`, `/bms/feed`, and `/bms/statistics` also read the Hub. The feed polls the first page. Leaderboard filters stay in the URL.
+Local `/bms` reads the local mirror and still renders when the Hub is unreachable. Insane, Satellite, and Stella are read from `packages/db/bms-tables` and written into `bms_table_cache` on the first tables read, so their song lists do not depend on a Hub fetch. The Hub stores the same three catalogues when it starts. The table screen shows one catalogue and one level at a time. Public `/bms/players/:username` reads the Hub. `/bms/charts/:chartId`, `/bms/compare/:playerA/:playerB`, `/bms/feed`, and `/bms/statistics` also read the Hub. The feed polls the first page. Leaderboard filters stay in the URL.
 
 ## Important symbols
 

@@ -1408,6 +1408,11 @@
     "submissions": "Submissions",
     "activePlayers": "Active players",
     "activity": "Activity",
-    "noActivity": "No plays in this period."
+    "noActivity": "No plays in this period.",
+    "findChart": "Find a chart",
+    "titleCol": "Title",
+    "artistCol": "Artist",
+    "noMatches": "No charts match.",
+    "ofLevel": "{{shown}} of {{total}}"
   }
 }

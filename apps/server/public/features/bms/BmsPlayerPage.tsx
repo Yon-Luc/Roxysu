@@ -110,6 +110,11 @@ export function BmsPlayerPage({
         showScores={view !== "tables"}
         showTables={view === "tables"}
         local={false}
+        tablesPending={
+          view === "tables" &&
+          tableQueries.some((query) => query.isPending) &&
+          tableQueries.every((query) => !query.data)
+        }
         error={
           hidden
             ? (dict?.bms?.privateHidden ?? "This profile is private.")

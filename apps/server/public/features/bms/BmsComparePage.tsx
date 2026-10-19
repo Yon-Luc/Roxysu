@@ -71,11 +71,11 @@ export function BmsComparePage({
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-6">
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
       <BmsCommunityNav />
       <PageTitle>{copy?.compare ?? "Compare"}</PageTitle>
       <form
-        className="flex flex-wrap items-end gap-3"
+        className="grid gap-3 rounded-lg bg-surface p-4 sm:grid-cols-2 lg:grid-cols-3"
         onSubmit={(event) => {
           event.preventDefault();
           const data = new FormData(event.currentTarget);
@@ -88,21 +88,21 @@ export function BmsComparePage({
           });
         }}
       >
-        <label className="text-sm text-muted">
+        <label className="flex flex-col gap-1 text-[11px] font-medium uppercase tracking-wide text-faint">
           {copy?.player ?? "Player"}
-          <input className="rx-input ml-2" value={left} onChange={(event) => setLeft(event.target.value)} />
+          <input className="rx-input" value={left} onChange={(event) => setLeft(event.target.value)} />
         </label>
-        <label className="text-sm text-muted">
+        <label className="flex flex-col gap-1 text-[11px] font-medium uppercase tracking-wide text-faint">
           {copy?.player ?? "Player"}
-          <input className="rx-input ml-2" value={right} onChange={(event) => setRight(event.target.value)} />
+          <input className="rx-input" value={right} onChange={(event) => setRight(event.target.value)} />
         </label>
-        <label className="text-sm text-muted">
+        <label className="flex flex-col gap-1 text-[11px] font-medium uppercase tracking-wide text-faint">
           {copy?.variant ?? "Variant"}
-          <input className="rx-input ml-2" value={variant} onChange={(event) => setVariant(event.target.value)} />
+          <input className="rx-input" value={variant} onChange={(event) => setVariant(event.target.value)} />
         </label>
-        <label className="text-sm text-muted">
+        <label className="flex flex-col gap-1 text-[11px] font-medium uppercase tracking-wide text-faint">
           {copy?.tables ?? "Tables"}
-          <select className="rx-select ml-2" name="tableId" defaultValue={search.tableId ?? ""}>
+          <select className="rx-select" name="tableId" defaultValue={search.tableId ?? ""}>
             <option value="">{copy?.none ?? "None"}</option>
             {(catalogue.data?.tables ?? []).map((table) => (
               <option key={table.id} value={table.id}>
@@ -112,9 +112,9 @@ export function BmsComparePage({
             ))}
           </select>
         </label>
-        <label className="text-sm text-muted">
+        <label className="flex flex-col gap-1 text-[11px] font-medium uppercase tracking-wide text-faint">
           {copy?.achievement ?? "Achievement"}
-          <select className="rx-select ml-2" name="achievement" defaultValue={search.achievement ?? "aa"}>
+          <select className="rx-select" name="achievement" defaultValue={search.achievement ?? "aa"}>
             {BMS_ACHIEVEMENTS.map((item) => (
               <option key={item} value={item}>
                 {item}
@@ -122,7 +122,7 @@ export function BmsComparePage({
             ))}
           </select>
         </label>
-        <button type="submit" className="rx-btn-primary">
+        <button type="submit" className="rx-btn-primary w-fit self-end">
           {copy?.compare ?? "Compare"}
         </button>
       </form>
@@ -144,16 +144,19 @@ export function BmsComparePage({
                   {player.plays} {copy?.plays ?? "Plays"} · EX {player.bestEx ?? "—"}
                 </p>
                 {player.table ? (
-                  <ul className="mt-3 space-y-1 text-sm">
+                  <div className="mt-3 flex gap-1 overflow-x-auto pb-1">
                     {player.table.levels.map((level) => (
-                      <li key={level.level} className="flex justify-between">
-                        <span>{level.level}</span>
-                        <span className="tabular-nums">
-                          {level.cleared} / {level.total}
-                        </span>
-                      </li>
+                      <div
+                        key={level.level}
+                        className="w-14 shrink-0 rounded-md bg-base px-1.5 py-1.5 text-center"
+                      >
+                        <div className="text-xs font-semibold">{level.level}</div>
+                        <div className="text-[10px] tabular-nums text-muted">
+                          {level.cleared}/{level.total}
+                        </div>
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 ) : null}
               </section>
             ))}
@@ -163,14 +166,17 @@ export function BmsComparePage({
             {compared.data.charts.length === 0 ? (
               <p className="mt-3 text-sm text-muted">{copy?.noScores ?? "No BMS scores yet."}</p>
             ) : (
-              <ul className="mt-3 divide-y divide-border">
+              <ul className="mt-3">
                 {compared.data.charts.map((chart) => (
-                  <li key={chart.chartMd5} className="flex items-baseline justify-between gap-3 py-2 text-sm">
-                    <span className="min-w-0 flex-1 truncate">
+                  <li
+                    key={chart.chartMd5}
+                    className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3 border-b border-line py-2.5 text-sm last:border-b-0"
+                  >
+                    <span className="min-w-0 truncate">
                       {chart.title ?? chart.chartMd5}
-                      <span className="ml-2 text-muted">{chart.artist ?? ""}</span>
+                      {chart.artist ? <span className="text-muted"> · {chart.artist}</span> : null}
                     </span>
-                    <span className="shrink-0 tabular-nums">
+                    <span className="tabular-nums text-muted">
                       {chart.a?.exScore ?? "—"} · {chart.b?.exScore ?? "—"}
                     </span>
                   </li>

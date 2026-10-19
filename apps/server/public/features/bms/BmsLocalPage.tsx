@@ -44,6 +44,7 @@ export function BmsLocalPage() {
       showScores
       showTables
       local
+      tablesPending={tables.isPending}
       error={profile.error instanceof Error ? profile.error.message : null}
     />
   );

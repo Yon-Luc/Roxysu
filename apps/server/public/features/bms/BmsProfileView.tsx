@@ -1,11 +1,12 @@
+import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { BeatmapCover } from "../../components/BeatmapCover";
 import { PageTitle } from "../../components/PageTitle";
 import { formatAccuracy, formatRelativeTime } from "../../lib/format";
-import { t, useAppDict } from "../../lib/i18n";
+import { useAppDict } from "../../lib/i18n";
 import { BmsCommunityNav } from "./BmsCommunityNav";
+import { BmsTableBrowser } from "./BmsTableBrowser";
 import type { BmsDayPoint, BmsScoreRow, BmsSessionRow, BmsTableBlock, BmsVariantCount } from "./types";
-import { BMS_ACHIEVEMENTS } from "./types";
 
 function when(value: number | string | null | undefined): string {
   if (value == null) return "";
@@ -160,6 +161,7 @@ export function BmsProfileView({
   showTables,
   local,
   error,
+  tablesPending = false,
 }: {
   title: string;
   subtitle?: string;
@@ -179,61 +181,74 @@ export function BmsProfileView({
   showTables: boolean;
   local: boolean;
   error?: string | null;
+  tablesPending?: boolean;
 }) {
   const { dict } = useAppDict();
   const copy = dict?.bms;
+  const both = showScores && showTables;
+  const [section, setSection] = useState<"scores" | "tables">("tables");
+  const scoresOpen = showScores && (!both || section === "scores");
+  const tablesOpen = showTables && (!both || section === "tables");
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-6">
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
       <BmsCommunityNav />
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <PageTitle>{title}</PageTitle>
-          {subtitle ? <p className="mt-1 text-sm text-muted">{subtitle}</p> : null}
-          {username ? (
-            <p className="mt-2 text-sm text-ink">
-              {local ? (
-                <Link
-                  to="/bms/players/$username"
-                  params={{ username }}
-                  className="font-semibold text-accent"
-                >
-                  {username}
-                </Link>
-              ) : (
-                <span className="font-semibold">{username}</span>
-              )}
-              {countryCode ? <span className="ml-2 text-muted">{countryCode}</span> : null}
-            </p>
-          ) : null}
+      <header>
+        {username ? <p className="rx-label">{title}</p> : null}
+        <div className="flex items-start justify-between gap-4">
+          <PageTitle>{username ?? title}</PageTitle>
+          <div className="shrink-0 text-right">
+            <div className="font-display text-3xl font-bold tabular-nums leading-none text-ink">{plays}</div>
+            <div className="mt-1 text-[11px] font-medium uppercase tracking-wide text-faint">
+              {copy?.plays ?? "Plays"}
+            </div>
+          </div>
         </div>
-        <div className="rounded-xl bg-base px-4 py-3">
-          <div className="font-display text-2xl font-bold tabular-nums text-ink">{plays}</div>
-          <div className="text-xs text-muted">{copy?.plays ?? "Plays"}</div>
-        </div>
-      </div>
+        {subtitle ? <p className="rx-subtitle max-w-xl">{subtitle}</p> : null}
+        {countryCode ? <p className="mt-1 text-sm text-muted">{countryCode}</p> : null}
+        {local && username ? (
+          <Link
+            to="/bms/players/$username"
+            params={{ username }}
+            className="mt-2 inline-block text-sm font-medium text-accent"
+          >
+            {copy?.publicTitle ?? "BMS profile"}
+          </Link>
+        ) : null}
+      </header>
 
       {error ? <p className="text-sm text-warning">{error}</p> : null}
 
-      <div className="flex flex-wrap gap-2">
-        {variants.map((variant) => (
-          <button
-            key={variant.variantId}
-            type="button"
-            className={variant.variantId === variantId ? "rx-btn-primary" : "rx-btn"}
-            onClick={() => onVariant(variant.variantId)}
-          >
-            {variant.variantId} · {variant.plays}
-          </button>
-        ))}
-      </div>
+      {variants.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5" role="tablist" aria-label={copy?.variant ?? "Variant"}>
+          {variants.map((variant) => {
+            const selected = variant.variantId === variantId;
+            return (
+              <button
+                key={variant.variantId}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                className={`rx-chip transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.98] ${
+                  selected ? "bg-accent text-white" : "bg-elevated text-muted hover:text-ink"
+                }`}
+                onClick={() => onVariant(variant.variantId)}
+              >
+                {variant.variantId}
+                <span className="tabular-nums opacity-80">{variant.plays}</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
 
       {!local && username ? (
-        <div className="flex gap-3 text-sm">
+        <nav className="flex gap-5 border-b border-line text-sm font-semibold">
           <Link
             to="/bms/players/$username"
             params={{ username }}
             activeOptions={{ exact: true }}
-            className="text-accent"
+            activeProps={{ className: "-mb-px border-b-2 border-accent pb-2 text-ink" }}
+            inactiveProps={{ className: "-mb-px border-b-2 border-transparent pb-2 text-muted hover:text-ink" }}
           >
             {copy?.overview ?? "Overview"}
           </Link>
@@ -241,7 +256,8 @@ export function BmsProfileView({
             to="/bms/players/$username/scores"
             params={{ username }}
             activeOptions={{ exact: true }}
-            className="text-accent"
+            activeProps={{ className: "-mb-px border-b-2 border-accent pb-2 text-ink" }}
+            inactiveProps={{ className: "-mb-px border-b-2 border-transparent pb-2 text-muted hover:text-ink" }}
           >
             {copy?.scores ?? "Scores"}
           </Link>
@@ -249,33 +265,61 @@ export function BmsProfileView({
             to="/bms/players/$username/tables"
             params={{ username }}
             activeOptions={{ exact: true }}
-            className="text-accent"
+            activeProps={{ className: "-mb-px border-b-2 border-accent pb-2 text-ink" }}
+            inactiveProps={{ className: "-mb-px border-b-2 border-transparent pb-2 text-muted hover:text-ink" }}
           >
             {copy?.tables ?? "Tables"}
           </Link>
-          <Link to="/bms/compare" search={{ playerA: username }} className="text-accent">
+          <Link
+            to="/bms/compare"
+            search={{ playerA: username }}
+            className="-mb-px border-b-2 border-transparent pb-2 text-muted hover:text-ink"
+          >
             {copy?.compare ?? "Compare"}
           </Link>
+        </nav>
+      ) : null}
+
+      {both ? (
+        <div className="flex gap-1.5" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={section === "scores"}
+            className={section === "scores" ? "rx-btn-primary" : "rx-btn"}
+            onClick={() => setSection("scores")}
+          >
+            {copy?.scores ?? "Scores"}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={section === "tables"}
+            className={section === "tables" ? "rx-btn-primary" : "rx-btn"}
+            onClick={() => setSection("tables")}
+          >
+            {copy?.tables ?? "Tables"}
+          </button>
         </div>
       ) : null}
 
       {activity && activity.length > 0 ? (
         <section>
           <h2 className="font-display text-lg font-semibold">{copy?.activity ?? "Activity"}</h2>
-          <div className="mt-3 flex flex-wrap gap-1" aria-label={copy?.activity ?? "Activity"}>
+          <div className="mt-3 flex max-w-xl flex-wrap gap-1" aria-label={copy?.activity ?? "Activity"}>
             {activity.slice(-120).map((day) => (
               <span
                 key={day.day}
                 title={`${day.day}: ${day.plays}`}
-                className="h-3 w-3 rounded-sm bg-accent"
-                style={{ opacity: 0.2 + Math.min(0.8, day.plays / 8) }}
+                className="size-3 rounded-[2px] bg-accent"
+                style={{ opacity: day.plays === 0 ? 0.15 : 0.35 + Math.min(0.65, day.plays / 8) }}
               />
             ))}
           </div>
         </section>
       ) : null}
 
-      {showScores ? (
+      {scoresOpen ? (
         <section>
           <h2 className="font-display text-lg font-semibold">{copy?.recent ?? "Recent scores"}</h2>
           {scores.length === 0 ? (
@@ -290,20 +334,21 @@ export function BmsProfileView({
         </section>
       ) : null}
 
-      {showScores ? (
-        <section className="rx-panel p-4">
+      {scoresOpen ? (
+        <section>
           <h2 className="font-display text-lg font-semibold">{copy?.sessions ?? "Sessions"}</h2>
           {sessions.length === 0 ? (
             <p className="mt-3 text-sm text-muted">{copy?.noScores ?? "No BMS scores yet."}</p>
           ) : (
-            <ul className="mt-3 space-y-2">
+            <ul className="mt-3 overflow-hidden rounded-lg bg-surface">
               {sessions.map((session) => (
-                <li key={`${session.startedAt}-${session.scoreCount}`} className="text-sm">
-                  <span className="font-medium">{when(session.startedAt)}</span>
-                  <span className="text-muted"> · {session.scoreCount}</span>
-                  {session.titles.length > 0 ? (
-                    <span className="text-muted"> · {session.titles.join(", ")}</span>
-                  ) : null}
+                <li
+                  key={`${session.startedAt}-${session.scoreCount}`}
+                  className="grid gap-1 border-b border-line px-3 py-2.5 text-sm last:border-b-0 sm:grid-cols-[11rem_3rem_minmax(0,1fr)] sm:items-baseline sm:gap-3"
+                >
+                  <span className="tabular-nums text-ink">{when(session.startedAt)}</span>
+                  <span className="tabular-nums text-muted">{session.scoreCount}</span>
+                  <span className="truncate text-muted">{session.titles.join(", ")}</span>
                 </li>
               ))}
             </ul>
@@ -311,82 +356,12 @@ export function BmsProfileView({
         </section>
       ) : null}
 
-      {showTables ? (
-        <section className="rx-panel p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="font-display text-lg font-semibold">{copy?.tables ?? "Tables"}</h2>
-            <label className="flex items-center gap-2 text-sm text-muted">
-              {copy?.achievement ?? "Achievement"}
-              <select
-                className="rx-select"
-                value={achievement}
-                onChange={(event) => onAchievement(event.target.value)}
-              >
-                {BMS_ACHIEVEMENTS.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          {tables.length === 0 ? (
-            <p className="mt-3 text-sm text-muted">
-              {copy?.noTables ??
-                "No table is cached yet. Table completion appears after the Hub has a table and this app can reach it."}
-            </p>
-          ) : (
-            tables.map((table) => (
-              <div key={table.versionId} className="mt-4">
-                <h3 className="font-semibold">
-                  {table.symbol ? `${table.symbol} · ` : ""}
-                  {table.name}
-                </h3>
-                {table.unresolvedCount > 0 ? (
-                  <p className="text-xs text-muted">
-                    {t(copy?.unresolved, { count: table.unresolvedCount })}
-                  </p>
-                ) : null}
-                <div className="mt-2 flex flex-col gap-2">
-                  {table.levels.map((level) => (
-                    <details key={level.level} className="rounded-lg bg-base px-3 py-2 text-sm">
-                      <summary className="flex cursor-pointer justify-between gap-3">
-                        <span>{level.level}</span>
-                        <span className="tabular-nums">
-                          {t(copy?.cleared, { cleared: level.cleared, total: level.total })}
-                        </span>
-                      </summary>
-                      {(level.songs ?? []).length > 0 ? (
-                        <ul className="mt-2 space-y-1">
-                          {(level.songs ?? []).map((song) => (
-                            <li
-                              key={`${song.md5 ?? ""}-${song.title ?? ""}`}
-                              className={song.cleared ? "text-ink" : "text-muted"}
-                            >
-                              <span className="mr-2 inline-block w-3">{song.cleared ? "●" : "○"}</span>
-                              {song.md5 ? (
-                                <Link
-                                  to="/bms/charts/$chartId"
-                                  params={{ chartId: song.md5 }}
-                                  search={{}}
-                                  className="hover:text-accent"
-                                >
-                                  {song.title ?? song.md5}
-                                </Link>
-                              ) : (
-                                <span>{song.title ?? "—"}</span>
-                              )}
-                              {song.artist ? <span className="text-muted"> · {song.artist}</span> : null}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : null}
-                    </details>
-                  ))}
-                </div>
-              </div>
-            ))
+      {tablesOpen && !(tables.length === 0 && tablesPending) ? (
+        <section>
+          {both ? null : (
+            <h2 className="mb-4 font-display text-lg font-semibold">{copy?.tables ?? "Tables"}</h2>
           )}
+          <BmsTableBrowser tables={tables} achievement={achievement} onAchievement={onAchievement} />
         </section>
       ) : null}
     </div>

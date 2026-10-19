@@ -466,6 +466,20 @@ html.light .rx-select option {
   flex-shrink: 0;
 }
 
+.bms-rail {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+
+.bms-rail::-webkit-scrollbar {
+  height: 6px;
+}
+
+.bms-rail::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background: var(--color-border);
+}
+
 .rx-chip {
   display: inline-flex;
   align-items: center;

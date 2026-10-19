@@ -51,7 +51,7 @@ export function BmsChartPage({
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-6">
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
       <BmsCommunityNav />
       <div>
         <PageTitle>{chart.data?.title ?? copy?.chart ?? "Chart"}</PageTitle>
@@ -63,22 +63,25 @@ export function BmsChartPage({
       {chart.error instanceof Error ? (
         <p className="text-sm text-warning">{chart.error.message}</p>
       ) : null}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-1.5">
         {(chart.data?.variants ?? []).map((item) => (
           <button
             key={item.variantId}
             type="button"
-            className={item.variantId === variant ? "rx-btn-primary" : "rx-btn"}
+            className={`rx-chip transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.98] ${
+              item.variantId === variant ? "bg-accent text-white" : "bg-elevated text-muted hover:text-ink"
+            }`}
             onClick={() => setFilter({ variant: item.variantId })}
           >
-            {item.variantId} · {item.players}
+            {item.variantId}
+            <span className="tabular-nums opacity-80">{item.players}</span>
           </button>
         ))}
       </div>
       {variant ? (
         <form
           key={`${search.achievement ?? ""}-${search.gauge ?? ""}-${search.country ?? ""}`}
-          className="flex flex-wrap items-end gap-3"
+          className="grid gap-3 rounded-lg bg-surface p-4 sm:grid-cols-[1fr_1fr_6rem_auto] sm:items-end"
           onSubmit={(event) => {
             event.preventDefault();
             const data = new FormData(event.currentTarget);
@@ -91,9 +94,9 @@ export function BmsChartPage({
             });
           }}
         >
-          <label className="text-sm text-muted">
+          <label className="flex flex-col gap-1 text-[11px] font-medium uppercase tracking-wide text-faint">
             {copy?.achievement ?? "Achievement"}
-            <select className="rx-select ml-2" name="achievement" defaultValue={search.achievement ?? ""}>
+            <select className="rx-select" name="achievement" defaultValue={search.achievement ?? ""}>
               <option value="">{copy?.any ?? "Any"}</option>
               {BMS_ACHIEVEMENTS.map((item) => (
                 <option key={item} value={item}>
@@ -102,9 +105,9 @@ export function BmsChartPage({
               ))}
             </select>
           </label>
-          <label className="text-sm text-muted">
+          <label className="flex flex-col gap-1 text-[11px] font-medium uppercase tracking-wide text-faint">
             {copy?.gauge ?? "Gauge"}
-            <select className="rx-select ml-2" name="gauge" defaultValue={search.gauge ?? ""}>
+            <select className="rx-select" name="gauge" defaultValue={search.gauge ?? ""}>
               <option value="">{copy?.any ?? "Any"}</option>
               {BMS_GAUGES.map((item) => (
                 <option key={item} value={item}>
@@ -113,10 +116,10 @@ export function BmsChartPage({
               ))}
             </select>
           </label>
-          <label className="text-sm text-muted">
+          <label className="flex flex-col gap-1 text-[11px] font-medium uppercase tracking-wide text-faint">
             {copy?.country ?? "Country"}
             <input
-              className="rx-input ml-2 w-16 uppercase"
+              className="rx-input w-full uppercase"
               name="country"
               maxLength={2}
               defaultValue={search.country ?? ""}
@@ -138,19 +141,22 @@ export function BmsChartPage({
           {board.data.scores.length === 0 ? (
             <p className="mt-3 text-sm text-muted">{copy?.noScores ?? "No BMS scores yet."}</p>
           ) : (
-            <ol className="mt-3 divide-y divide-border">
+            <ol className="mt-3">
               {board.data.scores.map((row) => (
-                <li key={row.id} className="flex items-baseline justify-between gap-3 py-2 text-sm">
-                  <span className="w-8 shrink-0 tabular-nums text-muted">{row.rank}</span>
+                <li
+                  key={row.id}
+                  className="grid grid-cols-[2rem_minmax(0,1fr)] items-baseline gap-x-3 border-b border-line py-2.5 text-sm last:border-b-0 sm:grid-cols-[2rem_minmax(0,1fr)_auto]"
+                >
+                  <span className="tabular-nums text-faint">{row.rank}</span>
                   <Link
                     to="/bms/players/$username"
                     params={{ username: row.username }}
-                    className="min-w-0 flex-1 truncate font-semibold text-ink"
+                    className="min-w-0 truncate font-semibold text-ink"
                   >
                     {row.username}
                     {row.countryCode ? <span className="ml-2 font-normal text-muted">{row.countryCode}</span> : null}
                   </Link>
-                  <span className="shrink-0 tabular-nums">
+                  <span className="col-start-2 tabular-nums text-muted sm:col-start-auto">
                     {row.djGrade ?? "—"} · {row.exScore ?? "—"} · {formatAccuracy(row.accuracy)}
                   </span>
                 </li>

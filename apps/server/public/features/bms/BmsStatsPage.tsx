@@ -21,7 +21,7 @@ export function BmsStatsPage() {
   const max = Math.max(1, ...points.map((point) => point.plays));
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-6">
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
       <BmsCommunityNav />
       <PageTitle>{copy?.statistics ?? "Statistics"}</PageTitle>
       {stats.error instanceof Error ? <p className="text-sm text-warning">{stats.error.message}</p> : null}

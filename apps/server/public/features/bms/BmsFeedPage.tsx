@@ -24,7 +24,7 @@ export function BmsFeedPage({
   });
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-6">
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
       <BmsCommunityNav />
       <div>
         <PageTitle>{copy?.feed ?? "Feed"}</PageTitle>
@@ -36,37 +36,37 @@ export function BmsFeedPage({
       {feed.data && feed.data.scores.length === 0 ? (
         <p className="text-sm text-muted">{copy?.noScores ?? "No BMS scores yet."}</p>
       ) : null}
-      <ul className="flex flex-col gap-3">
-        {(feed.data?.scores ?? []).map((score) => (
-          <li key={score.id} className="rx-card p-4">
-            <div className="flex items-baseline justify-between gap-3">
-              <Link
-                to="/bms/players/$username"
-                params={{ username: score.username }}
-                className="font-semibold text-ink"
-              >
-                {score.username}
-              </Link>
-              <span className="text-xs text-muted">
-                {formatRelativeTime(score.achievedAt, dict?.common)}
-              </span>
-            </div>
+      {feed.data && feed.data.scores.length > 0 ? (
+      <ul className="overflow-hidden rounded-lg bg-surface">
+        {feed.data.scores.map((score) => (
+          <li
+            key={score.id}
+            className="grid gap-1 border-b border-line px-3 py-3 last:border-b-0 sm:grid-cols-[8rem_minmax(0,1fr)_auto] sm:items-baseline sm:gap-4"
+          >
+            <Link
+              to="/bms/players/$username"
+              params={{ username: score.username }}
+              className="truncate text-sm font-semibold text-ink"
+            >
+              {score.username}
+            </Link>
             <Link
               to="/bms/charts/$chartId"
               params={{ chartId: score.chartMd5 }}
               search={{ variant: score.variantId }}
-              className="mt-1 block truncate text-sm text-accent"
+              className="min-w-0 truncate text-sm text-ink hover:text-accent"
             >
-              {score.artist ? `${score.artist} — ` : ""}
               {score.title ?? score.chartMd5}
+              {score.artist ? <span className="text-muted"> · {score.artist}</span> : null}
             </Link>
-            <p className="mt-2 text-sm tabular-nums text-subtle">
-              {score.variantId} · {score.djGrade ?? "—"} · {score.exScore ?? "—"} ·{" "}
-              {formatAccuracy(score.accuracy)}
-            </p>
+            <span className="text-xs tabular-nums text-muted">
+              {score.djGrade ?? "—"} · {score.exScore ?? "—"} · {formatAccuracy(score.accuracy)} ·{" "}
+              {formatRelativeTime(score.achievedAt, dict?.common)}
+            </span>
           </li>
         ))}
       </ul>
+      ) : null}
       <div className="flex gap-2">
         {cursor ? (
           <button type="button" className="rx-btn" onClick={() => onCursor(undefined)}>

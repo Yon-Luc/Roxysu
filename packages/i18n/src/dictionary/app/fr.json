@@ -1402,6 +1402,11 @@
     "submissions": "Envois",
     "activePlayers": "Joueurs actifs",
     "activity": "Activité",
-    "noActivity": "Aucune partie sur cette période."
+    "noActivity": "Aucune partie sur cette période.",
+    "findChart": "Chercher un chart",
+    "titleCol": "Titre",
+    "artistCol": "Artiste",
+    "noMatches": "Aucun chart ne correspond.",
+    "ofLevel": "{{shown}} sur {{total}}"
   }
 }

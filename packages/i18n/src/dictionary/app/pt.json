@@ -1402,6 +1402,11 @@
     "activePlayers": "Jogadores ativos",
     "activity": "Atividade",
     "noActivity": "Nenhuma partida neste período.",
+    "findChart": "Procurar um chart",
+    "titleCol": "Título",
+    "artistCol": "Artista",
+    "noMatches": "Nenhum chart corresponde.",
+    "ofLevel": "{{shown}} de {{total}}",
     "country": "País"
   }
 }

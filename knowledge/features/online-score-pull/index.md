@@ -2,6 +2,7 @@
 last_verified: 2026-10
 confidence: verified
 touches:
+  - apps/hub/src/routes/osuScores.ts
   - apps/hub/src/services/osuScores.ts
   - apps/hub/src/services/osuBudget.ts
   - apps/server/src/online-scores/pull.ts
@@ -39,6 +40,9 @@ A manual, ruleset-scoped fetch. Loved and pending maps are out. The player previ
 2. The usage ledger admin route requires admin role.
    **Enforced by:** `apps/hub/src/routes/osuScores.ts` `osuBudgetAdminRoutes` — status: verified
    **Unauthorized result:** 403
+3. No user-role route exposes the usage ledger (`todayCalls`, `yesterdayCalls`, `todayLimited`). Signed-in users do see the live per-minute snapshot (`callsThisMinute`, `limitPerMinute`, `inFlight`, `parkedUntil`) in `scores/best` and `scores/progress`. It is process-wide, not per user, and the Settings panel shows it on purpose.
+   **Enforced by:** `apps/hub/src/routes/osuScores.ts` (no `/osu/budget` route) + `apps/hub/src/routes/osuScores.routes.test.ts` — status: verified
+   **Unauthorized result:** 404 for the removed route; the ledger stays behind `/admin/osu-budget`
 
 ## Important symbols
 

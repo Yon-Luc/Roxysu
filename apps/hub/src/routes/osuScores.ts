@@ -47,8 +47,7 @@ export const osuScoreRoutes = new Elysia({ prefix: "/osu" })
       return readPullProgress(user.osuId, ruleset);
     },
     { query: t.Object({ ruleset: t.String() }) },
-  )
-  .get("/budget", async () => budgetHistory(1));
+  );
 
 export const osuBudgetAdminRoutes = new Elysia({ prefix: "/admin" })
   .use(requireAdmin)

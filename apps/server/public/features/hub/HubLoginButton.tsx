@@ -121,7 +121,7 @@ export function HubLoginButton({
               await open(
                 hubLoginUrl(hubUrl, {
                   client: "desktop",
-                  handoff: begin.handoff,
+                  nonce: begin.handoff,
                   challenge: begin.challenge,
                 }),
               );

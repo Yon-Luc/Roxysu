@@ -39,6 +39,7 @@ export { runReworkEstimatorFromText } from "./reworkEstimator";
 export type { ReworkEstimatorResult } from "./reworkEstimator";
 export {
   getReworkDanJobState,
+  getReworkDanJobStatus,
   getReworkDanCoverage,
   startReworkDanBackfill,
   startReworkDanRecompute,
@@ -101,6 +102,7 @@ export {
 } from "./danielDanJob";
 export {
   getPatternAnalysisJobState,
+  getPatternAnalysisJobStatus,
   getPatternAnalysisCoverage,
   startPatternAnalysisBackfill,
   startPatternAnalysisRecompute,

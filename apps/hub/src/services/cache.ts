@@ -576,6 +576,19 @@ export async function filterSetIdsByKeymode(
   return unique.filter((id) => keptSet.has(id));
 }
 
+export const REFRESH_FAILURE_BACKOFF_MS = 15 * 60_000;
+
+export async function recordRefreshFailure(rowId: number, err: unknown) {
+  const message = err instanceof Error ? err.message : String(err);
+  await db
+    .update(searchCache)
+    .set({
+      refreshError: message.slice(0, 500),
+      refreshBackoffUntil: new Date(Date.now() + REFRESH_FAILURE_BACKOFF_MS),
+    })
+    .where(eq(searchCache.id, rowId));
+}
+
 /**
  * Run the hinamizawa search for a cache entry and upsert enriched stubs.
  * Keymode uses embedded search `beatmaps[].cs` during the crawl (same as

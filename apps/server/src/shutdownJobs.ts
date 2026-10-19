@@ -1,18 +1,16 @@
 import type { Db } from "@roxysu/db/types";
 import { shutdownAnalyticsPipeline } from "./analytics/pipeline";
 import {
-  getPatternAnalysisJobState,
-  getReworkDanJobState,
+  getPatternAnalysisJobStatus,
+  getReworkDanJobStatus,
   stopDanielDanBackfill,
   stopDanVariantJob,
   stopPatternAnalysisBackfill,
   stopReworkDanBackfill,
   stopSunnyDanBackfill,
 } from "./map-analysis";
-import { getManiaRatingJobState, stopManiaRatingBackfill } from "./mania-rating";
+import { getManiaRatingJobStatus, stopManiaRatingBackfill } from "./mania-rating";
 import { stopMirrorBatchJob } from "./mirrors";
-
-type JobStatus = { status: string };
 
 export type ShutdownJobsDeps = {
   shutdownAnalytics: (opts: { timeoutMs: number }) => Promise<boolean>;
@@ -35,7 +33,6 @@ function activeStatus(status: string): boolean {
 }
 
 function defaultDeps(db: Db): ShutdownJobsDeps {
-  const status = (state: JobStatus) => state.status;
   return {
     shutdownAnalytics: shutdownAnalyticsPipeline,
     stops: [
@@ -48,13 +45,17 @@ function defaultDeps(db: Db): ShutdownJobsDeps {
       () => stopMirrorBatchJob(),
     ],
     asyncJobStatuses: [
-      () => status(getManiaRatingJobState(db)),
-      () => status(getReworkDanJobState(db)),
-      () => status(getPatternAnalysisJobState(db)),
+      () => getManiaRatingJobStatus(),
+      () => getReworkDanJobStatus(),
+      () => getPatternAnalysisJobStatus(),
     ],
     sleep: (ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
     now: Date.now,
   };
+}
+
+export function shutdownAsyncJobStatuses(db: Db): Array<() => string> {
+  return defaultDeps(db).asyncJobStatuses;
 }
 
 /**

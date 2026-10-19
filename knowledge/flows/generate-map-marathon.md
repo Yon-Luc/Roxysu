@@ -21,7 +21,7 @@ user orders 2–12 mania maps (search or 4K/7K recommend)
     ↓
 POST /api/marathon/sources
     ↓
-browser decodes one audio file at a time into 16-bit PCM chunks (cancellable, 60 min cap), inserts pause, writes WAV (osu! cannot play AAC/M4A)
+browser decodes one audio file at a time into 16-bit PCM chunks (cancellable, 60 min cap), inserts pause, stores those chunks as an uncompressed WAV in the zip (osu! cannot play AAC/M4A)
     ↓
 fuseManiaCharts offsets notes + timing points by audio duration + pause
     ↓

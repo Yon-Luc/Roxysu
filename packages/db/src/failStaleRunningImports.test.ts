@@ -122,6 +122,37 @@ describe("failStaleRunningImportsOlderThan", () => {
     expect(failStaleRunningImportsOlderThan(db, STALE_RUNNING_MS, now)).toBe(0);
   });
 
+  test("a fresh progress_at keeps an old started_at alive", () => {
+    const now = 100 * 60_000;
+    db.insert(imports)
+      .values({
+        kind: "full",
+        status: "running",
+        startedAt: new Date(now - STALE_RUNNING_MS - 5_000),
+        progressAt: new Date(now - 1_000),
+        realmSchemaVersion: 0,
+      })
+      .run();
+    expect(failStaleRunningImportsOlderThan(db, STALE_RUNNING_MS, now)).toBe(0);
+    expect(db.select({ status: imports.status }).from(imports).all()[0]?.status).toBe(
+      "running",
+    );
+  });
+
+  test("an old progress_at is failed even when started_at is recent", () => {
+    const now = 100 * 60_000;
+    db.insert(imports)
+      .values({
+        kind: "full",
+        status: "running",
+        startedAt: new Date(now - 1_000),
+        progressAt: new Date(now - STALE_RUNNING_MS - 1),
+        realmSchemaVersion: 0,
+      })
+      .run();
+    expect(failStaleRunningImportsOlderThan(db, STALE_RUNNING_MS, now)).toBe(1);
+  });
+
   test("threshold is the shared 10 minute constant by default", () => {
     expect(STALE_RUNNING_MS).toBe(10 * 60_000);
     const now = Date.now();

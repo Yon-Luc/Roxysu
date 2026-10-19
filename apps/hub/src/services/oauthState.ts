@@ -8,8 +8,11 @@ export type OAuthClientKind = "web" | "desktop";
 
 type StateEntry = {
   client: OAuthClientKind;
-  /** Desktop handoff id from Roxysu begin — optional for web. */
-  handoffId: string | null;
+  /**
+   * Desktop local nonce from Roxysu begin. Not the Hub handoff id.
+   * Echoed on the localhost redirect so only that pending login learns the id.
+   */
+  nonce: string | null;
   /** Handoff challenge: base64url SHA-256 of the initiating client's verifier. */
   challenge: string;
   expiresAt: number;
@@ -71,7 +74,7 @@ function challengeMatches(storedChallenge: string, verifier: string): boolean {
 /** Create a CSRF-bound OAuth `state` value echoed by osu!; carries the handoff challenge. */
 export function createOAuthState(
   client: OAuthClientKind,
-  handoffId: string | null | undefined,
+  nonce: string | null | undefined,
   challenge: string,
 ): string {
   if (!isValidHandoffChallenge(challenge)) {
@@ -81,7 +84,7 @@ export function createOAuthState(
   const id = randomId();
   oauthStates.set(id, {
     client,
-    handoffId: handoffId?.trim() || null,
+    nonce: nonce?.trim() || null,
     challenge,
     expiresAt: Date.now() + STATE_TTL_MS,
   });
@@ -100,26 +103,16 @@ export function consumeOAuthState(state: string | undefined): StateEntry | null 
 }
 
 /**
- * Store a JWT under a one-time handoff id (short TTL).
- * Prefer reusing a desktop-provided id when present and unused.
+ * Store a JWT under a Hub-generated handoff id (short TTL).
+ * Callers cannot choose the id. A query-string id would let the sender of a
+ * login link redeem the victim's JWT with a challenge they also chose.
  */
-export function createHandoff(
-  token: string,
-  preferredId: string | null | undefined,
-  challenge: string,
-): string {
+export function createHandoff(token: string, challenge: string): string {
   if (!isValidHandoffChallenge(challenge)) {
     throw new Error("Invalid handoff challenge");
   }
   pruneMap(handoffs);
-  const id =
-    preferredId &&
-    preferredId.length >= 16 &&
-    preferredId.length <= 128 &&
-    /^[A-Za-z0-9_-]+$/.test(preferredId) &&
-    !handoffs.has(preferredId)
-      ? preferredId
-      : randomId();
+  const id = randomId();
   handoffs.set(id, {
     token,
     challenge,

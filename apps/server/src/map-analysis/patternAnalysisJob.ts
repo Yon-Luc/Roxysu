@@ -152,6 +152,10 @@ export function getPatternAnalysisCoverage(db: Db): PatternAnalysisCoverage {
   };
 }
 
+export function getPatternAnalysisJobStatus(): PatternAnalysisJobStatus {
+  return job.status;
+}
+
 export function getPatternAnalysisJobState(db: Db): PatternAnalysisJobState {
   return {
     status: job.status,

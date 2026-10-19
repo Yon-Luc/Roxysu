@@ -168,6 +168,12 @@ export const imports = sqliteTable("imports", {
     enum: ["running", "success", "failed", "locked"],
   }).notNull(),
   startedAt: integer("started_at", { mode: "timestamp_ms" }).notNull(),
+  /**
+   * Last time the realm-reader touched this row while it was still running.
+   * Stale means no progress for STALE_RUNNING_MS, not a long started_at.
+   * Null on rows written before the heartbeat migration: fall back to started_at.
+   */
+  progressAt: integer("progress_at", { mode: "timestamp_ms" }),
   finishedAt: integer("finished_at", { mode: "timestamp_ms" }),
   realmSchemaVersion: integer("realm_schema_version").notNull(),
   beatmapSetsUpserted: integer("beatmap_sets_upserted").notNull().default(0),

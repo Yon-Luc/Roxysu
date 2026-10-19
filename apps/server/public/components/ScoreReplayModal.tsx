@@ -94,11 +94,13 @@ import {
 } from "./previewPrefs";
 import {
   buildReplayVideoFilename,
+  discardStreamedFile,
   downloadBlob,
   exportReplayVideo,
   getReplayVideoExportPreset,
   pickReplayVideoSaveHandle,
   shouldStreamToDisk,
+  streamedExportError,
   supportsStreamingSave,
   type ReplayVideoExportProgress,
   type ReplayVideoSaveHandle,
@@ -626,13 +628,11 @@ export function ScoreReplayModal({
       });
       if (result.blob) downloadBlob(result.blob, result.filename);
     } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") {
-        // cancelled
-      } else {
-        setExportError(
-          err instanceof Error ? err.message : "Failed to export video",
-        );
-      }
+      const removed = saveHandle
+        ? await discardStreamedFile(saveHandle)
+        : false;
+      const message = streamedExportError(saveHandle, removed, err);
+      if (message) setExportError(message);
     } finally {
       exportAbortRef.current = null;
       setExporting(false);

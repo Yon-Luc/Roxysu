@@ -1,9 +1,7 @@
 import { and, eq, gt, isNotNull } from "drizzle-orm";
 import { db } from "../db";
 import { searchCache } from "@roxysu/db/hub";
-import { refreshCacheSingleFlight } from "./cache";
-
-const FAILURE_BACKOFF_MS = 15 * 60 * 1000;
+import { recordRefreshFailure, refreshCacheSingleFlight } from "./cache";
 
 let tickRunning = false;
 
@@ -80,13 +78,7 @@ export async function tickSearchCacheRefreshes(): Promise<void> {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`[cache-cron] refresh failed id=${due.id}:`, message);
-      await db
-        .update(searchCache)
-        .set({
-          refreshError: message.slice(0, 500),
-          refreshBackoffUntil: new Date(Date.now() + FAILURE_BACKOFF_MS),
-        })
-        .where(eq(searchCache.id, due.id));
+      await recordRefreshFailure(due.id, err);
     }
   } finally {
     tickRunning = false;

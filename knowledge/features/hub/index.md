@@ -126,7 +126,7 @@ Networked collaboration / discovery — not required for offline practice analyt
 17. Insane, Satellite, and Stella are stored when the Hub starts, from the catalogues shipped in `packages/db/bms-tables`. Their identity is the bundled source name, so a later start does not add a second version of the same catalogue.
     **Enforced by:** `apps/hub/src/services/bms.ts:seedBundledBmsTables()` — status: verified
 
-18. Hub OAuth handoff redeem needs a handoff verifier. The client that starts login keeps a high-entropy verifier (never in a URL or redirect) and sends only its SHA-256 challenge to `GET /auth/login` (required). The Hub stores the challenge with the one-time JWT and redeems it only via `POST /auth/handoff/:id` with the matching verifier (constant-time compare). A wrong or missing verifier returns the same 404 as an unknown id, does not consume the handoff, and still counts toward the per-IP rate limit (30 per minute). Knowing the handoff id (visible in the redirect) is not enough. The `GET` redeem no longer exists.
+18. Hub OAuth handoff redeem needs a handoff verifier, and the Hub always generates the handoff id. A `handoff` query param on `GET /auth/login` is ignored. Desktop login sends a local nonce (`nonce`), which is echoed on the localhost redirect (`h` + `n`) so only that pending login learns the Hub id. The client that starts login keeps a high-entropy verifier (never in a URL or redirect) and sends only its SHA-256 challenge (required). The Hub stores the challenge with the one-time JWT and redeems it only via `POST /auth/handoff/:id` with the matching verifier (constant-time compare). A wrong or missing verifier returns the same 404 as an unknown id, does not consume the handoff, and still counts toward the per-IP rate limit (30 per minute). Knowing an id the caller chose is not enough, because that id is not the one stored. The `GET` redeem no longer exists.
    **Enforced by:** `apps/hub/src/services/oauthState.ts:consumeHandoff()` and `apps/hub/src/routes/auth.ts` `/login`, `POST /handoff/:id` — status: verified
    **Unauthorized result:** 404 (login without a valid challenge: 400)
 
@@ -134,7 +134,7 @@ Networked collaboration / discovery — not required for offline practice analyt
    **Enforced by:** `apps/server/src/map-analysis/calcBundle.ts:uploadCalcBundleToHub()` — status: verified
    **Unauthorized result:** N/A (no caller-selected target)
 
-20. Hub search index refresh is single-flight per `search_cache` row. Public stale refresh (`GET /search`, `GET /search/all`), admin prime and `POST /admin/cache/:id/refresh`, and the cron tick all call `refreshCacheSingleFlight(cacheId)`, so overlapping refreshes of one row share one crawl and one delete-then-insert of `search_index_sets`. A failure rejects every waiter and clears the entry. The map is in Hub process memory (one Hub process).
+20. Hub search index refresh is single-flight per `search_cache` row. Public stale refresh (`GET /search`, `GET /search/all`), admin prime and `POST /admin/cache/:id/refresh`, and the cron tick all call `refreshCacheSingleFlight(cacheId)`, so overlapping refreshes of one row share one crawl and one delete-then-insert of `search_index_sets`. A failure rejects every waiter and clears the entry. The map is in Hub process memory (one Hub process). Public stale refresh does not start a crawl while `refreshBackoffUntil` is in the future, and that skip happens before the per-IP limit. Cron, admin refresh, and the public path write failures with `recordRefreshFailure` (`REFRESH_FAILURE_BACKOFF_MS`, 15 minutes). Backoff does not turn a stale row into `hit-fresh`.
    **Enforced by:** `apps/hub/src/services/cache.ts:refreshCacheSingleFlight` (built on `apps/hub/src/services/singleFlight.ts`) — status: verified
    **Unauthorized result:** N/A (integrity rule: readers never see a half-replaced index from two overlapping refreshes)
 
@@ -164,7 +164,7 @@ Networked collaboration / discovery — not required for offline practice analyt
 - A shared collection stores one `collection_maps` row per beatmapset (download / ownership) and one `collection_beatmaps` row per difficulty that was in the source collection. An empty difficulty list is legacy whole-set membership.
 - Publishing a smart or Realm collection sends those beatmap online ids. Saving it locally stores them on the hub-added row and collection write-back includes only those beatmaps.
 - Community Added tab renders from local hub-added rows; ownership uses `POST /api/mirrors/ownership/diff` rather than shipping every owned set ID.
-- OAuth callback accepts only `h=` (handoff id), never a JWT or verifier in the URL
+- OAuth callback accepts only `h=` (handoff id), never a JWT or verifier in the URL. `HubCallbackPage` does not redeem until the `system-status` query has resolved, and redeems once (the once-ref is set before the await) so it never POSTs the verifier to the `useHubUrl` localhost default
 - `apps/hub/src/db.ts` — `bun run db:migrate` and Hub boot both apply Hub store migrations
 - `apps/hub/Dockerfile` — build context is repo root. Copy every `apps/*/package.json` so `bun.lock`'s workspace graph stays valid under `--frozen-lockfile`.
 - `apps/hub/docker-compose.yml` — Coolify run config: pull prebuilt image, named volume at `/app/data`, `expose` 4322 (no host `ports`), `HUB_TRUST_PROXY=1`, production CORS allowlist for local Community; defaults `HUB_SEARCH_HTTP_CACHE=0` for safe rollout.
@@ -173,7 +173,7 @@ Networked collaboration / discovery — not required for offline practice analyt
 
 Hub does not publish to Cloudflare Workers. When the Hub hostname is orange-cloud proxied:
 
-1. Origin **fresh** hits set `CDN-Cache-Control: public, max-age=…` (capped by `HUB_SEARCH_EDGE_CACHE_MAX_AGE_SEC`, default 1h) when `HUB_SEARCH_HTTP_CACHE=1`; browsers get `private, no-store`. A `hit-stale` response, a miss, and a fresh hit whose row has a refresh in flight are `no-store` on every header, so the edge does not pin the pre-refresh page list. Pages cached before a refresh commit still live until their TTL (no purge; bypass the CF rule to flush). `apps/hub/src/routes/search.ts:searchPageEdgeTtlSec()` decides.
+1. Origin **fresh** hits set `CDN-Cache-Control: public, max-age=…` (capped by `HUB_SEARCH_EDGE_CACHE_MAX_AGE_SEC`, default 1h, and clamped to remaining `hubCacheTtlMs` freshness; under 5 seconds left is `no-store`) when `HUB_SEARCH_HTTP_CACHE=1`; browsers get `private, no-store`. A `hit-stale` response, a miss, and a fresh hit whose row has a refresh in flight are `no-store` on every header, so the edge does not pin the pre-refresh page list. There is no purge client; bypass the CF rule to flush. `GET /search/all` stays `no-store`. `apps/hub/src/routes/search.ts:searchPageEdgeTtlSec()` decides.
 2. JSON is **not** CF-cacheable by default — ops must add a named Cache Rule: `GET` + path `/search*` → Eligible for cache, respect origin TTL. Bypass that rule for instant edge kill.
 3. Incident order: `HUB_SEARCH_INDEX=0` (live mirror) → CF Bypass `/search*` → `HUB_SEARCH_HTTP_CACHE=0` (+ Bypass until TTL/purge).
 

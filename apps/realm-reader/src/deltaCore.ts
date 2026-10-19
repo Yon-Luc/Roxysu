@@ -159,6 +159,8 @@ export class DeltaWriter {
   readonly changedScores = new CappedIdSet();
   readonly changedBeatmaps = new CappedIdSet();
   watermarks: ExtractionWatermarks;
+  /** Called after each autocommit batch. Used for the import heartbeat. */
+  onBatch: (() => void) | null = null;
   private rulesetsDone = new Set<string>();
 
   constructor(
@@ -215,6 +217,7 @@ export class DeltaWriter {
         beatmapSets,
         rows as Record<string, unknown>[],
         ["id"],
+        this.onBatch ?? undefined,
       ),
     );
   }
@@ -228,6 +231,7 @@ export class DeltaWriter {
       beatmaps,
       rows as Record<string, unknown>[],
       ["id"],
+      this.onBatch ?? undefined,
     );
     addTotals(this.totals.beatmaps, result);
     for (const row of rows) this.changedBeatmaps.add(row.id as string);
@@ -293,6 +297,7 @@ export class DeltaWriter {
       scores,
       rows as Record<string, unknown>[],
       ["id"],
+      this.onBatch ?? undefined,
     );
     addTotals(this.totals.scores, result);
     for (const row of rows) this.changedScores.add(row.id as string);
@@ -369,8 +374,10 @@ export function streamIncrementalDelta(
   db: Db,
   source: ExtractionSource,
   watermarks: ExtractionWatermarks,
+  onBatch?: () => void,
 ): DeltaWriter {
   const writer = new DeltaWriter(db, source, watermarks);
+  writer.onBatch = onBatch ?? null;
 
   if (watermarks.maxLastLocalUpdate) {
     streamInBatches(

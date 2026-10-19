@@ -66,9 +66,12 @@ and not a live screen capture.
 6. Export is cancelable; closing the modal or changing score aborts the job.
    An abort or encode error always tears the encoder down: `Output.cancel()`
    runs, canvases are released, and a streamed partial file is aborted rather
-   than committed.
+   than committed. If a save handle exists and the export did not finish,
+   `remove()` is called. If `remove` is missing or throws, the modal shows
+   "Export did not finish. The chosen file is empty." That abort is not silent.
    **Status:** verified — `AbortSignal` in `ScoreReplayModal`,
-   `teardownFailedOutput`, `createGuardedFileWritable`, `replayVideoExport.test.ts`.
+   `teardownFailedOutput`, `createGuardedFileWritable`, `discardStreamedFile`,
+   `replayVideoExport.test.ts`.
 
 7. Output filename: `{artist} - {title} [{diff}] ({userUsername}).mp4`.
    **Status:** verified — `buildReplayVideoFilename`.

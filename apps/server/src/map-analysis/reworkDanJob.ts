@@ -150,6 +150,10 @@ export function getReworkDanCoverage(db: Db): ReworkDanCoverage {
   };
 }
 
+export function getReworkDanJobStatus(): ReworkDanJobStatus {
+  return job.status;
+}
+
 export function getReworkDanJobState(db: Db): ReworkDanJobState {
   return {
     status: job.status,

@@ -30,7 +30,7 @@ SSE consumers refresh
 
 ## Business guarantee
 
-Soft deletes and orphan cleanup feed session/mastery refresh; large/full imports may force full rebuild. A `running`/`failed` import while scores have moved past the last successful watermark forces a full rebuild. `running` older than 10 minutes is treated as idle. Delta retries still read the global score timeline for correct `retry_index`, but only rewrite `score_metrics` for affected beatmaps. The session engine repairs only the sessions the new `scoreIds` touch (windowed re-bucketing, same reconcile routine as the full rebuild) before falling back to a full rebuild. `is_pb` ranks by resolved PP (`resolveScorePp`), the same value mastery `best_pp` uses. Mastery rows carry Practice/QL play aggregates (`best_score`, `best_misses`, …).
+Soft deletes and orphan cleanup feed session/mastery refresh; large/full imports may force full rebuild. A `running`/`failed` import while scores have moved past the last successful watermark forces a full rebuild. A `running` import with no `progress_at` heartbeat for 10 minutes is treated as idle. A live reader keeps that heartbeat fresh. Delta retries still read the global score timeline for correct `retry_index`, but only rewrite `score_metrics` for affected beatmaps. The session engine repairs only the sessions the new `scoreIds` touch (windowed re-bucketing, same reconcile routine as the full rebuild) before falling back to a full rebuild. `is_pb` ranks by resolved PP (`resolveScorePp`), the same value mastery `best_pp` uses. Mastery rows carry Practice/QL play aggregates (`best_score`, `best_misses`, …).
 
 ## Implementation references
 

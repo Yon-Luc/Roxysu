@@ -43,10 +43,12 @@ function buildClientRedirect(handoffId: string): string {
   return appendHandoffParam(base, handoffId);
 }
 
-function buildDesktopRedirect(handoffId: string): string {
+function buildDesktopRedirect(handoffId: string, nonce: string): string {
   const base =
     process.env.HUB_DESKTOP_REDIRECT_URI?.trim() || DEFAULT_DESKTOP_REDIRECT;
-  return appendHandoffParam(base, handoffId);
+  const param = `h=${encodeURIComponent(handoffId)}&n=${encodeURIComponent(nonce)}`;
+  const sep = base.includes("?") ? "&" : "?";
+  return `${base}${sep}${param}`;
 }
 
 export const authRoutes = new Elysia({ prefix: "/auth" })
@@ -54,7 +56,8 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
 
   // -------------------------------------------------------------------------
   // GET /auth/login — redirect to osu! OAuth (public)
-  // ?client=desktop&handoff=… → CSRF state bound to desktop handoff id
+  // ?client=desktop&nonce=… → local pending id, echoed on the desktop redirect.
+  // Hub always generates the handoff id. A caller-supplied handoff is ignored.
   // ?challenge=… (required) → base64url SHA-256 of a verifier only the starting
   // client holds; redeeming the handoff later needs that verifier.
   // -------------------------------------------------------------------------
@@ -62,10 +65,10 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
     "/login",
     ({ query, redirect }) => {
       const client = query.client === "desktop" ? "desktop" : "web";
-      const handoffId = query.handoff?.trim() || null;
-      if (client === "desktop" && !handoffId) {
+      const nonce = query.nonce?.trim() || null;
+      if (client === "desktop" && !nonce) {
         return status(400, {
-          message: "Desktop login requires a handoff id from Roxysu",
+          message: "Desktop login requires a nonce from Roxysu",
         });
       }
       if (!isValidHandoffChallenge(query.challenge)) {
@@ -73,14 +76,16 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
           message: "Login requires a handoff challenge (base64url SHA-256)",
         });
       }
-      const state = createOAuthState(client, handoffId, query.challenge);
+      const state = createOAuthState(client, nonce, query.challenge);
       return redirect(buildAuthorizationUrl(state));
     },
     {
       query: t.Object({
         client: t.Optional(t.String()),
-        /** Desktop: opaque id from POST /api/system/hub-oauth/begin */
-        handoff: t.Optional(t.String({ minLength: 16, maxLength: 128 })),
+        /** Desktop: local pending id. Not the Hub handoff id. Ignored for web. */
+        nonce: t.Optional(t.String({ minLength: 16, maxLength: 128 })),
+        /** Ignored. Hub generates the handoff id. Kept so old links do not 422. */
+        handoff: t.Optional(t.String()),
         /** base64url SHA-256 of the client-held handoff verifier (43 chars). */
         challenge: t.String({ minLength: 43, maxLength: 43 }),
       }),
@@ -171,14 +176,13 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
         return status(500, { message: "Failed to issue session token" });
       }
 
-      const handoffId = createHandoff(
-        token,
-        stateEntry.handoffId,
-        stateEntry.challenge,
-      );
+      const handoffId = createHandoff(token, stateEntry.challenge);
 
       if (stateEntry.client === "desktop") {
-        return redirect(buildDesktopRedirect(handoffId));
+        if (!stateEntry.nonce) {
+          return status(400, { message: "Desktop login is missing its nonce" });
+        }
+        return redirect(buildDesktopRedirect(handoffId, stateEntry.nonce));
       }
       return redirect(buildClientRedirect(handoffId));
     },

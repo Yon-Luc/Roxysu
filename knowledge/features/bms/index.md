@@ -48,7 +48,7 @@ BMS is a ruleset already present in the local mirror. This feature interprets th
    **Status:** verified
 6. Disabling upload stops new sends. It does not delete local or Hub scores.
    **Status:** verified
-7. Table completion counts DJ grades and combo lamps. Clear-type lamps are not counted as clears. Insane, Satellite, and Stella ship with the app. Each level lists that table's charts, and a chart counts when the player has a matching score.
+7. Table completion counts DJ grades and combo lamps. Clear-type lamps are not counted as clears. Insane, Satellite, and Stella ship with the app. Each level lists that table's charts, and a chart counts when the player has a matching score. Bundled rows are stamped `importedAt` 0 (and existing `bundled://` rows are updated to 0 even when the in-memory seed flag skips inserts) so a Hub import of the same table id wins. The tables GET schedules a background refresh that must not reject the process if settings reads fail; the response does not wait on that refresh.
    **Status:** verified
    **Enforced by:** `packages/db/src/bmsTables.ts:loadBundledBmsTables()` and `apps/server/src/bms/localProfile.ts:seedBundledLocalTables()`
 8. A public chart leaderboard is one best score per player for one variant. Achievement, gauge, and country are filters on that board. Scratch and other variants do not share a board.
@@ -72,7 +72,7 @@ BMS is a ruleset already present in the local mirror. This feature interprets th
 1. Local `/api/bms` follows the client app: no user auth. The Hub JWT used for background upload is stored in local settings and is not returned by the status route.
    **Enforced by:** `apps/server/src/bms/sync.ts:bmsSyncStatus()` — status: verified
    **Unauthorized result:** N/A on the client app
-2. Hub score ownership is the authenticated principal. A body user id is ignored. Trust is `community_submitted`. The Hub stores the DJ grade and combo lamp computed from the submitted accuracy and judgement counts, and rejects autoplay.
+2. Hub score ownership is the authenticated principal. A body user id is ignored. Trust is `community_submitted`. Ingest requires `pgreat` and `great`, stores EX and accuracy computed from those counts (`exScoreFromCounts`, accuracy = EX / max EX), and rejects a client `exScore` or `accuracy` that disagrees. DJ grade comes from that computed accuracy. Combo lamp comes from the counts. Autoplay is rejected. Startup recomputes stored rows from their counts; rows with no pgreat/great lose `djGrade` and `exScore`.
    **Enforced by:** `apps/hub/src/routes/bms.ts` and `apps/hub/src/services/bms.ts:ingestBmsScore()` — status: verified
    **Unauthorized result:** 401
 3. Private profiles and missing profiles both 404 for non-owners.
@@ -99,7 +99,7 @@ worker posts a batch to Hub /api/bms/scores/batch
 accepted and duplicate become synced; rejected stops; retryable waits
 ```
 
-Local `/bms` reads the local mirror and still renders when the Hub is unreachable. Opening the profile does not derive scores; the analytics pipeline does that on import, and enabling upload derives before it enqueues. Insane, Satellite, and Stella are read from `packages/db/bms-tables` and written into `bms_table_cache` on the first tables read, so their song lists do not depend on a Hub fetch. A later tables read uses that cache and refreshes it in the background when the last attempt is older than 15 minutes, or when the request passes `refresh=1`. The Hub stores the same three catalogues when it starts. The table screen shows one catalogue and one level at a time. Public `/bms/players/:username` reads the Hub. The play count in the header is the selected variant. Score history follows `nextCursor` one page at a time. `/bms/charts/:chartId`, `/bms/compare/:playerA/:playerB`, `/bms/feed`, and `/bms/statistics` also read the Hub. The feed polls the first page. Leaderboard filters stay in the URL.
+Local `/bms` reads the local mirror and still renders when the Hub is unreachable. Opening the profile does not derive scores; the analytics pipeline does that on import, and enabling upload derives before it enqueues. Insane, Satellite, and Stella are read from `packages/db/bms-tables` and written into `bms_table_cache` on the first tables read, so their song lists do not depend on a Hub fetch. A later tables read uses that cache and refreshes it in the background when the last attempt is older than 15 minutes, or when the request passes `refresh=1`. The Hub stores the same three catalogues when it starts. The table screen shows one catalogue and one level at a time. Public `/bms/players/:username` reads the Hub. On the tables tab, a pending catalogue is pending (the empty-table sentence is not shown), and a catalogue or table fetch error is the error string rather than that sentence. A successful empty catalogue is still no tables. The play count in the header is the selected variant. Score history follows `nextCursor` one page at a time. `/bms/charts/:chartId`, `/bms/compare/:playerA/:playerB`, `/bms/feed`, and `/bms/statistics` also read the Hub. The feed polls the first page. Leaderboard filters stay in the URL.
 
 ## Important symbols
 

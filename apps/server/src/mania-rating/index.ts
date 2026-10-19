@@ -73,6 +73,7 @@ export type {
 } from "./exportHtml";
 export {
   getManiaRatingJobState,
+  getManiaRatingJobStatus,
   getManiaRatingCoverage,
   startManiaRatingBackfill,
   stopManiaRatingBackfill,

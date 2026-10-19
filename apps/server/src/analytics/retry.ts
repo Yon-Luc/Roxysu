@@ -161,17 +161,7 @@ export async function runRetryEngine(
     ? metrics.filter((m) => m.beatmapId != null && scopeSet.has(m.beatmapId))
     : metrics;
 
-  if (!scoped) {
-    await db.delete(scoreMetrics);
-  } else if (toWrite.length > 0) {
-    const scoreIds = toWrite.map((m) => m.scoreId);
-    const BATCH_DEL = 500;
-    for (let i = 0; i < scoreIds.length; i += BATCH_DEL) {
-      const chunk = scoreIds.slice(i, i + BATCH_DEL);
-      await db.delete(scoreMetrics).where(inArray(scoreMetrics.scoreId, chunk));
-    }
-  }
-
+  const batches = [];
   const BATCH = 500;
   for (let i = 0; i < toWrite.length; i += BATCH) {
     const batch = toWrite.slice(i, i + BATCH).map(({ scoreId, retryIndex: ri, isPb, sessionId }) => ({
@@ -180,7 +170,23 @@ export async function runRetryEngine(
       isPb,
       sessionId,
     }));
-    if (batch.length === 0) continue;
-    await db.insert(scoreMetrics).values(batch);
+    if (batch.length > 0) batches.push(batch);
   }
+
+  db.transaction((tx) => {
+    if (!scoped) {
+      tx.delete(scoreMetrics).run();
+    } else if (toWrite.length > 0) {
+      const scoreIds = toWrite.map((m) => m.scoreId);
+      const BATCH_DEL = 500;
+      for (let i = 0; i < scoreIds.length; i += BATCH_DEL) {
+        tx.delete(scoreMetrics)
+          .where(inArray(scoreMetrics.scoreId, scoreIds.slice(i, i + BATCH_DEL)))
+          .run();
+      }
+    }
+    for (const batch of batches) {
+      tx.insert(scoreMetrics).values(batch).run();
+    }
+  }, { behavior: "immediate" });
 }

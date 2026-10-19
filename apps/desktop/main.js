@@ -6,7 +6,7 @@ const fs = require("node:fs");
 const { resolveDesktopPaths, ensureParentDir, ensureRealmExtracted } = require("./paths");
 const { startAutoUpdate } = require("./auto-update");
 const { decideRespawn } = require("./respawnPolicy");
-const { decideOverlayApply } = require("./overlayApplyPolicy");
+const { decideOverlayApply, childIsAlive } = require("./overlayApplyPolicy");
 
 // Stable userData folder: %APPDATA%\Roxysu (Windows) / XDG or Application Support.
 app.setName("Roxysu");
@@ -31,8 +31,8 @@ let overlayAppliedUrlArg = null;
 let overlaySpawnedAt = 0;
 /** Overlay host setting poll timer. @type {NodeJS.Timeout | null} */
 let overlayPollTimer = null;
-/** @type {number[]} */
-const childLogFds = [];
+/** @type {Map<string, number>} */
+const childLogFdByLabel = new Map();
 let shuttingDown = false;
 /** @type {string | null} */
 let desktopLogPath = null;
@@ -102,14 +102,29 @@ function signalWindowReady(dataDir) {
  * @param {string} label
  */
 function openChildLogFd(dataDir, label) {
-  const logDir = path.join(dataDir, "logs");
-  fs.mkdirSync(logDir, { recursive: true });
-  const logPath = path.join(logDir, `${label}.log`);
-  const fd = fs.openSync(logPath, "a");
+  const logPath = path.join(dataDir, "logs", `${label}.log`);
+  let fd = childLogFdByLabel.get(label);
+  if (fd == null) {
+    fs.mkdirSync(path.dirname(logPath), { recursive: true });
+    fd = fs.openSync(logPath, "a");
+    childLogFdByLabel.set(label, fd);
+    desktopLog(`${label} log: ${logPath}`);
+  }
   fs.writeSync(fd, `\n--- ${new Date().toISOString()} starting ${label} ---\n`);
-  childLogFds.push(fd);
-  desktopLog(`${label} log: ${logPath}`);
   return { logPath, fd };
+}
+
+/**
+ * Swallow spawn `'error'` (ENOENT / EACCES). That event does not emit `'exit'`.
+ * @param {import("node:child_process").ChildProcess} child
+ * @param {string} label
+ * @param {(err: Error) => void} onFailure
+ */
+function watchChildError(child, label, onFailure) {
+  child.on("error", (err) => {
+    desktopLog(`${label} spawn failed: ${err.message}`);
+    onFailure(err);
+  });
 }
 
 function resolveTsx(repoRoot, serverDir, realmDir) {
@@ -327,21 +342,21 @@ function createSplashWindow(paths) {
 /**
  * @param {ReturnType<typeof resolveDesktopPaths>} paths
  * @param {NodeJS.ProcessEnv} sharedEnv
+ * @returns {"running" | "failed" | "spawned"}
  */
 function spawnRealmReader(paths, sharedEnv) {
   // An exited child is not "killed", so check exit state, not `killed`.
-  if (realmChild && realmChild.exitCode === null && realmChild.signalCode === null) {
-    return;
-  }
+  // Signal death leaves exitCode null; childIsAlive treats that as dead.
+  if (childIsAlive(realmChild)) return "running";
   try {
     ensureRealmExtracted(paths);
   } catch (err) {
     desktopLog(`realm extract failed: ${err}`);
-    return;
+    return "failed";
   }
   if (!fs.existsSync(paths.realmEntry)) {
     desktopLog(`realm entry missing: ${paths.realmEntry}`);
-    return;
+    return "failed";
   }
   desktopLog(`spawn realm-reader dir=${paths.realmDir}`);
   // Opt-in heap guardrail: REALM_MAX_OLD_SPACE_MB=1536 caps V8 old space for
@@ -371,6 +386,12 @@ function spawnRealmReader(paths, sharedEnv) {
     desktopLog(`realm-reader exited code=${code} signal=${signal}`);
     scheduleRealmRespawn(paths, sharedEnv);
   });
+  watchChildError(child, "realm-reader", () => {
+    if (shuttingDown) return;
+    if (child !== realmChild) return;
+    scheduleRealmRespawn(paths, sharedEnv);
+  });
+  return "spawned";
 }
 
 /**
@@ -398,7 +419,9 @@ function scheduleRealmRespawn(paths, sharedEnv) {
   realmRespawnTimer = setTimeout(() => {
     realmRespawnTimer = null;
     if (shuttingDown) return;
-    spawnRealmReader(paths, sharedEnv);
+    if (spawnRealmReader(paths, sharedEnv) === "failed") {
+      scheduleRealmRespawn(paths, sharedEnv);
+    }
   }, decision.delayMs);
 }
 
@@ -444,11 +467,14 @@ function spawnOverlayHost(paths, urlArg) {
     shell: false,
   });
   overlaySpawnedAt = Date.now();
-  overlayChild.on("exit", (code, signal) => {
+  const child = overlayChild;
+  child.on("exit", (code, signal) => {
     if (!shuttingDown) {
       desktopLog(`overlay exited code=${code} signal=${signal}`);
     }
   });
+  // Poll respawns off exitCode !== null. A second schedule would double-spawn.
+  watchChildError(child, "overlay", () => {});
 }
 
 const OVERLAY_URL_DEFAULT = `--url=http://${HOST}:${PORT}/#/overlay?bg=clear`;
@@ -516,13 +542,13 @@ function watchOverlayHostSetting(paths) {
     if (shuttingDown) return;
 
     // Decision logic lives in overlayApplyPolicy.js (pure, unit-tested):
-    // F-038 gap only for an unchanged URL, F-066 stop after repeated poll
-    // failures while the last known toggle was off.
+    // F-038 gap only for an unchanged URL. Repeated poll failures stop a
+    // live host after the cap, whether or not the last known toggle was off.
     const decision = decideOverlayApply({
       settings,
       defaultUrlArg: OVERLAY_URL_DEFAULT,
       hasChild: overlayChild !== null,
-      childExited: overlayChild !== null && overlayChild.exitCode !== null,
+      childExited: overlayChild !== null && !childIsAlive(overlayChild),
       appliedUrlArg: overlayAppliedUrlArg,
       spawnedAt: overlaySpawnedAt,
       now: Date.now(),
@@ -537,7 +563,7 @@ function watchOverlayHostSetting(paths) {
       desktopLog(
         decision.reason === "disabled"
           ? "overlay disabled by setting — stopping host"
-          : `overlay settings unreachable (${consecutiveFailures} polls) while disabled — stopping host`,
+          : `overlay settings unreachable (${consecutiveFailures} polls) — stopping host`,
       );
       stopChild(overlayChild, "overlay");
       overlayChild = null;
@@ -634,14 +660,14 @@ function stopChild(child, label) {
 }
 
 function closeChildLogs() {
-  while (childLogFds.length > 0) {
-    const fd = childLogFds.pop();
+  for (const fd of childLogFdByLabel.values()) {
     try {
       fs.closeSync(fd);
     } catch {
       // already closed
     }
   }
+  childLogFdByLabel.clear();
 }
 
 /** @type {Promise<void> | null} */
@@ -799,6 +825,11 @@ if (!gotLock) {
         void shutdown().then(() => app.exit(code ?? 1));
       }
     });
+    watchChildError(serverChild, "server", () => {
+      if (!shuttingDown) {
+        void shutdown().then(() => app.exit(1));
+      }
+    });
 
     void setSplashStatus("Waiting for server");
     desktopLog("waitForServer start");
@@ -821,7 +852,9 @@ if (!gotLock) {
     desktopLog("ready");
 
     // Defer Realm until the UI is up; extract archive lazily (shrink AV scan at install).
-    spawnRealmReader(paths, sharedEnv);
+    if (spawnRealmReader(paths, sharedEnv) === "failed") {
+      scheduleRealmRespawn(paths, sharedEnv);
+    }
 
     // Optional Wayland in-game overlay host (bundled on NixOS packages):
     // spawns from the overlay.host_enabled / overlay.host_url settings and

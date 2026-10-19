@@ -558,7 +558,7 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
       if (scoresFilterChanged) {
         invalidateScoreAutoFilterCache();
         invalidateQueryContextCache();
-        await runAnalyticsPipeline(db, { forceFull: true });
+        void runAnalyticsPipeline(db, { forceFull: true });
         publish({ type: "dashboard.updated" });
         publish({ type: "mastery.updated" });
       } else if (axisThresholdsChanged || focusSettingsChanged) {

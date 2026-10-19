@@ -7,6 +7,7 @@ import {
   baseParamsFromCacheQuery,
   hashQueryParams,
   normalizeRefreshIntervalMinutes,
+  recordRefreshFailure,
   refreshCacheSingleFlight,
   searchCacheMetaColumns,
   type CacheQueryParams,
@@ -197,14 +198,7 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
       try {
         await refreshCacheSingleFlight(params.id);
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        await db
-          .update(searchCache)
-          .set({
-            refreshError: message.slice(0, 500),
-            refreshBackoffUntil: new Date(Date.now() + 15 * 60_000),
-          })
-          .where(eq(searchCache.id, params.id));
+        await recordRefreshFailure(params.id, err);
         console.error("[admin] Refresh failed:", err);
         return status(502, {
           message: "Hinamizawa search failed during refresh",

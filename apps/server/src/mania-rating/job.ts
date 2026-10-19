@@ -227,6 +227,10 @@ export function getManiaRatingCoverage(
   };
 }
 
+export function getManiaRatingJobStatus(): ManiaRatingJobStatus {
+  return job.status;
+}
+
 export function getManiaRatingJobState(db: Db): ManiaRatingJobState {
   const versionId = job.versionId;
   const running = job.status === "running" || job.status === "stopping";

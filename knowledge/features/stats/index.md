@@ -26,8 +26,8 @@ Keymode scopes the whole page and stays in the header. Axis and top-plays sit wi
 
 ## Business rules
 
-1. Every Stats figure uses the active score filters (Settings username and gamemode, resolved once per request) and excludes `delete_pending` scores. This includes the header `sessionCount` and `pbCount` and the session averages (`getSessionStats`).
-   **Enforced by:** `scoreScopeFilter` in `apps/server/src/analytics/playerStats.ts` (same conditions as `countSessionPbs` in `session.ts`) — status: verified (`playerStats.test.ts`)
+1. Every Stats figure uses the active score filters (Settings username and gamemode, resolved once per request) and excludes `delete_pending` scores. The header `sessionCount`, `pbCount`, and session averages (`getSessionStats`) also match `streamManiaPass`: mania, the selected key count, and non-deleted beatmap sets.
+   **Enforced by:** `scoreScopeFilter` plus the mania / key-count / set predicates in `getSessionStats` (`apps/server/src/analytics/playerStats.ts`) — status: verified (`playerStats.test.ts`)
 2. A session counts only if it contains at least one scoped play; its play count in "plays per session" and "longest" is its scoped plays, not the stored `sessions.score_count`. Session start/end times are the stored values. `pbCount` is every scoped `score_metrics.is_pb` row, including PBs outside any session.
    **Enforced by:** `getSessionStats` — status: verified
 

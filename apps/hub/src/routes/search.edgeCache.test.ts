@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, test } from "bun:test";
+import { hubCacheTtlMs } from "../services/hubEnv";
 
 /**
  * F-027: only a fresh index hit may be edge cached. A stale hit, or a row whose
@@ -40,5 +41,25 @@ describe("searchPageEdgeTtlSec", () => {
     await flight;
     expect(refreshCacheSingleFlight.has(id)).toBe(false);
     expect(searchPageEdgeTtlSec("hit-fresh", id, true, 900)).toBe(900);
+  });
+
+  test("clamps edge TTL to remaining hub freshness", () => {
+    const now = Date.parse("2026-10-19T12:00:00Z");
+    const freshnessSec = Math.floor(hubCacheTtlMs() / 1000);
+    const cachedAt = now - (freshnessSec - 30) * 1000;
+    expect(searchPageEdgeTtlSec("hit-fresh", 1, true, 900, cachedAt, now)).toBe(30);
+  });
+
+  test("remaining freshness under 5s is no-store", () => {
+    const now = Date.parse("2026-10-19T12:00:00Z");
+    const freshnessSec = Math.floor(hubCacheTtlMs() / 1000);
+    const cachedAt = now - (freshnessSec - 2) * 1000;
+    expect(searchPageEdgeTtlSec("hit-fresh", 1, true, 900, cachedAt, now)).toBeNull();
+  });
+
+  test("age past hub freshness is no-store", () => {
+    const now = Date.parse("2026-10-19T12:00:00Z");
+    const cachedAt = now - hubCacheTtlMs() - 1000;
+    expect(searchPageEdgeTtlSec("hit-fresh", 1, true, 900, cachedAt, now)).toBeNull();
   });
 });

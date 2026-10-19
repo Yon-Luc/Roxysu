@@ -420,12 +420,11 @@ function getPlayTimePatterns(pass: ManiaPass) {
 }
 
 /**
- * Session header stats under the active score scope (username, gamemode,
- * `delete_pending`), like `countSessionPbs` in session.ts. Only sessions that
- * contain at least one scoped play count, and each session's play count is its
- * scoped plays, so the header matches the scoped charts.
+ * Session header stats for the same rows as `streamManiaPass`: username,
+ * gamemode, non-deleted scores, non-deleted sets, mania, and the selected
+ * key count. Only sessions that contain at least one such play count.
  */
-function getSessionStats(db: Db, user: ScoreScope) {
+function getSessionStats(db: Db, user: ScoreScope, keyCount: number) {
   // One grouped pass: per-session scoped play and PB counts. The null group
   // holds PBs that belong to no session; they count toward pbCount only.
   const groups = db.$client
@@ -438,14 +437,19 @@ function getSessionStats(db: Db, user: ScoreScope) {
              SUM(sm.is_pb) AS pbCount
       FROM score_metrics sm
       JOIN scores s ON s.id = sm.score_id
+      JOIN beatmaps b ON b.id = s.beatmap_id
+      LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
       LEFT JOIN sessions ss ON ss.id = sm.session_id
       WHERE s.delete_pending = 0
         ${user.sql}
+        AND COALESCE(bs.delete_pending, 0) = 0
+        AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
+        AND b.circle_size = ?
       GROUP BY sm.session_id
       ORDER BY sm.session_id ASC
     `,
     )
-    .all(...user.params) as Array<{
+    .all(...user.params, keyCount) as Array<{
     id: number | null;
     startedAt: number | null;
     endedAt: number | null;
@@ -604,7 +608,7 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
   const rankDistribution = getRankDistribution(pass.rankByLabel);
   const skillsetMix = getSkillsetMix(pass.candidates, variantOf, axisThresholds);
   const playPatterns = getPlayTimePatterns(pass);
-  const sessionStats = getSessionStats(db, scope);
+  const sessionStats = getSessionStats(db, scope, keyCount);
   const topMappers = getTopMappers(pass.byMapper, 10);
 
   const summary = {

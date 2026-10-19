@@ -14,6 +14,7 @@ import {
 import {
   BMS_AUTOPLAY_ACRONYM,
   bmsScorePresentation,
+  exScoreFromCounts,
   comboLampMeets,
   gradeMeets,
   loadRecentBmsSessions,
@@ -118,9 +119,27 @@ export function validateInbound(score: BmsInbound): string | null {
     const reason = optionalCount(score.judgements?.[key], key);
     if (reason) return reason;
   }
+  const pgreat = score.judgements?.pgreat;
+  const great = score.judgements?.great;
+  if (pgreat == null || great == null) return "judgement counts required";
+  const expectedEx = exScoreFromCounts(pgreat, great);
+  if (ex != null && ex !== expectedEx) return "exScore does not match judgements";
+  if (maxEx != null && expectedEx > maxEx) return "exScore exceeds maxExScore";
+  if (maxEx != null && maxEx > 0 && accuracy != null) {
+    const expectedAcc = expectedEx / maxEx;
+    if (Math.abs(accuracy - expectedAcc) > 1e-6) return "accuracy does not match judgements";
+  }
   const mods = score.gameplay.mods ?? [];
   if (mods.some((mod) => mod.toUpperCase() === BMS_AUTOPLAY_ACRONYM)) return "autoplay";
   return null;
+}
+
+function derivedAccuracy(score: BmsInbound): number | null {
+  const pgreat = score.judgements?.pgreat;
+  const great = score.judgements?.great;
+  const maxEx = score.score?.maxExScore;
+  if (pgreat == null || great == null || maxEx == null || maxEx <= 0) return null;
+  return exScoreFromCounts(pgreat, great) / maxEx;
 }
 
 function presentedScore(score: BmsInbound) {
@@ -131,7 +150,7 @@ function presentedScore(score: BmsInbound) {
     bad: score.judgements?.bad ?? null,
     poor: score.judgements?.poor ?? null,
     miss: score.judgements?.miss ?? null,
-    accuracy: score.score.accuracy ?? null,
+    accuracy: derivedAccuracy(score),
   });
 }
 
@@ -230,10 +249,13 @@ export async function ingestBmsScore(
         localScoreId: score.localScoreId,
         chartMd5: md5,
         achievedAt: new Date(score.achievedAt),
-        exScore: score.score.exScore ?? null,
+        exScore:
+          score.judgements?.pgreat == null || score.judgements?.great == null
+            ? null
+            : exScoreFromCounts(score.judgements.pgreat, score.judgements.great),
         maxExScore: score.score.maxExScore ?? null,
         normalizedScore: score.score.normalizedScore ?? null,
-        accuracy: score.score.accuracy ?? null,
+        accuracy: derivedAccuracy(score),
         pgreat: score.judgements?.pgreat ?? null,
         great: score.judgements?.great ?? null,
         good: score.judgements?.good ?? null,
@@ -698,6 +720,73 @@ export async function importTable(
   }
   if (parsed.entries.length === 0) throw new Error("table has no charts");
   return storeTable(db, sourceUrl, parsed);
+}
+
+/**
+ * One-shot repair for rows stored before grades were derived from counts.
+ * Rows with no pgreat/great cannot be checked: drop them from grade and rank.
+ */
+export async function recomputeStoredBmsScores(db: HubDb): Promise<number> {
+  const rows = await db
+    .select({
+      id: bmsScores.id,
+      exScore: bmsScores.exScore,
+      maxExScore: bmsScores.maxExScore,
+      accuracy: bmsScores.accuracy,
+      pgreat: bmsScores.pgreat,
+      great: bmsScores.great,
+      good: bmsScores.good,
+      bad: bmsScores.bad,
+      poor: bmsScores.poor,
+      miss: bmsScores.miss,
+      djGrade: bmsScores.djGrade,
+      comboLampId: bmsScores.comboLampId,
+    })
+    .from(bmsScores);
+  let updated = 0;
+  for (const row of rows) {
+    if (row.pgreat == null && row.great == null) {
+      if (row.djGrade != null || row.exScore != null) {
+        await db
+          .update(bmsScores)
+          .set({ djGrade: null, exScore: null })
+          .where(eq(bmsScores.id, row.id));
+        updated += 1;
+      }
+      continue;
+    }
+    const ex = exScoreFromCounts(row.pgreat ?? 0, row.great ?? 0);
+    const accuracy =
+      row.maxExScore != null && row.maxExScore > 0 ? ex / row.maxExScore : null;
+    const presented = bmsScorePresentation({
+      pgreat: row.pgreat,
+      great: row.great,
+      good: row.good,
+      bad: row.bad,
+      poor: row.poor,
+      miss: row.miss,
+      accuracy,
+    });
+    if (
+      row.exScore === ex &&
+      row.accuracy === accuracy &&
+      row.djGrade === presented.djGrade &&
+      row.comboLampId === presented.comboLampId
+    ) {
+      continue;
+    }
+    await db
+      .update(bmsScores)
+      .set({
+        exScore: ex,
+        accuracy,
+        djGrade: presented.djGrade,
+        comboLampId: presented.comboLampId,
+      })
+      .where(eq(bmsScores.id, row.id));
+    updated += 1;
+  }
+  return updated;
 }
 
 export async function seedBundledBmsTables(db: HubDb) {

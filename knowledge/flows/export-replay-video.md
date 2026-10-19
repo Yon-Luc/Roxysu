@@ -26,7 +26,7 @@ ScoreReplayModal (rewatch)
        ├── paint composed frames @ preset fps
        ├── mediabunny CanvasSource + AudioBufferSource → Mp4OutputFormat
        │     (StreamTarget to the chosen file, or BufferTarget in memory)
-       ├── abort / error → Output.cancel(), release canvases
+        ├── abort / error → Output.cancel(), release canvases, remove() the chosen file if the export did not finish
        └── downloadBlob(filename) unless already written to disk
 ```
 

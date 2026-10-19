@@ -60,7 +60,7 @@ describe("oauthState", () => {
     const state = createOAuthState("desktop", "handoff-id-1234567890ab", CHALLENGE);
     const entry = consumeOAuthState(state);
     expect(entry?.client).toBe("desktop");
-    expect(entry?.handoffId).toBe("handoff-id-1234567890ab");
+    expect(entry?.nonce).toBe("handoff-id-1234567890ab");
     expect(entry?.challenge).toBe(CHALLENGE);
     expect(consumeOAuthState(state)).toBeNull();
   });
@@ -70,13 +70,13 @@ describe("oauthState", () => {
   });
 
   test("handoff is one-time and needs the verifier", () => {
-    const id = createHandoff("jwt-token", null, CHALLENGE);
+    const id = createHandoff("jwt-token", CHALLENGE);
     expect(consumeHandoff(id, VERIFIER)).toBe("jwt-token");
     expect(consumeHandoff(id, VERIFIER)).toBeNull();
   });
 
   test("wrong, missing, or malformed verifier does not redeem or consume", () => {
-    const id = createHandoff("jwt-token", null, CHALLENGE);
+    const id = createHandoff("jwt-token", CHALLENGE);
     expect(consumeHandoff(id, "w".repeat(43))).toBeNull();
     expect(consumeHandoff(id, undefined)).toBeNull();
     expect(consumeHandoff(id, "short")).toBeNull();
@@ -84,11 +84,11 @@ describe("oauthState", () => {
     expect(consumeHandoff(id, VERIFIER)).toBe("jwt-token");
   });
 
-  test("preferred handoff id is reused when free", () => {
-    const preferred = "preferred-handoff-id-xyz";
-    const id = createHandoff("jwt-token", preferred, CHALLENGE);
-    expect(id).toBe(preferred);
-    expect(consumeHandoff(preferred, VERIFIER)).toBe("jwt-token");
+  test("caller cannot choose the handoff id", () => {
+    const id = createHandoff("jwt-token", CHALLENGE);
+    expect(id).not.toBe("preferred-handoff-id-xyz");
+    expect(consumeHandoff("preferred-handoff-id-xyz", VERIFIER)).toBeNull();
+    expect(consumeHandoff(id, VERIFIER)).toBe("jwt-token");
   });
 });
 

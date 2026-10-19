@@ -95,17 +95,19 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
    The Electron shell polls `GET /api/settings` (~4s) and applies both keys:
    stop/spawn-restart of the host child whenever they change — plain
    client-app HTTP, no IPC. The same poll is also the liveness respawner: if
-   the host child exits on its own (crash or watchdog), it is respawned
+    the host child exits on its own (crash, signal, or watchdog), it is respawned
    within ~4s, rate-limited to one auto-respawn per 15s
    (`OVERLAY_RESPAWN_GAP_MS`) so a crashing binary cannot spin the poll.
    The gap applies only while the desired `--url=` token equals the one the
    exited child was spawned with; when the URL changed, the shell stops any
    running child and spawns at once, even inside the gap.
-   **Failed polls**: a failed settings read (HTTP error or 2s timeout) carries
-   no new intent. After 5 consecutive failures the shell stops the host if the
-   last successfully read `overlay.host_enabled` was off; if the last known
-   value was on (or no read has succeeded yet) the host keeps running. A
-   successful read resets the counter. Decision logic:
+    **Failed polls**: a failed settings read (HTTP error or 2s timeout) carries
+    no new intent. After 5 consecutive failures the shell stops a live host.
+    The last known toggle does not gate that stop: a disable already cleared
+    the child, and a dead server with the toggle still on must not keep
+    drawing. One failed poll does not stop the host. A successful read resets
+    the counter and, if the toggle is on and no child is running, spawns
+    again. Decision logic:
    `apps/desktop/overlayApplyPolicy.js:decideOverlayApply()` (pure,
    unit-tested).
 15. **Resource watchdog**: the host self-terminates before driver state

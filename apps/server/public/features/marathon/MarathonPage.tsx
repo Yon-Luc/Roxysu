@@ -125,8 +125,14 @@ export function MarathonPage() {
     void fetchMarathonSources(initialIds)
       .then((data) => {
         if (cancelled) return;
-        setTracks(data.sources.filter(isPlayableSource));
-        if (data.keyCount) setRecKey(data.keyCount === 4 ? 4 : 7);
+        const playable = data.sources.filter(isPlayableSource);
+        const { accepted, rejected, referenceKeyCount } = partitionByKeyCount(
+          [],
+          playable,
+        );
+        setTracks(accepted);
+        rejectKeyMismatch(rejected, referenceKeyCount);
+        if (referenceKeyCount) setRecKey(referenceKeyCount === 4 ? 4 : 7);
       })
       .catch(() => {
         if (!cancelled) {

@@ -13,7 +13,7 @@ import {
   type BmsDjGrade,
 } from "@roxysu/db/bms";
 import { loadBundledBmsTables } from "@roxysu/db/bms-tables";
-import { and, asc, desc, eq, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, like, lt, or, sql } from "drizzle-orm";
 import type { Db } from "@roxysu/db/types";
 import {
   resolveScoresUsernames,
@@ -208,29 +208,37 @@ let bundledTablesSeeded = false;
 
 /** Insane, Satellite, and Stella ship with the app, so the song list works offline. */
 export async function seedBundledLocalTables(db: Db): Promise<void> {
-  if (bundledTablesSeeded) return;
-  const now = Date.now();
-  for (const table of loadBundledBmsTables()) {
-    await replaceTableCache(db, {
-      versionId: table.versionId,
-      tableId: table.tableId,
-      name: table.parsed.name,
-      symbol: table.parsed.symbol,
-      sourceUrl: table.sourceUrl,
-      importedAt: now,
-      levelOrder: table.parsed.levelOrder,
-      entries: table.parsed.entries.map((entry) => ({
-        level: entry.level,
-        levelIndex: entry.levelIndex,
-        md5: entry.md5,
-        sha256: entry.sha256,
-        title: entry.title,
-        artist: entry.artist,
-      })),
-      unresolvedCount: table.parsed.unresolvedCount,
-    });
+  if (!bundledTablesSeeded) {
+    for (const table of loadBundledBmsTables()) {
+      await replaceTableCache(db, {
+        versionId: table.versionId,
+        tableId: table.tableId,
+        name: table.parsed.name,
+        symbol: table.parsed.symbol,
+        sourceUrl: table.sourceUrl,
+        importedAt: 0,
+        levelOrder: table.parsed.levelOrder,
+        entries: table.parsed.entries.map((entry) => ({
+          level: entry.level,
+          levelIndex: entry.levelIndex,
+          md5: entry.md5,
+          sha256: entry.sha256,
+          title: entry.title,
+          artist: entry.artist,
+        })),
+        unresolvedCount: table.parsed.unresolvedCount,
+      });
+    }
+    bundledTablesSeeded = true;
   }
-  bundledTablesSeeded = true;
+  await db
+    .update(bmsTableCache)
+    .set({ importedAt: new Date(0) })
+    .where(like(bmsTableCache.sourceUrl, "bundled://%"));
+}
+
+export function resetBundledTablesSeedForTests(): void {
+  bundledTablesSeeded = false;
 }
 
 function achievementHit(

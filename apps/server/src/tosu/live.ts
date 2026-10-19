@@ -52,6 +52,7 @@ let lastPlayPublishAt = 0;
 const spawnGate = createSpawnGateState();
 let probeTimer: ReturnType<typeof setInterval> | null = null;
 let sunnyDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+let probeEpoch = 0;
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -71,6 +72,7 @@ const deps = {
   probeTosuHttp,
   spawnTosu,
   isPidAlive,
+  readTosuSettings,
 };
 
 function emit(force = false): void {
@@ -132,14 +134,18 @@ async function refreshProbeAndMaybeSpawn(opts: {
   allowSpawn: boolean;
 }): Promise<void> {
   if (!settings?.enabled || !dbRef) return;
+  const epoch = probeEpoch;
+  const host = settings.host;
+  const executablePath = settings.executablePath;
 
-  const probe = await deps.probeTosuHttp(settings.host);
+  const probe = await deps.probeTosuHttp(host);
+  if (epoch !== probeEpoch || !settings?.enabled || !dbRef) return;
   const nextWarnings = [...probe.warnings];
 
   if (probe.httpUp) {
     resetSpawnGate(spawnGate);
   } else if (opts.allowSpawn) {
-    if (!settings.executablePath) {
+    if (!executablePath) {
       nextWarnings.push(
         "Tosu executable path is not configured. Set it in Settings to auto-start tosu.",
       );
@@ -147,7 +153,7 @@ async function refreshProbeAndMaybeSpawn(opts: {
       const now = Date.now();
       const decision = decideSpawn(spawnGate, now, deps.isPidAlive);
       if (decision.spawn) {
-        const result = deps.spawnTosu(settings.executablePath);
+        const result = deps.spawnTosu(executablePath);
         recordSpawn(spawnGate, now, result.ok ? result.pid : null);
         nextWarnings.push(
           result.ok
@@ -398,8 +404,10 @@ export function ensureTosuStarted(db: Db): Promise<void> {
 }
 
 export async function startTosuAdapter(db: Db): Promise<void> {
+  const epoch = ++probeEpoch;
   dbRef = db;
-  settings = await readTosuSettings(db);
+  settings = await deps.readTosuSettings(db);
+  if (epoch !== probeEpoch) return;
 
   stopWs();
   stopProbeLoop();
@@ -442,6 +450,7 @@ export async function restartTosuAdapter(db: Db): Promise<void> {
 }
 
 export function stopTosuAdapter(): void {
+  probeEpoch += 1;
   stopWs();
   stopProbeLoop();
   if (sunnyDebounceTimer) {

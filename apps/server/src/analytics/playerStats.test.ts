@@ -56,6 +56,48 @@ async function referenceMetrics(scope: Scope) {
   };
 }
 
+/** Header reference: mania + key count + non-deleted set, matching getSessionStats. */
+async function referenceHeader(scope: Scope, keyCount: number) {
+  const metricRows = await db
+    .select({
+      sessionId: scoreMetrics.sessionId,
+      isPb: scoreMetrics.isPb,
+      deletePending: scores.deletePending,
+      username: scores.userUsername,
+      ruleset: scores.rulesetShortName,
+      setDeletePending: beatmapSets.deletePending,
+      mapRuleset: beatmaps.rulesetShortName,
+      cs: beatmaps.circleSize,
+    })
+    .from(scoreMetrics)
+    .innerJoin(scores, eq(scoreMetrics.scoreId, scores.id))
+    .innerJoin(beatmaps, eq(scores.beatmapId, beatmaps.id))
+    .leftJoin(beatmapSets, eq(beatmaps.setId, beatmapSets.id));
+  const scoped = metricRows.filter(
+    (r) =>
+      !r.deletePending &&
+      !r.setDeletePending &&
+      (scope.username == null || r.username === scope.username) &&
+      (scope.gamemode == null || r.ruleset === scope.gamemode) &&
+      r.mapRuleset === "mania" &&
+      r.cs === keyCount,
+  );
+  const perSession = new Map<number, number>();
+  for (const r of scoped) {
+    if (r.sessionId == null) continue;
+    perSession.set(r.sessionId, (perSession.get(r.sessionId) ?? 0) + 1);
+  }
+  return {
+    sessionCount: perSession.size,
+    pbCount: scoped.filter((r) => r.isPb).length,
+    avgPlaysPerSession:
+      perSession.size > 0
+        ? [...perSession.values()].reduce((a, b) => a + b, 0) / perSession.size
+        : 0,
+    longestCount: Math.max(0, ...perSession.values()),
+  };
+}
+
 async function referenceManiaPlays(scope: Scope, keyCount: number) {
   const rows = await db
     .select({
@@ -102,7 +144,7 @@ describe("stats session and PB counts follow the score scope (F-016)", () => {
   for (const [label, scope, setting] of SCOPES) {
     test(`header counts match scoped scores: ${label}`, async () => {
       await setScoreScope(db, setting);
-      const expected = await referenceMetrics(scope);
+      const expected = await referenceHeader(scope, 7);
       const stats = await getPlayerStats(db, { keyCount: 7 });
       expect(stats.summary.sessionCount).toBe(expected.sessionCount);
       expect(stats.summary.pbCount).toBe(expected.pbCount);
@@ -124,6 +166,18 @@ describe("stats session and PB counts follow the score scope (F-016)", () => {
     });
     expect(scoped.pbCount).toBeLessThan(all.pbCount);
     expect(scoped.sessionCount).toBeGreaterThan(0);
+  });
+
+  test("4K and 7K headers do not share session counts", async () => {
+    await setScoreScope(db, { username: "*", gamemode: "*" });
+    const four = await getPlayerStats(db, { keyCount: 4 });
+    const seven = await getPlayerStats(db, { keyCount: 7 });
+    const expected4 = await referenceHeader({ username: null, gamemode: null }, 4);
+    const expected7 = await referenceHeader({ username: null, gamemode: null }, 7);
+    expect(four.summary.sessionCount).toBe(expected4.sessionCount);
+    expect(seven.summary.sessionCount).toBe(expected7.sessionCount);
+    expect(four.summary.pbCount).toBe(expected4.pbCount);
+    expect(seven.summary.pbCount).toBe(expected7.pbCount);
   });
 
   test("a scope with no plays has no sessions or PBs", async () => {

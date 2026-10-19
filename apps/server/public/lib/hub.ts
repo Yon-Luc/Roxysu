@@ -52,12 +52,12 @@ export function useHubUrl(): string {
 
 export function hubLoginUrl(
   hubUrl: string,
-  opts: { client?: "desktop"; handoff?: string; challenge: string },
+  opts: { client?: "desktop"; nonce?: string; challenge: string },
 ): string {
   const base = `${hubUrl.replace(/\/$/, "")}/auth/login`;
   const q = new URLSearchParams({ challenge: opts.challenge });
   if (opts?.client === "desktop") q.set("client", "desktop");
-  if (opts?.handoff) q.set("handoff", opts.handoff);
+  if (opts?.nonce) q.set("nonce", opts.nonce);
   return `${base}?${q.toString()}`;
 }
 

@@ -44,6 +44,32 @@ describe("importGateDecision", () => {
       ),
     ).toBe("proceed");
   });
+
+  test("a fresh heartbeat keeps a long-running import from proceeding", () => {
+    expect(
+      importGateDecision(
+        {
+          status: "running",
+          startedAt: NOW - 30 * MIN,
+          progressAt: NOW - MIN,
+        },
+        NOW,
+      ),
+    ).toBe("wait");
+  });
+
+  test("a stale heartbeat proceeds even if startedAt is recent", () => {
+    expect(
+      importGateDecision(
+        {
+          status: "running",
+          startedAt: NOW - MIN,
+          progressAt: NOW - 10 * MIN - 1,
+        },
+        NOW,
+      ),
+    ).toBe("proceed");
+  });
 });
 
 describe("waitForIdleImport", () => {

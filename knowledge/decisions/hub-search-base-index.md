@@ -34,7 +34,7 @@ Exact-hash primes for every stars/bpm/query combo do not scale and force empty s
 - Edge cache: JSON needs a CF Cache Rule (Eligible for cache on `/search*`); headers alone are insufficient.
 - Kill switches: `HUB_SEARCH_INDEX=0`, `HUB_SEARCH_HTTP_CACHE=0`, and CF Bypass — see Hub feature doc incident order.
 - Index refresh is single-flight per `search_cache` row (`refreshCacheSingleFlight`): `replaceSetsForCache` deletes then re-inserts, so two overlapping refreshes must never run. Do not call `refreshCache` directly from a route or the cron.
-- Only a fresh index hit may be edge cached. `hit-stale` responses and rows with a refresh in flight are `no-store`; the edge is not purged when a refresh commits, so pages cached before the commit live until their TTL.
+- Only a fresh index hit may be edge cached. `hit-stale` responses and rows with a refresh in flight are `no-store`. Edge TTL is clamped to remaining hub freshness (`hubCacheTtlMs` minus row age); under 5 seconds remaining is `no-store`. The edge is not purged when a refresh commits. Public stale refresh skips a row whose `refreshBackoffUntil` is still in the future and does not count that skip against the per-IP refresh limit. Cron, admin, and that path record failures through `recordRefreshFailure` (15 minutes). Backoff does not make `lookupCache` return `hit-fresh`.
 - Safe rollout: ship with `HUB_SEARCH_HTTP_CACHE=0` (compose default) until validated, then enable HTTP cache + CF rule.
 
 ## Relevant implementation

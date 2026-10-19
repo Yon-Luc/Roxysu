@@ -9,8 +9,19 @@
  * bookkeeping (failure counter, last known enabled flag) to carry forward.
  */
 
-/** Consecutive failed settings polls before a disabled host is stopped. */
+/** Consecutive failed settings polls before a live host is stopped. */
 const OVERLAY_MAX_POLL_FAILURES = 5;
+
+/**
+ * A spawned child is alive only while both exit fields are still null.
+ * Signal death sets `signalCode` and leaves `exitCode` null. `killed` is not
+ * this check — an exited child is not `killed`.
+ * @param {{ exitCode: number | null, signalCode: NodeJS.Signals | null } | null | undefined} child
+ * @returns {boolean}
+ */
+function childIsAlive(child) {
+  return child != null && child.exitCode === null && child.signalCode === null;
+}
 
 /**
  * @typedef {object} OverlayApplyInput
@@ -46,17 +57,16 @@ function decideOverlayApply(input) {
   const maxFailures = input.maxPollFailures ?? OVERLAY_MAX_POLL_FAILURES;
 
   if (!input.settings) {
-    // F-066: a failed poll carries no new intent. Keep a host the user left
-    // enabled running, but do not let a host the user turned off survive an
-    // unreachable server indefinitely.
+    // A failed poll carries no new intent. One failure must not kill the HUD.
+    // After the cap, stop whenever a child is alive. The last known toggle
+    // cannot gate this: a disable already cleared the child, and a dead
+    // server with the toggle still on must not keep drawing.
     const consecutiveFailures = input.consecutiveFailures + 1;
     const shouldStop =
-      consecutiveFailures >= maxFailures &&
-      input.lastKnownEnabled === false &&
-      input.hasChild;
+      consecutiveFailures >= maxFailures && input.hasChild;
     return {
       action: shouldStop ? "stop" : "noop",
-      reason: shouldStop ? "poll-failures-while-disabled" : "poll-failed",
+      reason: shouldStop ? "poll-failures" : "poll-failed",
       consecutiveFailures,
       lastKnownEnabled: input.lastKnownEnabled,
     };
@@ -111,4 +121,4 @@ function decideOverlayApply(input) {
   };
 }
 
-module.exports = { OVERLAY_MAX_POLL_FAILURES, decideOverlayApply };
+module.exports = { OVERLAY_MAX_POLL_FAILURES, childIsAlive, decideOverlayApply };

@@ -12,6 +12,7 @@ import { bmsScores, hubUsers } from "@roxysu/db/hub";
 import {
   importTable,
   ingestBmsBatch,
+  recomputeStoredBmsScores,
   readBmsProfile,
   type BmsInbound,
   type HubDb,
@@ -127,5 +128,42 @@ describe("ingestBmsBatch", () => {
       .where(eq(bmsScores.localScoreId, "score-partial"));
     expect(partialRow[0]?.comboLampId).toBeNull();
     expect(partialRow[0]?.djGrade).toBe("max");
+  });
+
+  test("rejects a grade forged from client accuracy", async () => {
+    const forged = inbound("score-forged");
+    forged.score.accuracy = 1;
+    forged.score.exScore = 0;
+    forged.score.maxExScore = 20;
+    forged.judgements = { pgreat: 0, great: 0, good: 0, bad: 0, poor: 0, miss: 500 };
+    const rejected = await ingestBmsBatch(db, 1, "install-1", [forged]);
+    expect(rejected.results[0]?.status).toBe("rejected");
+    expect(rejected.results[0]?.reason).toBe("accuracy does not match judgements");
+    const row = await db.select().from(bmsScores).where(eq(bmsScores.localScoreId, "score-forged"));
+    expect(row).toHaveLength(0);
+  });
+
+  test("rejects an exScore above the judgement counts", async () => {
+    const forged = inbound("score-ex");
+    forged.score.exScore = 10_000_000;
+    forged.score.maxExScore = 10_000_000;
+    forged.score.accuracy = 1;
+    forged.judgements = { pgreat: 1, great: 0, good: 0, bad: 0, poor: 0, miss: 0 };
+    const rejected = await ingestBmsBatch(db, 1, "install-1", [forged]);
+    expect(rejected.results[0]?.reason).toBe("exScore does not match judgements");
+  });
+
+  test("recomputeStoredBmsScores repairs a client grade from counts", async () => {
+    const id = "score-old";
+    await ingestBmsBatch(db, 1, "install-1", [inbound(id)]);
+    await db
+      .update(bmsScores)
+      .set({ djGrade: "d", accuracy: 1, exScore: 999 })
+      .where(eq(bmsScores.localScoreId, id));
+    expect(await recomputeStoredBmsScores(db)).toBeGreaterThan(0);
+    const row = await db.select().from(bmsScores).where(eq(bmsScores.localScoreId, id));
+    expect(row[0]?.exScore).toBe(20);
+    expect(row[0]?.djGrade).toBe("max");
+    expect(await recomputeStoredBmsScores(db)).toBe(0);
   });
 });

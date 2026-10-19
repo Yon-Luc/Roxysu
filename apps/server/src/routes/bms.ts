@@ -83,12 +83,12 @@ function scheduleTableRefresh(
 ) {
   if (tableRefreshInFlight) return;
   tableRefreshInFlight = (async () => {
-    if (!force) {
-      const last = Number((await readSetting(db, BMS_TABLE_REFRESH_AT_KEY)) ?? "0");
-      if (Number.isFinite(last) && Date.now() - last < TABLE_REFRESH_MS) return;
-    }
-    await writeSetting(db, BMS_TABLE_REFRESH_AT_KEY, String(Date.now()));
     try {
+      if (!force) {
+        const last = Number((await readSetting(db, BMS_TABLE_REFRESH_AT_KEY)) ?? "0");
+        if (Number.isFinite(last) && Date.now() - last < TABLE_REFRESH_MS) return;
+      }
+      await writeSetting(db, BMS_TABLE_REFRESH_AT_KEY, String(Date.now()));
       await refreshTableCache(db);
     } catch {
       // The next interval tries again. The response already used the cache.
@@ -96,6 +96,10 @@ function scheduleTableRefresh(
   })().finally(() => {
     tableRefreshInFlight = null;
   });
+}
+
+export function bmsTableRefreshInFlight(): Promise<void> | null {
+  return tableRefreshInFlight;
 }
 
 export const bmsRoutes = new Elysia({ prefix: "/bms" })

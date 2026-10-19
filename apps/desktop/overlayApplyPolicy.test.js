@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const {
   OVERLAY_MAX_POLL_FAILURES,
+  childIsAlive,
   decideOverlayApply,
 } = require("./overlayApplyPolicy.js");
 
@@ -25,6 +26,20 @@ function input(overrides = {}) {
     ...overrides,
   };
 }
+
+describe("childIsAlive", () => {
+  test("signal death is not alive", () => {
+    expect(childIsAlive({ exitCode: null, signalCode: "SIGSEGV" })).toBe(false);
+  });
+
+  test("a running child is alive", () => {
+    expect(childIsAlive({ exitCode: null, signalCode: null })).toBe(true);
+  });
+
+  test("a clean exit is not alive", () => {
+    expect(childIsAlive({ exitCode: 0, signalCode: null })).toBe(false);
+  });
+});
 
 describe("decideOverlayApply: spawn / liveness", () => {
   test("initial spawn with the default url", () => {
@@ -131,50 +146,63 @@ describe("decideOverlayApply: disabled", () => {
 describe("decideOverlayApply: F-066 poll failures", () => {
   test("a single failure keeps the host and counts", () => {
     const d = decideOverlayApply(
-      input({ settings: null, hasChild: true, lastKnownEnabled: false }),
-    );
-    expect(d).toMatchObject({ action: "noop", consecutiveFailures: 1, lastKnownEnabled: false });
-  });
-
-  test("N failures with last known disabled stops the host", () => {
-    const d = decideOverlayApply(
-      input({
-        settings: null,
-        hasChild: true,
-        lastKnownEnabled: false,
-        consecutiveFailures: OVERLAY_MAX_POLL_FAILURES - 1,
-      }),
+      input({ settings: null, hasChild: true, lastKnownEnabled: true }),
     );
     expect(d).toMatchObject({
-      action: "stop",
-      reason: "poll-failures-while-disabled",
-      consecutiveFailures: OVERLAY_MAX_POLL_FAILURES,
+      action: "noop",
+      reason: "poll-failed",
+      consecutiveFailures: 1,
+      lastKnownEnabled: true,
     });
   });
 
-  test("N failures with last known enabled keeps running", () => {
+  test("failures below the cap with a live host stay a noop", () => {
     const d = decideOverlayApply(
       input({
         settings: null,
         hasChild: true,
         lastKnownEnabled: true,
-        consecutiveFailures: 50,
+        consecutiveFailures: OVERLAY_MAX_POLL_FAILURES - 2,
       }),
     );
-    expect(d.action).toBe("noop");
-    expect(d.consecutiveFailures).toBe(51);
+    expect(d).toMatchObject({
+      action: "noop",
+      reason: "poll-failed",
+      consecutiveFailures: OVERLAY_MAX_POLL_FAILURES - 1,
+    });
   });
 
-  test("N failures before any successful read keeps running", () => {
+  test("failures at the cap with a live host stop it", () => {
     const d = decideOverlayApply(
       input({
         settings: null,
         hasChild: true,
-        lastKnownEnabled: null,
-        consecutiveFailures: 50,
+        lastKnownEnabled: true,
+        consecutiveFailures: OVERLAY_MAX_POLL_FAILURES - 1,
       }),
     );
-    expect(d.action).toBe("noop");
+    expect(d).toMatchObject({
+      action: "stop",
+      reason: "poll-failures",
+      consecutiveFailures: OVERLAY_MAX_POLL_FAILURES,
+      lastKnownEnabled: true,
+    });
+  });
+
+  test("a later successful enabled poll with no child spawns", () => {
+    const d = decideOverlayApply(
+      input({
+        settings: { enabled: true, hostUrl: null },
+        hasChild: false,
+        lastKnownEnabled: true,
+      }),
+    );
+    expect(d).toMatchObject({
+      action: "spawn",
+      reason: "initial",
+      stopRunning: false,
+      urlArg: DEFAULT_ARG,
+    });
   });
 
   test("failures with no child never stop anything", () => {

@@ -52,14 +52,14 @@ describe("auth handoff routes", () => {
   }
 
   test("GET redeem is gone", async () => {
-    const id = createHandoff("jwt", null, CHALLENGE);
+    const id = createHandoff("jwt", CHALLENGE);
     const res = await app.handle(new Request(`http://localhost/auth/handoff/${id}`));
     expect(res.status).toBe(404);
     expect((await redeem(id, VERIFIER)).status).toBe(200);
   });
 
   test("redeem without or with a wrong verifier fails and keeps the handoff", async () => {
-    const id = createHandoff("jwt", null, CHALLENGE);
+    const id = createHandoff("jwt", CHALLENGE);
     expect((await redeem(id)).status).toBe(400);
     expect((await redeem(id, "x".repeat(43))).status).toBe(404);
     const ok = await redeem(id, VERIFIER);
@@ -69,7 +69,7 @@ describe("auth handoff routes", () => {
   });
 
   test("wrong-verifier attempts count toward the rate limit", async () => {
-    const id = createHandoff("jwt", null, CHALLENGE);
+    const id = createHandoff("jwt", CHALLENGE);
     for (let i = 0; i < 30; i++) await redeem(id, "x".repeat(43));
     expect((await redeem(id, VERIFIER)).status).toBe(429);
   });

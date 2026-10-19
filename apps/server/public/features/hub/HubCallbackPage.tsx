@@ -1,22 +1,28 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import {
-  redeemHubHandoff,
-  setHubJwt,
-  useHubUrl,
-} from "../../lib/hub";
+import { useQuery } from "@tanstack/react-query";
+import { fetchSystemStatus } from "../../lib/api";
+import { redeemHubHandoff, setHubJwt } from "../../lib/hub";
 import { useAppDict } from "../../lib/i18n";
 
 /** Captures hub OAuth handoff from the hash query and routes to /hub. */
 export function HubCallbackPage() {
   const navigate = useNavigate();
-  const hubUrl = useHubUrl();
   const [error, setError] = useState<string | null>(null);
   const { dict } = useAppDict();
+  const status = useQuery({
+    queryKey: ["system-status"],
+    queryFn: fetchSystemStatus,
+    staleTime: 60_000,
+  });
+  const started = useRef(false);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.hash.split("?")[1] ?? "");
-    const handoff = params.get("h");
+    if (!status.isSuccess || started.current) return;
+    const hubUrl = status.data.hubUrl;
+    if (!hubUrl) return;
+    started.current = true;
+    const handoff = new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("h");
 
     void (async () => {
       try {
@@ -29,7 +35,7 @@ export function HubCallbackPage() {
         setError(err instanceof Error ? err.message : (dict?.hub?.callbackSignInFailed ?? "Sign-in failed"));
       }
     })();
-  }, [hubUrl, navigate, dict]);
+  }, [status.isSuccess, status.data, navigate, dict]);
 
   return (
     <div className="space-y-2 p-6">

@@ -3,6 +3,7 @@ import {
   edgeCacheTtlSecondsForRow,
   lookupCacheByBase,
   parseStoredStubs,
+  recordRefreshFailure,
   refreshCacheSingleFlight,
   secondaryFiltersFromQuery,
   type CacheQueryParams,
@@ -16,6 +17,7 @@ import {
 import { allowRateLimit } from "../services/rateLimit";
 import { clientIp } from "../services/clientIp";
 import {
+  hubCacheTtlMs,
   isHubSearchHttpCacheEnabled,
   isHubSearchIndexEnabled,
 } from "../services/hubEnv";
@@ -80,18 +82,24 @@ function emptyMiss(page: number, limit: number) {
   };
 }
 
-async function maybeRefreshStale(
-  rowId: number,
+export async function maybeRefreshStale(
+  row: { id: number; refreshBackoffUntil: Date | null },
   status: "hit-fresh" | "hit-stale" | "miss",
   ip: string,
 ) {
-  if (status !== "hit-stale" || refreshCacheSingleFlight.has(rowId)) return;
+  if (status !== "hit-stale" || refreshCacheSingleFlight.has(row.id)) return;
+  if (row.refreshBackoffUntil && row.refreshBackoffUntil.getTime() > Date.now()) {
+    return;
+  }
   if (!allowRateLimit(`search-refresh:${ip}`, { limit: 10, windowMs: 60_000 })) {
     return;
   }
-  refreshCacheSingleFlight(rowId).catch((err) =>
-    console.error("[search] Background refresh failed:", err),
-  );
+  refreshCacheSingleFlight(row.id).catch((err) => {
+    console.error("[search] Background refresh failed:", err);
+    void recordRefreshFailure(row.id, err).catch((writeErr) => {
+      console.error("[search] Failed to record refresh backoff:", writeErr);
+    });
+  });
 }
 
 /**
@@ -104,11 +112,23 @@ export function searchPageEdgeTtlSec(
   rowId: number,
   httpCacheEnabled: boolean,
   rowTtlSec: number,
+  cachedAt: Date | number | null = null,
+  nowMs = Date.now(),
 ): number | null {
   if (!httpCacheEnabled) return null;
   if (status !== "hit-fresh") return null;
   if (refreshCacheSingleFlight.has(rowId)) return null;
-  return rowTtlSec;
+  const cachedAtMs =
+    cachedAt instanceof Date
+      ? cachedAt.getTime()
+      : typeof cachedAt === "number"
+        ? cachedAt
+        : nowMs;
+  const ageSec = Math.floor((nowMs - cachedAtMs) / 1000);
+  const remaining = Math.floor(hubCacheTtlMs() / 1000) - ageSec;
+  const ttl = Math.min(rowTtlSec, remaining);
+  if (ttl < 5) return null;
+  return ttl;
 }
 
 export const searchRoutes = new Elysia({ prefix: "/search" })
@@ -154,7 +174,7 @@ export const searchRoutes = new Elysia({ prefix: "/search" })
         };
       }
 
-      maybeRefreshStale(row.id, status, ip);
+        maybeRefreshStale(row, status, ip);
       await ensureSearchIndexRows(db, row.id, parseStoredStubs);
 
       const secondary = secondaryFiltersFromQuery(params);
@@ -213,7 +233,7 @@ export const searchRoutes = new Elysia({ prefix: "/search" })
       const { status, row } = await lookupCacheByBase(params);
 
       if (row) {
-        maybeRefreshStale(row.id, status, ip);
+      maybeRefreshStale(row, status, ip);
         await ensureSearchIndexRows(db, row.id, parseStoredStubs);
 
         const secondary = secondaryFiltersFromQuery(params);
@@ -230,6 +250,7 @@ export const searchRoutes = new Elysia({ prefix: "/search" })
           row.id,
           isHubSearchHttpCacheEnabled(),
           edgeCacheTtlSecondsForRow(row),
+          row.cachedAt,
         );
         if (edgeTtl != null) {
           setEdgeCache(set, edgeTtl);

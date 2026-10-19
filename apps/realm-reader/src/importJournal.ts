@@ -12,6 +12,7 @@ import {
   beatmaps,
   imports,
   scores,
+  and,
   desc,
   eq,
   max,
@@ -205,6 +206,7 @@ export function finishImport(
       .set({
         status: "success",
         finishedAt: new Date(),
+        progressAt: new Date(),
         beatmapSetsUpserted: counts.beatmapSetsUpserted,
         beatmapsUpserted: counts.beatmapsUpserted,
         scoresUpserted: counts.scoresUpserted,
@@ -217,7 +219,7 @@ export function finishImport(
         watermarkPlayedAt: watermarks.maxPlayedAt,
         watermarkLastLocalUpdate: watermarks.maxLastLocalUpdate,
       })
-      .where(eq(imports.id, importId))
+      .where(and(eq(imports.id, importId), eq(imports.status, "running")))
       .run(),
   );
   pruneImports(db);
@@ -261,7 +263,7 @@ export function failImport(db: Db, importId: number, err: unknown) {
         finishedAt: new Date(),
         error: err instanceof Error ? err.message : String(err),
       })
-      .where(eq(imports.id, importId))
+      .where(and(eq(imports.id, importId), eq(imports.status, "running")))
       .run(),
   );
 }
@@ -274,11 +276,36 @@ export function claimImport(db: Db, kind: SyncKind) {
         kind,
         status: "running",
         startedAt: new Date(),
+        progressAt: new Date(),
         realmSchemaVersion: 0,
       })
       .returning({ id: imports.id })
       .get(),
   );
+}
+
+/** Heartbeat. Stale is "no progress", not "started a long time ago". */
+export function touchImportProgress(db: Db, importId: number, now = Date.now()) {
+  withBusyRetry(() =>
+    db
+      .update(imports)
+      .set({ progressAt: new Date(now) })
+      .where(and(eq(imports.id, importId), eq(imports.status, "running")))
+      .run(),
+  );
+}
+
+const IMPORT_PROGRESS_TOUCH_MS = 30_000;
+
+/** Throttled touch for streamed batches. The first call always writes. */
+export function createImportProgressTouch(db: Db, importId: number) {
+  let last = 0;
+  return () => {
+    const now = Date.now();
+    if (last !== 0 && now - last < IMPORT_PROGRESS_TOUCH_MS) return;
+    last = now;
+    touchImportProgress(db, importId, now);
+  };
 }
 
 export function setImportSchemaVersion(db: Db, importId: number, version: number) {

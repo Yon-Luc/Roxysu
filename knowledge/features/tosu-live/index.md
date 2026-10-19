@@ -33,6 +33,7 @@ Optional WebSocket integration with **tosu** for live in-progress map state (ove
 8. Mania key count comes from tosu v2 `stats.cs`, which is a number or `{ original, converted }`; `keysFromCs` (`src/tosu/client.ts`) prefers an integer `converted` in 1-10, else `original`. Same rule as the **Tosu counter**.
 9. Auto-start never stacks tosu processes. `decideSpawn` (`src/tosu/spawnGate.ts`) skips a spawn while the previously spawned pid is alive, backs off 60 s then 120 s between attempts, and stops after 3 consecutive attempts, pushing a warning to the live warnings list in each case. A reachable HTTP probe, or a manual `POST /api/tosu/start`, resets the gate. Detached tosu children are still not killed on Roxysu shutdown.
 10. The 15 s probe loop only refreshes warnings. It publishes `tosu.updated` (`full`) only when the warning list changed; beatmap, play and analysis changes publish themselves.
+11. An in-flight HTTP probe must not spawn tosu or rewrite warnings after live is stopped or reloaded disabled. `startTosuAdapter` and `stopTosuAdapter` bump `probeEpoch` before any await; `refreshProbeAndMaybeSpawn` bails after the probe if that epoch moved, settings are disabled, or the db is gone.
 
 ## Important symbols
 

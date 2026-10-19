@@ -18,22 +18,22 @@ describe("hubOAuthPending", () => {
     const { handoff: id } = beginHubOAuthHandoff();
     expect(id.length).toBeGreaterThanOrEqual(16);
     expect(peekHubOAuthHandoffReady(id)).toBe(false);
-    expect(markHubOAuthHandoffReady(id)).toBe(true);
+    expect(markHubOAuthHandoffReady(id, "hub-handoff-id-from-redirect")).toBe(true);
     expect(peekHubOAuthHandoffReady(id)).toBe(true);
   });
 
   test("cannot mark an unknown handoff ready", () => {
-    expect(markHubOAuthHandoffReady("not-a-real-handoff-id-xxxxx")).toBe(
+    expect(markHubOAuthHandoffReady("not-a-real-handoff-id-xxxxx", "hub-handoff-id-from-redirect")).toBe(
       false,
     );
   });
 
   test("clear removes the handoff", () => {
     const { handoff: id } = beginHubOAuthHandoff();
-    markHubOAuthHandoffReady(id);
+    markHubOAuthHandoffReady(id, "hub-handoff-id-from-redirect");
     clearHubOAuthHandoff(id);
     expect(peekHubOAuthHandoffReady(id)).toBe(false);
-    expect(markHubOAuthHandoffReady(id)).toBe(false);
+    expect(markHubOAuthHandoffReady(id, "hub-handoff-id-from-redirect")).toBe(false);
   });
 });
 
@@ -50,7 +50,7 @@ describe("handoff verifier", () => {
 
   test("only the begin verifier verifies; a wrong one does not clear the handoff", () => {
     const { handoff, verifier } = beginHubOAuthHandoff();
-    markHubOAuthHandoffReady(handoff);
+    markHubOAuthHandoffReady(handoff, "hub-handoff-id-from-redirect");
     expect(verifyHubOAuthHandoffVerifier(handoff, verifier)).toBe(true);
     expect(verifyHubOAuthHandoffVerifier(handoff, "A".repeat(43))).toBe(false);
     expect(verifyHubOAuthHandoffVerifier(handoff, "short")).toBe(false);

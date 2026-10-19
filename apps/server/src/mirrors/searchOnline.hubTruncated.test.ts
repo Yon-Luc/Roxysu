@@ -31,7 +31,7 @@ function setsWithIds(ids: number[]) {
   }));
 }
 
-type Calls = { hub: number; mirror: number };
+type Calls = { hub: number; mirror: number; mirrorPages: number[] };
 
 function mockNetwork(opts: {
   hub: { ids: number[]; total: number; truncated: boolean };
@@ -39,7 +39,7 @@ function mockNetwork(opts: {
   mirrorPages: Record<number, number[]>;
   failMirror?: boolean;
 }): Calls {
-  const calls: Calls = { hub: 0, mirror: 0 };
+  const calls: Calls = { hub: 0, mirror: 0, mirrorPages: [] };
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = new URL(String(input));
     if (url.host === "hub.test") {
@@ -61,6 +61,7 @@ function mockNetwork(opts: {
     calls.mirror += 1;
     if (opts.failMirror) return new Response("nope", { status: 503 });
     const page = Number(url.searchParams.get("page") ?? "0");
+    calls.mirrorPages.push(page);
     return json(setsWithIds(opts.mirrorPages[page] ?? []));
   }) as unknown as typeof fetch;
   return calls;
@@ -100,6 +101,7 @@ describe("collectMatchingOnlineBeatmapsets with a truncated Hub dump (F-025)", (
 
     expect(calls.hub).toBe(1);
     expect(calls.mirror).toBeGreaterThan(0);
+    expect(calls.mirrorPages).toContain(0);
     expect(result.sets.map((s) => s.id).sort((a, b) => a - b)).toEqual([
       1, 2, 3, 4, 5, 6, 7, 8,
     ]);
@@ -174,5 +176,54 @@ describe("collectMatchingOnlineBeatmapsets with a truncated Hub dump (F-025)", (
     expect(calls.mirror).toBe(0);
     expect(result.matched).toBe(3);
     expect(result.hitPageCap).toBe(true);
+  });
+
+  test("a hub-max seed of 200 ids seeks past the prefix after validating one page", async () => {
+    const seed = Array.from({ length: 200 }, (_, i) => i + 1);
+    const calls = mockNetwork({
+      hub: { ids: seed, total: 203, truncated: true },
+      mirrorPages: {
+        1: seed.slice(100),
+        2: [201, 202, 203],
+      },
+    });
+
+    const result = await collectMatchingOnlineBeatmapsets(db, {
+      onlineQuery: query(),
+      excludeOwned: false,
+      maxPages: 1000,
+    });
+
+    expect(calls.mirrorPages).not.toContain(0);
+    expect(calls.mirrorPages).toContain(1);
+    expect(calls.mirrorPages).toContain(2);
+    expect(result.sets.map((s) => s.id).sort((a, b) => a - b)).toEqual([
+      ...seed,
+      201,
+      202,
+      203,
+    ]);
+  });
+
+  test("a validation page outside the seed sets hitPageCap and does not walk further", async () => {
+    const seed = Array.from({ length: 200 }, (_, i) => i + 1);
+    const calls = mockNetwork({
+      hub: { ids: seed, total: 250, truncated: true },
+      mirrorPages: {
+        0: [9],
+        1: [999],
+        2: [201],
+      },
+    });
+
+    const result = await collectMatchingOnlineBeatmapsets(db, {
+      onlineQuery: query(),
+      excludeOwned: false,
+      maxPages: 1000,
+    });
+
+    expect(calls.mirrorPages).toEqual([1]);
+    expect(result.hitPageCap).toBe(true);
+    expect(result.sets.map((s) => s.id).sort((a, b) => a - b)).toEqual(seed);
   });
 });

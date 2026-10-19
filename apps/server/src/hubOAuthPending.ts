@@ -8,8 +8,10 @@ const MAX_PENDING = 64;
 type Pending = {
   /** base64url SHA-256 of the verifier returned only to the initiating UI. */
   challenge: string;
-  /** Set when browser hits /complete with matching handoff id. */
+  /** Set when browser hits /complete with this local nonce. */
   ready: boolean;
+  /** Hub-generated handoff id, learned only from the localhost redirect. */
+  hubHandoffId: string | null;
   expiresAt: number;
 };
 
@@ -56,6 +58,7 @@ export function beginHubOAuthHandoff(): HubOAuthBegin {
   pendingById.set(handoff, {
     challenge,
     ready: false,
+    hubHandoffId: null,
     expiresAt: Date.now() + TTL_MS,
   });
   return { handoff, verifier, challenge };
@@ -79,21 +82,37 @@ export function verifyHubOAuthHandoffVerifier(
 }
 
 /**
- * Mark a handoff ready after the browser lands on /complete.
- * Rejects unknown ids (cannot deposit arbitrary JWTs).
+ * Bind the Hub-generated handoff id to a local nonce after /complete.
+ * Rejects unknown nonces so a phished redirect cannot mark a login ready.
  */
-export function markHubOAuthHandoffReady(handoffId: string): boolean {
+export function markHubOAuthHandoffReady(
+  nonce: string,
+  hubHandoffId: string,
+): boolean {
   prune();
-  const id = handoffId.trim();
-  if (!id) return false;
+  const id = nonce.trim();
+  const hubId = hubHandoffId.trim();
+  if (!id || !hubId) return false;
+  if (!/^[A-Za-z0-9_-]{16,128}$/.test(hubId)) return false;
   const entry = pendingById.get(id);
   if (!entry || entry.expiresAt <= Date.now()) {
     pendingById.delete(id);
     return false;
   }
+  entry.hubHandoffId = hubId;
   entry.ready = true;
   entry.expiresAt = Date.now() + TTL_MS;
   return true;
+}
+
+/** Hub id to redeem, or null if the local nonce is not ready. */
+export function hubHandoffIdFor(localId: string): string | null {
+  prune();
+  const entry = pendingById.get(localId.trim());
+  if (!entry || entry.expiresAt <= Date.now() || !entry.ready || !entry.hubHandoffId) {
+    return null;
+  }
+  return entry.hubHandoffId;
 }
 
 /**

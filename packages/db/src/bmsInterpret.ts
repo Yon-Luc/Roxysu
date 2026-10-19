@@ -153,6 +153,11 @@ export function gaugeIdFromAcronyms(acronyms: readonly string[]): string | null 
   return null;
 }
 
+/** EX = pgreat*2 + great. Shared so Hub ingest cannot drift from the comment above. */
+export function exScoreFromCounts(pgreat: number, great: number): number {
+  return pgreat * 2 + great;
+}
+
 export function djGradeFromAccuracy(accuracy: number): BmsDjGrade {
   if (!Number.isFinite(accuracy) || accuracy < 0) return "d";
   if (accuracy >= 1 - 1e-9) return "max";

@@ -588,7 +588,38 @@ export const REPLAY_VIDEO_MEMORY_WARN_BYTES = 192 * 1024 * 1024;
 /** Minimal File System Access surface used for streamed export. */
 export type ReplayVideoSaveHandle = {
   createWritable(): Promise<WritableStream<StreamTargetChunk>>;
+  remove?: () => Promise<void>;
 };
+
+export const STREAMED_EXPORT_EMPTY_FILE_ERROR =
+  "Export did not finish. The chosen file is empty.";
+
+const discardedStreamedFiles = new WeakSet<object>();
+
+export async function discardStreamedFile(
+  handle: ReplayVideoSaveHandle | undefined,
+): Promise<boolean> {
+  if (!handle) return false;
+  if (discardedStreamedFiles.has(handle)) return true;
+  if (!handle.remove) return false;
+  try {
+    await handle.remove();
+    discardedStreamedFiles.add(handle);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function streamedExportError(
+  saveHandle: ReplayVideoSaveHandle | undefined,
+  removed: boolean,
+  err: unknown,
+): string | null {
+  if (saveHandle && !removed) return STREAMED_EXPORT_EMPTY_FILE_ERROR;
+  if (err instanceof DOMException && err.name === "AbortError") return null;
+  return err instanceof Error ? err.message : "Failed to export video";
+}
 
 type SaveFilePickerWindow = {
   showSaveFilePicker?: (options?: {
@@ -1407,6 +1438,17 @@ function paintComposedFrame(args: {
  * Encode a score rewatch as an MP4 blob matching the rewatch page composition.
  */
 export async function exportReplayVideo(
+  opts: ReplayVideoExportOptions,
+): Promise<ReplayVideoExportResult> {
+  try {
+    return await runExportReplayVideo(opts);
+  } catch (err) {
+    if (opts.saveHandle) await discardStreamedFile(opts.saveHandle);
+    throw err;
+  }
+}
+
+async function runExportReplayVideo(
   opts: ReplayVideoExportOptions,
 ): Promise<ReplayVideoExportResult> {
   const {

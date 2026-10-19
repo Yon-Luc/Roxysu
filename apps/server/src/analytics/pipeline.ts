@@ -50,13 +50,14 @@ function playedAtMs(value: Date | number | null | undefined): number | null {
   return value;
 }
 
-function latestImport(db: Db): {
-  status: string;
-  startedAt: Date | number;
-} | null {
+function latestImport(db: Db): ImportGateRow | null {
   return (
     db
-      .select({ status: imports.status, startedAt: imports.startedAt })
+      .select({
+        status: imports.status,
+        startedAt: imports.startedAt,
+        progressAt: imports.progressAt,
+      })
       .from(imports)
       .orderBy(desc(imports.id))
       .limit(1)
@@ -64,23 +65,28 @@ function latestImport(db: Db): {
   );
 }
 
-type ImportGateRow = { status: string; startedAt: Date | number };
+type ImportGateRow = {
+  status: string;
+  startedAt: Date | number;
+  /** Null/absent falls back to startedAt (rows from before the heartbeat). */
+  progressAt?: Date | number | null;
+};
 
 function isStaleRunning(
   row: ImportGateRow | null,
   now: number = Date.now(),
 ): boolean {
   if (!row || row.status !== "running") return false;
-  const started = playedAtMs(row.startedAt);
-  return started != null && now - started > STALE_RUNNING_MS;
+  const stamp = playedAtMs(row.progressAt) ?? playedAtMs(row.startedAt);
+  return stamp != null && now - stamp > STALE_RUNNING_MS;
 }
 
 /**
  * Whether the analytics pipeline may read the local mirror now.
- * "wait" while the latest import is `running` and not stale: raw rows are
- * committed in batches before `finishImport`, so a rebuild would read a
- * partial library. A stale `running` row no longer blocks (the writer is
- * presumed dead); `importNeedsForcedFull` then forces a full rebuild.
+ * "wait" while the latest import is `running` and its heartbeat is fresh.
+ * Raw rows are committed in batches before `finishImport`, so a rebuild
+ * would read a partial library. Stale means no `progressAt` (else
+ * `startedAt`) for the shared threshold: the writer is presumed dead.
  */
 export function importGateDecision(
   row: ImportGateRow | null,
@@ -152,11 +158,11 @@ export function loadAnalyticsDelta(
 }
 
 /**
- * Block until the latest import is not `running` (or has gone stale).
+ * Block until the latest import is not `running` (or its heartbeat is stale).
  * There is no wait cap that proceeds anyway: the loop ends only when
- * `importGateDecision` says "proceed", which is bounded by the stale
- * threshold measured from the import's `startedAt`. Covers every entry point
- * (SSE-scheduled runs, boot debounce, forced full rebuilds).
+ * `importGateDecision` says "proceed". A live reader keeps `progressAt`
+ * fresh, so this can outlast `startedAt + 10 min`. Callers that must not
+ * block the request (settings PATCH) must not await this.
  */
 export async function waitForIdleImport(
   readLatest: () => ImportGateRow | null,

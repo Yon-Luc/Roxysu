@@ -191,19 +191,23 @@ export async function runMasteryEngine(
     };
   });
 
-  if (scopeIds && scopeIds.length > 0) {
-    // Drop stale mastery for scoped maps with no remaining scores.
-    await db.delete(mastery).where(inArray(mastery.beatmapId, scopeIds));
-  } else {
-    await db.delete(mastery);
-  }
-
+  const batches = [];
   const BATCH = 500;
   for (let i = 0; i < rows.length; i += BATCH) {
     const batch = rows.slice(i, i + BATCH);
-    if (batch.length === 0) continue;
-    await db.insert(mastery).values(batch);
+    if (batch.length > 0) batches.push(batch);
   }
+
+  db.transaction((tx) => {
+    if (scopeIds && scopeIds.length > 0) {
+      tx.delete(mastery).where(inArray(mastery.beatmapId, scopeIds)).run();
+    } else {
+      tx.delete(mastery).run();
+    }
+    for (const batch of batches) {
+      tx.insert(mastery).values(batch).run();
+    }
+  }, { behavior: "immediate" });
 
   publish({ type: "mastery.updated" });
 }

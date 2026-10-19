@@ -202,6 +202,7 @@ export function upsertBatches(
   table: UpsertTable,
   rows: Record<string, unknown>[],
   primaryKeyNames: string[],
+  onBatch?: () => void,
 ): UpsertResult {
   if (rows.length === 0) {
     return { attempted: 0, changed: 0, skipped: 0, skippedKeys: [] };
@@ -229,6 +230,7 @@ export function upsertBatches(
       set,
       setWhere,
     );
+    onBatch?.();
     changed += result.changed;
     skipped += result.skipped;
     skippedKeys.push(...result.skippedKeys);
@@ -251,6 +253,7 @@ export function streamMappedUpsert(
   mapRow: (obj: unknown) => Record<string, unknown> | null,
   primaryKeyNames: string[],
   onUpserted?: (row: Record<string, unknown>) => void,
+  onBatch?: () => void,
 ): UpsertResult {
   let buffer: Record<string, unknown>[] = [];
   let attempted = 0;
@@ -262,7 +265,7 @@ export function streamMappedUpsert(
     if (buffer.length === 0) return;
     const batch = buffer;
     buffer = [];
-    const result = upsertBatches(db, table, batch, primaryKeyNames);
+    const result = upsertBatches(db, table, batch, primaryKeyNames, onBatch);
     attempted += result.attempted;
     changed += result.changed;
     skipped += result.skipped;

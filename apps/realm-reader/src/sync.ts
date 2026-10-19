@@ -33,6 +33,7 @@ import {
   RealmLockedError,
   claimImport,
   commitImport,
+  createImportProgressTouch,
   failImport,
   getWatermarks,
   hasSuccessfulImport,
@@ -241,6 +242,7 @@ function catchUpMissingFromRealm(
     realmBeatmapIds: Set<string>;
     realmSetIds: Set<string>;
   },
+  onBatch?: () => void,
 ): {
   beatmapSetsUpserted: number;
   beatmapsUpserted: number;
@@ -353,24 +355,28 @@ function catchUpMissingFromRealm(
     rulesets,
     rulesetRows as Record<string, unknown>[],
     ["shortName"],
+    onBatch,
   );
   const beatmapSetsUpserted = upsertBatches(
     db,
     beatmapSets,
     setRows as Record<string, unknown>[],
     ["id"],
+    onBatch,
   );
   const beatmapsUpserted = upsertBatches(
     db,
     beatmaps,
     beatmapRows as Record<string, unknown>[],
     ["id"],
+    onBatch,
   );
   const scoresUpserted = upsertBatches(
     db,
     scores,
     scoreRows as Record<string, unknown>[],
     ["id"],
+    onBatch,
   );
 
   return {
@@ -425,6 +431,7 @@ function realmSource(realm: Realm): ExtractionSource {
  */
 export function runFullSync(db: Db, realmPath: string): SyncResult {
   const importRow = claimImport(db, "full");
+  const touch = createImportProgressTouch(db, importRow.id);
 
   let realm: Realm | undefined;
   try {
@@ -441,6 +448,8 @@ export function runFullSync(db: Db, realmPath: string): SyncResult {
       realm.objects("Ruleset"),
       (obj) => mapRuleset(obj as never) as Record<string, unknown> | null,
       ["shortName"],
+      undefined,
+      touch,
     );
 
     const realmSetIds = new Set<string>();
@@ -454,6 +463,8 @@ export function runFullSync(db: Db, realmPath: string): SyncResult {
         return row as Record<string, unknown> | null;
       },
       ["id"],
+      undefined,
+      touch,
     );
 
     const realmBeatmapIds = new Set<string>();
@@ -474,6 +485,7 @@ export function runFullSync(db: Db, realmPath: string): SyncResult {
           row.lastLocalUpdate as Date | number | null,
         );
       },
+      touch,
     );
 
     const realmScoreIds = new Set<string>();
@@ -498,6 +510,7 @@ export function runFullSync(db: Db, realmPath: string): SyncResult {
           row.playedAt as Date | number | null,
         );
       },
+      touch,
     );
 
     // Commit phase: orphan deletes + `success` flip + watermarks, atomically.
@@ -567,6 +580,7 @@ export function runFullSync(db: Db, realmPath: string): SyncResult {
  */
 export function runReconcileSync(db: Db, realmPath: string): SyncResult {
   const importRow = claimImport(db, "reconcile");
+  const touch = createImportProgressTouch(db, importRow.id);
 
   let realm: Realm | undefined;
   try {
@@ -585,7 +599,7 @@ export function runReconcileSync(db: Db, realmPath: string): SyncResult {
     // tripped) and, in the commit phase, delete SQLite orphans.
     const round = startCountGapRound(db, realmCounts, {
       collectRealmIdSets: () => collectRealmIdSets(open),
-      catchUp: (ids) => catchUpMissingFromRealm(db, open, ids),
+      catchUp: (ids) => catchUpMissingFromRealm(db, open, ids, touch),
     });
     const caughtUp = round.caughtUp;
 
@@ -594,6 +608,7 @@ export function runReconcileSync(db: Db, realmPath: string): SyncResult {
     // Hidden.
     const source = realmSource(open);
     const heal = new DeltaWriter(db, source, getWatermarks(db));
+    heal.onBatch = touch;
     healFlaggedRows(heal, db, source);
 
     // One-shot: remap all scores so replay_file_hash is populated after migration.
@@ -612,6 +627,8 @@ export function runReconcileSync(db: Db, realmPath: string): SyncResult {
         open.objects("Score"),
         (obj) => mapScore(obj as never) as Record<string, unknown> | null,
         ["id"],
+        undefined,
+        touch,
       ).changed;
       replayBackfillRan = true;
     }
@@ -717,6 +734,7 @@ export function runIncrementalSync(db: Db, realmPath: string): SyncResult {
   }
 
   const importRow = claimImport(db, "incremental");
+  const touch = createImportProgressTouch(db, importRow.id);
 
   let realm: Realm | undefined;
   try {
@@ -725,7 +743,7 @@ export function runIncrementalSync(db: Db, realmPath: string): SyncResult {
     const actual = assertSchemaVersion(open);
     setImportSchemaVersion(db, importRow.id, actual);
 
-    const writer = streamIncrementalDelta(db, realmSource(open), watermarks);
+    const writer = streamIncrementalDelta(db, realmSource(open), watermarks, touch);
 
     commitImport(db, importRow.id, (tx) => {
       // Missed rows (e.g. lazer wrote mid-window) are healed by the periodic

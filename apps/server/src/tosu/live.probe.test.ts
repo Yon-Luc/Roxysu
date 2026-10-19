@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { Db } from "@roxysu/db/types";
-import { __tosuLiveTest as t } from "./live";
+import { __tosuLiveTest as t, startTosuAdapter } from "./live";
 import { MAX_SPAWN_ATTEMPTS } from "./spawnGate";
 
 const down = { httpUp: false, warnings: ["Tosu is not reachable at h."] };
@@ -27,6 +27,11 @@ beforeEach(() => {
     return spawnResult;
   }) as typeof t.deps.spawnTosu;
   t.deps.isPidAlive = () => pidAlive;
+  t.deps.readTosuSettings = (async () => ({
+    enabled: true,
+    host: "h",
+    executablePath: "/bin/tosu",
+  })) as typeof t.deps.readTosuSettings;
   t.init(
     { enabled: true, host: "h", executablePath: "/bin/tosu" },
     {} as Db,
@@ -100,6 +105,38 @@ describe("auto-start gate (F-006)", () => {
     await t.runProbeTick();
     expect(t.spawnGate.failedAttempts).toBe(0);
     expect(t.spawnGate.lastPid).toBeNull();
+  });
+
+  test("an in-flight probe does not spawn after live is disabled", async () => {
+    let release: (value: typeof down) => void = () => {};
+    t.deps.probeTosuHttp = (() =>
+      new Promise((resolve) => {
+        release = resolve;
+      })) as typeof t.deps.probeTosuHttp;
+    const pending = t.runProbeTick();
+    t.deps.readTosuSettings = (async () => ({
+      enabled: false,
+      host: "h",
+      executablePath: "/bin/tosu",
+    })) as typeof t.deps.readTosuSettings;
+    const disabling = startTosuAdapter({} as Db);
+    release(down);
+    await pending;
+    await disabling;
+    expect(spawns).toEqual([]);
+    expect(t.getWarnings()).toEqual([]);
+  });
+
+  test("a probe that resolves without a restart still spawns when http is down", async () => {
+    let release: (value: typeof down) => void = () => {};
+    t.deps.probeTosuHttp = (() =>
+      new Promise((resolve) => {
+        release = resolve;
+      })) as typeof t.deps.probeTosuHttp;
+    const pending = t.runProbeTick();
+    release(down);
+    await pending;
+    expect(spawns).toEqual(["/bin/tosu"]);
   });
 
   test("missing executable path warns without spawning", async () => {

@@ -83,6 +83,8 @@ export function BmsPlayerPage({
     !!me.data && me.data.username.toLowerCase() === username.toLowerCase();
   const hidden =
     profile.error instanceof Error && /not found|404/i.test(profile.error.message);
+  const tableError = tableQueries.find((query) => query.error instanceof Error)?.error;
+  const tablesHaveData = tableQueries.some((query) => query.data);
 
   return (
     <div>
@@ -121,8 +123,10 @@ export function BmsPlayerPage({
         local={false}
         tablesPending={
           view === "tables" &&
-          tableQueries.some((query) => query.isPending) &&
-          tableQueries.every((query) => !query.data)
+          (catalogue.isPending ||
+            ((catalogue.isError || tableError instanceof Error) && !tablesHaveData) ||
+            (tableQueries.some((query) => query.isPending) &&
+              tableQueries.every((query) => !query.data)))
         }
         profilePending={profile.isPending && profile.data == null}
         scoresPending={
@@ -145,9 +149,13 @@ export function BmsPlayerPage({
             ? (dict?.bms?.privateHidden ?? "This profile is private.")
             : profile.error instanceof Error
               ? profile.error.message
-              : scores.error instanceof Error
-                ? scores.error.message
-                : null
+              : view === "tables" && catalogue.error instanceof Error
+                ? catalogue.error.message
+                : view === "tables" && tableError instanceof Error
+                  ? tableError.message
+                  : scores.error instanceof Error
+                    ? scores.error.message
+                    : null
         }
       />
     </div>

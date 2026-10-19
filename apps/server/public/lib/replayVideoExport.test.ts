@@ -5,8 +5,11 @@ import {
   REPLAY_VIDEO_MEMORY_WARN_BYTES,
   computeHud,
   createGuardedFileWritable,
+  discardStreamedFile,
   getReplayVideoExportPreset,
   pickReplayVideoSaveHandle,
+  STREAMED_EXPORT_EMPTY_FILE_ERROR,
+  streamedExportError,
   replayVideoMemoryRisk,
   shouldStreamToDisk,
   supportsStreamingSave,
@@ -94,6 +97,40 @@ describe("createGuardedFileWritable", () => {
     await w.write(chunk(0));
     await w.close();
     expect(log).toEqual(["abort"]);
+  });
+});
+
+describe("discardStreamedFile", () => {
+  test("remove is called on abort before createWritable", async () => {
+    let removed = 0;
+    let created = 0;
+    const handle = {
+      createWritable: async () => {
+        created += 1;
+        return new WritableStream<StreamTargetChunk>();
+      },
+      remove: async () => {
+        removed += 1;
+      },
+    };
+    expect(await discardStreamedFile(handle)).toBe(true);
+    expect(removed).toBe(1);
+    expect(created).toBe(0);
+  });
+
+  test("a missing remove returns false and sets the empty-file error", async () => {
+    const handle = {
+      createWritable: async () => new WritableStream<StreamTargetChunk>(),
+    };
+    const removed = await discardStreamedFile(handle);
+    expect(removed).toBe(false);
+    expect(
+      streamedExportError(
+        handle,
+        removed,
+        new DOMException("Export cancelled", "AbortError"),
+      ),
+    ).toBe(STREAMED_EXPORT_EMPTY_FILE_ERROR);
   });
 });
 

@@ -527,6 +527,7 @@ export function CommandPalette({
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
+        data-command-palette=""
         aria-labelledby={titleId}
         className="w-full max-w-xl overflow-hidden rounded-2xl bg-elevated shadow-2xl shadow-black/60"
         onClick={(e) => e.stopPropagation()}
@@ -647,6 +648,18 @@ export function useCommandPaletteShortcut(onToggle: () => void) {
         target?.isContentEditable
       ) {
         return;
+      }
+      const modals = document.querySelectorAll("[aria-modal='true']");
+      if (modals.length > 0) {
+        const insidePalette =
+          target instanceof Node &&
+          [...modals].some(
+            (el) =>
+              el instanceof HTMLElement &&
+              el.hasAttribute("data-command-palette") &&
+              el.contains(target),
+          );
+        if (!insidePalette) return;
       }
       e.preventDefault();
       onToggle();

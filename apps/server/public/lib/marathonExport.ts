@@ -1,4 +1,4 @@
-import { zipSync } from "fflate";
+import { Zip, ZipPassThrough } from "fflate";
 import { fuseManiaCharts } from "@roxysu/osu-chart";
 import { localBeatmapAudioUrl, localBeatmapCoverUrl } from "./osuUrls";
 
@@ -88,14 +88,8 @@ export function pcm16Interleave(
   return out;
 }
 
-/** Wrap already-encoded stereo 16-bit PCM chunks in one WAV file. */
-export function assembleStereoWav(
-  pcmChunks: Uint8Array[],
-  sampleRate: number,
-): Uint8Array {
-  let dataSize = 0;
-  for (const chunk of pcmChunks) dataSize += chunk.byteLength;
-  const out = new Uint8Array(44 + dataSize);
+function stereoWavHeader(dataSize: number, sampleRate: number): Uint8Array {
+  const out = new Uint8Array(44);
   const view = new DataView(out.buffer);
   writeAscii(out, 0, "RIFF");
   view.setUint32(4, 36 + dataSize, true);
@@ -110,6 +104,18 @@ export function assembleStereoWav(
   view.setUint16(34, 16, true);
   writeAscii(out, 36, "data");
   view.setUint32(40, dataSize, true);
+  return out;
+}
+
+/** Wrap already-encoded stereo 16-bit PCM chunks in one WAV file. */
+export function assembleStereoWav(
+  pcmChunks: Uint8Array[],
+  sampleRate: number,
+): Uint8Array {
+  let dataSize = 0;
+  for (const chunk of pcmChunks) dataSize += chunk.byteLength;
+  const out = new Uint8Array(44 + dataSize);
+  out.set(stereoWavHeader(dataSize, sampleRate));
   let offset = 44;
   for (const chunk of pcmChunks) {
     out.set(chunk, offset);
@@ -130,7 +136,7 @@ export async function mixTracksToWav(args: {
   pauseMs: number;
   maxDurationSec?: number;
   signal?: AbortSignal;
-}): Promise<{ wav: Uint8Array; durationsMs: number[] }> {
+}): Promise<{ chunks: Uint8Array[]; durationsMs: number[] }> {
   const { count, loadTrack, pauseMs, signal } = args;
   const maxFrames = Math.round(
     (args.maxDurationSec ?? MARATHON_MAX_DURATION_SEC) * TARGET_RATE,
@@ -164,7 +170,55 @@ export async function mixTracksToWav(args: {
 
   if (peak <= SILENCE_PEAK) throw new Error("Concatenated audio is silent");
   throwIfAborted(signal);
-  return { wav: assembleStereoWav(chunks, TARGET_RATE), durationsMs };
+  return { chunks, durationsMs };
+}
+
+/**
+ * Store the WAV (header, then each PCM chunk) and the small chart files.
+ * PCM is not deflated and is not copied into a second WAV buffer.
+ */
+export function packMarathonArchive(args: {
+  audioName: string;
+  pcmChunks: Uint8Array[];
+  osuName: string;
+  osuBytes: Uint8Array;
+  background?: { filename: string; bytes: Uint8Array };
+}): Blob {
+  const parts: Uint8Array[] = [];
+  let zipError: unknown = null;
+  const zip = new Zip((err, data) => {
+    if (zipError) return;
+    if (err) {
+      zipError = err;
+      return;
+    }
+    if (data.length) parts.push(data);
+  });
+
+  const audio = new ZipPassThrough(args.audioName);
+  zip.add(audio);
+  let dataSize = 0;
+  for (const chunk of args.pcmChunks) dataSize += chunk.byteLength;
+  audio.push(stereoWavHeader(dataSize, TARGET_RATE), false);
+  for (let i = 0; i < args.pcmChunks.length; i += 1) {
+    const chunk = args.pcmChunks[i]!;
+    args.pcmChunks[i] = undefined as unknown as Uint8Array;
+    audio.push(chunk, false);
+  }
+  args.pcmChunks.length = 0;
+  audio.push(new Uint8Array(0), true);
+
+  const osu = new ZipPassThrough(args.osuName);
+  zip.add(osu);
+  osu.push(args.osuBytes, true);
+  if (args.background) {
+    const bg = new ZipPassThrough(args.background.filename);
+    zip.add(bg);
+    bg.push(args.background.bytes, true);
+  }
+  zip.end();
+  if (zipError) throw zipError;
+  return new Blob(parts, { type: "application/octet-stream" });
 }
 
 export function sanitizeMarathonFilename(name: string): string {
@@ -200,7 +254,7 @@ export async function generateMarathonOsz(args: {
       return toStereo44100(await decodeAudio(url, signal));
     },
   });
-  const encoded = { bytes: mixed.wav, filename: "audio.wav" };
+  const audioName = "audio.wav";
   const durationsMs = mixed.durationsMs;
 
   throwIfAborted(signal);
@@ -224,7 +278,7 @@ export async function generateMarathonOsz(args: {
         artist,
         creator: "Roxysu",
         version,
-        audioFilename: encoded.filename,
+        audioFilename: audioName,
         backgroundFilename: bg?.filename,
         previewTime: 0,
         tags: "roxysu marathon",
@@ -233,18 +287,17 @@ export async function generateMarathonOsz(args: {
   );
 
   const osuName = `${sanitizeArchiveStem(artist)} - ${sanitizeArchiveStem(title)} [${sanitizeArchiveStem(version)}].osu`;
-  const files: Record<string, Uint8Array> = {
-    [osuName]: new TextEncoder().encode(fused.osuText),
-    [encoded.filename]: encoded.bytes,
-  };
-  if (bg) files[bg.filename] = bg.bytes;
-
-  const zipped = zipSync(files);
   const filename = sanitizeMarathonFilename(`${artist} - ${title}`);
   return {
-    blob: new Blob([zipped], { type: "application/octet-stream" }),
+    blob: packMarathonArchive({
+      audioName,
+      pcmChunks: mixed.chunks,
+      osuName,
+      osuBytes: new TextEncoder().encode(fused.osuText),
+      background: bg ?? undefined,
+    }),
     filename,
-    audioName: encoded.filename,
+    audioName,
   };
 }
 

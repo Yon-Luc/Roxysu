@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { Db } from "@roxysu/db/types";
-import { shutdownBackgroundWork, type ShutdownJobsDeps } from "./shutdownJobs";
+import {
+  shutdownAsyncJobStatuses,
+  shutdownBackgroundWork,
+  type ShutdownJobsDeps,
+} from "./shutdownJobs";
 
 const db = {} as Db;
 
@@ -55,5 +59,20 @@ describe("shutdownBackgroundWork", () => {
     });
     expect(await shutdownBackgroundWork(db, { deps })).toBe(true);
     expect(calls).toContain("stop-b");
+  });
+
+  test("status readers do not query", () => {
+    const throwing = new Proxy({} as object, {
+      get() {
+        return () => {
+          throw new Error("coverage query");
+        };
+      },
+    }) as Db;
+    expect(shutdownAsyncJobStatuses(throwing).map((read) => read())).toEqual([
+      "idle",
+      "idle",
+      "idle",
+    ]);
   });
 });

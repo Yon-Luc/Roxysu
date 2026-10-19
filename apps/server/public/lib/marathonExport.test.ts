@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { unzipSync } from "fflate";
 import {
+  assembleStereoWav,
   collageGrid,
   encodePcmWav,
   mixTracksToWav,
+  packMarathonArchive,
   partitionByKeyCount,
   sanitizeMarathonFilename,
 } from "./marathonExport";
@@ -48,11 +51,12 @@ describe("mixTracksToWav", () => {
     const tracks = [constant(1000, 0.5), constant(2000, 0.25)];
     const pauseMs = 100;
     const pauseFrames = Math.round((pauseMs / 1000) * RATE);
-    const { wav, durationsMs } = await mixTracksToWav({
+    const { chunks, durationsMs } = await mixTracksToWav({
       count: 2,
       pauseMs,
       loadTrack: async (i) => tracks[i]!,
     });
+    const wav = assembleStereoWav(chunks, RATE);
     const total = 1000 + pauseFrames + 2000;
     expect(wav.byteLength).toBe(44 + total * 4);
     expect(new DataView(wav.buffer).getUint32(40, true)).toBe(total * 4);
@@ -71,11 +75,12 @@ describe("mixTracksToWav", () => {
 
   test("matches encodePcmWav for a single track", async () => {
     const [l, r] = constant(64, 0.3);
-    const { wav } = await mixTracksToWav({
+    const { chunks } = await mixTracksToWav({
       count: 1,
       pauseMs: 0,
       loadTrack: async () => [l, r],
     });
+    const wav = assembleStereoWav(chunks, RATE);
     expect(wav).toEqual(encodePcmWav([l, r], RATE));
   });
 
@@ -132,6 +137,49 @@ describe("mixTracksToWav", () => {
     });
     await expect(run).rejects.toMatchObject({ name: "AbortError" });
     expect(loads).toBe(1);
+  });
+});
+
+function zipCompressionMethod(zip: Uint8Array, filename: string): number {
+  const name = new TextEncoder().encode(filename);
+  for (let i = 0; i + 30 + name.length <= zip.length; i += 1) {
+    if (
+      zip[i] !== 0x50 ||
+      zip[i + 1] !== 0x4b ||
+      zip[i + 2] !== 0x03 ||
+      zip[i + 3] !== 0x04
+    ) {
+      continue;
+    }
+    const nameLen = zip[i + 26]! | (zip[i + 27]! << 8);
+    if (nameLen !== name.length) continue;
+    let match = true;
+    for (let j = 0; j < name.length; j += 1) {
+      if (zip[i + 30 + j] !== name[j]) {
+        match = false;
+        break;
+      }
+    }
+    if (match) return zip[i + 8]! | (zip[i + 9]! << 8);
+  }
+  throw new Error(`zip entry not found: ${filename}`);
+}
+
+describe("packMarathonArchive", () => {
+  test("stores the WAV (method 0) with a RIFF header and the PCM payload", async () => {
+    const pcm = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
+    const blob = packMarathonArchive({
+      audioName: "audio.wav",
+      pcmChunks: [pcm.slice(), pcm.slice()],
+      osuName: "map.osu",
+      osuBytes: new TextEncoder().encode("osu file format v14"),
+    });
+    const zipped = new Uint8Array(await blob.arrayBuffer());
+    expect(zipCompressionMethod(zipped, "audio.wav")).toBe(0);
+    const files = unzipSync(zipped);
+    const wav = files["audio.wav"]!;
+    expect(String.fromCharCode(...wav.subarray(0, 4))).toBe("RIFF");
+    expect(wav.subarray(44)).toEqual(new Uint8Array([...pcm, ...pcm]));
   });
 });
 

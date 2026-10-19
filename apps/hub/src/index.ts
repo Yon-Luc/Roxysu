@@ -13,7 +13,7 @@ import { adminRoutes } from "./routes/admin";
 import { calcBundleRoutes } from "./routes/calcBundles";
 import { osuBudgetAdminRoutes, osuScoreRoutes } from "./routes/osuScores";
 import { bmsPublicRoutes, bmsRoutes } from "./routes/bms";
-import { seedBundledBmsTables } from "./services/bms";
+import { recomputeStoredBmsScores, seedBundledBmsTables } from "./services/bms";
 
 // Fail closed on missing/weak JWT secret before binding the port.
 resolveJwtSecret();
@@ -24,6 +24,7 @@ runMigrations();
 await rehashSearchCacheKeys();
 await migrateBlobsToRows();
 await seedBundledBmsTables(db);
+await recomputeStoredBmsScores(db);
 
 const PORT = parseInt(process.env.PORT ?? "4322", 10);
 const LISTEN_HOST = resolveHubListenHost();

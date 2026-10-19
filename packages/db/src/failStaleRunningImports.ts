@@ -1,4 +1,4 @@
-import { and, eq, lt } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { imports } from "./schema";
 import type { Db } from "./types";
 
@@ -42,9 +42,11 @@ export function failStaleRunningImports(db: Db): number {
 
 /**
  * Age-gated variant for processes that are NOT the realm-reader (the server).
- * Fails only `running` imports whose `started_at` is older than `maxAgeMs`, so
- * a live reader's in-flight import is left alone. A reader that is still alive
- * overwrites the row with its final status by id when it finishes.
+ * Fails only `running` imports with no heartbeat (`progress_at`, else
+ * `started_at`) for `maxAgeMs`. A live reader touches `progress_at` per batch,
+ * so a long import is not failed. A reader that is still alive and has not
+ * been swept overwrites the row when it finishes (`finishImport` requires
+ * `status = running`).
  *
  * @returns number of rows marked failed
  */
@@ -57,7 +59,15 @@ export function failStaleRunningImportsOlderThan(
   const rows = db
     .select({ id: imports.id })
     .from(imports)
-    .where(and(eq(imports.status, "running"), lt(imports.startedAt, cutoff)))
+    .where(
+      and(
+        eq(imports.status, "running"),
+        or(
+          and(isNotNull(imports.progressAt), lt(imports.progressAt, cutoff)),
+          and(isNull(imports.progressAt), lt(imports.startedAt, cutoff)),
+        ),
+      ),
+    )
     .all();
   if (rows.length === 0) return 0;
 

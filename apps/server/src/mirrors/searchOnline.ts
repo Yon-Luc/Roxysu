@@ -562,8 +562,30 @@ export async function collectMatchingOnlineBeatmapsets(
     opts.onlineQuery.mirrorParams.status,
   );
 
+  let mirrorPage = 0;
+  if (hubSeed && hubSeed.seen.size >= MIRROR_PAGE_CAPACITY) {
+    const seen = hubSeed.seen;
+    const prefixPages = Math.floor(seen.size / MIRROR_PAGE_CAPACITY);
+    let tailIds: number[] = [];
+    try {
+      const tail = await fetchMirrorPage(provider.id, {
+        ...opts.onlineQuery.mirrorParams,
+        page: prefixPages - 1,
+      });
+      tailIds = tail.sets.map((set) => set.id);
+    } catch {
+      tailIds = [];
+    }
+    if (tailIds.length === 0 || tailIds.some((id) => !seen.has(id))) {
+      hitPageCap = true;
+      mirrorHasMore = false;
+    } else {
+      mirrorPage = prefixPages;
+    }
+  }
+
   for (
-    let mirrorPage = 0;
+    ;
     mirrorHasMore && !hitPageCap && !hitSetCap;
     mirrorPage += parallelWidth
   ) {

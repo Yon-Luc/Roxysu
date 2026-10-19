@@ -31,6 +31,13 @@ export function fetchLocalBmsProfile(variant: string | null) {
   }>(`/api/bms/profile${q}`);
 }
 
+export function fetchLocalBmsScores(variant: string | null, cursor: string | null) {
+  const q = new URLSearchParams({ limit: "20" });
+  if (variant) q.set("variant", variant);
+  if (cursor) q.set("cursor", cursor);
+  return localGet<{ scores: BmsScoreRow[]; nextCursor: string | null }>(`/api/bms/scores?${q}`);
+}
+
 export function fetchLocalBmsSessions(variant: string | null) {
   const q = variant ? `?variant=${encodeURIComponent(variant)}` : "";
   return localGet<{ sessions: BmsSessionRow[] }>(`/api/bms/sessions${q}`);
@@ -91,11 +98,14 @@ export function fetchPublicBmsScores(
   username: string,
   variant: string | null,
   token: string | null,
+  cursor: string | null,
 ) {
-  const q = variant ? `?variant=${encodeURIComponent(variant)}&limit=20` : "?limit=20";
+  const q = new URLSearchParams({ limit: "20" });
+  if (variant) q.set("variant", variant);
+  if (cursor) q.set("cursor", cursor);
   return hubFetch<{ scores: BmsScoreRow[]; nextCursor: string | null }>(
     hubUrl,
-    `/api/bms/profiles/${encodeURIComponent(username)}/scores${q}`,
+    `/api/bms/profiles/${encodeURIComponent(username)}/scores?${q}`,
     { token },
   );
 }

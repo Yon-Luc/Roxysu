@@ -35,8 +35,8 @@ touches:
 7. Production CORS is an explicit origin list. `CORS_ORIGIN=*` or unset refuses to listen.
    **Enforced by:** `apps/hub/src/services/hubEnv.ts:resolveCorsOrigin()` — status: verified
 
-8. BMS score upload uses the authenticated Hub user. A body user id is ignored. Private BMS profiles 404 for everyone except the owner. Table import is admin-only and limited to allowlisted HTTPS URLs.
-   **Enforced by:** `apps/hub/src/routes/bms.ts` — status: verified
+8. BMS score upload uses the authenticated Hub user. A body user id is ignored. The Hub computes DJ grade and combo lamp from the submitted counts and rejects autoplay. Private BMS profiles 404 for everyone except the owner. Table import is admin-only and limited to allowlisted HTTPS URLs.
+   **Enforced by:** `apps/hub/src/routes/bms.ts` and `apps/hub/src/services/bms.ts:validateInbound()` — status: verified
 
 **Unauthorized result:** request rejected / forbidden before mutation; Hub does not start if production CORS is unset/`*`.
 

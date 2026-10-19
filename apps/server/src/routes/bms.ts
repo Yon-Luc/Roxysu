@@ -10,6 +10,7 @@ import {
   BMS_HISTORICAL_UPLOAD_KEY,
   BMS_HUB_JWT_KEY,
   BMS_SYNC_AUTH_PAUSED_KEY,
+  BMS_TABLE_REFRESH_AT_KEY,
 } from "@roxysu/db/settings-keys";
 import { dbPlugin } from "../db-runtime";
 import { resolveHubBaseUrl } from "../hubUrl";
@@ -32,6 +33,9 @@ import {
   postBmsBatch,
   retryWaiting,
 } from "../bms/sync";
+
+const TABLE_REFRESH_MS = 15 * 60 * 1000;
+let tableRefreshInFlight: Promise<void> | null = null;
 
 async function refreshTableCache(db: Parameters<typeof replaceTableCache>[0]) {
   const base = resolveHubBaseUrl();
@@ -71,6 +75,27 @@ async function refreshTableCache(db: Parameters<typeof replaceTableCache>[0]) {
       importedAt: Date.parse(version.importedAt) || Date.now(),
     });
   }
+}
+
+function scheduleTableRefresh(
+  db: Parameters<typeof replaceTableCache>[0],
+  force: boolean,
+) {
+  if (tableRefreshInFlight) return;
+  tableRefreshInFlight = (async () => {
+    if (!force) {
+      const last = Number((await readSetting(db, BMS_TABLE_REFRESH_AT_KEY)) ?? "0");
+      if (Number.isFinite(last) && Date.now() - last < TABLE_REFRESH_MS) return;
+    }
+    await writeSetting(db, BMS_TABLE_REFRESH_AT_KEY, String(Date.now()));
+    try {
+      await refreshTableCache(db);
+    } catch {
+      // The next interval tries again. The response already used the cache.
+    }
+  })().finally(() => {
+    tableRefreshInFlight = null;
+  });
 }
 
 export const bmsRoutes = new Elysia({ prefix: "/bms" })
@@ -117,10 +142,7 @@ export const bmsRoutes = new Elysia({ prefix: "/bms" })
   )
   .get(
     "/profile",
-    async ({ db, query }) => {
-      await deriveBmsScores(db, null);
-      return localBmsOverview(db, query.variant ?? null);
-    },
+    async ({ db, query }) => localBmsOverview(db, query.variant ?? null),
     {
       query: t.Object({
         variant: t.Optional(t.String()),
@@ -152,11 +174,7 @@ export const bmsRoutes = new Elysia({ prefix: "/bms" })
     "/tables",
     async ({ db, query }) => {
       await seedBundledLocalTables(db);
-      try {
-        await refreshTableCache(db);
-      } catch {
-        // Offline profile still reads the bundled catalogues and the last pulled versions.
-      }
+      scheduleTableRefresh(db, query.refresh === "1");
       return {
         tables: await localTableCompletion(
           db,
@@ -169,6 +187,7 @@ export const bmsRoutes = new Elysia({ prefix: "/bms" })
       query: t.Object({
         variant: t.Optional(t.String()),
         achievement: t.Optional(t.String()),
+        refresh: t.Optional(t.String()),
       }),
     },
   )

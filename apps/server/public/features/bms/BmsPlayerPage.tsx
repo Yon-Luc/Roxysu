@@ -26,6 +26,7 @@ export function BmsPlayerPage({
   const queryClient = useQueryClient();
   const [variant, setVariant] = useState<string | null>(null);
   const [achievement, setAchievement] = useState("aa");
+  const [scoreCursor, setScoreCursor] = useState<string | null>(null);
   const me = useQuery({
     queryKey: ["hub-me", hubUrl, token],
     queryFn: () => fetchHubMe(hubUrl, token!),
@@ -37,9 +38,14 @@ export function BmsPlayerPage({
   });
   const selected = variant ?? profile.data?.variants[0]?.variantId ?? "standard";
   const scores = useQuery({
-    queryKey: ["bms-public-scores", hubUrl, username, selected, token],
-    queryFn: () => fetchPublicBmsScores(hubUrl, username, selected, token),
+    queryKey: ["bms-public-scores", hubUrl, username, selected, scoreCursor, token],
+    queryFn: () => fetchPublicBmsScores(hubUrl, username, selected, token, scoreCursor),
     enabled: profile.isSuccess && view !== "tables",
+    placeholderData: (previous, previousQuery) => {
+      const key = previousQuery?.queryKey;
+      if (!key || key[1] !== hubUrl || key[2] !== username || key[3] !== selected) return undefined;
+      return previous;
+    },
   });
   const activity = useQuery({
     queryKey: ["bms-public-activity", hubUrl, username, token],
@@ -105,7 +111,10 @@ export function BmsPlayerPage({
         tables={tableQueries.flatMap((query) => (query.data ? [query.data] : []))}
         activity={view === "overview" ? activity.data?.days : undefined}
         achievement={achievement}
-        onVariant={setVariant}
+        onVariant={(next) => {
+          setVariant(next);
+          setScoreCursor(null);
+        }}
         onAchievement={setAchievement}
         showScores={view !== "tables"}
         showTables={view === "tables"}
@@ -115,12 +124,30 @@ export function BmsPlayerPage({
           tableQueries.some((query) => query.isPending) &&
           tableQueries.every((query) => !query.data)
         }
+        profilePending={profile.isPending && profile.data == null}
+        scoresPending={
+          view !== "tables" &&
+          !profile.isError &&
+          scores.isPending &&
+          scores.data == null
+        }
+        sessionsPending={
+          view !== "tables" &&
+          !profile.isError &&
+          sessions.isPending &&
+          sessions.data == null
+        }
+        scoreCursor={scoreCursor}
+        scoreNextCursor={scores.data?.nextCursor ?? null}
+        onScoreCursor={view === "tables" ? undefined : setScoreCursor}
         error={
           hidden
             ? (dict?.bms?.privateHidden ?? "This profile is private.")
             : profile.error instanceof Error
               ? profile.error.message
-              : null
+              : scores.error instanceof Error
+                ? scores.error.message
+                : null
         }
       />
     </div>

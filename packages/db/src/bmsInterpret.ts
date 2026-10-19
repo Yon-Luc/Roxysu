@@ -178,20 +178,40 @@ export function comboLampMeets(
   return rank >= need;
 }
 
-function comboLamp(j: BmsJudgements): "max" | "perfect" | "fc" | null {
+export function comboLampFromCounts(j: BmsJudgements): "max" | "perfect" | "fc" | null {
+  if (j.pgreat == null && j.great == null && j.good == null) return null;
+  if (j.bad == null || j.poor == null || j.miss == null) return null;
   const pgreat = j.pgreat ?? 0;
   const great = j.great ?? 0;
   const good = j.good ?? 0;
-  const bad = j.bad ?? 0;
-  const poor = j.poor ?? 0;
-  const miss = j.miss ?? 0;
-  if (j.pgreat == null && j.great == null && j.good == null) return null;
-  const scored = pgreat + great + good + bad + poor + miss;
+  const scored = pgreat + great + good + j.bad + j.poor + j.miss;
   if (scored <= 0) return null;
-  if (bad + poor + miss > 0) return null;
+  if (j.bad + j.poor + j.miss > 0) return null;
   if (good === 0 && great === 0 && pgreat > 0) return "max";
   if (good === 0) return "perfect";
   return "fc";
+}
+
+/** Grade and combo lamp from the counts and accuracy already on a score. */
+export function bmsScorePresentation(input: {
+  pgreat: number | null;
+  great: number | null;
+  good: number | null;
+  bad: number | null;
+  poor: number | null;
+  miss: number | null;
+  accuracy: number | null;
+}): {
+  comboLampId: "max" | "perfect" | "fc" | null;
+  djGrade: BmsDjGrade | null;
+} {
+  return {
+    comboLampId: comboLampFromCounts({ ...input, ePoor: null }),
+    djGrade:
+      input.accuracy == null || !Number.isFinite(input.accuracy)
+        ? null
+        : djGradeFromAccuracy(input.accuracy),
+  };
 }
 
 export function interpretBmsScore(input: {
@@ -242,7 +262,7 @@ export function interpretBmsScore(input: {
     judgements,
     variantId: variantIdFromAcronyms(acronyms),
     gaugeId: gaugeIdFromAcronyms(acronyms),
-    comboLampId: comboLamp(judgements),
+    comboLampId: comboLampFromCounts(judgements),
     clearLampId: null,
     djGrade: djGradeFromAccuracy(accuracy),
     modAcronyms: acronyms,

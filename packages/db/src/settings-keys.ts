@@ -130,3 +130,6 @@ export const BMS_HUB_JWT_KEY = "bms.hub_jwt";
 /** "1" after the Hub rejects the stored JWT. Cleared when a new token is saved. */
 export const BMS_SYNC_AUTH_PAUSED_KEY = "bms.sync_auth_paused";
 
+/** Unix ms of the last BMS table-cache refresh attempt. */
+export const BMS_TABLE_REFRESH_AT_KEY = "bms.table_refresh_at";
+

@@ -124,8 +124,10 @@ Three estimators write to the same store, keyed by `algorithm`: `sunny`, `daniel
 3. **Star ratings must not depend on the profile.** A single pass with
    `withPattern` produces the identical star as a dan-only pass — asserted in
    `computeReworkDan.integration.test.ts`.
-4. **Skills store per-note base difficulty in a `Float64Array`.** Accuracy
-   multipliers are constant per skill. Do not reintroduce per-note
+4. **Skills store per-note base difficulty in a `Float64Array`.** Processor
+   skills (speed, technical, jack, coordination, release) share one accuracy
+   multiplier row. The Total skill's combined curve changes on every note, so
+   those rows live in a second flat buffer. Do not reintroduce per-note
    `AccuracyDifficulties` objects: the root-finder scans every note ~25 times
    per skill, so that allocation was the dominant cost.
 5. **Preprocessor walks return scalars.** `walkChain` returns a `ChainStats`

@@ -101,8 +101,8 @@ Networked collaboration / discovery — not required for offline practice analyt
     **Enforced by:** `apps/server/src/map-analysis/calcBundle.ts:applyCalcBundle()` — status: verified
     **See:** [decisions/hub-calc-bundle-version.md](../../decisions/hub-calc-bundle-version.md)
 
-13. BMS score batches belong to the authenticated Hub user. A `userId` in the body is ignored. Trust is always `community_submitted`.
-    **Enforced by:** `apps/hub/src/routes/bms.ts` `POST /api/bms/scores/batch` — status: verified
+13. BMS score batches belong to the authenticated Hub user. A `userId` in the body is ignored. Trust is always `community_submitted`. The stored DJ grade and combo lamp are computed from the submitted accuracy and judgement counts. A score whose mods include autoplay is rejected.
+    **Enforced by:** `apps/hub/src/routes/bms.ts` `POST /api/bms/scores/batch` and `apps/hub/src/services/bms.ts:ingestBmsScore()` — status: verified
     **Unauthorized result:** 401 before insert
 
 14. A private BMS profile (`hub_users.bms_profile_public = 0`) is hidden from everyone except that user. Missing and private profiles both return 404.

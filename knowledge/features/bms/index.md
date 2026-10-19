@@ -38,10 +38,12 @@ BMS is a ruleset already present in the local mirror. This feature interprets th
    **Status:** verified
 2. A BMS variant is the sorted partitioning mods. Gauge mods stay a separate field. No gauge mod stays null. Stored `AG` means Normal.
    **Status:** verified
-3. Combo lamps come only from judgement counts. Clear lamps stay null. Rank is the DJ grade, not a clear.
+3. Combo lamps come only from judgement counts. A missing bad, poor, or miss count stays a null lamp. Clear lamps stay null. Rank is the DJ grade, not a clear.
    **Status:** verified
-4. Autoplay scores (`AT`) are derived but not uploaded.
+   **Enforced by:** `packages/db/src/bmsInterpret.ts:comboLampFromCounts()`
+4. Autoplay scores (`AT`) are derived locally and are not uploaded. The Hub rejects a batch item whose mods include `AT`.
    **Status:** verified
+   **Enforced by:** `apps/server/src/bms/derive.ts` and `apps/hub/src/services/bms.ts:validateInbound()`
 5. A rescan rebuilds `bms_score_details` and does not reset a `synced` or `rejected` queue row.
    **Status:** verified
 6. Disabling upload stops new sends. It does not delete local or Hub scores.
@@ -67,8 +69,8 @@ BMS is a ruleset already present in the local mirror. This feature interprets th
 1. Local `/api/bms` follows the client app: no user auth. The Hub JWT used for background upload is stored in local settings and is not returned by the status route.
    **Enforced by:** `apps/server/src/bms/sync.ts:bmsSyncStatus()` — status: verified
    **Unauthorized result:** N/A on the client app
-2. Hub score ownership is the authenticated principal. A body user id is ignored. Trust is `community_submitted`.
-   **Enforced by:** `apps/hub/src/routes/bms.ts` — status: verified
+2. Hub score ownership is the authenticated principal. A body user id is ignored. Trust is `community_submitted`. The Hub stores the DJ grade and combo lamp computed from the submitted accuracy and judgement counts, and rejects autoplay.
+   **Enforced by:** `apps/hub/src/routes/bms.ts` and `apps/hub/src/services/bms.ts:ingestBmsScore()` — status: verified
    **Unauthorized result:** 401
 3. Private profiles and missing profiles both 404 for non-owners.
    **Enforced by:** `apps/hub/src/services/bms.ts:readBmsProfile()` — status: verified
@@ -94,7 +96,7 @@ worker posts a batch to Hub /api/bms/scores/batch
 accepted and duplicate become synced; rejected stops; retryable waits
 ```
 
-Local `/bms` reads the local mirror and still renders when the Hub is unreachable. Insane, Satellite, and Stella are read from `packages/db/bms-tables` and written into `bms_table_cache` on the first tables read, so their song lists do not depend on a Hub fetch. The Hub stores the same three catalogues when it starts. The table screen shows one catalogue and one level at a time. Public `/bms/players/:username` reads the Hub. `/bms/charts/:chartId`, `/bms/compare/:playerA/:playerB`, `/bms/feed`, and `/bms/statistics` also read the Hub. The feed polls the first page. Leaderboard filters stay in the URL.
+Local `/bms` reads the local mirror and still renders when the Hub is unreachable. Opening the profile does not derive scores; the analytics pipeline does that on import, and enabling upload derives before it enqueues. Insane, Satellite, and Stella are read from `packages/db/bms-tables` and written into `bms_table_cache` on the first tables read, so their song lists do not depend on a Hub fetch. A later tables read uses that cache and refreshes it in the background when the last attempt is older than 15 minutes, or when the request passes `refresh=1`. The Hub stores the same three catalogues when it starts. The table screen shows one catalogue and one level at a time. Public `/bms/players/:username` reads the Hub. The play count in the header is the selected variant. Score history follows `nextCursor` one page at a time. `/bms/charts/:chartId`, `/bms/compare/:playerA/:playerB`, `/bms/feed`, and `/bms/statistics` also read the Hub. The feed polls the first page. Leaderboard filters stay in the URL.
 
 ## Important symbols
 

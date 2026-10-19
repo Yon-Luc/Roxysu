@@ -117,6 +117,18 @@ describe("interpretBmsScore", () => {
         statistics: JSON.stringify({ perfect: 7, great: 1, good: 2, ok: 0, meh: 0, miss: 0 }),
       }).comboLampId,
     ).toBe("fc");
+    expect(
+      interpretBmsScore({
+        ...base,
+        statistics: JSON.stringify({ perfect: 10, great: 0, good: 0, ok: 0, meh: 0 }),
+      }).comboLampId,
+    ).toBeNull();
+    expect(
+      interpretBmsScore({
+        ...base,
+        statistics: JSON.stringify({ perfect: 10, great: 0, good: 0, miss: 0 }),
+      }).comboLampId,
+    ).toBeNull();
   });
 
   test("grade thresholds are cumulative", () => {

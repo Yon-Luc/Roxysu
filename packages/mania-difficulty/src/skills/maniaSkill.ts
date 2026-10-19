@@ -12,22 +12,23 @@ const INITIAL_CAPACITY = 512;
 /**
  * Accuracy at a given skill for one note.
  *
- * Inlined from `accuracyAtSkill` so the root-finder scan stays a numeric loop:
- * multipliers are constant for a skill, so only the base difficulty is read
- * per note.
+ * Inlined from `accuracyAtSkill` so the root-finder scan stays a numeric loop.
+ * `offset` selects this note's row inside `multipliers` (0 when the skill
+ * shares one row).
  */
 function accuracyAtSkillInlined(
   base: number,
   multipliers: Float64Array,
+  offset: number,
   skill: number,
 ): number {
-  if (skill >= base * multipliers[0]!) return ACCURACY_VALUES[0]!;
+  if (skill >= base * multipliers[offset]!) return ACCURACY_VALUES[0]!;
   if (skill <= 0) return LOWEST_ACCURACY;
 
   for (let i = 1; i < VALUE_COUNT; i++) {
-    const lowerSkillBound = base * multipliers[i]!;
+    const lowerSkillBound = base * multipliers[offset + i]!;
     if (lowerSkillBound > skill) continue;
-    const upperSkillBound = base * multipliers[i - 1]!;
+    const upperSkillBound = base * multipliers[offset + i - 1]!;
     const t = (skill - lowerSkillBound) / (upperSkillBound - lowerSkillBound);
     return (
       ACCURACY_VALUES[i]! +
@@ -61,51 +62,68 @@ function noteWeight(current: ManiaDifficultyHitObject): number {
 /**
  * Shared skill state.
  *
- * Per-note base difficulties live in one growing `Float64Array`. Accuracy
- * multipliers are identical for every note of a skill, so they are kept once
- * as a `Float64Array` — previously each note allocated a wrapper object plus an
- * eight-element multiplier array, which dominated the root-finder cost.
+ * Per-note base difficulties live in one growing `Float64Array`. Processor
+ * skills share one multiplier row. The Total skill's combined curve changes
+ * on every note, so those rows live in a second flat buffer (stride
+ * {@link VALUE_COUNT}) — not one `AccuracyDifficulties` object per note.
  */
 function createSkillState(
   readNote: (
     current: ManiaDifficultyHitObject,
     push: (base: number, multipliers: readonly number[]) => void,
   ) => void,
+  perNoteMultipliers: boolean,
 ): ManiaSkillState {
   let bases = new Float64Array(INITIAL_CAPACITY);
   let count = 0;
-  const multipliers = new Float64Array(VALUE_COUNT);
-  let multipliersSet = false;
+  const sharedMultipliers = new Float64Array(VALUE_COUNT);
+  let sharedSet = false;
+  let perNote = perNoteMultipliers
+    ? new Float64Array(INITIAL_CAPACITY * VALUE_COUNT)
+    : sharedMultipliers;
   let totalNoteWeight = 0;
 
-  function setMultipliers(values: readonly number[]): void {
-    for (let i = 0; i < VALUE_COUNT; i++) multipliers[i] = values[i] ?? 0;
-    multipliersSet = true;
-  }
-
-  function push(base: number): void {
-    if (count === bases.length) {
-      const grown = new Float64Array(bases.length * 2);
-      grown.set(bases);
-      bases = grown;
-    }
-    bases[count] = base;
-    count += 1;
+  function ensureCapacity(): void {
+    if (count < bases.length) return;
+    const next = bases.length * 2;
+    const grownBases = new Float64Array(next);
+    grownBases.set(bases);
+    bases = grownBases;
+    if (!perNoteMultipliers) return;
+    const grown = new Float64Array(next * VALUE_COUNT);
+    grown.set(perNote);
+    perNote = grown;
   }
 
   function pushWithMultipliers(
     base: number,
     values: readonly number[],
   ): void {
-    if (!multipliersSet) setMultipliers(values);
-    push(base);
+    ensureCapacity();
+    if (perNoteMultipliers) {
+      const offset = count * VALUE_COUNT;
+      for (let i = 0; i < VALUE_COUNT; i++) perNote[offset + i] = values[i] ?? 0;
+    } else if (!sharedSet) {
+      for (let i = 0; i < VALUE_COUNT; i++) {
+        sharedMultipliers[i] = values[i] ?? 0;
+      }
+      sharedSet = true;
+    }
+    bases[count] = base;
+    count += 1;
   }
 
   function AccuracyAtSkillExact(skill: number): number {
     if (skill === 0) return 0;
     let accuracySum = 0;
     for (let n = 0; n < count; n++) {
-      accuracySum += accuracyAtSkillInlined(bases[n]!, multipliers, skill);
+      const offset = perNoteMultipliers ? n * VALUE_COUNT : 0;
+      accuracySum += accuracyAtSkillInlined(
+        bases[n]!,
+        perNote,
+        offset,
+        skill,
+      );
     }
     return accuracySum / (count - Math.min(count * 0.01, 10));
   }
@@ -140,7 +158,7 @@ export function createManiaSkill(
   return createSkillState((current, push) => {
     const d = accuracyAt(current);
     push(d.BaseDifficulty, d.Multipliers);
-  });
+  }, true);
 }
 
 /**
@@ -155,5 +173,5 @@ export function createProcessorSkill(
   return createSkillState((current, push) => {
     processor.ProcessStrainFor(current);
     push(processor.CurrentStrain, processor.accuracyMultipliers);
-  });
+  }, false);
 }

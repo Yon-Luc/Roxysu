@@ -97,4 +97,35 @@ describe("ingestBmsBatch", () => {
     expect(again.versionId).toBe(created.versionId);
     expect(created.entries).toBe(1);
   });
+
+  test("rejects autoplay and stores grade and lamp from the payload counts", async () => {
+    const lying = inbound("score-lie");
+    lying.gameplay.djGrade = "d";
+    lying.gameplay.comboLampId = null;
+    const accepted = await ingestBmsBatch(db, 1, "install-1", [lying]);
+    expect(accepted.results[0]?.status).toBe("accepted");
+    const stored = await db.select().from(bmsScores).where(eq(bmsScores.localScoreId, "score-lie"));
+    expect(stored[0]?.djGrade).toBe("max");
+    expect(stored[0]?.comboLampId).toBe("max");
+
+    const auto = inbound("score-at");
+    auto.gameplay.mods = ["AT"];
+    const rejected = await ingestBmsBatch(db, 1, "install-1", [auto]);
+    expect(rejected.results[0]?.status).toBe("rejected");
+    expect(rejected.results[0]?.reason).toBe("autoplay");
+    const autoRow = await db.select().from(bmsScores).where(eq(bmsScores.localScoreId, "score-at"));
+    expect(autoRow).toHaveLength(0);
+
+    const partial = inbound("score-partial");
+    partial.judgements = { pgreat: 10, great: 0, good: 0, bad: 0, poor: 0 };
+    partial.gameplay.comboLampId = "fc";
+    const partialResult = await ingestBmsBatch(db, 1, "install-1", [partial]);
+    expect(partialResult.results[0]?.status).toBe("accepted");
+    const partialRow = await db
+      .select()
+      .from(bmsScores)
+      .where(eq(bmsScores.localScoreId, "score-partial"));
+    expect(partialRow[0]?.comboLampId).toBeNull();
+    expect(partialRow[0]?.djGrade).toBe("max");
+  });
 });

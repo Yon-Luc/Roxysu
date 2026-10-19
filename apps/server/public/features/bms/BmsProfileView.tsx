@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { BeatmapCover } from "../../components/BeatmapCover";
+import { CardGridSkeleton, ListSkeleton, SkeletonBlock } from "../../components/LoadingSkeleton";
 import { PageTitle } from "../../components/PageTitle";
 import { formatAccuracy, formatRelativeTime } from "../../lib/format";
 import { useAppDict } from "../../lib/i18n";
@@ -110,10 +111,10 @@ function BmsScoreCard({ score, priority }: { score: BmsScoreRow; priority: boole
         <div className="truncate text-sm text-muted">
           {score.artist ?? dict?.practice.unknownArtist ?? "Unknown artist"}
         </div>
-        {score.chartMd5 ? (
+        {score.chartMd5 || score.md5 ? (
           <Link
             to="/bms/charts/$chartId"
-            params={{ chartId: score.chartMd5 }}
+            params={{ chartId: score.chartMd5 ?? score.md5 ?? "" }}
             search={{ variant: score.variantId }}
             className="block truncate font-bold text-ink"
           >
@@ -162,6 +163,12 @@ export function BmsProfileView({
   local,
   error,
   tablesPending = false,
+  profilePending = false,
+  scoresPending = false,
+  sessionsPending = false,
+  scoreCursor = null,
+  scoreNextCursor = null,
+  onScoreCursor,
 }: {
   title: string;
   subtitle?: string;
@@ -182,6 +189,12 @@ export function BmsProfileView({
   local: boolean;
   error?: string | null;
   tablesPending?: boolean;
+  profilePending?: boolean;
+  scoresPending?: boolean;
+  sessionsPending?: boolean;
+  scoreCursor?: string | null;
+  scoreNextCursor?: string | null;
+  onScoreCursor?: (cursor: string | null) => void;
 }) {
   const { dict } = useAppDict();
   const copy = dict?.bms;
@@ -189,6 +202,8 @@ export function BmsProfileView({
   const [section, setSection] = useState<"scores" | "tables">("tables");
   const scoresOpen = showScores && (!both || section === "scores");
   const tablesOpen = showTables && (!both || section === "tables");
+  const variantPlays = variants.find((variant) => variant.variantId === variantId)?.plays;
+  const shownPlays = variantPlays ?? plays;
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
       <BmsCommunityNav />
@@ -197,7 +212,13 @@ export function BmsProfileView({
         <div className="flex items-start justify-between gap-4">
           <PageTitle>{username ?? title}</PageTitle>
           <div className="shrink-0 text-right">
-            <div className="font-display text-3xl font-bold tabular-nums leading-none text-ink">{plays}</div>
+            {profilePending ? (
+              <SkeletonBlock className="ml-auto h-9 w-16" />
+            ) : (
+              <div className="font-display text-3xl font-bold tabular-nums leading-none text-ink">
+                {shownPlays}
+              </div>
+            )}
             <div className="mt-1 text-[11px] font-medium uppercase tracking-wide text-faint">
               {copy?.plays ?? "Plays"}
             </div>
@@ -216,7 +237,7 @@ export function BmsProfileView({
         ) : null}
       </header>
 
-      {error ? <p className="text-sm text-warning">{error}</p> : null}
+      {error ? <p className="text-sm text-danger">{error}</p> : null}
 
       {variants.length > 0 ? (
         <div className="flex flex-wrap gap-1.5" role="tablist" aria-label={copy?.variant ?? "Variant"}>
@@ -321,9 +342,17 @@ export function BmsProfileView({
 
       {scoresOpen ? (
         <section>
-          <h2 className="font-display text-lg font-semibold">{copy?.recent ?? "Recent scores"}</h2>
-          {scores.length === 0 ? (
-            <p className="mt-3 text-sm text-muted">{copy?.noScores ?? "No BMS scores yet."}</p>
+          <h2 className="font-display text-lg font-semibold">
+            {scoreCursor ? (copy?.scores ?? "Scores") : (copy?.recent ?? "Recent scores")}
+          </h2>
+          {scoresPending ? (
+            <div className="mt-3">
+              <CardGridSkeleton count={6} />
+            </div>
+          ) : scores.length === 0 ? (
+            error ? null : (
+              <p className="mt-3 text-sm text-muted">{copy?.noScores ?? "No BMS scores yet."}</p>
+            )
           ) : (
             <ul className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {scores.map((score, index) => (
@@ -331,14 +360,34 @@ export function BmsProfileView({
               ))}
             </ul>
           )}
+          {onScoreCursor && (scoreCursor || scoreNextCursor) ? (
+            <div className="mt-3 flex gap-2">
+              {scoreCursor ? (
+                <button type="button" className="rx-btn" onClick={() => onScoreCursor(null)}>
+                  {copy?.newer ?? "Newer"}
+                </button>
+              ) : null}
+              {scoreNextCursor ? (
+                <button type="button" className="rx-btn" onClick={() => onScoreCursor(scoreNextCursor)}>
+                  {copy?.more ?? "More"}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </section>
       ) : null}
 
       {scoresOpen ? (
         <section>
           <h2 className="font-display text-lg font-semibold">{copy?.sessions ?? "Sessions"}</h2>
-          {sessions.length === 0 ? (
-            <p className="mt-3 text-sm text-muted">{copy?.noScores ?? "No BMS scores yet."}</p>
+          {sessionsPending ? (
+            <div className="mt-3">
+              <ListSkeleton count={4} showThumbnail={false} />
+            </div>
+          ) : sessions.length === 0 ? (
+            error ? null : (
+              <p className="mt-3 text-sm text-muted">{copy?.noScores ?? "No BMS scores yet."}</p>
+            )
           ) : (
             <ul className="mt-3 overflow-hidden rounded-lg bg-surface">
               {sessions.map((session) => (

@@ -12,6 +12,8 @@ import {
   hubUsers,
 } from "@roxysu/db/hub";
 import {
+  BMS_AUTOPLAY_ACRONYM,
+  bmsScorePresentation,
   comboLampMeets,
   gradeMeets,
   groupBmsSessions,
@@ -116,7 +118,21 @@ export function validateInbound(score: BmsInbound): string | null {
     const reason = optionalCount(score.judgements?.[key], key);
     if (reason) return reason;
   }
+  const mods = score.gameplay.mods ?? [];
+  if (mods.some((mod) => mod.toUpperCase() === BMS_AUTOPLAY_ACRONYM)) return "autoplay";
   return null;
+}
+
+function presentedScore(score: BmsInbound) {
+  return bmsScorePresentation({
+    pgreat: score.judgements?.pgreat ?? null,
+    great: score.judgements?.great ?? null,
+    good: score.judgements?.good ?? null,
+    bad: score.judgements?.bad ?? null,
+    poor: score.judgements?.poor ?? null,
+    miss: score.judgements?.miss ?? null,
+    accuracy: score.score.accuracy ?? null,
+  });
 }
 
 async function findScore(
@@ -183,6 +199,7 @@ export async function ingestBmsScore(
   }
 
   const md5 = score.chart.md5!.toLowerCase();
+  const presented = presentedScore(score);
   const scoreId = randomUUID();
   try {
     await db.transaction(async (tx) => {
@@ -225,9 +242,9 @@ export async function ingestBmsScore(
         miss: score.judgements?.miss ?? null,
         variantId: score.gameplay.variantId,
         gaugeId: score.gameplay.gaugeId ?? null,
-        comboLampId: score.gameplay.comboLampId ?? null,
+        comboLampId: presented.comboLampId,
         clearLampId: null,
-        djGrade: score.gameplay.djGrade ?? null,
+        djGrade: presented.djGrade,
         modsJson: JSON.stringify(score.gameplay.mods ?? []),
         trust: "community_submitted",
       });

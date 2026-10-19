@@ -365,6 +365,85 @@ describe("planFusion", () => {
     expect(report.warnings.some((w) => w.includes("Version differs"))).toBe(true);
   });
 
+  test("combo colours follow the chosen donor and do not keep the base extras", () => {
+    const base = donor("base", {
+      "skin.ini": [
+        "[General]",
+        "Name: Base",
+        "[Colours]",
+        "Combo1: 1,2,3",
+        "Combo2: 4,5,6",
+        "SliderBorder: 9,9,9",
+        "",
+      ].join("\n"),
+      "hitcircle.png": png(1),
+    });
+    const osu = donor("osu", {
+      "skin.ini": [
+        "[General]",
+        "Name: Purple",
+        "[Colours]",
+        "Combo1: 179,109,255",
+        "SliderBorder: 140,140,140",
+        "SliderTrackOverride: 0,0,0",
+        "",
+      ].join("\n"),
+      "hitcircle.png": png(2),
+    });
+    const fruits = donor("fruits", {
+      "skin.ini": [
+        "[General]",
+        "Name: Catch",
+        "[Colours]",
+        "Combo1: 255,255,255",
+        "HyperDash: 255,0,0",
+        "",
+      ].join("\n"),
+      "fruit-drop.png": png(3),
+    });
+    const purple = planFusion({
+      name: "Mix",
+      creator: "",
+      donors: [base, osu, fruits],
+      baseId: "base",
+      slots: { osu: "osu", fruits: "fruits" },
+      options: { comboColourSource: "osu" },
+    });
+    const colours = findSection(iniOf(purple.files), "Colours")!;
+    expect(getValue(colours, "Combo1")).toBe("179,109,255");
+    expect(getValue(colours, "Combo2")).toBeUndefined();
+    expect(getValue(colours, "SliderBorder")).toBe("140,140,140");
+    expect(getValue(colours, "SliderTrackOverride")).toBe("0,0,0");
+    expect(purple.report.comboColourFrom).toBe("OSU");
+    expect(purple.report.warnings.some((w) => w.includes("FRUITS"))).toBe(true);
+
+    const white = planFusion({
+      name: "Mix",
+      creator: "",
+      donors: [base, osu, fruits],
+      baseId: "base",
+      slots: { osu: "osu", fruits: "fruits" },
+      options: { comboColourSource: "fruits" },
+    });
+    const whiteColours = findSection(iniOf(white.files), "Colours")!;
+    expect(getValue(whiteColours, "Combo1")).toBe("255,255,255");
+    expect(getValue(whiteColours, "Combo2")).toBeUndefined();
+    expect(getValue(findSection(iniOf(white.files), "CatchTheBeat")!, "HyperDash")).toBe("255,0,0");
+    expect(white.report.warnings.some((w) => w.includes("OSU"))).toBe(true);
+
+    const kept = planFusion({
+      name: "Mix",
+      creator: "",
+      donors: [base, osu, fruits],
+      baseId: "base",
+      slots: { osu: "osu", fruits: "fruits" },
+    });
+    const keptColours = findSection(iniOf(kept.files), "Colours")!;
+    expect(getValue(keptColours, "Combo1")).toBe("1,2,3");
+    expect(getValue(keptColours, "Combo2")).toBe("4,5,6");
+    expect(getValue(findSection(iniOf(kept.files), "General")!, "Author")).toBeUndefined();
+  });
+
   test("output skininfo.json is a legacy skin with the fusion name", () => {
     const a = donor("a", SKIN_A);
     const { files } = planFusion({ name: "Fusion 1", creator: "yon", donors: [a], baseId: "a", slots: {} });

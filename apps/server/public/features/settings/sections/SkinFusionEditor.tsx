@@ -6,6 +6,7 @@ import {
   formatReport,
   maniaSlotId,
   planFusion,
+  type ComboColourSource,
   type FusionResult,
   type ManiaNamespacing,
   type SkinDonor,
@@ -18,6 +19,7 @@ import {
   donorFromArchiveBytes,
   donorFromFileList,
   downloadBytes,
+  lazerDisplayName,
   safeOskFilename,
 } from "../../../lib/skinFusionDonors";
 import { pageSectionDomId } from "../../../lib/pageSections";
@@ -37,9 +39,11 @@ export function SkinFusionEditor() {
   const [donors, setDonors] = useState<SkinDonor[]>([]);
   const [baseId, setBaseId] = useState("");
   const [slots, setSlots] = useState<Partial<Record<SlotId, string>>>({});
-  const [name, setName] = useState("Roxysu fusion");
+  const [name, setName] = useState("");
+  const [nameTouched, setNameTouched] = useState(false);
   const [creator, setCreator] = useState("");
   const [namespacing, setNamespacing] = useState<ManiaNamespacing>("auto");
+  const [comboColourSource, setComboColourSource] = useState<ComboColourSource>("base");
   const [busy, setBusy] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pickedRealm, setPickedRealm] = useState("");
@@ -56,6 +60,17 @@ export function SkinFusionEditor() {
 
   const effectiveBase = donors.some((d) => d.id === baseId) ? baseId : (donors[0]?.id ?? "");
   const base = donors.find((d) => d.id === effectiveBase) ?? null;
+  const suggestedName = useMemo(() => {
+    const labels: string[] = [];
+    const push = (label: string) => {
+      const trimmed = label.trim();
+      if (trimmed && !labels.includes(trimmed)) labels.push(trimmed);
+    };
+    if (base) push(base.label);
+    for (const donor of donors) push(donor.label);
+    return labels.join(" + ").slice(0, 80);
+  }, [base, donors]);
+  const resolvedName = (nameTouched ? name : suggestedName || name).trim();
 
   async function addDonor(work: (id: string) => Promise<SkinDonor>) {
     setBusy(true);
@@ -133,25 +148,28 @@ export function SkinFusionEditor() {
     try {
       return {
         result: planFusion({
-          name: name.trim() || "Roxysu fusion",
+          name: resolvedName || "Roxysu fusion",
           creator: creator.trim(),
           donors,
           baseId: base.id,
           slots,
-          options: { maniaNamespacing: namespacing },
+          options: { maniaNamespacing: namespacing, comboColourSource },
         }),
         error: null,
       };
     } catch (err) {
       return { result: null, error: err instanceof Error ? err.message : String(err) };
     }
-  }, [base, donors, slots, name, creator, namespacing]);
+  }, [base, donors, slots, resolvedName, creator, namespacing, comboColourSource]);
 
   function download() {
     if (!plan.result) return;
     const bytes = toOskBytes(plan.result.files, formatReport(plan.result.report));
-    downloadBytes(bytes, safeOskFilename(name));
+    downloadBytes(bytes, safeOskFilename(resolvedName || "Roxysu fusion", creator));
   }
+
+  const skinName = resolvedName || "Roxysu fusion";
+  const listedName = creator.trim() ? lazerDisplayName(skinName, creator) : `${skinName} (Unknown)`;
 
   return (
     <div className="space-y-6" id={pageSectionDomId("skin-fusion")}>
@@ -241,15 +259,41 @@ export function SkinFusionEditor() {
       {base ? (
         <>
           <section className="rx-panel space-y-4 p-5">
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <label className="flex flex-col gap-1.5 text-xs text-muted">
                 <span>{f?.outputName ?? "Skin name"}</span>
-                <input className="rx-input h-9" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} />
+                <input
+                  className="rx-input h-9"
+                  value={resolvedName}
+                  maxLength={80}
+                  onChange={(e) => {
+                    setNameTouched(true);
+                    setName(e.target.value);
+                  }}
+                />
               </label>
               <label className="flex flex-col gap-1.5 text-xs text-muted">
                 <span>{f?.outputCreator ?? "Creator"}</span>
                 <input className="rx-input h-9" value={creator} maxLength={80} onChange={(e) => setCreator(e.target.value)} />
               </label>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="rx-btn text-xs"
+                disabled={!suggestedName}
+                onClick={() => {
+                  setNameTouched(true);
+                  setName(suggestedName);
+                }}
+              >
+                {f?.useSourceNames ?? "Use source names"}
+              </button>
+              <p className="text-xs text-faint">
+                {t(f?.nameHint, { name: listedName })}
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
               <label className="flex flex-col gap-1.5 text-xs text-muted">
                 <span>{f?.base ?? "Base skin"}</span>
                 <select className="rx-input h-9" value={base.id} onChange={(e) => setBaseId(e.target.value)}>
@@ -260,8 +304,21 @@ export function SkinFusionEditor() {
                   ))}
                 </select>
               </label>
+              <label className="flex flex-col gap-1.5 text-xs text-muted">
+                <span>{f?.comboColours ?? "Combo colours"}</span>
+                <select
+                  className="rx-input h-9"
+                  value={comboColourSource}
+                  onChange={(e) => setComboColourSource(e.target.value as ComboColourSource)}
+                >
+                  <option value="base">{f?.comboBase ?? "Base skin"}</option>
+                  <option value="osu">{f?.comboOsu ?? "osu!standard skin"}</option>
+                  <option value="fruits">{f?.comboFruits ?? "Catch skin"}</option>
+                </select>
+              </label>
             </div>
             <p className="text-xs text-faint">{f?.baseHint}</p>
+            <p className="text-xs text-faint">{f?.comboHint}</p>
           </section>
 
           <section className="rx-panel space-y-3 p-5">

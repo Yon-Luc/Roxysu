@@ -63,10 +63,21 @@ export function downloadBytes(bytes: Uint8Array, filename: string): void {
   window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
-export function safeOskFilename(name: string): string {
-  const cleaned = name
-    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_")
-    .replace(/\s+/g, " ")
-    .trim();
-  return `${cleaned.length > 0 ? cleaned.slice(0, 120) : "fusion"}.osk`;
+/** Characters lazer's `GetValidFilename` strips. The archive name must survive that or lazer renames the skin. */
+const LAZER_INVALID_FILENAME = /["<>|\u0000-\u001f:*?\\/]/g;
+
+/** How osu!lazer lists the skin: `Name` or `Name (Creator)`. */
+export function lazerDisplayName(name: string, creator: string): string {
+  const trimmedName = name.trim();
+  const trimmedCreator = creator.trim();
+  return (trimmedCreator ? `${trimmedName} (${trimmedCreator})` : trimmedName).trim();
+}
+
+/**
+ * `.osk` filename lazer accepts without appending `[filename]` to the skin name.
+ * Matches `SkinInfo.ToString().GetValidFilename()`: invalid characters are removed, not replaced.
+ */
+export function safeOskFilename(name: string, creator = ""): string {
+  const cleaned = lazerDisplayName(name, creator).replace(LAZER_INVALID_FILENAME, "").trim();
+  return `${cleaned.length > 0 ? cleaned.slice(0, 180) : "fusion"}.osk`;
 }

@@ -25,7 +25,8 @@ Skin page → Fusion tab
        ├── .osk / .zip: unzipSkinFiles()
        └── folder:      donorFromFileList()
      each → buildDonor()  (skin.ini model, layout JSON, key counts, rulesets)
-  → pick base, slot donors, mania image folders mode
+   → pick base, slot donors, combo-colour source, mania image folders mode
+   → name (source names until edited) and creator; the .osk filename matches that name
   → planFusion()  (memoised preview)
        ├── ownership per slot  → place files by priority
        ├── conflicts           → rename layout sprites / relocate mania refs

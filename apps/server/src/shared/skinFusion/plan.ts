@@ -91,6 +91,9 @@ export type SkinDonor = {
 
 export type ManiaNamespacing = "auto" | "always" | "never";
 
+/** Which donor's Combo1–8 list is written. Lazer uses that one list for every ruleset. */
+export type ComboColourSource = "base" | "osu" | "fruits";
+
 export type FusionInput = {
   name: string;
   creator: string;
@@ -100,6 +103,8 @@ export type FusionInput = {
   options?: {
     /** Move every mania image into a per-donor folder (`auto`: only when mania slots use 2+ donors). */
     maniaNamespacing?: ManiaNamespacing;
+    /** Combo1–8 source. Default `base`. One palette tints std circles and catch droplets. */
+    comboColourSource?: ComboColourSource;
     maxBytes?: number;
   };
 };
@@ -107,6 +112,8 @@ export type FusionInput = {
 export type FusionReport = {
   slots: Array<{ slot: string; donor: string | null }>;
   maniaNamespaced: boolean;
+  /** Donor label whose Combo1–8 were written. */
+  comboColourFrom: string;
   relocated: Array<{ from: string; to: string; donor: string; reason: string }>;
   dropped: Array<{ path: string; donor: string; reason: string }>;
   droppedCount: number;
@@ -512,7 +519,8 @@ export function planFusion(input: FusionInput): FusionResult {
     ? cloneSection(findSection(base.ini, "General")!)
     : newSection("General");
   setValue(general, "Name", input.name);
-  setValue(general, "Author", input.creator || "Roxysu skin fusion");
+  if (input.creator.trim()) setValue(general, "Author", input.creator.trim());
+  else removeKey(general, "Author");
   doc.sections.push(general);
 
   if (base.ini) {
@@ -544,11 +552,46 @@ export function planFusion(input: FusionInput): FusionResult {
   }
   for (const [key, value] of fontRewrites) setValue(ensureFonts(), key, value);
 
-  // [CatchTheBeat] from the fruits donor.
+  // [CatchTheBeat] from the fruits donor. HyperDash keys that a catch skin
+  // only put under [Colours] are copied here so alpha is preserved.
   const fruitsDonor = donorFor("fruits");
   if (fruitsDonor?.ini) {
     for (const section of findSections(fruitsDonor.ini, "CatchTheBeat")) {
       doc.sections.push(cloneSection(section));
+    }
+    const fruitColours = coloursOf(fruitsDonor);
+    if (fruitColours) {
+      let catchSection = findSection(doc, "CatchTheBeat");
+      for (const key of HYPER_COLOUR_KEYS) {
+        const value = getValue(fruitColours, key);
+        if (value === undefined) continue;
+        if (!catchSection) {
+          catchSection = newSection("CatchTheBeat");
+          doc.sections.push(catchSection);
+        }
+        if (getValue(catchSection, key) === undefined) setValue(catchSection, key, value);
+      }
+    }
+  }
+
+  const colourSource = input.options?.comboColourSource ?? "base";
+  const colourSlotDonor =
+    colourSource === "osu" ? osuDonor : colourSource === "fruits" ? fruitsDonor : base;
+  const colourDonor = colourSlotDonor ?? base;
+  if (colourSource !== "base" && !colourSlotDonor) {
+    warn(
+      `Combo colours were set to the ${colourSource} skin, but that slot is empty; keeping the base palette.`,
+    );
+  }
+  applyComboColours(doc, colourDonor, base, warn);
+  if (osuDonor && osuDonor.id !== base.id) {
+    const osuColours = coloursOf(osuDonor);
+    if (osuColours) {
+      const colours = ensureColours(doc);
+      for (const key of STD_COLOUR_KEYS) {
+        const value = getValue(osuColours, key);
+        if (value !== undefined) setValue(colours, key, value);
+      }
     }
   }
 
@@ -601,7 +644,7 @@ export function planFusion(input: FusionInput): FusionResult {
       `${JSON.stringify(
         {
           Name: input.name,
-          Creator: input.creator || "Roxysu skin fusion",
+          Creator: input.creator.trim(),
           InstantiationInfo: LEGACY_INSTANTIATION,
         },
         null,
@@ -664,16 +707,16 @@ export function planFusion(input: FusionInput): FusionResult {
     );
   }
 
-  if (fruitsDonor && fruitsDonor.id !== base.id) {
-    const colours = (d: SkinDonor) => (d.ini ? findSection(d.ini, "Colours") : null);
-    const a = colours(base);
-    const b = colours(fruitsDonor);
-    const combos = (s: IniSection | null) =>
-      Array.from({ length: 8 }, (_, i) => (s ? getValue(s, `Combo${i + 1}`) ?? "" : "")).join("|");
-    if (combos(a) !== combos(b)) {
-      warn(`Combo colours come from the base; ${fruitsDonor.label} (fruits) uses different ones.`);
-    }
-  }
+  const writtenCombos = comboSignature(findSection(doc, "Colours"));
+  const warnCombo = (donor: SkinDonor | null, role: string) => {
+    if (!donor || donor.id === colourDonor.id) return;
+    if (comboSignature(coloursOf(donor)) === writtenCombos) return;
+    warn(
+      `Combo colours come from ${colourDonor.label}. ${donor.label} (${role}) uses different ones, so its hit circles or droplets will not match that skin. Lazer has one combo palette for every ruleset.`,
+    );
+  };
+  warnCombo(osuDonor, "osu!standard");
+  warnCombo(fruitsDonor, "catch");
 
   if (maniaLayoutDonorId) {
     const disagree = sortedKeys.filter((k) => {
@@ -743,6 +786,7 @@ export function planFusion(input: FusionInput): FusionResult {
     report: {
       slots: slotRows,
       maniaNamespaced,
+      comboColourFrom: colourDonor.label,
       relocated,
       dropped,
       droppedCount,
@@ -751,6 +795,51 @@ export function planFusion(input: FusionInput): FusionResult {
       totalBytes,
     },
   };
+}
+
+const COMBO_COLOUR_KEYS = [
+  "Combo1", "Combo2", "Combo3", "Combo4", "Combo5", "Combo6", "Combo7", "Combo8",
+] as const;
+const STD_COLOUR_KEYS = [
+  "SliderBorder", "SliderTrackOverride", "SliderBall", "SpinnerBackground",
+] as const;
+const HYPER_COLOUR_KEYS = ["HyperDash", "HyperDashFruit", "HyperDashAfterImage"] as const;
+
+function coloursOf(donor: SkinDonor | null): IniSection | null {
+  return donor?.ini ? findSection(donor.ini, "Colours") : null;
+}
+
+function comboSignature(section: IniSection | null): string {
+  return COMBO_COLOUR_KEYS.map((key) => (section ? getValue(section, key) ?? "" : "")).join("|");
+}
+
+function ensureColours(doc: IniDoc): IniSection {
+  const existing = findSection(doc, "Colours");
+  if (existing) return existing;
+  const section = newSection("Colours");
+  doc.sections.push(section);
+  return section;
+}
+
+/** Replace Combo1–8 with only the keys the chosen donor defines. Gaps are not filled from the base. */
+function applyComboColours(
+  doc: IniDoc,
+  source: SkinDonor,
+  base: SkinDonor,
+  warn: (msg: string) => void,
+): void {
+  if (source.id === base.id) return;
+  const sourceColours = coloursOf(source);
+  const defined = COMBO_COLOUR_KEYS.filter(
+    (key) => sourceColours && getValue(sourceColours, key) !== undefined,
+  );
+  if (defined.length === 0) {
+    warn(`${source.label} has no combo colours; keeping the base palette.`);
+    return;
+  }
+  const section = ensureColours(doc);
+  for (const key of COMBO_COLOUR_KEYS) removeKey(section, key);
+  for (const key of defined) setValue(section, key, getValue(sourceColours!, key)!);
 }
 
 function buildCredits(
@@ -772,7 +861,8 @@ export function formatReport(report: FusionReport): string {
   const lines: string[] = ["Roxysu skin fusion report", ""];
   lines.push("Slots:");
   for (const s of report.slots) lines.push(`  ${s.slot}: ${s.donor ?? "(none)"}`);
-  lines.push("", `Mania images ${report.maniaNamespaced ? "moved into per-skin folders" : "kept at original paths"}.`);
+  lines.push("", `Combo colours: ${report.comboColourFrom}`);
+  lines.push(`Mania images ${report.maniaNamespaced ? "moved into per-skin folders" : "kept at original paths"}.`);
   lines.push(`Files: ${report.fileCount}, ${(report.totalBytes / 1048576).toFixed(1)} MB`);
   if (report.warnings.length > 0) {
     lines.push("", "Warnings:");

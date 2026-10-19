@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-10
+last_verified: 2026-10-19
 confidence: verified
 touches:
   - apps/server/src/shared/skinFusion/fileMap.ts
@@ -55,9 +55,19 @@ handling and `skin.ini` / layout composition that would otherwise be manual.
    paths compare case-insensitively; `@2x` and animation frames move as a group.
 6. Mania image folders option: `auto` isolates every mania ref per donor only when
    2+ donors feed mania slots; `always`; `never`.
-7. `skin.ini`: `[General]`, `[Colours]`, `[Fonts]` come from the base donor;
-   `[CatchTheBeat]` from the fruits donor; one `[Mania]` block per `Keys` (first
-   block wins in lazer). `Version:` is global, so a mismatch yields a warning.
+7. `skin.ini`: `[General]` and `[Fonts]` come from the base donor. Combo1–8 come
+   from the selected combo-colour source (`base`, osu slot, or fruits slot);
+   only keys that donor defines are written, so a single Combo1 is not filled
+   out from the base. Std-only colour keys (`SliderBorder`, `SliderTrackOverride`,
+   `SliderBall`, `SpinnerBackground`) come from the osu donor when it sets them.
+   `[CatchTheBeat]` comes from the fruits donor; HyperDash keys that exist only
+   under that donor's `[Colours]` are copied into `[CatchTheBeat]`. One `[Mania]`
+   block per `Keys` (first block wins in lazer). `Version:` is global, so a
+   mismatch yields a warning. Lazer has one combo palette for every ruleset, so
+   a mismatch with the other slot is a warning, not a merge.
+   `Name` is the user-edited name (default: source names joined). `Author` is
+   the creator field, omitted when empty. The downloaded filename matches
+   lazer's `Name (Author)` valid filename so import does not rename the skin.
 8. Layout JSON (`MainHUDComponents.json`, `Playfield.json`, `SongSelect.json`):
    `DrawableInfo` entries are picked per ruleset key (`global`, `osu`, `taiko`,
    `fruits`, `mania`, `bms`) and copied verbatim, including `Type` strings. File

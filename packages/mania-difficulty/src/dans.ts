@@ -10,7 +10,12 @@
  * - `tables["<columnCount>"].ln`   — tiers at/above it. Empty array falls back
  *   to the `rice` tiers, so a key count only needs `ln` rows once it diverges.
  * - A tier spans from its `floor` to the next tier's `floor`. Only the last
- *   tier may set an explicit `ceiling`; above it the label is a `>` sentinel.
+ *   tier may set an explicit `ceiling`.
+ * - `id` (optional) names the base tier a sub-level belongs to, e.g. the
+ *   "Regular 7" / "Regular 7+" / "Regular 7++" rows all carry `id: "Regular 7"`.
+ *   It defaults to the tier's own `name`; groups must be contiguous.
+ * - A last tier with no `ceiling` is an open-ended sentinel: it covers
+ *   [floor, ∞) in one interval labelled with the bare tier name.
  */
 
 import dansJson from "../dans.json";
@@ -28,6 +33,12 @@ export const REWORK_UNKNOWN_DAN = "Unknown difficulty";
 export type DanTierInput = {
   /** Dan name, e.g. "Alpha" or "LN 13" or "Regular Zenith". */
   name: string;
+  /**
+   * Base tier this row belongs to, for sub-levels sharing one dan ("Regular 7+"
+   * groups under "Regular 7"). Defaults to `name`; must match an earlier
+   * tier's name and stay contiguous within its group.
+   */
+  id?: string;
   /** Inclusive lower bound (star rating) of this tier. */
   floor: number;
   /** Inclusive upper bound; only valid on the last tier. */
@@ -78,9 +89,28 @@ export function validateDanConfig(config: DanConfig = CONFIG): string[] {
         }
         continue;
       }
+      /** Sub-level groups (`id`) must each name a table tier and stay contiguous. */
+      const groupLastIndex = new Map<string, number>();
       tiers.forEach((tier, i) => {
         const at = `tables.${keyCount}.${kind}[${i}]`;
         if (!tier?.name) errors.push(`${at}.name: required`);
+        if (tier?.id != null) {
+          if (typeof tier.id !== "string" || tier.id.trim().length === 0) {
+            errors.push(`${at}.id: must be a non-empty string`);
+          } else {
+            if (!tiers.some((t) => t.name === tier.id)) {
+              errors.push(`${at}.id: "${tier.id}" must name a tier of this table`);
+            }
+            const seenAt = groupLastIndex.get(tier.id);
+            if (seenAt != null && seenAt !== i - 1) {
+              errors.push(`${at}.id: "${tier.id}" group must be contiguous`);
+            }
+            groupLastIndex.set(tier.id, i);
+          }
+        } else if (typeof tier?.name === "string" && groupLastIndex.has(tier.name)) {
+          // A plain base row inside an in-flight group keeps it contiguous.
+          groupLastIndex.set(tier.name, i);
+        }
         if (!Number.isFinite(tier?.floor)) {
           errors.push(`${at}.floor: must be a finite number`);
           return;
@@ -128,7 +158,12 @@ export function expandDanTiers(
   for (let i = 0; i < tiers.length; i++) {
     const tier = tiers[i]!;
     const upper = tiers[i + 1]?.floor ?? tier.ceiling;
-    if (upper == null || !Number.isFinite(upper)) continue;
+    if (upper == null || !Number.isFinite(upper)) {
+      // A final tier without a ceiling is an open-ended sentinel: one
+      // unbounded interval labelled with the bare tier name (no band suffix).
+      if (i === tiers.length - 1) out.push([tier.floor, Infinity, tier.name]);
+      continue;
+    }
 
     const span = upper - tier.floor;
     const step = span / bands.length;
@@ -208,7 +243,9 @@ export function reworkDanIntervalForStar(
  * Rework ★ → a single dan label.
  * - LN ratio < 20% → `rice` tiers, else `ln` tiers (empty `ln` falls back to `rice`).
  * - Below the first floor → `< {first} {lowest band}`.
- * - Above the last ceiling → `> {last} {highest band}`.
+ * - A ceiling-less last tier is an open-ended sentinel: everything at/above
+ *   its floor labels with the bare tier name.
+ * - Above a declared last ceiling → `> {last} {highest band}`.
  */
 export function reworkDanLabel(
   sr: number,

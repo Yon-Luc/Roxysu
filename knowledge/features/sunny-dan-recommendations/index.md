@@ -74,22 +74,32 @@ Three estimators write to the same store, keyed by `algorithm`: `sunny`, `daniel
 ## Rework dan rules
 
 1. Floors live in `packages/mania-difficulty/dans.json`. `bands` lists the band
-   suffixes; each `tables["<keys>"].rice` / `.ln` entry is `{ name, floor, ceiling? }`.
-   Only the last tier may set `ceiling`. Floors must strictly increase.
-2. The file is validated at import time — an invalid config throws at boot
+   suffixes; each `tables["<keys>"].rice` / `.ln` entry is
+   `{ name, id?, floor, ceiling? }`. Only the last tier may set `ceiling`.
+   Floors must strictly increase.
+2. `id` (optional) is the base tier a sub-level belongs to — the "Regular 7" /
+   "Regular 7+" / "Regular 7++" rows all carry `id: "Regular 7"` so UIs can group
+   them. It must name a tier of the same table and stay contiguous; it defaults
+   to the row's own `name`. `validateDanConfig()` enforces both rules.
+3. A last tier **without** `ceiling` is an open-ended sentinel: it covers
+   `[floor, ∞)` in one interval labelled with the bare name (4K `>θ`, 4K LN
+   `LN >18`, 7K `Regular >∞`).
+4. The file is validated at import time — an invalid config throws at boot
    rather than mislabelling. `validateDanConfig()` is covered by unit tests.
-3. An empty `ln` array falls back to that key count's `rice` tiers. 7K declares
+5. An empty `ln` array falls back to that key count's `rice` tiers. 7K declares
    no `ln` rows, so 7K LN currently resolves on the rice floors.
-4. Key counts with no table (6K) return `Unknown difficulty` while still storing
+6. Key counts with no table (6K) return `Unknown difficulty` while still storing
    a star rating and skill breakdown.
-5. Below the first floor is a `<` sentinel, above the last ceiling a `>`
-   sentinel — same shape as Sunny, so `compileDanMatch` is reused unchanged.
-6. Editing `dans.json` does **not** require re-estimation. `relabelReworkDanSync()`
+7. Below the first floor is a `<` sentinel; once past the table, labels come
+   from the last tier — an explicit `ceiling` yields a `>` sentinel (same shape
+   as Sunny, so `compileDanMatch` is reused unchanged), an open-ended last tier
+   yields the bare tier name.
+8. Editing `dans.json` does **not** require re-estimation. `relabelReworkDanSync()`
    recomputes labels from stored stars; exposed as `POST /api/settings/rework-dan/relabel`
    and run automatically when the job starts with nothing missing.
-7. `rework:` matches only `algorithm = 'mania-difficulty'` rows; `dan:` matches
+9. `rework:` matches only `algorithm = 'mania-difficulty'` rows; `dan:` matches
    Sunny and Daniel only. The two never mix.
-8. The mania difficulty port pin is `packages/mania-difficulty/upstream/revision.json`
+10. The mania difficulty port pin is `packages/mania-difficulty/upstream/revision.json`
    (`loleur362/osu` branch `mania-difficulty`, currently `1859fda`, whose skill
    curves use 100% accuracy as the base difficulty). A new pin changes star ratings.
    **Calculate missing dans** only fills missing rows and rows whose beatmap
@@ -103,8 +113,8 @@ Three estimators write to the same store, keyed by `algorithm`: `sunny`, `daniel
    not replace the dev library. A Hub bundle for the same product version can
    still gap-fill old numbers back in if a Recalculate all pass is restarted
    before it finishes.
-9. Chart shape is counted on the difficulty row graph in the same calculator pass as the dominant skill (`chartShapeWalk` before the graph is released). It does not change star rating. Labels are `stream`, `trill`, `jumptrill`, `jumpstream`, `handstream` (4K), `chordjack`, `chordstream`, and `bracket` (7K). Stored on `shape_pattern` / `secondary_shape`. A pattern row with a skill and a null shape is missing and is filled by the pattern job without a new algorithm id. An empty `shape_pattern` means the walk ran and no family led (a pure jack chart), so the job does not recompute it. The map page, Now selected, overlay, and tosu live show `shape_pattern` (and its note shares), not the dominant skill.
-10. The `rework` rating display mode is client-side (`roxysu:rating-display`).
+11. Chart shape is counted on the difficulty row graph in the same calculator pass as the dominant skill (`chartShapeWalk` before the graph is released). It does not change star rating. Labels are `stream`, `trill`, `jumptrill`, `jumpstream`, `handstream` (4K), `chordjack`, `chordstream`, and `bracket` (7K). Stored on `shape_pattern` / `secondary_shape`. A pattern row with a skill and a null shape is missing and is filled by the pattern job without a new algorithm id. An empty `shape_pattern` means the walk ran and no family led (a pure jack chart), so the job does not recompute it. The map page, Now selected, overlay, and tosu live show `shape_pattern` (and its note shares), not the dominant skill.
+12. The `rework` rating display mode is client-side (`roxysu:rating-display`).
    Practice/search/collection list cards and the beatmap detail panel must pass
    `reworkStar` / `reworkEstDiff` / `reworkLnRatio` into `formatPrimaryRating`
    and `primaryDanSource`. The practice list serializer (`mapCard`) and

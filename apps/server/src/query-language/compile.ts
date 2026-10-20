@@ -1,4 +1,4 @@
-import { isShapeLabel } from "@roxysu/mania-difficulty";
+import { expandReworkDanMatch, isShapeLabel } from "@roxysu/mania-difficulty";
 import type { AstNode, FieldTerm } from "./ast";
 import {
   DEFAULT_AXIS_THRESHOLDS,
@@ -239,8 +239,28 @@ function compileTerm(
     }
     case "daniel":
       return compileDanMatch(term.value, term.prefix, push, "dr_d.est_diff");
-    case "rework":
+    case "rework": {
+      // Alias/ name first: spellings like "Gamma" or "Zeta" resolve to the
+      // concrete tier groups of `dans.json`; anything unresolvable keeps the
+      // generic label-token matching.
+      const members = expandReworkDanMatch(String(term.value));
+      if (members != null) {
+        // Labels are always "{tier} {band}" or a bare sentinel name, so
+        // exact-or-prefix per member is tier-safe: "Regular 1" cannot match
+        // "Regular 10 low" and a group covers each sub-level + band.
+        const estDiff = "dr_r.est_diff";
+        const clauses = members.map((name) => {
+          const exact = push(name);
+          const startBand = push(`${name} %`);
+          return `(${estDiff} IS NOT NULL AND (
+            lower(${estDiff}) = lower(${exact})
+            OR lower(${estDiff}) LIKE lower(${startBand}) ESCAPE '\\'
+          ))`;
+        });
+        return clauses.length > 1 ? `( ${clauses.join(" OR ")} )` : clauses[0];
+      }
       return compileDanMatch(term.value, term.prefix, push, "dr_r.est_diff");
+    }
     case "reworkstars": {
       if (term.min != null && term.max != null) {
         return `dr_r.sunny_star BETWEEN ${push(term.min)} AND ${push(term.max)}`;

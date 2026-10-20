@@ -14,6 +14,9 @@
  * - `id` (optional) names the base tier a sub-level belongs to, e.g. the
  *   "Regular 7" / "Regular 7+" / "Regular 7++" rows all carry `id: "Regular 7"`.
  *   It defaults to the tier's own `name`; groups must be contiguous.
+ * - `aliases` (optional) are alternate spellings for search. On the base row
+ *   of a group they name the whole group ("Gamma" and "Regular Gamma" cover
+ *   every `Regular γ` sub-level); on other rows they name just that tier.
  * - A last tier with no `ceiling` is an open-ended sentinel: it covers
  *   [floor, ∞) in one interval labelled with the bare tier name.
  */
@@ -39,6 +42,12 @@ export type DanTierInput = {
    * tier's name and stay contiguous within its group.
    */
   id?: string;
+  /**
+   * Alternate spellings for search. On a base row an alias names the whole
+   * group; on any other row it names only this tier. Must not shadow a tier
+   * name of the same table or a rendered as a "<"/">" sentinel prefix.
+   */
+  aliases?: string[];
   /** Inclusive lower bound (star rating) of this tier. */
   floor: number;
   /** Inclusive upper bound; only valid on the last tier. */
@@ -91,6 +100,10 @@ export function validateDanConfig(config: DanConfig = CONFIG): string[] {
       }
       /** Sub-level groups (`id`) must each name a table tier and stay contiguous. */
       const groupLastIndex = new Map<string, number>();
+      const tableNames = new Set(
+        tiers.map((t) => (typeof t?.name === "string" ? t.name : "")),
+      );
+      const aliasOwners = new Map<string, string>();
       tiers.forEach((tier, i) => {
         const at = `tables.${keyCount}.${kind}[${i}]`;
         if (!tier?.name) errors.push(`${at}.name: required`);
@@ -110,6 +123,37 @@ export function validateDanConfig(config: DanConfig = CONFIG): string[] {
         } else if (typeof tier?.name === "string" && groupLastIndex.has(tier.name)) {
           // A plain base row inside an in-flight group keeps it contiguous.
           groupLastIndex.set(tier.name, i);
+        }
+        if (tier?.aliases != null && !Array.isArray(tier.aliases)) {
+          errors.push(`${at}.aliases: must be an array of strings`);
+        } else if (Array.isArray(tier?.aliases)) {
+          for (const alias of tier.aliases as unknown[]) {
+            if (typeof alias !== "string" || alias.trim().length === 0) {
+              errors.push(`${at}.aliases: entries must be non-empty strings`);
+              continue;
+            }
+            if (alias.startsWith("<") || alias.startsWith(">")) {
+              errors.push(
+                `${at}.aliases: "${alias}" must not start with < or > (those are always sentinel lookups)`,
+              );
+              continue;
+            }
+            if (tableNames.has(alias)) {
+              errors.push(
+                `${at}.aliases: "${alias}" must not shadow a tier name of this table`,
+              );
+              continue;
+            }
+            const aliasKey = alias.toLowerCase();
+            const owner = aliasOwners.get(aliasKey);
+            if (owner != null) {
+              errors.push(
+                `${at}.aliases: "${alias}" is already used for ${owner}`,
+              );
+              continue;
+            }
+            aliasOwners.set(aliasKey, tier.name ?? "?");
+          }
         }
         if (!Number.isFinite(tier?.floor)) {
           errors.push(`${at}.floor: must be a finite number`);
@@ -146,6 +190,57 @@ if (VALIDATION_ERRORS.length > 0) {
 }
 
 export const REWORK_DAN_BANDS: readonly string[] = CONFIG.bands;
+
+/**
+ * Search resolution, built once from the config: canonical tier names and
+ * their declared aliases map to the tier names a dan label may start with.
+ * - A base row's name resolves to its whole group (every sub-level band);
+ *   a normal row's name resolves to itself. An alias on a base row covers
+ *   its group; an alias anywhere else covers only that row.
+ * - Keys are lowercase and members are MERGED across tables and kinds — a
+ *   value can be a tier name in one table and an alias in another (the 4K
+ *   row "γ" and the 7K group alias "γ"), because labels spell distinct
+ *   names, so OR'd literal patterns never cross tiers.
+ */
+const MATCH_MEMBERS = new Map<string, string[]>();
+
+for (const tables of Object.values(CONFIG.tables ?? {})) {
+  for (const kind of ["rice", "ln"] as const) {
+    const tiers = tables?.[kind] ?? [];
+    const groupMembers = new Map<string, string[]>();
+    for (const tier of tiers) {
+      const group = tier.id ?? tier.name;
+      if (!group) continue;
+      const members = groupMembers.get(group) ?? [];
+      if (tier.name) members.push(tier.name);
+      groupMembers.set(group, members);
+    }
+    for (const tier of tiers) {
+      if (!tier.name) continue;
+      const group = tier.id ?? tier.name;
+      const members = group === tier.name
+        ? groupMembers.get(group)!
+        : [tier.name];
+      for (const key of [tier.name, ...(tier.aliases ?? [])]) {
+        const slot = MATCH_MEMBERS.get(key.toLowerCase()) ?? [];
+        for (const m of members) if (!slot.includes(m)) slot.push(m);
+        MATCH_MEMBERS.set(key.toLowerCase(), slot);
+      }
+    }
+  }
+}
+
+/**
+ * Resolve a search token to the tier names a dan label may start with.
+ * `null` when the token resolves nowhere — including explicit "<"/">"
+ * sentinel lookups, which always fall back to literal matching.
+ */
+export function expandReworkDanMatch(value: string): string[] | null {
+  const key = value.trim().toLowerCase();
+  if (!key || key.startsWith("<") || key.startsWith(">")) return null;
+  const members = MATCH_MEMBERS.get(key);
+  return members ? members : null;
+}
 
 /** Expand tiers + bands into contiguous `[lower, upper, label]` intervals. */
 export function expandDanTiers(

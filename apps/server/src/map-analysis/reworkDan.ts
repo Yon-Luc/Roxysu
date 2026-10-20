@@ -4,6 +4,7 @@ export {
   reworkDanIntervalTable,
   reworkDanTierNames,
   reworkDanTiersFor,
+  expandReworkDanMatch,
   REWORK_LN_RATIO_THRESHOLD,
 } from "@roxysu/mania-difficulty/dans";
 

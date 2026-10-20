@@ -165,14 +165,51 @@ describe("rework dan fields", () => {
     const { sql, params } = compileQuery(parseQuery("rework:Alpha"));
     expect(sql).toContain("dr_r.est_diff");
     expect(sql).not.toContain("dr_d.est_diff");
-    expect(sql).toContain("NOT LIKE '<%'");
-    expect(params).toEqual(["Alpha", "Alpha %", "% Alpha %", "% Alpha"]);
+    // "Alpha" resolves to the 4K α group (one member: exact-or-prefix match).
+    expect(params).toEqual(["α", "α %"]);
+  });
+
+  test("rework:Gamma spans every γ sub-level on both key modes", () => {
+    const { sql, params } = compileQuery(parseQuery("rework:Gamma"));
+    expect(sql).toContain("dr_r.est_diff");
+    expect(sql).toContain("OR");
+    for (const expected of [
+      "γ",
+      "γ %",
+      "Regular γ--",
+      "Regular γ-- %",
+      "Regular γ++",
+      "Regular γ++ %",
+    ]) {
+      expect(params).toContain(expected);
+    }
+  });
+
+  test("rework:γ matches the glyph spelling too", () => {
+    const { params } = compileQuery(parseQuery("rework:γ"));
+    expect(params).toContain("Regular γ--");
+    expect(params).toContain("Regular γ-- %");
+  });
+
+  test("rework:Zeta matches 4K and 7K zeta without crossing tiers", () => {
+    const { params } = compileQuery(parseQuery("rework:Zeta"));
+    expect(params).toContain("ζ");
+    expect(params).toContain("Regular ζ--");
+    // tier safety: no partial suffix numerics
+    expect(params).toContain("Regular ζ-- %");
+    expect(new Set(params).size).toBe(params.length);
   });
 
   test("rework:LN 14 keeps the tier-number guard", () => {
     const { sql, params } = compileQuery(parseQuery('rework:"LN 14"'));
     expect(sql).toContain("dr_r.est_diff");
-    expect(params).toEqual(["%LN 14 %", "LN 14"]);
+    expect(params).toEqual(["LN 14", "LN 14 %"]);
+  });
+
+  test("unresolvable rework tokens fall back to generic label matching", () => {
+    const { params, sql } = compileQuery(parseQuery("rework:zzzz"));
+    expect(sql).toContain("NOT LIKE '<%'");
+    expect(params).toEqual(["zzzz", "zzzz %", "% zzzz %", "% zzzz"]);
   });
 
   test("rework:^Reg is a prefix match", () => {

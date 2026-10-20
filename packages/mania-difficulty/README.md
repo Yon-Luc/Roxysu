@@ -30,6 +30,7 @@ no code change is needed.
 - A tier spans its `floor` to the next tier's floor. Only the **last** tier may set `ceiling`.
 - Floors must strictly increase. The config is validated at import — an invalid file throws at boot.
 - `id` (optional) marks the base tier a sub-level belongs to: `Regular 7` / `Regular 7+` / `Regular 7++` all carry `id: "Regular 7"`. It must name a tier of the same table and stay contiguous; it defaults to the row's own `name`.
+- `aliases` (optional) are search spellings. On a base row an alias names the whole group — `Regular Gamma`, `Gamma` and the glyph `γ` all match every `Regular γ*` label; on other rows it matches only that row. Tier names and aliases are matched case-insensitively and merged across key modes; `expandReworkDanMatch()` resolves a token, and `rework:` uses it before falling back to generic token matching.
 - Each span is split into `bands`, so `rework:Alpha` still matches all five bands.
 - Below the first floor → `< {name} {lowest band}`. Above a declared last ceiling → `> {name} {highest band}`. A last tier **without** `ceiling` is an open-ended sentinel covering `[floor, ∞)` with just its name (e.g. `Regular >∞`).
 - An empty `ln` array falls back to that key count's `rice` tiers.

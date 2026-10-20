@@ -27,6 +27,7 @@ export type { SkillStrainSnapshot } from "./skills/calculator";
 
 export {
   expandDanTiers,
+  expandReworkDanMatch,
   reworkDanIntervalForStar,
   reworkDanIntervalTable,
   reworkDanLabel,

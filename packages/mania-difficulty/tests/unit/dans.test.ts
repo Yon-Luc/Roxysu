@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { skillProfile, MAX_SKILL_WINDOWS } from "../../src/skillProfile";
 import {
   expandDanTiers,
+  expandReworkDanMatch,
   reworkDanIntervalForStar,
   reworkDanIntervalTable,
   reworkDanLabel,
@@ -143,6 +144,47 @@ describe("validateDanConfig", () => {
     expect(errors.join(" ")).toContain("only the last tier may set a ceiling");
   });
 
+  test("rejects an alias that shadows a tier name of the table", () => {
+    const errors = validateDanConfig(
+      config({
+        tables: {
+          4: {
+            rice: [
+              { name: "A", floor: 6, aliases: ["B"] },
+              { name: "B", floor: 7 },
+            ],
+            ln: [],
+          },
+        },
+      }),
+    );
+    expect(errors.join(" ")).toContain('"B" must not shadow a tier name');
+  });
+
+  test("rejects a duplicated alias within a table", () => {
+    const errors = validateDanConfig(
+      config({
+        tables: {
+          4: {
+            rice: [
+              { name: "A", floor: 6, aliases: ["X"] },
+              { name: "B", floor: 7, aliases: ["X"] },
+            ],
+            ln: [],
+          },
+        },
+      }),
+    );
+    expect(errors.join(" ")).toContain("is already used for A");
+  });
+
+  test("rejects an alias starting with a sentinel marker", () => {
+    const errors = validateDanConfig(
+      config({ tables: { 4: { rice: [{ name: "A", floor: 6, aliases: [">A"] }], ln: [] } } }),
+    );
+    expect(errors.join(" ")).toContain("must not start with < or >");
+  });
+
   test("requires at least one rice tier per key count", () => {
     const errors = validateDanConfig(
       config({ tables: { 6: { rice: [], ln: [] } } }),
@@ -269,6 +311,68 @@ describe("reworkDanLabel", () => {
     );
     expect(new Set(seen).size).toBe(REWORK_DAN_BANDS.length);
     expect(seen.map((l) => l.split(" ")[1])).toEqual([...REWORK_DAN_BANDS]);
+  });
+});
+
+describe("expandReworkDanMatch", () => {
+  test("a base-row alias covers every sub-level of its group", () => {
+    expect(expandReworkDanMatch("Gamma")).toEqual([
+      "γ",
+      "Regular γ--",
+      "Regular γ-",
+      "Regular γ",
+      "Regular γ+",
+      "Regular γ++",
+    ]);
+    // Case-insensitive; group-scoped spellings resolve to the same set.
+    expect(expandReworkDanMatch("  Regular GAMMA ")).toEqual(
+      expandReworkDanMatch("Regular Gamma"),
+    );
+  });
+
+  test("the bare symbol is searchable", () => {
+    expect(expandReworkDanMatch("ψ")).toEqual([
+      "Regular Ψ--",
+      "Regular Ψ-",
+      "Regular Ψ",
+      "Regular Ψ+",
+      "Regular Ψ++",
+    ]);
+    expect(expandReworkDanMatch("α")).toEqual(["α"]);
+  });
+
+  test("a group id resolves to its members", () => {
+    expect(expandReworkDanMatch("Regular ∞")).toEqual([
+      "Regular ∞--",
+      "Regular ∞-",
+      "Regular ∞",
+    ]);
+  });
+
+  test("a sub-level or plain tier name resolves to itself", () => {
+    expect(expandReworkDanMatch("Regular ζ++")).toEqual(["Regular ζ++"]);
+    expect(expandReworkDanMatch("Reform 10")).toEqual(["Reform 10"]);
+    expect(expandReworkDanMatch("LN 14")).toEqual(["LN 14"]);
+  });
+
+  test("sentinel-marked and unresolved tokens stay generic", () => {
+    expect(expandReworkDanMatch(">θ")).toBeNull();
+    expect(expandReworkDanMatch("< Reform 1 low")).toBeNull();
+    // Spelled sentinel aliases resolve like any other member.
+    expect(expandReworkDanMatch("Over Theta")).toEqual([">θ"]);
+    expect(expandReworkDanMatch("Over Infinity")).toEqual(["Regular >∞"]);
+    expect(expandReworkDanMatch("zz")).toBeNull();
+  });
+
+  test("one spelled name spans both key modes safely", () => {
+    expect(expandReworkDanMatch("Zeta")).toEqual([
+      "ζ",
+      "Regular ζ--",
+      "Regular ζ-",
+      "Regular ζ",
+      "Regular ζ+",
+      "Regular ζ++",
+    ]);
   });
 });
 

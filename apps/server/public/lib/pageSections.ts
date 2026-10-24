@@ -35,13 +35,6 @@ export const PAGE_SECTIONS: PageSectionDef[] = [
     keywords: ["settings", "tosu", "websocket", "live map", "adapter"],
   },
   {
-    id: "mastery-formula",
-    to: "/settings",
-    pageLabel: "Settings",
-    label: "Mastery formula",
-    keywords: ["settings", "mastery", "level", "formula"],
-  },
-  {
     id: "score-username",
     to: "/settings",
     pageLabel: "Settings",

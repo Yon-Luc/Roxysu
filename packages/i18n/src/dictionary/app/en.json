@@ -207,7 +207,6 @@
       "statBestPp": "Best PP",
       "statLastPlayed": "Last played",
       "mastery": "Mastery",
-      "masteryFormula": "Formula: {{formula}} · {{plays}} plays",
       "noMasteryYet": "No mastery yet.",
       "sunnyDan": "Sunny dan",
       "danielDan": "Daniel dan",
@@ -297,7 +296,7 @@
   },
   "settings": {
     "pageTitle": "Settings",
-    "subtitle": "Display preferences and tools — mastery formulas recompute all levels when changed.",
+    "subtitle": "Display preferences, practice filters, and background tools.",
     "tabs": {
       "setup": "Setup",
       "practice": "Practice",
@@ -395,8 +394,6 @@
     "executablePath": "Executable path",
     "saveTosu": "Save tosu settings",
     "clearExecutable": "Clear executable",
-    "masteryFormula": "Mastery formula",
-    "recomputingMastery": "Recomputing mastery…",
     "scoreUsername": "Score username",
     "scoreUsernameDesc": "Hide scores from downloaded replays by default. Auto uses the username that appears most often; otherwise pick one or more usernames.",
     "mostCommonUsername": "Most common username",

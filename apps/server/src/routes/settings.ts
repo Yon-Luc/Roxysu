@@ -21,12 +21,6 @@ import {
 } from "../map-analysis/calcBundle";
 
 import { dbPlugin, type Db } from "../db-runtime";
-import {
-  getActiveFormulaId,
-  listFormulas,
-  runMasteryEngine,
-  setActiveFormulaId,
-} from "../analytics/mastery/engine";
 import { runAnalyticsPipeline } from "../analytics/pipeline";
 import { invalidateQueryContextCache } from "../query-language/execute";
 import { invalidateScoreAutoFilterCache } from "../analytics/scoreAutoFilterCache";
@@ -135,7 +129,6 @@ async function readOverlayHostEnabled(db: Db): Promise<boolean> {
 }
 
 async function buildSettingsResponse(db: Db) {
-  const formulaId = await getActiveFormulaId(db);
   const [pauseRow] = await db
     .select()
     .from(settings)
@@ -168,14 +161,6 @@ async function buildSettingsResponse(db: Db) {
   ]);
 
   return {
-    mastery: {
-      formulaId,
-      formulas: listFormulas().map((f) => ({
-        id: f.id,
-        label: f.label,
-        description: f.description,
-      })),
-    },
     sync: {
       pauseWhenUnfocused: pauseRow?.value === "1",
     },
@@ -346,19 +331,6 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
       let scoresFilterChanged = false;
       let axisThresholdsChanged = false;
       let focusSettingsChanged = false;
-
-      if (body.masteryFormulaId) {
-        try {
-          await setActiveFormulaId(db, body.masteryFormulaId);
-        } catch (err) {
-          set.status = 400;
-          return {
-            error: err instanceof Error ? err.message : String(err),
-          };
-        }
-        await runMasteryEngine(db);
-        publish({ type: "dashboard.updated" });
-      }
 
       if (body.scoresUsernameFilter !== undefined) {
         const next = normalizeScoresUsernameFilterInput(
@@ -571,7 +543,6 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
     },
     {
       body: t.Object({
-        masteryFormulaId: t.Optional(t.String()),
         pauseWhenUnfocused: t.Optional(t.Boolean()),
         /**
          * Score username filter: "auto", "*", a username, or a list of usernames.

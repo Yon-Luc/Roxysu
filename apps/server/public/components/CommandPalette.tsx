@@ -48,7 +48,6 @@ const SETTINGS_SECTION_KEYS: Record<string, keyof Dictionary["app"]["settings"]>
     "osu-lazer-data-folder": "lazerDataFolder",
     "in-game-overlay": "overlayHost",
     "tosu-live-map": "tosuLiveMap",
-    "mastery-formula": "masteryFormula",
     "score-username": "scoreUsername",
     gamemode: "gamemode",
     "live-sync": "liveSync",

@@ -844,7 +844,6 @@ export async function removeHubAddedCollection(hubCollectionId: number) {
 
 
 export async function patchSettings(body: {
-  masteryFormulaId?: string;
   pauseWhenUnfocused?: boolean;
   scoresUsernameFilter?: string | string[];
   scoresGamemodeFilter?: string;

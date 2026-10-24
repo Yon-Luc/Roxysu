@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-04
+last_verified: 2026-10
 confidence: verified
 touches:
   - apps/server/src/analytics/mastery
@@ -21,7 +21,7 @@ touches:
 
 ## Purpose
 
-Choose mastery formula (`simple` or `practice`), rating display preference (osu! stars / dan / Sunny stars / rework dan), paths, background jobs (Sunny, Daniel, rework backfills), Rice/LN/FLN classification boundaries, and recommendation focus bands (Push / Accuracy / Consistency / Deficit). Recompute mastery across the practice library when formula changes.
+Configure rating display preference (osu! stars / dan / Sunny stars / rework dan), paths, background jobs (Sunny, Daniel, rework backfills), Rice/LN/FLN classification boundaries, and recommendation focus bands (Push / Accuracy / Consistency / Deficit). Mastery levels use a fixed blend recomputed by the analytics pipeline (see [business/mastery-formulas.md](../../business/mastery-formulas.md)).
 
 **In UI:** each Settings tab has chip-style jump links to its sections (`?tab=` + `?section=` — not `#` hashes, because the client uses hash history). Skin import, reset, and overlay sprite publish stay on the mania tab.
 
@@ -33,12 +33,11 @@ see `features/sunny-dan-recommendations/` rule 8.
 
 ## Business rules
 
-1. Mastery formula is a setting; switching triggers recompute.
-2. Path resolution precedence: env → Settings → platform default (`packages/osu-paths`).
-3. Rice / LN / FLN **classification** boundaries are user-configurable (defaults LN start 20%, FLN start 80%). LN start must be strictly less than FLN start. Keys: `recommend.ln_ratio_threshold`, `recommend.fln_ratio_threshold`.
-4. Classification thresholds affect recommend axes, skill estimates, stats skillset mix, and `axis:` query filters. They do **not** change Sunny dan RC/LN **label table** selection (stays package constant 20%).
-5. Recommendation **focus** settings (clear-rate bands, target difficulty, tolerance, topPlays) live in `recommend.focus_settings` and are edited on the Customize tab. Clear-rate band edges are clamped to 80–100% (Accuracy max may be open-ended above 100% in storage). Defaults keep Push in a closed 90–95% band near that skill level.
-6. Each mastery row also stores Practice/QL play aggregates: `play_count`, `best_accuracy`, `best_pp`, `best_score`, `best_misses`, `last_played_at`. The query language joins these instead of aggregating `scores` per request. **Enforced by:** `runMasteryEngine` + `query-language/execute.ts` `baseFrom()`.
+1. Path resolution precedence: env → Settings → platform default (`packages/osu-paths`).
+2. Rice / LN / FLN **classification** boundaries are user-configurable (defaults LN start 20%, FLN start 80%). LN start must be strictly less than FLN start. Keys: `recommend.ln_ratio_threshold`, `recommend.fln_ratio_threshold`.
+3. Classification thresholds affect recommend axes, skill estimates, stats skillset mix, and `axis:` query filters. They do **not** change Sunny dan RC/LN **label table** selection (stays package constant 20%).
+4. Recommendation **focus** settings (clear-rate bands, target difficulty, tolerance, topPlays) live in `recommend.focus_settings` and are edited on the Customize tab. Clear-rate band edges are clamped to 80–100% (Accuracy max may be open-ended above 100% in storage). Defaults keep Push in a closed 90–95% band near that skill level.
+5. Each mastery row also stores Practice/QL play aggregates: `play_count`, `best_accuracy`, `best_pp`, `best_score`, `best_misses`, `last_played_at`. The query language joins these instead of aggregating `scores` per request. **Enforced by:** `runMasteryEngine` + `query-language/execute.ts` `baseFrom()`.
 
 ## Implementation
 
@@ -47,7 +46,7 @@ Settings UI is tab-grouped on `/settings`:
 | Tab | Sections |
 |---|---|
 | Setup | osu!lazer data folder, live sync, in-game overlay, tosu / live map |
-| Practice | mastery formula, score username, gamemode |
+| Practice | score username, gamemode |
 | Customize | Rice / LN / FLN boundaries, recommendation focuses |
 | Appearance | appearance, difficulty display, preview skin, keybinds (columns + playback actions) |
 | Jobs | Sunny dan, Daniel dan, rework dan (mania difficulty port), dominant skill analysis, Mania Rating Lab |

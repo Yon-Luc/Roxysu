@@ -51,7 +51,7 @@ acc:90..93 NOT played:last14d
 ```
 
 ### Mastery & settings
-Choose a mastery formula (`simple` or `practice`) and recompute across your library. Prefer **osu! stars**, **Sunny dan** labels, or **Sunny rework stars** for rating display. Kick off a background Sunny dan backfill for mania maps from Settings.
+Mastery levels blend best accuracy, play count, and PP across your library (recomputed by the analytics pipeline). Prefer **osu! stars**, **Sunny dan** labels, or **Sunny rework stars** for rating display. Kick off a background Sunny dan backfill for mania maps from Settings.
 
 ### Live sync
 A separate process continuously mirrors `client.realm` into local SQLite. In Settings you can opt in to pause sync when the browser tab is unfocused (off by default), so lazer isn’t fighting for the Realm file during score submission. The UI shows Synced / Syncing / Paused / Failed and updates over SSE.

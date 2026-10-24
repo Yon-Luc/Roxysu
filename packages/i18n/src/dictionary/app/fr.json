@@ -207,7 +207,6 @@
       "statBestPp": "Meilleur PP",
       "statLastPlayed": "Dernière partie",
       "mastery": "Maîtrise",
-      "masteryFormula": "Formule : {{formula}} · {{plays}} parties",
       "noMasteryYet": "Pas encore de maîtrise.",
       "sunnyDan": "Dan Sunny",
       "danielDan": "Dan Daniel",
@@ -297,7 +296,7 @@
   },
   "settings": {
     "pageTitle": "Paramètres",
-    "subtitle": "Préférences d'affichage et outils — les formules de maîtrise recalculent tous les niveaux lorsqu'elles changent.",
+    "subtitle": "Préférences d'affichage, filtres de pratique et outils en arrière-plan.",
     "tabs": {
       "setup": "Configuration",
       "practice": "Entraînement",
@@ -395,8 +394,6 @@
     "executablePath": "Chemin de l'exécutable",
     "saveTosu": "Enregistrer les paramètres tosu",
     "clearExecutable": "Effacer l'exécutable",
-    "masteryFormula": "Formule de maîtrise",
-    "recomputingMastery": "Recalcul de la maîtrise…",
     "scoreUsername": "Nom d'utilisateur des scores",
     "scoreUsernameDesc": "Masquer les scores des replays téléchargés par défaut. Auto utilise le nom d'utilisateur le plus fréquent ; sinon choisissez un ou plusieurs noms.",
     "mostCommonUsername": "Nom d'utilisateur le plus courant",

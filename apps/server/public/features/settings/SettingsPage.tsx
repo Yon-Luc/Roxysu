@@ -13,7 +13,6 @@ import { useAppDict, t } from "../../lib/i18n";
 import { OsuDataFolderSection } from "./sections/OsuDataFolderSection";
 import { OverlayHostSection } from "./sections/OverlayHostSection";
 import { TosuLiveMapSection } from "./sections/TosuLiveMapSection";
-import { MasteryFormulaSection } from "./sections/MasteryFormulaSection";
 import { ScoreUsernameSection } from "./sections/ScoreUsernameSection";
 import { GamemodeSection } from "./sections/GamemodeSection";
 import { LiveSyncSection } from "./sections/LiveSyncSection";
@@ -77,7 +76,6 @@ function SettingsTabPanels({
     case "practice":
       return (
         <>
-          <MasteryFormulaSection data={data} />
           <ScoreUsernameSection data={data} />
           <GamemodeSection data={data} />
         </>

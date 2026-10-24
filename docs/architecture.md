@@ -205,7 +205,7 @@ SQLite stores:
 - tags
 - beatmap_tags
 - notes
-- mastery (`formula_id` records which mastery formula produced `level`)
+- mastery (`level` from fixed simple blend; `formula_id` kept as provenance, always `simple`)
 - imports
 - settings
 - daily_stats
@@ -213,18 +213,14 @@ SQLite stores:
 - mapper_stats
 - score_metrics
 
-## Mastery Formulas
+## Mastery level
 
-Mastery is pluggable via an in-process registry (`apps/server/src/analytics/mastery/`):
-
-- Active formula id stored in `settings` key `mastery.formula` (default `simple`).
-- Shipping formulas: `simple` (acc + play count + PP), `practice` (acc + retries + consistency).
-- Switching formula via `/api/settings` recomputes all mastery rows.
+Mastery `level` is a fixed blend in `apps/server/src/analytics/mastery/` (best accuracy 50%, log play count 25%, best PP 25%). The analytics pipeline recomputes rows when scores change; there is no settings-selected formula.
 
 ## Analytics Engines
 
 - Session Engine
-- Mastery Engine (pluggable formulas)
+- Mastery Engine
 - Progression Engine (dashboard trend read-models)
 - Retry Engine
 - Statistics Engine
@@ -336,8 +332,8 @@ This would be added as a **third isolated adapter**, not a replacement for Realm
 
 ### Phase 5 *(done)*
 - Analytics pipeline (Retry → Session → Mastery → Statistics)
-- Pluggable mastery formulas
 - Sessions, progression trends, retry metrics
+- Mastery levels (fixed simple blend)
 
 ### Phase 6
 - Notes

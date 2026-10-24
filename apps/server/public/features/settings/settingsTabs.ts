@@ -33,7 +33,6 @@ export const SECTION_TO_TAB: Record<string, SettingsTabId> = {
   "score-transfer": "setup",
   "in-game-overlay": "setup",
   "tosu-live-map": "setup",
-  "mastery-formula": "practice",
   "score-username": "practice",
   gamemode: "practice",
   "axis-thresholds": "customize",
@@ -64,7 +63,6 @@ export const TAB_SECTIONS: Record<
     { id: "tosu-live-map", labelKey: "tosuLiveMap" },
   ],
   practice: [
-    { id: "mastery-formula", labelKey: "masteryFormula" },
     { id: "score-username", labelKey: "scoreUsername" },
     { id: "gamemode", labelKey: "gamemode" },
   ],

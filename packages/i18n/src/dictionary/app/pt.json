@@ -207,7 +207,6 @@
       "statBestPp": "Melhor PP",
       "statLastPlayed": "Último play",
       "mastery": "Maestria",
-      "masteryFormula": "Fórmula: {{formula}} · {{plays}} plays",
       "noMasteryYet": "Ainda sem maestria.",
       "sunnyDan": "Sunny dan",
       "danielDan": "Daniel dan",
@@ -297,7 +296,7 @@
   },
   "settings": {
     "pageTitle": "Configurações",
-    "subtitle": "Preferências de display e ferramentas — fórmulas de maestria recalculam todos os níveis quando mudam.",
+    "subtitle": "Preferências de display, filtros de practice e ferramentas em segundo plano.",
     "tabs": {
       "setup": "Configuração",
       "practice": "Treino",
@@ -395,8 +394,6 @@
     "executablePath": "Caminho do executável",
     "saveTosu": "Salvar configs do tosu",
     "clearExecutable": "Limpar executável",
-    "masteryFormula": "Fórmula de maestria",
-    "recomputingMastery": "Recalculando maestria…",
     "scoreUsername": "Username dos scores",
     "scoreUsernameDesc": "Esconde scores de replays baixados por padrão. Auto usa o username que mais aparece; senão escolha um ou mais usernames.",
     "mostCommonUsername": "Username mais comum",

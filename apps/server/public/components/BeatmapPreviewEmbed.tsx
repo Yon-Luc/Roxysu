@@ -7,7 +7,11 @@ import {
   type FormEvent,
 } from "react";
 import { fetchBeatmapPreview, type BeatmapPreview } from "../lib/api";
-import { AudioClock, sampleAudioClock } from "../lib/audioClock";
+import {
+  AudioClock,
+  createUiTimePublisher,
+  sampleAudioClock,
+} from "../lib/audioClock";
 import { clamp, formatClock } from "../lib/format";
 import { localBeatmapAudioUrl, localBeatmapCoverUrl, osuBeatmapCoverUrl } from "../lib/osuUrls";
 import { useStdSkin } from "../lib/stdSkin";
@@ -130,6 +134,7 @@ export function BeatmapPreviewEmbed({
 
   const [playing, setPlaying] = useState(false);
   const [currentMs, setCurrentMs] = useState(0);
+  const publishUiTimeRef = useRef(createUiTimePublisher(setCurrentMs));
   const [durationMs, setDurationMs] = useState(0);
   const [audioError, setAudioError] = useState<string | null>(null);
   const [volume, setVolume] = useState(prefs.volume);
@@ -225,7 +230,7 @@ export function BeatmapPreviewEmbed({
       playing: !audio.paused && !audio.ended,
       rate: audio.playbackRate > 0 ? audio.playbackRate : 1,
     });
-    setCurrentMs(next);
+    publishUiTimeRef.current(next, true);
     stdHitsounds.onSeek(next);
   }
 
@@ -234,7 +239,7 @@ export function BeatmapPreviewEmbed({
     liveSyncSampleRef.current = null;
     const frozen = clockRef.current.nowMs();
     clockRef.current.set(frozen, { playing: false, rate: 1 });
-    setCurrentMs(frozen);
+    publishUiTimeRef.current(frozen, true);
     audioRef.current?.pause();
   }, []);
 
@@ -300,7 +305,7 @@ export function BeatmapPreviewEmbed({
     clockRef.current.set(0, { playing: false, rate: 1 });
     audioRef.current?.pause();
     setAudioError(null);
-    setCurrentMs(0);
+    publishUiTimeRef.current(0, true);
     setDurationMs(0);
     setPlaying(false);
   }, [beatmapId, audioUrl]);
@@ -336,7 +341,7 @@ export function BeatmapPreviewEmbed({
         playing: !audio!.paused && !audio!.ended,
         rate: audio!.playbackRate > 0 ? audio!.playbackRate : 1,
       });
-      setCurrentMs(pt);
+      publishUiTimeRef.current(pt, true);
     }
 
     function tryAutoPlay() {
@@ -348,7 +353,7 @@ export function BeatmapPreviewEmbed({
       });
     }
 
-    function syncClockFromAudio() {
+    function syncClockFromAudio(forceUi = false) {
       if (syncSampleFresh(liveSyncSampleRef.current)) return;
       const ms = (audio!.currentTime || 0) * 1000;
       const desired = desiredMsRef.current;
@@ -360,7 +365,7 @@ export function BeatmapPreviewEmbed({
             playing: !audio!.paused && !audio!.ended,
             rate: audio!.playbackRate > 0 ? audio!.playbackRate : 1,
           });
-          setCurrentMs(desired);
+          publishUiTimeRef.current(desired, true);
           return;
         } else {
           desiredMsRef.current = null;
@@ -370,7 +375,7 @@ export function BeatmapPreviewEmbed({
         playing: !audio!.paused && !audio!.ended,
         rate: audio!.playbackRate > 0 ? audio!.playbackRate : 1,
       });
-      setCurrentMs(ms);
+      publishUiTimeRef.current(clock.nowMs(), forceUi);
     }
 
     function onLoadedMetadata() {
@@ -383,15 +388,15 @@ export function BeatmapPreviewEmbed({
       tryAutoPlay();
     }
     function onPlay() {
-      syncClockFromAudio();
+      syncClockFromAudio(true);
       setPlaying(true);
     }
     function onPause() {
-      syncClockFromAudio();
+      syncClockFromAudio(true);
       setPlaying(false);
     }
     function onEnded() {
-      syncClockFromAudio();
+      syncClockFromAudio(true);
       setPlaying(false);
     }
     function onError() {
@@ -400,7 +405,7 @@ export function BeatmapPreviewEmbed({
       );
     }
     function onTimeUpdate() {
-      syncClockFromAudio();
+      syncClockFromAudio(false);
     }
 
     audio.volume = volume;
@@ -481,10 +486,10 @@ export function BeatmapPreviewEmbed({
     const localMs = clockRef.current.nowMs();
     if (Math.abs(localMs - syncTimeMs) > SYNC_RESYNC_MS) {
       clockRef.current.set(syncTimeMs, { playing, rate });
-      setCurrentMs(syncTimeMs);
+      publishUiTimeRef.current(syncTimeMs, true);
     } else {
       clockRef.current.set(localMs, { playing, rate });
-      setCurrentMs(localMs);
+      publishUiTimeRef.current(localMs, false);
     }
 
     if (!audio) return;

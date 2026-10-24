@@ -106,6 +106,8 @@ export function ManiaNotefield({
   const framesRef = useRef<NotefieldFrame[]>([]);
   const liveHeldMaskRef = useRef<number | null>(null);
   const headJudgmentsRef = useRef<Map<number, NotefieldJudgment>>(new Map());
+  /** Last `judgments` array we built from — avoid a new Map (paint snap) on unrelated re-renders. */
+  const judgmentsSrcRef = useRef<NotefieldJudgment[] | undefined>(undefined);
   const highlightMissRef = useRef(highlightMissNotes);
   const storedSkin = usePreviewSkin();
   const keymodeSkin = skinOverride ?? resolveKeymodeSkin(storedSkin, columnCount);
@@ -144,7 +146,20 @@ export function ManiaNotefield({
     Number.isFinite(playbackRate) && playbackRate > 0 ? playbackRate : 1;
   framesRef.current = frames ?? [];
   liveHeldMaskRef.current = liveHeldMask ?? null;
-  headJudgmentsRef.current = buildHeadJudgmentMap(judgments);
+  if (judgments !== judgmentsSrcRef.current) {
+    const prev = judgmentsSrcRef.current;
+    const next = judgments;
+    const prevLen = prev?.length ?? -1;
+    const nextLen = next?.length ?? -1;
+    // Append-only live HUD: rebuild when length or last entry changes.
+    const lastChanged =
+      prevLen !== nextLen ||
+      (nextLen > 0 && prev![nextLen - 1] !== next![nextLen - 1]);
+    if (lastChanged || prev === undefined) {
+      headJudgmentsRef.current = buildHeadJudgmentMap(judgments);
+    }
+    judgmentsSrcRef.current = judgments;
+  }
   highlightMissRef.current = highlightMissNotes;
 
   useEffect(() => {

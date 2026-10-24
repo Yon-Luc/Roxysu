@@ -13,6 +13,7 @@ touches:
   - apps/server/public/components/previewPrefs.test.ts
   - apps/server/public/lib/previewSkin.test.ts
   - apps/server/public/lib/api.ts
+  - apps/server/public/lib/audioClock.ts
   - apps/server/src/routes/beatmaps.ts
   - apps/server/src/routes/scores.ts
   - apps/server/public/components/StdPlayfield.tsx
@@ -23,6 +24,7 @@ touches:
   - apps/server/public/lib/paintCatchPlayfield.ts
   - apps/server/public/components/ManiaNotefield.tsx
   - apps/server/public/lib/playfieldRaf.ts
+  - apps/tosu-counter/src/main.ts
   - apps/server/public/lib/paintManiaNotefield.ts
   - apps/server/public/lib/previewSkin.ts
   - apps/server/public/lib/keybinds.ts
@@ -411,8 +413,14 @@ Realm skin extract (full / reconcile):
 
 - Paint modules are pure; React wrappers are rAF via `startPlayfieldRaf`.
   The loop skips `paint*` when map time and a snapshot (size, skin, mask,
-  notes) are unchanged, and cancels while `document.hidden`. Video export
-  calls the same paint.
+  notes) are unchanged, and cancels while `document.hidden`. Preview /
+  rewatch / embed leave the optional `heartbeatHz` off so paused canvases
+  idle; tosu-counter passes `heartbeatHz: 30` for hidden-iframe recovery
+  (change-gated while visible, force-paint while `document.hidden`). Video
+  export calls the same paint.
+- Scrubber / clock labels use `createUiTimePublisher` (~10 Hz, force on
+  seek / play / pause / ended) so media `timeupdate` does not re-render the
+  whole modal every tick. Authoritative time stays on `AudioClock`.
 - Score rewatch HUD ticks incrementally through judgments and calls `setHud`
   only when combo / accuracy / last result change (counts ride the same update).
   Paused + unchanged time   skips the scan. Combo, accuracy, and running counts are draggable playfield

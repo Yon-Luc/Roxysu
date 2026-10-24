@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { AudioClock } from "./audioClock";
+import { AudioClock, createUiTimePublisher } from "./audioClock";
 
 describe("AudioClock", () => {
   test("interpolates between coarse media samples while playing", () => {
@@ -51,5 +51,18 @@ describe("AudioClock", () => {
     // Continues from interpolated 20ms at new rate.
     expect(clock.nowMs(20)).toBeCloseTo(20, 5);
     expect(clock.nowMs(30)).toBeCloseTo(40, 5);
+  });
+});
+
+describe("createUiTimePublisher", () => {
+  test("throttles publishes and flushes when forced", () => {
+    const seen: number[] = [];
+    const publish = createUiTimePublisher((ms) => seen.push(ms), 100);
+    publish(0);
+    publish(10);
+    publish(20);
+    expect(seen).toEqual([0]);
+    publish(50, true);
+    expect(seen).toEqual([0, 50]);
   });
 });

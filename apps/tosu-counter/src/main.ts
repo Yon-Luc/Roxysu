@@ -575,6 +575,9 @@ function main(): void {
 
     loop = startPlayfieldRaf({
       getTimeMs,
+      // Dashboard iframe often reports document.hidden while still on screen;
+      // keep a 30Hz tick so idle preview / skin don't freeze when rAF throttles.
+      heartbeatHz: 30,
       snapshot: () => [
         canvas.clientWidth,
         canvas.clientHeight,

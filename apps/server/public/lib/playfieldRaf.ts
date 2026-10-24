@@ -37,12 +37,22 @@ export function startPlayfieldRaf(opts: {
   getTimeMs: () => number;
   snapshot: () => readonly unknown[];
   paint: (tMs: number) => void;
+  /**
+   * Optional timer-driven tick (Hz). Off by default — preview/rewatch modals
+   * only need change-gated rAF. tosu-counter passes 30 so the canvas stays
+   * alive when the dashboard iframe reports `document.hidden` (rAF throttled).
+   */
+  heartbeatHz?: number;
 }): { stop: () => void; invalidate: () => void } {
   let raf = 0;
   let timer = 0;
   let running = true;
   let lastT = Number.NaN;
   let lastSnap: readonly unknown[] | null = null;
+  const heartbeatHz =
+    typeof opts.heartbeatHz === "number" && opts.heartbeatHz > 0
+      ? opts.heartbeatHz
+      : 0;
 
   // Render once if the snapshot or clock changed since the last paint. When
   // called from `invalidate()` (below) this is also the synchronous repaint
@@ -59,11 +69,11 @@ export function startPlayfieldRaf(opts: {
     }
   }
 
-  // Unconditional paint — used by the heartbeat so the canvas repaints even
-  // when nothing "changed" (idle preview with no live data). Without this, the
-  // first paint can land while the embedded iframe isn't visible yet, and the
-  // change-gated `renderOnce` would then never repaint once tosu shows it
-  // (the only thing forcing a repaint was a dashboard settings update).
+  // Unconditional paint — used by the heartbeat while the document is hidden
+  // so the canvas refreshes even when nothing "changed" (idle preview with no
+  // live data). Without this, the first paint can land while the embedded
+  // iframe isn't visible yet, and the change-gated `renderOnce` would then
+  // never repaint once tosu shows it.
   function paintNow() {
     const tMs = opts.getTimeMs();
     lastT = tMs;
@@ -79,13 +89,17 @@ export function startPlayfieldRaf(opts: {
     }
   }
 
-  // Heartbeat: a timer-driven tick that keeps the canvas live even when rAF is
-  // dead/throttled. setInterval still fires (throttled) when the document is
-  // "hidden", so the embedded counter never freezes. It paints unconditionally
-  // so a now-visible preview always refreshes.
+  // Heartbeat: timer-driven tick for embedded iframes where rAF is
+  // dead/throttled. When the document is visible and rAF is running, stay
+  // change-gated so we do not double-paint with the animation loop. When
+  // hidden, force a paint so a now-visible preview always refreshes.
   function heartbeat() {
     if (!running) return;
-    paintNow();
+    if (typeof document !== "undefined" && document.hidden) {
+      paintNow();
+      return;
+    }
+    renderOnce();
   }
 
   function startRaf() {
@@ -119,7 +133,9 @@ export function startPlayfieldRaf(opts: {
     document.addEventListener("visibilitychange", onVisibility);
   }
   startRaf();
-  timer = setInterval(heartbeat, 1000 / 30) as unknown as number;
+  if (heartbeatHz > 0) {
+    timer = setInterval(heartbeat, 1000 / heartbeatHz) as unknown as number;
+  }
 
   return {
     stop: () => {

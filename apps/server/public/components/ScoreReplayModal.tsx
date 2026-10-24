@@ -10,7 +10,11 @@ import {
   type FormEvent,
 } from "react";
 import { fetchScoreReplay, type ScoreReplay } from "../lib/api";
-import { AudioClock, sampleAudioClock } from "../lib/audioClock";
+import {
+  AudioClock,
+  createUiTimePublisher,
+  sampleAudioClock,
+} from "../lib/audioClock";
 import { clamp, formatAccuracy, formatClock } from "../lib/format";
 import { useStdSkin } from "../lib/stdSkin";
 import { useImportedStdSprites } from "../lib/stdSkinImport";
@@ -279,6 +283,7 @@ export function ScoreReplayModal({
   const [mode, setMode] = useState<ModalMode>("rewatch");
   const [playing, setPlaying] = useState(false);
   const [currentMs, setCurrentMs] = useState(0);
+  const publishUiTimeRef = useRef(createUiTimePublisher(setCurrentMs));
   const [durationMs, setDurationMs] = useState(0);
   const [audioError, setAudioError] = useState<string | null>(null);
   const [keybindModalOpen, setKeybindModalOpen] = useState(false);
@@ -510,7 +515,7 @@ export function ScoreReplayModal({
       playing: !audio.paused && !audio.ended,
       rate: audio.playbackRate > 0 ? audio.playbackRate : 1,
     });
-    setCurrentMs(next);
+    publishUiTimeRef.current(next, true);
     stdHitsounds.onSeek(next);
   }
 
@@ -883,7 +888,7 @@ export function ScoreReplayModal({
     rateApplied.current = false;
     clockRef.current.set(0, { playing: false, rate: prefsRef.current.rate });
     setAudioError(null);
-    setCurrentMs(0);
+    publishUiTimeRef.current(0, true);
     setDurationMs(0);
     setPlaying(false);
     setMode("rewatch");
@@ -911,7 +916,7 @@ export function ScoreReplayModal({
     if (!audio || !audioUrl) return;
     const clock = clockRef.current;
 
-    function syncClockFromAudio() {
+    function syncClockFromAudio(forceUi = false) {
       const ms = (audio!.currentTime || 0) * 1000;
       const desired = desiredMsRef.current;
       if (desired != null) {
@@ -923,7 +928,7 @@ export function ScoreReplayModal({
             playing: !audio!.paused && !audio!.ended,
             rate: audio!.playbackRate > 0 ? audio!.playbackRate : 1,
           });
-          setCurrentMs(desired);
+          publishUiTimeRef.current(desired, true);
           return;
         } else {
           desiredMsRef.current = null;
@@ -933,17 +938,17 @@ export function ScoreReplayModal({
         playing: !audio!.paused && !audio!.ended,
         rate: audio!.playbackRate > 0 ? audio!.playbackRate : 1,
       });
-      setCurrentMs(ms);
+      publishUiTimeRef.current(clock.nowMs(), forceUi);
     }
 
     function onTimeUpdate() {
-      syncClockFromAudio();
+      syncClockFromAudio(false);
     }
     function onSeeking() {
-      syncClockFromAudio();
+      syncClockFromAudio(true);
     }
     function onSeeked() {
-      syncClockFromAudio();
+      syncClockFromAudio(true);
     }
     function onLoadedMetadata() {
       setDurationMs((audio!.duration || 0) * 1000);
@@ -969,15 +974,15 @@ export function ScoreReplayModal({
       }
     }
     function onPlay() {
-      syncClockFromAudio();
+      syncClockFromAudio(true);
       setPlaying(true);
     }
     function onPause() {
-      syncClockFromAudio();
+      syncClockFromAudio(true);
       setPlaying(false);
     }
     function onEnded() {
-      syncClockFromAudio();
+      syncClockFromAudio(true);
       setPlaying(false);
     }
     function onError() {

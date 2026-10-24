@@ -106,3 +106,21 @@ export function sampleAudioClock(
   const t = clock.nowMs();
   return Number.isFinite(t) ? t : fallbackMs;
 }
+
+/**
+ * Publish map time into React state without re-rendering the host on every
+ * media `timeupdate`. Throttled by default; pass `force` on seek / play /
+ * pause / ended so the scrubber snaps immediately.
+ */
+export function createUiTimePublisher(
+  publish: (ms: number) => void,
+  minIntervalMs = 100,
+): (ms: number, force?: boolean) => void {
+  let lastWall = Number.NEGATIVE_INFINITY;
+  return (ms: number, force = false) => {
+    const now = performance.now();
+    if (!force && now - lastWall < minIntervalMs) return;
+    lastWall = now;
+    publish(ms);
+  };
+}

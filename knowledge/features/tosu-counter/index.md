@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08
+last_verified: 2026-10
 confidence: verified
 touches:
   - apps/tosu-counter/
@@ -96,18 +96,14 @@ mania notefield synced to the live in-game time.
     skin — so the skin is visible in song select instead of a blank
     "Waiting for osu!". The preview uses `lastColumnCount` (last loaded
     keymode, default 4). Toggle via dashboard setting, ⚙ panel checkbox, or
-    localStorage (`roxysu:tosu-counter-settings`). Rendering is driven by
-    `apps/server/public/lib/playfieldRaf.ts`, which paints on a `requestAnimation
-    Frame` loop **plus** a ~30fps `setInterval` heartbeat that paints
-    **unconditionally** (not change-gated) and paints synchronously on
-    `invalidate()` + one forced paint at startup. The heartbeat must paint every
-    tick rather than only on change: in idle (no live data) nothing changes, so
-    a change-gated repaint would only fire once (while the embedded iframe may
-    still be invisible) and never refresh once tosu shows it — the only thing
-    forcing a repaint was a dashboard settings update. Unconditional heartbeat
-    + startup paint keeps the canvas live inside embedded iframes (tosu dashboard
-    preview reports `document.hidden` while visible, which otherwise
-    throttles/pauses rAF). The counter also repaints on activation events
+    localStorage (`roxysu:tosu-counter-settings`).     Rendering is driven by
+    `apps/server/public/lib/playfieldRaf.ts` with `heartbeatHz: 30` (opt-in;
+    preview/rewatch modals leave it off). The loop is change-gated
+    `requestAnimationFrame` plus a ~30fps timer: while `document.hidden` the
+    heartbeat force-paints so idle preview recovers when the dashboard iframe
+    was invisible; while visible it stays change-gated so it does not
+    double-paint with rAF. `invalidate()` paints synchronously. The counter
+    also repaints on activation events
     (`load`, `pageshow`, `focus`, `resize`, `visibilitychange`) because the
     loop is suspended in tosu's embedded preview until the iframe is shown;
     and `connectTosuSettings` **always** repaints (`touchSkin`) on any

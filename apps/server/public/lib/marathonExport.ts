@@ -218,7 +218,7 @@ export function packMarathonArchive(args: {
   }
   zip.end();
   if (zipError) throw zipError;
-  return new Blob(parts, { type: "application/octet-stream" });
+  return new Blob(parts as BlobPart[], { type: "application/octet-stream" });
 }
 
 export function sanitizeMarathonFilename(name: string): string {

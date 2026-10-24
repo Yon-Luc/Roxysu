@@ -161,7 +161,14 @@ export async function runRetryEngine(
     ? metrics.filter((m) => m.beatmapId != null && scopeSet.has(m.beatmapId))
     : metrics;
 
-  const batches = [];
+  const batches: Array<
+    Array<{
+      scoreId: string;
+      retryIndex: number | null;
+      isPb: boolean;
+      sessionId: number | null;
+    }>
+  > = [];
   const BATCH = 500;
   for (let i = 0; i < toWrite.length; i += BATCH) {
     const batch = toWrite.slice(i, i + BATCH).map(({ scoreId, retryIndex: ri, isPb, sessionId }) => ({

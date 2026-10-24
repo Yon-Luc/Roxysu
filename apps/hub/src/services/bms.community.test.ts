@@ -23,19 +23,45 @@ import {
 const MD5 = "ab".repeat(16);
 const OTHER = "cd".repeat(16);
 
+/** Build EX/accuracy/judgement triples that pass Hub ingest validation. */
+function scored(
+  exScore: number,
+  maxExScore: number,
+): Pick<BmsInbound, "score" | "judgements"> {
+  const pgreat = Math.floor(exScore / 2);
+  const great = exScore % 2;
+  const accuracy = maxExScore > 0 ? exScore / maxExScore : 0;
+  return {
+    judgements: { pgreat, great, good: 0, bad: 0, poor: 0, miss: 0 },
+    score: {
+      exScore,
+      maxExScore,
+      normalizedScore: Math.round(accuracy * 1_000_000),
+      accuracy,
+    },
+  };
+}
+
 function inbound(
   localScoreId: string,
   patch: Partial<BmsInbound> & { chartMd5?: string } = {},
 ): BmsInbound {
   const md5 = patch.chartMd5 ?? MD5;
+  const base = scored(100, 112);
   return {
     localScoreId,
     rulesetId: "bms",
-    chart: { md5, title: "chart", artist: "anon", keyCount: 8 },
+    chart: { md5, title: "chart", artist: "anon", keyCount: 8, ...patch.chart },
     achievedAt: "2024-06-01T12:00:00.000Z",
-    score: { exScore: 100, maxExScore: 200, normalizedScore: 500_000, accuracy: 0.9 },
-    judgements: { pgreat: 10, great: 0, good: 0, bad: 0, poor: 0, miss: 0 },
-    gameplay: { variantId: "standard", gaugeId: "hard", comboLampId: "fc", djGrade: "aaa", mods: [] },
+    ...base,
+    gameplay: {
+      variantId: "standard",
+      gaugeId: "hard",
+      comboLampId: "fc",
+      djGrade: "aaa",
+      mods: [],
+      ...patch.gameplay,
+    },
     ...patch,
     chart: { md5, title: "chart", artist: "anon", keyCount: 8, ...patch.chart },
     gameplay: {
@@ -46,13 +72,8 @@ function inbound(
       mods: [],
       ...patch.gameplay,
     },
-    score: {
-      exScore: 100,
-      maxExScore: 200,
-      normalizedScore: 500_000,
-      accuracy: 0.9,
-      ...patch.score,
-    },
+    score: { ...base.score, ...patch.score },
+    judgements: { ...base.judgements, ...patch.judgements },
   };
 }
 
@@ -78,23 +99,29 @@ beforeAll(async () => {
     },
   ]);
   await ingestBmsBatch(db, 1, "install-ada", [
-    inbound("ada-best", { score: { exScore: 100 } }),
-    inbound("ada-worse", { score: { exScore: 40 }, achievedAt: "2024-06-02T12:00:00.000Z" }),
+    inbound("ada-best", { ...scored(100, 112) }),
+    inbound("ada-worse", {
+      ...scored(40, 112),
+      achievedAt: "2024-06-02T12:00:00.000Z",
+    }),
   ]);
   await ingestBmsBatch(db, 2, "install-bea", [
     inbound("bea-std", {
-      score: { exScore: 80, accuracy: 0.7 },
+      ...scored(80, 120),
       gameplay: { variantId: "standard", gaugeId: "easy", djGrade: "a", comboLampId: null },
       achievedAt: "2024-06-02T08:00:00.000Z",
     }),
     inbound("bea-2p", {
       chartMd5: OTHER,
-      score: { exScore: 200 },
+      ...scored(200, 200),
       gameplay: { variantId: "2P", gaugeId: "hard", djGrade: "max" },
     }),
   ]);
   await ingestBmsBatch(db, 3, "install-cy", [
-    inbound("cy-secret", { score: { exScore: 999 }, achievedAt: new Date().toISOString() }),
+    inbound("cy-secret", {
+      ...scored(999, 999),
+      achievedAt: new Date().toISOString(),
+    }),
   ]);
 });
 
@@ -169,7 +196,10 @@ describe("BMS community reads", () => {
     expect(head.scores.some((row) => row.username === "cy")).toBe(false);
 
     await ingestBmsBatch(db, 1, "install-ada", [
-      inbound("ada-now", { achievedAt: new Date().toISOString(), score: { exScore: 10 } }),
+      inbound("ada-now", {
+        ...scored(10, 112),
+        achievedAt: new Date().toISOString(),
+      }),
     ]);
     const stats = await bmsGlobalStats(db);
     expect(stats.uniqueScores).toBe(5);

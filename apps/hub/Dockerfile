@@ -13,8 +13,10 @@ COPY packages/ ./packages/
 COPY apps/hub/ ./apps/hub/
 COPY apps/desktop/package.json ./apps/desktop/
 COPY apps/docs/package.json ./apps/docs/
+COPY apps/play/package.json ./apps/play/
 COPY apps/realm-reader/package.json ./apps/realm-reader/
 COPY apps/server/package.json ./apps/server/
+COPY apps/tosu-counter/package.json ./apps/tosu-counter/
 
 # Hub only: skip native install scripts (realm / better-sqlite3).
 RUN bun install --frozen-lockfile --ignore-scripts --filter @roxysu/hub

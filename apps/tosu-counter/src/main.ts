@@ -525,11 +525,17 @@ function main(): void {
 
   function applySettingsToSkin(next: CounterSettings): void {
     const skin = getPreviewSkin();
-    setPreviewSkin({
-      ...skin,
-      hitPosition: clamp(next.hitPosition, HIT_POSITION_MIN, HIT_POSITION_MAX),
-      laneCover: clamp(next.laneCover, LANE_COVER_MIN, LANE_COVER_MAX),
-    });
+    const hitPosition = clamp(
+      next.hitPosition,
+      HIT_POSITION_MIN,
+      HIT_POSITION_MAX,
+    );
+    const laneCover = clamp(next.laneCover, LANE_COVER_MIN, LANE_COVER_MAX);
+    const keymodes = { ...skin.keymodes };
+    for (const k of KEYMODES) {
+      keymodes[k] = { ...keymodes[k], hitPosition, laneCover };
+    }
+    setPreviewSkin({ keymodes });
   }
   applySettingsToSkin(settings);
 
@@ -540,6 +546,7 @@ function main(): void {
   let loop: ReturnType<typeof startPlayfieldRaf> | null = null;
 
   function paintNotefield(tMs: number, columnCount: number, notes: PreviewNote[] | null): void {
+    const skin = skinFor(columnCount);
     paintManiaNotefield({
       ctx: ctx!,
       width: canvas.clientWidth,
@@ -549,17 +556,13 @@ function main(): void {
       notes: notes ?? [],
       scrollSpeed,
       playbackRate: currentRate(),
-      skin: skinFor(columnCount),
+      skin,
       hitPosition: clamp(
-        getPreviewSkin().hitPosition,
+        skin.hitPosition,
         HIT_POSITION_MIN,
         HIT_POSITION_MAX,
       ),
-      laneCover: clamp(
-        getPreviewSkin().laneCover,
-        LANE_COVER_MIN,
-        LANE_COVER_MAX,
-      ),
+      laneCover: clamp(skin.laneCover, LANE_COVER_MIN, LANE_COVER_MAX),
       sprites: currentSpritesFor(columnCount),
     });
   }

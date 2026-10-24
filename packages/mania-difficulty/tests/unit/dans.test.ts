@@ -290,9 +290,10 @@ describe("reworkDanLabel", () => {
   test("below the first floor is an under-band sentinel", () => {
     expect(reworkDanLabel(2.5, 0, 4)).toBe(`< Reform 1 ${REWORK_DAN_BANDS[0]}`);
     expect(reworkDanLabel(7.1, 0.5, 4)).toBe(`< LN 13 ${REWORK_DAN_BANDS[0]}`);
-    expect(reworkDanLabel(7.05, 0, 7)).toBe(
-      `< Regular 7 ${REWORK_DAN_BANDS[0]}`,
+    expect(reworkDanLabel(4.3, 0, 7)).toBe(
+      `< Regular 1 ${REWORK_DAN_BANDS[0]}`,
     );
+    expect(reworkDanLabel(7.05, 0, 7)).toBe(`Regular 6++ high`);
   });
 
   test("the open-ended sentinel tier labels with its bare name above 4K high range", () => {
@@ -360,12 +361,12 @@ describe("expandReworkDanMatch", () => {
     expect(expandReworkDanMatch("< Reform 1 low")).toBeNull();
     // Spelled sentinel aliases resolve like any other member.
     expect(expandReworkDanMatch("Over Theta")).toEqual([">θ"]);
-    expect(expandReworkDanMatch("Over Infinity")).toEqual(["Regular >∞"]);
+    expect(expandReworkDanMatch("Over Aeternium")).toEqual(["Regular >∞"]);
     expect(expandReworkDanMatch("zz")).toBeNull();
   });
 
   test("one spelled name spans both key modes safely", () => {
-    expect(expandReworkDanMatch("Zeta")).toEqual([
+    expect(expandReworkDanMatch("ζ")).toEqual([
       "ζ",
       "Regular ζ--",
       "Regular ζ-",
@@ -373,6 +374,9 @@ describe("expandReworkDanMatch", () => {
       "Regular ζ+",
       "Regular ζ++",
     ]);
+    // Key modes diverge on spelled names: 4K uses Zeta, 7K uses Zenith.
+    expect(expandReworkDanMatch("Zeta")).toContain("ζ");
+    expect(expandReworkDanMatch("Regular Zenith")).not.toContain("ζ");
   });
 });
 

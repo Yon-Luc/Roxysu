@@ -30,7 +30,12 @@
         { "name": "LN 16", "id": "LN 16", "floor": 9 },
         { "name": "LN 17", "id": "LN 17", "floor": 9.8 },
         { "name": "LN 18", "id": "LN 18", "floor": 10.5 },
-        { "name": "LN >18", "id": "LN >18", "floor": 11.5, "aliases": ["LN Over18"] }
+        {
+          "name": "LN >18",
+          "id": "LN >18",
+          "floor": 11.5,
+          "aliases": ["LN Over18"]
+        }
       ]
     },
     "7": {
@@ -55,28 +60,58 @@
         { "name": "Regular 10++", "id": "Regular 10", "floor": 8.5 },
         { "name": "Regular γ--", "id": "Regular γ", "floor": 8.6 },
         { "name": "Regular γ-", "id": "Regular γ", "floor": 8.7 },
-        { "name": "Regular γ", "id": "Regular γ", "floor": 8.8, "aliases": ["Regular Gamma", "Gamma", "γ"] },
+        {
+          "name": "Regular γ",
+          "id": "Regular γ",
+          "floor": 8.8,
+          "aliases": ["Regular Gamma", "Gamma", "γ"]
+        },
         { "name": "Regular γ+", "id": "Regular γ", "floor": 8.9 },
         { "name": "Regular γ++", "id": "Regular γ", "floor": 9 },
         { "name": "Regular Ψ--", "id": "Regular Ψ", "floor": 9.1 },
         { "name": "Regular Ψ-", "id": "Regular Ψ", "floor": 9.25 },
-        { "name": "Regular Ψ", "id": "Regular Ψ", "floor": 9.4, "aliases": ["Regular Psi", "Psi", "ψ"] },
+        {
+          "name": "Regular Ψ",
+          "id": "Regular Ψ",
+          "floor": 9.4,
+          "aliases": ["Regular Azimuth", "Azimuth", "ψ"]
+        },
         { "name": "Regular Ψ+", "id": "Regular Ψ", "floor": 9.6 },
         { "name": "Regular Ψ++", "id": "Regular Ψ", "floor": 9.8 },
         { "name": "Regular ζ--", "id": "Regular ζ", "floor": 10.1 },
         { "name": "Regular ζ-", "id": "Regular ζ", "floor": 10.35 },
-        { "name": "Regular ζ", "id": "Regular ζ", "floor": 10.6, "aliases": ["Regular Zeta", "Zeta", "ζ"] },
+        {
+          "name": "Regular ζ",
+          "id": "Regular ζ",
+          "floor": 10.6,
+          "aliases": ["Regular Zenith", "Zenith", "ζ"]
+        },
         { "name": "Regular ζ+", "id": "Regular ζ", "floor": 10.75 },
         { "name": "Regular ζ++", "id": "Regular ζ", "floor": 10.9 },
         { "name": "Regular ★--", "id": "Regular ★", "floor": 11 },
         { "name": "Regular ★-", "id": "Regular ★", "floor": 11.15 },
-        { "name": "Regular ★", "id": "Regular ★", "floor": 11.3, "aliases": ["Regular Star", "Star", "★"] },
+        {
+          "name": "Regular ★",
+          "id": "Regular ★",
+          "floor": 11.3,
+          "aliases": ["Regular Stellium", "Stellium", "★"]
+        },
         { "name": "Regular ★+", "id": "Regular ★", "floor": 11.5 },
         { "name": "Regular ★++", "id": "Regular ★", "floor": 11.7 },
         { "name": "Regular ∞--", "id": "Regular ∞", "floor": 11.9 },
         { "name": "Regular ∞-", "id": "Regular ∞", "floor": 12.1 },
-        { "name": "Regular ∞", "id": "Regular ∞", "floor": 12.3, "aliases": ["Regular Infinity", "Infinity", "∞"] },
-        { "name": "Regular >∞", "id": "Regular >∞", "floor": 13, "aliases": ["Regular Over Infinity", "Over Infinity"] }
+        {
+          "name": "Regular ∞",
+          "id": "Regular ∞",
+          "floor": 12.3,
+          "aliases": ["Regular Aeternium", "Aeternium", "∞"]
+        },
+        {
+          "name": "Regular >∞",
+          "id": "Regular >∞",
+          "floor": 13,
+          "aliases": ["Regular Over Aeternium", "Over Aeternium"]
+        }
       ],
       "ln": []
     }

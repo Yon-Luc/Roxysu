@@ -37,15 +37,6 @@ export type TosuLivePlay = {
   pp: number | null;
 };
 
-export type TosuLiveSunny = {
-  sunnyStar: number | null;
-  estDiff: string | null;
-  lnRatio: number | null;
-  columnCount: number | null;
-  error: string | null;
-  source: "db" | "osu-text";
-};
-
 /** Ephemeral rework (mania-difficulty) estimate for the live map. */
 export type TosuLiveRework = {
   reworkStar: number | null;
@@ -69,7 +60,6 @@ export type TosuLivePattern = {
 };
 
 export type TosuLiveAnalysis = {
-  sunny: TosuLiveSunny | null;
   rework: TosuLiveRework | null;
   pattern: TosuLivePattern | null;
   analyzing: boolean;

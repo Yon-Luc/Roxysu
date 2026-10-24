@@ -26,12 +26,12 @@ The searchable practice catalog — same query language powers collections and g
 ## Business rules
 
 1. Soft-deleted / `delete_pending` **sets** and scores are excluded from product queries; hidden difficulties are excluded via `hidden`.
-2. Query language fields include mode, mapper, title/artist/diff, stars, `ar:` (`approach_rate`), `cs:` (`circle_size`), `od:` (`overall_difficulty`), `hp:` (`drain_rate`), key, ln, dan/sunny, mods, acc, misses, score, pp, retry, mastery, played.
+2. Query language fields include mode, mapper, title/artist/diff, stars, `ar:` (`approach_rate`), `cs:` (`circle_size`), `od:` (`overall_difficulty`), `hp:` (`drain_rate`), key, ln, `dan:` / `rework:` / `reworkstars:`, mods, acc, misses, score, pp, retry, mastery, played. `sunny:`, `daniel:`, `danstars`, and `sunnystars` are removed.
 3. `ar:` / `cs:` / `od:` / `hp:` do not imply a ruleset. `cs:` is circle size on any ruleset, not mania key count (`key:`) and not `pattern:cs` (chart shape chordstream). Download search rejects these four fields.
 4. Boolean `AND` / `OR` / `NOT`, ranges, comparisons, and `^` prefix text matches are supported.
-5. Practice/search HTTP handlers read persisted Sunny dan / pattern rows only. They do not compute missing ratings on the request path. Unrated maps have null labels and miss `dan:` / `rework:` / `pattern:` until the Settings jobs fill the stores. `pattern:speed` and `pattern:jack` match the dominant skill. `pattern:jumpstream`, `pattern:chordstream`, `pattern:chordjack`, `pattern:bracket`, `pattern:handstream`, `pattern:stream`, `pattern:trill`, and `pattern:jumptrill` match chart shape. `pattern:delay` matches stream. A row with a skill and a null shape still matches skill queries; shape queries miss it until the pattern job fills `shape_pattern`.
-6. `dan:` matches a map when either its Sunny label or its Daniel label matches. 4K Sunny tiers are Intro / Reform / LN; 7K Sunny tiers are Regular / LN. A Daniel row on a 4K map does not hide the Sunny tier. `daniel:` matches Daniel labels only. Bare `dan:` / `daniel:` tier names match as label tokens (not unconstrained substrings) and do not match out-of-band sentinels (`< …` / `> …`) unless the query itself starts with `<` or `>`.
-7. Primary dan display on 4K prefers an in-band Daniel label (Alpha+). Out-of-band Daniel sentinels (`< …` / `> …`) fall back to Sunny so Reform / Intro / LN remain visible. **Enforced by:** `primaryDanLabel` / `primaryDanSource` in `apps/server/public/lib/ratingDisplay.ts`.
+5. Practice/search HTTP handlers read persisted rework dan / pattern rows only. They do not compute missing ratings on the request path. Unrated maps have null labels and miss `dan:` / `rework:` / `pattern:` until the Settings jobs fill the stores. `pattern:speed` and `pattern:jack` match the dominant skill. `pattern:jumpstream`, `pattern:chordstream`, `pattern:chordjack`, `pattern:bracket`, `pattern:handstream`, `pattern:stream`, `pattern:trill`, and `pattern:jumptrill` match chart shape. `pattern:delay` matches stream. A row with a skill and a null shape still matches skill queries; shape queries miss it until the pattern job fills `shape_pattern`.
+6. `dan:` is an alias of `rework:`: both match `algorithm = 'mania-difficulty'` labels via `expandReworkDanMatch` on `dr_r`. `axis:` uses rework `ln_ratio` (`dr_r`).
+7. Rating display modes are `osu` | `rework` only. Stored prefs `dan` / `sunny` migrate to `rework`. **Enforced by:** `parseMode` / `primaryDanSource` / `formatPrimaryRating` in `apps/server/public/lib/ratingDisplay.ts`.
 8. Username/gamemode query context is resolved once and reused until settings change or a new import lands. The retry subselect is built only when the AST uses `retry:`.
 9. Play aggregates used by Practice/Search (`play_count`, best accuracy/pp/score/misses, `last_played_at`) are read from the `mastery` row, not rebuilt from `scores` on each request. Mastery must be refreshed by analytics after imports for those fields to stay current.
 10. Ruleset equality filters (`mode:`, `key:`, `ln:`, gamemode clauses) use bare `ruleset_short_name = ?` (lowercase) so SQLite can use `beatmaps_ruleset_cs_idx`. `mode:catch` and `mode:ctb` compile to the stored short name `fruits`.
@@ -60,7 +60,7 @@ practice list / collection match / search
 ## Dependencies
 
 - `features/live-sync/` — practice library content from Realm extraction
-- `features/sunny-dan-recommendations/` — `dan:` / `sunny:` fields when Sunny dan ratings store is populated
+- `features/rework-dan-recommendations/` — `dan:` / `rework:` fields when rework dan rows are populated
 - `features/mastery-settings/` — mastery field values
 
 ## Depended on by

@@ -3,11 +3,9 @@ import { shutdownAnalyticsPipeline } from "./analytics/pipeline";
 import {
   getPatternAnalysisJobStatus,
   getReworkDanJobStatus,
-  stopDanielDanBackfill,
   stopDanVariantJob,
   stopPatternAnalysisBackfill,
   stopReworkDanBackfill,
-  stopSunnyDanBackfill,
 } from "./map-analysis";
 import { getManiaRatingJobStatus, stopManiaRatingBackfill } from "./mania-rating";
 import { stopMirrorBatchJob } from "./mirrors";
@@ -37,8 +35,6 @@ function defaultDeps(db: Db): ShutdownJobsDeps {
     shutdownAnalytics: shutdownAnalyticsPipeline,
     stops: [
       () => stopDanVariantJob(),
-      () => stopSunnyDanBackfill(db),
-      () => stopDanielDanBackfill(db),
       () => stopReworkDanBackfill(db),
       () => stopPatternAnalysisBackfill(db),
       () => stopManiaRatingBackfill(db),

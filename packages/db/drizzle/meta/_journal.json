@@ -218,6 +218,13 @@
       "when": 1788121600000,
       "tag": "0030_import_progress_at",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1788125200000,
+      "tag": "0031_drop_sunny_daniel_ratings",
+      "breakpoints": true
     }
   ]
 }

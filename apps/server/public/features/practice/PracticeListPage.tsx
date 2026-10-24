@@ -179,12 +179,6 @@ export function PracticeListPage() {
   const { dict } = useAppDict();
   const charts = useChartStyles();
   const ratingListLabels = {
-    danielDan: dict?.practice.detail.danielDan ?? "Daniel dan",
-    sunnyDan: dict?.practice.detail.sunnyDan ?? "Sunny dan",
-    danielStar:
-      dict?.settings.ratingDisplay.dan?.labelDanielStar ?? "Daniel star rating",
-    sunnyStar:
-      dict?.settings.ratingDisplay.sunny?.label ?? "Sunny star rating",
     reworkDan:
       dict?.settings.ratingDisplay.rework?.labelReworkDan ?? "Rework dan",
     reworkStar:
@@ -535,11 +529,6 @@ export function PracticeListPage() {
             {list.items.map((item: PracticeItem) => {
               const primarySource = primaryDanSource({
                 mode: ratingMode,
-                keyCount: item.keyCount,
-                danielEstDiff: item.danielEstDiff,
-                danielStar: item.danielStar,
-                sunnyEstDiff: item.sunnyEstDiff,
-                sunnyStar: item.sunnyStar,
                 reworkEstDiff: item.reworkEstDiff,
                 reworkStar: item.reworkStar,
               });
@@ -549,9 +538,7 @@ export function PracticeListPage() {
                 ratingListLabels,
               );
               const danLabel = primaryDanLabel({
-                sunnyEstDiff: item.sunnyEstDiff,
-                danielEstDiff: item.danielEstDiff,
-                keyCount: item.keyCount,
+                reworkEstDiff: item.reworkEstDiff,
               });
 
               return (
@@ -569,8 +556,7 @@ export function PracticeListPage() {
                       className="aspect-[2.2/1] w-full"
                       alt=""
                     />
-                    {(ratingMode === "osu" || ratingMode === "sunny") &&
-                    danLabel ? (
+                    {ratingMode === "osu" && danLabel ? (
                       <span className="absolute bottom-2 left-2 max-w-[calc(100%-1rem)] truncate rounded bg-canvas/85 px-2 py-1 text-[11px] font-semibold leading-none text-ink shadow-sm ring-1 ring-border backdrop-blur-sm">
                         {danLabel}
                       </span>
@@ -603,10 +589,6 @@ export function PracticeListPage() {
                         {formatPrimaryRating({
                           mode: ratingMode,
                           starRating: item.starRating,
-                          sunnyEstDiff: item.sunnyEstDiff,
-                          sunnyStar: item.sunnyStar,
-                          danielEstDiff: item.danielEstDiff,
-                          danielStar: item.danielStar,
                           reworkEstDiff: item.reworkEstDiff,
                           reworkStar: item.reworkStar,
                           lnRatio: item.reworkLnRatio,

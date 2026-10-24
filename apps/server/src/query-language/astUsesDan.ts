@@ -1,15 +1,13 @@
 import type { AstNode } from "./ast";
 
-/** True when the AST references Sunny dan ratings (`dan:` / `sunny:` / `axis:`). */
+/** True when the AST references rework dan ratings (`dan:` / `rework:` / `axis:`). */
 export function astUsesDanRating(node: AstNode): boolean {
   switch (node.type) {
     case "term":
       return (
         node.term.type === "dan" ||
-        node.term.type === "daniel" ||
         node.term.type === "rework" ||
         node.term.type === "reworkstars" ||
-        node.term.type === "sunny" ||
         node.term.type === "axis"
       );
     case "and":

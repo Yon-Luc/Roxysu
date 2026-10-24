@@ -173,10 +173,6 @@ export function CollectionResultsPage({
                       {formatPrimaryRating({
                         mode: ratingMode,
                         starRating: item.starRating,
-                        sunnyEstDiff: item.sunnyEstDiff,
-                        sunnyStar: item.sunnyStar,
-                        danielEstDiff: item.danielEstDiff,
-                        danielStar: item.danielStar,
                         reworkEstDiff: item.reworkEstDiff,
                         reworkStar: item.reworkStar,
                         lnRatio: item.reworkLnRatio,

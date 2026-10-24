@@ -316,6 +316,32 @@ export function reworkDanTierNames(
   return (reworkDanTiersFor(columnCount, kind) ?? []).map((t) => t.name);
 }
 
+/**
+ * Unique base-tier ids for a key count (sub-levels like Regular 7+ collapse
+ * under `id: "Regular 7"`). Used by marathon / recommend tier pickers.
+ */
+export function reworkDanBaseTierNames(
+  columnCount: number,
+  kind: DanTableKind = "rice",
+): string[] {
+  const tiers = reworkDanTiersFor(columnCount, kind) ?? [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const tier of tiers) {
+    const id = tier.id ?? tier.name;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+/** Query-language fragment matching a rework base tier (`dan:` aliases rework). */
+export function reworkDanQueryForTier(tier: string): string {
+  const escaped = tier.replace(/"/g, "");
+  return `dan:"${escaped}"`;
+}
+
 /** Interval containing `sr`, or null when outside the table. */
 export function reworkDanIntervalForStar(
   sr: number,

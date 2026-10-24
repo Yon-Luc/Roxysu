@@ -14,11 +14,6 @@ import {
   resolveScoresUsernames,
   scoresUsernameCondition,
 } from "../analytics/scoreUsername";
-import {
-  getOrComputeSunnyDan,
-  getSunnyDanForPatternMods,
-} from "../map-analysis/computeSunnyDan";
-import { getOrComputeDanielDan } from "../map-analysis/computeDanielDan";
 import { getReworkDan } from "../map-analysis/computeReworkDan";
 import {
   getOrComputePatternAnalysis,
@@ -165,10 +160,6 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
       );
 
       const isMania = beatmap.rulesetShortName === "mania";
-      const is4kMania =
-        isMania &&
-        beatmap.circleSize != null &&
-        Math.round(beatmap.circleSize) === 4;
 
       const [
         recentScores,
@@ -177,8 +168,6 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
         curves,
         masteryRows,
         sessionRows,
-        sunnyDan,
-        danielDan,
         reworkDan,
         patternAnalysis,
         osuLoaded,
@@ -226,10 +215,6 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
           .where(eq(mastery.beatmapId, params.id))
           .limit(1),
         listSessionsForBeatmap(db, params.id, 24),
-        isMania ? getOrComputeSunnyDan(db, params.id) : Promise.resolve(null),
-        is4kMania
-          ? getOrComputeDanielDan(db, params.id)
-          : Promise.resolve(null),
         isMania ? Promise.resolve(getReworkDan(db, params.id)) : Promise.resolve(null),
         isMania
           ? getOrComputePatternAnalysis(db, params.id)
@@ -323,8 +308,6 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
               updatedAt: toIso(masteryRow.updatedAt),
             }
           : null,
-        sunnyDan,
-        danielDan,
         reworkDan,
         patternAnalysis,
         sevenKAnalysis,
@@ -568,69 +551,4 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
       }),
     },
   )
-  .get(
-    "/:id/sunny-dan",
-    async ({ db, params, query, set }) => {
-      const patternMods = parsePatternModQuery(query?.mods);
-      const rawRate = Number(query?.rate);
-      // Modal rate presets run 0.5–1.5; keep a little headroom either way.
-      const speedRate =
-        Number.isFinite(rawRate) && rawRate > 0
-          ? Math.min(3, Math.max(0.5, rawRate))
-          : 1;
-
-      const sunnyDan = await getSunnyDanForPatternMods(db, params.id, {
-        invert: patternMods.invert,
-        holdOff: patternMods.holdOff,
-        speedRate,
-      });
-
-      if (!sunnyDan) {
-        set.status = 404;
-        return { error: "Beatmap not found" };
-      }
-      return { sunnyDan };
-    },
-    {
-      params: t.Object({
-        id: t.String(),
-      }),
-      query: t.Object({
-        mods: t.Optional(t.String()),
-        rate: t.Optional(t.String()),
-      }),
-    },
-  )
-  .post(
-    "/:id/sunny-dan",
-    async ({ db, params, set }) => {
-      const [beatmap] = await db
-        .select({
-          id: beatmaps.id,
-          rulesetShortName: beatmaps.rulesetShortName,
-        })
-        .from(beatmaps)
-        .where(eq(beatmaps.id, params.id))
-        .limit(1);
-
-      if (!beatmap) {
-        set.status = 404;
-        return { error: "Beatmap not found" };
-      }
-
-      if (beatmap.rulesetShortName !== "mania") {
-        set.status = 400;
-        return { error: "Sunny dan is only available for mania maps" };
-      }
-
-      const sunnyDan = await getOrComputeSunnyDan(db, params.id, {
-        force: true,
-      });
-      return { sunnyDan };
-    },
-    {
-      params: t.Object({
-        id: t.String(),
-      }),
-    },
-  );
+;

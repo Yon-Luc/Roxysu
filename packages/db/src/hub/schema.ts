@@ -341,8 +341,6 @@ export type NewSearchIndexDiff = typeof searchIndexDiffs.$inferInsert;
 
 /** Algorithms included in a Hub calc bundle (one bundle per Roxysu version). */
 export const CALC_BUNDLE_ALGORITHMS = [
-  "sunny",
-  "daniel",
   "mania-difficulty",
   "mania-skill-v1",
 ] as const;
@@ -370,7 +368,7 @@ export type NewCalcBundle = typeof calcBundles.$inferInsert;
 
 /**
  * One precomputed dan or pattern row, keyed by beatmap content hash.
- * Dan algorithms fill sunny_* / ln / est_diff; pattern fills skill columns.
+ * Rework dan fills sunny_* / ln / est_diff (column name kept); pattern fills skill columns.
  */
 export const calcBundleEntries = sqliteTable(
   "calc_bundle_entries",

@@ -277,7 +277,7 @@ export function SessionSevenKRecommend({
                 }
                 value={formatSkillRating({
                   mode: ratingMode,
-                  sunnyStar: skill.peakRc,
+                  reworkStar: skill.peakRc,
                   axis: "rc",
                 })}
                 note={bandMapsNote(skill.peakRc, skill.clearRcMaps ?? 0, requiredMaps, dict?.session.focus.push ?? "Push", dict)}
@@ -291,7 +291,7 @@ export function SessionSevenKRecommend({
                 }
                 value={formatSkillRating({
                   mode: ratingMode,
-                  sunnyStar: skill.peakLn,
+                  reworkStar: skill.peakLn,
                   axis: "ln",
                 })}
                 note={bandMapsNote(skill.peakLn, skill.clearLnMaps ?? 0, requiredMaps, dict?.session.focus.push ?? "Push", dict)}
@@ -305,7 +305,7 @@ export function SessionSevenKRecommend({
                 }
                 value={formatSkillRating({
                   mode: ratingMode,
-                  sunnyStar: skill.peakFln,
+                  reworkStar: skill.peakFln,
                   axis: "fln",
                 })}
                 note={bandMapsNote(skill.peakFln, skill.clearFlnMaps ?? 0, requiredMaps, dict?.session.focus.push ?? "Push", dict)}
@@ -319,7 +319,7 @@ export function SessionSevenKRecommend({
                 }
                 value={formatSkillRating({
                   mode: ratingMode,
-                  sunnyStar: skill.accuracyRc,
+                  reworkStar: skill.accuracyRc,
                   axis: "rc",
                 })}
                 note={bandMapsNote(
@@ -339,7 +339,7 @@ export function SessionSevenKRecommend({
                 }
                 value={formatSkillRating({
                   mode: ratingMode,
-                  sunnyStar: skill.accuracyLn,
+                  reworkStar: skill.accuracyLn,
                   axis: "ln",
                 })}
                 note={bandMapsNote(
@@ -359,7 +359,7 @@ export function SessionSevenKRecommend({
                 }
                 value={formatSkillRating({
                   mode: ratingMode,
-                  sunnyStar: skill.accuracyFln,
+                  reworkStar: skill.accuracyFln,
                   axis: "fln",
                 })}
                 note={bandMapsNote(
@@ -378,13 +378,13 @@ export function SessionSevenKRecommend({
           </div>
         ) : null}
 
-        {batch?.needsSunnyBackfill ? (
+        {batch?.needsReworkBackfill ? (
           <p className="text-xs text-warning/90">
             {(() => {
               const parts = (
-                t(dict?.session.needsSunnyBackfill, { keymode: keyCount }) ||
+                t(dict?.session.needsReworkBackfill, { keymode: keyCount }) ||
                 t(
-                  "Some mania maps still need Sunny dan ratings. Run backfill in ⟦SETTINGS⟧ for better {{keymode}}K recommendations.",
+                  "Some mania maps still need Rework dan ratings. Run backfill in ⟦SETTINGS⟧ for better {{keymode}}K recommendations.",
                   { keymode: keyCount },
                 )
               ).split("⟦SETTINGS⟧");
@@ -415,7 +415,7 @@ export function SessionSevenKRecommend({
           {batch?.summary ??
             (t(dict?.session.noRecommendations, { keymode: keyCount }) ||
               t(
-                "No recommendations yet. Play more {{keymode}}K maps or backfill Sunny ratings.",
+                "No recommendations yet. Play more {{keymode}}K maps or backfill Rework ratings.",
                 { keymode: keyCount },
               ))}
         </p>
@@ -425,11 +425,11 @@ export function SessionSevenKRecommend({
             {batch?.summary}
             {batch
               ? ` · ${
-                  t(dict?.session.mapsWithSunny, {
+                  t(dict?.session.mapsWithRework, {
                     count: batch.totalMapsConsidered.toLocaleString(),
                     keymode: keyCount,
                   }) ||
-                  `${batch.totalMapsConsidered.toLocaleString()} ${keyCount}K maps with Sunny`
+                  `${batch.totalMapsConsidered.toLocaleString()} ${keyCount}K maps with Rework`
                 }`
               : ""}
           </p>

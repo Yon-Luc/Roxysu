@@ -15,7 +15,7 @@ touches:
 
 ## Purpose
 
-Per-beatmap deep dive: cover, core stats, recent scores with judgment detail, sessions on that map, mania Sunny/Daniel/Rework estimates, copyable in-game search string, mania pattern detail (chart shape, density over time, hotspots).
+Per-beatmap deep dive: cover, core stats, recent scores with judgment detail, sessions on that map, mania Rework dan estimates, copyable in-game search string, mania pattern detail (chart shape, density over time, hotspots).
 
 ## Business meaning
 
@@ -47,7 +47,7 @@ Mania `GET /api/beatmaps/:id` reads the `.osu` file once for pattern detail. Den
 
 - `features/practice-library/`
 - `features/mastery-settings/` — mastery still exists for Practice library / query language; not shown on Map Page
-- `features/sunny-dan-recommendations/`
+- `features/rework-dan-recommendations/`
 - `features/sessions/`
 
 ## Depended on by

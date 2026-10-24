@@ -174,7 +174,7 @@ export function IdentityElement({
   const beatmap = useLiveBeatmap(ctx.snapshot);
   if (!beatmap) return null;
   const opts = identityOptions(element.options);
-  const sunny = ctx.snapshot?.analysis.sunny ?? null;
+  const rework = ctx.snapshot?.analysis.rework ?? null;
   return (
     <Panel ctx={ctx}>
       <div className="flex items-center gap-3">
@@ -205,10 +205,10 @@ export function IdentityElement({
                   </span>
                 ) : (
                   <span className="font-semibold tabular-nums text-accent">
-                    {sunny?.estDiff ?? ""}
-                    {sunny?.sunnyStar != null
-                      ? ` ${sunny.sunnyStar.toFixed(2)}★`
-                      : sunny?.estDiff
+                    {rework?.estDiff ?? ""}
+                    {rework?.reworkStar != null
+                      ? ` ${rework.reworkStar.toFixed(2)}★`
+                      : rework?.estDiff
                         ? ""
                         : "—"}
                   </span>
@@ -307,16 +307,16 @@ export function PreviewElement({
 
 export function AnalysisElement({ ctx }: { ctx: OverlayElementContext }) {
   const analysis = ctx.snapshot?.analysis ?? null;
-  if (!analysis || (!analysis.sunny && !analysis.pattern)) return null;
-  const sunny = analysis.sunny;
+  if (!analysis || (!analysis.rework && !analysis.pattern)) return null;
+  const rework = analysis.rework;
   const pattern = analysis.pattern;
   return (
     <Panel ctx={ctx}>
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-        {sunny?.estDiff || sunny?.sunnyStar != null ? (
+        {rework?.estDiff || rework?.reworkStar != null ? (
           <span className="text-sm font-semibold text-white overlay-text">
-            {sunny.estDiff ?? ""}
-            {sunny.sunnyStar != null ? ` ${sunny.sunnyStar.toFixed(2)}★` : ""}
+            {rework.estDiff ?? ""}
+            {rework.reworkStar != null ? ` ${rework.reworkStar.toFixed(2)}★` : ""}
           </span>
         ) : null}
         {pattern?.shapePattern ? (
@@ -325,9 +325,9 @@ export function AnalysisElement({ ctx }: { ctx: OverlayElementContext }) {
             {pattern.secondaryShape ? ` + ${pattern.secondaryShape}` : ""}
           </span>
         ) : null}
-        {sunny?.lnRatio != null ? (
+        {rework?.lnRatio != null ? (
           <span className="text-[11px] text-white/55 overlay-text">
-            LN {(sunny.lnRatio * 100).toFixed(0)}%
+            LN {(rework.lnRatio * 100).toFixed(0)}%
           </span>
         ) : null}
       </div>

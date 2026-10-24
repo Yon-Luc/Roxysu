@@ -7,14 +7,7 @@ import {
 } from "@roxysu/session-names";
 import { and, asc, count, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { publish } from "../shared/events";
-import { SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
-import {
-  danielEstDiffSelect,
-  danielStarSelect,
-  reworkEstDiffSelect,
-  reworkLnRatioSelect,
-  reworkStarSelect,
-} from "../map-analysis/danRatingSelect";
+import { REWORK_ALGORITHM } from "../map-analysis/reworkEstimator";
 import {
   resolveScoresGamemode,
   scoresGamemodeCondition,
@@ -598,13 +591,9 @@ export async function listSessionScores(
       keyCount: beatmaps.circleSize,
       setOnlineId: beatmapSets.onlineId,
       backgroundFileHash: beatmaps.backgroundFileHash,
-      sunnyEstDiff: beatmapDanRatings.estDiff,
-      sunnyStar: beatmapDanRatings.sunnyStar,
-      danielEstDiff: danielEstDiffSelect(),
-      danielStar: danielStarSelect(),
-      reworkEstDiff: reworkEstDiffSelect(),
-      reworkStar: reworkStarSelect(),
-      reworkLnRatio: reworkLnRatioSelect(),
+      reworkEstDiff: beatmapDanRatings.estDiff,
+      reworkStar: beatmapDanRatings.sunnyStar,
+      reworkLnRatio: beatmapDanRatings.lnRatio,
     })
     .from(scoreMetrics)
     .innerJoin(scores, eq(scoreMetrics.scoreId, scores.id))
@@ -614,7 +603,7 @@ export async function listSessionScores(
       beatmapDanRatings,
       and(
         eq(beatmapDanRatings.beatmapId, beatmaps.id),
-        eq(beatmapDanRatings.algorithm, SUNNY_ALGORITHM),
+        eq(beatmapDanRatings.algorithm, REWORK_ALGORITHM),
       ),
     )
     .where(

@@ -57,8 +57,6 @@ const SETTINGS_SECTION_KEYS: Record<string, keyof Dictionary["app"]["settings"]>
     "preview-skin": "previewSkin",
     keybinds: "keybinds",
     "mania-rating-lab": "maniaRatingLab",
-    "sunny-dan-calculation": "sunnyDan",
-    "daniel-dan-calculation": "danielDan",
     "pattern-analysis": "patternAnalysis",
   };
 

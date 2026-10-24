@@ -2,7 +2,6 @@
 last_verified: 2026-10
 confidence: verified
 touches:
-  - packages/sunny-dan
   - packages/mania-difficulty
   - packages/mania-pattern-analysis
   - apps/server/src/map-analysis/memoryPressure.ts
@@ -10,13 +9,12 @@ touches:
   - apps/server/src/map-analysis/patternAnalysisJob.ts
   - apps/server/src/map-analysis/computePatternAnalysis.ts
   - apps/desktop/main.js
-  - apps/server/src/map-analysis/sunnyDanJob.ts
+  - apps/server/src/map-analysis/reworkDanJob.ts
   - apps/server/src/map-analysis/computeDanVariants.ts
   - apps/server/src/map-analysis/danVariantJob.ts
   - apps/server/src/analytics/playerStatsCache.ts
   - apps/server/src/routes/settings.ts
   - apps/server/src/map-analysis/computeReworkDan.ts
-  - apps/server/src/map-analysis/reworkDanJob.ts
   - apps/server/src/routes/practice.ts
   - apps/server/src/routes/beatmaps.ts
   - apps/server/public/lib/ratingDisplay.ts
@@ -28,34 +26,29 @@ touches:
   - apps/server/public/features/settings/sections/RecommendFocusSection.tsx
 ---
 
-# Sunny dan & 4K/7K recommendations
+# Rework dan & 4K/7K recommendations
 
 ## Purpose
 
-Parse `.osu` charts from lazer storage, run Sunny Rework–style estimates, persist to the Sunny dan ratings store, expose them in the query language, and power 4K and 7K smart recommendations (Push / Accuracy / Consistency / Deficit / Skillset).
+Parse `.osu` charts from lazer storage, run the mania difficulty port (rework dan), persist to the Dan ratings store, expose them in the query language, and power 4K and 7K smart recommendations (Push / Accuracy / Consistency / Deficit / Skillset).
 
-Three estimators write to the same store, keyed by `algorithm`: `sunny`, `daniel`, and `mania-difficulty` (rework dan). `pattern:` matches either the **dominant skill** or the **chart shape**, both written by algorithm `mania-skill-v1`.
+Product writes use `algorithm = 'mania-difficulty'` (rework dan). Legacy Sunny/Daniel estimator rows are deleted by migration `0031_drop_sunny_daniel_ratings` and are not computed, backfilled, or queried. `pattern:` matches either the **dominant skill** or the **chart shape**, both written by algorithm `mania-skill-v1`.
 
 ## Business rules
 
-1. Estimates live in the Sunny dan ratings store (`beatmap_dan_ratings`); recommendations degrade without backfill.
-2. Backfill is a Settings-started background job (also offered after first sync via the Jobs onboarding modal). Before backfill, boot may gap-fill from a **Hub calc bundle** matching the Roxysu product version. Practice/search list handlers and recommend HTTP handlers do not run Sunny/Daniel/rework/pattern compute on the request path.
+1. Estimates live in the Dan ratings store (`beatmap_dan_ratings`); recommendations degrade without rework backfill.
+2. Rework (and pattern) backfill is a Settings-started background job (also offered after first sync via the Jobs onboarding modal). Before backfill, boot may gap-fill from a **Hub calc bundle** matching the Roxysu product version. Practice/search list handlers and recommend HTTP handlers do not run rework/pattern compute on the request path.
 3. Recommendations and skill estimates are for a single mania keymode (`keyCount`, default 7). 4K and 7K pools are never mixed.
-4. Matching uses Sunny stars for both 4K and 7K. Daniel remains a 4K profile label (Alpha+ only; below/above band → `< …` / `> …` sentinels). `dan:` matches Sunny tiers and Daniel tiers; `daniel:` matches Daniel labels only. A Daniel row does not hide 4K Sunny tiers (Intro / Reform / LN) — primary display falls back to Sunny when Daniel is out of band (`primaryDanLabel`).
-5. Modded plays (speed rate ≠ 1.0 or full-LN Invert) are rated by the **dan difficulty variants** store (`beatmap_dan_rating_variants`), computed lazily per played combo by an import-triggered background job. Skill axes and band plays read variant stars for modded plays; modded plays without a computed variant are excluded from skill until rated. NM-equivalent plays (rate 1.0, no Invert; Mirror/Classic ignored) always read the base store. Rework dan has **no** variant rows.
-6. Both Sunny estimators honor pattern conversions: Daniel applies Invert/Hold Off
-   via the same `OsuFileParser.modIN()` / `modHO()` conversions as Sunny
-   (`calculateDaniel(..., { cvtFlag })`). Single-map read paths (beatmap
-   preview dan chip, tosu live analysis) may compute estimates on request —
-   ephemeral, never persisted; list/recommend handlers still never compute.
-   The rework estimator applies chart conversion before parsing and supports
-   playback rate only.
+4. Product query language and rating display are rework-only: `dan:` aliases `rework:` (mania-difficulty labels via `expandReworkDanMatch`). Rating modes are `osu` | `rework`; legacy `dan`/`sunny` prefs migrate to `rework`. `formatSkillRating` uses `reworkDanLabel`.
+5. Modded plays (speed rate ≠ 1.0 or full-LN Invert) are rated by the **dan difficulty variants** store (`beatmap_dan_rating_variants`), computed for `mania-difficulty` only by an import-triggered background job. Skill axes and band plays read variant stars for modded plays; modded plays without a computed variant are excluded from skill until rated. NM-equivalent plays (rate 1.0, no Invert; Mirror/Classic ignored) always read the base rework row. Recommend / skill / stats analytics join `algorithm = 'mania-difficulty'` only (`needsReworkBackfill`, `reworkStar` / `reworkEstDiff`).
+6. The rework estimator applies chart conversion (Invert) before parsing and
+   supports playback rate. Tosu live analysis may compute rework ephemerally
+   on request (never persisted); list/recommend handlers still never compute.
 7. Rice / LN / FLN **map classification** for recommend, skill, stats mix, and
    `axis:` filters uses user settings (`recommend.ln_ratio_threshold` /
-   `recommend.fln_ratio_threshold`, defaults 0.2 / 0.8). Sunny dan **label
+   `recommend.fln_ratio_threshold`, defaults 0.2 / 0.8). Rework dan **label
    table** selection (RC vs LN) stays at the fixed package constant 0.2 —
-   classification settings do not recompute labels. Rework dan label selection
-   uses the same fixed 0.2 constant.
+   classification settings do not recompute labels.
    **Enforced by:** `readAxisThresholdsSync` / `classifyMapAxis` in
    `apps/server/src/analytics/recommend/axisThresholds.ts` + `axis.ts`.
 8. Push / Accuracy / Consistency / Deficit **focus definitions** (clear-rate
@@ -92,20 +85,20 @@ Three estimators write to the same store, keyed by `algorithm`: `sunny`, `daniel
    a star rating and skill breakdown.
 7. Below the first floor is a `<` sentinel; once past the table, labels come
    from the last tier — an explicit `ceiling` yields a `>` sentinel (same shape
-   as Sunny, so `compileDanMatch` is reused unchanged), an open-ended last tier
-   yields the bare tier name.
+   as legacy dan label matching, so `compileDanMatch` is reused unchanged), an
+   open-ended last tier yields the bare tier name.
 8. Aliases make tiers searchable beyond their literal label: a tier row may
    declare `aliases` — on a base row an alias covers its whole group
    (`rework:Gamma`, `rework:γ` and `rework:Regular Gamma` all match every
    `Regular γ*` label on both key modes). `expandReworkDanMatch()` resolves a
-   token to concrete tier names; `rework:` uses it and falls back to generic
-   label-token matching for sentinel lookups and unresolved values. `dan:` /
-   `daniel:` stay un-resolved (Sunny/Daniel labels are already spelled out).
+   token to concrete tier names; `dan:` and `rework:` both use it and fall back
+   to generic label-token matching for sentinel lookups and unresolved values.
+   Legacy `sunny:`, `daniel:`, `danstars`, and `sunnystars` fields are removed.
 9. Editing `dans.json` does **not** require re-estimation. `relabelReworkDanSync()`
    recomputes labels from stored stars; exposed as `POST /api/settings/rework-dan/relabel`
    and run automatically when the job starts with nothing missing.
-10. `rework:` matches only `algorithm = 'mania-difficulty'` rows; `dan:` matches
-   Sunny and Daniel only. The two never mix.
+10. `dan:` and `rework:` both match only `algorithm = 'mania-difficulty'` rows
+   (`dr_r`). `axis:` uses rework `ln_ratio`.
 11. The mania difficulty port pin is `packages/mania-difficulty/upstream/revision.json`
    (`loleur362/osu` branch `mania-difficulty`, currently `1859fda`, whose skill
    curves use 100% accuracy as the base difficulty). A new pin changes star ratings.
@@ -130,7 +123,7 @@ Three estimators write to the same store, keyed by `algorithm`: `sunny`, `daniel
    reads `getReworkDan` (persisted only; no on-request compute). **tosu live**
    analysis computes an ephemeral rework estimate (`analysis.rework`, rate via
    `clockRate` only) so Current session **Now selected** and the `/now-selected`
-   page show Rework dan when that display mode is selected — not Sunny dan.
+   page show Rework dan when that display mode is selected.
 
 ## Performance rules
 
@@ -192,9 +185,8 @@ Three estimators write to the same store, keyed by `algorithm`: `sunny`, `daniel
       `--max-old-space-size` to "fix" this — it only moves the crash and can
       hand the machine to the kernel OOM killer.
     - Paused jobs set status `paused` and re-check every 5 s, resuming on their
-      own. Wired into the rework, Sunny, Daniel and pattern jobs; the rework and
-      pattern jobs check between maps via `shouldContinue`, the Sunny/Daniel
-      jobs between batches. The dan variant job pauses the same way (status
+      own. Wired into the rework and pattern jobs; both check between maps via
+      `shouldContinue`. The dan variant job pauses the same way (status
       `paused`, 5 s poll) and also checks before every combo (rule 14). A backfill must never be the process that pushes a
       busy desktop into swap exhaustion — the OOM killer then takes arbitrary
       processes (observed: it killed the terminal, not the server). The Settings
@@ -250,16 +242,13 @@ old non-yielding loop).
 
 ## Important symbols
 
-- `packages/sunny-dan`
 - `packages/mania-difficulty` — port + `dans.json` + `skills.ts` + `skillProfile.ts`
-- `apps/server/src/map-analysis/sunnyDanJob.ts`
 - `apps/server/src/map-analysis/memoryPressure.ts` — OS headroom **and** V8 heap ratio; `BACKFILL_MIN_HEADROOM_MB`, `BACKFILL_MAX_HEAP_RATIO`
 - `apps/server/src/map-analysis/jobYield.ts` — per-map yield + forced collection (`Bun.gc`, else `global.gc`)
 - `packages/mania-pattern-analysis/src/analyze.ts:analyzeManiaBackfillFromOsuText` — chart-level only, no timeline
 - `apps/server/src/map-analysis/computePatternAnalysis.ts:backfillPatternAnalysis` — async, yields per map, honours `shouldContinue`
 - `apps/server/src/map-analysis/computeDanVariants.ts` — combo collection, backfill, variant lookups
-- `apps/server/src/map-analysis/danVariantJob.ts` — post-import incremental job (memory-guarded, per-combo yield; invalidates the player stats cache after writing rows; also one-time recompute of pre-conversion Daniel variant rows, settings flag `dan_variants.daniel_cvt_recompute`)
-- `apps/server/src/map-analysis/computeSunnyDan.ts:getSunnyDanForPatternMods` — mod-aware single-map reads
+- `apps/server/src/map-analysis/danVariantJob.ts` — post-import incremental job (memory-guarded, per-combo yield; invalidates the player stats cache after writing rows)
 - `apps/server/src/map-analysis/reworkEstimator.ts:analyzeManiaOnceFromText` — single pass, both stores
 - `apps/server/src/map-analysis/reworkEstimator.ts:runReworkEstimatorFromText` — dan only, no profile
 - `apps/server/src/map-analysis/computeReworkDan.ts` — persistence + `relabelReworkDanSync`
@@ -267,14 +256,13 @@ old non-yielding loop).
 - `resolveDanVariant()` / `danVariantKey()` — `packages/mania-judge`
 - `apps/server/src/analytics/recommend/*`
 - `GET /api/practice/recommend` — optional `keyCount` (default 7)
-- `GET /api/beatmaps/:id/sunny-dan?mods=&rate=` — mod-aware preview dan
 - `GET|POST /api/settings/rework-dan{,/start,/stop,/relabel,/recompute}`
 
 ## Dependencies
 
 - `features/mastery-settings/` — job controls, Jobs chrome, first-sync onboarding
 - `features/hub/` — Hub calc bundle pull before local backfill
-- `features/practice-library/` — `dan:` / `sunny:` / `rework:` / `pattern:` query language fields
+- `features/practice-library/` — `dan:` / `rework:` / `pattern:` query language fields
 - `packages/osu-chart`
 - `packages/mania-difficulty`
 
@@ -287,7 +275,7 @@ old non-yielding loop).
 
 ## Related knowledge
 
-- [vocabulary.md](../../vocabulary.md) — Sunny dan ratings store, Rework dan, Dominant skill, Mania difficulty port, Hub calc bundle
-- [flows/sunny-backfill-to-recommend.md](../../flows/sunny-backfill-to-recommend.md)
+- [vocabulary.md](../../vocabulary.md) — Dan ratings store, Rework dan, Dominant skill, Mania difficulty port, Hub calc bundle
+- [flows/rework-backfill-to-recommend.md](../../flows/rework-backfill-to-recommend.md)
 - [flows/hub-calc-bundle-pull.md](../../flows/hub-calc-bundle-pull.md)
 - [decisions/hub-calc-bundle-version.md](../../decisions/hub-calc-bundle-version.md)

@@ -3,126 +3,61 @@ import { compileQuery } from "./compile";
 import { parseQuery } from "./parse";
 
 describe("dan tier compile", () => {
-  test("Regular 1 does not match Regular 10 labels", () => {
+  test("Regular 1 expands to Regular 1 / 1+ / 1++ without Regular 10", () => {
     const { sql, params } = compileQuery(parseQuery('dan:"Regular 1"'));
-    expect(sql).toContain("dr.est_diff");
-    expect(params).toEqual(expect.arrayContaining(["%Regular 1 %", "Regular 1"]));
-
-    const matches = (label: string) => {
-      const lower = label.toLowerCase();
-      return lower.includes("regular 1 ") || lower === "regular 1";
-    };
-
-    expect(matches("Regular 1 mid")).toBe(true);
-    expect(matches("Regular 10 mid")).toBe(false);
+    expect(sql).toContain("dr_r.est_diff");
+    expect(params).toEqual([
+      "Regular 1",
+      "Regular 1 %",
+      "Regular 1+",
+      "Regular 1+ %",
+      "Regular 1++",
+      "Regular 1++ %",
+    ]);
+    expect(params).not.toContain("Regular 10");
+    expect(params).not.toContain("Regular 10 %");
   });
 
-  test("LN 1 does not match LN 10 labels", () => {
-    const { params } = compileQuery(parseQuery('dan:"LN 1"'));
-    expect(params).toEqual(expect.arrayContaining(["%LN 1 %", "LN 1"]));
-
-    const matches = (label: string) => {
-      const lower = label.toLowerCase();
-      return lower.includes("ln 1 ") || lower === "ln 1";
-    };
-
-    expect(matches("LN 1 high")).toBe(true);
-    expect(matches("LN 10 high")).toBe(false);
+  test("LN 1 falls back to tier-safe label matching", () => {
+    const { params, sql } = compileQuery(parseQuery('dan:"LN 1"'));
+    expect(sql).toContain("dr_r.est_diff");
+    expect(params).toEqual(["%LN 1 %", "LN 1"]);
   });
 
-  test("bare dan:Regular matches Regular bands via token patterns", () => {
+  test("bare dan:Regular falls back to token patterns", () => {
     const { params, sql } = compileQuery(parseQuery("dan:Regular"));
-    expect(params).toEqual(
-      expect.arrayContaining(["Regular", "Regular %", "% Regular %", "% Regular"]),
-    );
+    expect(sql).toContain("dr_r.est_diff");
+    expect(params).toEqual([
+      "Regular",
+      "Regular %",
+      "% Regular %",
+      "% Regular",
+    ]);
     expect(sql).toContain("NOT LIKE '<%'");
   });
 
-  test("4K Reform tiers match Sunny labels, not only Daniel", () => {
-    const { sql, params } = compileQuery(parseQuery('dan:"Reform 5"'));
-    expect(sql).toContain("dr.est_diff");
-    expect(sql).toContain("dr_d.est_diff");
-    expect(params).toEqual(
-      expect.arrayContaining(["%Reform 5 %", "Reform 5"]),
-    );
-  });
-
-  test("dan:Alpha matches Alpha bands but not under-band sentinel", () => {
-    const { params, sql } = compileQuery(parseQuery("dan:Alpha"));
-    expect(params).toEqual(
-      expect.arrayContaining(["Alpha", "Alpha %", "% Alpha %", "% Alpha"]),
-    );
-    expect(sql).toContain("NOT LIKE '<%'");
-    expect(sql).toContain("NOT LIKE '>%'");
-
-    const matches = (label: string) => {
-      const lower = label.toLowerCase();
-      if (lower.startsWith("<") || lower.startsWith(">")) return false;
-      return (
-        lower === "alpha" ||
-        lower.startsWith("alpha ") ||
-        lower.includes(" alpha ") ||
-        lower.endsWith(" alpha")
-      );
-    };
-
-    expect(matches("Alpha Low")).toBe(true);
-    expect(matches("Alpha mid")).toBe(true);
-    expect(matches("Alpha mid/high")).toBe(true);
-    expect(matches("< Alpha Low")).toBe(false);
-  });
-
-  test("daniel:Alpha excludes under-band sentinel", () => {
-    const { sql } = compileQuery(parseQuery("daniel:Alpha"));
-    expect(sql).toContain("dr_d.est_diff");
+  test("dan:Alpha matches only the rework label column", () => {
+    const { sql, params } = compileQuery(parseQuery("dan:Alpha"));
+    expect(sql).toContain("dr_r.est_diff");
     expect(sql).not.toContain("dr.est_diff");
-    expect(sql).toContain("NOT LIKE '<%'");
+    expect(sql).not.toContain("dr_d.est_diff");
+    expect(params).toEqual(["α", "α %"]);
   });
 
-  test("dan:Theta excludes over-band sentinel", () => {
-    const matches = (label: string) => {
-      const lower = label.toLowerCase();
-      if (lower.startsWith("<") || lower.startsWith(">")) return false;
-      return (
-        lower === "theta" ||
-        lower.startsWith("theta ") ||
-        lower.includes(" theta ") ||
-        lower.endsWith(" theta")
-      );
-    };
-    expect(matches("CloverWisp Theta High")).toBe(true);
-    expect(matches("> CloverWisp Theta High")).toBe(false);
-  });
-
-  test("dan:Gamma still matches Regular Gamma and bare Gamma", () => {
-    const matches = (label: string) => {
-      const lower = label.toLowerCase();
-      if (lower.startsWith("<") || lower.startsWith(">")) return false;
-      return (
-        lower === "gamma" ||
-        lower.startsWith("gamma ") ||
-        lower.includes(" gamma ") ||
-        lower.endsWith(" gamma")
-      );
-    };
-    expect(matches("Gamma mid")).toBe(true);
-    expect(matches("Regular Gamma low")).toBe(true);
-    expect(matches("LN Gamma high")).toBe(true);
-  });
-
-  test("dan:Zeta matches Emik Zeta bands", () => {
-    const matches = (label: string) => {
-      const lower = label.toLowerCase();
-      if (lower.startsWith("<") || lower.startsWith(">")) return false;
-      return (
-        lower === "zeta" ||
-        lower.startsWith("zeta ") ||
-        lower.includes(" zeta ") ||
-        lower.endsWith(" zeta")
-      );
-    };
-    expect(matches("Emik Zeta Low")).toBe(true);
-    expect(matches("Emik Zeta mid/high")).toBe(true);
+  test("dan:Gamma spans every γ sub-level like rework:", () => {
+    const { sql, params } = compileQuery(parseQuery("dan:Gamma"));
+    expect(sql).toContain("dr_r.est_diff");
+    expect(sql).toContain("OR");
+    for (const expected of [
+      "γ",
+      "γ %",
+      "Regular γ--",
+      "Regular γ-- %",
+      "Regular γ++",
+      "Regular γ++ %",
+    ]) {
+      expect(params).toContain(expected);
+    }
   });
 });
 
@@ -139,12 +74,12 @@ describe("LIKE wildcard escaping", () => {
 });
 
 describe("axis thresholds", () => {
-  test("axis:ln uses [ln, fln) bounds", () => {
+  test("axis:ln uses [ln, fln) bounds on rework ln_ratio", () => {
     const { sql, params } = compileQuery(parseQuery("axis:ln"), {
       axisThresholds: { ln: 0.25, fln: 0.7 },
     });
-    expect(sql).toContain("dr.ln_ratio >=");
-    expect(sql).toContain("dr.ln_ratio <");
+    expect(sql).toContain("dr_r.ln_ratio >=");
+    expect(sql).toContain("dr_r.ln_ratio <");
     expect(params).toEqual([0.25, 0.7]);
   });
 
@@ -191,13 +126,9 @@ describe("rework dan fields", () => {
     expect(params).toContain("Regular γ-- %");
   });
 
-  test("rework:Zeta matches 4K and 7K zeta without crossing tiers", () => {
+  test("rework:Zeta matches the ζ group", () => {
     const { params } = compileQuery(parseQuery("rework:Zeta"));
-    expect(params).toContain("ζ");
-    expect(params).toContain("Regular ζ--");
-    // tier safety: no partial suffix numerics
-    expect(params).toContain("Regular ζ-- %");
-    expect(new Set(params).size).toBe(params.length);
+    expect(params).toEqual(["ζ", "ζ %"]);
   });
 
   test("rework:LN 14 keeps the tier-number guard", () => {
@@ -232,19 +163,20 @@ describe("rework dan fields", () => {
     expect(cmp.params).toEqual([10]);
   });
 
-  test("rework fields never read the sunny or daniel columns", () => {
-    for (const query of ["rework:Eta", "reworkstars:5..6"]) {
+  test("rework fields never read sunny or daniel algorithm joins", () => {
+    for (const query of ["rework:Eta", "reworkstars:5..6", "dan:Alpha"]) {
       const { sql } = compileQuery(parseQuery(query));
       expect(sql).not.toContain("dr.sunny_star");
       expect(sql).not.toContain("dr_d.sunny_star");
       expect(sql).not.toContain("dr.est_diff");
+      expect(sql).not.toContain("dr_d.est_diff");
     }
   });
 
-  test("dan: still searches sunny and daniel only", () => {
-    const { sql } = compileQuery(parseQuery("dan:Alpha"));
-    expect(sql).toContain("dr.est_diff");
-    expect(sql).toContain("dr_d.est_diff");
-    expect(sql).not.toContain("dr_r.est_diff");
+  test("dan: compiles like rework:", () => {
+    const dan = compileQuery(parseQuery("dan:Alpha"));
+    const rework = compileQuery(parseQuery("rework:Alpha"));
+    expect(dan.sql).toBe(rework.sql);
+    expect(dan.params).toEqual(rework.params);
   });
 });

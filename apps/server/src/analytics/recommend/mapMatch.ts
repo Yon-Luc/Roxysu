@@ -6,12 +6,12 @@ import {
 } from "./axisThresholds";
 import { skillForAxis } from "./sevenKSkill";
 
-const BASE_SUNNY_WEIGHT = 0.6;
+const BASE_REWORK_WEIGHT = 0.6;
 const PERFORMANCE_WEIGHT = 0.4;
 
 export type CandidateMap = {
   id: string;
-  sunnyStar: number;
+  reworkStar: number;
   lnRatio: number | null;
   bestAccuracy: number | null;
   playCount: number;
@@ -20,7 +20,7 @@ export type CandidateMap = {
 
 /**
  * Performance adjustment from best accuracy on the map (Companella-style).
- * High acc → slightly easier than Sunny suggests; low acc → slightly harder.
+ * High acc → slightly easier than rework ★ suggests; low acc → slightly harder.
  * Accuracy is stored 0–1.
  */
 function performanceAdjustment(
@@ -39,7 +39,7 @@ function confidenceFor(
   skill: SevenKSkillProfile,
 ): number {
   let confidence = 0;
-  if (map.sunnyStar > 0) confidence += 0.4;
+  if (map.reworkStar > 0) confidence += 0.4;
   if (map.playCount > 0) {
     confidence += Math.min(0.3, map.playCount * 0.1);
   }
@@ -49,7 +49,7 @@ function confidenceFor(
 }
 
 /**
- * Map-MMR analogue: hybrid Sunny difficulty + personal performance tweak.
+ * Map-MMR analogue: hybrid rework difficulty + personal performance tweak.
  * relativeDifficulty = mmr / playerSkill (1.0 = at level).
  */
 export function calculateMapMatch(
@@ -64,10 +64,10 @@ export function calculateMapMatch(
       ? targetSkillset
       : classifyMapAxis(map.lnRatio, thresholds);
 
-  const baseSunny = map.sunnyStar;
+  const baseRework = map.reworkStar;
   const adjustment = performanceAdjustment(map.bestAccuracy, map.playCount);
-  const adjusted = baseSunny + adjustment;
-  const mmr = baseSunny * BASE_SUNNY_WEIGHT + adjusted * PERFORMANCE_WEIGHT;
+  const adjusted = baseRework + adjustment;
+  const mmr = baseRework * BASE_REWORK_WEIGHT + adjusted * PERFORMANCE_WEIGHT;
 
   const playerSkill = skillForAxis(skill, axis, skillMode);
   const relativeDifficulty =
@@ -78,7 +78,7 @@ export function calculateMapMatch(
     mmr,
     relativeDifficulty,
     confidence: confidenceFor(map, skill),
-    sunnyStar: baseSunny,
+    reworkStar: baseRework,
     lnRatio: map.lnRatio,
     axis,
     bestAccuracy: map.bestAccuracy,

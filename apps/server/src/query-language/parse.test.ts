@@ -10,7 +10,7 @@ describe("looksLikeQuery", () => {
     expect(looksLikeQuery("acc>98")).toBe(true);
     expect(looksLikeQuery("key=7")).toBe(true);
     expect(looksLikeQuery("ln<10")).toBe(true);
-    expect(looksLikeQuery("sunny>7")).toBe(true);
+    expect(looksLikeQuery("reworkstars>7")).toBe(true);
     expect(looksLikeQuery("ar>9")).toBe(true);
     expect(looksLikeQuery("cs=4")).toBe(true);
     expect(looksLikeQuery("od>=8")).toBe(true);
@@ -86,17 +86,13 @@ describe("parseQuery", () => {
       type: "term",
       term: { type: "dan", value: "Regular 4", prefix: false },
     });
-    expect(parseQuery("sunny:5..6")).toEqual({
+    expect(parseQuery("reworkstars:5..6")).toEqual({
       type: "term",
-      term: { type: "sunny", min: 5, max: 6 },
+      term: { type: "reworkstars", min: 5, max: 6 },
     });
-    expect(parseQuery("sunny>7")).toEqual({
+    expect(parseQuery("reworkstars>7")).toEqual({
       type: "term",
-      term: { type: "sunny", op: ">", value: 7 },
-    });
-    expect(parseQuery("danstars>=8")).toEqual({
-      type: "term",
-      term: { type: "sunny", op: ">=", value: 8 },
+      term: { type: "reworkstars", op: ">", value: 7 },
     });
     expect(parseQuery("pattern:jack")).toEqual({
       type: "term",
@@ -292,21 +288,26 @@ describe("compileQuery", () => {
     expect(compiled.params).toEqual(["mania", 10]);
   });
 
-  test("compiles dan label token match against sunny and daniel ratings", () => {
-    const ast = parseQuery("dan:Reform");
+  test("compiles dan label match against rework ratings", () => {
+    const ast = parseQuery("dan:Alpha");
     const compiled = compileQuery(ast);
-    expect(compiled.sql).toContain("dr.est_diff");
-    expect(compiled.sql).toContain("dr_d.est_diff");
-    expect(compiled.sql).toContain("LIKE");
-    expect(compiled.sql).toContain("NOT LIKE '<%'");
-    const tokenParams = ["Reform", "Reform %", "% Reform %", "% Reform"];
-    expect(compiled.params).toEqual([...tokenParams, ...tokenParams]);
+    expect(compiled.sql).toContain("dr_r.est_diff");
+    expect(compiled.sql).not.toContain("dr.est_diff");
+    expect(compiled.sql).not.toContain("dr_d.est_diff");
+    expect(compiled.params).toEqual(["α", "α %"]);
   });
 
-  test("compiles sunny star range", () => {
-    const ast = parseQuery("sunny:5..6");
+  test("rejects removed sunny and daniel fields", () => {
+    expect(() => parseQuery("sunny:5..6")).toThrow(QueryParseError);
+    expect(() => parseQuery("daniel:Alpha")).toThrow(QueryParseError);
+    expect(() => parseQuery("danstars:8")).toThrow(QueryParseError);
+    expect(() => parseQuery("sunnystars:7")).toThrow(QueryParseError);
+  });
+
+  test("compiles reworkstars range", () => {
+    const ast = parseQuery("reworkstars:5..6");
     const compiled = compileQuery(ast);
-    expect(compiled.sql).toContain("dr.sunny_star");
+    expect(compiled.sql).toContain("dr_r.sunny_star");
     expect(compiled.sql).toContain("BETWEEN");
     expect(compiled.params).toEqual([5, 6]);
   });
@@ -332,20 +333,20 @@ describe("compileQuery", () => {
     ]);
   });
 
-  test("compiles axis rc against sunny ln_ratio", () => {
+  test("compiles axis rc against rework ln_ratio", () => {
     const ast = parseQuery("key=7 axis:rc pattern:jack");
     const compiled = compileQuery(ast);
-    expect(compiled.sql).toContain("dr.ln_ratio");
+    expect(compiled.sql).toContain("dr_r.ln_ratio");
     expect(compiled.sql).toContain("pa.dominant_pattern");
     expect((compiled.sql.match(/\?/g) ?? []).length).toBe(compiled.params.length);
     expect(compiled.params).toEqual(["mania", 7, 0.2, "%jack%", "%jack%"]);
   });
 
-  test("compiles axis ln against sunny ln_ratio", () => {
+  test("compiles axis ln against rework ln_ratio", () => {
     const ast = parseQuery("axis:ln");
     const compiled = compileQuery(ast);
-    expect(compiled.sql).toContain("dr.ln_ratio >=");
-    expect(compiled.sql).toContain("dr.ln_ratio <");
+    expect(compiled.sql).toContain("dr_r.ln_ratio >=");
+    expect(compiled.sql).toContain("dr_r.ln_ratio <");
     expect(compiled.params).toEqual([0.2, 0.8]);
   });
 

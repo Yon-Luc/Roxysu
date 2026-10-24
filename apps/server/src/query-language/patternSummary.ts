@@ -1,7 +1,7 @@
 
 import { isShapeLabel } from "@roxysu/mania-difficulty";
 import type { Db } from "@roxysu/db/types";
-import { SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
+import { REWORK_ALGORITHM } from "../map-analysis/reworkEstimator";
 import { PATTERN_ALGORITHM } from "@roxysu/mania-pattern-analysis";
 import {
   DEFAULT_AXIS_THRESHOLDS,
@@ -134,8 +134,9 @@ const SELECT_COLS = `
   m.best_misses AS bestMisses,
   m.last_played_at AS lastPlayedAt,
   m.level AS masteryLevel,
-  dr.est_diff AS sunnyEstDiff,
-  dr.sunny_star AS sunnyStar
+  dr.est_diff AS reworkEstDiff,
+  dr.sunny_star AS reworkStar,
+  dr.ln_ratio AS reworkLnRatio
 `;
 
 function maniaKeymodeWhere(keymode: PatternKeymode): string {
@@ -193,8 +194,9 @@ function mapSampleRow(r: PracticeCardRow): PracticeCardRow {
     bestScore: r.bestScore != null ? Number(r.bestScore) : null,
     bestMisses: r.bestMisses != null ? Number(r.bestMisses) : null,
     masteryLevel: r.masteryLevel != null ? Number(r.masteryLevel) : null,
-    sunnyEstDiff: r.sunnyEstDiff ?? null,
-    sunnyStar: r.sunnyStar != null ? Number(r.sunnyStar) : null,
+    reworkEstDiff: r.reworkEstDiff ?? null,
+    reworkStar: r.reworkStar != null ? Number(r.reworkStar) : null,
+    reworkLnRatio: r.reworkLnRatio != null ? Number(r.reworkLnRatio) : null,
     keyCount: r.keyCount != null ? Number(r.keyCount) : null,
   };
 }
@@ -244,7 +246,7 @@ function buildPatternsForCounts(
       `,
       )
       .all(
-        SUNNY_ALGORITHM,
+        REWORK_ALGORITHM,
         PATTERN_ALGORITHM,
         pattern,
         pattern,
@@ -327,7 +329,7 @@ export function practicePatternSummary(
         ${axisFilter}
     `,
           )
-          .get(SUNNY_ALGORITHM, ...axisParams) as { n: number });
+          .get(REWORK_ALGORITHM, ...axisParams) as { n: number });
 
   const analyzedRow = db.$client
     .query(
@@ -345,7 +347,7 @@ export function practicePatternSummary(
         ${axisFilter}
     `,
     )
-    .get(SUNNY_ALGORITHM, PATTERN_ALGORITHM, ...axisParams) as { n: number };
+    .get(REWORK_ALGORITHM, PATTERN_ALGORITHM, ...axisParams) as { n: number };
 
   const countRows = db.$client
     .query(
@@ -416,16 +418,16 @@ export function practicePatternSummary(
     `,
     )
     .all(
-      SUNNY_ALGORITHM,
+      REWORK_ALGORITHM,
       PATTERN_ALGORITHM,
       ...axisParams,
-      SUNNY_ALGORITHM,
+      REWORK_ALGORITHM,
       PATTERN_ALGORITHM,
       ...axisParams,
-      SUNNY_ALGORITHM,
+      REWORK_ALGORITHM,
       PATTERN_ALGORITHM,
       ...axisParams,
-      SUNNY_ALGORITHM,
+      REWORK_ALGORITHM,
       PATTERN_ALGORITHM,
       ...axisParams,
     ) as Array<{

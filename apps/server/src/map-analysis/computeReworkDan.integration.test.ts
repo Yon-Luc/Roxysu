@@ -201,25 +201,25 @@ describe("relabelReworkDanSync", () => {
     expect(relabelReworkDanSync(db)).toBe(0);
   });
 
-  test("never touches sunny or daniel rows", () => {
+  test("never touches other algorithm rows", () => {
     db.$client
       .query(
         `INSERT INTO beatmap_dan_ratings (
            beatmap_id, algorithm, sunny_star, ln_ratio, column_count,
            est_diff, error, updated_at
-         ) VALUES (?, 'sunny', 4.2, 0, 4, 'Reform 1 low', NULL, ?)`,
+         ) VALUES (?, 'other-algo', 4.2, 0, 4, 'keep me', NULL, ?)`,
       )
       .run(MAP_4K, Date.now());
 
     relabelReworkDanSync(db);
 
-    const sunny = db.$client
+    const other = db.$client
       .query(
         `SELECT est_diff AS estDiff FROM beatmap_dan_ratings
-         WHERE beatmap_id = ? AND algorithm = 'sunny'`,
+         WHERE beatmap_id = ? AND algorithm = 'other-algo'`,
       )
       .get(MAP_4K) as { estDiff: string };
-    expect(sunny.estDiff).toBe("Reform 1 low");
+    expect(other.estDiff).toBe("keep me");
   });
 });
 

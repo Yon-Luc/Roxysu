@@ -3,7 +3,7 @@
 import type { Db } from "@roxysu/db/types";
 import { beatmaps } from "@roxysu/db/schema";
 import { and, count, eq, sql } from "drizzle-orm";
-import { SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
+import { REWORK_ALGORITHM } from "../map-analysis/reworkEstimator";
 import {
   danVariantKey,
   resolveDanVariant,
@@ -147,7 +147,7 @@ function listPlayedKeyCounts(db: Db, user: ScoreScope): number[] {
 
 /**
  * Compact per-play input for skill history and skillset mix: non-hidden plays
- * of mapped beatmaps, with the base Sunny rating joined. Everything else a play
+ * of mapped beatmaps, with the base rework rating joined. Everything else a play
  * contributes (summary, rank mix, play-time, progression, mapper ranks) is
  * folded into running aggregates while the rows stream, so the full row set is
  * never held in memory.
@@ -157,7 +157,7 @@ type PlayCandidate = {
   mods: string | null;
   accuracy: number;
   playedAt: number;
-  sunnyStar: number | null;
+  reworkStar: number | null;
   lnRatio: number | null;
 };
 
@@ -171,7 +171,7 @@ type StreamedManiaRow = {
   rank: number;
   rulesetShortName: string | null;
   lnRatio: number | null;
-  sunnyStar: number | null;
+  reworkStar: number | null;
   mapperOnlineId: number | null;
   mapperUsername: string | null;
   hidden: number;
@@ -222,7 +222,7 @@ function streamManiaPass(
         s.rank AS rank,
         s.ruleset_short_name AS rulesetShortName,
         dr.ln_ratio AS lnRatio,
-        dr.sunny_star AS sunnyStar,
+        dr.sunny_star AS reworkStar,
         b.mapper_online_id AS mapperOnlineId,
         b.mapper_username AS mapperUsername,
         b.hidden AS hidden
@@ -256,7 +256,7 @@ function streamManiaPass(
     candidates: [],
   };
 
-  for (const raw of stmt.iterate(SUNNY_ALGORITHM, ...user.params, keyCount)) {
+  for (const raw of stmt.iterate(REWORK_ALGORITHM, ...user.params, keyCount)) {
     const row = raw as StreamedManiaRow;
     pass.summary.scoreCount += 1;
     if (row.beatmapId) maps.add(row.beatmapId);
@@ -307,7 +307,7 @@ function streamManiaPass(
         mods: row.mods,
         accuracy,
         playedAt: Number(row.playedAt ?? 0),
-        sunnyStar: row.sunnyStar,
+        reworkStar: row.reworkStar,
         lnRatio: row.lnRatio,
       });
     }
@@ -343,7 +343,7 @@ function loadDanVariantLookup(
       plays.filter((p) => resolveDanVariant(p.mods)).map((p) => p.beatmapId),
     ),
   ];
-  const ratings = loadDanVariantRatingsSync(db, beatmapIds, SUNNY_ALGORITHM);
+  const ratings = loadDanVariantRatingsSync(db, beatmapIds, REWORK_ALGORITHM);
   return (play) => {
     const variant = resolveDanVariant(play.mods);
     if (!variant) return null;
@@ -360,10 +360,10 @@ function danRatingFor(
 ): { star: number; lnRatio: number } | null {
   const variant = variantOf(play);
   if (variant) return variant;
-  // NM-equivalent play: read the base Sunny ratings store.
+  // NM-equivalent play: read the base rework ratings store.
   if (resolveDanVariant(play.mods)) return null;
-  if (play.sunnyStar == null || play.lnRatio == null) return null;
-  return { star: Number(play.sunnyStar), lnRatio: Number(play.lnRatio) };
+  if (play.reworkStar == null || play.lnRatio == null) return null;
+  return { star: Number(play.reworkStar), lnRatio: Number(play.lnRatio) };
 }
 
 /**
@@ -587,7 +587,7 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
       beatmapId: play.beatmapId,
       accuracy: play.accuracy,
       playedAt: play.playedAt,
-      sunnyStar: rating.star,
+      reworkStar: rating.star,
       lnRatio: rating.lnRatio,
     });
   }

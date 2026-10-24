@@ -27,11 +27,11 @@ function AxisCell({
       <div className="text-faint">{label}</div>
       <div
         className={`mt-0.5 font-semibold tabular-nums text-ink ${
-          mode === "dan" ? "text-[11px] leading-tight" : ""
+          mode === "rework" ? "text-[11px] leading-tight" : ""
         }`}
       >
         {hasEstimate
-          ? formatSkillRating({ mode, sunnyStar: value, axis })
+          ? formatSkillRating({ mode, reworkStar: value, axis })
           : "—"}
       </div>
       <div className="text-[10px] text-faint">
@@ -111,13 +111,13 @@ export function SkillCard({
       </div>
       <div
         className={`mt-2 font-bold tabular-nums text-ink ${
-          mode === "dan" ? "text-xl leading-snug" : "text-3xl"
+          mode === "rework" ? "text-xl leading-snug" : "text-3xl"
         }`}
       >
         {hasEstimate
           ? formatSkillRating({
               mode,
-              sunnyStar: value,
+              reworkStar: value,
               axis: skillRatingAxis(axis),
             })
           : "—"}

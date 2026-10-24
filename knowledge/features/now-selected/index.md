@@ -38,7 +38,7 @@ While song-selecting or playing, open **Now selected** (optionally `#/now-select
 9. Focus layout (`?focus=1`) hides AppShell chrome (sidebar, mobile nav) for a second monitor. While no map is selected, connection status and Start tosu share one panel. Live play shows combo, accuracy, misses, and PP as separate figures.
 10. Personal play count / best accuracy / best PP use `GET /api/beatmaps/:id/stats`, not the full practice-profile payload.
 11. Live play ticks patch the tosu live query cache (`tosu.updated` `reason: play`). HTTP poll of `GET /api/tosu/live` runs only when SSE is down.
-12. The rating widget follows Settings difficulty display (`roxysu:rating-display`): `rework` shows ephemeral `analysis.rework` (Rework dan + ★); other modes keep Sunny/Daniel from `analysis.sunny`. Same rule on the Current session **Now selected** panel.
+12. The analysis rating widget shows ephemeral `analysis.rework` (Rework dan + ★). Same content on the Current session **Now selected** panel.
 
 ## Security rules
 

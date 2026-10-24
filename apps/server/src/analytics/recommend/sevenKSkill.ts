@@ -2,6 +2,7 @@
 import type { Db } from "@roxysu/db/types";
 import { resolveDanVariant, danVariantKey } from "../../replay/mods";
 import { loadDanVariantRatingsSync } from "../../map-analysis/computeDanVariants";
+import { REWORK_ALGORITHM } from "../../map-analysis/reworkEstimator";
 import {
   resolveScoresGamemodeSync,
   scoresGamemodeSql,
@@ -41,13 +42,13 @@ export type SkillPlayRow = {
   beatmapId: string;
   accuracy: number;
   playedAt: number;
-  sunnyStar: number | null;
+  reworkStar: number | null;
   lnRatio: number | null;
 };
 
 type ClearMapRow = {
   beatmapId: string;
-  sunnyStar: number;
+  reworkStar: number;
   lnRatio: number | null;
   bandPlays: number;
   avgBandAcc: number;
@@ -198,7 +199,7 @@ export function parseSkillKeyCount(raw: unknown): number {
 
 type PlayLike = Pick<
   SkillPlayRow,
-  "beatmapId" | "accuracy" | "playedAt" | "sunnyStar"
+  "beatmapId" | "accuracy" | "playedAt" | "reworkStar"
 >;
 
 /** Keep a single best score per beatmap (highest ★, then acc, then newest). */
@@ -210,8 +211,8 @@ export function bestPlayPerMap<T extends PlayLike>(plays: T[]): T[] {
       byMap.set(play.beatmapId, play);
       continue;
     }
-    const playStar = play.sunnyStar ?? 0;
-    const existingStar = existing.sunnyStar ?? 0;
+    const playStar = play.reworkStar ?? 0;
+    const existingStar = existing.reworkStar ?? 0;
     const better =
       playStar > existingStar ||
       (playStar === existingStar &&
@@ -224,7 +225,7 @@ export function bestPlayPerMap<T extends PlayLike>(plays: T[]): T[] {
 }
 
 /**
- * Highest Sunny maps in an accuracy band (one best play per map).
+ * Highest rework ★ maps in an accuracy band (one best play per map).
  * When `accCeil` is set, the band is closed: `[accFloor, accCeil)`.
  * When omitted, only the floor applies (legacy ≥ floor).
  */
@@ -239,8 +240,8 @@ export function topPlaysInBand(
   return bestPlayPerMap(
     plays.filter(
       (p) =>
-        p.sunnyStar != null &&
-        p.sunnyStar > 0 &&
+        p.reworkStar != null &&
+        p.reworkStar > 0 &&
         p.accuracy >= accFloor &&
         (accCeil == null || p.accuracy < accCeil) &&
         (axis == null || classifyMapAxis(p.lnRatio, thresholds) === axis),
@@ -248,7 +249,7 @@ export function topPlaysInBand(
   )
     .sort(
       (a, b) =>
-        b.sunnyStar! - a.sunnyStar! ||
+        b.reworkStar! - a.reworkStar! ||
         b.accuracy - a.accuracy ||
         b.playedAt - a.playedAt ||
         a.beatmapId.localeCompare(b.beatmapId),
@@ -256,14 +257,14 @@ export function topPlaysInBand(
     .slice(0, topN);
 }
 
-/** Top Sunny-rated plays across all accuracy bands (one play per map). */
+/** Top rework-rated plays across all accuracy bands (one play per map). */
 function topRatedPlays(plays: SkillPlayRow[], topN: number): SkillPlayRow[] {
   return bestPlayPerMap(
-    plays.filter((p) => p.sunnyStar != null && p.sunnyStar > 0),
+    plays.filter((p) => p.reworkStar != null && p.reworkStar > 0),
   )
     .sort(
       (a, b) =>
-        b.sunnyStar! - a.sunnyStar! ||
+        b.reworkStar! - a.reworkStar! ||
         b.accuracy - a.accuracy ||
         b.playedAt - a.playedAt ||
         a.beatmapId.localeCompare(b.beatmapId),
@@ -282,7 +283,7 @@ function aggregateAccBandMaps(
   const byMap = new Map<
     string,
     {
-      sunnyStar: number;
+      reworkStar: number;
       lnRatio: number | null;
       bandPlays: number;
       accSum: number;
@@ -291,12 +292,12 @@ function aggregateAccBandMaps(
   >();
 
   for (const play of plays) {
-    if (play.sunnyStar == null || !(play.sunnyStar > 0)) continue;
+    if (play.reworkStar == null || !(play.reworkStar > 0)) continue;
     if (play.accuracy < accMin || play.accuracy >= accMax) continue;
     const existing = byMap.get(play.beatmapId);
     if (!existing) {
       byMap.set(play.beatmapId, {
-        sunnyStar: play.sunnyStar,
+        reworkStar: play.reworkStar,
         lnRatio: play.lnRatio,
         bandPlays: 1,
         accSum: play.accuracy,
@@ -314,7 +315,7 @@ function aggregateAccBandMaps(
 
   return [...byMap.entries()].map(([beatmapId, row]) => ({
     beatmapId,
-    sunnyStar: row.sunnyStar,
+    reworkStar: row.reworkStar,
     lnRatio: row.lnRatio,
     bandPlays: row.bandPlays,
     avgBandAcc: row.accSum / row.bandPlays,
@@ -323,7 +324,7 @@ function aggregateAccBandMaps(
 }
 
 /**
- * Average Sunny of top plays in an accuracy band on an axis.
+ * Average rework ★ of top plays in an accuracy band on an axis.
  * Weight: closeness to band center × mild recency.
  */
 function clearLevelFromPlays(
@@ -348,12 +349,12 @@ function clearLevelFromPlays(
 
   const points: Array<{ value: number; weight: number }> = [];
   for (const play of filtered) {
-    if (play.sunnyStar == null || !(play.sunnyStar > 0)) continue;
+    if (play.reworkStar == null || !(play.reworkStar > 0)) continue;
     const accDist = Math.abs(play.accuracy - accCenter);
     const accProximity = Math.max(0.35, 1 - accDist / Math.max(halfWidth, 0.01));
     const recency = 0.5 + 0.5 * ((play.playedAt - oldest) / span);
     const weight = accProximity * recency;
-    points.push({ value: play.sunnyStar, weight });
+    points.push({ value: play.reworkStar, weight });
   }
 
   return {
@@ -410,16 +411,16 @@ function coldStartFromPlays(
 ): SevenKSkillProfile {
   const byMap = new Map<
     string,
-    { bestAccuracy: number; sunnyStar: number; lnRatio: number | null }
+    { bestAccuracy: number; reworkStar: number; lnRatio: number | null }
   >();
 
   for (const play of plays) {
-    if (play.sunnyStar == null || !(play.sunnyStar > 0)) continue;
+    if (play.reworkStar == null || !(play.reworkStar > 0)) continue;
     const existing = byMap.get(play.beatmapId);
     if (!existing || play.accuracy > existing.bestAccuracy) {
       byMap.set(play.beatmapId, {
         bestAccuracy: play.accuracy,
-        sunnyStar: play.sunnyStar,
+        reworkStar: play.reworkStar,
         lnRatio: play.lnRatio,
       });
     }
@@ -436,7 +437,7 @@ function coldStartFromPlays(
 
   for (const row of rows) {
     const weight = Math.max(0.05, accuracyWeight(row.bestAccuracy));
-    const point = { value: row.sunnyStar, weight };
+    const point = { value: row.reworkStar, weight };
     allPoints.push(point);
     const axis = classifyMapAxis(row.lnRatio, thresholds);
     if (axis === "fln") flnPoints.push(point);
@@ -472,7 +473,7 @@ function coldStartFromPlays(
   });
 }
 
-/** Cold start: best-acc weighted Sunny on played maps for one keymode. */
+/** Cold start: best-acc weighted rework ★ on played maps for one keymode. */
 function coldStartFromMastery(
   db: Db,
   keyCount: number,
@@ -484,11 +485,11 @@ function coldStartFromMastery(
       SELECT
         m.best_accuracy AS bestAccuracy,
         COALESCE(m.play_count, 0) AS playCount,
-        dr.sunny_star AS sunnyStar,
+        dr.sunny_star AS reworkStar,
         dr.ln_ratio AS lnRatio
       FROM beatmaps b
       JOIN beatmap_dan_ratings dr
-        ON dr.beatmap_id = b.id AND dr.algorithm = 'sunny'
+        ON dr.beatmap_id = b.id AND dr.algorithm = ?
       LEFT JOIN mastery m ON m.beatmap_id = b.id
       LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
       WHERE b.hidden = 0
@@ -502,10 +503,10 @@ function coldStartFromMastery(
       LIMIT 80
     `,
     )
-    .all(keyCount) as Array<{
+    .all(REWORK_ALGORITHM, keyCount) as Array<{
     bestAccuracy: number | null;
     playCount: number;
-    sunnyStar: number;
+    reworkStar: number;
     lnRatio: number | null;
   }>;
 
@@ -515,11 +516,11 @@ function coldStartFromMastery(
   const allPoints: Array<{ value: number; weight: number }> = [];
 
   for (const row of rows) {
-    const sunny = Number(row.sunnyStar);
-    if (!Number.isFinite(sunny) || sunny <= 0) continue;
+    const star = Number(row.reworkStar);
+    if (!Number.isFinite(star) || star <= 0) continue;
     const acc = Number(row.bestAccuracy ?? 0);
     const weight = Math.max(0.05, accuracyWeight(acc));
-    const point = { value: sunny, weight };
+    const point = { value: star, weight };
     allPoints.push(point);
     const axis = classifyMapAxis(
       row.lnRatio != null ? Number(row.lnRatio) : null,
@@ -596,7 +597,7 @@ function applyBandLevels(
 
 /**
  * Pure skill estimate from an in-memory play list.
- * Comfort and band levels use the top {@link DEFAULT_SKILL_TOP_PLAYS} Sunny-rated plays
+ * Comfort and band levels use the top {@link DEFAULT_SKILL_TOP_PLAYS} rework-rated plays
  * (configurable via {@link topPlays}).
  */
 export function estimateSevenKSkillFromPlays(
@@ -649,9 +650,9 @@ export function estimateSevenKSkillFromPlays(
     focus.accuracy.accMax,
   );
 
-  const withSunny = topRatedPlays(filtered, topN);
+  const withRework = topRatedPlays(filtered, topN);
 
-  if (withSunny.length < MIN_PLAYS_FOR_SKILL) {
+  if (withRework.length < MIN_PLAYS_FOR_SKILL) {
     const fromPlays = coldStartFromPlays(filtered, thresholds);
     if (fromPlays.overall > 0) {
       return applyBandLevels(fromPlays, clear, farm, acc, topN);
@@ -663,7 +664,7 @@ export function estimateSevenKSkillFromPlays(
       }
     }
     return emptySkill({
-      samplePlays: withSunny.length,
+      samplePlays: withRework.length,
       clearRcMaps: clear.rc.playCount,
       clearLnMaps: clear.ln.playCount,
       clearFlnMaps: clear.fln.playCount,
@@ -676,17 +677,17 @@ export function estimateSevenKSkillFromPlays(
     });
   }
 
-  const total = withSunny.length;
+  const total = withRework.length;
   const rcPoints: Array<{ value: number; weight: number }> = [];
   const lnPoints: Array<{ value: number; weight: number }> = [];
   const flnPoints: Array<{ value: number; weight: number }> = [];
   const allPoints: Array<{ value: number; weight: number }> = [];
 
-  for (let i = 0; i < withSunny.length; i++) {
-    const play = withSunny[i]!;
+  for (let i = 0; i < withRework.length; i++) {
+    const play = withRework[i]!;
     const recencyWeight = Math.pow(RECENCY_DECAY, total - i - 1);
     const combined = recencyWeight * accuracyWeight(play.accuracy);
-    const point = { value: play.sunnyStar!, weight: combined };
+    const point = { value: play.reworkStar!, weight: combined };
     allPoints.push(point);
     const axis = classifyMapAxis(play.lnRatio, thresholds);
     if (axis === "fln") flnPoints.push(point);
@@ -708,7 +709,7 @@ export function estimateSevenKSkillFromPlays(
       rc: comfortRc,
       ln: comfortLn,
       fln: comfortFln,
-      samplePlays: withSunny.length,
+      samplePlays: withRework.length,
       rcPlays: rcPoints.length,
       lnPlays: lnPoints.length,
       flnPlays: flnPoints.length,
@@ -722,9 +723,9 @@ export function estimateSevenKSkillFromPlays(
 }
 
 /**
- * Load mania plays for a single keymode with existing Sunny ratings only.
+ * Load mania plays for a single keymode with existing rework ratings only.
  * Does not compute missing ratings — callers that need ratings should
- * run the Sunny job / pipeline separately.
+ * run the rework job / pipeline separately.
  */
 export function loadSevenKPlays(
   db: Db,
@@ -740,13 +741,13 @@ export function loadSevenKPlays(
         s.accuracy AS accuracy,
         s.played_at AS playedAt,
         s.mods AS mods,
-        dr.sunny_star AS sunnyStar,
+        dr.sunny_star AS reworkStar,
         dr.ln_ratio AS lnRatio
       FROM scores s
       JOIN beatmaps b ON b.id = s.beatmap_id
       LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
       LEFT JOIN beatmap_dan_ratings dr
-        ON dr.beatmap_id = b.id AND dr.algorithm = 'sunny'
+        ON dr.beatmap_id = b.id AND dr.algorithm = ?
       WHERE s.delete_pending = 0
         ${user.sql}
         ${mode.sql}
@@ -758,12 +759,12 @@ export function loadSevenKPlays(
       ORDER BY s.played_at DESC
     `,
     )
-    .all(...user.params, ...mode.params, keyCount) as Array<{
+    .all(REWORK_ALGORITHM, ...user.params, ...mode.params, keyCount) as Array<{
     beatmapId: string;
     accuracy: number;
     playedAt: number;
     mods: string | null;
-    sunnyStar: number | null;
+    reworkStar: number | null;
     lnRatio: number | null;
   }>;
 
@@ -772,25 +773,25 @@ export function loadSevenKPlays(
   const variantRatings = loadDanVariantRatingsSync(
     db,
     [...new Set(rows.map((r) => r.beatmapId))],
-    "sunny",
+    REWORK_ALGORITHM,
   );
 
   const out: SkillPlayRow[] = [];
   for (const r of rows) {
-    let sunnyStar = r.sunnyStar != null ? Number(r.sunnyStar) : null;
+    let reworkStar = r.reworkStar != null ? Number(r.reworkStar) : null;
     let lnRatio = r.lnRatio != null ? Number(r.lnRatio) : null;
     const variant = resolveDanVariant(r.mods);
     if (variant) {
       const stored = variantRatings.get(danVariantKey(r.beatmapId, variant));
       if (!stored) continue;
-      sunnyStar = stored.star;
+      reworkStar = stored.star;
       lnRatio = stored.lnRatio;
     }
     out.push({
       beatmapId: r.beatmapId,
       accuracy: Number(r.accuracy ?? 0),
       playedAt: Number(r.playedAt ?? 0),
-      sunnyStar,
+      reworkStar,
       lnRatio,
     });
   }
@@ -800,11 +801,11 @@ export function loadSevenKPlays(
 /**
  * Estimate mania skill for one keymode:
  * - comfort (overall/rc/ln/fln): recent plays, recency × acc weight
- * - peak*: average Sunny of maps in the configured Push clear-rate band
- * - accuracy*: average Sunny of maps in the configured Accuracy band
- * - consistency*: average Sunny of maps in the configured Consistency band
+ * - peak*: average rework ★ of maps in the configured Push clear-rate band
+ * - accuracy*: average rework ★ of maps in the configured Accuracy band
+ * - consistency*: average rework ★ of maps in the configured Consistency band
  *
- * Uses cached Sunny ratings only (no request-path backfill).
+ * Uses cached rework ratings only (no request-path backfill).
  */
 export function estimateSevenKSkill(
   db: Db,
@@ -919,7 +920,7 @@ function skillHistoryFromPlays(
 
 /**
  * Skill evolution series: one estimate per day or week end, from a single play load.
- * Uses cached Sunny ratings only (no request-path backfill).
+ * Uses cached rework ratings only (no request-path backfill).
  */
 export function estimateSevenKSkillHistory(
   db: Db,
@@ -951,7 +952,7 @@ export function estimateSevenKSkillWithHistoryFromPlays(
 }
 
 /**
- * Current skill + history from one keymode play load (no Sunny backfill).
+ * Current skill + history from one keymode play load (no rework backfill).
  */
 export function estimateSevenKSkillWithHistory(
   db: Db,

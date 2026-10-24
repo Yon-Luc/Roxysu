@@ -105,9 +105,9 @@ export function HubAdminCalcBundlesPage() {
           <GoBackLink to="/hub">Community</GoBackLink>
           <PageTitle>Hub calc bundles</PageTitle>
           <p className="text-sm text-muted">
-            Publish Sunny / Daniel / Rework dan and dominant-skill rows from
-            this machine for a Roxysu product version. Clients pull the bundle
-            matching their version on boot.
+            Publish Rework dan and dominant-skill rows from this machine for a
+            Roxysu product version. Clients pull the bundle matching their
+            version on boot.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

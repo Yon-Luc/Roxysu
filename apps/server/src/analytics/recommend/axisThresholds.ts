@@ -3,10 +3,7 @@ import {
   RECOMMEND_FLN_RATIO_THRESHOLD_KEY,
   RECOMMEND_LN_RATIO_THRESHOLD_KEY,
 } from "@roxysu/db/settings-keys";
-import {
-  FLN_RATIO_THRESHOLD,
-  LN_DAN_RATIO_THRESHOLD,
-} from "../../map-analysis/estDiff";
+import { REWORK_LN_RATIO_THRESHOLD } from "@roxysu/mania-difficulty";
 
 /** Rice / LN / FLN classification boundaries (ln_ratio 0–1). */
 export type AxisThresholds = {
@@ -16,9 +13,12 @@ export type AxisThresholds = {
   fln: number;
 };
 
+/** Full-LN axis boundary (recommend / skill classification; not dan labeling). */
+const DEFAULT_FLN_RATIO_THRESHOLD = 0.8;
+
 export const DEFAULT_AXIS_THRESHOLDS: AxisThresholds = {
-  ln: LN_DAN_RATIO_THRESHOLD,
-  fln: FLN_RATIO_THRESHOLD,
+  ln: REWORK_LN_RATIO_THRESHOLD,
+  fln: DEFAULT_FLN_RATIO_THRESHOLD,
 };
 
 const MIN_THRESHOLD = 0.01;

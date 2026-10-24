@@ -17,7 +17,7 @@ import {
   SCORES_USERNAME_FILTER_KEY,
 } from "@roxysu/db/settings-keys";
 import type { Db } from "../db-runtime";
-import { SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
+import { REWORK_ALGORITHM } from "../map-analysis/reworkEstimator";
 import { LAZER_MASTER_VERSION } from "../mania-rating/registry";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -114,7 +114,7 @@ export async function seedStatsFixture(
     if (isMania && i % 5 !== 4) {
       ratingRows.push({
         beatmapId: id,
-        algorithm: SUNNY_ALGORITHM,
+        algorithm: REWORK_ALGORITHM,
         sunnyStar: 3 + (i % 7) + rnd(),
         lnRatio: rnd(),
         estDiff: "x",

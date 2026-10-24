@@ -19,10 +19,10 @@ At-a-glance view of your library: indexed score/beatmap counts, sync status, the
 Browse every map you’ve played as practice cards — play count, best accuracy, misses, PP, mastery, and last played. Filter with plain text or the query language; sort by last played, accuracy, misses, score, PP, mastery, or stars. Click distribution chart bars to refine filters.
 
 ### Practice profiles
-Per-beatmap deep dive: cover art, stats, mastery, recent scores, sessions on that map, and (for mania) Sunny dan estimates. Copy a search string for use in-game.
+Per-beatmap deep dive: cover art, stats, mastery, recent scores, sessions on that map, and (for mania) Rework dan estimates. Copy a search string for use in-game.
 
 ### Sessions
-Scores are auto-grouped into sessions by inactivity gaps. Browse past sessions, or open the live **current session** hub (SSE-updated as new plays land). Under **Suggest maps**, switch between **Up Next** (query-language accuracy/staleness filters) and **7K recommendations** (Sunny skill estimate with Push / Consistency / Deficit / Skillset). Run Sunny dan backfill in Settings first for best 7K results.
+Scores are auto-grouped into sessions by inactivity gaps. Browse past sessions, or open the live **current session** hub (SSE-updated as new plays land). Under **Suggest maps**, switch between **Up Next** (query-language accuracy/staleness filters) and **7K recommendations** (Rework skill estimate with Push / Consistency / Deficit / Skillset). Run Rework dan backfill in Settings first for best 7K results.
 
 ### Smart collections
 Collections are saved query strings, not static lists — they stay up to date as your library grows. Create, delete, and paginate match results. Use **Sync to osu!lazer** (Collections page) to push them into lazer as `!Roxysu {name}` collections — close lazer first; Roxysu backs up `client.realm` before writing.
@@ -34,7 +34,7 @@ One DSL powers practice search, collections, and global search:
 | --- | --- |
 | `mode`, `mapper`, `title`, `artist`, `diff` | `mode:mania`, `title:^SL_5` |
 | `stars`, `key`, `ln` | `stars:5..6`, `key=7`, `ln<10` |
-| `dan`, `sunny` / `danstars` | `dan:"Regular 4"`, `sunny:5..6` |
+| `dan` / `rework` / `reworkstars` | `dan:"Regular 4"`, `rework:5..6` |
 | `mods`, `acc`, `misses`, `score`, `pp` | `acc>98`, `mods:DT` |
 | `retry`, `mastery`, `played` | `mastery>80`, `played:never` |
 
@@ -51,13 +51,13 @@ acc:90..93 NOT played:last14d
 ```
 
 ### Mastery & settings
-Mastery levels blend best accuracy, play count, and PP across your library (recomputed by the analytics pipeline). Prefer **osu! stars**, **Sunny dan** labels, or **Sunny rework stars** for rating display. Kick off a background Sunny dan backfill for mania maps from Settings.
+Mastery levels blend best accuracy, play count, and PP across your library (recomputed by the analytics pipeline). Prefer **osu! stars** or **Rework dan** for rating display. Kick off a background Rework dan backfill for mania maps from Settings.
 
 ### Live sync
 A separate process continuously mirrors `client.realm` into local SQLite. In Settings you can opt in to pause sync when the browser tab is unfocused (off by default), so lazer isn’t fighting for the Realm file during score submission. The UI shows Synced / Syncing / Paused / Failed and updates over SSE.
 
-### Mania Sunny dan
-Parses `.osu` files from lazer storage, runs a Sunny Rework–style estimate, caches dan labels and Sunny stars, and makes them queryable (`dan:`, `sunny:`, `key=`, `ln`). **7K smart recommendations** depend on these cached ratings — kick off a background Sunny dan backfill from Settings so skill estimates and ranked picks have enough data.
+### Mania Rework dan
+Parses `.osu` files from lazer storage, runs the mania difficulty port, caches dan labels and rework stars, and makes them queryable (`dan:`, `rework:`, `reworkstars:`, `key=`, `ln`). **7K smart recommendations** depend on these cached ratings — kick off a background Rework dan backfill from Settings so skill estimates and ranked picks have enough data.
 
 ---
 

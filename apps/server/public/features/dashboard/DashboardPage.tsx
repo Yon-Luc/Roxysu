@@ -285,10 +285,6 @@ export function DashboardPage() {
                             {formatPrimaryRating({
                               mode: ratingMode,
                               starRating: score.starRating,
-                              sunnyEstDiff: score.sunnyEstDiff,
-                              sunnyStar: score.sunnyStar,
-                              danielEstDiff: score.danielEstDiff,
-                              danielStar: score.danielStar,
                               reworkEstDiff: score.reworkEstDiff,
                               reworkStar: score.reworkStar,
                               lnRatio: score.reworkLnRatio,

@@ -46,7 +46,7 @@ function escapeLikeLiteral(value: string): string {
 }
 
 /**
- * Match Sunny/Daniel dan labels without crossing tiers — "Regular 1" must not match "Regular 10".
+ * Match rework dan labels without crossing tiers — "Regular 1" must not match "Regular 10".
  * Bare names (Alpha, Gamma, …) match as label tokens, not unconstrained substrings, so
  * `dan:Alpha` hits "Alpha Low" but not the out-of-band sentinel "< Alpha Low".
  */
@@ -225,24 +225,11 @@ function compileTerm(
       const since = Date.now() - term.days * 24 * 60 * 60 * 1000;
       return `(m.last_played_at IS NOT NULL AND m.last_played_at >= ${push(since)})`;
     }
-    case "dan": {
-      // Sunny tiers (4K Reform/LN/Intro, 7K Regular/LN) stay searchable even
-      // when a 4K map also has a Daniel label. daniel: is Daniel-only.
-      const sunny = compileDanMatch(term.value, term.prefix, push, "dr.est_diff");
-      const daniel = compileDanMatch(
-        term.value,
-        term.prefix,
-        push,
-        "dr_d.est_diff",
-      );
-      return `(${sunny} OR ${daniel})`;
-    }
-    case "daniel":
-      return compileDanMatch(term.value, term.prefix, push, "dr_d.est_diff");
+    case "dan":
     case "rework": {
-      // Alias/ name first: spellings like "Gamma" or "Zeta" resolve to the
+      // Alias/name first: spellings like "Gamma" or "Zeta" resolve to the
       // concrete tier groups of `dans.json`; anything unresolvable keeps the
-      // generic label-token matching.
+      // generic label-token matching. `dan:` is an alias of `rework:`.
       const members = expandReworkDanMatch(String(term.value));
       if (members != null) {
         // Labels are always "{tier} {band}" or a bare sentinel name, so
@@ -270,15 +257,6 @@ function compileTerm(
       }
       return "dr_r.sunny_star IS NOT NULL";
     }
-    case "sunny": {
-      if (term.min != null && term.max != null) {
-        return `dr.sunny_star BETWEEN ${push(term.min)} AND ${push(term.max)}`;
-      }
-      if (term.op != null && term.value != null) {
-        return `dr.sunny_star ${term.op} ${push(term.value)}`;
-      }
-      return "dr.sunny_star IS NOT NULL";
-    }
     case "pattern": {
       const pattern = likePattern(term.value, term.prefix);
       const primaryPat = push(pattern);
@@ -296,12 +274,12 @@ function compileTerm(
     }
     case "axis": {
       if (term.value === "fln") {
-        return `(dr.ln_ratio IS NOT NULL AND dr.ln_ratio >= ${push(thresholds.fln)})`;
+        return `(dr_r.ln_ratio IS NOT NULL AND dr_r.ln_ratio >= ${push(thresholds.fln)})`;
       }
       if (term.value === "ln") {
-        return `(dr.ln_ratio IS NOT NULL AND dr.ln_ratio >= ${push(thresholds.ln)} AND dr.ln_ratio < ${push(thresholds.fln)})`;
+        return `(dr_r.ln_ratio IS NOT NULL AND dr_r.ln_ratio >= ${push(thresholds.ln)} AND dr_r.ln_ratio < ${push(thresholds.fln)})`;
       }
-      return `(dr.ln_ratio IS NOT NULL AND dr.ln_ratio < ${push(thresholds.ln)})`;
+      return `(dr_r.ln_ratio IS NOT NULL AND dr_r.ln_ratio < ${push(thresholds.ln)})`;
     }
     case "grade": {
       const userFilter = (alias: string) => {

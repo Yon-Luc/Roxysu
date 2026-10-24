@@ -79,7 +79,7 @@ describe("reconcile deletes with foreign keys enforced (F-012)", () => {
     db.insert(beatmapDanRatingVariants)
       .values({
         beatmapId: beatmapId(2),
-        algorithm: "daniel",
+        algorithm: "mania-difficulty",
         rate: 1,
         lnOnly: false,
         updatedAt: now,

@@ -9,7 +9,7 @@ import { pushToast } from "../../lib/toasts";
 
 /**
  * After the first meaningful sync, explain dan/pattern backfills and offer
- * to start Sunny + Daniel + Rework (pattern included via rework).
+ * to start Rework (pattern included via the rework path / separate job).
  */
 export function JobsOnboardingModal() {
   const queryClient = useQueryClient();
@@ -57,7 +57,7 @@ export function JobsOnboardingModal() {
         pushToast({
           tone: "success",
           title: "Jobs started",
-          detail: "Sunny, Daniel, and Rework dan are running in the background.",
+          detail: "Rework dan is running in the background.",
           action: {
             label: "Open Jobs",
             onClick: () => {
@@ -93,10 +93,10 @@ export function JobsOnboardingModal() {
           Analyze your maps?
         </h2>
         <p className="mt-2 text-sm text-muted">
-          Roxysu can estimate Sunny dan, Daniel dan, Rework dan, and dominant
-          skill for your mania library. This runs in the background, pauses
-          automatically when memory is low, and may use precomputed results
-          from the Hub for this app version when available.
+          Roxysu can estimate Rework dan and dominant skill for your mania
+          library. This runs in the background, pauses automatically when
+          memory is low, and may use precomputed results from the Hub for this
+          app version when available.
         </p>
         <p className="mt-2 text-sm text-muted">
           You can start or stop these anytime from Settings → Jobs.

@@ -38,13 +38,13 @@ export function pickCandidatesInRange(
   );
   if (playerSkill <= 0) return { rows: [], matches: [] };
 
-  const targetSunny = playerSkill * opts.targetRatio;
-  const minSunny = Math.max(0, targetSunny * (1 - opts.tolerance));
-  const maxSunny = targetSunny * (1 + opts.tolerance);
+  const targetRework = playerSkill * opts.targetRatio;
+  const minRework = Math.max(0, targetRework * (1 - opts.tolerance));
+  const maxRework = targetRework * (1 + opts.tolerance);
 
   const filter = buildBaseKeymodeFilter(
-    minSunny,
-    maxSunny,
+    minRework,
+    maxRework,
     opts.axis,
     opts.overlaySql,
     opts.overlayParams,
@@ -70,14 +70,14 @@ export function pickCandidatesInRange(
   }> = [];
 
   for (const row of rows) {
-    if (row.sunnyStar == null || row.sunnyStar <= 0) continue;
+    if (row.reworkStar == null || row.reworkStar <= 0) continue;
     if (opts.axis && !mapMatchesAxis(row.lnRatio, opts.axis, thresholds))
       continue;
 
     const match = calculateMapMatch(
       {
         id: row.id,
-        sunnyStar: row.sunnyStar,
+        reworkStar: row.reworkStar,
         lnRatio: row.lnRatio,
         bestAccuracy: row.bestAccuracy,
         playCount: row.playCount,

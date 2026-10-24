@@ -74,10 +74,6 @@ function mapCard(r: {
   bestMisses: number | null;
   lastPlayedAt: number | Date | null;
   masteryLevel?: number | null;
-  sunnyEstDiff?: string | null;
-  sunnyStar?: number | null;
-  danielEstDiff?: string | null;
-  danielStar?: number | null;
   reworkEstDiff?: string | null;
   reworkStar?: number | null;
   reworkLnRatio?: number | null;
@@ -102,10 +98,6 @@ function mapCard(r: {
     bestMisses: r.bestMisses ?? null,
     lastPlayedAt: toIso(r.lastPlayedAt),
     masteryLevel: r.masteryLevel ?? null,
-    sunnyEstDiff: r.sunnyEstDiff ?? null,
-    sunnyStar: r.sunnyStar ?? null,
-    danielEstDiff: r.danielEstDiff ?? null,
-    danielStar: r.danielStar ?? null,
     reworkEstDiff: r.reworkEstDiff ?? null,
     reworkStar: r.reworkStar ?? null,
     reworkLnRatio: r.reworkLnRatio ?? null,
@@ -281,7 +273,7 @@ export const practiceRoutes = new Elysia({ prefix: "/practice" })
           skillTopPlays: batch.skillTopPlays,
           summary: batch.summary,
           totalMapsConsidered: batch.totalMapsConsidered,
-          needsSunnyBackfill: batch.needsSunnyBackfill,
+          needsReworkBackfill: batch.needsReworkBackfill,
           recommendations: batch.recommendations.map((r) => ({
             ...mapCard({
               id: r.id,
@@ -302,8 +294,9 @@ export const practiceRoutes = new Elysia({ prefix: "/practice" })
               bestMisses: r.bestMisses,
               lastPlayedAt: r.lastPlayedAt,
               masteryLevel: r.masteryLevel,
-              sunnyEstDiff: r.sunnyEstDiff,
-              sunnyStar: r.sunnyStar,
+              reworkEstDiff: r.reworkEstDiff,
+              reworkStar: r.reworkStar,
+              reworkLnRatio: r.lnRatio,
               keyCount: r.keyCount ?? keyCount,
             }),
             relativeDifficulty: r.relativeDifficulty,

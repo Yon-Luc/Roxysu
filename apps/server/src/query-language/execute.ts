@@ -73,18 +73,11 @@ export type PracticeCardRow = {
   bestMisses: number | null;
   lastPlayedAt: number | null;
   masteryLevel: number | null;
-  /** Sunny dan label when computed (RC/LN split). */
-  sunnyEstDiff: string | null;
-  /** Sunny rework star rating when computed. */
-  sunnyStar: number | null;
-  /** Daniel dan label when computed (4K RC). */
-  danielEstDiff: string | null;
+  /** Rework dan label when computed. */
   reworkEstDiff: string | null;
   reworkStar: number | null;
   /** LN ratio from the rework rating row (for client-side dan floors). */
   reworkLnRatio: number | null;
-  /** Daniel star rating when computed. */
-  danielStar: number | null;
   /** Mania key count (circle size). */
   keyCount: number | null;
 };
@@ -134,10 +127,6 @@ function baseFrom(ctx: QueryContext, includeRetry = false): string {
   LEFT JOIN mastery m ON m.beatmap_id = b.id
   ${retryJoin(ctx, includeRetry)}
   LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
-  LEFT JOIN beatmap_dan_ratings dr
-    ON dr.beatmap_id = b.id AND dr.algorithm = 'sunny'
-  LEFT JOIN beatmap_dan_ratings dr_d
-    ON dr_d.beatmap_id = b.id AND dr_d.algorithm = 'daniel'
   LEFT JOIN beatmap_dan_ratings dr_r
     ON dr_r.beatmap_id = b.id AND dr_r.algorithm = 'mania-difficulty'
   LEFT JOIN beatmap_pattern_analysis pa
@@ -165,10 +154,6 @@ const SELECT_COLS = `
   m.best_misses AS bestMisses,
   m.last_played_at AS lastPlayedAt,
   m.level AS masteryLevel,
-  dr.est_diff AS sunnyEstDiff,
-  dr.sunny_star AS sunnyStar,
-  dr_d.est_diff AS danielEstDiff,
-  dr_d.sunny_star AS danielStar,
   dr_r.est_diff AS reworkEstDiff,
   dr_r.sunny_star AS reworkStar,
   dr_r.ln_ratio AS reworkLnRatio
@@ -312,10 +297,6 @@ function mapRow(r: PracticeCardRow): PracticeCardRow {
     bestScore: r.bestScore != null ? Number(r.bestScore) : null,
     bestMisses: r.bestMisses != null ? Number(r.bestMisses) : null,
     masteryLevel: r.masteryLevel != null ? Number(r.masteryLevel) : null,
-    sunnyEstDiff: r.sunnyEstDiff ?? null,
-    sunnyStar: r.sunnyStar != null ? Number(r.sunnyStar) : null,
-    danielEstDiff: r.danielEstDiff ?? null,
-    danielStar: r.danielStar != null ? Number(r.danielStar) : null,
     reworkEstDiff: r.reworkEstDiff ?? null,
     reworkStar: r.reworkStar != null ? Number(r.reworkStar) : null,
     reworkLnRatio: r.reworkLnRatio != null ? Number(r.reworkLnRatio) : null,

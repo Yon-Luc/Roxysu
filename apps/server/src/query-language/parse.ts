@@ -179,7 +179,7 @@ function parseFieldTerm(raw: string): FieldTerm {
       return { type: "mode", value: gluedMode[1]!.trim() };
     }
     // Could be acc>98 style without field prefix... support field+op glued
-    const glued = raw.match(/^(acc|retry|mastery|pp|stars|ar|approachrate|cs|circlesize|od|overalldifficulty|hp|drainrate|misses|miss|score|keys|key|lns|ln|sunny|danstars|sunnystars)(>=|<=|>|<|=)(-?\d+(?:\.\d+)?)$/i);
+    const glued = raw.match(/^(acc|retry|mastery|pp|stars|ar|approachrate|cs|circlesize|od|overalldifficulty|hp|drainrate|misses|miss|score|keys|key|lns|ln|reworkstars)(>=|<=|>|<|=)(-?\d+(?:\.\d+)?)$/i);
     if (glued) {
       const field = glued[1]!.toLowerCase();
       const op = glued[2] as ComparisonOp;
@@ -197,8 +197,8 @@ function parseFieldTerm(raw: string): FieldTerm {
       if (field === "score") return { type: "score", op, value };
       if (field === "key" || field === "keys") return { type: "key", op, value };
       if (field === "ln" || field === "lns") return { type: "ln", op, value };
-      if (field === "sunny" || field === "danstars" || field === "sunnystars") {
-        return { type: "sunny", op, value };
+      if (field === "reworkstars") {
+        return { type: "reworkstars", op, value };
       }
     }
     const bareStatus = normalizeStatusToken(raw);
@@ -347,10 +347,6 @@ function parseFieldTerm(raw: string): FieldTerm {
       if (!value) throw new QueryParseError("Invalid dan value: empty");
       return { type: "dan", value, prefix };
     }
-    case "daniel": {
-      if (!value) throw new QueryParseError("Invalid daniel value: empty");
-      return { type: "daniel", value, prefix };
-    }
     case "rework":
     case "reworkdan": {
       if (!value) throw new QueryParseError("Invalid rework value: empty");
@@ -360,13 +356,6 @@ function parseFieldTerm(raw: string): FieldTerm {
       const r = parseRange(value);
       if (!r) throw new QueryParseError(`Invalid reworkstars value: ${value}`);
       return { type: "reworkstars", ...r };
-    }
-    case "sunny":
-    case "danstars":
-    case "sunnystars": {
-      const r = parseRange(value);
-      if (!r) throw new QueryParseError(`Invalid sunny value: ${value}`);
-      return { type: "sunny", ...r };
     }
     case "pattern":
     case "dominant":
@@ -521,7 +510,7 @@ export function looksLikeQuery(q: string): boolean {
   if (/[()]/.test(trimmed)) return true;
   if (/\b(AND|OR|NOT)\b/i.test(trimmed)) return true;
   if (/:\S/.test(trimmed)) return true;
-  if (/\b(acc|retry|mastery|pp|stars|ar|approachrate|cs|circlesize|od|overalldifficulty|hp|drainrate|misses|miss|score|keys|key|lns|ln|sunny|danstars|sunnystars|pattern|dominant|style|axis|rice|lnmap|grade|rank)(>=|<=|>|<|=)/i.test(trimmed)) return true;
+  if (/\b(acc|retry|mastery|pp|stars|ar|approachrate|cs|circlesize|od|overalldifficulty|hp|drainrate|misses|miss|score|keys|key|lns|ln|reworkstars|pattern|dominant|style|axis|rice|lnmap|grade|rank)(>=|<=|>|<|=)/i.test(trimmed)) return true;
   if (/:(rc|rice|ln|lnmap|fln)\b/i.test(trimmed)) return true;
   if (/\bgrade:[dcbasx]/i.test(trimmed)) return true;
   if (/\bgrade:ss\b/i.test(trimmed)) return true;

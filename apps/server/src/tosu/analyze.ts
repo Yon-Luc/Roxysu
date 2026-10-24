@@ -11,7 +11,6 @@ import {
   PATTERN_ALGORITHM,
   type ManiaPatternDetail,
 } from "../map-analysis";
-import { runDanielEstimatorFromText } from "../map-analysis/danielEstimator";
 import { runReworkEstimatorFromText } from "../map-analysis/reworkEstimator";
 import {
   getOsuDataPath,
@@ -22,7 +21,6 @@ import type {
   TosuLiveBeatmap,
   TosuLivePattern,
   TosuLiveRework,
-  TosuLiveSunny,
 } from "./types";
 
 async function lookupBeatmap(
@@ -106,52 +104,20 @@ function patternFromDb(
 }
 
 /**
- * Estimator `cvtFlag` ("IN", "HO", "IN,HO") for a lazer mods JSON string.
- * Null when no pattern conversion is active — Mirror/Classic don't convert.
+ * Invert (IN) flag for the rework estimator `lnOnly` option.
+ * Hold Off is not applied on the rework path.
  */
-export function conversionCvtFlag(
-  mods: string | null | undefined,
-): string | null {
-  const parsed = parseScoreMods(mods);
-  const parts = [
-    parsed.invert ? "IN" : null,
-    parsed.holdOff ? "HO" : null,
-  ].filter(Boolean);
-  return parts.length > 0 ? parts.join(",") : null;
+export function reworkLnOnly(mods: string | null | undefined): boolean {
+  return parseScoreMods(mods).invert;
 }
 
-function sunnyFromText(
+function reworkFromText(
   osuText: string,
   speedRate: number,
-  cvtFlag: string | null,
-): TosuLiveSunny {
+  lnOnly: boolean,
+): TosuLiveRework {
   try {
-    const result = runDanielEstimatorFromText(osuText, { speedRate, cvtFlag });
-    return {
-      sunnyStar: result.star,
-      estDiff: result.estDiff,
-      lnRatio: result.lnRatio,
-      columnCount: result.columnCount,
-      error: null,
-      source: "osu-text",
-    };
-  } catch (err) {
-    return {
-      sunnyStar: null,
-      estDiff: null,
-      lnRatio: null,
-      columnCount: null,
-      error: err instanceof Error ? err.message : String(err),
-      source: "osu-text",
-    };
-  }
-}
-
-function reworkFromText(osuText: string, speedRate: number): TosuLiveRework {
-  try {
-    // Rework has no dan-variant store; rate is applied via clockRate only
-    // (no Invert/Hold Off conversion on this path).
-    const result = runReworkEstimatorFromText(osuText, { speedRate });
+    const result = runReworkEstimatorFromText(osuText, { speedRate, lnOnly });
     return {
       reworkStar: result.star,
       estDiff: result.estDiff,
@@ -210,11 +176,11 @@ export type AnalyzeLiveMapResult = {
 export type AnalyzeLiveMapOptions = {
   /** Cached `.osu` text for the current checksum (avoids re-fetch on rate tweaks). */
   osuTextCache?: string | null;
-  /** When true, skip pattern recompute (rate-only change). */
-  sunnyOnly?: boolean;
-  /** Previous pattern to keep when sunnyOnly. */
+  /** When true, skip pattern recompute (rate/Invert-only change). */
+  rateOnly?: boolean;
+  /** Previous pattern to keep when rateOnly. */
   previousPattern?: TosuLivePattern | null;
-  /** Previous full pattern detail to keep when sunnyOnly. */
+  /** Previous full pattern detail to keep when rateOnly. */
   previousPatternDetail?: ManiaPatternDetail | null;
 };
 
@@ -255,7 +221,7 @@ function patternDetailFromText(osuText: string): ManiaPatternDetail | null {
   }
 }
 
-/** Resolve the live tosu map to Roxysu analysis (ephemeral; rate-aware Sunny + rework). */
+/** Resolve the live tosu map to Roxysu analysis (ephemeral; rate+Invert-aware rework). */
 export async function analyzeLiveMap(
   db: Db,
   host: string,
@@ -265,7 +231,7 @@ export async function analyzeLiveMap(
   const empty = {
     matchedBeatmapId: null as string | null,
     backgroundFileHash: null as string | null,
-    analysis: { sunny: null, rework: null, pattern: null } as Omit<
+    analysis: { rework: null, pattern: null } as Omit<
       TosuLiveAnalysis,
       "analyzing"
     >,
@@ -281,12 +247,12 @@ export async function analyzeLiveMap(
   const matchedBeatmapId = matched?.id ?? null;
   const backgroundFileHash = matched?.backgroundFileHash ?? null;
 
-  // Sunny/rework/pattern analysis is mania-only, but still resolve library id for preview.
+  // Rework/pattern analysis is mania-only, but still resolve library id for preview.
   if (!isMania && beatmap.modeNumber != null && beatmap.modeNumber !== 3) {
     return {
       matchedBeatmapId,
       backgroundFileHash,
-      analysis: { sunny: null, rework: null, pattern: null },
+      analysis: { rework: null, pattern: null },
       patternDetail: null,
       osuText: options.osuTextCache ?? null,
     };
@@ -310,13 +276,12 @@ export async function analyzeLiveMap(
       ? beatmap.rate
       : 1;
 
-  const cvtFlag = conversionCvtFlag(beatmap.mods);
-  const sunny = sunnyFromText(osuText, speedRate, cvtFlag);
-  const rework = reworkFromText(osuText, speedRate);
+  const lnOnly = reworkLnOnly(beatmap.mods);
+  const rework = reworkFromText(osuText, speedRate, lnOnly);
 
   let pattern: TosuLivePattern | null;
   let patternDetail: ManiaPatternDetail | null;
-  if (options.sunnyOnly) {
+  if (options.rateOnly) {
     pattern = options.previousPattern ?? null;
     patternDetail = options.previousPatternDetail ?? null;
   } else {
@@ -327,11 +292,11 @@ export async function analyzeLiveMap(
       );
       pattern = patternFromDb(fromDb);
       if (!pattern) {
-        const keys = sunny.columnCount ?? rework.columnCount ?? beatmap.keys;
+        const keys = rework.columnCount ?? beatmap.keys;
         pattern = keys === 7 ? patternFromText(osuText) : null;
       }
     } else {
-      const keys = sunny.columnCount ?? rework.columnCount ?? beatmap.keys;
+      const keys = rework.columnCount ?? beatmap.keys;
       pattern = keys === 7 ? patternFromText(osuText) : null;
     }
     // Prefer labels from the full structural detail when available.
@@ -352,7 +317,7 @@ export async function analyzeLiveMap(
   return {
     matchedBeatmapId,
     backgroundFileHash,
-    analysis: { sunny, rework, pattern },
+    analysis: { rework, pattern },
     patternDetail,
     osuText,
   };

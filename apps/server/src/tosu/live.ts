@@ -2,7 +2,7 @@
 import type { Db } from "@roxysu/db/types";
 import type { ManiaPatternDetail } from "../map-analysis";
 import { publish } from "../shared/events";
-import { analyzeLiveMap, conversionCvtFlag } from "./analyze";
+import { analyzeLiveMap, reworkLnOnly } from "./analyze";
 import { connectTosuWs, type TosuWsClient } from "./client";
 import { readTosuSettings, type TosuSettings } from "./settings";
 import { spawnTosu } from "./spawn";
@@ -34,24 +34,23 @@ let play: TosuLivePlay | null = null;
 let matchedBeatmapId: string | null = null;
 let backgroundFileHash: string | null = null;
 let analyzing = false;
-let sunny: TosuLiveSnapshot["analysis"]["sunny"] = null;
 let rework: TosuLiveSnapshot["analysis"]["rework"] = null;
 let pattern: TosuLiveSnapshot["analysis"]["pattern"] = null;
 /** Full mania pattern detail for the current checksum (not on the lean snapshot). */
 let patternDetail: ManiaPatternDetail | null = null;
 let patternDetailChecksum: string | null = null;
 let lastChecksum: string | null = null;
-/** Sunny input signature (rate + IN/HO conversions) last finished analyzing. */
-let lastAnalyzedSunnySignature: string | null = null;
+/** Rework input signature (rate + Invert) last finished analyzing. */
+let lastAnalyzedReworkSignature: string | null = null;
 /** Signature already scheduled for recompute (avoids debounce reset spam). */
-let pendingSunnySignature: string | null = null;
+let pendingReworkSignature: string | null = null;
 let osuTextCache: string | null = null;
 let osuTextChecksum: string | null = null;
 let analysisToken = 0;
 let lastPlayPublishAt = 0;
 const spawnGate = createSpawnGateState();
 let probeTimer: ReturnType<typeof setInterval> | null = null;
-let sunnyDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+let reworkDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 let probeEpoch = 0;
 
 function nowIso(): string {
@@ -105,7 +104,6 @@ export function getTosuLiveSnapshot(): TosuLiveSnapshot {
     beatmap,
     play,
     analysis: {
-      sunny,
       rework,
       pattern,
       analyzing,
@@ -185,14 +183,14 @@ async function runProbeTick(): Promise<void> {
   if (!sameWarnings(before, warnings)) emit(true);
 }
 
-/** Sunny analysis inputs that force a recompute when they change. */
-function sunnySignatureOf(beatmap: TosuLiveBeatmap): string {
-  return `${roundRate(beatmap.rate)}|${conversionCvtFlag(beatmap.mods) ?? ""}`;
+/** Rework analysis inputs that force a recompute when they change. */
+function reworkSignatureOf(beatmap: TosuLiveBeatmap): string {
+  return `${roundRate(beatmap.rate)}|${reworkLnOnly(beatmap.mods) ? "IN" : ""}`;
 }
 
 async function runAnalysisForBeatmap(
   next: TosuLiveBeatmap,
-  opts: { sunnyOnly: boolean },
+  opts: { rateOnly: boolean },
 ): Promise<void> {
   if (!dbRef || !settings) return;
   const token = ++analysisToken;
@@ -204,17 +202,16 @@ async function runAnalysisForBeatmap(
       osuTextChecksum === next.checksum ? osuTextCache : null;
     const result = await analyzeLiveMap(dbRef, settings.host, next, {
       osuTextCache: cache,
-      sunnyOnly: opts.sunnyOnly,
-      previousPattern: opts.sunnyOnly ? pattern : null,
-      previousPatternDetail: opts.sunnyOnly ? patternDetail : null,
+      rateOnly: opts.rateOnly,
+      previousPattern: opts.rateOnly ? pattern : null,
+      previousPatternDetail: opts.rateOnly ? patternDetail : null,
     });
     if (token !== analysisToken) return;
     matchedBeatmapId = result.matchedBeatmapId;
     backgroundFileHash = result.backgroundFileHash;
-    sunny = result.analysis.sunny;
     rework = result.analysis.rework;
     pattern = result.analysis.pattern;
-    if (!opts.sunnyOnly) {
+    if (!opts.rateOnly) {
       patternDetail = result.patternDetail;
       patternDetailChecksum = next.checksum;
     }
@@ -222,19 +219,11 @@ async function runAnalysisForBeatmap(
       osuTextCache = result.osuText;
       osuTextChecksum = next.checksum;
     }
-    lastAnalyzedSunnySignature = sunnySignatureOf(next);
-    pendingSunnySignature = null;
+    lastAnalyzedReworkSignature = reworkSignatureOf(next);
+    pendingReworkSignature = null;
   } catch (err) {
     if (token !== analysisToken) return;
     const message = err instanceof Error ? err.message : String(err);
-    sunny = {
-      sunnyStar: null,
-      estDiff: null,
-      lnRatio: null,
-      columnCount: null,
-      error: message,
-      source: "osu-text",
-    };
     rework = {
       reworkStar: null,
       estDiff: null,
@@ -243,14 +232,14 @@ async function runAnalysisForBeatmap(
       error: message,
       source: "osu-text",
     };
-    if (!opts.sunnyOnly) {
+    if (!opts.rateOnly) {
       pattern = null;
       patternDetail = null;
       patternDetailChecksum = next.checksum;
       matchedBeatmapId = null;
       backgroundFileHash = null;
     }
-    pendingSunnySignature = null;
+    pendingReworkSignature = null;
   } finally {
     if (token === analysisToken) {
       analyzing = false;
@@ -260,39 +249,38 @@ async function runAnalysisForBeatmap(
 }
 
 /**
- * Recompute Sunny when rate or pattern-conversion mods (IN/HO) change. Only
- * (re)arms the debounce when the target signature differs from what we already
- * scheduled — continuous tosu WS frames were previously resetting the timer
- * forever so analysis never ran.
+ * Recompute rework when rate or Invert changes. Only (re)arms the debounce when
+ * the target signature differs from what we already scheduled — continuous tosu
+ * WS frames were previously resetting the timer forever so analysis never ran.
  */
-function scheduleSunnyAnalysis(next: TosuLiveBeatmap): void {
-  const target = sunnySignatureOf(next);
+function scheduleReworkAnalysis(next: TosuLiveBeatmap): void {
+  const target = reworkSignatureOf(next);
   if (
-    lastAnalyzedSunnySignature != null &&
-    target === lastAnalyzedSunnySignature
+    lastAnalyzedReworkSignature != null &&
+    target === lastAnalyzedReworkSignature
   ) {
     return;
   }
-  if (pendingSunnySignature != null && target === pendingSunnySignature) return;
+  if (pendingReworkSignature != null && target === pendingReworkSignature) return;
 
-  pendingSunnySignature = target;
-  if (sunnyDebounceTimer) clearTimeout(sunnyDebounceTimer);
-  sunnyDebounceTimer = setTimeout(() => {
-    sunnyDebounceTimer = null;
+  pendingReworkSignature = target;
+  if (reworkDebounceTimer) clearTimeout(reworkDebounceTimer);
+  reworkDebounceTimer = setTimeout(() => {
+    reworkDebounceTimer = null;
     const current = beatmap;
     if (!current) {
-      pendingSunnySignature = null;
+      pendingReworkSignature = null;
       return;
     }
-    const signature = sunnySignatureOf(current);
+    const signature = reworkSignatureOf(current);
     if (
-      lastAnalyzedSunnySignature != null &&
-      signature === lastAnalyzedSunnySignature
+      lastAnalyzedReworkSignature != null &&
+      signature === lastAnalyzedReworkSignature
     ) {
-      pendingSunnySignature = null;
+      pendingReworkSignature = null;
       return;
     }
-    void runAnalysisForBeatmap(current, { sunnyOnly: true });
+    void runAnalysisForBeatmap(current, { rateOnly: true });
   }, RATE_ANALYSIS_DEBOUNCE_MS);
 }
 
@@ -301,25 +289,24 @@ function onFrame(frame: {
   play: TosuLivePlay;
 }): void {
   const checksumChanged = frame.beatmap.checksum !== lastChecksum;
-  const nextSignature = sunnySignatureOf(frame.beatmap);
-  const sunnyChanged =
-    lastAnalyzedSunnySignature != null &&
-    nextSignature !== lastAnalyzedSunnySignature;
+  const nextSignature = reworkSignatureOf(frame.beatmap);
+  const reworkChanged =
+    lastAnalyzedReworkSignature != null &&
+    nextSignature !== lastAnalyzedReworkSignature;
 
   beatmap = frame.beatmap;
   play = frame.play;
 
   if (checksumChanged) {
-    if (sunnyDebounceTimer) {
-      clearTimeout(sunnyDebounceTimer);
-      sunnyDebounceTimer = null;
+    if (reworkDebounceTimer) {
+      clearTimeout(reworkDebounceTimer);
+      reworkDebounceTimer = null;
     }
     lastChecksum = frame.beatmap.checksum;
-    lastAnalyzedSunnySignature = null;
-    pendingSunnySignature = null;
+    lastAnalyzedReworkSignature = null;
+    pendingReworkSignature = null;
     osuTextCache = null;
     osuTextChecksum = null;
-    sunny = null;
     rework = null;
     pattern = null;
     patternDetail = null;
@@ -327,14 +314,14 @@ function onFrame(frame: {
     matchedBeatmapId = null;
     backgroundFileHash = null;
     if (frame.beatmap.checksum || frame.beatmap.title) {
-      void runAnalysisForBeatmap(frame.beatmap, { sunnyOnly: false });
+      void runAnalysisForBeatmap(frame.beatmap, { rateOnly: false });
     }
     emit(true);
     return;
   }
 
-  if (sunnyChanged && (frame.beatmap.checksum || frame.beatmap.title)) {
-    scheduleSunnyAnalysis(frame.beatmap);
+  if (reworkChanged && (frame.beatmap.checksum || frame.beatmap.title)) {
+    scheduleReworkAnalysis(frame.beatmap);
     emit(true);
     return;
   }
@@ -411,9 +398,9 @@ export async function startTosuAdapter(db: Db): Promise<void> {
 
   stopWs();
   stopProbeLoop();
-  if (sunnyDebounceTimer) {
-    clearTimeout(sunnyDebounceTimer);
-    sunnyDebounceTimer = null;
+  if (reworkDebounceTimer) {
+    clearTimeout(reworkDebounceTimer);
+    reworkDebounceTimer = null;
   }
 
   if (!settings.enabled) {
@@ -423,15 +410,14 @@ export async function startTosuAdapter(db: Db): Promise<void> {
     play = null;
     matchedBeatmapId = null;
     backgroundFileHash = null;
-    sunny = null;
     rework = null;
     pattern = null;
     patternDetail = null;
     patternDetailChecksum = null;
     analyzing = false;
     lastChecksum = null;
-    lastAnalyzedSunnySignature = null;
-    pendingSunnySignature = null;
+    lastAnalyzedReworkSignature = null;
+    pendingReworkSignature = null;
     osuTextCache = null;
     osuTextChecksum = null;
     emit(true);
@@ -453,9 +439,9 @@ export function stopTosuAdapter(): void {
   probeEpoch += 1;
   stopWs();
   stopProbeLoop();
-  if (sunnyDebounceTimer) {
-    clearTimeout(sunnyDebounceTimer);
-    sunnyDebounceTimer = null;
+  if (reworkDebounceTimer) {
+    clearTimeout(reworkDebounceTimer);
+    reworkDebounceTimer = null;
   }
   status = "disabled";
   analysisToken += 1;

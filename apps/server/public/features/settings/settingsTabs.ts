@@ -41,8 +41,6 @@ export const SECTION_TO_TAB: Record<string, SettingsTabId> = {
   "difficulty-display": "appearance",
   "preview-skin": "appearance",
   keybinds: "appearance",
-  "sunny-dan-calculation": "jobs",
-  "daniel-dan-calculation": "jobs",
   "rework-dan-calculation": "jobs",
   "pattern-analysis": "jobs",
   "mania-rating-lab": "jobs",
@@ -77,8 +75,6 @@ export const TAB_SECTIONS: Record<
     { id: "keybinds", labelKey: "keybinds" },
   ],
   jobs: [
-    { id: "sunny-dan-calculation", labelKey: "sunnyDan" },
-    { id: "daniel-dan-calculation", labelKey: "danielDan" },
     { id: "rework-dan-calculation", labelKey: "reworkDan" },
     { id: "pattern-analysis", labelKey: "patternAnalysis" },
     { id: "mania-rating-lab", labelKey: "maniaRatingLab", desktopHidden: true },

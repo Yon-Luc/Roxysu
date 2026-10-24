@@ -10,25 +10,17 @@ import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { resolveHubBaseUrl } from "../hubUrl";
 import { APP_VERSION } from "../appVersion";
 import { publish } from "../shared/events";
-import { SUNNY_ALGORITHM } from "./computeSunnyDan";
-import { DANIEL_ALGORITHM } from "./computeDanielDan";
 import { REWORK_ALGORITHM } from "./computeReworkDan";
 import { PATTERN_ALGORITHM } from "./computePatternAnalysis";
 
 export const CALC_BUNDLE_ALGORITHMS = [
-  SUNNY_ALGORITHM,
-  DANIEL_ALGORITHM,
   REWORK_ALGORITHM,
   PATTERN_ALGORITHM,
 ] as const;
 
 export const CALC_BUNDLE_CHUNK_SIZE = 1_500;
 
-const DAN_ALGORITHMS = new Set<string>([
-  SUNNY_ALGORITHM,
-  DANIEL_ALGORITHM,
-  REWORK_ALGORITHM,
-]);
+const DAN_ALGORITHMS = new Set<string>([REWORK_ALGORITHM]);
 
 const HUB_TIMEOUT_MS = 60_000;
 const HUB_CIRCUIT_COOLDOWN_MS = 30_000;
@@ -144,11 +136,7 @@ export async function exportCalcBundleEntries(
     .innerJoin(beatmaps, eq(beatmaps.id, beatmapDanRatings.beatmapId))
     .where(
       and(
-        inArray(beatmapDanRatings.algorithm, [
-          SUNNY_ALGORITHM,
-          DANIEL_ALGORITHM,
-          REWORK_ALGORITHM,
-        ]),
+        inArray(beatmapDanRatings.algorithm, [REWORK_ALGORITHM]),
         isNotNull(beatmaps.hash),
         isNull(beatmapDanRatings.error),
         isNotNull(beatmapDanRatings.estDiff),

@@ -26,7 +26,7 @@ function SkillPlayList({
     artist: string;
     difficultyName: string;
     accuracy: number;
-    sunnyStar: number;
+    reworkStar: number;
     danLabel: string;
     mods: string | null;
     playedAt: string | number | null;
@@ -65,9 +65,9 @@ function SkillPlayList({
                   <div className="text-xs tabular-nums text-muted">
                     {formatMods(play.mods)}
                     {" · "}
-                    {ratingMode === "dan"
-                      ? play.danLabel
-                      : formatStars(play.sunnyStar)}
+                    {ratingMode === "rework"
+                      ? (play.danLabel ?? formatStars(play.reworkStar))
+                      : formatStars(play.reworkStar)}
                     {" · "}
                     {play.playedAt != null
                       ? formatRelativeTime(String(play.playedAt), dict?.common)

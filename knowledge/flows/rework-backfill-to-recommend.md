@@ -2,45 +2,28 @@
 last_verified: 2026-10
 confidence: verified
 touches:
-  - apps/server/src/map-analysis/sunnyDanJob.ts
+  - apps/server/src/map-analysis/reworkDanJob.ts
   - apps/server/src/map-analysis/danVariantJob.ts
-  - apps/server/src/map-analysis/computeSunnyDan.ts
+  - apps/server/src/map-analysis/computeReworkDan.ts
   - apps/server/src/tosu/analyze.ts
   - apps/server/src/analytics/recommend
-  - packages/sunny-dan
   - packages/mania-difficulty
   - packages/mania-pattern-analysis
 ---
 
-# Flow: Sunny backfill to recommend
+# Flow: Rework backfill to recommend
 
 ## User intent
 
-Populate mania difficulty estimates so 4K/7K recommendations and `dan:`/`sunny:` filters work well.
+Populate mania difficulty estimates so 4K/7K recommendations and `dan:`/`rework:` filters work well.
 
 ## Flow
 
 ```
 (optional) Hub calc bundle pull gap-fills matching hashes
     ↓
-Settings POST /api/settings/sunny-dan/start
-  (or Jobs onboarding /jobs/start-recommended)
-    ↓
-job reads .osu from lazer files
-    ↓
-@roxysu/sunny-dan estimate
-    ↓
-persist Sunny dan ratings store (beatmap_dan_ratings)
-    ↓
-query language fields + GET /api/practice/recommend + Session Suggest UI
-```
-
-Also see [hub-calc-bundle-pull.md](hub-calc-bundle-pull.md).
-
-## Flow: rework dan backfill (mania difficulty port)
-
-```
 Settings POST /api/settings/rework-dan/start
+  (or Jobs onboarding /jobs/start-recommended)
     ↓
 job reads .osu from lazer files  (one batch = one SQLite transaction)
     ↓
@@ -51,18 +34,21 @@ analyzeManiaOnceFromText  — parses once, runs the calculator once
     ↓
 reworkDanLabel(star, lnRatio, keys) → tier from dans.json
     ↓
-persist beatmap_dan_ratings (algorithm = 'mania-difficulty')
+persist Dan ratings store (beatmap_dan_ratings, algorithm = 'mania-difficulty')
    + beatmap_pattern_analysis (dominant skill) — same pass
     ↓
-rework: / reworkstars: / pattern: query fields + `rework` display mode
+dan: / rework: / reworkstars: / pattern: query fields + `rework` display mode
+    ↓
+GET /api/practice/recommend + Session Suggest UI
 ```
+
+Also see [hub-calc-bundle-pull.md](hub-calc-bundle-pull.md).
+
+Editing `dans.json` only needs `POST /api/settings/rework-dan/relabel`, which
+rewrites labels from stored stars without re-reading charts.
 
 The pattern job is still available for maps the dan job has not rated, but a
 full dan backfill also fills the pattern store, so running both is not required.
-
-Recommendations and skill estimates do **not** read these rows. Editing
-`dans.json` only needs `POST /api/settings/rework-dan/relabel`, which rewrites
-labels from stored stars without re-reading charts.
 
 ## Flow: dominant skill pattern analysis
 
@@ -96,7 +82,7 @@ resolveDanVariant() → distinct combos (beatmap × rate × Invert)
     ↓
 backfill (memory-guarded, yields per combo) reads .osu, estimates with { speedRate, cvtFlag: "IN" }
     ↓
-persist beatmap_dan_rating_variants (sunny + daniel for 4K)
+persist beatmap_dan_rating_variants (algorithm = 'mania-difficulty')
     ↓
 run finished with rows written -> invalidatePlayerStatsCache()
     ↓
@@ -106,27 +92,27 @@ skill axes / band plays / dashboard read variant stars per play
 ## Flow: mod-aware dan reads (preview / live analysis)
 
 ```
-BeatmapPreviewModal pills or tosu snapshot mods (MR/IN/HO + rate)
+tosu snapshot mods (MR/IN/HO + rate) or detail/profile read
     ↓
-GET /api/beatmaps/:id/sunny-dan?mods=&rate=   |   analyze.ts sunnyFromText(cvtFlag)
-    ↓
-base combo → Sunny dan ratings store          | conversionCvtFlag → estimator { speedRate, cvtFlag }
-modded combo → variant row if persisted, else ephemeral estimate (never persisted)
+analyze.ts reworkFromText(cvtFlag)     |   getReworkDan(db, id) on beatmap detail
+    ↓                                  |
+ephemeral analysis.rework              |   Dan ratings store (persisted NM row)
+(never persisted; rate via clockRate)
 ```
 
-Single-map request paths may compute; `GET /api/practice`, `GET /api/search`,
-and `GET /api/practice/recommend` still never do.
+Variant rows are for skill/stats aggregation of modded plays, not a separate
+list/recommend request-path compute. `GET /api/practice`, `GET /api/search`,
+and `GET /api/practice/recommend` never start rework/pattern jobs.
 
 ## Business guarantee
 
-Recommendations and `dan:` / `rework:` / `pattern:` filters use persisted estimates only. Without the Settings jobs, 4K/7K suggest quality is limited and those filters miss unrated maps. `GET /api/practice`, `GET /api/search`, and `GET /api/practice/recommend` do not start or run Sunny/Daniel/pattern compute. Dan difficulty variants are likewise computed only by the background job — modded plays without a computed variant are excluded from skill aggregation until rated.
+Recommendations and `dan:` / `rework:` / `pattern:` filters use persisted estimates only. Without the Settings jobs, 4K/7K suggest quality is limited and those filters miss unrated maps. `GET /api/practice`, `GET /api/search`, and `GET /api/practice/recommend` do not start or run rework/pattern compute. Dan difficulty variants are likewise computed only by the background job — modded plays without a computed variant are excluded from skill aggregation until rated.
 
 ## Implementation references
 
-- `apps/server/src/map-analysis/sunnyDanJob.ts`
-- `apps/server/src/map-analysis/danVariantJob.ts`
 - `apps/server/src/map-analysis/reworkDanJob.ts`
+- `apps/server/src/map-analysis/danVariantJob.ts`
 - `apps/server/src/map-analysis/patternAnalysisJob.ts`
-- `packages/sunny-dan`
+- `packages/mania-difficulty`
 - `packages/mania-difficulty/dans.json`
 - `apps/server/src/analytics/recommend/*`

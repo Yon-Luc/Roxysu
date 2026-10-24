@@ -111,7 +111,7 @@ export function BeatmapInsightsPanel({
             ) : null}
 
             {danRating?.estDiff ? (
-              <InsightRow label="Sunny dan" value={danRating.estDiff} />
+              <InsightRow label="Rework dan" value={danRating.estDiff} />
             ) : null}
           </Stack>
         </CardContent>

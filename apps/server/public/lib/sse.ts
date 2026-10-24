@@ -178,8 +178,6 @@ export function connectLiveUpdates(queryClient: QueryClient): () => void {
   };
 
   const onJobsUpdated = () => {
-    inv(["settings", "sunny-dan"]);
-    inv(["settings", "daniel-dan"]);
     inv(["settings", "rework-dan"]);
     inv(["settings", "pattern-analysis"]);
     inv(["settings"]);

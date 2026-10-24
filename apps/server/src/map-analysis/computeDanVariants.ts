@@ -10,12 +10,13 @@ import {
   resolveDanVariant,
   type DanVariant,
 } from "../replay/mods";
-import { runSunnyEstimatorFromText } from "./sunnyEstimator";
-import { runDanielEstimatorFromText } from "./danielEstimator";
+import {
+  REWORK_ALGORITHM,
+  runReworkEstimatorFromText,
+} from "./reworkEstimator";
 import { yieldForBackfill } from "./jobYield";
 
-export const DAN_VARIANTS_ALGORITHM_SUNNY = "sunny";
-export const DAN_VARIANTS_ALGORITHM_DANIEL = "daniel";
+export const DAN_VARIANTS_ALGORITHM = REWORK_ALGORITHM;
 
 export type DanVariantCombo = {
   beatmapId: string;
@@ -94,7 +95,6 @@ export function collectDanVariantCombos(
 
 function upsertVariantSync(
   db: Db,
-  algorithm: string,
   combo: DanVariantCombo,
   values: {
     beatmapHash: string | null;
@@ -125,7 +125,7 @@ function upsertVariantSync(
     )
     .run(
       combo.beatmapId,
-      algorithm,
+      REWORK_ALGORITHM,
       combo.rate,
       combo.lnOnly ? 1 : 0,
       values.beatmapHash,
@@ -148,22 +148,19 @@ function computeOneComboSync(
   db: Db,
   combo: DanVariantCombo,
   beatmap: VariantBeatmapRow,
-  algorithms: Array<"sunny" | "daniel">,
 ): void {
   const now = Date.now();
 
   const fail = (message: string) => {
-    for (const algorithm of algorithms) {
-      upsertVariantSync(db, algorithm, combo, {
-        beatmapHash: beatmap.hash,
-        star: null,
-        lnRatio: null,
-        columnCount: null,
-        estDiff: null,
-        error: message,
-        updatedAtMs: now,
-      });
-    }
+    upsertVariantSync(db, combo, {
+      beatmapHash: beatmap.hash,
+      star: null,
+      lnRatio: null,
+      columnCount: null,
+      estDiff: null,
+      error: message,
+      updatedAtMs: now,
+    });
   };
 
   if (!beatmap.hash) {
@@ -185,26 +182,22 @@ function computeOneComboSync(
     return;
   }
 
-  const options = {
-    speedRate: combo.rate,
-    cvtFlag: combo.lnOnly ? "IN" : null,
-  };
-
   try {
-    if (algorithms.includes("sunny")) {
-      const result = runSunnyEstimatorFromText(osuText, options);
-      upsertVariantSync(db, "sunny", combo, {
-        beatmapHash: beatmap.hash,
-        star: result.star,
-        lnRatio: result.lnRatio,
-        columnCount: result.columnCount,
-        estDiff: result.estDiff,
-        error: null,
-        updatedAtMs: now,
-      });
-    }
+    const result = runReworkEstimatorFromText(osuText, {
+      speedRate: combo.rate,
+      lnOnly: combo.lnOnly,
+    });
+    upsertVariantSync(db, combo, {
+      beatmapHash: beatmap.hash,
+      star: result.star,
+      lnRatio: result.lnRatio,
+      columnCount: result.columnCount,
+      estDiff: result.estDiff,
+      error: null,
+      updatedAtMs: now,
+    });
   } catch (err) {
-    upsertVariantSync(db, "sunny", combo, {
+    upsertVariantSync(db, combo, {
       beatmapHash: beatmap.hash,
       star: null,
       lnRatio: null,
@@ -214,36 +207,10 @@ function computeOneComboSync(
       updatedAtMs: now,
     });
   }
-
-  if (algorithms.includes("daniel")) {
-    try {
-      const result = runDanielEstimatorFromText(osuText, options);
-      upsertVariantSync(db, "daniel", combo, {
-        beatmapHash: beatmap.hash,
-        star: result.star,
-        lnRatio: result.lnRatio,
-        columnCount: result.columnCount,
-        estDiff: result.estDiff,
-        error: null,
-        updatedAtMs: now,
-      });
-    } catch (err) {
-      upsertVariantSync(db, "daniel", combo, {
-        beatmapHash: beatmap.hash,
-        star: null,
-        lnRatio: null,
-        columnCount: null,
-        estDiff: null,
-        error: err instanceof Error ? err.message : String(err),
-        updatedAtMs: now,
-      });
-    }
-  }
 }
 
 function variantRowFor(
   db: Db,
-  algorithm: string,
   combo: DanVariantCombo,
 ): { beatmapHash: string | null; estDiff: string | null } | null {
   return (db.$client
@@ -255,7 +222,12 @@ function variantRowFor(
         AND rate = ? AND ln_only = ?
     `,
     )
-    .get(combo.beatmapId, algorithm, combo.rate, combo.lnOnly ? 1 : 0) as {
+    .get(
+      combo.beatmapId,
+      REWORK_ALGORITHM,
+      combo.rate,
+      combo.lnOnly ? 1 : 0,
+    ) as {
     beatmapHash: string | null;
     estDiff: string | null;
   } | null);
@@ -264,7 +236,6 @@ function variantRowFor(
 type PlannedCombo = {
   combo: DanVariantCombo;
   beatmap: VariantBeatmapRow;
-  algorithms: Array<"sunny" | "daniel">;
 };
 
 export type DanVariantBackfillResult = {
@@ -287,7 +258,7 @@ export type DanVariantBackfillOptions = {
   shouldContinue?: () => boolean;
 };
 
-/** Pick the combos in `candidates` that still need a sunny/daniel variant row. */
+/** Pick the combos in `candidates` that still need a rework variant row. */
 function planDanVariantBackfill(
   db: Db,
   candidates: DanVariantCombo[],
@@ -311,30 +282,16 @@ function planDanVariantBackfill(
       .all(combo.beatmapId) as VariantBeatmapRow[];
     if (!beatmap) continue;
 
-    const algorithms: Array<"sunny" | "daniel"> = [];
-    const sunny = variantRowFor(db, "sunny", combo);
+    const existing = variantRowFor(db, combo);
     if (
-      !sunny ||
-      (sunny.beatmapHash !== null && sunny.beatmapHash !== beatmap.hash)
+      existing &&
+      (existing.beatmapHash === null ||
+        existing.beatmapHash === beatmap.hash)
     ) {
-      algorithms.push("sunny");
+      continue;
     }
-    const isFourK =
-      beatmap.rulesetShortName === "mania" &&
-      beatmap.circleSize != null &&
-      Math.round(Number(beatmap.circleSize)) === 4;
-    if (isFourK) {
-      const daniel = variantRowFor(db, "daniel", combo);
-      if (
-        !daniel ||
-        (daniel.beatmapHash !== null && daniel.beatmapHash !== beatmap.hash)
-      ) {
-        algorithms.push("daniel");
-      }
-    }
-    if (algorithms.length === 0) continue;
 
-    planned.push({ combo, beatmap, algorithms });
+    planned.push({ combo, beatmap });
   }
 
   return planned;
@@ -342,13 +299,10 @@ function planDanVariantBackfill(
 
 /** Compute one planned combo; true when a usable label was stored. */
 function runPlannedCombo(db: Db, item: PlannedCombo): boolean {
-  const { combo, beatmap, algorithms } = item;
-  computeOneComboSync(db, combo, beatmap, algorithms);
-  const after = variantRowFor(db, "sunny", combo);
-  const danielAfter = algorithms.includes("daniel")
-    ? variantRowFor(db, "daniel", combo)
-    : after;
-  return Boolean(after?.estDiff || danielAfter?.estDiff);
+  const { combo, beatmap } = item;
+  computeOneComboSync(db, combo, beatmap);
+  const after = variantRowFor(db, combo);
+  return Boolean(after?.estDiff);
 }
 
 /**
@@ -437,7 +391,7 @@ export async function backfillDanVariants(
 export function loadDanVariantRatingsSync(
   db: Db,
   beatmapIds: string[],
-  algorithm: string,
+  algorithm: string = REWORK_ALGORITHM,
 ): Map<string, DanVariantRatingRow> {
   const out = new Map<string, DanVariantRatingRow>();
   const unique = [...new Set(beatmapIds.filter(Boolean))];

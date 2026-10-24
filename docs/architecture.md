@@ -123,7 +123,7 @@ roxysu/
 │   ├── pattern-7k/        # 7K pattern analysis
 │   ├── timing-analysis/   # Timing grid analysis
 │   ├── mania-judge/       # Hit windows, mods, replay judgment
-│   └── sunny-dan/         # Sunny stars → dan estimate
+│   └── mania-difficulty/  # Mania difficulty port → rework dan
 ├── docs/
 └── scripts/
 ```

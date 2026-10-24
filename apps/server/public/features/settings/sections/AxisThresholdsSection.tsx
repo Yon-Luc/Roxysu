@@ -94,7 +94,7 @@ export function AxisThresholdsSection({ data }: { data: SettingsPayload }) {
       </h2>
       <p className="mt-1 text-sm text-muted">
         {dict?.settings.axisThresholdsDesc ??
-          "Choose when maps count as Rice, LN, or full LN for recommendations, skill axes, stats mix, and axis: filters. Sunny dan labels stay at the standard 20% RC/LN split."}
+          "Choose when maps count as Rice, LN, or full LN for recommendations, skill axes, stats mix, and axis: filters. Rework dan label tables still use the fixed 20% RC/LN split."}
       </p>
 
       <div className="mt-5 space-y-5">

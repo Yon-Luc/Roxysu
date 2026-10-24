@@ -16,7 +16,7 @@ touches:
 
 ## Decision
 
-One **Hub calc bundle** per Roxysu product version (e.g. `0.1.17`). Each bundle may include rows for `sunny`, `daniel`, `mania-difficulty`, and `mania-skill-v1`. Match clients to bundles by product version only — not by separate algorithm pins. Apply Hub rows into the local mirror by beatmap content hash. Sunny and Daniel stay **gap-fill only** (never overwrite a successful local compute). On a packaged install, a product-version bump **replaces** successful `mania-difficulty` and `mania-skill-v1` rows that the bundle contains; maps absent from the bundle keep their previous rows. `bun desktop` leaves `ROXYSU_PACKAGED` unset, so the dev library is gap-filled only and is not replaced. A manual pull from Settings stays gap-fill on every install. Admin may upload for a future version before release. Public pull is killable via `HUB_CALC_BUNDLES=0`.
+One **Hub calc bundle** per Roxysu product version (e.g. `0.1.17`). Each bundle may include rows for `mania-difficulty` and `mania-skill-v1` only. Match clients to bundles by product version only — not by separate algorithm pins. Apply Hub rows into the local mirror by beatmap content hash. On a packaged install, a product-version bump **replaces** successful `mania-difficulty` and `mania-skill-v1` rows that the bundle contains; maps absent from the bundle keep their previous rows. `bun desktop` leaves `ROXYSU_PACKAGED` unset, so the dev library is gap-filled only and is not replaced. A manual pull from Settings stays gap-fill on every install. Admin may upload for a future version before release. Public pull is killable via `HUB_CALC_BUNDLES=0`.
 
 ## Reason
 

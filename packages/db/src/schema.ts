@@ -424,7 +424,7 @@ export const beatmapDanRatings = sqliteTable(
     beatmapId: text("beatmap_id")
       .notNull()
       .references(() => beatmaps.id),
-    /** Estimator id, e.g. "sunny". */
+    /** Estimator id, e.g. "mania-difficulty". */
     algorithm: text("algorithm").notNull(),
     /** Beatmap content hash when computed (invalidate on mismatch). */
     beatmapHash: text("beatmap_hash"),
@@ -452,7 +452,7 @@ export const beatmapDanRatingVariants = sqliteTable(
     beatmapId: text("beatmap_id")
       .notNull()
       .references(() => beatmaps.id),
-    /** Estimator id, e.g. "sunny". */
+    /** Estimator id, e.g. "mania-difficulty". */
     algorithm: text("algorithm").notNull(),
     /** Playback rate quantized to 2 decimals (DT 1.5, HT 0.75, custom 1.1…). */
     rate: real("rate").notNull(),

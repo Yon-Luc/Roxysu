@@ -1,6 +1,9 @@
-
 import type { Db } from "@roxysu/db/types";
-import { estDiff, nextDanInterval } from "@roxysu/sunny-dan";
+import {
+  reworkDanIntervalTable,
+  reworkDanLabel,
+  reworkDanNextTierName,
+} from "@roxysu/mania-difficulty";
 import {
   danVariantKey,
   resolveDanVariant,
@@ -32,6 +35,7 @@ import {
   scoresUsernameSql,
 } from "./scoreUsername";
 import { loadDanVariantRatingsSync } from "../map-analysis/computeDanVariants";
+import { REWORK_ALGORITHM } from "../map-analysis/reworkEstimator";
 
 const DEFAULT_KEY_COUNT = DEFAULT_SKILL_KEY_COUNT;
 
@@ -44,7 +48,7 @@ export type SkillBandPlayDetail = {
   artist: string;
   difficultyName: string;
   accuracy: number;
-  sunnyStar: number;
+  reworkStar: number;
   danLabel: string;
   mods: string | null;
   playedAt: number;
@@ -70,7 +74,7 @@ type EnrichedPlayRow = SkillPlayRow & {
   title: string;
   artist: string;
   difficultyName: string;
-  sunnyEstDiff: string | null;
+  reworkEstDiff: string | null;
   mods: string | null;
 };
 
@@ -128,7 +132,7 @@ function toDetail(
   lnRatioForDan: number,
   keyCount: number,
 ): SkillBandPlayDetail {
-  const sunnyStar = play.sunnyStar ?? 0;
+  const reworkStar = play.reworkStar ?? 0;
   return {
     scoreId: play.scoreId,
     beatmapId: play.beatmapId,
@@ -136,12 +140,33 @@ function toDetail(
     artist: play.artist,
     difficultyName: play.difficultyName,
     accuracy: play.accuracy,
-    sunnyStar,
+    reworkStar,
     danLabel:
-      play.sunnyEstDiff ??
-      estDiff(sunnyStar, play.lnRatio ?? lnRatioForDan, keyCount),
+      play.reworkEstDiff ??
+      reworkDanLabel(reworkStar, play.lnRatio ?? lnRatioForDan, keyCount),
     mods: play.mods,
     playedAt: play.playedAt,
+  };
+}
+
+/** Star bounds for the next rework tier above `sr`, or null at the top. */
+function nextReworkDanBounds(
+  sr: number,
+  lnRatio: number,
+  keyCount: number,
+): { lower: number; upper: number; label: string } | null {
+  const nextName = reworkDanNextTierName(sr, lnRatio, keyCount);
+  if (!nextName) return null;
+  const table = reworkDanIntervalTable(lnRatio, keyCount);
+  if (!table) return null;
+  const intervals = table.filter(
+    ([, , label]) => label === nextName || label.startsWith(`${nextName} `),
+  );
+  if (intervals.length === 0) return null;
+  return {
+    lower: intervals[0]![0],
+    upper: intervals[intervals.length - 1]![1],
+    label: nextName,
   };
 }
 
@@ -163,14 +188,14 @@ function loadEnrichedSevenKPlays(
         s.accuracy AS accuracy,
         s.played_at AS playedAt,
         s.mods AS mods,
-        dr.sunny_star AS sunnyStar,
+        dr.sunny_star AS reworkStar,
         dr.ln_ratio AS lnRatio,
-        dr.est_diff AS sunnyEstDiff
+        dr.est_diff AS reworkEstDiff
       FROM scores s
       JOIN beatmaps b ON b.id = s.beatmap_id
       LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
       LEFT JOIN beatmap_dan_ratings dr
-        ON dr.beatmap_id = b.id AND dr.algorithm = 'sunny'
+        ON dr.beatmap_id = b.id AND dr.algorithm = ?
       WHERE s.delete_pending = 0
         ${user.sql}
         ${mode.sql}
@@ -182,7 +207,7 @@ function loadEnrichedSevenKPlays(
       ORDER BY s.played_at DESC
     `,
     )
-    .all(...user.params, ...mode.params, keyCount) as Array<{
+    .all(REWORK_ALGORITHM, ...user.params, ...mode.params, keyCount) as Array<{
     scoreId: string;
     beatmapId: string;
     title: string;
@@ -191,9 +216,9 @@ function loadEnrichedSevenKPlays(
     accuracy: number;
     playedAt: number;
     mods: string | null;
-    sunnyStar: number | null;
+    reworkStar: number | null;
     lnRatio: number | null;
-    sunnyEstDiff: string | null;
+    reworkEstDiff: string | null;
   }>;
 
   // Modded plays read their persisted dan difficulty variants (dropped until
@@ -201,21 +226,21 @@ function loadEnrichedSevenKPlays(
   const variantRatings = loadDanVariantRatingsSync(
     db,
     [...new Set(rows.map((r) => r.beatmapId))],
-    "sunny",
+    REWORK_ALGORITHM,
   );
 
   const out: EnrichedPlayRow[] = [];
   for (const r of rows) {
-    let sunnyStar = r.sunnyStar != null ? Number(r.sunnyStar) : null;
+    let reworkStar = r.reworkStar != null ? Number(r.reworkStar) : null;
     let lnRatio = r.lnRatio != null ? Number(r.lnRatio) : null;
-    let sunnyEstDiff = r.sunnyEstDiff;
+    let reworkEstDiff = r.reworkEstDiff;
     const variant = resolveDanVariant(r.mods);
     if (variant) {
       const stored = variantRatings.get(danVariantKey(r.beatmapId, variant));
       if (!stored) continue;
-      sunnyStar = stored.star;
+      reworkStar = stored.star;
       lnRatio = stored.lnRatio;
-      sunnyEstDiff = stored.estDiff;
+      reworkEstDiff = stored.estDiff;
     }
     out.push({
       scoreId: r.scoreId,
@@ -225,9 +250,9 @@ function loadEnrichedSevenKPlays(
       difficultyName: r.difficultyName,
       accuracy: Number(r.accuracy ?? 0),
       playedAt: Number(r.playedAt ?? 0),
-      sunnyStar,
+      reworkStar,
       lnRatio,
-      sunnyEstDiff,
+      reworkEstDiff,
       mods: r.mods,
     });
   }
@@ -245,18 +270,18 @@ function playsInDanInterval(
   const mapAxis = axisFilter(axis);
   return bestPlayPerMap(
     plays.filter((p) => {
-      if (p.sunnyStar == null || !(p.sunnyStar > 0)) return false;
+      if (p.reworkStar == null || !(p.reworkStar > 0)) return false;
       if (p.accuracy < accFloor) return false;
       if (
         mapAxis != null &&
         classifyMapAxis(p.lnRatio, thresholds) !== mapAxis
       )
         return false;
-      return p.sunnyStar >= lower && p.sunnyStar <= upper;
+      return p.reworkStar >= lower && p.reworkStar <= upper;
     }),
   ).sort(
     (a, b) =>
-      b.sunnyStar! - a.sunnyStar! ||
+      b.reworkStar! - a.reworkStar! ||
       b.accuracy - a.accuracy ||
       b.playedAt - a.playedAt ||
       a.beatmapId.localeCompare(b.beatmapId),
@@ -274,8 +299,8 @@ function topEnrichedPlaysInBand(
   return bestPlayPerMap(
     plays.filter(
       (p) =>
-        p.sunnyStar != null &&
-        p.sunnyStar > 0 &&
+        p.reworkStar != null &&
+        p.reworkStar > 0 &&
         p.accuracy >= accFloor &&
         (accCeil == null || p.accuracy < accCeil) &&
         (axis == null || classifyMapAxis(p.lnRatio, thresholds) === axis),
@@ -283,7 +308,7 @@ function topEnrichedPlaysInBand(
   )
     .sort(
       (a, b) =>
-        b.sunnyStar! - a.sunnyStar! ||
+        b.reworkStar! - a.reworkStar! ||
         b.accuracy - a.accuracy ||
         b.playedAt - a.playedAt ||
         a.beatmapId.localeCompare(b.beatmapId),
@@ -309,14 +334,14 @@ export function getSkillBandPlays(
   const lnRatioForDan = axisLnRatio(axis);
   const thresholds = readAxisThresholdsSync(db);
 
-  // Cached Sunny ratings only — no request-path backfill.
+  // Cached rework ratings only — no request-path backfill.
   const plays = loadEnrichedSevenKPlays(db, keyCount);
 
   const skillRows: SkillPlayRow[] = plays.map((p) => ({
     beatmapId: p.beatmapId,
     accuracy: p.accuracy,
     playedAt: p.playedAt,
-    sunnyStar: p.sunnyStar,
+    reworkStar: p.reworkStar,
     lnRatio: p.lnRatio,
   }));
 
@@ -338,22 +363,21 @@ export function getSkillBandPlays(
 
   const currentDanLabel =
     currentLevel > 0
-      ? estDiff(currentLevel, lnRatioForDan, keyCount)
+      ? reworkDanLabel(currentLevel, lnRatioForDan, keyCount)
       : null;
-  const nextInterval =
+  const nextBounds =
     currentLevel > 0
-      ? nextDanInterval(currentLevel, lnRatioForDan, keyCount)
+      ? nextReworkDanBounds(currentLevel, lnRatioForDan, keyCount)
       : null;
 
   let inNextDanEnriched: EnrichedPlayRow[] = [];
-  if (nextInterval) {
-    const [lower, upper] = nextInterval;
+  if (nextBounds) {
     inNextDanEnriched = playsInDanInterval(
       plays,
       accMin,
       axis,
-      lower,
-      upper,
+      nextBounds.lower,
+      nextBounds.upper,
       thresholds,
     );
   }
@@ -366,7 +390,7 @@ export function getSkillBandPlays(
     accMax,
     currentLevel,
     currentDanLabel,
-    nextDanLabel: nextInterval?.[2] ?? null,
+    nextDanLabel: nextBounds?.label ?? null,
     inBand: inBandEnriched.map((p) => toDetail(p, lnRatioForDan, keyCount)),
     inBandTotal: inBandEnriched.length,
     inNextDan: inNextDanEnriched

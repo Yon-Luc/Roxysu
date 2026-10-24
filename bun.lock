@@ -13,7 +13,7 @@
     },
     "apps/desktop": {
       "name": "@roxysu/desktop",
-      "version": "0.1.17",
+      "version": "0.1.19",
       "dependencies": {
         "electron-updater": "^6.6.2",
       },
@@ -85,7 +85,7 @@
     },
     "apps/server": {
       "name": "Roxysu",
-      "version": "0.1.17",
+      "version": "0.1.19",
       "dependencies": {
         "@elysia/eden": "^1.4.10",
         "@elysia/html": "^1.4.1",
@@ -103,7 +103,6 @@
         "@roxysu/pattern-7k": "workspace:*",
         "@roxysu/realm-backup": "workspace:*",
         "@roxysu/session-names": "workspace:*",
-        "@roxysu/sunny-dan": "workspace:*",
         "@roxysu/timing-analysis": "workspace:*",
         "@tanstack/react-query": "^5.101.2",
         "@tanstack/react-router": "^1.170.18",
@@ -253,16 +252,6 @@
     "packages/session-names": {
       "name": "@roxysu/session-names",
       "version": "0.0.1",
-      "devDependencies": {
-        "bun-types": "^1.3.14",
-      },
-    },
-    "packages/sunny-dan": {
-      "name": "@roxysu/sunny-dan",
-      "version": "0.0.1",
-      "dependencies": {
-        "@roxysu/osu-chart": "workspace:*",
-      },
       "devDependencies": {
         "bun-types": "^1.3.14",
       },
@@ -532,8 +521,6 @@
     "@roxysu/realm-reader": ["@roxysu/realm-reader@workspace:apps/realm-reader"],
 
     "@roxysu/session-names": ["@roxysu/session-names@workspace:packages/session-names"],
-
-    "@roxysu/sunny-dan": ["@roxysu/sunny-dan@workspace:packages/sunny-dan"],
 
     "@roxysu/timing-analysis": ["@roxysu/timing-analysis@workspace:packages/timing-analysis"],
 

@@ -23,7 +23,7 @@ function play(
 ): SkillPlayRow {
   return {
     accuracy: 0.93,
-    sunnyStar: 5,
+    reworkStar: 5,
     lnRatio: 0.1,
     ...overrides,
   };
@@ -33,10 +33,10 @@ describe("aggregateAccBandMaps", () => {
   test("groups maps in the push accuracy band", () => {
     const maps = aggregateAccBandMaps(
       [
-        play({ beatmapId: "a", playedAt: 1000, accuracy: 0.92, sunnyStar: 4 }),
-        play({ beatmapId: "a", playedAt: 2000, accuracy: 0.94, sunnyStar: 4 }),
-        play({ beatmapId: "b", playedAt: 3000, accuracy: 0.99, sunnyStar: 6 }), // accuracy band
-        play({ beatmapId: "c", playedAt: 4000, accuracy: 0.85, sunnyStar: 3 }), // below push
+        play({ beatmapId: "a", playedAt: 1000, accuracy: 0.92, reworkStar: 4 }),
+        play({ beatmapId: "a", playedAt: 2000, accuracy: 0.94, reworkStar: 4 }),
+        play({ beatmapId: "b", playedAt: 3000, accuracy: 0.99, reworkStar: 6 }), // accuracy band
+        play({ beatmapId: "c", playedAt: 4000, accuracy: 0.85, reworkStar: 3 }), // below push
       ],
       PUSH_ACC_MIN,
       PUSH_ACC_MAX,
@@ -58,19 +58,19 @@ describe("topPlaysInBand", () => {
           beatmapId: "a",
           playedAt: 1000,
           accuracy: 0.91,
-          sunnyStar: 8,
+          reworkStar: 8,
         }),
         play({
           beatmapId: "a",
           playedAt: 2000,
           accuracy: 0.94,
-          sunnyStar: 8,
+          reworkStar: 8,
         }),
         play({
           beatmapId: "b",
           playedAt: 3000,
           accuracy: 0.92,
-          sunnyStar: 9,
+          reworkStar: 9,
         }),
       ],
       PUSH_ACC_MIN,
@@ -89,14 +89,14 @@ describe("topPlaysInBand", () => {
           beatmapId: "a",
           playedAt: 1000,
           accuracy: 0.97,
-          sunnyStar: 8.5,
+          reworkStar: 8.5,
           lnRatio: 0.5,
         }),
         play({
           beatmapId: "b",
           playedAt: 2000,
           accuracy: 0.92,
-          sunnyStar: 8,
+          reworkStar: 8,
           lnRatio: 0.5,
         }),
       ],
@@ -115,14 +115,14 @@ describe("topPlaysInBand", () => {
           beatmapId: "a",
           playedAt: 1000,
           accuracy: 0.97,
-          sunnyStar: 8.5,
+          reworkStar: 8.5,
           lnRatio: 0.5,
         }),
         play({
           beatmapId: "b",
           playedAt: 2000,
           accuracy: 0.92,
-          sunnyStar: 8,
+          reworkStar: 8,
           lnRatio: 0.5,
         }),
       ],
@@ -152,7 +152,7 @@ describe("estimateSevenKSkillFromPlays as-of", () => {
           beatmapId: `early-${i}`,
           playedAt: day1 + i,
           accuracy: 0.92,
-          sunnyStar: 4,
+          reworkStar: 4,
         }),
       );
     }
@@ -162,7 +162,7 @@ describe("estimateSevenKSkillFromPlays as-of", () => {
           beatmapId: `comfort-${i}`,
           playedAt: day1 + 100 + i,
           accuracy: 0.97,
-          sunnyStar: 4.2,
+          reworkStar: 4.2,
         }),
       );
     }
@@ -171,7 +171,7 @@ describe("estimateSevenKSkillFromPlays as-of", () => {
       beatmapId: "late",
       playedAt: day3,
       accuracy: 0.92,
-      sunnyStar: 9,
+      reworkStar: 9,
     });
 
     const asOfMid = estimateSevenKSkillFromPlays([...early, latePush], {
@@ -201,7 +201,7 @@ describe("estimateSevenKSkillFromPlays as-of", () => {
           beatmapId: `ln-${i}`,
           playedAt: 1000 + i,
           accuracy: 0.92,
-          sunnyStar: 8.5,
+          reworkStar: 8.5,
           lnRatio: 0.5,
         }),
       );
@@ -212,7 +212,7 @@ describe("estimateSevenKSkillFromPlays as-of", () => {
           beatmapId: `comfort-${i}`,
           playedAt: 2000 + i,
           accuracy: 0.85,
-          sunnyStar: 7,
+          reworkStar: 7,
           lnRatio: 0.5,
         }),
       );

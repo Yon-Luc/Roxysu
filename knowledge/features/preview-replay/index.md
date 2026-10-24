@@ -257,25 +257,18 @@ Playfield = the visual layer for that ruleset (notefield, 512×384, or taiko lan
     optional `mods` query param (acronyms `MR|IN|HO`, others dropped) plus an
     NM/MR/IN/HO pill picker in the modal. Conversions reuse
     `OsuFileParser.modIN()` / `modHO()` via `applyManiaPatternMods`
-    (Invert then Hold Off, Sunny order). Invert is a start-based approximation:
+    (Invert then Hold Off). Invert is a start-based approximation:
     each note becomes an LN ending `max(d/2, d − beatLength/4)` before the next
-    note in its column, and a column's trailing note is dropped — same as the
-    Sunny dan estimator. Mirror flips columns after conversion.
+    note in its column, and a column's trailing note is dropped — same conversion
+    used by the mania difficulty port. Mirror flips columns after conversion.
     **Source:** `replay/loadChart.ts:applyManiaPatternMods`,
     `routes/scores.ts` mania branch, `routes/beatmaps.ts` `/:id/preview`,
     `replay/mods.ts:parsePatternModQuery` — status: verified by
     `patternMods.test.ts`, `mods.test.ts`.
 
-11. The preview modal shows a **mod-aware Sunny dan** chip next to the mod
-    pills, fed by `GET /api/beatmaps/:id/sunny-dan?mods=&rate=`. Base combos
-    (rate 1, no IN/HO) read the Sunny dan ratings store; modded combos prefer a
-    persisted dan difficulty variants row and otherwise estimate ephemerally.
-    Ephemeral results are never persisted — variant rows are written only by
-    the background job.
-    **Source:** `map-analysis/computeSunnyDan.ts:getSunnyDanForPatternMods`,
-    `routes/beatmaps.ts` `/:id/sunny-dan`, `BeatmapPreviewModal.tsx` Sunny chip,
-    `lib/api.ts:fetchBeatmapSunnyDan` — status: verified by
-     `beatmapsPreview.test.ts`.
+11. The preview modal does not show a dan chip; pattern mod pills and chart
+    conversion for preview playback are unchanged.
+    **Status:** verified
 
 12. Score rewatch and Play (preview modal and score modal) show running judgment
     counts on the playfield: perfect / great / good / ok / meh / miss, including

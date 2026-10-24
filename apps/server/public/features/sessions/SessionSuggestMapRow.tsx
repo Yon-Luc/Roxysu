@@ -17,10 +17,6 @@ export type SessionSuggestMapFields = {
   artist: string | null;
   difficultyName: string | null;
   starRating: number;
-  sunnyEstDiff?: string | null;
-  sunnyStar?: number | null;
-  danielEstDiff?: string | null;
-  danielStar?: number | null;
   reworkEstDiff?: string | null;
   reworkStar?: number | null;
   reworkLnRatio?: number | null;
@@ -72,10 +68,6 @@ export function SessionSuggestMapRow({
             {formatPrimaryRating({
               mode: ratingMode,
               starRating: item.starRating,
-              sunnyEstDiff: item.sunnyEstDiff,
-              sunnyStar: item.sunnyStar,
-              danielEstDiff: item.danielEstDiff,
-              danielStar: item.danielStar,
               reworkEstDiff: item.reworkEstDiff,
               reworkStar: item.reworkStar,
               lnRatio: item.reworkLnRatio,

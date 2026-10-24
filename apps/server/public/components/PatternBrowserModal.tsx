@@ -201,7 +201,7 @@ function PatternBrowserModal({
             <p className="py-8 text-center text-sm text-muted">
               No analyzed patterns in this group yet.
               {axis !== "all"
-                ? " Sunny LN classification may still be backfilling — try All or check back shortly."
+                ? " Rework LN classification may still be backfilling — try All or check back shortly."
                 : " Pattern analysis runs when you open this view or search with pattern filters."}
             </p>
           ) : (
@@ -272,10 +272,6 @@ function PatternBrowserModal({
                                 {formatPrimaryRating({
                                   mode: ratingMode,
                                   starRating: item.starRating,
-                                  sunnyEstDiff: item.sunnyEstDiff,
-                                  sunnyStar: item.sunnyStar,
-                                  danielEstDiff: item.danielEstDiff,
-                                  danielStar: item.danielStar,
                                   reworkEstDiff: item.reworkEstDiff,
                                   reworkStar: item.reworkStar,
                                   lnRatio: item.reworkLnRatio,

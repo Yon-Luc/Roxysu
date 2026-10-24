@@ -1,8 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  FLN_RATIO_THRESHOLD,
-  LN_DAN_RATIO_THRESHOLD,
-} from "../../map-analysis/estDiff";
+import { DEFAULT_AXIS_THRESHOLDS } from "./axisThresholds";
 import { buildBaseKeymodeFilter } from "./candidates";
 
 describe("buildBaseKeymodeFilter", () => {
@@ -21,7 +18,7 @@ describe("buildBaseKeymodeFilter", () => {
   test("adds rice LN-ratio bound", () => {
     const filter = buildBaseKeymodeFilter(2, 8, "rc", null, [], 4);
     expect(filter.sql).toContain("COALESCE(dr.ln_ratio, 0) < ?");
-    expect(filter.params).toEqual([4, 2, 8, LN_DAN_RATIO_THRESHOLD]);
+    expect(filter.params).toEqual([4, 2, 8, DEFAULT_AXIS_THRESHOLDS.ln]);
   });
 
   test("adds LN and FLN ratio bounds", () => {
@@ -31,10 +28,10 @@ describe("buildBaseKeymodeFilter", () => {
       7,
       2,
       8,
-      LN_DAN_RATIO_THRESHOLD,
-      FLN_RATIO_THRESHOLD,
+      DEFAULT_AXIS_THRESHOLDS.ln,
+      DEFAULT_AXIS_THRESHOLDS.fln,
     ]);
-    expect(fln.params).toEqual([7, 2, 8, FLN_RATIO_THRESHOLD]);
+    expect(fln.params).toEqual([7, 2, 8, DEFAULT_AXIS_THRESHOLDS.fln]);
   });
 
   test("uses custom axis thresholds", () => {

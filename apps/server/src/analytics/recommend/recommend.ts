@@ -12,7 +12,7 @@ import {
   strongestAxis,
   weakestAxis,
 } from "./sevenKSkill";
-import { countMissingSunnyDan, countKeymodeWithSunny } from "./candidates";
+import { countMissingReworkDan, countKeymodeWithRework } from "./candidates";
 import {
   recommendAccuracy,
   recommendConsistency,
@@ -97,8 +97,8 @@ export function recommendSevenK(
   const keyCount = parseSkillKeyCount(opts.keyCount);
   let skillset = parseSkillset(opts.skillset);
 
-  const missingSunny = countMissingSunnyDan(db, keyCount);
-  const needsSunnyBackfill = missingSunny > 0;
+  const missingRework = countMissingReworkDan(db, keyCount);
+  const needsReworkBackfill = missingRework > 0;
 
   const axisThresholds = readAxisThresholdsSync(db);
   const focusSettings = readFocusSettingsSync(db);
@@ -123,7 +123,7 @@ export function recommendSevenK(
   }
 
   const overlay = { sql: overlaySql, params: overlayParams };
-  const totalMapsConsidered = countKeymodeWithSunny(db, keyCount);
+  const totalMapsConsidered = countKeymodeWithRework(db, keyCount);
 
   // Companella defaults skillset focus to the player's strongest axis when unset.
   if (focus === "skillset" && skillset === null) {
@@ -142,7 +142,7 @@ export function recommendSevenK(
       skillTopPlays: topPlays,
       summary: summaryFor(focus, resolvedSkillset, skill, 0, topPlays),
       totalMapsConsidered,
-      needsSunnyBackfill,
+      needsReworkBackfill,
       recommendations: [],
     };
   }
@@ -228,7 +228,7 @@ export function recommendSevenK(
     skillTopPlays: topPlays,
     summary: summaryFor(focus, batchSkillset, skill, recommendations.length, topPlays),
     totalMapsConsidered,
-    needsSunnyBackfill,
+    needsReworkBackfill,
     recommendations,
   };
 }

@@ -7,7 +7,7 @@ export type FocusBandConfig = {
   accMin: number;
   /** Exclusive upper accuracy bound (0–1+eps). */
   accMax: number;
-  /** Target Sunny relative to band skill (1.0 = same difficulty). */
+  /** Target rework ★ relative to band skill (1.0 = same difficulty). */
   targetRatio: number;
   /** ± window around targetRatio. */
   tolerance: number;

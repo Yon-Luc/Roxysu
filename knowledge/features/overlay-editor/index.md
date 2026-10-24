@@ -57,9 +57,9 @@ evaluated against **tosu live**. The editor stays dark so the canvas matches the
    seek/timing bar. The embed's clock syncs with tosu `beatmap.time.live`
    (see `features/now-selected/` rule 4).
 9. The **identity** element carries per-instance options (`identityOptions`):
-   `showAnalysis` toggle, `ratingSource` (`dan` → Sunny dan estimate from tosu
-   live analysis, or `star` → beatmap star rating), and `showPattern`
-   (dominant pattern from tosu live analysis). Configured in the editor
+   `showAnalysis` toggle, `ratingSource` (`dan` → Rework dan from tosu live
+   `analysis.rework`, or `star` → beatmap star rating), and `showPattern`
+   (chart shape from tosu live analysis). Configured in the editor
    inspector; defaults keep the element minimal.
 10. Every element can opt into a background instead of transparent
     (`backgroundOptions`: `bgEnabled`, `bgColor` hex, `bgOpacity` 0–100).

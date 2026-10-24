@@ -15,7 +15,7 @@ touches:
 
 ## User intent
 
-On a Roxysu version change (or first boot of that version), reuse admin-published Sunny/Daniel/Rework dan and dominant-skill rows from the Hub so the player does not recompute every map.
+On a Roxysu version change (or first boot of that version), reuse admin-published Rework dan and dominant-skill rows from the Hub so the player does not recompute every map.
 
 ## Flow
 
@@ -53,7 +53,7 @@ Hub store calc_bundles + calc_bundle_entries
 ## Business guarantee
 
 - Only hash-matched maps receive Hub rows.
-- Sunny and Daniel successful local computes are never overwritten.
+- Bundles export/apply `mania-difficulty` and `mania-skill-v1` only (other algorithm ids are ignored).
 - Packaged version bumps replace rework dan and dominant-skill rows the bundle contains. `bun desktop` does not.
 - A manual Settings pull stays gap-fill.
 - Kill switch `HUB_CALC_BUNDLES=0` makes public GET return 503.

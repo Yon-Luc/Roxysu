@@ -1,30 +1,12 @@
 /**
- * Mania map analysis (Sunny Rework → dan estimate; Daniel for 4K RC;
- * the mania difficulty port → rework dan).
+ * Mania map analysis (mania difficulty port → rework dan; pattern / timing).
  *
  * Algorithm/port sources:
- * - https://github.com/LeoBlackMT/osumania_map_analyser (Sunny/Daniel + dan interval tables)
- * - https://github.com/sunnyxxy/Star-Rating-Rebirth (Sunny Rework)
- * - https://thebagelofman.github.io/Daniel/ (Daniel 4K RC estimator)
  * - `packages/mania-difficulty` (pinned loleur362/osu `mania-difficulty` port)
+ * - `packages/mania-pattern-analysis`
  *
  * Rework dan floors live in `packages/mania-difficulty/dans.json`.
  */
-export { runSunnyEstimatorFromText } from "./sunnyEstimator";
-export { runDanielEstimatorFromText } from "./danielEstimator";
-export {
-  getOrComputeSunnyDan,
-  backfillSunnyDanSync,
-  relabelSunnyDanSync,
-  ensureSunnyDanForIdsSync,
-  SUNNY_ALGORITHM,
-} from "./computeSunnyDan";
-export {
-  getOrComputeDanielDan,
-  backfillDanielDanSync,
-  ensureDanielDanForIdsSync,
-  DANIEL_ALGORITHM,
-} from "./computeDanielDan";
 export {
   getReworkDan,
   computeReworkDanSync,
@@ -54,7 +36,6 @@ export {
   reworkDanTierNames,
   REWORK_LN_RATIO_THRESHOLD,
 } from "./reworkDan";
-export { estDiff, LN_DAN_RATIO_THRESHOLD } from "./estDiff";
 export {
   getOrComputePatternAnalysis,
   getManiaPatternDetail,
@@ -86,20 +67,6 @@ export { analyzeManiaNotes as analyze7kNotes } from "@roxysu/mania-pattern-analy
 export { analyzeManiaStructuralFromOsuText as analyze7kStructuralFromOsuText } from "@roxysu/mania-pattern-analysis";
 /** @deprecated Use analyzeManiaStructuralNotes */
 export { analyzeManiaStructuralNotes as analyze7kStructuralNotes } from "@roxysu/mania-pattern-analysis";
-export {
-  getSunnyDanJobState,
-  getSunnyDanCoverage,
-  startSunnyDanBackfill,
-  stopSunnyDanBackfill,
-  countSunnyDanMissing,
-} from "./sunnyDanJob";
-export {
-  getDanielDanJobState,
-  getDanielDanCoverage,
-  startDanielDanBackfill,
-  stopDanielDanBackfill,
-  countDanielDanMissing,
-} from "./danielDanJob";
 export {
   getPatternAnalysisJobState,
   getPatternAnalysisJobStatus,

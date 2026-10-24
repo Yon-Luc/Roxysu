@@ -17,7 +17,7 @@ export const OVERLAY_ELEMENT_DEFS: {
   { type: "difficulty", label: "Difficulty", hint: "Star rating, keys, mods" },
   { type: "livePlay", label: "Live play", hint: "Accuracy, combo, score, PP" },
   { type: "preview", label: "Preview", hint: "Embedded playfield of the selected map" },
-  { type: "analysis", label: "Analysis", hint: "Sunny star + dominant pattern" },
+  { type: "analysis", label: "Analysis", hint: "Rework dan + dominant pattern" },
   { type: "sessionStats", label: "Session stats", hint: "Session name and play count" },
   { type: "personalStats", label: "Personal stats", hint: "Plays / best acc / best PP" },
   { type: "density", label: "Density", hint: "Density over time mini-graph" },

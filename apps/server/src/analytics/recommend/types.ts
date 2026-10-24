@@ -1,4 +1,4 @@
-/** Companella-style focus modes adapted for 7K Sunny difficulty. */
+/** Companella-style focus modes adapted for mania rework difficulty. */
 export type RecommendFocus =
   | "push"
   | "accuracy"
@@ -10,7 +10,7 @@ export type RecommendFocus =
 export type RecommendSkillsetFilter = "both" | "rc" | "ln" | "fln";
 
 /**
- * Skill axes via Sunny ln_ratio (defaults; user-configurable in Settings → Customize):
+ * Skill axes via rework ln_ratio (defaults; user-configurable in Settings → Customize):
  * - rc: &lt; ln threshold (default 20%)
  * - ln: [ln, fln) (default 20–80%)
  * - fln: ≥ fln threshold (default 80%)
@@ -27,7 +27,7 @@ export type SevenKSkillProfile = {
   ln: number;
   fln: number;
   /**
-   * Push baseline: average Sunny of maps with scores in the 90–95% band.
+   * Push baseline: average rework ★ of maps with scores in the 90–95% band.
    */
   peakOverall: number;
   peakRc: number;
@@ -38,7 +38,7 @@ export type SevenKSkillProfile = {
   clearLnMaps: number;
   clearFlnMaps: number;
   /**
-   * Accuracy baseline: average Sunny of maps with scores at 99%+.
+   * Accuracy baseline: average rework ★ of maps with scores at 99%+.
    */
   accuracyOverall: number;
   accuracyRc: number;
@@ -48,7 +48,7 @@ export type SevenKSkillProfile = {
   accuracyLnMaps: number;
   accuracyFlnMaps: number;
   /**
-   * Consistency baseline: average Sunny of maps with scores in the 96–99% band.
+   * Consistency baseline: average rework ★ of maps with scores in the 96–99% band.
    */
   consistencyOverall: number;
   consistencyRc: number;
@@ -57,7 +57,7 @@ export type SevenKSkillProfile = {
   consistencyRcMaps: number;
   consistencyLnMaps: number;
   consistencyFlnMaps: number;
-  /** Scores with Sunny used in the comfort estimate. */
+  /** Scores with rework ★ used in the comfort estimate. */
   samplePlays: number;
   rcPlays: number;
   lnPlays: number;
@@ -71,7 +71,7 @@ export type MapMatchResult = {
   mmr: number;
   relativeDifficulty: number;
   confidence: number;
-  sunnyStar: number;
+  reworkStar: number;
   lnRatio: number | null;
   axis: SkillAxis;
   bestAccuracy: number | null;
@@ -99,7 +99,7 @@ export type RecommendItem = MapMatchResult & {
   bestScore: number | null;
   bestMisses: number | null;
   masteryLevel: number | null;
-  sunnyEstDiff: string | null;
+  reworkEstDiff: string | null;
   keyCount: number | null;
 };
 
@@ -110,6 +110,6 @@ export type RecommendBatch = {
   skillTopPlays: number;
   summary: string;
   totalMapsConsidered: number;
-  needsSunnyBackfill: boolean;
+  needsReworkBackfill: boolean;
   recommendations: RecommendItem[];
 };

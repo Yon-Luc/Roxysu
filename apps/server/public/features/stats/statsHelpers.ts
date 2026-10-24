@@ -130,7 +130,7 @@ export function skillTooltipFormatter(
   return [
     formatSkillRating({
       mode,
-      sunnyStar: n,
+      reworkStar: n,
       axis: skillRatingAxis(axis),
     }),
     label,

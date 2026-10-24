@@ -1,4 +1,4 @@
-import { parseOsuChart } from "@roxysu/osu-chart";
+import { OsuFileParser, parseOsuChart, notesFromParser } from "@roxysu/osu-chart";
 import {
   reworkDanLabel,
   skillProfile,
@@ -6,9 +6,9 @@ import {
   type SkillLabel,
   type SkillStar,
 } from "@roxysu/mania-difficulty";
-import type { ChartNote } from "@roxysu/osu-chart";
+import type { ChartNote, ParsedOsuChart } from "@roxysu/osu-chart";
 
-/** Estimator id stored in the Sunny dan ratings store. */
+/** Estimator id stored in the dan ratings store. */
 export const REWORK_ALGORITHM = "mania-difficulty";
 
 export type ReworkDanValues = {
@@ -53,20 +53,60 @@ export type ReworkPatternSummary = {
   overallDifficulty: number;
 };
 
+export type ReworkEstimatorOptions = {
+  clockRate?: number;
+  speedRate?: number;
+  /**
+   * Invert (IN): convert rice to LNs before rating. Same chart conversion as
+   * dan difficulty variants (`ln_only`). Conversion failures keep the original.
+   */
+  lnOnly?: boolean;
+};
+
 function overallDifficultyFrom(metaData: Record<string, string>): number {
   const raw = Number(metaData["OverallDifficulty"]);
   return Number.isFinite(raw) && raw > 0 ? raw : 8;
 }
 
-function parseManiaChart(osuText: string) {
-  const chart = parseOsuChart(osuText);
-  if (chart.status === "NotMania" || chart.gameMode !== "3") {
+/**
+ * Parse a mania chart, optionally applying Invert after the base parse
+ * (same order as Sunny/Daniel: process → modIN).
+ */
+function parseManiaChart(osuText: string, lnOnly = false): ParsedOsuChart {
+  if (!lnOnly) {
+    const chart = parseOsuChart(osuText);
+    if (chart.status === "NotMania" || chart.gameMode !== "3") {
+      throw new Error("Beatmap mode is not mania");
+    }
+    if (chart.status === "Fail" || chart.columnCount <= 0) {
+      throw new Error("Beatmap parse failed");
+    }
+    return chart;
+  }
+
+  const parser = new OsuFileParser(osuText);
+  parser.process();
+  if (parser.status === "NotMania" || parser.gameMode !== "3") {
     throw new Error("Beatmap mode is not mania");
   }
-  if (chart.status === "Fail" || chart.columnCount <= 0) {
+  if (parser.status === "Fail" || parser.columnCount <= 0) {
     throw new Error("Beatmap parse failed");
   }
-  return chart;
+  try {
+    parser.modIN();
+  } catch {
+    // Keep the unconverted chart — same policy as Sunny/Daniel estimators.
+  }
+  return {
+    columnCount: parser.columnCount,
+    gameMode: parser.gameMode,
+    status: parser.status,
+    lnRatio: parser.lnRatio,
+    notes: notesFromParser(parser),
+    timingPoints: parser.timingPoints,
+    breaks: parser.breaks,
+    metaData: parser.metaData,
+  };
 }
 
 function toInput(chart: { columnCount: number; notes: ChartNote[] }, od: number) {
@@ -116,6 +156,7 @@ export function analyzeManiaOnceFromText(
   osuText: string,
   options: {
     clockRate?: number;
+    lnOnly?: boolean;
     /** Compute the dominant-skill row too. Default false. */
     withPattern?: boolean;
     /**
@@ -127,7 +168,7 @@ export function analyzeManiaOnceFromText(
     shouldContinue?: () => boolean;
   } = {},
 ): ReworkEstimatorResult {
-  const chart = parseManiaChart(osuText);
+  const chart = parseManiaChart(osuText, options.lnOnly === true);
   const overallDifficulty = overallDifficultyFrom(chart.metaData);
   const beatmap = toInput(chart, overallDifficulty);
   const withPattern = options.withPattern === true;
@@ -189,10 +230,11 @@ export function analyzeManiaOnceFromText(
  */
 export function runReworkEstimatorFromText(
   osuText: string,
-  options: { speedRate?: number; clockRate?: number } = {},
+  options: ReworkEstimatorOptions = {},
 ): Omit<ReworkEstimatorResult, "pattern"> {
   const result = analyzeManiaOnceFromText(osuText, {
     clockRate: options.clockRate ?? options.speedRate ?? 1,
+    lnOnly: options.lnOnly === true,
   });
   const { pattern: _pattern, ...dan } = result;
   return dan;

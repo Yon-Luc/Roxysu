@@ -17,7 +17,6 @@ import {
   reworkReplaceAlgorithmsForBoot,
   uploadCalcBundleToHub,
 } from "./calcBundle";
-import { SUNNY_ALGORITHM } from "./computeSunnyDan";
 import { REWORK_ALGORITHM } from "./computeReworkDan";
 
 const SET_ID = "00000000-0000-0000-0000-000000000030";
@@ -70,7 +69,7 @@ beforeAll(async () => {
 
   await db.insert(beatmapDanRatings).values({
     beatmapId: MAP_A,
-    algorithm: SUNNY_ALGORITHM,
+    algorithm: REWORK_ALGORITHM,
     beatmapHash: HASH_A,
     sunnyStar: 5,
     lnRatio: 0.1,
@@ -99,7 +98,7 @@ describe("reworkReplaceAlgorithmsForBoot", () => {
     const replace = reworkReplaceAlgorithmsForBoot({ ROXYSU_PACKAGED: "1" });
     expect(replace?.has(REWORK_ALGORITHM)).toBe(true);
     expect(replace?.has("mania-skill-v1")).toBe(true);
-    expect(replace?.has(SUNNY_ALGORITHM)).toBe(false);
+    expect(replace?.has("sunny")).toBe(false);
   });
 });
 
@@ -109,7 +108,7 @@ describe("applyCalcBundle", () => {
       {
         beatmapHash: HASH_A,
         onlineBeatmapId: 100,
-        algorithm: SUNNY_ALGORITHM,
+        algorithm: REWORK_ALGORITHM,
         sunnyStar: 9,
         lnRatio: 0.9,
         columnCount: 4,
@@ -118,7 +117,7 @@ describe("applyCalcBundle", () => {
       {
         beatmapHash: HASH_B,
         onlineBeatmapId: 101,
-        algorithm: SUNNY_ALGORITHM,
+        algorithm: REWORK_ALGORITHM,
         sunnyStar: 6.5,
         lnRatio: 0.2,
         columnCount: 4,
@@ -126,7 +125,7 @@ describe("applyCalcBundle", () => {
       },
       {
         beatmapHash: "ff".repeat(32),
-        algorithm: SUNNY_ALGORITHM,
+        algorithm: REWORK_ALGORITHM,
         sunnyStar: 1,
         estDiff: "unmatched",
       },
@@ -142,7 +141,7 @@ describe("applyCalcBundle", () => {
       .where(
         and(
           eq(beatmapDanRatings.beatmapId, MAP_A),
-          eq(beatmapDanRatings.algorithm, SUNNY_ALGORITHM),
+          eq(beatmapDanRatings.algorithm, REWORK_ALGORITHM),
         ),
       )
       .get();
@@ -155,7 +154,7 @@ describe("applyCalcBundle", () => {
       .where(
         and(
           eq(beatmapDanRatings.beatmapId, MAP_B),
-          eq(beatmapDanRatings.algorithm, SUNNY_ALGORITHM),
+          eq(beatmapDanRatings.algorithm, REWORK_ALGORITHM),
         ),
       )
       .get();
@@ -163,7 +162,7 @@ describe("applyCalcBundle", () => {
     expect(filled?.sunnyStar).toBe(6.5);
   });
 
-  test("replaceAlgorithms overwrites successful rework and leaves sunny", async () => {
+  test("replaceAlgorithms overwrites successful rework", async () => {
     await db
       .insert(beatmapDanRatings)
       .values({
@@ -192,12 +191,6 @@ describe("applyCalcBundle", () => {
       [
         {
           beatmapHash: HASH_A,
-          algorithm: SUNNY_ALGORITHM,
-          sunnyStar: 9,
-          estDiff: "SHOULD_NOT_OVERWRITE",
-        },
-        {
-          beatmapHash: HASH_A,
           algorithm: REWORK_ALGORITHM,
           sunnyStar: 2.5,
           lnRatio: 0.1,
@@ -208,20 +201,8 @@ describe("applyCalcBundle", () => {
       { replaceAlgorithms: new Set([REWORK_ALGORITHM]) },
     );
 
-    expect(stats.skipped).toBe(1);
+    expect(stats.skipped).toBe(0);
     expect(stats.applied).toBe(1);
-
-    const sunny = await db
-      .select()
-      .from(beatmapDanRatings)
-      .where(
-        and(
-          eq(beatmapDanRatings.beatmapId, MAP_A),
-          eq(beatmapDanRatings.algorithm, SUNNY_ALGORITHM),
-        ),
-      )
-      .get();
-    expect(sunny?.estDiff).toBe("Regular 1 mid");
 
     const rework = await db
       .select()
@@ -238,30 +219,33 @@ describe("applyCalcBundle", () => {
   });
 
   test("replaces failed local rows", async () => {
-    await db.insert(beatmapDanRatings).values({
-      beatmapId: MAP_B,
-      algorithm: "daniel",
-      beatmapHash: HASH_B,
-      sunnyStar: null,
-      lnRatio: null,
-      columnCount: null,
-      estDiff: null,
-      error: "Boom",
-      updatedAt: new Date(),
-    }).onConflictDoUpdate({
-      target: [beatmapDanRatings.beatmapId, beatmapDanRatings.algorithm],
-      set: {
-        error: "Boom",
-        estDiff: null,
+    await db
+      .insert(beatmapDanRatings)
+      .values({
+        beatmapId: MAP_B,
+        algorithm: REWORK_ALGORITHM,
+        beatmapHash: HASH_B,
         sunnyStar: null,
+        lnRatio: null,
+        columnCount: null,
+        estDiff: null,
+        error: "Boom",
         updatedAt: new Date(),
-      },
-    });
+      })
+      .onConflictDoUpdate({
+        target: [beatmapDanRatings.beatmapId, beatmapDanRatings.algorithm],
+        set: {
+          error: "Boom",
+          estDiff: null,
+          sunnyStar: null,
+          updatedAt: new Date(),
+        },
+      });
 
     const stats = await applyCalcBundle(db, [
       {
         beatmapHash: HASH_B,
-        algorithm: "daniel",
+        algorithm: REWORK_ALGORITHM,
         sunnyStar: 4,
         lnRatio: 0,
         columnCount: 4,
@@ -276,7 +260,7 @@ describe("applyCalcBundle", () => {
       .where(
         and(
           eq(beatmapDanRatings.beatmapId, MAP_B),
-          eq(beatmapDanRatings.algorithm, "daniel"),
+          eq(beatmapDanRatings.algorithm, REWORK_ALGORITHM),
         ),
       )
       .get();
@@ -284,12 +268,26 @@ describe("applyCalcBundle", () => {
     expect(row?.estDiff).toBe("Regular 0 mid");
   });
 
-  test("export includes successful hash-matched rows only", async () => {
+  test("skips unknown legacy algorithms", async () => {
+    const stats = await applyCalcBundle(db, [
+      {
+        beatmapHash: HASH_A,
+        algorithm: "sunny",
+        sunnyStar: 9,
+        estDiff: "ignored",
+      },
+    ]);
+    expect(stats.skipped).toBe(1);
+    expect(stats.applied).toBe(0);
+  });
+
+  test("export includes successful hash-matched rework rows only", async () => {
     const entries = await exportCalcBundleEntries(db);
-    const sunny = entries.filter((e) => e.algorithm === SUNNY_ALGORITHM);
-    expect(sunny.some((e) => e.beatmapHash === HASH_A)).toBe(true);
-    expect(sunny.some((e) => e.beatmapHash === HASH_B)).toBe(true);
-    expect(sunny.every((e) => e.estDiff != null)).toBe(true);
+    const rework = entries.filter((e) => e.algorithm === REWORK_ALGORITHM);
+    expect(rework.length).toBeGreaterThan(0);
+    expect(rework.every((e) => e.estDiff != null)).toBe(true);
+    expect(entries.every((e) => e.algorithm !== "sunny")).toBe(true);
+    expect(entries.every((e) => e.algorithm !== "daniel")).toBe(true);
   });
 });
 

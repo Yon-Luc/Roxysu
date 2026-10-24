@@ -11,7 +11,7 @@ import {
 import {
   MANIA_RATING_VERSION,
   PATTERN_ALGORITHM,
-  SUNNY_DAN_ALGORITHM,
+  REWORK_DAN_ALGORITHM,
 } from "../integrations/roxysu-insights";
 import type { BeatmapInsights } from "./types";
 
@@ -70,7 +70,7 @@ export class BeatmapInsightsRepository {
       .where(
         and(
           inArray(beatmapDanRatings.beatmapId, beatmapIds),
-          eq(beatmapDanRatings.algorithm, SUNNY_DAN_ALGORITHM),
+          eq(beatmapDanRatings.algorithm, REWORK_DAN_ALGORITHM),
         ),
       )
       .all();

@@ -55,18 +55,8 @@ const FIELDS: { field: string; meaning: string; example: string }[] = [
   {
     field: "dan",
     meaning:
-      "Dan label. Matches Sunny tiers (4K Intro/Reform/LN, 7K Regular/LN) and Daniel tiers on 4K (Alpha through Theta). Quote multi-word labels. Use daniel: for Daniel only.",
+      "Rework dan label (alias of rework:). Matches mania difficulty port tiers via expandReworkDanMatch. Quote multi-word labels.",
     example: 'key=4 dan:"Reform 5"',
-  },
-  {
-    field: "daniel",
-    meaning: "Daniel dan label (4K RC only; Alpha through Theta tiers)",
-    example: 'daniel:Beta key=4',
-  },
-  {
-    field: "sunny / danstars",
-    meaning: "Sunny rework star rating (range or comparison)",
-    example: "sunny:5..6",
   },
   {
     field: "pattern / dominant / style",
@@ -88,7 +78,7 @@ const FIELDS: { field: string; meaning: string; example: string }[] = [
   {
     field: "axis / rice / lnmap",
     meaning:
-      "RC vs LN map split from Sunny LN ratio (≥20% LN = LN map). Same threshold as dan labels.",
+      "RC vs LN map split from rework LN ratio (≥20% LN = LN map). Same threshold as dan labels.",
     example: "key=7 axis:rc pattern:jack",
   },
   { field: "mods / mod", meaning: "Mods used on a score", example: "mods:DT" },
@@ -121,7 +111,7 @@ const EXAMPLES = [
   "key=7 ln<10",
   "key=4 dan:Reform",
   'key=7 dan:"Regular 4"',
-  "key=7 dan:Regular sunny:6..8",
+  "key=7 dan:Regular reworkstars:6..8",
   "pattern:jack",
   "key=7 pattern:jack",
   "key=7 axis:rc pattern:speed",

@@ -13,7 +13,7 @@ One subdirectory per product surface. Terms: [vocabulary.md](../vocabulary.md).
 | Realm extraction | [live-sync/](live-sync/index.md) |
 | Online score pull | [online-score-pull/](online-score-pull/index.md) |
 | Score transfer | [score-transfer/](score-transfer/index.md) |
-| Sunny dan / 4K/7K recommend | [sunny-dan-recommendations/](sunny-dan-recommendations/index.md) |
+| Rework dan / 4K/7K recommend | [rework-dan-recommendations/](rework-dan-recommendations/index.md) |
 | Stats | [stats/](stats/index.md) |
 | Download mirrors | [download-mirrors/](download-mirrors/index.md) |
 | Map marathon | [map-marathon/](map-marathon/index.md) |

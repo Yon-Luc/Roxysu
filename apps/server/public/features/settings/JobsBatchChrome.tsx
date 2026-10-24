@@ -3,15 +3,11 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createPortal } from "react-dom";
 import {
-  fetchDanielDanJob,
   fetchPatternAnalysisJob,
   fetchReworkDanJob,
-  fetchSunnyDanJob,
   stopAllJobs,
-  type DanielDanJob,
   type PatternAnalysisJob,
   type ReworkDanJob,
-  type SunnyDanJob,
 } from "../../lib/api";
 import { pushToast } from "../../lib/toasts";
 
@@ -43,15 +39,8 @@ function jobProgress(job: JobLike | undefined): {
   return { done: computed, total, pct };
 }
 
-function aggregate(
-  sunny?: SunnyDanJob,
-  daniel?: DanielDanJob,
-  rework?: ReworkDanJob,
-  pattern?: PatternAnalysisJob,
-) {
+function aggregate(rework?: ReworkDanJob, pattern?: PatternAnalysisJob) {
   const jobs = [
-    { name: "Sunny", job: sunny },
-    { name: "Daniel", job: daniel },
     { name: "Rework", job: rework },
     { name: "Pattern", job: pattern },
   ].filter((j) => isBusy(j.job?.status));
@@ -89,16 +78,6 @@ export function JobsBatchChrome() {
     return 2_500;
   };
 
-  const sunnyQuery = useQuery({
-    queryKey: ["settings", "sunny-dan"],
-    queryFn: fetchSunnyDanJob,
-    refetchInterval: (q) => jobsPollMs(isBusy(q.state.data?.status)),
-  });
-  const danielQuery = useQuery({
-    queryKey: ["settings", "daniel-dan"],
-    queryFn: fetchDanielDanJob,
-    refetchInterval: (q) => jobsPollMs(isBusy(q.state.data?.status)),
-  });
   const reworkQuery = useQuery({
     queryKey: ["settings", "rework-dan"],
     queryFn: fetchReworkDanJob,
@@ -110,13 +89,11 @@ export function JobsBatchChrome() {
     refetchInterval: (q) => jobsPollMs(isBusy(q.state.data?.status)),
   });
 
-  const sunny = sunnyQuery.data;
-  const daniel = danielQuery.data;
   const rework = reworkQuery.data;
   const pattern = patternQuery.data;
-  const agg = aggregate(sunny, daniel, rework, pattern);
+  const agg = aggregate(rework, pattern);
 
-  useJobsCompletionToasts(sunny, daniel, rework, pattern, agg.busy);
+  useJobsCompletionToasts(rework, pattern, agg.busy);
 
   const stopMutation = useMutation({
     mutationFn: stopAllJobs,
@@ -176,8 +153,6 @@ export function JobsBatchChrome() {
 }
 
 function useJobsCompletionToasts(
-  sunny: SunnyDanJob | undefined,
-  daniel: DanielDanJob | undefined,
   rework: ReworkDanJob | undefined,
   pattern: PatternAnalysisJob | undefined,
   busy: boolean,
@@ -187,8 +162,6 @@ function useJobsCompletionToasts(
 
   useEffect(() => {
     const statuses: Record<string, string> = {
-      sunny: sunny?.status ?? "idle",
-      daniel: daniel?.status ?? "idle",
       rework: rework?.status ?? "idle",
       pattern: pattern?.status ?? "idle",
     };
@@ -228,5 +201,5 @@ function useJobsCompletionToasts(
         },
       },
     });
-  }, [sunny, daniel, rework, pattern, busy]);
+  }, [rework, pattern, busy]);
 }

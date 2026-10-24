@@ -13,7 +13,9 @@ import {
   backfillDanVariantsSync,
   collectDanVariantCombos,
   loadDanVariantRatingsSync,
+  DAN_VARIANTS_ALGORITHM,
 } from "./computeDanVariants";
+import { REWORK_ALGORITHM } from "./reworkEstimator";
 import { loadSevenKPlays } from "../analytics/recommend/sevenKSkill";
 
 const SET_ID = "00000000-0000-0000-0000-000000000020";
@@ -144,24 +146,22 @@ describe("collectDanVariantCombos", () => {
 });
 
 describe("backfillDanVariantsSync", () => {
-  test("computes sunny + daniel variants for played combos", () => {
+  test("computes rework variants for played combos", () => {
     const first = backfillDanVariantsSync(db);
     expect(first.attempted).toBeGreaterThan(0);
 
-    const sunny = loadDanVariantRatingsSync(db, [MAP_4K], "sunny");
-    expect(sunny.size).toBe(3);
-    for (const row of sunny.values()) {
+    const rework = loadDanVariantRatingsSync(db, [MAP_4K], DAN_VARIANTS_ALGORITHM);
+    expect(rework.size).toBe(3);
+    for (const row of rework.values()) {
       expect(row.error).toBeNull();
       expect(row.star).toBeGreaterThan(0);
       expect(row.columnCount).toBe(4);
+      expect(row.algorithm).toBe(REWORK_ALGORITHM);
     }
 
     // Invert converts the chart to full-LN → lnRatio jumps to ~1.
-    const inRow = [...sunny.values()].find((r) => r.lnOnly)!;
+    const inRow = [...rework.values()].find((r) => r.lnOnly)!;
     expect(inRow.lnRatio).toBeGreaterThanOrEqual(0.99);
-
-    const daniel = loadDanVariantRatingsSync(db, [MAP_4K], "daniel");
-    expect(daniel.size).toBe(3);
 
     // Everything fresh → nothing left to attempt.
     const second = backfillDanVariantsSync(db);
@@ -177,19 +177,20 @@ describe("skill consumption over variants", () => {
         INSERT INTO beatmap_dan_ratings (
           beatmap_id, algorithm, beatmap_hash, sunny_star, ln_ratio,
           column_count, est_diff, error, updated_at
-        ) VALUES (?, 'sunny', ?, 4.0, 0.1, 4, 'NM base', NULL, ?)
+        ) VALUES (?, ?, ?, 4.0, 0.1, 4, 'NM base', NULL, ?)
       `,
       )
-      .run(MAP_4K, HASH_4K, Date.now());
+      .run(MAP_4K, REWORK_ALGORITHM, HASH_4K, Date.now());
 
     // A fresh DT play whose variant was never computed.
     insertScore("s-dt15", MAP_4K, ["DT"]);
 
     const before = loadSevenKPlays(db, 4);
     // NM + Mirror reads share the base rating; modded plays carry variant stars.
-    expect(before.filter((p) => p.sunnyStar === 4.0).length).toBe(2);
-    expect(before.filter((p) => p.sunnyStar != null && p.sunnyStar !== 4.0).length)
-      .toBe(3);
+    expect(before.filter((p) => p.reworkStar === 4.0).length).toBe(2);
+    expect(
+      before.filter((p) => p.reworkStar != null && p.reworkStar !== 4.0).length,
+    ).toBe(3);
     // The uncomputed DT@1.5 play is dropped (6 scores − 1 unrated modded).
     expect(before.length).toBe(5);
 
@@ -197,6 +198,6 @@ describe("skill consumption over variants", () => {
     backfillDanVariantsSync(db);
     const after = loadSevenKPlays(db, 4);
     expect(after.length).toBe(6);
-    expect(new Set(after.map((p) => p.sunnyStar)).size).toBeGreaterThanOrEqual(4);
+    expect(new Set(after.map((p) => p.reworkStar)).size).toBeGreaterThanOrEqual(4);
   });
 });

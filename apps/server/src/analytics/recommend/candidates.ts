@@ -1,6 +1,5 @@
-
 import type { Db } from "@roxysu/db/types";
-import { SUNNY_ALGORITHM } from "../../map-analysis/computeSunnyDan";
+import { REWORK_ALGORITHM } from "../../map-analysis/reworkEstimator";
 import {
   DEFAULT_AXIS_THRESHOLDS,
   type AxisThresholds,
@@ -25,14 +24,14 @@ export type CandidateRow = {
   bestMisses: number | null;
   lastPlayedAt: number | null;
   masteryLevel: number | null;
-  sunnyEstDiff: string | null;
-  sunnyStar: number | null;
+  reworkEstDiff: string | null;
+  reworkStar: number | null;
   lnRatio: number | null;
   keyCount: number | null;
 };
 
-export function countMissingSunnyDan(db: Db, keyCount?: number): number {
-  const params: Array<string | number> = [SUNNY_ALGORITHM];
+export function countMissingReworkDan(db: Db, keyCount?: number): number {
+  const params: Array<string | number> = [REWORK_ALGORITHM];
   let keySql = "";
   if (keyCount != null) {
     keySql = `AND b.circle_size = ?`;
@@ -63,8 +62,8 @@ export function countMissingSunnyDan(db: Db, keyCount?: number): number {
 }
 
 export function buildBaseKeymodeFilter(
-  minSunny: number,
-  maxSunny: number,
+  minRework: number,
+  maxRework: number,
   axis: "rc" | "ln" | "fln" | null,
   overlaySql: string | null,
   overlayParams: unknown[],
@@ -81,7 +80,7 @@ export function buildBaseKeymodeFilter(
     `LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'`,
     `b.circle_size = ${push(keyCount)}`,
     `dr.sunny_star IS NOT NULL`,
-    `dr.sunny_star BETWEEN ${push(minSunny)} AND ${push(maxSunny)}`,
+    `dr.sunny_star BETWEEN ${push(minRework)} AND ${push(maxRework)}`,
   ];
 
   if (axis === "fln") {
@@ -109,7 +108,7 @@ export function loadCandidates(
   limit: number,
 ): CandidateRow[] {
   const bind: Array<string | number | bigint | boolean | null> = [
-    SUNNY_ALGORITHM,
+    REWORK_ALGORITHM,
     ...(filterParams as Array<string | number | bigint | boolean | null>),
   ];
   let excludeSql = "";
@@ -140,8 +139,8 @@ export function loadCandidates(
       m.best_misses AS bestMisses,
       m.last_played_at AS lastPlayedAt,
       m.level AS masteryLevel,
-      dr.est_diff AS sunnyEstDiff,
-      dr.sunny_star AS sunnyStar,
+      dr.est_diff AS reworkEstDiff,
+      dr.sunny_star AS reworkStar,
       dr.ln_ratio AS lnRatio,
       CAST(b.circle_size AS INTEGER) AS keyCount
     FROM beatmaps b
@@ -170,13 +169,13 @@ export function loadCandidates(
     bestMisses: r.bestMisses != null ? Number(r.bestMisses) : null,
     lastPlayedAt: r.lastPlayedAt != null ? Number(r.lastPlayedAt) : null,
     masteryLevel: r.masteryLevel != null ? Number(r.masteryLevel) : null,
-    sunnyStar: r.sunnyStar != null ? Number(r.sunnyStar) : null,
+    reworkStar: r.reworkStar != null ? Number(r.reworkStar) : null,
     lnRatio: r.lnRatio != null ? Number(r.lnRatio) : null,
     keyCount: r.keyCount != null ? Number(r.keyCount) : null,
   }));
 }
 
-export function countKeymodeWithSunny(db: Db, keyCount: number): number {
+export function countKeymodeWithRework(db: Db, keyCount: number): number {
   const row = db.$client
     .query(
       `
@@ -192,6 +191,6 @@ export function countKeymodeWithSunny(db: Db, keyCount: number): number {
         AND dr.sunny_star IS NOT NULL
     `,
     )
-    .get(SUNNY_ALGORITHM, keyCount) as { n: number } | null;
+    .get(REWORK_ALGORITHM, keyCount) as { n: number } | null;
   return Number(row?.n ?? 0);
 }

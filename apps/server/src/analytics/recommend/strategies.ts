@@ -14,7 +14,7 @@ import {
   formatAccBandLabel,
   type RecommendFocusSettings,
 } from "./focusSettings";
-import { formatSunny } from "./summary";
+import { formatRework } from "./summary";
 import type {
   MapAxis,
   RecommendFocus,
@@ -50,7 +50,7 @@ function toItem(
     bestScore: row.bestScore,
     bestMisses: row.bestMisses,
     masteryLevel: row.masteryLevel,
-    sunnyEstDiff: row.sunnyEstDiff,
+    reworkEstDiff: row.reworkEstDiff,
     keyCount: row.keyCount,
   };
 }
@@ -122,7 +122,7 @@ export function recommendPush(
 
   return paired.slice(0, count).map(({ row, match }) => {
     const diffPercent = (match.relativeDifficulty - 1) * 100;
-    const dan = row.sunnyEstDiff ? ` · ${row.sunnyEstDiff}` : "";
+    const dan = row.reworkEstDiff ? ` · ${row.reworkEstDiff}` : "";
     const diffText =
       Math.abs(diffPercent) < 0.5
         ? "at"
@@ -132,7 +132,7 @@ export function recommendPush(
       match,
       "push",
       axisFilter,
-      `Push ${labelForMatch(match)}: ${diffText} your ${bandLabel} clear level (${formatSunny(match.sunnyStar)} Sunny${dan})`,
+      `Push ${labelForMatch(match)}: ${diffText} your ${bandLabel} clear level (${formatRework(match.reworkStar)}★${dan})`,
     );
   });
 }
@@ -200,7 +200,7 @@ export function recommendAccuracy(
 
   const items: RecommendItem[] = [];
   for (const { row, match } of [...roomToImprove, ...rest]) {
-    const dan = row.sunnyEstDiff ? ` · ${row.sunnyEstDiff}` : "";
+    const dan = row.reworkEstDiff ? ` · ${row.reworkEstDiff}` : "";
     if (match.playCount > 0 && match.bestAccuracy != null) {
       const accPct = (match.bestAccuracy * 100).toFixed(2);
       items.push(
@@ -209,7 +209,7 @@ export function recommendAccuracy(
           match,
           "accuracy",
           axisFilter,
-          `Accuracy ${labelForMatch(match)}: target ${bandLabel} (best ${accPct}% · ${formatSunny(match.sunnyStar)} Sunny${dan})`,
+          `Accuracy ${labelForMatch(match)}: target ${bandLabel} (best ${accPct}% · ${formatRework(match.reworkStar)}★${dan})`,
         ),
       );
     } else {
@@ -219,7 +219,7 @@ export function recommendAccuracy(
           match,
           "accuracy",
           axisFilter,
-          `Accuracy ${labelForMatch(match)}: in your ${bandLabel} difficulty range (${formatSunny(match.sunnyStar)} Sunny${dan})`,
+          `Accuracy ${labelForMatch(match)}: in your ${bandLabel} difficulty range (${formatRework(match.reworkStar)}★${dan})`,
         ),
       );
     }
@@ -290,7 +290,7 @@ export function recommendConsistency(
 
   const items: RecommendItem[] = [];
   for (const { row, match } of [...played, ...unplayed]) {
-    const dan = row.sunnyEstDiff ? ` · ${row.sunnyEstDiff}` : "";
+    const dan = row.reworkEstDiff ? ` · ${row.reworkEstDiff}` : "";
     if (match.playCount > 0 && match.bestAccuracy != null) {
       const accPct = (match.bestAccuracy * 100).toFixed(2);
       items.push(
@@ -299,7 +299,7 @@ export function recommendConsistency(
           match,
           "consistency",
           axisFilter,
-          `Consistency ${labelForMatch(match)}: polish toward ${formatAccBandLabel(focusSettings.accuracy)} (best ${accPct}% · ${formatSunny(match.sunnyStar)} Sunny${dan})`,
+          `Consistency ${labelForMatch(match)}: polish toward ${formatAccBandLabel(focusSettings.accuracy)} (best ${accPct}% · ${formatRework(match.reworkStar)}★${dan})`,
         ),
       );
     } else {
@@ -309,7 +309,7 @@ export function recommendConsistency(
           match,
           "consistency",
           axisFilter,
-          `Consistency ${labelForMatch(match)}: around your ${bandLabel} level (${formatSunny(match.sunnyStar)} Sunny${dan})`,
+          `Consistency ${labelForMatch(match)}: around your ${bandLabel} level (${formatRework(match.reworkStar)}★${dan})`,
         ),
       );
     }
@@ -357,7 +357,7 @@ export function recommendSkillset(
       match,
       "skillset",
       axisFilter,
-      `Good ${labelForMatch(match)} practice at your level (${formatSunny(match.sunnyStar)} Sunny)`,
+      `Good ${labelForMatch(match)} practice at your level (${formatRework(match.reworkStar)}★)`,
     );
   });
 }
@@ -396,7 +396,7 @@ export function recommendDeficit(
     const match = matches[i]!;
     const deficitText =
       deficit > 0.05
-        ? `deficit: ${deficit.toFixed(1)} Sunny below average`
+        ? `deficit: ${deficit.toFixed(1)}★ below average`
         : "weaker axis";
     return toItem(
       row,

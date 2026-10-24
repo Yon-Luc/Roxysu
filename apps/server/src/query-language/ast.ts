@@ -27,10 +27,8 @@ export type FieldTerm =
   | { type: "played"; never: true }
   | { type: "pp"; op: ComparisonOp; value: number }
   | { type: "text"; value: string }
-  /** Sunny or Daniel dan label (est_diff), e.g. Reform / LN / Regular / Alpha. */
+  /** Rework dan label (alias of `rework:`). */
   | { type: "dan"; value: string; prefix?: boolean }
-  /** Daniel dan label substring (4K RC), e.g. Alpha / Beta. */
-  | { type: "daniel"; value: string; prefix?: boolean }
   /** Rework (mania difficulty port) dan label, e.g. Alpha / LN 14 / Regular Zenith. */
   | { type: "rework"; value: string; prefix?: boolean }
   /** Rework star rating (numeric). */
@@ -41,17 +39,9 @@ export type FieldTerm =
       op?: ComparisonOp;
       value?: number;
     }
-  /** Sunny rework star rating (numeric). */
-  | {
-      type: "sunny";
-      min?: number;
-      max?: number;
-      op?: ComparisonOp;
-      value?: number;
-    }
   /** Skill label or chart-shape family. Compile picks the column. */
   | { type: "pattern"; value: string; prefix?: boolean }
-  /** RC vs LN map axis from Sunny ln_ratio (20% split, same as dan). */
+  /** RC vs LN map axis from rework ln_ratio (20% split). */
   | { type: "axis"; value: "rc" | "ln" | "fln" }
   /** Best nomod/mirror score grade bucket (D/C/B/A/S/SS/X). */
   | { type: "grade"; value: "D" | "C" | "B" | "A" | "S" | "SS" | "X" }

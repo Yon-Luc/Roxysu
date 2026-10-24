@@ -12,12 +12,6 @@ import {
   localBeatmapCoverUrl,
   osuBeatmapCoverUrl,
 } from "../../lib/osuUrls";
-import {
-  isFourKKeyCount,
-  primaryDanSource,
-  primaryRatingDisplayTitle,
-  useRatingDisplayMode,
-} from "../../lib/ratingDisplay";
 
 const PREFS_KEY = "rx-session-tosu-panel";
 
@@ -168,62 +162,18 @@ export function SessionTosuLivePanel() {
     },
   });
 
-  const ratingMode = useRatingDisplayMode();
   const chip = statusLabel(dict, data);
   const beatmap = data?.beatmap;
-  const sunny = data?.analysis.sunny;
   const rework = data?.analysis.rework;
   const pattern = data?.analysis.pattern;
   const hasMap = Boolean(beatmap?.title || beatmap?.checksum);
   const showManiaAnalysis = isManiaBeatmap(beatmap);
 
-  const keyCount =
-    sunny?.columnCount ?? rework?.columnCount ?? beatmap?.keys ?? null;
-  const isFourK = isFourKKeyCount(keyCount);
-  const titleMode = ratingMode === "osu" ? "dan" : ratingMode;
-  const ratingLabels = {
-    danielDan: dict?.practice.detail.danielDan ?? "Daniel dan",
-    sunnyDan: dict?.practice.detail.sunnyDan ?? "Sunny dan",
-    danielStar:
-      dict?.settings.ratingDisplay.dan?.labelDanielStar ??
-      "Daniel star rating",
-    sunnyStar:
-      dict?.settings.ratingDisplay.sunny?.label ?? "Sunny star rating",
-    reworkDan:
-      dict?.settings.ratingDisplay.rework?.labelReworkDan ?? "Rework dan",
-    reworkStar:
-      dict?.settings.ratingDisplay.rework?.labelReworkStar ??
-      "Rework star rating",
-  };
-  const primarySource =
-    primaryDanSource({
-      mode: titleMode,
-      keyCount,
-      danielEstDiff: isFourK ? sunny?.estDiff : null,
-      sunnyEstDiff: !isFourK ? sunny?.estDiff : null,
-      danielStar: isFourK ? sunny?.sunnyStar : null,
-      sunnyStar: !isFourK ? sunny?.sunnyStar : null,
-      reworkEstDiff: rework?.estDiff,
-      reworkStar: rework?.reworkStar,
-    }) ??
-    (titleMode === "rework"
-      ? null
-      : isFourK
-        ? "daniel"
-        : keyCount != null
-          ? "sunny"
-          : null);
   const analysisLabel =
-    primaryRatingDisplayTitle(titleMode, primarySource, ratingLabels) ??
-    (titleMode === "rework"
-      ? ratingLabels.reworkDan
-      : (dict?.practice.detail.sunnyDan ?? "Sunny dan"));
-  const analysisEstDiff =
-    primarySource === "rework" ? rework?.estDiff : sunny?.estDiff;
-  const analysisStar =
-    primarySource === "rework" ? rework?.reworkStar : sunny?.sunnyStar;
-  const analysisError =
-    primarySource === "rework" ? rework?.error : sunny?.error;
+    dict?.settings.ratingDisplay.rework?.labelReworkDan ?? "Rework dan";
+  const analysisEstDiff = rework?.estDiff;
+  const analysisStar = rework?.reworkStar;
+  const analysisError = rework?.error;
 
   const bgSources = useMemo(() => liveBackgroundSources(data), [data]);
   const bgKey = `${beatmap?.checksum ?? ""}|${data?.backgroundFileHash ?? ""}|${data?.host ?? ""}`;

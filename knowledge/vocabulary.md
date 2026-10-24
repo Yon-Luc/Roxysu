@@ -167,7 +167,7 @@ Admin-managed pre-warmed beatmapset results in the Hub store. Each `search_cache
 
 ### Hub calc bundle
 
-Admin-published, version-keyed shared precomputes for Sunny dan, Daniel dan, Rework dan, and dominant skill. Stored in the Hub store (`calc_bundles` / `calc_bundle_entries`), keyed by Roxysu product version. Clients pull the bundle matching their app version and gap-fill the local mirror by beatmap content hash.
+Admin-published, version-keyed shared precomputes for Rework dan (`mania-difficulty`) and dominant skill (`mania-skill-v1`). Stored in the Hub store (`calc_bundles` / `calc_bundle_entries`), keyed by Roxysu product version. Clients pull the bundle matching their app version and gap-fill the local mirror by beatmap content hash.
 
 **Not:** "cache", "job cache", "search cache", "calc cache"
 
@@ -223,23 +223,23 @@ Derived count of how many beatmaps match each collection query. Refreshed when c
 
 ---
 
-### Sunny dan ratings store
+### Dan ratings store
 
-Persisted mania difficulty estimates from the Sunny dan backfill job (`beatmap_dan_ratings` table). Powers `dan:` / `sunny:` query fields and 4K/7K recommendations. Nommod (rate 1.0, no chart conversion) estimates only.
+Persisted mania difficulty estimates in `beatmap_dan_ratings`. Product rows use **rework dan** (`algorithm = 'mania-difficulty'`) via `dan:` / `rework:` / `reworkstars:`. Nommod (rate 1.0, no chart conversion) estimates only. Migration `0031_drop_sunny_daniel_ratings` removed legacy Sunny/Daniel estimator rows; those algorithms are not active.
 
-**Not:** "dan cache", "cache" alone
+**Not:** "dan cache", "cache" alone, "Sunny dan ratings store"
 
-**In code:** `beatmap_dan_ratings`, `sunnyDanJob.ts`
+**In code:** `beatmap_dan_ratings`, `reworkDanJob.ts`
 
-**See:** [features/sunny-dan-recommendations/](features/sunny-dan-recommendations/index.md)
+**See:** [features/rework-dan-recommendations/](features/rework-dan-recommendations/index.md)
 
 ---
 
 ### Mania difficulty port
 
-Workspace package that maintains a TypeScript port of the WIP osu!mania difficulty rework (`loleur362/osu` branch `mania-difficulty`). Upstream C# is the source of truth; `generated/` is a deterministic Roslyn build artifact. Runtime needs no .NET. Distinct from Sunny/Daniel estimators and from Rating Lab’s C# `mania-rating-calc` binaries (kept for PP/compare).
+Workspace package that maintains a TypeScript port of the WIP osu!mania difficulty rework (`loleur362/osu` branch `mania-difficulty`). Upstream C# is the source of truth; `generated/` is a deterministic Roslyn build artifact. Runtime needs no .NET. Distinct from Rating Lab’s C# `mania-rating-calc` binaries (kept for PP/compare). Sole product mania difficulty estimator.
 
-**Not:** Sunny dan, Daniel, import Realm star rating, Rating Lab experiment version alone
+**Not:** import Realm star rating, Rating Lab experiment version alone, Sunny/Daniel (removed)
 
 **In code:** `packages/mania-difficulty`, `upstream/revision.json`
 
@@ -249,13 +249,13 @@ Workspace package that maintains a TypeScript port of the WIP osu!mania difficul
 
 ### Rework dan
 
-Dan tier derived from the **mania difficulty port** star rating. Tiers are floor-based and user-editable in `packages/mania-difficulty/dans.json`; each tier spans from its floor to the next floor and is split into five bands (`low`, `mid/low`, `mid`, `mid/high`, `high`). Sub-levels (`Regular 7+`, `Regular 7++`, …) carry an `id` naming the base tier they belong to. A last tier without `ceiling` is an open-ended sentinel labelled with its bare name. Tier rows may declare `aliases` so a spelled name or symbol (`Gamma`, `γ`) searches the tier group; `rework:` resolves aliases via `expandReworkDanMatch()`. Spelled names intentionally differ per key mode — 7K groups use the community names (`Azimuth`, `Zenith`, `Aeternium`) while 4K uses the Greek spellings (`Zeta`), so only the shared symbol spans both modes. Stored as estimator id `mania-difficulty` in the **Sunny dan ratings store**. `rework:` and `reworkstars:` query fields and the `rework` rating display mode read it. Recommendations and skill estimates still use Sunny — rework dan is display and search only.
+Dan tier derived from the **mania difficulty port** star rating. Tiers are floor-based and user-editable in `packages/mania-difficulty/dans.json`; each tier spans from its floor to the next floor and is split into five bands (`low`, `mid/low`, `mid`, `mid/high`, `high`). Sub-levels (`Regular 7+`, `Regular 7++`, …) carry an `id` naming the base tier they belong to. A last tier without `ceiling` is an open-ended sentinel labelled with its bare name. Tier rows may declare `aliases` so a spelled name or symbol (`Gamma`, `γ`) searches the tier group; `dan:` and `rework:` resolve aliases via `expandReworkDanMatch()`. Spelled names intentionally differ per key mode — 7K groups use the community names (`Azimuth`, `Zenith`, `Aeternium`) while 4K uses the Greek spellings (`Zeta`), so only the shared symbol spans both modes. Stored as estimator id `mania-difficulty` in the **Dan ratings store**. `dan:`, `rework:`, and `reworkstars:` query fields and the `rework` rating display mode read it.
 
-**Not:** Sunny dan, Daniel, osu! star rating, "the new algo" in knowledge documents
+**Not:** osu! star rating, "the new algo" in knowledge documents, Sunny dan, Daniel
 
 **In code:** `packages/mania-difficulty/dans.json`, `reworkDanLabel()`, `apps/server/src/map-analysis/computeReworkDan.ts`
 
-**See:** [features/sunny-dan-recommendations/](features/sunny-dan-recommendations/index.md)
+**See:** [features/rework-dan-recommendations/](features/rework-dan-recommendations/index.md)
 
 ---
 
@@ -267,7 +267,7 @@ The one **mania difficulty port** skill a chart leans on hardest (`speed`, `jack
 
 **In code:** `packages/mania-difficulty/src/skills.ts`, `skillProfile()`, `packages/mania-pattern-analysis/src/skillAnalysis.ts`
 
-**See:** [features/sunny-dan-recommendations/](features/sunny-dan-recommendations/index.md)
+**See:** [features/rework-dan-recommendations/](features/rework-dan-recommendations/index.md)
 
 ---
 
@@ -279,31 +279,31 @@ The column pattern a mania chart is built from (`stream`, `trill`, `jumptrill`, 
 
 **In code:** `packages/mania-difficulty/src/shape.ts`, `chartShapeWalk()`, `beatmap_pattern_analysis.shape_pattern`
 
-**See:** [features/sunny-dan-recommendations/](features/sunny-dan-recommendations/index.md), [features/practice-library/](features/practice-library/index.md)
+**See:** [features/rework-dan-recommendations/](features/rework-dan-recommendations/index.md), [features/practice-library/](features/practice-library/index.md)
 
 ---
 
 ### Axis thresholds
 
-User-configurable `ln_ratio` boundaries that classify mania maps as Rice, LN, or FLN for recommendations, skill axes, stats mix, and `axis:` filters. Defaults: LN starts at 20%, FLN at 80%. Distinct from the fixed 20% used for Sunny dan RC vs LN **label table** selection.
+User-configurable `ln_ratio` boundaries that classify mania maps as Rice, LN, or FLN for recommendations, skill axes, stats mix, and `axis:` filters. Defaults: LN starts at 20%, FLN at 80%. Distinct from the fixed 20% used for Rework dan RC vs LN **label table** selection.
 
-**Not:** "LN percent setting" alone, Sunny dan threshold
+**Not:** "LN percent setting" alone, rework label-table threshold alone
 
 **In code:** `recommend.ln_ratio_threshold`, `recommend.fln_ratio_threshold`, `axisThresholds.ts`, `classifyMapAxis`
 
-**See:** [features/mastery-settings/](features/mastery-settings/index.md), [features/sunny-dan-recommendations/](features/sunny-dan-recommendations/index.md)
+**See:** [features/mastery-settings/](features/mastery-settings/index.md), [features/rework-dan-recommendations/](features/rework-dan-recommendations/index.md)
 
 ---
 
 ### Dan difficulty variants
 
-Persisted mod-aware mania difficulty estimates in `beatmap_dan_rating_variants`: one row per (beatmap, estimator, playback rate quantized to 2 decimals, full-LN Invert conversion) actually played. Both estimators apply the Invert/Hold Off conversions before rating. Computed by the dan variant background job after imports — never on request paths (single-map reads may compute ephemerally without persisting). NM plays stay in the Sunny dan ratings store.
+Persisted mod-aware mania difficulty estimates in `beatmap_dan_rating_variants`: one row per (beatmap, estimator, playback rate quantized to 2 decimals, full-LN Invert conversion) actually played. Product rows use `mania-difficulty` only; Invert/Hold Off conversions apply before rating. Computed by the dan variant background job after imports — never on request paths (single-map reads may compute ephemerally without persisting). NM plays stay in the Dan ratings store.
 
-**Not:** "mod cache", "variant cache", part of the Sunny dan ratings store
+**Not:** "mod cache", "variant cache", part of the Dan ratings store
 
 **In code:** `beatmap_dan_rating_variants`, `computeDanVariants.ts`, `danVariantJob.ts`, `resolveDanVariant()` (`packages/mania-judge`)
 
-**See:** [features/sunny-dan-recommendations/](features/sunny-dan-recommendations/index.md), [flows/sunny-backfill-to-recommend.md](flows/sunny-backfill-to-recommend.md)
+**See:** [features/rework-dan-recommendations/](features/rework-dan-recommendations/index.md), [flows/rework-backfill-to-recommend.md](flows/rework-backfill-to-recommend.md)
 
 ---
 
@@ -541,7 +541,7 @@ Runs offline in the client app; does not upload.
 
 A user-built mania chart made by concatenating several same-key-count maps from the practice library, with a configurable silence gap and a grid collage of their backgrounds, then imported into lazer as one `.osz`.
 
-**Not:** Sunny dan ratings, a Collection, a playlist of separate maps
+**Not:** Dan ratings store rows, a Collection, a playlist of separate maps
 
 **In code:** `fuseManiaCharts`, `/marathon`, `POST /api/marathon/sources`, `POST /api/marathon/open-in-osu`
 

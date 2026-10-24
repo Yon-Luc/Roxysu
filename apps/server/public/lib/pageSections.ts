@@ -134,7 +134,7 @@ export const PAGE_SECTIONS: PageSectionDef[] = [
     to: "/settings",
     pageLabel: "Settings",
     label: "Difficulty display",
-    keywords: ["settings", "stars", "rating", "sunny", "display"],
+    keywords: ["settings", "stars", "rating", "rework", "display"],
   },
   {
     id: "preview-skin",
@@ -157,20 +157,6 @@ export const PAGE_SECTIONS: PageSectionDef[] = [
     label: "Mania Rating Lab",
     keywords: ["settings", "pp", "sr", "calculator", "rating lab"],
     desktopHidden: true,
-  },
-  {
-    id: "sunny-dan-calculation",
-    to: "/settings",
-    pageLabel: "Settings",
-    label: "Sunny dan calculation",
-    keywords: ["settings", "sunny", "dan", "labels", "compute"],
-  },
-  {
-    id: "daniel-dan-calculation",
-    to: "/settings",
-    pageLabel: "Settings",
-    label: "Daniel dan calculation",
-    keywords: ["settings", "daniel", "4k", "dan", "labels", "compute"],
   },
   {
     id: "rework-dan-calculation",

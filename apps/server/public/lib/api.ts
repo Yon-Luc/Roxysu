@@ -309,23 +309,6 @@ export async function fetchBeatmapPreview(id: string, mods?: string[]) {
   );
 }
 
-/** Sunny dan for an explicit pattern-mod / playback-rate combo. */
-export async function fetchBeatmapSunnyDan(
-  id: string,
-  mods?: string[],
-  rate?: number,
-) {
-  return unwrap(
-    await api.api.beatmaps({ id })["sunny-dan"].get({
-      query: {
-        mods: mods && mods.length > 0 ? mods.join(",") : undefined,
-        rate: rate != null && rate !== 1 ? String(rate) : undefined,
-      },
-    }),
-    `/api/beatmaps/${id}/sunny-dan`,
-  );
-}
-
 export async function fetchScoreReplay(id: string) {
   return unwrap(
     await api.api.scores({ id }).replay.get(),
@@ -897,48 +880,6 @@ export async function startTosu() {
   return unwrap(await api.api.tosu.start.post(), "/api/tosu/start");
 }
 
-export async function fetchSunnyDanJob() {
-  return unwrap(
-    await api.api.settings["sunny-dan"].get(),
-    "/api/settings/sunny-dan",
-  );
-}
-
-export async function startSunnyDanJob() {
-  return unwrap(
-    await api.api.settings["sunny-dan"].start.post(),
-    "/api/settings/sunny-dan/start",
-  );
-}
-
-export async function stopSunnyDanJob() {
-  return unwrap(
-    await api.api.settings["sunny-dan"].stop.post(),
-    "/api/settings/sunny-dan/stop",
-  );
-}
-
-export async function fetchDanielDanJob() {
-  return unwrap(
-    await api.api.settings["daniel-dan"].get(),
-    "/api/settings/daniel-dan",
-  );
-}
-
-export async function startDanielDanJob() {
-  return unwrap(
-    await api.api.settings["daniel-dan"].start.post(),
-    "/api/settings/daniel-dan/start",
-  );
-}
-
-export async function stopDanielDanJob() {
-  return unwrap(
-    await api.api.settings["daniel-dan"].stop.post(),
-    "/api/settings/daniel-dan/stop",
-  );
-}
-
 export async function fetchReworkDanJob() {
   return unwrap(
     await api.api.settings["rework-dan"].get(),
@@ -1155,10 +1096,6 @@ export type BeatmapPreview = Exclude<
   Awaited<ReturnType<typeof fetchBeatmapPreview>>,
   { error: string }
 >;
-export type BeatmapSunnyDan = Exclude<
-  Awaited<ReturnType<typeof fetchBeatmapSunnyDan>>,
-  { error: string }
->["sunnyDan"];
 export type ScoreReplay = Exclude<
   Awaited<ReturnType<typeof fetchScoreReplay>>,
   { error: string }
@@ -1180,8 +1117,6 @@ export type RatingLabSummary = Exclude<
   { error: string }
 >;
 export type SettingsPayload = Awaited<ReturnType<typeof fetchSettings>>;
-export type SunnyDanJob = Awaited<ReturnType<typeof fetchSunnyDanJob>>;
-export type DanielDanJob = Awaited<ReturnType<typeof fetchDanielDanJob>>;
 export type ReworkDanJob = Awaited<ReturnType<typeof fetchReworkDanJob>>;
 export type PatternAnalysisJob = Awaited<
   ReturnType<typeof fetchPatternAnalysisJob>

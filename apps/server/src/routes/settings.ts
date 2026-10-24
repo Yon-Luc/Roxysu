@@ -39,16 +39,6 @@ import {
 } from "../analytics/scoreUsername";
 import { publish } from "../shared/events";
 import {
-  getSunnyDanJobState,
-  startSunnyDanBackfill,
-  stopSunnyDanBackfill,
-} from "../map-analysis/sunnyDanJob";
-import {
-  getDanielDanJobState,
-  startDanielDanBackfill,
-  stopDanielDanBackfill,
-} from "../map-analysis/danielDanJob";
-import {
   getReworkDanJobState,
   relabelReworkDan,
   startReworkDanBackfill,
@@ -189,8 +179,6 @@ async function buildSettingsResponse(db: Db) {
       executablePath: tosu.executablePath,
       defaultHost: DEFAULT_TOSU_HOST,
     },
-    sunnyDan: getSunnyDanJobState(db),
-    danielDan: getDanielDanJobState(db),
     reworkDan: getReworkDanJobState(db),
     patternAnalysis: getPatternAnalysisJobState(db),
     calcBundle: {
@@ -219,12 +207,6 @@ async function buildSettingsResponse(db: Db) {
 export const settingsRoutes = new Elysia({ prefix: "/settings" })
   .use(dbPlugin)
   .get("/", async ({ db }) => buildSettingsResponse(db))
-  .get("/sunny-dan", ({ db }) => getSunnyDanJobState(db))
-  .post("/sunny-dan/start", ({ db }) => startSunnyDanBackfill(db))
-  .post("/sunny-dan/stop", ({ db }) => stopSunnyDanBackfill(db))
-  .get("/daniel-dan", ({ db }) => getDanielDanJobState(db))
-  .post("/daniel-dan/start", ({ db }) => startDanielDanBackfill(db))
-  .post("/daniel-dan/stop", ({ db }) => stopDanielDanBackfill(db))
   .get("/rework-dan", ({ db }) => getReworkDanJobState(db))
   .post("/rework-dan/start", ({ db }) => startReworkDanBackfill(db))
   .post("/rework-dan/relabel", ({ db }) => ({
@@ -273,17 +255,13 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
     },
   )
   .post("/jobs/start-recommended", ({ db }) => {
-    const sunny = startSunnyDanBackfill(db);
-    const daniel = startDanielDanBackfill(db);
     const rework = startReworkDanBackfill(db);
-    return { sunny, daniel, rework };
+    return { rework };
   })
   .post("/jobs/stop-all", ({ db }) => {
-    const sunny = stopSunnyDanBackfill(db);
-    const daniel = stopDanielDanBackfill(db);
     const rework = stopReworkDanBackfill(db);
     const pattern = stopPatternAnalysisBackfill(db);
-    return { sunny, daniel, rework, pattern };
+    return { rework, pattern };
   })
   .get("/jobs/onboarding", async ({ db }) => {
     const row = await db
@@ -307,12 +285,10 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
       }
       if (body.startJobs) {
         await pullAndApplyCalcBundle(db);
-        const sunny = startSunnyDanBackfill(db);
-        const daniel = startDanielDanBackfill(db);
         const rework = startReworkDanBackfill(db);
         return {
           completed: true,
-          started: { sunny, daniel, rework },
+          started: { rework },
         };
       }
       return { completed: body.completed === true, started: null };

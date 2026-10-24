@@ -20,7 +20,10 @@ import {
 import { useAppDict, t } from "../../lib/i18n";
 import { pushToast } from "../../lib/toasts";
 import { formatStars } from "../../lib/format";
-import { danQueryForTier, danTiersForKeyCount } from "@roxysu/sunny-dan";
+import {
+  reworkDanBaseTierNames,
+  reworkDanQueryForTier,
+} from "@roxysu/mania-difficulty";
 
 const MAX_MAPS = 12;
 const DEFAULT_PAUSE_MS = 2000;
@@ -173,8 +176,8 @@ export function MarathonPage() {
   });
 
   const danTiers = useMemo(() => {
-    const table = recSkillset === "ln" || recSkillset === "fln" ? "LN" : "RC";
-    return danTiersForKeyCount(recKey, table);
+    const kind = recSkillset === "ln" || recSkillset === "fln" ? "ln" : "rice";
+    return reworkDanBaseTierNames(recKey, kind);
   }, [recKey, recSkillset]);
 
   useEffect(() => {
@@ -196,7 +199,7 @@ export function MarathonPage() {
         skillset: recFocus === "deficit" ? undefined : recSkillset,
         count: recCount,
         keyCount: recKey,
-        q: recDan ? danQueryForTier(recDan) : undefined,
+        q: recDan ? reworkDanQueryForTier(recDan) : undefined,
       }),
   });
 

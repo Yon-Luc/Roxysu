@@ -1,4 +1,4 @@
-import { beatmapDanRatings, beatmapSets, beatmaps, imports, scores } from "@roxysu/db/schema";
+import { beatmapSets, beatmaps, imports, scores } from "@roxysu/db/schema";
 import { Elysia } from "elysia";
 import { and, count, desc, eq } from "drizzle-orm";
 
@@ -15,16 +15,13 @@ import {
 } from "../analytics/scoreUsername";
 import { getWeeklyActivity } from "../analytics/progression";
 import { getPracticeSnapshot } from "../analytics/practiceSnapshot";
-import { DANIEL_ALGORITHM } from "../map-analysis/computeDanielDan";
-import { SUNNY_ALGORITHM } from "../map-analysis/computeSunnyDan";
+import { REWORK_ALGORITHM } from "../map-analysis/reworkEstimator";
 import {
   danVariantKey,
   resolveDanVariant,
 } from "../replay/mods";
 import { loadDanVariantRatingsSync } from "../map-analysis/computeDanVariants";
 import {
-  danielEstDiffSelect,
-  danielStarSelect,
   reworkEstDiffSelect,
   reworkLnRatioSelect,
   reworkStarSelect,
@@ -64,10 +61,6 @@ export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
         keyCount: beatmaps.circleSize,
         setOnlineId: beatmapSets.onlineId,
         backgroundFileHash: beatmaps.backgroundFileHash,
-        sunnyEstDiff: beatmapDanRatings.estDiff,
-        sunnyStar: beatmapDanRatings.sunnyStar,
-        danielEstDiff: danielEstDiffSelect(),
-        danielStar: danielStarSelect(),
         reworkEstDiff: reworkEstDiffSelect(),
         reworkStar: reworkStarSelect(),
         reworkLnRatio: reworkLnRatioSelect(),
@@ -75,13 +68,6 @@ export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
       .from(scores)
       .leftJoin(beatmaps, eq(scores.beatmapId, beatmaps.id))
       .leftJoin(beatmapSets, eq(beatmaps.setId, beatmapSets.id))
-      .leftJoin(
-        beatmapDanRatings,
-        and(
-          eq(beatmapDanRatings.beatmapId, beatmaps.id),
-          eq(beatmapDanRatings.algorithm, SUNNY_ALGORITHM),
-        ),
-      )
       .where(scoreScope)
       .orderBy(desc(scores.playedAt))
       .limit(8);
@@ -112,35 +98,26 @@ export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
       getPracticeSnapshot(db),
     ]);
 
-    // Modded plays show their dan difficulty variant labels when computed.
+    // Modded plays show their rework difficulty variant labels when computed.
     const ratedIds = [...new Set(recentBeatmapIds)];
-    const sunnyVariants = loadDanVariantRatingsSync(db, ratedIds, SUNNY_ALGORITHM);
-    const danielVariants = loadDanVariantRatingsSync(db, ratedIds, DANIEL_ALGORITHM);
+    const reworkVariants = loadDanVariantRatingsSync(db, ratedIds, REWORK_ALGORITHM);
 
     return {
       recentScores: recentScores.map((s) => {
-        let sunnyEstDiff = s.sunnyEstDiff ?? null;
-        let sunnyStar = s.sunnyStar ?? null;
-        let danielEstDiff = s.danielEstDiff ?? null;
-        let danielStar = s.danielStar != null ? Number(s.danielStar) : null;
+        let reworkEstDiff = s.reworkEstDiff ?? null;
+        let reworkStar = s.reworkStar != null ? Number(s.reworkStar) : null;
+        let reworkLnRatio =
+          s.reworkLnRatio != null ? Number(s.reworkLnRatio) : null;
         if (s.beatmapId) {
           const variant = resolveDanVariant(s.mods);
           if (variant) {
-            const sunnyVariant = sunnyVariants.get(danVariantKey(s.beatmapId, variant));
-            if (sunnyVariant) {
-              sunnyEstDiff = sunnyVariant.estDiff;
-              sunnyStar = sunnyVariant.star;
-            }
-            const keyCount =
-              s.keyCount != null ? Math.round(Number(s.keyCount)) : null;
-            if (keyCount === 4) {
-              const danielVariant = danielVariants.get(
-                danVariantKey(s.beatmapId, variant),
-              );
-              if (danielVariant) {
-                danielEstDiff = danielVariant.estDiff;
-                danielStar = danielVariant.star;
-              }
+            const reworkVariant = reworkVariants.get(
+              danVariantKey(s.beatmapId, variant),
+            );
+            if (reworkVariant) {
+              reworkEstDiff = reworkVariant.estDiff;
+              reworkStar = reworkVariant.star;
+              reworkLnRatio = reworkVariant.lnRatio ?? reworkLnRatio;
             }
           }
         }
@@ -166,13 +143,9 @@ export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
         difficultyName: s.difficultyName,
         starRating: s.starRating,
         keyCount: s.keyCount != null ? Math.round(Number(s.keyCount)) : null,
-        sunnyEstDiff,
-        sunnyStar,
-        danielEstDiff,
-        danielStar,
-        reworkEstDiff: s.reworkEstDiff ?? null,
-        reworkStar: s.reworkStar != null ? Number(s.reworkStar) : null,
-        reworkLnRatio: s.reworkLnRatio != null ? Number(s.reworkLnRatio) : null,
+        reworkEstDiff,
+        reworkStar,
+        reworkLnRatio,
         setOnlineId:
           s.setOnlineId != null && s.setOnlineId > 0 ? s.setOnlineId : null,
         backgroundFileHash: s.backgroundFileHash,

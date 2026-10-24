@@ -1,38 +1,38 @@
 import { describe, expect, test } from "bun:test";
-import { conversionCvtFlag } from "./analyze";
+import { reworkLnOnly } from "./analyze";
 
-describe("conversionCvtFlag", () => {
-  test("null for empty / NM / Mirror-only mods", () => {
-    expect(conversionCvtFlag(null)).toBeNull();
-    expect(conversionCvtFlag("")).toBeNull();
-    expect(conversionCvtFlag("[]")).toBeNull();
-    expect(conversionCvtFlag(JSON.stringify([{ acronym: "NM" }]))).toBeNull();
+describe("reworkLnOnly", () => {
+  test("false for empty / NM / Mirror-only mods", () => {
+    expect(reworkLnOnly(null)).toBe(false);
+    expect(reworkLnOnly("")).toBe(false);
+    expect(reworkLnOnly("[]")).toBe(false);
+    expect(reworkLnOnly(JSON.stringify([{ acronym: "NM" }]))).toBe(false);
     expect(
-      conversionCvtFlag(JSON.stringify([{ acronym: "MR" }, { acronym: "CL" }])),
-    ).toBeNull();
+      reworkLnOnly(JSON.stringify([{ acronym: "MR" }, { acronym: "CL" }])),
+    ).toBe(false);
   });
 
-  test("rate mods alone stay null", () => {
+  test("rate mods alone stay false", () => {
     expect(
-      conversionCvtFlag(
+      reworkLnOnly(
         JSON.stringify([{ acronym: "DT", settings: { speed_change: 1.25 } }]),
       ),
-    ).toBeNull();
+    ).toBe(false);
   });
 
-  test("Invert maps to IN", () => {
-    expect(conversionCvtFlag(JSON.stringify([{ acronym: "IN" }]))).toBe("IN");
+  test("Invert maps to true", () => {
+    expect(reworkLnOnly(JSON.stringify([{ acronym: "IN" }]))).toBe(true);
   });
 
-  test("Hold Off maps to HO", () => {
-    expect(conversionCvtFlag(JSON.stringify([{ acronym: "HO" }]))).toBe("HO");
+  test("Hold Off alone stays false (not on rework path)", () => {
+    expect(reworkLnOnly(JSON.stringify([{ acronym: "HO" }]))).toBe(false);
   });
 
-  test("combined conversions join in IN-then-HO order", () => {
+  test("Invert with Hold Off is still true", () => {
     expect(
-      conversionCvtFlag(
+      reworkLnOnly(
         JSON.stringify([{ acronym: "HO" }, { acronym: "DT" }, { acronym: "IN" }]),
       ),
-    ).toBe("IN,HO");
+    ).toBe(true);
   });
 });

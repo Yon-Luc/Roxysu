@@ -21,21 +21,22 @@ touches:
 
 ## Purpose
 
-Configure rating display preference (osu! stars / dan / Sunny stars / rework dan), paths, background jobs (Sunny, Daniel, rework backfills), Rice/LN/FLN classification boundaries, and recommendation focus bands (Push / Accuracy / Consistency / Deficit). Mastery levels use a fixed blend recomputed by the analytics pipeline (see [business/mastery-formulas.md](../../business/mastery-formulas.md)).
+Configure rating display preference (osu! stars / rework dan), paths, background jobs (rework + pattern backfills), Rice/LN/FLN classification boundaries, and recommendation focus bands (Push / Accuracy / Consistency / Deficit). Mastery levels use a fixed blend recomputed by the analytics pipeline (see [business/mastery-formulas.md](../../business/mastery-formulas.md)).
 
 **In UI:** each Settings tab has chip-style jump links to its sections (`?tab=` + `?section=` — not `#` hashes, because the client uses hash history). Skin import, reset, and overlay sprite publish stay on the mania tab.
 
-Rating display is stored in the browser (`roxysu:rating-display`). The `rework`
-option shows mania-difficulty-port dan labels (and the matching star under the
-detail panel). It needs the rework dan Settings job to have filled
-`beatmap_dan_ratings` rows, and the list/detail UI must receive those fields —
-see `features/sunny-dan-recommendations/` rule 8.
+Rating display is stored in the browser (`roxysu:rating-display`) with modes
+`osu` | `rework` only. Legacy stored prefs `dan` / `sunny` migrate to `rework`.
+The `rework` option shows mania-difficulty-port dan labels via `reworkDanLabel`.
+It needs the rework dan Settings job to have filled `beatmap_dan_ratings` rows,
+and the list/detail UI must receive those fields — see
+`features/rework-dan-recommendations/` rework display rules.
 
 ## Business rules
 
 1. Path resolution precedence: env → Settings → platform default (`packages/osu-paths`).
 2. Rice / LN / FLN **classification** boundaries are user-configurable (defaults LN start 20%, FLN start 80%). LN start must be strictly less than FLN start. Keys: `recommend.ln_ratio_threshold`, `recommend.fln_ratio_threshold`.
-3. Classification thresholds affect recommend axes, skill estimates, stats skillset mix, and `axis:` query filters. They do **not** change Sunny dan RC/LN **label table** selection (stays package constant 20%).
+3. Classification thresholds affect recommend axes, skill estimates, stats skillset mix, and `axis:` query filters. They do **not** change Rework dan RC/LN **label table** selection (stays package constant 20%).
 4. Recommendation **focus** settings (clear-rate bands, target difficulty, tolerance, topPlays) live in `recommend.focus_settings` and are edited on the Customize tab. Clear-rate band edges are clamped to 80–100% (Accuracy max may be open-ended above 100% in storage). Defaults keep Push in a closed 90–95% band near that skill level.
 5. Each mastery row also stores Practice/QL play aggregates: `play_count`, `best_accuracy`, `best_pp`, `best_score`, `best_misses`, `last_played_at`. The query language joins these instead of aggregating `scores` per request. **Enforced by:** `runMasteryEngine` + `query-language/execute.ts` `baseFrom()`.
 
@@ -49,7 +50,7 @@ Settings UI is tab-grouped on `/settings`:
 | Practice | score username, gamemode |
 | Customize | Rice / LN / FLN boundaries, recommendation focuses |
 | Appearance | appearance, difficulty display, preview skin, keybinds (columns + playback actions) |
-| Jobs | Sunny dan, Daniel dan, rework dan (mania difficulty port), dominant skill analysis, Mania Rating Lab |
+| Jobs | Rework dan (mania difficulty port), dominant skill analysis, Mania Rating Lab |
 
 Jobs pause themselves when the machine is low on memory (see
 `memoryPressure.ts`) and resume automatically, so they are safe to leave running
@@ -62,7 +63,7 @@ used/limit).
 While a job runs, `JobsBatchChrome` shows a floating progress chip (and
 completion toast) when the user leaves Settings — same pattern as Download
 batch chrome. After the first meaningful sync, `JobsOnboardingModal` offers to
-start Sunny + Daniel + Rework (pattern included via rework). Accepting also
+start Rework dan (pattern rows are filled in the same calculator pass). Accepting also
 pulls a Hub calc bundle for the current app version when available.
 
 Dominant skill analysis and rework dan rate one chart synchronously, so they
@@ -96,7 +97,7 @@ Only the active tab’s panels mount. Jump chips and Command Palette deep-links 
 
 - `features/practice-library/` — mastery filters; `axis:` filters use thresholds
 - `features/practice-profiles/`
-- `features/sunny-dan-recommendations/` — backfill job from Settings; axis classification
+- `features/rework-dan-recommendations/` — backfill job from Settings; axis classification
 - `features/sessions/` — 4K/7K recommend axes
 - `features/stats/` — skillset mix / skill bands
 

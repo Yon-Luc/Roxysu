@@ -13,9 +13,22 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const desktopRoot = path.resolve(__dirname, "..");
 const launcherSrc = path.join(desktopRoot, "launcher/win/dist/Roxysu.exe");
+// Shipped calc bundle file: exportable admin artifact placed in apps/desktop/pack/.
+const calcBundleSrc = path.join(desktopRoot, "pack/calc-bundle.ndjson.gz");
 
 /** @param {import('electron-builder').AfterPackContext} context */
 export default async function afterPack(context) {
+  // Copy the shipped calc bundle file when the admin placed one for this
+  // release. Conditional — a release without the file stays valid, packaged
+  // boots simply keep previous-version rows (no Hub fallback).
+  if (existsSync(calcBundleSrc)) {
+    const dest = path.join(context.appOutDir, "resources/calc-bundle.ndjson.gz");
+    copyFileSync(calcBundleSrc, dest);
+    console.log(
+      "[after-pack] shipped calc bundle → resources/calc-bundle.ndjson.gz",
+    );
+  }
+
   if (context.electronPlatformName !== "win32") return;
 
   const appOutDir = context.appOutDir;

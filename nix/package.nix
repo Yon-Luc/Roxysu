@@ -357,6 +357,14 @@ in
       cp -a apps/desktop/stage/realm-reader "$resources/realm-reader"
       cp apps/desktop/stage/splash.html "$resources/splash.html"
 
+      # Shipped calc bundle file (admin export, optional): packaged boots apply
+      # it locally instead of pulling the Hub.
+      if [ -f apps/desktop/pack/calc-bundle.ndjson.gz ]; then
+        cp apps/desktop/pack/calc-bundle.ndjson.gz "$resources/calc-bundle.ndjson.gz"
+      else
+        echo "note: no apps/desktop/pack/calc-bundle.ndjson.gz — this build ships without a calc bundle file"
+      fi
+
       # Optional in-game overlay host (Wayland). Symlink keeps store sharing;
       # its RPATH already points at the GTK/WebKit libs in its own closure.
       ${lib.optionalString (overlayBin != null) ''

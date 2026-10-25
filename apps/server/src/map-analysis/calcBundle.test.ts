@@ -8,16 +8,26 @@ import {
   beatmaps,
   closeDb,
   ensureDb,
+  settings,
 } from "@roxysu/db/client.bun";
+import { JOBS_CALC_BUNDLE_APPLIED_VERSION_KEY } from "@roxysu/db/settings-keys";
 import type { Db } from "@roxysu/db/types";
 import { and, eq } from "drizzle-orm";
 import {
   applyCalcBundle,
+  buildCalcBundleFileBytes,
   exportCalcBundleEntries,
+  getCalcBundleAppliedVersion,
+  maybePullCalcBundleOnBoot,
   reworkReplaceAlgorithmsForBoot,
   uploadCalcBundleToHub,
 } from "./calcBundle";
+import { readShippedCalcBundleFile } from "./calcBundleFile";
 import { REWORK_ALGORITHM } from "./computeReworkDan";
+import { APP_VERSION } from "../appVersion";
+import { gunzipSync } from "node:zlib";
+import { writeFileSync } from "node:fs";
+import { CALC_BUNDLE_ALGORITHMS } from "./calcBundle";
 
 const SET_ID = "00000000-0000-0000-0000-000000000030";
 const MAP_A = "00000000-0000-0000-0000-000000000031";
@@ -291,8 +301,7 @@ describe("applyCalcBundle", () => {
   });
 });
 
-describe("uploadCalcBundleToHub", () => {
-  const realFetch = globalThis.fetch;
+describe("uploadCalcBundleToHub", () => {  const realFetch = globalThis.fetch;
   const realHubUrl = process.env.HUB_URL;
   afterEach(() => {
     globalThis.fetch = realFetch;
@@ -323,5 +332,112 @@ describe("uploadCalcBundleToHub", () => {
     for (const url of urls) {
       expect(url).toBe("https://configured-hub.test/admin/calc-bundles");
     }
+  });
+});
+
+describe("calc bundle file build + boot", () => {
+  const realEnv: { [k: string]: string | undefined } = {};
+  const envKeys = ["ROXYSU_PACKAGED", "ROXYSU_CALC_BUNDLE_FILE"] as const;
+  afterEach(() => {
+    for (const key of envKeys) {
+      if (realEnv[key] === undefined) delete process.env[key];
+      else process.env[key] = realEnv[key];
+    }
+  });
+
+  function captureEnv() {
+    for (const key of envKeys) realEnv[key] = process.env[key];
+  }
+
+  test("build produces a valid gzip NDJSON file of stripped entries", async () => {
+    const bytes = await buildCalcBundleFileBytes(db, "0.0.0-filetest");
+    const text = gunzipSync(bytes).toString("utf8");
+    const lines = text.split("\n").filter((line) => line.length > 0);
+    const header = JSON.parse(lines[0]);
+    expect(header.format).toBe("roxysu-calc-bundle");
+    expect(header.roxysuVersion).toBe("0.0.0-filetest");
+    expect(header.algorithms).toContain(REWORK_ALGORITHM);
+    expect(header.entryCount).toBe(lines.length - 1);
+
+    const exportable = await exportCalcBundleEntries(db);
+    expect(header.entryCount).toBe(exportable.length);
+    const fileEntries = lines.slice(1).map((line) => JSON.parse(line));
+    // Advisory fields do not travel: file entries equal export entries minus
+    // onlineBeatmapId and null columns.
+    const expected = exportable.map((entry) =>
+      JSON.parse(JSON.stringify(entry, (key, value) =>
+        key === "onlineBeatmapId" || value === null ? undefined : value)),
+    );
+    expect(fileEntries).toEqual(expected);
+  });
+
+  test("packaged boot applies the shipped file locally and marks applied", async () => {
+    captureEnv();
+    const version = APP_VERSION;
+    const bytes = await buildCalcBundleFileBytes(db, version);
+    const bundlePath = path.join(tmpDir, "calc-bundle.ndjson.gz");
+    writeFileSync(bundlePath, bytes);
+    // Sanity: the built file for this db parses cleanly.
+    const read = readShippedCalcBundleFile(bundlePath, version, CALC_BUNDLE_ALGORITHMS);
+    expect(read.ok).toBe(true);
+
+    process.env.ROXYSU_PACKAGED = "1";
+    process.env.ROXYSU_CALC_BUNDLE_FILE = bundlePath;
+
+    await maybePullCalcBundleOnBoot(db);
+
+    expect(await getCalcBundleAppliedVersion(db)).toBe(version);
+
+    const replaced = await db
+      .select()
+      .from(beatmapDanRatings)
+      .where(
+        and(
+          eq(beatmapDanRatings.beatmapId, MAP_A),
+          eq(beatmapDanRatings.algorithm, REWORK_ALGORITHM),
+        ),
+      )
+      .get();
+    const fileEntry = read.ok
+      ? read.entries.find(
+          (e) =>
+            e.beatmapHash === HASH_A && e.algorithm === REWORK_ALGORITHM,
+        )
+      : undefined;
+    expect(fileEntry).toBeDefined();
+    expect(replaced?.sunnyStar).toBe(fileEntry!.sunnyStar);
+    expect(replaced?.estDiff).toBe(fileEntry!.estDiff);
+  });
+
+  test("packaged boot without a usable file marks applied and keeps rows", async () => {
+    captureEnv();
+    const version = APP_VERSION;
+    // Reset the applied marker so the boot path runs again.
+    await db
+      .insert(settings)
+      .values({ key: JOBS_CALC_BUNDLE_APPLIED_VERSION_KEY, value: "" })
+      .onConflictDoUpdate({
+        target: settings.key,
+        set: { value: "" },
+      });
+
+    process.env.ROXYSU_PACKAGED = "1";
+    process.env.ROXYSU_CALC_BUNDLE_FILE = path.join(tmpDir, "missing.ndjson.gz");
+
+    await maybePullCalcBundleOnBoot(db);
+    expect(await getCalcBundleAppliedVersion(db)).toBe(version);
+
+    // Prior rows survive untouched.
+    const kept = await db
+      .select()
+      .from(beatmapDanRatings)
+      .where(
+        and(
+          eq(beatmapDanRatings.beatmapId, MAP_A),
+          eq(beatmapDanRatings.algorithm, REWORK_ALGORITHM),
+        ),
+      )
+      .get();
+    expect(kept?.estDiff).not.toBeNull();
   });
 });

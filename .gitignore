@@ -48,3 +48,6 @@ result-*
 apps/overlay/roxysu-overlay
 # apps/overlay generated wayland protocol code
 apps/overlay/gen/
+
+# shipped calc bundle file (admin export release artifact)
+apps/desktop/pack/

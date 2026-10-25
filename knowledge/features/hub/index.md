@@ -27,6 +27,7 @@ touches:
   - apps/server/src/hubUrl.ts
   - apps/server/src/mirrors/hubSearch.ts
   - apps/server/src/map-analysis/calcBundle.ts
+  - apps/server/src/map-analysis/calcBundleFile.ts
   - apps/hub/src/db.ts
   - apps/hub/drizzle/0003_collection_indexes.sql
   - apps/hub/drizzle/0006_calc_bundles.sql
@@ -103,8 +104,8 @@ Networked collaboration / discovery — not required for offline practice analyt
 11. Kill switches (env, read per request): `HUB_SEARCH_INDEX=0` forces miss; `HUB_SEARCH_HTTP_CACHE=0` forces `Cache-Control`/`CDN-Cache-Control: no-store` (stops new Cloudflare edge entries; does not flush existing HITs — bypass the CF Cache Rule for that).
     **Enforced by:** `apps/hub/src/services/hubEnv.ts` + `apps/hub/src/routes/search.ts` — status: verified
 
-12. Hub calc bundles are keyed by Roxysu product version. Clients gap-fill the local mirror by beatmap hash and never overwrite successful local computes.
-    **Enforced by:** `apps/server/src/map-analysis/calcBundle.ts:applyCalcBundle()` — status: verified
+12. Hub calc bundles are keyed by Roxysu product version. Clients gap-fill the local mirror by beatmap hash and never overwrite successful local computes. Packaged installs apply the shipped **Calc bundle file** at boot and never call the Hub; dev boots pull from the Hub.
+    **Enforced by:** `apps/server/src/map-analysis/calcBundle.ts:applyCalcBundle()` + `apps/server/src/map-analysis/calcBundle.ts:maybePullCalcBundleOnBoot()` — status: verified
     **See:** [decisions/hub-calc-bundle-version.md](../../decisions/hub-calc-bundle-version.md)
 
 13. BMS score batches belong to the authenticated Hub user. A `userId` in the body is ignored. Trust is always `community_submitted`. The stored DJ grade and combo lamp are computed from the submitted accuracy and judgement counts. A score whose mods include autoplay is rejected.
@@ -150,7 +151,8 @@ Networked collaboration / discovery — not required for offline practice analyt
 - `apps/server/public/features/hub/HubAdminCachePage.tsx` — admin prime UI: base fields only (mode, status, keys, sort, frequency); secondary filters are runtime on Download Maps
 - `apps/server/public/features/hub/HubAdminCalcBundlesPage.tsx` — admin Hub calc bundle upload/list/delete
 - `apps/hub/src/services/calcBundles.ts` / `routes/calcBundles.ts` — version-keyed calc bundle store + public GET
-- `apps/server/src/map-analysis/calcBundle.ts` — export, pull, gap-fill apply
+- `apps/server/src/map-analysis/calcBundle.ts` — export/iterate, pull, gap-fill apply, boot dispatch, calc bundle file build
+- `apps/server/src/map-analysis/calcBundleFile.ts` — calc bundle file format + read/validate
 - `apps/server/src/hubUrl.ts:resolveHubBaseUrl()` — shared Hub URL for Community, OAuth redeem, and Download Maps (`HUB_URL`; localhost in `bun run dev`, `https://roxysu-api.yonx.app` when `ROXYSU_DESKTOP=1`)
 - `apps/server/public/lib/hub.ts` — runtime Community client (clears JWT on Hub 401; delete + export). `packages/hub-client` is the Node Eden client and is not used in the browser
 - `apps/server/public/features/hub/HubSessionChip.tsx` — app-wide osu! OAuth state on the right of the sidebar scores/maps lines. On small screens it floats bottom-right above the tab bar, and sits in the More sheet while that sheet is open. Logged out shows Log in; logged in shows avatar and username. Same JWT as Community. Not client app auth.
@@ -221,7 +223,7 @@ update tag validation — status: verified
 
 - Hub UI pages under `apps/server/public/features/hub`
 - `features/download-mirrors/` — Download Maps search / count / download-all prefer primed Hub search index
-- `features/rework-dan-recommendations/` — Hub calc bundle pull gap-fills dan/pattern rows before local backfill
+- `features/rework-dan-recommendations/` — calc bundle (release file boot apply; Hub pull for dev) gap-fills dan/pattern rows before local backfill
 - `features/online-score-pull/` — Hub proxies ranked best fetches and holds the osu! usage ledger
 - `features/bms/` — public BMS profile, score batch, table import, chart leaderboards, comparison, feed, and statistics
 

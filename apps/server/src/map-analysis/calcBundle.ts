@@ -7,11 +7,19 @@ import {
 import { JOBS_CALC_BUNDLE_APPLIED_VERSION_KEY } from "@roxysu/db/settings-keys";
 import type { Db } from "@roxysu/db/types";
 import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { gzipSync } from "node:zlib";
 import { resolveHubBaseUrl } from "../hubUrl";
 import { APP_VERSION } from "../appVersion";
 import { publish } from "../shared/events";
 import { REWORK_ALGORITHM } from "./computeReworkDan";
 import { PATTERN_ALGORITHM } from "./computePatternAnalysis";
+import {
+  CALC_BUNDLE_FILE_FORMAT,
+  type CalcBundleFileHeader,
+  readShippedCalcBundleFile,
+  serializeCalcBundleFileEntry,
+  serializeCalcBundleFileHeader,
+} from "./calcBundleFile";
 
 export const CALC_BUNDLE_ALGORITHMS = [
   REWORK_ALGORITHM,
@@ -54,8 +62,11 @@ export type CalcBundlePullStatus =
   | "error"
   | "skipped";
 
+export type CalcBundlePullSource = "hub" | "file";
+
 export type CalcBundlePullState = {
   status: CalcBundlePullStatus;
+  source: CalcBundlePullSource | null;
   version: string | null;
   applied: number;
   skipped: number;
@@ -68,6 +79,7 @@ export type CalcBundlePullState = {
 
 let pullState: CalcBundlePullState = {
   status: "idle",
+  source: null,
   version: null,
   applied: 0,
   skipped: 0,
@@ -118,10 +130,13 @@ export async function setCalcBundleAppliedVersion(
   await writeSetting(db, JOBS_CALC_BUNDLE_APPLIED_VERSION_KEY, version);
 }
 
-/** Export successful local rows for Hub upload (skip errors / null labels). */
-export async function exportCalcBundleEntries(
+/**
+ * Stream successful local rows for release/Hub export (dan rows first, then
+ * pattern rows; queries are single-pass, so pagination needs no ORDER BY).
+ */
+export async function* iterateCalcBundleEntries(
   db: Db,
-): Promise<CalcBundleEntry[]> {
+): AsyncGenerator<CalcBundleEntry> {
   const danRows = await db
     .select({
       beatmapHash: beatmaps.hash,
@@ -136,7 +151,7 @@ export async function exportCalcBundleEntries(
     .innerJoin(beatmaps, eq(beatmaps.id, beatmapDanRatings.beatmapId))
     .where(
       and(
-        inArray(beatmapDanRatings.algorithm, [REWORK_ALGORITHM]),
+        eq(beatmapDanRatings.algorithm, REWORK_ALGORITHM),
         isNotNull(beatmaps.hash),
         isNull(beatmapDanRatings.error),
         isNotNull(beatmapDanRatings.estDiff),
@@ -175,10 +190,9 @@ export async function exportCalcBundleEntries(
       ),
     );
 
-  const out: CalcBundleEntry[] = [];
   for (const row of danRows) {
     if (!row.beatmapHash) continue;
-    out.push({
+    yield {
       beatmapHash: row.beatmapHash,
       onlineBeatmapId: row.onlineBeatmapId,
       algorithm: row.algorithm,
@@ -186,11 +200,11 @@ export async function exportCalcBundleEntries(
       lnRatio: row.lnRatio,
       columnCount: row.columnCount,
       estDiff: row.estDiff,
-    });
+    };
   }
   for (const row of patternRows) {
     if (!row.beatmapHash) continue;
-    out.push({
+    yield {
       beatmapHash: row.beatmapHash,
       onlineBeatmapId: row.onlineBeatmapId,
       algorithm: row.algorithm,
@@ -207,9 +221,48 @@ export async function exportCalcBundleEntries(
       chordjackScore: row.chordjackScore,
       jumpstreamScore: row.jumpstreamScore,
       chordstreamScore: row.chordstreamScore,
-    });
+    };
+  }
+}
+
+/** Export successful local rows for Hub upload (skip errors / null labels). */
+export async function exportCalcBundleEntries(
+  db: Db,
+): Promise<CalcBundleEntry[]> {
+  const out: CalcBundleEntry[] = [];
+  for await (const entry of iterateCalcBundleEntries(db)) {
+    out.push(entry);
   }
   return out;
+}
+
+/**
+ * Build the shipped calc bundle file: gzipped NDJSON, header line first,
+ * entries without advisory fields (no `onlineBeatmapId`, no null columns).
+ * Throws when the local mirror has no exportable rows.
+ */
+export async function buildCalcBundleFileBytes(
+  db: Db,
+  roxysuVersion: string,
+): Promise<Buffer> {
+  const lines: string[] = [];
+  let entryCount = 0;
+  for await (const entry of iterateCalcBundleEntries(db)) {
+    entryCount++;
+    lines.push(serializeCalcBundleFileEntry(entry));
+  }
+  if (entryCount === 0) {
+    throw new Error("No exportable calc bundle rows (run the rework + pattern backfills first)");
+  }
+  const header: CalcBundleFileHeader = {
+    format: CALC_BUNDLE_FILE_FORMAT,
+    roxysuVersion,
+    algorithms: [...CALC_BUNDLE_ALGORITHMS],
+    entryCount,
+  };
+  lines.unshift(serializeCalcBundleFileHeader(header));
+  const text = lines.join("\n") + "\n";
+  return gzipSync(Buffer.from(text, "utf8"), { level: 9 });
 }
 
 type ApplyStats = { applied: number; skipped: number; unmatched: number };
@@ -224,8 +277,9 @@ export type CalcBundleApplyOptions = {
 
 /**
  * Packaged installs (Nix `ROXYSU_RESOURCES`, electron-builder) replace rework
- * rows from the Hub bundle on a product-version bump. `bun desktop` does not
- * set `ROXYSU_PACKAGED`, so the dev library is left alone.
+ * rows from the shipped calc bundle file on a product-version bump.
+ * `bun desktop` does not set `ROXYSU_PACKAGED`, so the dev library is left
+ * alone.
  */
 export function reworkReplaceAlgorithmsForBoot(
   env: NodeJS.ProcessEnv = process.env,
@@ -235,8 +289,13 @@ export function reworkReplaceAlgorithmsForBoot(
 }
 
 /**
- * Gap-fill: write Hub entries when the local row is missing or failed.
+ * Gap-fill: write bundle entries when the local row is missing or failed.
  * Successful local rows are kept unless `replaceAlgorithms` names that algorithm.
+ *
+ * Apollo entries are applied in slices — hash lookups and existing-row reads
+ * run batched per slice and the slice's writes commit in one transaction, so a
+ * full library (~130k entries) stays seconds-level instead of one autocommit
+ * statement per entry.
  */
 export async function applyCalcBundle(
   db: Db,
@@ -246,6 +305,25 @@ export async function applyCalcBundle(
   const stats: ApplyStats = { applied: 0, skipped: 0, unmatched: 0 };
   if (entries.length === 0) return stats;
 
+  const SLICE = 4_000;
+  for (let i = 0; i < entries.length; i += SLICE) {
+    await applyCalcBundleSlice(
+      db,
+      entries.slice(i, i + SLICE),
+      options,
+      stats,
+    );
+  }
+
+  return stats;
+}
+
+type MatchedEntry = { entry: CalcBundleEntry; beatmapId: string };
+
+async function resolveLocalByHash(
+  db: Db,
+  entries: CalcBundleEntry[],
+): Promise<Map<string, string>> {
   const hashes = [...new Set(entries.map((e) => e.beatmapHash))];
   const localByHash = new Map<string, string>();
   const HASH_BATCH = 400;
@@ -259,31 +337,105 @@ export async function applyCalcBundle(
       if (row.hash) localByHash.set(row.hash, row.id);
     }
   }
+  return localByHash;
+}
 
-  const now = new Date();
+async function readExistingDan(
+  db: Db,
+  beatmapIds: string[],
+): Promise<Map<string, { error: string | null; estDiff: string | null }>> {
+  const existing = new Map<string, { error: string | null; estDiff: string | null }>();
+  const IDs_BATCH = 900;
+  for (let i = 0; i < beatmapIds.length; i += IDs_BATCH) {
+    const slice = beatmapIds.slice(i, i + IDs_BATCH);
+    const rows = await db
+      .select({
+        beatmapId: beatmapDanRatings.beatmapId,
+        error: beatmapDanRatings.error,
+        estDiff: beatmapDanRatings.estDiff,
+      })
+      .from(beatmapDanRatings)
+      .where(
+        and(
+          inArray(beatmapDanRatings.beatmapId, slice),
+          eq(beatmapDanRatings.algorithm, REWORK_ALGORITHM),
+        ),
+      );
+    for (const row of rows) existing.set(row.beatmapId, row);
+  }
+  return existing;
+}
 
-  for (const entry of entries) {
+async function readExistingPattern(
+  db: Db,
+  beatmapIds: string[],
+): Promise<
+  Map<
+    string,
+    {
+      error: string | null;
+      dominantPattern: string | null;
+      shapePattern: string | null;
+    }
+  >
+> {
+  const existing = new Map<
+    string,
+    { error: string | null; dominantPattern: string | null; shapePattern: string | null }
+  >();
+  const IDs_BATCH = 900;
+  for (let i = 0; i < beatmapIds.length; i += IDs_BATCH) {
+    const slice = beatmapIds.slice(i, i + IDs_BATCH);
+    const rows = await db
+      .select({
+        beatmapId: beatmapPatternAnalysis.beatmapId,
+        error: beatmapPatternAnalysis.error,
+        dominantPattern: beatmapPatternAnalysis.dominantPattern,
+        shapePattern: beatmapPatternAnalysis.shapePattern,
+      })
+      .from(beatmapPatternAnalysis)
+      .where(
+        and(
+          inArray(beatmapPatternAnalysis.beatmapId, slice),
+          eq(beatmapPatternAnalysis.algorithm, PATTERN_ALGORITHM),
+        ),
+      );
+    for (const row of rows) existing.set(row.beatmapId, row);
+  }
+  return existing;
+}
+
+const now = () => new Date();
+
+async function applyCalcBundleSlice(
+  db: Db,
+  slice: CalcBundleEntry[],
+  options: CalcBundleApplyOptions | undefined,
+  stats: ApplyStats,
+): Promise<void> {
+  const localByHash = await resolveLocalByHash(db, slice);
+
+  const matched: MatchedEntry[] = [];
+  const beatmapIds: string[] = [];
+  for (const entry of slice) {
     const beatmapId = localByHash.get(entry.beatmapHash);
     if (!beatmapId) {
       stats.unmatched++;
       continue;
     }
+    matched.push({ entry, beatmapId });
+    beatmapIds.push(beatmapId);
+  }
+  if (matched.length === 0) return;
 
+  const uniqueBeatmapIds = [...new Set(beatmapIds)];
+  const danExisting = await readExistingDan(db, uniqueBeatmapIds);
+  const patternExisting = await readExistingPattern(db, uniqueBeatmapIds);
+
+  const writes: MatchedEntry[] = [];
+  for (const { entry, beatmapId } of matched) {
     if (DAN_ALGORITHMS.has(entry.algorithm)) {
-      const existing = await db
-        .select({
-          error: beatmapDanRatings.error,
-          estDiff: beatmapDanRatings.estDiff,
-        })
-        .from(beatmapDanRatings)
-        .where(
-          and(
-            eq(beatmapDanRatings.beatmapId, beatmapId),
-            eq(beatmapDanRatings.algorithm, entry.algorithm),
-          ),
-        )
-        .get();
-
+      const existing = danExisting.get(beatmapId);
       if (
         !options?.replaceAlgorithms?.has(entry.algorithm) &&
         existing &&
@@ -293,52 +445,12 @@ export async function applyCalcBundle(
         stats.skipped++;
         continue;
       }
-
-      await db
-        .insert(beatmapDanRatings)
-        .values({
-          beatmapId,
-          algorithm: entry.algorithm,
-          beatmapHash: entry.beatmapHash,
-          sunnyStar: entry.sunnyStar ?? null,
-          lnRatio: entry.lnRatio ?? null,
-          columnCount: entry.columnCount ?? null,
-          estDiff: entry.estDiff ?? null,
-          error: null,
-          updatedAt: now,
-        })
-        .onConflictDoUpdate({
-          target: [beatmapDanRatings.beatmapId, beatmapDanRatings.algorithm],
-          set: {
-            beatmapHash: entry.beatmapHash,
-            sunnyStar: entry.sunnyStar ?? null,
-            lnRatio: entry.lnRatio ?? null,
-            columnCount: entry.columnCount ?? null,
-            estDiff: entry.estDiff ?? null,
-            error: null,
-            updatedAt: now,
-          },
-        });
-      stats.applied++;
+      writes.push({ entry, beatmapId });
       continue;
     }
 
     if (entry.algorithm === PATTERN_ALGORITHM) {
-      const existing = await db
-        .select({
-          error: beatmapPatternAnalysis.error,
-          dominantPattern: beatmapPatternAnalysis.dominantPattern,
-          shapePattern: beatmapPatternAnalysis.shapePattern,
-        })
-        .from(beatmapPatternAnalysis)
-        .where(
-          and(
-            eq(beatmapPatternAnalysis.beatmapId, beatmapId),
-            eq(beatmapPatternAnalysis.algorithm, PATTERN_ALGORITHM),
-          ),
-        )
-        .get();
-
+      const existing = patternExisting.get(beatmapId);
       if (
         !options?.replaceAlgorithms?.has(PATTERN_ALGORITHM) &&
         existing &&
@@ -349,35 +461,53 @@ export async function applyCalcBundle(
         stats.skipped++;
         continue;
       }
+      writes.push({ entry, beatmapId });
+      continue;
+    }
 
-      await db
-        .insert(beatmapPatternAnalysis)
-        .values({
-          beatmapId,
-          algorithm: PATTERN_ALGORITHM,
-          beatmapHash: entry.beatmapHash,
-          columnCount: entry.columnCount ?? null,
-          dominantPattern: entry.dominantPattern ?? null,
-          secondaryPattern: entry.secondaryPattern ?? null,
-          shapePattern: entry.shapePattern ?? null,
-          secondaryShape: entry.secondaryShape ?? null,
-          confidence: entry.confidence ?? null,
-          jackDensity: entry.jackDensity ?? null,
-          chordDensity: entry.chordDensity ?? null,
-          streamDensity: entry.streamDensity ?? null,
-          bracketDensity: entry.bracketDensity ?? null,
-          chordjackScore: entry.chordjackScore ?? null,
-          jumpstreamScore: entry.jumpstreamScore ?? null,
-          chordstreamScore: entry.chordstreamScore ?? null,
-          error: null,
-          updatedAt: now,
-        })
-        .onConflictDoUpdate({
-          target: [
-            beatmapPatternAnalysis.beatmapId,
-            beatmapPatternAnalysis.algorithm,
-          ],
-          set: {
+    stats.skipped++;
+  }
+
+  if (writes.length === 0) return;
+
+  db.transaction((tx) => {
+    for (const { entry, beatmapId } of writes) {
+      if (DAN_ALGORITHMS.has(entry.algorithm)) {
+        tx
+          .insert(beatmapDanRatings)
+          .values({
+            beatmapId,
+            algorithm: entry.algorithm,
+            beatmapHash: entry.beatmapHash,
+            sunnyStar: entry.sunnyStar ?? null,
+            lnRatio: entry.lnRatio ?? null,
+            columnCount: entry.columnCount ?? null,
+            estDiff: entry.estDiff ?? null,
+            error: null,
+            updatedAt: now(),
+          })
+          .onConflictDoUpdate({
+            target: [beatmapDanRatings.beatmapId, beatmapDanRatings.algorithm],
+            set: {
+              beatmapHash: entry.beatmapHash,
+              sunnyStar: entry.sunnyStar ?? null,
+              lnRatio: entry.lnRatio ?? null,
+              columnCount: entry.columnCount ?? null,
+              estDiff: entry.estDiff ?? null,
+              error: null,
+              updatedAt: now(),
+            },
+          })
+          .run();
+        continue;
+      }
+
+      if (entry.algorithm === PATTERN_ALGORITHM) {
+        tx
+          .insert(beatmapPatternAnalysis)
+          .values({
+            beatmapId,
+            algorithm: PATTERN_ALGORITHM,
             beatmapHash: entry.beatmapHash,
             columnCount: entry.columnCount ?? null,
             dominantPattern: entry.dominantPattern ?? null,
@@ -393,17 +523,39 @@ export async function applyCalcBundle(
             jumpstreamScore: entry.jumpstreamScore ?? null,
             chordstreamScore: entry.chordstreamScore ?? null,
             error: null,
-            updatedAt: now,
-          },
-        });
-      stats.applied++;
-      continue;
+            updatedAt: now(),
+          })
+          .onConflictDoUpdate({
+            target: [
+              beatmapPatternAnalysis.beatmapId,
+              beatmapPatternAnalysis.algorithm,
+            ],
+            set: {
+              beatmapHash: entry.beatmapHash,
+              columnCount: entry.columnCount ?? null,
+              dominantPattern: entry.dominantPattern ?? null,
+              secondaryPattern: entry.secondaryPattern ?? null,
+              shapePattern: entry.shapePattern ?? null,
+              secondaryShape: entry.secondaryShape ?? null,
+              confidence: entry.confidence ?? null,
+              jackDensity: entry.jackDensity ?? null,
+              chordDensity: entry.chordDensity ?? null,
+              streamDensity: entry.streamDensity ?? null,
+              bracketDensity: entry.bracketDensity ?? null,
+              chordjackScore: entry.chordjackScore ?? null,
+              jumpstreamScore: entry.jumpstreamScore ?? null,
+              chordstreamScore: entry.chordstreamScore ?? null,
+              error: null,
+              updatedAt: now(),
+            },
+          })
+          .run();
+        continue;
+      }
     }
+  });
 
-    stats.skipped++;
-  }
-
-  return stats;
+  stats.applied += writes.length;
 }
 
 async function fetchHubCalcBundle(
@@ -474,6 +626,7 @@ export async function pullAndApplyCalcBundle(
 
   setPullState({
     status: "running",
+    source: "hub",
     version,
     applied: 0,
     skipped: 0,
@@ -518,12 +671,83 @@ export async function pullAndApplyCalcBundle(
   return getCalcBundlePullState();
 }
 
-/** Boot: pull once per product version when not yet applied. */
+/**
+ * Boot for a packaged install: apply the shipped calc bundle file and mark
+ * applied. Packaged boots never call the Hub — the release artifact is the
+ * only boot-time gap-fill source, so a missing/unreadable/mismatched file
+ * still marks applied (the file cannot self-heal between boots) and leaves
+ * previous-version rows in place.
+ */
+export async function maybeApplyShippedCalcBundleOnBoot(
+  db: Db,
+  replaceAlgorithms: ReadonlySet<string> | undefined,
+): Promise<CalcBundlePullState> {
+  if (pullState.status === "running") return getCalcBundlePullState();
+  const version = APP_VERSION;
+
+  setPullState({
+    status: "running",
+    source: "file",
+    version,
+    applied: 0,
+    skipped: 0,
+    unmatched: 0,
+    entryCount: 0,
+    error: null,
+    startedAt: new Date().toISOString(),
+    finishedAt: null,
+  });
+
+  const filePath = process.env.ROXYSU_CALC_BUNDLE_FILE?.trim() ?? "";
+  const read = readShippedCalcBundleFile(
+    filePath,
+    version,
+    CALC_BUNDLE_ALGORITHMS,
+  );
+  if (!read.ok) {
+    console.warn(`[calc-bundle] shipped calc bundle unusable: ${read.reason}`);
+    await setCalcBundleAppliedVersion(db, version);
+    setPullState({
+      status: "skipped",
+      error: read.reason,
+      finishedAt: new Date().toISOString(),
+    });
+    return getCalcBundlePullState();
+  }
+
+  const stats = await applyCalcBundle(db, read.entries, { replaceAlgorithms });
+  await setCalcBundleAppliedVersion(db, version);
+  setPullState({
+    status: "completed",
+    applied: stats.applied,
+    skipped: stats.skipped,
+    unmatched: stats.unmatched,
+    entryCount: read.header.entryCount,
+    finishedAt: new Date().toISOString(),
+  });
+  publish({ type: "dashboard.updated" });
+  return getCalcBundlePullState();
+}
+
+/** Boot: apply shipped file (packaged) or pull the Hub bundle (dev) once per product version. */
 export async function maybePullCalcBundleOnBoot(db: Db): Promise<void> {
   try {
     const applied = await getCalcBundleAppliedVersion(db);
     if (applied === APP_VERSION) return;
     const replaceAlgorithms = reworkReplaceAlgorithmsForBoot();
+    if (process.env.ROXYSU_PACKAGED === "1") {
+      console.log(
+        `[calc-bundle] packaged boot: applying shipped calc bundle file for ${APP_VERSION} (was ${applied ?? "none"})${replaceAlgorithms ? "; replacing rework rows" : ""}`,
+      );
+      const state = await maybeApplyShippedCalcBundleOnBoot(
+        db,
+        replaceAlgorithms,
+      );
+      console.log(
+        `[calc-bundle] shipped bundle ${state.status}: applied=${state.applied} skipped=${state.skipped} unmatched=${state.unmatched}`,
+      );
+      return;
+    }
     console.log(
       `[calc-bundle] pulling Hub calc bundle for ${APP_VERSION} (was ${applied ?? "none"})${replaceAlgorithms ? "; replacing rework rows" : ""}`,
     );

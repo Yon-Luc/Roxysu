@@ -783,11 +783,24 @@ if (!gotLock) {
     createSplashWindow(paths);
     void setSplashStatus("Starting");
 
+    // Shipped calc bundle file (release artifact staged by after-pack/Nix).
+    // Packaged boots apply it locally instead of pulling the Hub.
+    const calcBundleFile = path.join(
+      paths.resourcesDir,
+      "calc-bundle.ndjson.gz",
+    );
+    const hasCalcBundleFile =
+      paths.isPackaged && fs.existsSync(calcBundleFile);
+    desktopLog(`calcBundleFile=${hasCalcBundleFile ? calcBundleFile : "(none)"}`);
+
     const sharedEnv = {
       ROXYSU_DESKTOP: "1",
       // Set only for Nix / electron-builder installs. `bun desktop` stays
       // unpackaged so a version bump does not replace the dev library.
       ...(paths.isPackaged ? { ROXYSU_PACKAGED: "1" } : {}),
+      ...(hasCalcBundleFile
+        ? { ROXYSU_CALC_BUNDLE_FILE: calcBundleFile }
+        : {}),
       ROXYSU_PORT: String(PORT),
       ROXYSU_HOST: HOST,
       ROXYSU_STATIC_DIR: paths.staticDir,

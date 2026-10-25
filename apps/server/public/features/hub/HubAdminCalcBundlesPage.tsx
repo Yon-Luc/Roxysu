@@ -159,16 +159,32 @@ export function HubAdminCalcBundlesPage() {
                 placeholder="Pre-release rework + pattern"
               />
             </label>
-            <button
-              type="button"
-              className="rx-btn rx-btn-primary"
-              disabled={
-                uploadMutation.isPending || !version.trim() || !jwt
-              }
-              onClick={() => uploadMutation.mutate()}
-            >
-              {uploadMutation.isPending ? "Uploading…" : "Export & upload"}
-            </button>
+            <div className="flex flex-wrap items-start gap-2">
+              <button
+                type="button"
+                className="rx-btn rx-btn-primary"
+                disabled={
+                  uploadMutation.isPending || !version.trim() || !jwt
+                }
+                onClick={() => uploadMutation.mutate()}
+              >
+                {uploadMutation.isPending ? "Uploading…" : "Export & upload"}
+              </button>
+              <a
+                className="rx-btn"
+                href={`/api/settings/calc-bundle/export-file?version=${encodeURIComponent(version.trim() || APP_VERSION)}`}
+                download
+                title="Release artifact for packaged installs"
+              >
+                Download release file (.ndjson.gz)
+              </a>
+            </div>
+            <p className="text-xs text-faint">
+              Save the release file as{" "}
+              <code className="text-ink">apps/desktop/pack/calc-bundle.ndjson.gz</code>{" "}
+              before packing so the installer ships it; packaged boots then apply
+              it locally instead of pulling the Hub.
+            </p>
           </section>
 
           <section className="space-y-3">

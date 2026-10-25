@@ -380,7 +380,52 @@ async function main() {
   );
 
   log(`electron=${require("electron/package.json").version} (UI only; children use Node ${NODE_VERSION})`);
+  checkCalcBundleReleaseFile();
   log("done — run rebuild:native && archive-realm before electron-builder");
+}
+
+/**
+ * Shipped calc bundle file: the admin exports it from the client app and
+ * drops it at apps/desktop/pack/calc-bundle.ndjson.gz before packing. The
+ * stage copy happens in after-pack (electron-builder) / nix package.nix.
+ */
+function checkCalcBundleReleaseFile() {
+  const calcBundlePath = path.join(desktopRoot, "pack/calc-bundle.ndjson.gz");
+  if (!existsSync(calcBundlePath)) {
+    log(
+      "note: no apps/desktop/pack/calc-bundle.ndjson.gz — this release ships without a calc bundle file; packaged boots will keep previous-version rework rows",
+    );
+    return;
+  }
+  let serverVersion = "unknown";
+  try {
+    serverVersion = JSON.parse(
+      readFileSync(path.join(repoRoot, "apps/server/package.json"), "utf8"),
+    ).version;
+  } catch {
+    // Leave "unknown" — the header check still runs against itself.
+  }
+  try {
+    const { gunzipSync } = require("node:zlib");
+    const firstLine = gunzipSync(readFileSync(calcBundlePath))
+      .toString("utf8")
+      .split("\n", 1)[0];
+    const header = JSON.parse(firstLine);
+    const headerVersion = header?.roxysuVersion;
+    if (headerVersion === serverVersion) {
+      log(
+        `calc bundle file ok: ${header.entryCount} entries for ${headerVersion}`,
+      );
+    } else {
+      log(
+        `warn: calc bundle file header version ${JSON.stringify(headerVersion)} ≠ apps/server package version ${JSON.stringify(serverVersion)} — packaged boots will ignore it (version mismatch)`,
+      );
+    }
+  } catch (err) {
+    log(
+      `warn: could not validate calc bundle file header (${err instanceof Error ? err.message : String(err)})`,
+    );
+  }
 }
 
 main().catch((err) => {

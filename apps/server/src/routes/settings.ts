@@ -13,6 +13,7 @@ import { Elysia, t } from "elysia";
 import { eq } from "drizzle-orm";
 import { APP_VERSION } from "../appVersion";
 import {
+  buildCalcBundleFileBytes,
   exportCalcBundleEntries,
   getCalcBundleAppliedVersion,
   getCalcBundlePullState,
@@ -251,6 +252,39 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
         token: t.String({ minLength: 1 }),
         roxysuVersion: t.String({ minLength: 1, maxLength: 32 }),
         label: t.Optional(t.String({ maxLength: 100 })),
+      }),
+    },
+  )
+  .get(
+    "/calc-bundle/export-file",
+    async ({ db, query, set }) => {
+      const version = query.version?.trim() || APP_VERSION;
+      if (!/^[0-9A-Za-z._+-]{1,32}$/.test(version)) {
+        set.status = 400;
+        return {
+          ok: false as const,
+          message: `Invalid Roxysu version ${JSON.stringify(query.version ?? "")}`,
+        };
+      }
+      try {
+        const bytes = await buildCalcBundleFileBytes(db, version);
+        set.headers["content-type"] = "application/gzip";
+        set.headers["cache-control"] = "no-store";
+        set.headers[
+          "content-disposition"
+        ] = `attachment; filename="calc-bundle-${version}.ndjson.gz"`;
+        return bytes;
+      } catch (err) {
+        set.status = 409;
+        return {
+          ok: false as const,
+          message: err instanceof Error ? err.message : String(err),
+        };
+      }
+    },
+    {
+      query: t.Object({
+        version: t.Optional(t.String({ maxLength: 64 })),
       }),
     },
   )

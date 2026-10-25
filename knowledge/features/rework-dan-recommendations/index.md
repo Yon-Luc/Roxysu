@@ -8,6 +8,8 @@ touches:
   - apps/server/src/map-analysis/jobYield.ts
   - apps/server/src/map-analysis/patternAnalysisJob.ts
   - apps/server/src/map-analysis/computePatternAnalysis.ts
+  - apps/server/src/map-analysis/calcBundle.ts
+  - apps/server/src/map-analysis/calcBundleFile.ts
   - apps/desktop/main.js
   - apps/server/src/map-analysis/reworkDanJob.ts
   - apps/server/src/map-analysis/computeDanVariants.ts
@@ -37,7 +39,7 @@ Product writes use `algorithm = 'mania-difficulty'` (rework dan). Legacy Sunny/D
 ## Business rules
 
 1. Estimates live in the Dan ratings store (`beatmap_dan_ratings`); recommendations degrade without rework backfill.
-2. Rework (and pattern) backfill is a Settings-started background job (also offered after first sync via the Jobs onboarding modal). Before backfill, boot may gap-fill from a **Hub calc bundle** matching the Roxysu product version. Practice/search list handlers and recommend HTTP handlers do not run rework/pattern compute on the request path.
+2. Rework (and pattern) backfill is a Settings-started background job (also offered after first sync via the Jobs onboarding modal). Before backfill, a packaged boot applies the **Calc bundle file** shipped with that release (never the Hub); a dev boot gap-fills from a **Hub calc bundle** matching the Roxysu product version. Practice/search list handlers and recommend HTTP handlers do not run rework/pattern compute on the request path.
 3. Recommendations and skill estimates are for a single mania keymode (`keyCount`, default 7). 4K and 7K pools are never mixed.
 4. Product query language and rating display are rework-only: `dan:` aliases `rework:` (mania-difficulty labels via `expandReworkDanMatch`). Rating modes are `osu` | `rework`; legacy `dan`/`sunny` prefs migrate to `rework`. `formatSkillRating` uses `reworkDanLabel`.
 5. Modded plays (speed rate ≠ 1.0 or full-LN Invert) are rated by the **dan difficulty variants** store (`beatmap_dan_rating_variants`), computed for `mania-difficulty` only by an import-triggered background job. Skill axes and band plays read variant stars for modded plays; modded plays without a computed variant are excluded from skill until rated. NM-equivalent plays (rate 1.0, no Invert; Mirror/Classic ignored) always read the base rework row. Recommend / skill / stats analytics join `algorithm = 'mania-difficulty'` only (`needsReworkBackfill`, `reworkStar` / `reworkEstDiff`).
@@ -107,12 +109,12 @@ Product writes use `algorithm = 'mania-difficulty'` (rework dan). Legacy Sunny/D
    deletes `mania-difficulty` dan rows and `mania-skill-v1` pattern rows, then
    starts the same backfill. It refuses while a pass is running, stopping, or
    paused. On a packaged install, a product-version bump replaces successful
-   `mania-difficulty` and `mania-skill-v1` rows with that version's Hub calc
-   bundle (maps the bundle does not contain keep their previous rows).
-   `bun desktop` does not set `ROXYSU_PACKAGED`, so it gap-fills only and does
-   not replace the dev library. A Hub bundle for the same product version can
-   still gap-fill old numbers back in if a Recalculate all pass is restarted
-   before it finishes.
+   `mania-difficulty` and `mania-skill-v1` rows with that version's **Calc
+   bundle file** shipped with the release (maps the file does not contain keep
+   their previous rows). `bun desktop` does not set `ROXYSU_PACKAGED`, so it
+   gap-fills only from the Hub and does not replace the dev library. A Hub
+   bundle or manual pull for the same product version can still gap-fill old
+   numbers back in if a Recalculate all pass is restarted before it finishes.
 12. Chart shape is counted on the difficulty row graph in the same calculator pass as the dominant skill (`chartShapeWalk` before the graph is released). It does not change star rating. Labels are `stream`, `trill`, `jumptrill`, `jumpstream`, `handstream` (4K), `chordjack`, `chordstream`, and `bracket` (7K). Stored on `shape_pattern` / `secondary_shape`. A pattern row with a skill and a null shape is missing and is filled by the pattern job without a new algorithm id. An empty `shape_pattern` means the walk ran and no family led (a pure jack chart), so the job does not recompute it. The map page, Now selected, overlay, and tosu live show `shape_pattern` (and its note shares), not the dominant skill.
 13. The `rework` rating display mode is client-side (`roxysu:rating-display`).
    Practice/search/collection list cards and the beatmap detail panel must pass
@@ -261,7 +263,7 @@ old non-yielding loop).
 ## Dependencies
 
 - `features/mastery-settings/` — job controls, Jobs chrome, first-sync onboarding
-- `features/hub/` — Hub calc bundle pull before local backfill
+- `features/hub/` — calc bundle (release file boot apply; Hub pull for dev) before local backfill
 - `features/practice-library/` — `dan:` / `rework:` / `pattern:` query language fields
 - `packages/osu-chart`
 - `packages/mania-difficulty`

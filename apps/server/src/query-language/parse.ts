@@ -112,7 +112,8 @@ function parsePlayed(rest: string): number | null {
  * Normalize pattern synonyms.
  *
  * Skill tokens stay skills. Family names stay chart shapes (`delay` is the
- * 7K name for `stream`). `jack` stays the jack skill.
+ * 7K name for `stream`). `jack` stays the jack skill. `tech` is the mixed
+ * chart shape; the skill keeps the full name `technical`.
  */
 function normalizePatternValue(raw: string): string {
   const compact = raw.trim().toLowerCase().replace(/[\s_-]+/g, "");
@@ -122,7 +123,6 @@ function normalizePatternValue(raw: string): string {
     jacks: "jack",
     coordination: "coordination",
     technical: "technical",
-    tech: "technical",
     release: "release",
     jumpstream: "jumpstream",
     js: "jumpstream",
@@ -144,6 +144,12 @@ function normalizePatternValue(raw: string): string {
     thrill: "trill",
     jumptrill: "jumptrill",
     jt: "jumptrill",
+    anchor: "anchor",
+    anchors: "anchor",
+    shield: "shield",
+    shields: "shield",
+    tech: "tech",
+    mixed: "tech",
   };
   return aliases[compact] ?? raw.trim().toLowerCase();
 }

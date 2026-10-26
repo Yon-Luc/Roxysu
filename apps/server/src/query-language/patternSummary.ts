@@ -58,6 +58,9 @@ const PATTERN_DISPLAY: Record<string, string> = {
   delay: "Delay",
   trill: "Trill",
   jumptrill: "Jumptrill",
+  anchor: "Anchor",
+  shield: "Shield",
+  tech: "Tech",
   mixed: "Mixed",
 };
 

@@ -16,6 +16,20 @@ function chart(columnCount: number, rows: number[][], gapMs = 120): ManiaBeatmap
   return { columnCount, overallDifficulty: 8, notes };
 }
 
+/** Tap, then a hold in the same column on the next row. */
+function shielded(columnCount: number, times: number, gapMs = 120): ManiaBeatmapInput {
+  const notes: ManiaDifficultyNote[] = [
+    { column: 0, startMs: 0, endMs: 0 },
+  ];
+  for (let i = 0; i < times; i++) {
+    const tap = 200 + i * gapMs * 2;
+    const head = tap + gapMs;
+    notes.push({ column: 0, startMs: tap, endMs: tap });
+    notes.push({ column: 0, startMs: head, endMs: head + gapMs * 2 });
+  }
+  return { columnCount, overallDifficulty: 8, notes };
+}
+
 function repeat(pattern: number[][], times: number): number[][] {
   const rows: number[][] = [];
   for (let i = 0; i < times; i++) rows.push(...pattern);
@@ -81,12 +95,16 @@ describe("shapeProfile", () => {
   });
 
   test("chords that share a column are chordjacks", () => {
+    // Rotate the shared column so no single column is planted — that chart
+    // is an anchor, not a chordjack.
     const rows = repeat(
       [
         [0, 1],
         [1, 2],
+        [2, 3],
+        [0, 3],
       ],
-      12,
+      8,
     );
     const shape = shapeProfile(chart(4, rows));
     expect(shape.dominant).toBe("chordjack");
@@ -173,5 +191,87 @@ describe("shapeProfile", () => {
     for (const shape of SHAPE_LABELS) expect(isShapeLabel(shape)).toBe(true);
     expect(isShapeLabel("speed")).toBe(false);
     expect(isShapeLabel("jack")).toBe(false);
+  });
+
+  test("a planted column inside chordjacks is an anchor", () => {
+    const rows = repeat(
+      [
+        [0, 1],
+        [0, 2],
+      ],
+      16,
+    );
+    const shape = shapeProfile(chart(4, rows));
+    expect(shape.dominant).toBe("anchor");
+    expect(shape.secondary).toBe("chordjack");
+    expect(shape.counts.anchor).toBeGreaterThan(0);
+  });
+
+  test("a one-column jack run is an anchor, not tech", () => {
+    const shape = shapeProfile(chart(4, repeat([[1]], 24)));
+    expect(shape.dominant).toBe("anchor");
+    expect(shape.dominant).not.toBe("tech");
+  });
+
+  test("a short anchor burst inside jumpstream stays jumpstream", () => {
+    const burst = [
+      [0, 1],
+      [0, 2],
+      [0, 3],
+    ];
+    const jumpstream = [
+      [0, 1],
+      [3],
+      [1, 2],
+      [0],
+      [2, 3],
+      [1],
+    ];
+    const shape = shapeProfile(chart(4, [...burst, ...repeat(jumpstream, 8)]));
+    expect(shape.dominant).toBe("jumpstream");
+    expect(shape.counts.anchor).toBeGreaterThan(0);
+  });
+
+  test("7k planted column is an anchor too", () => {
+    const rows = repeat(
+      [
+        [0, 1],
+        [0, 4],
+      ],
+      12,
+    );
+    const shape = shapeProfile(chart(7, rows));
+    expect(shape.dominant).toBe("anchor");
+    expect(shape.counts.handstream).toBe(0);
+  });
+
+  test("holds preceded by a same-column note are shields", () => {
+    const shape = shapeProfile(shielded(4, 16));
+    expect(shape.dominant).toBe("shield");
+  });
+
+  test("a rice chart is not a shield", () => {
+    const rows = repeat([[0], [1], [2], [3]], 8);
+    expect(shapeProfile(chart(4, rows)).dominant).not.toBe("shield");
+  });
+
+  test("a mix with no leading family is tech", () => {
+    const stream = [[0], [2], [1], [3]];
+    const trill = [[0], [1]];
+    const chordjack = [
+      [0, 1],
+      [1, 2],
+      [2, 3],
+      [0, 3],
+    ];
+    const rows = [
+      ...repeat(trill, 8),
+      ...repeat(stream, 6),
+      ...repeat(chordjack, 4),
+      ...repeat(trill, 4),
+    ];
+    const shape = shapeProfile(chart(4, rows));
+    expect(shape.dominant).toBe("tech");
+    expect(shape.secondary).not.toBeNull();
   });
 });

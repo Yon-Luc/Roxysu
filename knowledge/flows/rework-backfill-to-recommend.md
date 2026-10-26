@@ -74,7 +74,10 @@ pattern: / dominant: / style: filters + practice browser skill chart
 ```
 
 On-request detail still bins the skill timeline. The backfill does not. A chart
-that would exhaust the heap is a failed row, not a dead server.
+that would exhaust the heap is a failed row, not a dead server. Anchor, shield,
+and tech are promoted after the walk; a still-legal older label (a chordjack
+that is now an anchor) is not nulled by the illegal-shape sweep. A pattern
+recompute is what writes those families onto an existing library.
 
 ## Flow: modded plays → dan difficulty variants
 

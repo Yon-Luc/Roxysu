@@ -7,7 +7,13 @@
 
 import { SECONDARY_SKILL_RATIO } from "./skills";
 
-/** Family labels, in canonical tie-break order (earlier wins a tie). */
+/**
+ * Family labels, in canonical tie-break order (earlier wins a tie).
+ *
+ * `anchor`, `shield`, and `tech` are parallel families: the row walk does not
+ * claim them. They are promoted in {@link shapeProfileFromWalk} when the chart
+ * is built from them, and they never win a count tie over a walk family.
+ */
 export const SHAPE_LABELS = [
   "trill",
   "jumptrill",
@@ -17,7 +23,22 @@ export const SHAPE_LABELS = [
   "jumpstream",
   "chordstream",
   "stream",
+  "anchor",
+  "shield",
+  "tech",
 ] as const;
+
+/** Families the row walk assigns. The other three are promoted after the walk. */
+const WALK_LABELS: readonly ShapeLabel[] = [
+  "trill",
+  "jumptrill",
+  "chordjack",
+  "bracket",
+  "handstream",
+  "jumpstream",
+  "chordstream",
+  "stream",
+];
 
 export type ShapeLabel = (typeof SHAPE_LABELS)[number];
 
@@ -28,7 +49,8 @@ export type ShapeLabel = (typeof SHAPE_LABELS)[number];
  * handstream are 4K terms (a stream involving jumps/hands), so they cannot be a
  * 7K chart shape. Bracket and chordstream belong to non-4K keymodes — outside
  * 4K, chordstream names chords of 3+ notes. Single-note stream, trill,
- * jumptrill and chordjack exist on every key count.
+ * jumptrill and chordjack exist on every key count. Anchor, shield, and tech
+ * are not keymode-exclusive (wiki Anchor and Hold note pages).
  */
 const SHAPE_LABELS_4K = [
   "stream",
@@ -37,7 +59,10 @@ const SHAPE_LABELS_4K = [
   "jumpstream",
   "handstream",
   "chordjack",
+  "anchor",
   "chordstream",
+  "shield",
+  "tech",
 ] as const;
 
 const SHAPE_LABELS_NON4K = [
@@ -45,8 +70,11 @@ const SHAPE_LABELS_NON4K = [
   "trill",
   "jumptrill",
   "chordjack",
+  "anchor",
   "chordstream",
   "bracket",
+  "shield",
+  "tech",
 ] as const;
 
 /** Chart-shape families that may label a chart on the given key count. */
@@ -81,8 +109,33 @@ export type ShapeWalk = {
   chordRows: number;
   /** Steps that share a column with the previous row. */
   jackSteps: number;
+  /** Notes in the chart, including rows the walk left unlabeled. */
+  totalNotes: number;
+  /** Hold heads. Shield promotion is a share of these. */
+  holdHeads: number;
+  /** Consecutive shields and reverse shields. */
+  shieldHits: number;
+  /**
+   * Most times one column sat in three consecutive rows at a similar snap.
+   * Compared with {@link stepCount} for the anchor bar.
+   */
+  anchorPairs: number;
+  /** Notes in that column. Compared with {@link totalNotes}. */
+  anchorColumnNotes: number;
   counts: Record<ShapeLabel, number>;
 };
+
+/** One column on at least half of the steps, and at least this share of notes. */
+const ANCHOR_PAIR_SHARE = 0.5;
+const ANCHOR_NOTE_SHARE = 0.35;
+/** Shielded holds, and those steps as a share of every note. */
+const SHIELD_HOLD_SHARE = 0.5;
+const SHIELD_NOTE_SHARE = 0.25;
+/** Tech: no walk family leads, and several are actually present. */
+const TECH_MAX_LEAD = 0.4;
+const TECH_MIN_FAMILY = 0.12;
+const TECH_MIN_NOTES = 32;
+const TECH_MIN_FAMILIES = 3;
 
 export type ShapeProfile = ShapeDensities & {
   dominant: ShapeLabel | null;
@@ -103,6 +156,9 @@ export function emptyShapeCounts(): Record<ShapeLabel, number> {
     jumpstream: 0,
     chordstream: 0,
     stream: 0,
+    anchor: 0,
+    shield: 0,
+    tech: 0,
   };
 }
 
@@ -133,8 +189,51 @@ function share(count: number, steps: number): number {
 
 function noteTotal(counts: ShapeWalk["counts"]): number {
   let total = 0;
-  for (const shape of SHAPE_LABELS) total += counts[shape];
+  for (const shape of WALK_LABELS) total += counts[shape];
   return total;
+}
+
+function rankedWalk(counts: ShapeWalk["counts"]) {
+  return WALK_LABELS.map((shape) => ({
+    shape,
+    count: counts[shape],
+  }))
+    .filter((entry) => entry.count > 0)
+    .sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count;
+      return SHAPE_LABELS.indexOf(a.shape) - SHAPE_LABELS.indexOf(b.shape);
+    });
+}
+
+/**
+ * Shield, then anchor, then tech. A specific structure beats a mix, and a mix
+ * only replaces a walk family that does not actually lead.
+ */
+function promotedShape(walk: ShapeWalk, notes: number): ShapeLabel | null {
+  if (
+    walk.holdHeads > 0 &&
+    walk.shieldHits / walk.holdHeads >= SHIELD_HOLD_SHARE &&
+    walk.totalNotes > 0 &&
+    walk.shieldHits / walk.totalNotes >= SHIELD_NOTE_SHARE
+  ) {
+    return "shield";
+  }
+  if (
+    walk.stepCount > 0 &&
+    walk.anchorPairs / walk.stepCount >= ANCHOR_PAIR_SHARE &&
+    walk.totalNotes > 0 &&
+    walk.anchorColumnNotes / walk.totalNotes >= ANCHOR_NOTE_SHARE
+  ) {
+    return "anchor";
+  }
+  if (notes < TECH_MIN_NOTES) return null;
+  const ranked = rankedWalk(walk.counts);
+  const top = ranked[0];
+  if (!top || top.count / notes >= TECH_MAX_LEAD) return null;
+  const present = ranked.filter(
+    (entry) => entry.count / notes >= TECH_MIN_FAMILY,
+  ).length;
+  return present >= TECH_MIN_FAMILIES ? "tech" : null;
 }
 
 /** Dominant and secondary shape from a finished row walk. */
@@ -151,18 +250,10 @@ export function shapeProfileFromWalk(walk: ShapeWalk): ShapeProfile {
     chordstreamScore: share(walk.counts.chordstream, notes),
   };
 
-  const ranked = SHAPE_LABELS.map((shape) => ({
-    shape,
-    count: walk.counts[shape],
-  }))
-    .filter((entry) => entry.count > 0)
-    .sort((a, b) => {
-      if (b.count !== a.count) return b.count - a.count;
-      return SHAPE_LABELS.indexOf(a.shape) - SHAPE_LABELS.indexOf(b.shape);
-    });
-
+  const ranked = rankedWalk(walk.counts);
   const top = ranked[0];
-  if (!top) {
+  const promoted = promotedShape(walk, notes);
+  if (!top && !promoted) {
     return {
       dominant: null,
       secondary: null,
@@ -172,18 +263,28 @@ export function shapeProfileFromWalk(walk: ShapeWalk): ShapeProfile {
     };
   }
 
+  if (promoted) {
+    return {
+      dominant: promoted,
+      secondary: top?.shape ?? null,
+      confidence: top ? Math.min(1, Math.max(0, 1 - top.count / Math.max(notes, 1))) : 1,
+      counts: walk.counts,
+      ...densities,
+    };
+  }
+
   const runnerUp = ranked[1];
   const secondary =
-    runnerUp && runnerUp.count >= SECONDARY_SKILL_RATIO * top.count
+    runnerUp && runnerUp.count >= SECONDARY_SKILL_RATIO * top!.count
       ? runnerUp.shape
       : null;
   const confidence =
     runnerUp && runnerUp.count > 0
-      ? Math.min(1, Math.max(0, (top.count - runnerUp.count) / top.count))
+      ? Math.min(1, Math.max(0, (top!.count - runnerUp.count) / top!.count))
       : 1;
 
   return {
-    dominant: top.shape,
+    dominant: top!.shape,
     secondary,
     confidence,
     counts: walk.counts,

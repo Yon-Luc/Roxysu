@@ -278,6 +278,9 @@ describe("stats mania aggregates match a plain reference (F-021)", () => {
       "chordjack",
       "chordstream",
       "bracket",
+      "anchor",
+      "shield",
+      "tech",
     ]);
     for (const row of stats.patternShapes.shapes) {
       expect(known.has(row.shape)).toBe(true);

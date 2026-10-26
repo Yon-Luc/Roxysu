@@ -1254,20 +1254,34 @@ function shapeLabelAt(rows: ManiaRow[], index: number): ShapeLabel | null {
   return null;
 }
 
+function gapsSimilar(a: number, b: number): boolean {
+  if (a <= 0 || b <= 0) return false;
+  const ratio = a > b ? a / b : b / a;
+  return ratio <= 1.5;
+}
+
 /**
  * Count chart-shape families on a live hit-object graph.
  *
  * Call before `releaseHitObjectGraph`. The walk is linear and stores only
- * counters.
+ * counters. Anchor and shield are counted beside the exclusive families; they
+ * do not take a row away from jumpstream, chordjack, or stream.
  */
 export function chartShapeWalk(objects: ManiaDifficultyHitObject[]): ShapeWalk {
   const counts = emptyShapeCounts();
   const rows = rowsInOrder(objects);
   let jackSteps = 0;
   let chordRows = 0;
+  let totalNotes = 0;
+  const columnNotes: number[] = [];
   for (const row of rows) {
     if (row.IsChord) chordRows += 1;
+    totalNotes += row.Size;
+    for (const column of row.Columns) {
+      columnNotes[column] = (columnNotes[column] ?? 0) + 1;
+    }
   }
+  const anchorWindows: number[] = [];
   for (let i = 1; i < rows.length; i++) {
     const prev = rows[i - 1]!;
     const row = rows[i]!;
@@ -1277,12 +1291,56 @@ export function chartShapeWalk(objects: ManiaDifficultyHitObject[]): ShapeWalk {
     // single sitting next to it. An even jump/single split would otherwise
     // tie as stream.
     if (label) counts[label] += row.Size;
+    const next = rows[i + 1];
+    if (!next) continue;
+    const gapBefore = row.StartTime - prev.StartTime;
+    const gapAfter = next.StartTime - row.StartTime;
+    if (!gapsSimilar(gapBefore, gapAfter)) continue;
+    for (const column of row.Columns) {
+      if (!prev.Columns.includes(column) || !next.Columns.includes(column)) continue;
+      anchorWindows[column] = (anchorWindows[column] ?? 0) + 1;
+    }
   }
+
+  let anchorPairs = 0;
+  let anchorColumn = -1;
+  for (let column = 0; column < anchorWindows.length; column++) {
+    const windows = anchorWindows[column] ?? 0;
+    if (windows > anchorPairs) {
+      anchorPairs = windows;
+      anchorColumn = column;
+    }
+  }
+  counts.anchor = anchorPairs;
+
+  let holdHeads = 0;
+  let shieldHits = 0;
+  for (const row of rows) {
+    const gapCap =
+      row.GapBefore === Number.POSITIVE_INFINITY ? 0 : row.GapBefore * 1.5;
+    for (const note of row.Objects) {
+      if (note.IsHoldNote) holdHeads += 1;
+      const prev = note.PrevInColumn(0);
+      if (!prev || gapCap <= 0) continue;
+      const gap = note.StartTime - prev.EndTime;
+      if (gap < 0 || gap > gapCap) continue;
+      // Wiki shield: a note immediately before a hold. Reverse shield: a note
+      // immediately after a release. Both are the same family.
+      if (note.IsHoldNote || prev.IsHoldNote) shieldHits += 1;
+    }
+  }
+  counts.shield = shieldHits;
+
   return {
     rowCount: rows.length,
     stepCount: Math.max(0, rows.length - 1),
     chordRows,
     jackSteps,
+    totalNotes,
+    holdHeads,
+    shieldHits,
+    anchorPairs,
+    anchorColumnNotes: anchorColumn >= 0 ? (columnNotes[anchorColumn] ?? 0) : 0,
     counts,
   };
 }

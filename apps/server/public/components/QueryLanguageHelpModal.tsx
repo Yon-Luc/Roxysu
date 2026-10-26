@@ -61,7 +61,7 @@ const FIELDS: { field: string; meaning: string; example: string }[] = [
   {
     field: "pattern / dominant / style",
     meaning:
-      "Skill (speed, jack, coordination, technical, release) or chart shape (stream, trill, jumptrill, chordjack, chordstream on any key count; jumpstream and handstream are 4K only; bracket is 7K and other non-4K modes). pattern:jack is the jack skill. pattern:delay matches stream.",
+      "Skill (speed, jack, coordination, technical, release) or chart shape (stream, trill, jumptrill, chordjack, chordstream, anchor, shield, tech on any key count; jumpstream and handstream are 4K only; bracket is 7K and other non-4K modes). pattern:jack is the jack skill. pattern:technical is the skill; pattern:tech is the mixed chart shape. pattern:delay matches stream.",
     example: "pattern:jumpstream key=4",
   },
   {
@@ -118,6 +118,9 @@ const EXAMPLES = [
   "key=7 axis:ln pattern:release",
   "pattern:speed stars:4..6",
   "pattern:technical key=7",
+  "pattern:tech",
+  "key=7 pattern:anchor",
+  "pattern:shield",
   "pattern:jack OR pattern:coordination",
   "pattern:jumpstream",
   "key=7 pattern:bracket",

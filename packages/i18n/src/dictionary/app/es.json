@@ -261,6 +261,9 @@
         "delay": "Delay",
         "trill": "Trill",
         "jumptrill": "Jumptrill",
+        "anchor": "Anchor",
+        "shield": "Shield",
+        "tech": "Tech",
         "mixed": "Mixto"
       },
       "hintWords": {

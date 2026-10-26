@@ -36,6 +36,7 @@ import {
 } from "./scoreUsername";
 import { loadDanVariantRatingsSync } from "../map-analysis/computeDanVariants";
 import { REWORK_ALGORITHM } from "../map-analysis/reworkEstimator";
+import { PATTERN_ALGORITHM } from "../map-analysis/computePatternAnalysis";
 
 const DEFAULT_KEY_COUNT = DEFAULT_SKILL_KEY_COUNT;
 
@@ -76,6 +77,8 @@ type EnrichedPlayRow = SkillPlayRow & {
   difficultyName: string;
   reworkEstDiff: string | null;
   mods: string | null;
+  /** Primary chart shape (`mania-skill-v1`), or null/"" when unclassified. */
+  shapePattern: string | null;
 };
 
 function normalizeTopPlays(raw: number | undefined): number {
@@ -173,6 +176,7 @@ function nextReworkDanBounds(
 function loadEnrichedSevenKPlays(
   db: Db,
   keyCount: number,
+  shape?: string,
 ): EnrichedPlayRow[] {
   const user = scoresUsernameSql(resolveScoresUsernamesSync(db));
   const mode = scoresGamemodeSql(resolveScoresGamemodeSync(db));
@@ -190,12 +194,15 @@ function loadEnrichedSevenKPlays(
         s.mods AS mods,
         dr.sunny_star AS reworkStar,
         dr.ln_ratio AS lnRatio,
-        dr.est_diff AS reworkEstDiff
+        dr.est_diff AS reworkEstDiff,
+        pa.shape_pattern AS shapePattern
       FROM scores s
       JOIN beatmaps b ON b.id = s.beatmap_id
       LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
       LEFT JOIN beatmap_dan_ratings dr
         ON dr.beatmap_id = b.id AND dr.algorithm = ?
+      LEFT JOIN beatmap_pattern_analysis pa
+        ON pa.beatmap_id = b.id AND pa.algorithm = ?
       WHERE s.delete_pending = 0
         ${user.sql}
         ${mode.sql}
@@ -207,7 +214,7 @@ function loadEnrichedSevenKPlays(
       ORDER BY s.played_at DESC
     `,
     )
-    .all(REWORK_ALGORITHM, ...user.params, ...mode.params, keyCount) as Array<{
+    .all(REWORK_ALGORITHM, PATTERN_ALGORITHM, ...user.params, ...mode.params, keyCount) as Array<{
     scoreId: string;
     beatmapId: string;
     title: string;
@@ -219,6 +226,7 @@ function loadEnrichedSevenKPlays(
     reworkStar: number | null;
     lnRatio: number | null;
     reworkEstDiff: string | null;
+    shapePattern: string | null;
   }>;
 
   // Modded plays read their persisted dan difficulty variants (dropped until
@@ -231,10 +239,10 @@ function loadEnrichedSevenKPlays(
 
   const out: EnrichedPlayRow[] = [];
   for (const r of rows) {
+    const variant = resolveDanVariant(r.mods);
     let reworkStar = r.reworkStar != null ? Number(r.reworkStar) : null;
     let lnRatio = r.lnRatio != null ? Number(r.lnRatio) : null;
     let reworkEstDiff = r.reworkEstDiff;
-    const variant = resolveDanVariant(r.mods);
     if (variant) {
       const stored = variantRatings.get(danVariantKey(r.beatmapId, variant));
       if (!stored) continue;
@@ -242,6 +250,9 @@ function loadEnrichedSevenKPlays(
       lnRatio = stored.lnRatio;
       reworkEstDiff = stored.estDiff;
     }
+    // A shape-filtered list follows the NM chart's shape: full-LN Invert
+    // rebuilds the chart, so those plays cannot claim the base chart's shape.
+    if (shape && (variant?.lnOnly || r.shapePattern !== shape)) continue;
     out.push({
       scoreId: r.scoreId,
       beatmapId: r.beatmapId,
@@ -254,6 +265,7 @@ function loadEnrichedSevenKPlays(
       lnRatio,
       reworkEstDiff,
       mods: r.mods,
+      shapePattern: r.shapePattern ?? null,
     });
   }
   return out;
@@ -323,10 +335,13 @@ export function getSkillBandPlays(
     axis?: SkillBandAxis;
     topPlays?: number;
     keyCount?: number;
+    /** Restrict the play lists to one primary chart shape; currentLevel stays whole. */
+    shape?: string;
   },
 ): SkillBandPlaysResult {
   const band = opts.band;
   const axis: SkillBandAxis = opts.axis ?? "all";
+  const shape = opts.shape?.trim() || undefined;
   const focus = readFocusSettingsSync(db);
   const topN = normalizeTopPlays(opts.topPlays ?? focus.topPlays);
   const keyCount = parseSkillKeyCount(opts.keyCount ?? DEFAULT_KEY_COUNT);
@@ -336,6 +351,8 @@ export function getSkillBandPlays(
 
   // Cached rework ratings only — no request-path backfill.
   const plays = loadEnrichedSevenKPlays(db, keyCount);
+  // Shape-scoped lists need a second pass; the current level stays whole-mode.
+  const shapePlays = shape ? loadEnrichedSevenKPlays(db, keyCount, shape) : plays;
 
   const skillRows: SkillPlayRow[] = plays.map((p) => ({
     beatmapId: p.beatmapId,
@@ -353,7 +370,7 @@ export function getSkillBandPlays(
   const currentLevel = bandLevelForAxis(skill, band, axis);
 
   const inBandEnriched = topEnrichedPlaysInBand(
-    plays,
+    shapePlays,
     accMin,
     topN,
     axisFilter(axis),
@@ -373,7 +390,7 @@ export function getSkillBandPlays(
   let inNextDanEnriched: EnrichedPlayRow[] = [];
   if (nextBounds) {
     inNextDanEnriched = playsInDanInterval(
-      plays,
+      shapePlays,
       accMin,
       axis,
       nextBounds.lower,

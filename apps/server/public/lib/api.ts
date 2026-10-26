@@ -126,6 +126,8 @@ export async function fetchSkillBandPlays(params: {
   axis?: StatsSkillAxis;
   topPlays?: number;
   keyCount?: number;
+  /** Restrict the lists to one primary chart shape (Patterns section). */
+  shape?: string;
 }) {
   return unwrap(
     await api.api.stats["skill-plays"].get({
@@ -134,6 +136,7 @@ export async function fetchSkillBandPlays(params: {
         axis: params.axis,
         topPlays: params.topPlays,
         keyCount: params.keyCount,
+        shape: params.shape,
       },
     }),
     "/api/stats/skill-plays",

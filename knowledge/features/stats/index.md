@@ -6,9 +6,13 @@ touches:
   - apps/server/src/analytics/playerStats.test.ts
   - apps/server/src/analytics/playerStats.fixture.ts
   - apps/server/src/analytics/playerStatsCache.ts
+  - apps/server/src/analytics/skillBandPlays.ts
   - apps/server/src/map-analysis/danVariantJob.ts
+  - apps/server/src/map-analysis/reworkDanJob.ts
+  - apps/server/src/map-analysis/patternAnalysisJob.ts
   - apps/server/src/routes/settings.ts
   - apps/server/public/features/stats
+  - apps/server/public/features/stats/components/PatternShapesSection.tsx
 ---
 
 # Stats
@@ -19,11 +23,11 @@ Player skill bands / axes and related aggregate practice statistics beyond the d
 
 ## Implementation
 
-`getPlayerStats` resolves the username and gamemode score filters once, then streams the mania scores of the selected keymode in a single pass (`streamManiaPass`) that folds each play into summary, rank mix, play-time patterns, daily/weekly progression buckets, and per-mapper aggregates, keeping only a compact per-play record (non-hidden plays) for skill history, skillset mix, and the top mappers rated columns. No full row array is retained. SQL aggregates for rank mix / play-time / counts were measured and rejected: they re-scan the join and cost more than the in-memory work they replace. Day skill history is sampled to about 60 points. The client keeps previous chart data while filters change, defers below-fold Recharts, and invalidates `["stats"]` on `sync.finished` / `dashboard.updated` (`refetchType: "active"`).
+`getPlayerStats` resolves the username and gamemode score filters once, then streams the mania scores of the selected keymode in a single pass (`streamManiaPass`) that folds each play into summary, rank mix, play-time patterns, daily/weekly progression buckets, and per-mapper aggregates, keeping only a compact per-play record (non-hidden plays, with the joined `shape_pattern`) for skill history, skillset mix, the Patterns section, and the top mappers rated columns. No full row array is retained. SQL aggregates for rank mix / play-time / counts were measured and rejected: they re-scan the join and cost more than the in-memory work they replace. Day skill history is sampled to about 60 points. The client keeps previous chart data while filters change, defers below-fold Recharts, and invalidates `["stats"]` on `sync.finished` / `dashboard.updated` (`refetchType: "active"`).
 
 The accuracy-trend chart on the Stats page ("Progression") plots only the daily mean accuracy of graded plays; its Y axis runs from the lowest plotted point minus 5 (floor 0) up to 100, so high-accuracy players still see day-to-day movement. Dashboard trends come from stored `daily_stats` (`statistics.ts`), which does **not** apply the graded-play rule yet — accuracy there includes failed plays; reconciling those two engines is an open follow-up, not a silent inconsistency.
 
-Keymode scopes the whole page and stays in the header. Axis and top-plays sit with Current skill. Day/week only samples skill history, so it sits on that chart. Range windows skill history and progression, so the same control appears on both.
+Keymode scopes the whole page and stays in the header. Axis and top-plays sit with Current skill. Day/week only samples skill history, so it sits on that chart. Range windows skill history and progression, so the same control appears on both. The Patterns section sits directly under Current skill and follows its axis / top-plays controls; it adds a local Push / Accuracy / Consistency toggle and a shape-scoped plays panel (`SkillBandPlaysPanel` with `shape` / `heading` / `idSuffix`) that fetches `GET /api/stats/skill-plays?shape=…` — lists are shape-filtered there, the current level stays whole-mode.
 
 ## Business rules
 
@@ -31,6 +35,8 @@ Keymode scopes the whole page and stays in the header. Axis and top-plays sit wi
    **Enforced by:** `scoreScopeFilter` plus the mania / key-count / set predicates in `getSessionStats` (`apps/server/src/analytics/playerStats.ts`) — status: verified (`playerStats.test.ts`)
 2. A session counts only if it contains at least one scoped play; its play count in "plays per session" and "longest" is its scoped plays, not the stored `sessions.score_count`. Session start/end times are the stored values. `pbCount` is every scoped `score_metrics.is_pb` row, including PBs outside any session.
    **Enforced by:** `getSessionStats` — status: verified
+3. The Patterns section ranks clear level per primary **chart shape** (`pa.shape_pattern`, algorithm `mania-skill-v1`), not per dominant skill or skillset. A shape's level is the same weighted rework-star mean Current skill computes, restricted to plays on maps whose primary shape is that family: one best play per map, per band (Push / Accuracy / Consistency), per Rice/LN/FLN axis. Shapes with fewer than `PATTERN_SHAPE_MIN_MAPS` (5) maps in the selected cell are listed but unranked; Best and Weakest appear only with two qualified shapes (ties: best → more maps, weakest → fewer). Plays on full-LN Invert conversions are skipped (the stored shape does not describe the converted chart); rate-only modded plays keep the base chart's shape and read their variant star. Empty `shape_pattern` (walk ran, no family led — usually pure jack) and unclassified rows are excluded; a map counts once, under its primary shape, and the section never feeds recommendations.
+   **Enforced by:** `getPatternShapes` (`apps/server/src/analytics/playerStats.ts`), shape-filtered `getSkillBandPlays` — status: verified (`playerStats.test.ts` fixture)
 3. The "Top mappers" section is a per-mapper table, not a PP list. Columns over the same scoped plays: plays (retries included), distinct beatmaps, mean accuracy, distinct sessions (non-null `score_metrics.session_id`; plays outside a session do not count). Ranking is plays → maps → name; the summed-PP rank (`getTopMappers` `totalPp`) was removed. Mappers group by osu! user id when present, else by username; rows with neither are omitted. Volume columns include hidden maps.
 4. Accuracy averages (daily/weekly progression buckets, "Top mappers" mean accuracy) fold in only graded plays (Realm `rank != -1`). A play without a grade — failed / quit — counts toward play counts, play-time patterns, and PP volume, but contributes nothing to accuracy sums, so a rage-quit cannot drag the day's average. A day/week with no graded plays reports `avgAccuracy: null`, not 0.
    **Enforced by:** `graded` flag in `streamManiaPass`, `accSum/accCount` in `bumpBucket` and the mapper fold (`apps/server/src/analytics/playerStats.ts`) — status: verified (`playerStats.test.ts` F-021 reference)
@@ -41,7 +47,7 @@ Keymode scopes the whole page and stays in the header. Axis and top-plays sit wi
 
 Volume/accuracy aggregates (play counts, rank mix, play-time patterns, summary, daily/weekly/mapper trends) include **all** played scores regardless of mods; stored Realm PP is already mod-aware.
 
-Difficulty-dependent views use the dan difficulty variants store: skill axes, skill history, and skillset mix read variant stars/LN ratio for modded plays (rate ≠ 1.0 or full-LN Invert); modded plays without a computed variant are excluded until rated. NM-equivalent plays (rate 1.0, no Invert; Mirror/Classic ignored) always read the base rework (`mania-difficulty`) row in the Dan ratings store.
+Difficulty-dependent views use the dan difficulty variants store: skill axes, skill history, skillset mix, and the Patterns section read variant stars/LN ratio for modded plays (rate ≠ 1.0 or full-LN Invert); modded plays without a computed variant are excluded until rated. NM-equivalent plays (rate 1.0, no Invert; Mirror/Classic ignored) always read the base rework (`mania-difficulty`) row in the Dan ratings store. The Patterns section additionally **skips** full-LN Invert plays (no shape for the converted chart) and reads the base chart's `shape_pattern` for everything else — shapes are NM-chart facts and have no variants store.
 
 PP curve estimation stays NM-only (`resolveScorePp` in `apps/server/src/mania-rating/estimateScorePp.ts`): modded scores contribute their stored Realm PP when present, never a curve estimate. Session `is_pb` and `pbCompare` rank by the same resolved PP (see `features/sessions/`), so a score's PB status agrees with mastery `best_pp`.
 
@@ -53,13 +59,15 @@ Top mappers difficulty columns follow the same gate (`foldMapperRatings`): the R
 
 1. Customize changes to axis thresholds or recommend focus settings (`PATCH /api/settings` calls `invalidatePlayerStatsCache()`), because skill history and skillset mix read them at compute time.
 2. A finished dan variant job run that wrote variant rows (`danVariantJob.ts:finish`), because modded plays only count once a variant exists.
+3. A finished rework dan or pattern analysis job run that rated maps (`reworkDanJob.ts:finish`, `patternAnalysisJob.ts:finish` guard on `computedThisRun > 0`), because those runs fill or replace `beatmap_dan_ratings` / `beatmap_pattern_analysis` rows the skill and Patterns views join.
 
-`dashboard.updated` alone never clears it.
+`dashboard.updated` alone never clears it (the jobs above call `invalidatePlayerStatsCache()` directly before publishing it).
 
 ## Important symbols
 
 - `apps/server/src/routes/stats.ts`
 - `apps/server/src/analytics/playerStats.ts`
+- `apps/server/src/analytics/skillBandPlays.ts`
 - `apps/server/src/analytics/playerStatsCache.ts`
 - `apps/server/public/features/stats/*`
 
@@ -67,6 +75,7 @@ Top mappers difficulty columns follow the same gate (`foldMapperRatings`): the R
 
 - `features/live-sync/` — Realm extraction
 - analytics pipeline (`apps/server/src/analytics/pipeline.ts`)
+- `features/rework-dan-recommendations/` — chart-shape rows (`mania-skill-v1`) the Patterns section joins; its backfill jobs clear the stats cache when they write rows
 
 ## Depended on by
 

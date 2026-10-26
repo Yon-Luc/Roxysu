@@ -5,6 +5,7 @@ import { createDb } from "@roxysu/db/client.bun";
 import {
   beatmapDanRatings,
   beatmapManiaRatings,
+  beatmapPatternAnalysis,
   beatmapSets,
   beatmaps,
   scoreMetrics,
@@ -18,6 +19,7 @@ import {
 } from "@roxysu/db/settings-keys";
 import type { Db } from "../db-runtime";
 import { REWORK_ALGORITHM } from "../map-analysis/reworkEstimator";
+import { PATTERN_ALGORITHM } from "../map-analysis/computePatternAnalysis";
 import { LAZER_MASTER_VERSION } from "../mania-rating/registry";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -76,6 +78,7 @@ export async function seedStatsFixture(
   const mapRows: (typeof beatmaps.$inferInsert)[] = [];
   const ratingRows: (typeof beatmapDanRatings.$inferInsert)[] = [];
   const curveRows: (typeof beatmapManiaRatings.$inferInsert)[] = [];
+  const patternRows: (typeof beatmapPatternAnalysis.$inferInsert)[] = [];
   const mappers: Array<[number | null, string | null]> = [
     [11, "alice"],
     [12, "bob"],
@@ -120,6 +123,17 @@ export async function seedStatsFixture(
         estDiff: "x",
         updatedAt: new Date(FIXTURE_BASE_MS),
       });
+      // Pattern rows: a null classification (row missing), an empty shape
+      // (walk ran, no family led), and a rotating chart-shape bucket.
+      if (i % 13 !== 12) {
+        const SHAPE_POOL = ["jumpstream", "chordjack", "stream", "trill"];
+        patternRows.push({
+          beatmapId: id,
+          algorithm: PATTERN_ALGORITHM,
+          shapePattern: i % 18 === 17 ? "" : SHAPE_POOL[i % 4]!,
+          updatedAt: new Date(FIXTURE_BASE_MS),
+        });
+      }
     }
     if (isMania && i % 4 !== 3) {
       curveRows.push({
@@ -140,6 +154,8 @@ export async function seedStatsFixture(
   await db.insert(beatmaps).values(mapRows);
   if (ratingRows.length) await db.insert(beatmapDanRatings).values(ratingRows);
   if (curveRows.length) await db.insert(beatmapManiaRatings).values(curveRows);
+  if (patternRows.length)
+    await db.insert(beatmapPatternAnalysis).values(patternRows);
 
   const modsPool = [
     null,

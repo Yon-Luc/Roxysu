@@ -3,6 +3,7 @@ import type { Db } from "@roxysu/db/types";
 import { PATTERN_ALGORITHM } from "@roxysu/mania-pattern-analysis";
 import { backfillPatternAnalysis } from "./computePatternAnalysis";
 import { publish } from "../shared/events";
+import { invalidatePlayerStatsCache } from "../analytics/playerStatsCache";
 import {
   describeMemoryPressure,
   isInMapMemoryPressure,
@@ -185,6 +186,9 @@ function finish(status: "completed" | "idle" | "error", error?: string): void {
   job.finishedAt = new Date();
   job.error = error ?? null;
   job.db = null;
+  // Written shape rows change the Patterns section — the stats cache ignores
+  // `dashboard.updated`.
+  if (job.computedThisRun > 0) invalidatePlayerStatsCache();
   publish({ type: "dashboard.updated" });
   publish({ type: "jobs.updated" });
 }

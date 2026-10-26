@@ -4,6 +4,7 @@ import type { Db } from "@roxysu/db/types";
 import { beatmaps } from "@roxysu/db/schema";
 import { and, count, eq, sql } from "drizzle-orm";
 import { REWORK_ALGORITHM } from "../map-analysis/reworkEstimator";
+import { PATTERN_ALGORITHM } from "../map-analysis/computePatternAnalysis";
 import {
   danVariantKey,
   resolveDanVariant,
@@ -15,13 +16,22 @@ import {
   readAxisThresholdsSync,
   type AxisThresholds,
 } from "./recommend/axisThresholds";
-import { readFocusSettingsSync } from "./recommend/focusSettings";
+import {
+  bandCenter,
+  bandHalfWidth,
+  readFocusSettingsSync,
+  type RecommendFocusSettings,
+} from "./recommend/focusSettings";
 import { classifyScoreGrade, PERFECT_TOTAL_SCORE } from "../query-language/scoreGrade";
 import {
   DEFAULT_SKILL_KEY_COUNT,
+  bandLevelsFromPlays,
   estimateSevenKSkillWithHistoryFromPlays,
   parseSkillKeyCount,
   parseSkillTopPlays,
+  skillBandAccRange,
+  type SkillBandKind,
+  type SkillPlayRow,
 } from "./recommend/sevenKSkill";
 import {
   loadManiaPpCurvesSync,
@@ -155,6 +165,8 @@ type PlayCandidate = {
   playedAt: number;
   reworkStar: number | null;
   lnRatio: number | null;
+  /** Primary chart shape (`mania-skill-v1`), or null/"" when unclassified. */
+  shape: string | null;
   /** Mapper group key this play belongs to, or null when unattributable. */
   mapperKey: string | null;
 };
@@ -170,6 +182,7 @@ type StreamedManiaRow = {
   rulesetShortName: string | null;
   lnRatio: number | null;
   reworkStar: number | null;
+  shape: string | null;
   mapperOnlineId: number | null;
   mapperUsername: string | null;
   sessionId: number | null;
@@ -279,6 +292,7 @@ function streamManiaPass(
         s.ruleset_short_name AS rulesetShortName,
         dr.ln_ratio AS lnRatio,
         dr.sunny_star AS reworkStar,
+        pa.shape_pattern AS shape,
         b.mapper_online_id AS mapperOnlineId,
         b.mapper_username AS mapperUsername,
         sm.session_id AS sessionId,
@@ -288,6 +302,8 @@ function streamManiaPass(
       LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
       LEFT JOIN beatmap_dan_ratings dr
         ON dr.beatmap_id = b.id AND dr.algorithm = ?
+      LEFT JOIN beatmap_pattern_analysis pa
+        ON pa.beatmap_id = b.id AND pa.algorithm = ?
       LEFT JOIN score_metrics sm ON sm.score_id = s.id
       WHERE s.delete_pending = 0
         ${user.sql}
@@ -314,7 +330,12 @@ function streamManiaPass(
     candidates: [],
   };
 
-  for (const raw of stmt.iterate(REWORK_ALGORITHM, ...user.params, keyCount)) {
+  for (const raw of stmt.iterate(
+    REWORK_ALGORITHM,
+    PATTERN_ALGORITHM,
+    ...user.params,
+    keyCount,
+  )) {
     const row = raw as StreamedManiaRow;
     pass.summary.scoreCount += 1;
     if (row.beatmapId) maps.add(row.beatmapId);
@@ -380,6 +401,7 @@ function streamManiaPass(
         playedAt: Number(row.playedAt ?? 0),
         reworkStar: row.reworkStar,
         lnRatio: row.lnRatio,
+        shape: row.shape ?? null,
         mapperKey,
       });
     }
@@ -481,6 +503,106 @@ function getSkillsetMix(
     lnPct: pct(ln),
     flnPct: pct(fln),
   };
+}
+
+/**
+ * Chart-shape skill stats ("Patterns" section): per band (Push / Accuracy /
+ * Consistency) and per Rice/LN/FLN axis, the same clear level Current skill
+ * computes, restricted to plays whose map's primary chart shape is that family.
+ *
+ * Full-LN Invert plays are skipped (the stored shape does not describe the
+ * converted chart); rate-only modded plays keep the base chart's shape and read
+ * their variant star. Empty / null `shape_pattern` rows stay out — an empty
+ * walk is not a chart-shape family.
+ */
+export const PATTERN_SHAPE_MIN_MAPS = 5;
+
+/** Level + map count for one (band, axis) cell. */
+export type PatternShapeAxisStat = {
+  level: number;
+  /** Maps counted for the cell — axis-filtered within the top-N slice. */
+  maps: number;
+};
+
+export type PatternShapeStat = {
+  shape: string;
+  bands: Record<
+    SkillBandKind,
+    { all: PatternShapeAxisStat; rc: PatternShapeAxisStat; ln: PatternShapeAxisStat; fln: PatternShapeAxisStat }
+  >;
+};
+
+export type PatternShapesStats = {
+  /** Maps in band + axis before a shape's level is ranked. */
+  floor: number;
+  /** Sorted deterministically (push / all level desc, then shape name). */
+  shapes: PatternShapeStat[];
+};
+
+function getPatternShapes(
+  candidates: PlayCandidate[],
+  opts: {
+    variantOf: (play: PlayCandidate) => DanVariantRating | null;
+    thresholds: AxisThresholds;
+    focus: RecommendFocusSettings;
+    topN: number;
+  },
+): PatternShapesStats {
+  const { variantOf, thresholds, focus, topN } = opts;
+  const shapeRows = new Map<string, SkillPlayRow[]>();
+  for (const play of candidates) {
+    if (!play.shape) continue;
+    const rating = danRatingFor(play, variantOf);
+    if (!rating) continue;
+    if (resolveDanVariant(play.mods)?.lnOnly) continue;
+    let rows = shapeRows.get(play.shape);
+    if (!rows) {
+      rows = [];
+      shapeRows.set(play.shape, rows);
+    }
+    rows.push({
+      beatmapId: play.beatmapId,
+      accuracy: play.accuracy,
+      playedAt: play.playedAt,
+      reworkStar: rating.star,
+      lnRatio: rating.lnRatio,
+    });
+  }
+
+  const shapes: PatternShapeStat[] = [];
+  for (const [shape, rows] of shapeRows) {
+    const bands = {} as PatternShapeStat["bands"];
+    for (const band of ["push", "accuracy", "consistency"] as const) {
+      const range = skillBandAccRange(band, focus);
+      const levels = bandLevelsFromPlays(
+        rows,
+        range.min,
+        topN,
+        bandCenter(focus[band]),
+        bandHalfWidth(focus[band]),
+        thresholds,
+        range.max,
+      );
+      const cell = (v: { level: number; playCount: number }) => ({
+        level: v.level,
+        maps: v.playCount,
+      });
+      bands[band] = {
+        all: cell(levels.all),
+        rc: cell(levels.rc),
+        ln: cell(levels.ln),
+        fln: cell(levels.fln),
+      };
+    }
+    shapes.push({ shape, bands });
+  }
+  shapes.sort(
+    (a, b) =>
+      b.bands.push.all.level - a.bands.push.all.level ||
+      b.bands.push.all.maps - a.bands.push.all.maps ||
+      a.shape.localeCompare(b.shape),
+  );
+  return { floor: PATTERN_SHAPE_MIN_MAPS, shapes };
 }
 
 function getPlayTimePatterns(pass: ManiaPass) {
@@ -746,6 +868,12 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
   );
   const rankDistribution = getRankDistribution(pass.rankByLabel);
   const skillsetMix = getSkillsetMix(pass.candidates, variantOf, axisThresholds);
+  const patternShapes = getPatternShapes(pass.candidates, {
+    variantOf,
+    thresholds: axisThresholds,
+    focus: focusSettings,
+    topN: skillTopPlays || focusSettings.topPlays,
+  });
   const playPatterns = getPlayTimePatterns(pass);
   const sessionStats = getSessionStats(db, scope, keyCount);
   foldMapperRatings(pass, variantOf);
@@ -774,6 +902,7 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
     weeklyActivity: progression.weeklyActivity,
     rankDistribution,
     skillsetMix,
+    patternShapes,
     playByHour: playPatterns.byHour,
     playByDayOfWeek: playPatterns.byDayOfWeek,
     sessionStats: {

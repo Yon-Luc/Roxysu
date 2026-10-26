@@ -72,6 +72,7 @@ export const statsRoutes = new Elysia({ prefix: "/stats" })
         axis,
         topPlays: parseSkillTopPlays(query.topPlays),
         keyCount: parseSkillKeyCount(query.keyCount),
+        shape: query.shape?.trim() || undefined,
       });
       return {
         ...result,
@@ -102,6 +103,7 @@ export const statsRoutes = new Elysia({ prefix: "/stats" })
         ),
         topPlays: t.Optional(t.Union([t.Number(), t.String()])),
         keyCount: t.Optional(t.Union([t.Number(), t.String()])),
+        shape: t.Optional(t.String()),
       }),
     },
   )

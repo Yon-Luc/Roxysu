@@ -263,6 +263,49 @@ describe("stats mania aggregates match a plain reference (F-021)", () => {
     expect(stats.topMappers.length).toBeGreaterThan(0);
   });
 
+  test("pattern shapes rank clear level per chart shape with a qualification floor", async () => {
+    await setScoreScope(db, { username: "*", gamemode: "*" });
+    const stats = await getPlayerStats(db, { keyCount: 4 });
+
+    expect(stats.patternShapes.floor).toBe(5);
+    // Only `mania-skill-v1` chart-shape families; empty / unclassified stay out.
+    const known = new Set([
+      "stream",
+      "trill",
+      "jumptrill",
+      "jumpstream",
+      "handstream",
+      "chordjack",
+      "chordstream",
+      "bracket",
+    ]);
+    for (const row of stats.patternShapes.shapes) {
+      expect(known.has(row.shape)).toBe(true);
+      for (const bands of Object.values(row.bands)) {
+        for (const cell of Object.values(bands)) {
+          expect(cell.maps).toBeGreaterThanOrEqual(0);
+          if (cell.maps > 0) {
+            expect(cell.level).toBeGreaterThan(0);
+          } else {
+            expect(cell.level).toBe(0);
+          }
+        }
+      }
+    }
+    // Deterministic order: push / all level desc, tie-break by shape name.
+    const pushLevels = stats.patternShapes.shapes.map(
+      (s) => s.bands.push.all.level,
+    );
+    for (let i = 1; i < pushLevels.length; i++) {
+      const prev = stats.patternShapes.shapes[i - 1]!;
+      const cur = stats.patternShapes.shapes[i]!;
+      expect(pushLevels[i - 1]!).toBeGreaterThanOrEqual(pushLevels[i]!);
+      if (pushLevels[i - 1] === pushLevels[i]) {
+        expect(prev.shape.localeCompare(cur.shape)).toBeLessThanOrEqual(0);
+      }
+    }
+  });
+
   test("top mappers table aggregates plays, maps, sessions, axes, and Rework stars", async () => {
     await setScoreScope(db, { username: "*", gamemode: "*" });
     const keyCount = 4;

@@ -89,29 +89,42 @@ export function SkillBandPlaysPanel({
   topPlays,
   keyCount,
   ratingMode,
+  shape,
+  heading,
+  idSuffix,
 }: {
   band: SkillBandKind;
   axis: StatsSkillAxis;
   topPlays: number;
   keyCount: number;
   ratingMode: RatingDisplayMode;
+  /** Restrict the lists to one primary chart shape (Patterns section). */
+  shape?: string;
+  /** Optional heading override (shape-scoped lists label their shape). */
+  heading?: string;
+  /** DOM id suffix so two open panels never share `skill-band-{band}`. */
+  idSuffix?: string;
 }) {
   const { dict } = useAppDict();
   const { data, isLoading, error } = useQuery({
-    queryKey: ["stats", "skill-plays", band, axis, topPlays, keyCount],
+    queryKey: ["stats", "skill-plays", band, axis, topPlays, keyCount, shape ?? null],
     queryFn: () =>
       fetchSkillBandPlays({
         band,
         axis: axis === "all" ? undefined : axis,
         topPlays,
         keyCount,
+        shape,
       }),
     staleTime: 5 * 60_000,
   });
 
   if (isLoading) {
     return (
-      <div id={`skill-band-${band}`} className="rx-panel p-4">
+      <div
+        id={`skill-band-${band}${idSuffix ?? ""}`}
+        className="rx-panel p-4"
+      >
         <SkeletonBlock className="h-5 w-36" />
         <SkeletonBlock className="mt-2 h-3 w-64 max-w-full" />
         <div className="mt-5">
@@ -123,7 +136,10 @@ export function SkillBandPlaysPanel({
 
   if (error || !data) {
     return (
-      <div id={`skill-band-${band}`} className="rx-panel p-4">
+      <div
+        id={`skill-band-${band}${idSuffix ?? ""}`}
+        className="rx-panel p-4"
+      >
         <p className="text-sm text-danger">
           {error?.message ?? dict?.stats.failedToLoadPlays ?? "Failed to load plays"}
         </p>
@@ -140,10 +156,14 @@ export function SkillBandPlaysPanel({
         : dict?.stats.bandConsistency ?? "Consistency";
 
   return (
-    <div id={`skill-band-${band}`} className="rx-panel space-y-6 p-4 sm:p-5">
+    <div
+      id={`skill-band-${band}${idSuffix ?? ""}`}
+      className="rx-panel space-y-6 p-4 sm:p-5"
+    >
       <div>
         <h3 className="font-display text-lg font-bold text-ink">
-          {t(dict?.stats.bandPlays, { band: bandTitle })}
+          {heading ??
+            t(dict?.stats.bandPlays, { band: bandTitle })}
           {axis !== "all" ? ` · ${axisLabel}` : ""}
         </h3>
         <p className="mt-1 text-xs text-muted">

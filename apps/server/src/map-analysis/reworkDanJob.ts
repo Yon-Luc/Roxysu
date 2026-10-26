@@ -13,6 +13,7 @@ import {
   memoryHeadroom,
 } from "./memoryPressure";
 import { publish } from "../shared/events";
+import { invalidatePlayerStatsCache } from "../analytics/playerStatsCache";
 
 export type ReworkDanJobStatus =
   | "idle"
@@ -184,6 +185,9 @@ function finish(status: "completed" | "idle" | "error", error?: string): void {
   job.finishedAt = new Date();
   job.error = error ?? null;
   job.db = null;
+  // A run that rated maps changes skill history, skillset mix, and the
+  // Patterns section — the stats cache ignores `dashboard.updated`.
+  if (job.computedThisRun > 0) invalidatePlayerStatsCache();
   publish({ type: "dashboard.updated" });
   publish({ type: "jobs.updated" });
 }

@@ -29,6 +29,7 @@ import { Stat } from "../../components/Stat";
 import { ToggleGroup } from "../../components/ToggleGroup";
 import { SkillCard } from "./components/SkillCard";
 import { SkillBandPlaysPanel } from "./components/SkillBandPlaysPanel";
+import { PatternShapesSection } from "./components/PatternShapesSection";
 import {
   formatDuration,
   historyBandValue,
@@ -491,6 +492,15 @@ export function StatsPage({
           </p>
         ) : null}
       </section>
+
+      <PatternShapesSection
+        data={data.patternShapes}
+        skill={skill}
+        axis={skillAxis}
+        topPlays={skillTopPlays}
+        keyCount={keyCount}
+        ratingMode={ratingMode}
+      />
 
       <section>
         <ChartCard

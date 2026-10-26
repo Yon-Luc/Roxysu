@@ -327,7 +327,7 @@ function aggregateAccBandMaps(
  * Average rework ★ of top plays in an accuracy band on an axis.
  * Weight: closeness to band center × mild recency.
  */
-function clearLevelFromPlays(
+export function clearLevelFromPlays(
   bandPlays: SkillPlayRow[],
   axis: MapAxis | "all",
   accCenter: number,
@@ -363,7 +363,7 @@ function clearLevelFromPlays(
   };
 }
 
-function bandLevelsFromPlays(
+export function bandLevelsFromPlays(
   plays: SkillPlayRow[],
   accFloor: number,
   topN: number,

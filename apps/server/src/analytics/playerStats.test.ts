@@ -1,8 +1,21 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { closeDb } from "@roxysu/db/client.bun";
-import { beatmapSets, beatmaps, scoreMetrics, scores } from "@roxysu/db/schema";
-import { eq } from "drizzle-orm";
+import {
+  beatmapDanRatings,
+  beatmapSets,
+  beatmaps,
+  scoreMetrics,
+  scores,
+} from "@roxysu/db/schema";
+import { and, eq } from "drizzle-orm";
 import type { Db } from "../db-runtime";
+import { REWORK_ALGORITHM } from "../map-analysis/reworkEstimator";
+import { resolveDanVariant } from "../replay/mods";
+import {
+  DEFAULT_AXIS_THRESHOLDS,
+} from "./recommend/axisThresholds";
+import { classifyMapAxis } from "./recommend/axis";
+import { mapperGroupKey } from "./mapperUsername";
 import { classifyScoreGrade } from "../query-language/scoreGrade";
 import { getPlayerStats } from "./playerStats";
 import {
@@ -248,5 +261,141 @@ describe("stats mania aggregates match a plain reference (F-021)", () => {
     // Hidden maps count toward summary but never toward the skillset mix.
     expect(stats.skillsetMix.total).toBeLessThanOrEqual(stats.summary.scoreCount);
     expect(stats.topMappers.length).toBeGreaterThan(0);
+  });
+
+  test("top mappers table aggregates plays, maps, sessions, axes, and Rework stars", async () => {
+    await setScoreScope(db, { username: "*", gamemode: "*" });
+    const keyCount = 4;
+    const stats = await getPlayerStats(db, { keyCount });
+
+    // Independent reference over the same scoped plays the stream walks.
+    const rows = await db
+      .select({
+        deletePending: scores.deletePending,
+        accuracy: scores.accuracy,
+        rank: scores.rank,
+        mods: scores.mods,
+        beatmapId: scores.beatmapId,
+        mapRuleset: beatmaps.rulesetShortName,
+        cs: beatmaps.circleSize,
+        mapperOnlineId: beatmaps.mapperOnlineId,
+        mapperUsername: beatmaps.mapperUsername,
+        hidden: beatmaps.hidden,
+        reworkStar: beatmapDanRatings.sunnyStar,
+        lnRatio: beatmapDanRatings.lnRatio,
+        setDeletePending: beatmapSets.deletePending,
+        sessionId: scoreMetrics.sessionId,
+      })
+      .from(scores)
+      .innerJoin(beatmaps, eq(scores.beatmapId, beatmaps.id))
+      .leftJoin(beatmapSets, eq(beatmaps.setId, beatmapSets.id))
+      .leftJoin(
+        beatmapDanRatings,
+        and(
+          eq(beatmapDanRatings.beatmapId, beatmaps.id),
+          eq(beatmapDanRatings.algorithm, REWORK_ALGORITHM),
+        ),
+      )
+      .leftJoin(scoreMetrics, eq(scoreMetrics.scoreId, scores.id));
+
+    type RefAgg = {
+      plays: number;
+      accSum: number;
+      accCount: number;
+      maps: Set<string>;
+      sessions: Set<number>;
+      rated: Map<string, { star: number; lnRatio: number }>;
+      name: string | null;
+    };
+    const aggs = new Map<string, RefAgg>();
+    for (const r of rows) {
+      if (r.deletePending || r.setDeletePending) continue;
+      if (r.mapRuleset !== "mania" || r.cs !== keyCount) continue;
+      const key = mapperGroupKey(r.mapperOnlineId, r.mapperUsername);
+      if (!key) continue;
+      const agg =
+        aggs.get(key) ??
+        {
+          plays: 0,
+          accSum: 0,
+          accCount: 0,
+          maps: new Set<string>(),
+          sessions: new Set<number>(),
+          rated: new Map<string, { star: number; lnRatio: number }>(),
+          name: r.mapperUsername ?? null,
+        };
+      aggs.set(key, agg);
+      agg.plays += 1;
+      // Failed / quit plays (rank -1) count as volume, not accuracy.
+      if (r.rank !== -1) {
+        agg.accSum += Number(r.accuracy ?? 0);
+        agg.accCount += 1;
+      }
+      if (r.beatmapId) agg.maps.add(r.beatmapId);
+      if (r.sessionId != null) agg.sessions.add(Number(r.sessionId));
+      // Fixture persists no dan variants: only NM plays can be rated.
+      if (resolveDanVariant(r.mods)) continue;
+      // Hidden maps count toward volume but never rated columns.
+      if (r.hidden) continue;
+      if (r.reworkStar == null || r.lnRatio == null) continue;
+      const ratedKey = `${r.beatmapId}|nm`;
+      if (!agg.rated.has(ratedKey)) {
+        agg.rated.set(ratedKey, {
+          star: Number(r.reworkStar),
+          lnRatio: Number(r.lnRatio),
+        });
+      }
+    }
+
+    const expected = [...aggs.entries()]
+      .map(([key, agg]) => {
+        let rc = 0;
+        let ln = 0;
+        let fln = 0;
+        let starSum = 0;
+        for (const rated of agg.rated.values()) {
+          const axis = classifyMapAxis(rated.lnRatio, DEFAULT_AXIS_THRESHOLDS);
+          if (axis === "fln") fln += 1;
+          else if (axis === "ln") ln += 1;
+          else rc += 1;
+          starSum += rated.star;
+        }
+        const ratedMaps = agg.rated.size;
+        return {
+          mapperOnlineId: key.startsWith("id:")
+            ? Number(key.slice(3))
+            : 0,
+          mapperUsername: agg.name,
+          playCount: agg.plays,
+          mapsPlayed: agg.maps.size,
+          avgAccuracy: agg.accCount > 0 ? agg.accSum / agg.accCount : null,
+          sessionCount: agg.sessions.size,
+          rcMaps: rc,
+          lnMaps: ln,
+          flnMaps: fln,
+          ratedMaps,
+          avgStar: ratedMaps > 0 ? starSum / ratedMaps : null,
+        };
+      })
+      .sort(
+        (a, b) =>
+          b.playCount - a.playCount ||
+          b.mapsPlayed - a.mapsPlayed ||
+          (a.mapperUsername ?? "").localeCompare(b.mapperUsername ?? "") ||
+          b.mapperOnlineId - a.mapperOnlineId,
+      )
+      .slice(0, 10);
+
+    expect(stats.topMappers).toEqual(expected);
+
+    // The PP sum is gone; the table carries the new columns.
+    for (const row of stats.topMappers) {
+      expect("totalPp" in row).toBe(false);
+      expect(row).toHaveProperty("sessionCount");
+      expect(row).toHaveProperty("rcMaps");
+      expect(row).toHaveProperty("lnMaps");
+      expect(row).toHaveProperty("flnMaps");
+      expect(row).toHaveProperty("avgStar");
+    }
   });
 });

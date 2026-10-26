@@ -5,6 +5,7 @@ touches:
   - apps/server/src/map-analysis/reworkDanJob.ts
   - apps/server/src/map-analysis/danVariantJob.ts
   - apps/server/src/map-analysis/computeReworkDan.ts
+  - apps/server/src/map-analysis/calcBundle.ts
   - apps/server/src/tosu/analyze.ts
   - apps/server/src/analytics/recommend
   - packages/mania-difficulty
@@ -20,6 +21,8 @@ Populate mania difficulty estimates so 4K/7K recommendations and `dan:`/`rework:
 ## Flow
 
 ```
+(packaged version bump) entry points call startReworkDanBackfill
+    only when the shipped calc bundle dropped stored rows
 (optional) Hub calc bundle pull gap-fills matching hashes
     ↓
 Settings POST /api/settings/rework-dan/start
@@ -113,6 +116,7 @@ Recommendations and `dan:` / `rework:` / `pattern:` filters use persisted estima
 - `apps/server/src/map-analysis/reworkDanJob.ts`
 - `apps/server/src/map-analysis/danVariantJob.ts`
 - `apps/server/src/map-analysis/patternAnalysisJob.ts`
+- `apps/server/src/map-analysis/calcBundle.ts` — packaged boot drop; entry points own the auto-start
 - `packages/mania-difficulty`
 - `packages/mania-difficulty/dans.json`
 - `apps/server/src/analytics/recommend/*`

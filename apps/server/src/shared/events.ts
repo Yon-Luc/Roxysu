@@ -12,6 +12,11 @@ export type AppEvent =
   | { type: "dashboard.updated" }
   /** Background dan/pattern jobs or Hub calc-bundle pull changed state. */
   | { type: "jobs.updated" }
+  /**
+   * A packaged boot replaced/dropped stored rework + pattern rows from the
+   * shipped calc bundle file. Invalidates beatmap detail / practice queries.
+   */
+  | { type: "calc-bundle.applied" }
   | {
       type: "tosu.updated";
       reason: "play" | "full";

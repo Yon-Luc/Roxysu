@@ -223,7 +223,7 @@ update tag validation — status: verified
 
 - Hub UI pages under `apps/server/public/features/hub`
 - `features/download-mirrors/` — Download Maps search / count / download-all prefer primed Hub search index
-- `features/rework-dan-recommendations/` — calc bundle (release file boot apply; Hub pull for dev) gap-fills dan/pattern rows before local backfill
+- `features/rework-dan-recommendations/` — calc bundle (release file boot apply; Hub pull for dev) gap-fills dan/pattern rows before local backfill; a packaged bump also drops rows the file does not contain and auto-starts the rework backfill
 - `features/online-score-pull/` — Hub proxies ranked best fetches and holds the osu! usage ledger
 - `features/bms/` — public BMS profile, score batch, table import, chart leaderboards, comparison, feed, and statistics
 

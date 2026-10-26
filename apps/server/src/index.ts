@@ -6,6 +6,7 @@ import { startAnalyticsPipeline } from "./analytics/pipeline";
 import { startBmsSync } from "./bms/sync";
 import { startDanVariantJob } from "./map-analysis/danVariantJob";
 import { maybePullCalcBundleOnBoot } from "./map-analysis/calcBundle";
+import { startReworkDanBackfill } from "./map-analysis/reworkDanJob";
 import { startCollectionMatchCache } from "./shared/collectionMatchCache";
 import { ensureTosuStarted, stopTosuAdapter } from "./tosu";
 import { clearStuckMirrorBatchLocks } from "./mirrors";
@@ -32,7 +33,11 @@ const stopAnalytics = startAnalyticsPipeline(db);
 const stopBmsSync = startBmsSync(db);
 const stopDanVariants = startDanVariantJob(db);
 startCollectionMatchCache(db);
-void maybePullCalcBundleOnBoot(db);
+// Boot calc-bundle replace may drop stored rows the shipped file does not
+// contain; recomputing only those keeps the version bump cheap.
+void maybePullCalcBundleOnBoot(db).then((boot) => {
+  if (boot && boot.droppedLeftovers > 0) startReworkDanBackfill(db);
+});
 
 console.log(
   `🦊 Roxysu running at http://${app.server?.hostname}:${app.server?.port}`,

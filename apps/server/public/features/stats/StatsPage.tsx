@@ -49,6 +49,7 @@ import {
   formatChartDay,
   formatPp,
   formatRelativeTime,
+  formatStars,
 } from "../../lib/format";
 import {
   useRatingDisplayMode,
@@ -127,7 +128,6 @@ export function StatsPage({
   });
 
   const history = data?.skillHistory ?? [];
-  const ppTrend = data?.ppTrend ?? [];
   const accTrend = data?.accuracyTrend ?? [];
 
   // Must stay above loading/error returns — Rules of Hooks.
@@ -141,15 +141,24 @@ export function StatsPage({
       })),
     [history, skillAxis],
   );
-  const ppAccChart = useMemo(
+  const accChart = useMemo(
     () =>
-      ppTrend.map((p, i) => ({
+      accTrend.map((p) => ({
         day: p.day,
-        totalPp: p.totalPp,
-        avgAccuracy: (accTrend[i]?.avgAccuracy ?? 0) * 100,
+        avgAccuracy: p.avgAccuracy == null ? null : p.avgAccuracy * 100,
+        plays: p.playCount,
       })),
-    [ppTrend, accTrend],
+    [accTrend],
   );
+  // Floor the axis 5 points under the worst day (>= 0); ceiling stays at 100
+  // so per-day accuracy differences stay visible for high-accuracy players.
+  const accDomain = useMemo<[number, number]>(() => {
+    const points = accChart
+      .map((p) => p.avgAccuracy)
+      .filter((v): v is number => v != null);
+    if (points.length === 0) return [95, 100];
+    return [Math.max(0, Math.floor(Math.min(...points) - 5)), 100];
+  }, [accChart]);
 
   const axisToggle = (
     <ToggleGroup
@@ -607,12 +616,12 @@ export function StatsPage({
             )}
           </ChartCard>
 
-          <ChartCard title={dict?.stats.ppAccTrend ?? "PP / accuracy trend"}>
-            {ppTrend.length === 0 && accTrend.length === 0 ? (
+          <ChartCard title={dict?.stats.accuracyTrend ?? "Accuracy trend"}>
+            {accTrend.length === 0 ? (
               <EmptyChart message={notEnoughData} />
             ) : (
               <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={ppAccChart}>
+                <LineChart data={accChart}>
                   <CartesianGrid
                     stroke={charts.grid}
                     vertical={false}
@@ -627,39 +636,35 @@ export function StatsPage({
                     tickLine={false}
                   />
                   <YAxis
-                    yAxisId="pp"
                     tick={charts.tick}
                     width={40}
                     axisLine={false}
                     tickLine={false}
-                  />
-                  <YAxis
-                    yAxisId="acc"
-                    orientation="right"
-                    tick={charts.tick}
-                    width={36}
-                    domain={[0, 100]}
-                    axisLine={false}
-                    tickLine={false}
+                    domain={accDomain}
                   />
                   <Tooltip
                     contentStyle={charts.tooltip}
                     labelFormatter={formatChartDay}
+                    formatter={(value, name) =>
+                      name === "plays"
+                        ? [String(value), dict?.stats.plays ?? "Plays"]
+                        : [
+                            `${Number(value).toFixed(2)}%`,
+                            dict?.stats.bandAccuracy ?? "Accuracy",
+                          ]
+                    }
                   />
                   <Line
-                    yAxisId="pp"
-                    type="monotone"
-                    dataKey="totalPp"
-                    name="PP"
-                    stroke={charts.chartAlt}
+                    stroke="none"
+                    dataKey="plays"
+                    name={dict?.stats.plays ?? "Plays"}
+                    legendType="none"
                     dot={false}
-                    strokeWidth={2.5}
                   />
                   <Line
-                    yAxisId="acc"
                     type="monotone"
                     dataKey="avgAccuracy"
-                    name="Acc %"
+                    name={dict?.stats.bandAccuracy ?? "Accuracy"}
                     stroke={charts.chart}
                     dot={false}
                     strokeWidth={2.5}
@@ -884,37 +889,79 @@ export function StatsPage({
         {mappers.length === 0 ? (
           <p className="text-sm text-muted">
             {dict?.stats.noMapperStats ??
-              "No mapper stats yet — they fill in after the analytics pipeline runs."}
+              "No mapper stats yet — they appear as soon as you play mapped charts."}
           </p>
         ) : (
-          <ul className="space-y-0.5">
-            {mappers.map((m, i) => (
-              <li
-                key={`${m.mapperOnlineId}-${m.mapperUsername ?? ""}`}
-                className="rx-row"
-              >
-                <span className="w-8 shrink-0 tabular-nums text-faint">
-                  {i + 1}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-semibold text-ink">
-                    {m.mapperUsername ??
-                      t(dict?.stats.mapperFallback, { id: m.mapperOnlineId })}
-                  </div>
-                  <div className="text-sm text-muted">
-                    {m.playCount.toLocaleString()}{" "}
-                    {dict?.stats.plays ?? "plays"}
-                    {m.avgAccuracy != null
-                      ? ` · ${formatAccuracy(m.avgAccuracy)}`
-                      : ""}
-                  </div>
-                </div>
-                <div className="shrink-0 text-right text-sm tabular-nums text-muted">
-                  {formatPp(m.totalPp)}
-                </div>
-              </li>
-            ))}
-          </ul>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[48rem] text-left text-sm">
+              <thead>
+                <tr className="border-b border-line text-xs uppercase tracking-wide text-faint">
+                  <th className="px-2 py-2 font-semibold">
+                    {dict?.stats.colRank ?? "#"}
+                  </th>
+                  <th className="px-2 py-2 font-semibold">
+                    {dict?.stats.colMapper ?? "Mapper"}
+                  </th>
+                  <th className="px-2 py-2 text-right font-semibold">
+                    {dict?.stats.colPlays ?? "Plays"}
+                  </th>
+                  <th className="px-2 py-2 text-right font-semibold">
+                    {dict?.stats.colMaps ?? "Maps"}
+                  </th>
+                  <th className="px-2 py-2 text-right font-semibold">
+                    {dict?.stats.colAccuracy ?? "Acc"}
+                  </th>
+                  <th className="px-2 py-2 text-right font-semibold">
+                    {dict?.stats.colSessions ?? "Sessions"}
+                  </th>
+                  <th className="px-2 py-2 text-right font-semibold">
+                    {dict?.stats.colMapType ?? "Rice / LN / FLN"}
+                  </th>
+                  <th className="px-2 py-2 text-right font-semibold">
+                    {dict?.stats.colAvgStar ?? "Avg ★ (rework)"}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {mappers.map((m, i) => (
+                  <tr
+                    key={`${m.mapperOnlineId}-${m.mapperUsername ?? ""}`}
+                    className="border-b border-line/60 transition-colors hover:bg-elevated/40"
+                  >
+                    <td className="px-2 py-2 tabular-nums text-faint">
+                      {i + 1}
+                    </td>
+                    <td className="px-2 py-2 font-semibold text-ink">
+                      {m.mapperUsername ??
+                        t(dict?.stats.mapperFallback, {
+                          id: m.mapperOnlineId,
+                        })}
+                    </td>
+                    <td className="px-2 py-2 text-right tabular-nums text-ink">
+                      {m.playCount.toLocaleString()}
+                    </td>
+                    <td className="px-2 py-2 text-right tabular-nums text-ink">
+                      {m.mapsPlayed.toLocaleString()}
+                    </td>
+                    <td className="px-2 py-2 text-right tabular-nums text-muted">
+                      {formatAccuracy(m.avgAccuracy)}
+                    </td>
+                    <td className="px-2 py-2 text-right tabular-nums text-muted">
+                      {m.sessionCount.toLocaleString()}
+                    </td>
+                    <td className="px-2 py-2 text-right tabular-nums font-mono text-muted">
+                      {m.ratedMaps > 0
+                        ? `${m.rcMaps} / ${m.lnMaps} / ${m.flnMaps}`
+                        : "—"}
+                    </td>
+                    <td className="px-2 py-2 text-right tabular-nums font-mono text-muted">
+                      {formatStars(m.avgStar)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
         {summary.firstPlayedAt || summary.lastPlayedAt ? (
           <p className="mt-4 text-xs text-faint">

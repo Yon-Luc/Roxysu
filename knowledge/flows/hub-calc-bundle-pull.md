@@ -5,9 +5,11 @@ touches:
   - apps/server/src/map-analysis/calcBundle.ts
   - apps/server/src/map-analysis/calcBundleFile.ts
   - apps/server/src/routes/settings.ts
+  - apps/server/src/index.ts
+  - apps/server/src/index.node.ts
+  - apps/server/public/lib/sse.ts
   - apps/desktop/main.js
   - apps/desktop/scripts/after-pack.mjs
-  - apps/desktop/scripts/build-pack.mjs
   - nix/package.nix
   - apps/server/public/features/hub/HubAdminCalcBundlesPage.tsx
 ---
@@ -51,8 +53,16 @@ readShippedCalcBundleFile(ROXYSU_CALC_BUNDLE_FILE, APP_VERSION, CALC_BUNDLE_ALGO
       applyCalcBundle (batched slices; match beatmaps.hash)
         → replace mania-difficulty + mania-skill-v1 rows the file contains
         ↓
+      dropCalcBundleLeftovers
+        → delete bundle-algorithm rows whose beatmap_hash is null or not in the file
+        ↓
+      publish "calc-bundle.applied"  →  client invalidates ["beatmap"] / ["practice"]
+        ↓
       mark jobs.calc_bundle_applied_version = APP_VERSION
         ↓
+      entry points: droppedLeftovers > 0 ? startReworkDanBackfill (missing pass)
+      : no backfill (rows the file already covers are correct)
+      ↓
       (optional) Jobs onboarding / start-recommended backfills leftovers
 ```
 
@@ -78,18 +88,19 @@ Manual pull from Settings stays a Hub gap-fill on every install type
 
 - Only hash-matched maps receive bundle rows.
 - Bundles (Hub and file) carry `mania-difficulty` and `mania-skill-v1` only (other algorithm ids are ignored).
-- Packaged version bumps replace successful rework dan and dominant-skill rows the bundle contains. `bun desktop` does not replace.
+- Packaged version bumps replace successful rework dan and dominant-skill rows the bundle contains, **then drop** bundle-algorithm rows the file does not contain; the entry points start the missing-only rework backfill when the drop deleted rows, so those maps are recomputed on the new formula. `bun desktop` does not replace or drop.
 - Packaged boots never call the Hub; dev boots never read the file. A release without the file ships with no boot-time gap-fill (previous-version rows stay).
 - A manual Settings pull stays gap-fill.
+- `calc-bundle.applied` publishes once per successful packaged file apply; the client invalidates `["beatmap"]` / `["practice"]` so an already-open beatmap page refetches after the boot apply finishes. `jobs.updated` deliberately does not watch these queries.
 - Kill switch `HUB_CALC_BUNDLES=0` makes the Hub public GET return 503; the shipped-file path is local-only and not gated.
 
 ## Implementation references
 
 - `apps/server/src/map-analysis/calcBundle.ts:maybePullCalcBundleOnBoot()` — boot dispatch (packaged → file, dev → Hub)
-- `apps/server/src/map-analysis/calcBundle.ts:maybeApplyShippedCalcBundleOnBoot()`
-- `apps/server/src/map-analysis/calcBundle.ts:reworkReplaceAlgorithmsForBoot()`
-- `apps/server/src/map-analysis/calcBundle.ts:applyCalcBundle()` — sliced batched apply
-- `apps/server/src/map-analysis/calcBundle.ts:buildCalcBundleFileBytes()`
+- `apps/server/src/map-analysis/calcBundle.ts:maybeApplyShippedCalcBundleOnBoot()` — replace + drop (`dropCalcBundleLeftovers`), publishes `calc-bundle.applied`
+- `apps/server/src/map-analysis/calcBundle.ts:CalcBundleBootResult` — `droppedLeftovers` for the entry-point backfill decision
+- `apps/server/src/index.ts` / `src/index.node.ts` — auto-start `startReworkDanBackfill` when rows were dropped
+- `apps/server/public/lib/sse.ts` — `calc-bundle.applied` → invalidate `["beatmap"]`, `["practice"]`
 - `apps/server/src/map-analysis/calcBundleFile.ts:readShippedCalcBundleFile()`
 - `apps/server/src/routes/settings.ts` — `GET /settings/calc-bundle/export-file`
 - `apps/server/public/features/hub/HubAdminCalcBundlesPage.tsx` — download + upload buttons

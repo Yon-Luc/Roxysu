@@ -108,13 +108,17 @@ Product writes use `algorithm = 'mania-difficulty'` (rework dan). Legacy Sunny/D
    hash changed. **Recalculate all** (`POST /api/settings/rework-dan/recompute`)
    deletes `mania-difficulty` dan rows and `mania-skill-v1` pattern rows, then
    starts the same backfill. It refuses while a pass is running, stopping, or
-   paused. On a packaged install, a product-version bump replaces successful
-   `mania-difficulty` and `mania-skill-v1` rows with that version's **Calc
-   bundle file** shipped with the release (maps the file does not contain keep
-   their previous rows). `bun desktop` does not set `ROXYSU_PACKAGED`, so it
-   gap-fills only from the Hub and does not replace the dev library. A Hub
-   bundle or manual pull for the same product version can still gap-fill old
-   numbers back in if a Recalculate all pass is restarted before it finishes.
+   paused. On a packaged install, a product-version bump with a usable shipped
+   **Calc bundle file** replaces `mania-difficulty` / `mania-skill-v1` rows the
+   file contains, **drops** bundle-algorithm rows whose hash it does not
+   contain (`dropCalcBundleLeftovers`), publishes `calc-bundle.applied`
+   (client invalidates `["beatmap"]` / `["practice"]`), and — when rows were
+   dropped — the entry points start the missing-only backfill, so every stored
+   rating ends up on the new formula. A missing or version-mismatched file
+   still marks applied and keeps previous-version rows (no Hub fallback).
+   `bun desktop` does not set `ROXYSU_PACKAGED`, so it gap-fills only from the
+   Hub and neither replaces nor drops. A Hub bundle or manual pull always stays
+   gap-fill: old successful rows are never removed by them.
 12. Chart shape is counted on the difficulty row graph in the same calculator pass as the dominant skill (`chartShapeWalk` before the graph is released). It does not change star rating. Labels are `stream`, `trill`, `jumptrill`, `jumpstream`, `handstream` (4K), `chordjack`, `chordstream`, and `bracket` (7K). Stored on `shape_pattern` / `secondary_shape`. A pattern row with a skill and a null shape is missing and is filled by the pattern job without a new algorithm id. An empty `shape_pattern` means the walk ran and no family led (a pure jack chart), so the job does not recompute it. The map page, Now selected, overlay, and tosu live show `shape_pattern` (and its note shares), not the dominant skill.
 13. The `rework` rating display mode is client-side (`roxysu:rating-display`).
    Practice/search/collection list cards and the beatmap detail panel must pass

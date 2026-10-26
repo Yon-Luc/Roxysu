@@ -37,13 +37,9 @@ import {
   scoresUsernameSql,
 } from "./scoreUsername";
 import {
-  bumpMapperAgg,
-  compareMapperAgg,
-  createMapperAgg,
   dominantMapperUsername,
   mapperGroupKey,
   mapperOnlineIdFromGroupKey,
-  type MapperAgg,
 } from "./mapperUsername";
 
 type ScoreScope = { sql: string; params: string[] };
@@ -159,6 +155,8 @@ type PlayCandidate = {
   playedAt: number;
   reworkStar: number | null;
   lnRatio: number | null;
+  /** Mapper group key this play belongs to, or null when unattributable. */
+  mapperKey: string | null;
 };
 
 type StreamedManiaRow = {
@@ -174,10 +172,68 @@ type StreamedManiaRow = {
   reworkStar: number | null;
   mapperOnlineId: number | null;
   mapperUsername: string | null;
+  sessionId: number | null;
   hidden: number;
 };
 
-type ProgressionBucket = { playCount: number; totalPp: number; accSum: number };
+type ProgressionBucket = {
+  playCount: number;
+  totalPp: number;
+  /** Sum of accuracy over completed plays only (no grade = failed/quit). */
+  accSum: number;
+  /** Completed plays counted for accuracy averages. */
+  accCount: number;
+};
+
+/**
+ * Per-mapper aggregate folded while plays stream. Volume counters include
+ * every scoped play (hidden maps too); rated columns are folded later from
+ * non-hidden candidates with a resolvable dan rating.
+ */
+type MapperViewAgg = {
+  playCount: number;
+  accSum: number;
+  accCount: number;
+  beatmapIds: Set<string>;
+  sessionIds: Set<number>;
+  usernameCounts: Map<string, number>;
+  /** Distinct rated-map entries keyed `"${beatmapId}|${variantKeyOrNm}"`. */
+  rated: Map<string, { star: number; lnRatio: number }>;
+};
+
+function createMapperViewAgg(): MapperViewAgg {
+  return {
+    playCount: 0,
+    accSum: 0,
+    accCount: 0,
+    beatmapIds: new Set(),
+    sessionIds: new Set(),
+    usernameCounts: new Map(),
+    rated: new Map(),
+  };
+}
+
+/** One top mappers table row. */
+export type TopMapperStat = {
+  mapperOnlineId: number;
+  mapperUsername: string | null;
+  /** Plays on this mapper's maps; retries included. */
+  playCount: number;
+  /** Distinct beatmaps those plays are on. */
+  mapsPlayed: number;
+  /** Mean accuracy across those plays, or null. */
+  avgAccuracy: number | null;
+  /** Sessions that contain at least one of those plays. */
+  sessionCount: number;
+  /** Distinct rated maps per axis (user axis thresholds). */
+  rcMaps: number;
+  lnMaps: number;
+  flnMaps: number;
+  /** Rated entries backing the axis split / star mean. */
+  ratedMaps: number;
+  /** Mean Rework star over the rated entries, or null when none rated. */
+  avgStar: number | null;
+};
 
 type ManiaPass = {
   summary: {
@@ -191,7 +247,7 @@ type ManiaPass = {
   byDayOfWeek: number[];
   daily: Map<string, ProgressionBucket>;
   weekly: Map<string, ProgressionBucket>;
-  byMapper: Map<string, MapperAgg>;
+  byMapper: Map<string, MapperViewAgg>;
   candidates: PlayCandidate[];
 };
 
@@ -225,12 +281,14 @@ function streamManiaPass(
         dr.sunny_star AS reworkStar,
         b.mapper_online_id AS mapperOnlineId,
         b.mapper_username AS mapperUsername,
+        sm.session_id AS sessionId,
         b.hidden AS hidden
       FROM scores s
       JOIN beatmaps b ON b.id = s.beatmap_id
       LEFT JOIN beatmap_sets bs ON bs.id = b.set_id
       LEFT JOIN beatmap_dan_ratings dr
         ON dr.beatmap_id = b.id AND dr.algorithm = ?
+      LEFT JOIN score_metrics sm ON sm.score_id = s.id
       WHERE s.delete_pending = 0
         ${user.sql}
         AND COALESCE(bs.delete_pending, 0) = 0
@@ -261,7 +319,10 @@ function streamManiaPass(
     pass.summary.scoreCount += 1;
     if (row.beatmapId) maps.add(row.beatmapId);
 
-    if (row.rank !== -1) {
+    // No grade = failed / quit play: counts as activity, but its accuracy
+    // must not pollute accuracy averages.
+    const graded = row.rank !== -1;
+    if (graded) {
       const label = classifyScoreGrade(Number(row.totalScore), row.rank);
       if (label) {
         pass.rankByLabel.set(label, (pass.rankByLabel.get(label) ?? 0) + 1);
@@ -290,14 +351,24 @@ function streamManiaPass(
       const played = new Date(ms);
       pass.byHour[played.getUTCHours()]! += 1;
       pass.byDayOfWeek[played.getUTCDay()]! += 1;
-      bumpBucket(pass.daily, dayKey(played), pp, accuracy);
-      bumpBucket(pass.weekly, weekStartKey(played), pp, accuracy);
+      bumpBucket(pass.daily, dayKey(played), pp, accuracy, graded);
+      bumpBucket(pass.weekly, weekStartKey(played), pp, accuracy, graded);
     }
 
     const mapperKey = mapperGroupKey(row.mapperOnlineId, row.mapperUsername);
     if (mapperKey) {
-      const cur = pass.byMapper.get(mapperKey) ?? createMapperAgg();
-      bumpMapperAgg(cur, accuracy, pp, row.mapperUsername);
+      const cur = pass.byMapper.get(mapperKey) ?? createMapperViewAgg();
+      cur.playCount += 1;
+      if (graded) {
+        cur.accSum += accuracy;
+        cur.accCount += 1;
+      }
+      if (row.beatmapId) cur.beatmapIds.add(row.beatmapId);
+      if (row.sessionId != null) cur.sessionIds.add(Number(row.sessionId));
+      const name = row.mapperUsername?.trim();
+      if (name) {
+        cur.usernameCounts.set(name, (cur.usernameCounts.get(name) ?? 0) + 1);
+      }
       pass.byMapper.set(mapperKey, cur);
     }
 
@@ -309,6 +380,7 @@ function streamManiaPass(
         playedAt: Number(row.playedAt ?? 0),
         reworkStar: row.reworkStar,
         lnRatio: row.lnRatio,
+        mapperKey,
       });
     }
   }
@@ -322,11 +394,15 @@ function bumpBucket(
   key: string,
   pp: number,
   accuracy: number,
+  graded: boolean,
 ) {
-  const b = map.get(key) ?? { playCount: 0, totalPp: 0, accSum: 0 };
+  const b = map.get(key) ?? { playCount: 0, totalPp: 0, accSum: 0, accCount: 0 };
   b.playCount += 1;
   b.totalPp += pp;
-  b.accSum += accuracy;
+  if (graded) {
+    b.accSum += accuracy;
+    b.accCount += 1;
+  }
   map.set(key, b);
 }
 
@@ -501,17 +577,80 @@ function getSessionStats(db: Db, user: ScoreScope, keyCount: number) {
   };
 }
 
-function getTopMappers(byMapper: Map<string, MapperAgg>, limit = 10) {
-  return [...byMapper.entries()]
-    .sort(([, a], [, b]) => compareMapperAgg(a, b))
-    .slice(0, limit)
-    .map(([key, b]) => ({
+/**
+ * Fold one rated-map entry per (mapper, beatmap, variant) into the aggregate.
+ * NM plays read the base rework rating; modded plays need a computed variant.
+ * Unrated or hidden plays contribute nothing to the rated columns.
+ */
+function foldMapperRatings(
+  pass: ManiaPass,
+  variantOf: (play: PlayCandidate) => DanVariantRating | null,
+) {
+  for (const play of pass.candidates) {
+    if (!play.mapperKey) continue;
+    const agg = pass.byMapper.get(play.mapperKey);
+    if (!agg) continue;
+    const rating = danRatingFor(play, variantOf);
+    if (!rating) continue;
+    const variant = resolveDanVariant(play.mods);
+    // NM maps key on the base rating; each modded (beatmap, variant) stands alone.
+    const key = variant
+      ? danVariantKey(play.beatmapId, variant)
+      : `${play.beatmapId}|nm`;
+    if (!agg.rated.has(key)) {
+      agg.rated.set(key, rating);
+    }
+  }
+}
+
+/**
+ * Build the top mappers table: play volume from the streamed aggregates,
+ * axis split and Rework star mean over the distinct rated entries. Ranked by
+ * plays, then distinct maps, then name — the PP tiebreak is gone with PP.
+ */
+function buildTopMappers(
+  byMapper: Map<string, MapperViewAgg>,
+  thresholds: AxisThresholds,
+  limit = 10,
+): TopMapperStat[] {
+  const rows: TopMapperStat[] = [];
+  for (const [key, agg] of byMapper) {
+    let rc = 0;
+    let ln = 0;
+    let fln = 0;
+    let starSum = 0;
+    for (const rated of agg.rated.values()) {
+      const axis = classifyMapAxis(rated.lnRatio, thresholds);
+      if (axis === "fln") fln += 1;
+      else if (axis === "ln") ln += 1;
+      else rc += 1;
+      starSum += rated.star;
+    }
+    const ratedMaps = agg.rated.size;
+    rows.push({
       mapperOnlineId: mapperOnlineIdFromGroupKey(key),
-      mapperUsername: dominantMapperUsername(b.usernameCounts),
-      playCount: b.playCount,
-      totalPp: b.totalPp,
-      avgAccuracy: b.playCount > 0 ? b.accSum / b.playCount : null,
-    }));
+      mapperUsername: dominantMapperUsername(agg.usernameCounts),
+      playCount: agg.playCount,
+      mapsPlayed: agg.beatmapIds.size,
+      avgAccuracy:
+        agg.accCount > 0 ? agg.accSum / agg.accCount : null,
+      sessionCount: agg.sessionIds.size,
+      rcMaps: rc,
+      lnMaps: ln,
+      flnMaps: fln,
+      ratedMaps,
+      avgStar: ratedMaps > 0 ? starSum / ratedMaps : null,
+    });
+  }
+  return rows
+    .sort(
+      (a, b) =>
+        b.playCount - a.playCount ||
+        b.mapsPlayed - a.mapsPlayed ||
+        (a.mapperUsername ?? "").localeCompare(b.mapperUsername ?? "") ||
+        b.mapperOnlineId - a.mapperOnlineId,
+    )
+    .slice(0, limit);
 }
 
 function getKeymodeProgression(
@@ -534,7 +673,7 @@ function getKeymodeProgression(
     .slice(-days)
     .map(([day, b]) => ({
       day,
-      avgAccuracy: b.playCount > 0 ? b.accSum / b.playCount : 0,
+      avgAccuracy: b.accCount > 0 ? b.accSum / b.accCount : null,
       playCount: b.playCount,
     }));
 
@@ -609,7 +748,8 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
   const skillsetMix = getSkillsetMix(pass.candidates, variantOf, axisThresholds);
   const playPatterns = getPlayTimePatterns(pass);
   const sessionStats = getSessionStats(db, scope, keyCount);
-  const topMappers = getTopMappers(pass.byMapper, 10);
+  foldMapperRatings(pass, variantOf);
+  const topMappers = buildTopMappers(pass.byMapper, axisThresholds, 10);
 
   const summary = {
     ...pass.summary,

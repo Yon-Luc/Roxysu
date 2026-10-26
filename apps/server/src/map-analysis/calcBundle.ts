@@ -407,6 +407,98 @@ async function readExistingPattern(
 
 const now = () => new Date();
 
+/**
+ * Delete rows of the bundle algorithms whose `beatmap_hash` is null or not in
+ * the shipped file.
+ *
+ * Packaged replace semantics only: the file is the formula authority for its
+ * product version, so a row the file does not vouch for is stale and must not
+ * keep showing the previous formula's number on the beatmap page. Dropped maps
+ * re-enter the missing backfill instead of being trusted.
+ *
+ * The hashes go into a temp table first — one `NOT IN (SELECT …)` delete per
+ * table instead of a ~130k-parameter `NOT IN` list. Everything runs in one
+ * transaction so the counts match the deletes.
+ */
+export async function dropCalcBundleLeftovers(
+  db: Db,
+  entries: CalcBundleEntry[],
+): Promise<number> {
+  const hashes: string[] = [];
+  {
+    const seen = new Set<string>();
+    for (const entry of entries) {
+      if (!seen.has(entry.beatmapHash)) {
+        seen.add(entry.beatmapHash);
+        hashes.push(entry.beatmapHash);
+      }
+    }
+  }
+  if (hashes.length === 0) return 0;
+
+  /** Drizzle binds ~32k parameters max; keep insert batches far below that. */
+  const HASHES_PER_INSERT = 2_000;
+  const outsideHashPred =
+    sql`(beatmap_hash IS NULL OR beatmap_hash NOT IN (SELECT hash FROM temp.calc_bundle_hashes))`;
+
+  try {
+    return db.transaction((tx) => {
+      tx.run(sql`DROP TABLE IF EXISTS temp.calc_bundle_hashes`);
+      tx.run(sql`CREATE TABLE temp.calc_bundle_hashes (hash TEXT PRIMARY KEY)`);
+      for (let i = 0; i < hashes.length; i += HASHES_PER_INSERT) {
+        const values = sql.join(
+          hashes
+            .slice(i, i + HASHES_PER_INSERT)
+            .map((hash) => sql`(${hash})`),
+          sql`, `,
+        );
+        tx.run(
+          sql`INSERT OR IGNORE INTO temp.calc_bundle_hashes (hash) VALUES ${values}`,
+        );
+      }
+      let dropped = 0;
+      for (const algorithm of CALC_BUNDLE_ALGORITHMS) {
+        // Count on the raw client — the drizzle bun driver returns positional
+        // arrays for raw `SELECT COUNT(*)`, the better-sqlite3 driver objects.
+        // The prepared+`.get()` shape is uniform across both.
+        const dan = db.$client
+          .query(
+            `SELECT COUNT(*) AS n FROM beatmap_dan_ratings WHERE algorithm = ? AND (beatmap_hash IS NULL OR beatmap_hash NOT IN (SELECT hash FROM temp.calc_bundle_hashes))`,
+          )
+          .get(algorithm) as { n: number } | null;
+        const pattern = db.$client
+          .query(
+            `SELECT COUNT(*) AS n FROM beatmap_pattern_analysis WHERE algorithm = ? AND (beatmap_hash IS NULL OR beatmap_hash NOT IN (SELECT hash FROM temp.calc_bundle_hashes))`,
+          )
+          .get(algorithm) as { n: number } | null;
+        dropped += Number(dan?.n ?? 0) + Number(pattern?.n ?? 0);
+      }
+      for (const algorithm of CALC_BUNDLE_ALGORITHMS) {
+        tx.run(
+          sql`DELETE FROM beatmap_dan_ratings WHERE algorithm = ${algorithm} AND ${outsideHashPred}`,
+        );
+        tx.run(
+          sql`DELETE FROM beatmap_pattern_analysis WHERE algorithm = ${algorithm} AND ${outsideHashPred}`,
+        );
+      }
+      tx.run(sql`DROP TABLE IF EXISTS temp.calc_bundle_hashes`);
+      return dropped;
+    });
+  } catch (err) {
+    console.warn(
+      `[calc-bundle] leftover drop failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    try {
+      db.$client
+        .query("DROP TABLE IF EXISTS temp.calc_bundle_hashes")
+        .run();
+    } catch {
+      // temp table cleanup is best-effort
+    }
+    return 0;
+  }
+}
+
 async function applyCalcBundleSlice(
   db: Db,
   slice: CalcBundleEntry[],
@@ -677,12 +769,26 @@ export async function pullAndApplyCalcBundle(
  * only boot-time gap-fill source, so a missing/unreadable/mismatched file
  * still marks applied (the file cannot self-heal between boots) and leaves
  * previous-version rows in place.
+ *
+ * With `replaceAlgorithms` set, the successful apply also deletes bundle
+ * algorithm rows whose content hash the file does not contain (see
+ * `dropCalcBundleLeftovers`) and reports the count as `droppedLeftovers`.
  */
+export type CalcBundleBootResult = {
+  state: CalcBundlePullState;
+  /** Bundle algorithm rows dropped because the shipped file has no entry for their hash (packaged replace path). */
+  droppedLeftovers: number;
+};
+
 export async function maybeApplyShippedCalcBundleOnBoot(
   db: Db,
   replaceAlgorithms: ReadonlySet<string> | undefined,
-): Promise<CalcBundlePullState> {
-  if (pullState.status === "running") return getCalcBundlePullState();
+): Promise<CalcBundleBootResult> {
+  if (pullState.status === "running")
+    return {
+      state: getCalcBundlePullState(),
+      droppedLeftovers: 0,
+    };
   const version = APP_VERSION;
 
   setPullState({
@@ -712,10 +818,26 @@ export async function maybeApplyShippedCalcBundleOnBoot(
       error: read.reason,
       finishedAt: new Date().toISOString(),
     });
-    return getCalcBundlePullState();
+    return {
+      state: getCalcBundlePullState(),
+      droppedLeftovers: 0,
+    };
   }
 
   const stats = await applyCalcBundle(db, read.entries, { replaceAlgorithms });
+  let droppedLeftovers = 0;
+  if (replaceAlgorithms) {
+    droppedLeftovers = await dropCalcBundleLeftovers(db, read.entries);
+    if (droppedLeftovers > 0) {
+      console.log(
+        `[calc-bundle] dropped ${droppedLeftovers} stored rows the shipped file does not contain — they will be recomputed by the missing backfill`,
+      );
+    }
+  } else {
+    console.log(
+      "[calc-bundle] non-packaged boot gap-fill — no stored rows replaced or dropped",
+    );
+  }
   await setCalcBundleAppliedVersion(db, version);
   setPullState({
     status: "completed",
@@ -726,27 +848,44 @@ export async function maybeApplyShippedCalcBundleOnBoot(
     finishedAt: new Date().toISOString(),
   });
   publish({ type: "dashboard.updated" });
-  return getCalcBundlePullState();
+  // Consumers of stored dan/pattern rows (open beatmap pages, practice lists)
+  // may already be cached; one event keeps them honest.
+  publish({ type: "calc-bundle.applied" });
+  return {
+    state: getCalcBundlePullState(),
+    droppedLeftovers,
+  };
 }
 
-/** Boot: apply shipped file (packaged) or pull the Hub bundle (dev) once per product version. */
-export async function maybePullCalcBundleOnBoot(db: Db): Promise<void> {
+/**
+ * Boot: apply shipped file (packaged) or pull the Hub bundle (dev) once per
+ * product version. Resolves after the boot apply/pull finished (or failed) —
+ * callers may consult `droppedLeftovers` to kick the missing backfill.
+ */
+export async function maybePullCalcBundleOnBoot(
+  db: Db,
+): Promise<CalcBundleBootResult | null> {
   try {
     const applied = await getCalcBundleAppliedVersion(db);
-    if (applied === APP_VERSION) return;
+    if (applied === APP_VERSION) {
+      return {
+        state: getCalcBundlePullState(),
+        droppedLeftovers: 0,
+      };
+    }
     const replaceAlgorithms = reworkReplaceAlgorithmsForBoot();
     if (process.env.ROXYSU_PACKAGED === "1") {
       console.log(
         `[calc-bundle] packaged boot: applying shipped calc bundle file for ${APP_VERSION} (was ${applied ?? "none"})${replaceAlgorithms ? "; replacing rework rows" : ""}`,
       );
-      const state = await maybeApplyShippedCalcBundleOnBoot(
+      const result = await maybeApplyShippedCalcBundleOnBoot(
         db,
         replaceAlgorithms,
       );
       console.log(
-        `[calc-bundle] shipped bundle ${state.status}: applied=${state.applied} skipped=${state.skipped} unmatched=${state.unmatched}`,
+        `[calc-bundle] shipped bundle ${result.state.status}: applied=${result.state.applied} skipped=${result.state.skipped} unmatched=${result.state.unmatched}${result.droppedLeftovers ? ` dropped=${result.droppedLeftovers}` : ""}`,
       );
-      return;
+      return result;
     }
     console.log(
       `[calc-bundle] pulling Hub calc bundle for ${APP_VERSION} (was ${applied ?? "none"})${replaceAlgorithms ? "; replacing rework rows" : ""}`,
@@ -757,8 +896,13 @@ export async function maybePullCalcBundleOnBoot(db: Db): Promise<void> {
     console.log(
       `[calc-bundle] pull ${state.status}: applied=${state.applied} skipped=${state.skipped} unmatched=${state.unmatched}`,
     );
+    return {
+      state,
+      droppedLeftovers: 0,
+    };
   } catch (err) {
     console.error("[calc-bundle] boot pull failed", err);
+    return null;
   }
 }
 

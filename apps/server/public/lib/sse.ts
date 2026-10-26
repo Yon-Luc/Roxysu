@@ -138,6 +138,14 @@ export function connectLiveUpdates(queryClient: QueryClient): () => void {
     inv(["dashboard"]);
   };
 
+  // calc-bundle.applied: a boot version bump replaced / dropped stored
+  // rework + pattern rows from the shipped calc bundle file. Beatmap pages
+  // and practice lists must refetch instead of trusting the old numbers.
+  const onCalcBundleApplied = () => {
+    inv(["beatmap"]);
+    inv(["practice"]);
+  };
+
   // session.started / session.finished: session list + dashboard session stat.
   const onSessionEvent = () => {
     inv(["sessions"]);
@@ -229,6 +237,7 @@ export function connectLiveUpdates(queryClient: QueryClient): () => void {
     "sync.schema_outdated": onSchemaOutdated,
     "sync.finished": onSyncFinished,
     "jobs.updated": onJobsUpdated,
+    "calc-bundle.applied": onCalcBundleApplied,
     "tosu.updated": onTosu,
   };
 

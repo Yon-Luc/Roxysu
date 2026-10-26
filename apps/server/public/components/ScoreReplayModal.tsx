@@ -1030,6 +1030,9 @@ export function ScoreReplayModal({
     const weight =
       ruleset === "taiko" ? TAIKO_RESULT_WEIGHT : MANIA_RESULT_WEIGHT;
     const scale = ruleset === "mania" ? MANIA_ACC_SCALE : TAIKO_ACC_SCALE;
+    // Backward dips smaller than this must not reset the HUD scan — the clock
+    // can step back by a frame around pause/resume holds.
+    const REWIND_SCAN_TOLERANCE_MS = 50;
     let raf = 0;
     let running = true;
     let lastT = Number.NEGATIVE_INFINITY;
@@ -1053,7 +1056,10 @@ export function ScoreReplayModal({
         return;
       }
 
-      if (t < lastT) {
+      // A backward movement resets the scan and replays the judgments, but the
+      // clock can dip by a frame (~small) on pause/resume holds. Only a real
+      // rewind — past the dip tolerance — resets it.
+      if (t < lastT - REWIND_SCAN_TOLERANCE_MS) {
         combo = 0;
         last = null;
         judged = 0;

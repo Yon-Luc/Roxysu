@@ -413,7 +413,14 @@ Realm skin extract (full / reconcile):
   export calls the same paint.
 - Scrubber / clock labels use `createUiTimePublisher` (~10 Hz, force on
   seek / play / pause / ended) so media `timeupdate` does not re-render the
-  whole modal every tick. Authoritative time stays on `AudioClock`.
+  whole modal every tick. Authoritative time stays on `AudioClock`. Pause
+  freezes the interpolated time (the next coarse media sample usually sits
+  behind it), and resume holds that position until the media pointer really
+  moves (bounded by `RESUME_HOLD_MS`, ~250 ms in `lib/audioClock.ts`), so
+  resuming does not snap to a stale or rewound `currentTime` sample. Media
+  jumps are only followed when they exceed ~250 ms; smaller backward dips do
+  not reset the rewatch HUD scan (`REWIND_SCAN_TOLERANCE_MS` in
+  `ScoreReplayModal.tsx`).
 - Score rewatch HUD ticks incrementally through judgments and calls `setHud`
   only when combo / accuracy / last result change (counts ride the same update).
   Paused + unchanged time   skips the scan. Combo, accuracy, and running counts are draggable playfield

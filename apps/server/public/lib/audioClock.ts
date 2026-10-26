@@ -5,13 +5,30 @@
  * makes scrollers look stuttery even when canvas paints at 144Hz. This clock
  * samples the media time when it changes and interpolates with performance.now()
  * between samples, while staying locked to playbackRate / pause / seek.
+ * Pausing freezes the interpolated time (the next coarse sample usually sits
+ * behind it), and resuming holds that position until the media pointer really
+ * moves, so the playfield never snaps back on pause or resume.
  */
+/** A media sample this far from the current position is treated as a seek. */
+const SEEK_SNAP_MS = 250;
+/** Resume holds the frozen position at most this long before following media again. */
+const RESUME_HOLD_MS = 250;
+
 export class AudioClock {
   private mediaMs = 0;
   private samplePerfMs = 0;
   private lastRawMediaMs = Number.NaN;
   private rate = 1;
   private playing = false;
+  /**
+   * Resume hold: `play` fires before audio actually starts, and the media
+   * clock can still sit where it was (a step behind the interpolated time) or
+   * step back briefly while the pipeline restarts. Holding the frozen
+   * position instead of interpolating ahead of the sound is what removes the
+   * mini rollback on resume.
+   */
+  private holding = false;
+  private holdUntilNowMs = 0;
 
   /** Force position (seek, pause freeze, track change). */
   set(
@@ -22,6 +39,7 @@ export class AudioClock {
     this.mediaMs = mediaMs;
     this.samplePerfMs = now;
     this.lastRawMediaMs = mediaMs;
+    this.holding = false;
     if (opts?.playing != null) this.playing = opts.playing;
     if (opts?.rate != null) this.rate = Math.max(0.01, opts.rate);
   }
@@ -44,17 +62,19 @@ export class AudioClock {
 
     if (opts?.playing != null && opts.playing !== this.playing) {
       if (opts.playing) {
-        // Start interpolating from the latest media sample.
-        this.mediaMs = Number.isFinite(rawMediaMs) ? rawMediaMs : this.mediaMs;
-        this.samplePerfMs = now;
-        this.lastRawMediaMs = this.mediaMs;
+        // Resume: start from the frozen position and wait for the media
+        // pointer to actually move. Adopting raw immediately (still stale, or
+        // rewound while the pipeline restarts) snapped the playfield backward.
+        this.holding = true;
+        this.holdUntilNowMs = now + RESUME_HOLD_MS;
+        if (Number.isFinite(rawMediaMs)) this.lastRawMediaMs = rawMediaMs;
       } else {
-        // Freeze at current interpolated time, then snap to media if present.
-        this.mediaMs = Number.isFinite(rawMediaMs)
-          ? rawMediaMs
-          : this.nowMs(now);
+        // Pause: freeze at the interpolated time. The next coarse media sample
+        // is usually behind it and must not pull the position back.
+        this.holding = false;
+        this.mediaMs = this.nowMs(now);
         this.samplePerfMs = now;
-        this.lastRawMediaMs = this.mediaMs;
+        if (Number.isFinite(rawMediaMs)) this.lastRawMediaMs = rawMediaMs;
       }
       this.playing = opts.playing;
     }
@@ -62,9 +82,26 @@ export class AudioClock {
     if (!Number.isFinite(rawMediaMs)) return;
 
     if (!this.playing) {
-      this.mediaMs = rawMediaMs;
-      this.samplePerfMs = now;
-      this.lastRawMediaMs = rawMediaMs;
+      // While paused only a real seek (a large jump) moves the position.
+      if (rawMediaMs !== this.lastRawMediaMs) {
+        this.lastRawMediaMs = rawMediaMs;
+        if (Math.abs(rawMediaMs - this.mediaMs) > SEEK_SNAP_MS) {
+          this.mediaMs = rawMediaMs;
+          this.samplePerfMs = now;
+        }
+      }
+      return;
+    }
+
+    if (this.holding) {
+      // Stay frozen until the media pointer reaches the held position (the
+      // pipeline has really started / caught up) or the hold times out.
+      if (rawMediaMs >= this.mediaMs || now >= this.holdUntilNowMs) {
+        this.holding = false;
+        this.mediaMs = rawMediaMs;
+        this.samplePerfMs = now;
+        this.lastRawMediaMs = rawMediaMs;
+      }
       return;
     }
 
@@ -77,7 +114,7 @@ export class AudioClock {
   }
 
   nowMs(now = performance.now()): number {
-    if (!this.playing) return this.mediaMs;
+    if (!this.playing || this.holding) return this.mediaMs;
     return this.mediaMs + (now - this.samplePerfMs) * this.rate;
   }
 

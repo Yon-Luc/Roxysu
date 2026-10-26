@@ -1213,16 +1213,22 @@ function besideSingle(row: ManiaRow, other: ManiaRow | undefined): boolean {
 /**
  * One family per row, first match wins.
  *
- * A jump sitting next to a single is jumpstream even when `jumptrillStrength`
- * also fires: that detector treats every cross-hand jump as a jumptrill step.
- * Jumptrill is reserved for jump rows whose neighbors are not those singles.
- * Single-note trills are claimed before that detector so a two-column
- * alternation stays a trill.
+ * Keymode terms follow the osu! wiki pattern index: jumpstream and handstream
+ * are 4K shapes (a stream mixing in jumps/hands), bracket is exclusive to
+ * non-4K, and outside 4K chordstream names chords of 3+ notes — a 7K double
+ * beside a single is not a jumpstream and stays unlabeled.
+ *
+ * A jump sitting next to a single is jumpstream (on 4K) even when
+ * `jumptrillStrength` also fires: that detector treats every cross-hand jump
+ * as a jumptrill step. Jumptrill is reserved for jump rows whose neighbors are
+ * not those singles. Single-note trills are claimed before that detector so a
+ * two-column alternation stays a trill.
  */
 function shapeLabelAt(rows: ManiaRow[], index: number): ShapeLabel | null {
   const row = rows[index]!;
   const prev = index > 0 ? rows[index - 1] : undefined;
   const next = index + 1 < rows.length ? rows[index + 1] : undefined;
+  const is4K = row.TotalColumns === 4;
   const jumpBesideSingle =
     row.IsJump && (besideSingle(row, prev) || besideSingle(row, next));
 
@@ -1231,17 +1237,19 @@ function shapeLabelAt(rows: ManiaRow[], index: number): ShapeLabel | null {
     return "jumptrill";
   }
   if (row.IsChord && prev?.IsChord && sharesColumn(prev, row)) return "chordjack";
-  if (rowInBracket(rows, index)) return "bracket";
+  if (!is4K && rowInBracket(rows, index)) return "bracket";
   if (
-    row.TotalColumns === 4 &&
+    is4K &&
     row.Size === 3 &&
     (prev == null || !sharesColumn(prev, row)) &&
     (next == null || !sharesColumn(row, next))
   ) {
     return "handstream";
   }
-  if (jumpBesideSingle) return "jumpstream";
-  if (row.IsChord && prev != null && !sharesColumn(prev, row)) return "chordstream";
+  if (jumpBesideSingle && is4K) return "jumpstream";
+  if (row.IsChord && prev != null && !sharesColumn(prev, row)) {
+    if (is4K || row.Size >= 3) return "chordstream";
+  }
   if (row.IsSingleNote && prev != null && !sharesColumn(prev, row)) return "stream";
   return null;
 }

@@ -285,11 +285,11 @@ The one **mania difficulty port** skill a chart leans on hardest (`speed`, `jack
 
 ### Chart shape
 
-The column pattern a mania chart is built from (`stream`, `trill`, `jumptrill`, `jumpstream`, `handstream`, `chordjack`, `chordstream`, `bracket`), counted on the mania difficulty port's row graph during the same pass as star rating. Stored as `shape_pattern` / `secondary_shape` on the `mania-skill-v1` row. An empty `shape_pattern` means the walk ran and no family led. Null means the row has not been classified yet. `pattern:jumpstream` matches it. `pattern:delay` is the 7K name for `stream`. `pattern:jack` stays the jack **dominant skill**.
+The column pattern a mania chart is built from (`stream`, `trill`, `jumptrill`, `jumpstream`, `handstream`, `chordjack`, `chordstream`, `bracket`), counted on the mania difficulty port's row graph during the same pass as star rating. Family validity is per key count (`shapesForKeyCount`): jumpstream and handstream are 4K terms (a stream mixing in jumps/hands), bracket and chordstream belong to non-4K keymodes — outside 4K chordstream names 3+ note chords, so a 7K double beside a single stays unlabeled. Stream, trill, jumptrill, and chordjack exist on every key count. Stored as `shape_pattern` / `secondary_shape` on the `mania-skill-v1` row. An empty `shape_pattern` means the walk ran and no family led. Null means the row has not been classified yet. `pattern:jumpstream` matches it (only 4K rows after the relabel). `pattern:delay` is the 7K name for `stream`. `pattern:jack` stays the jack **dominant skill**. Pattern job starts and calc-bundle applies first null illegal labels (`nullIllegalShapeLabels`) so the missing-shape refill rewrites them.
 
 **Not:** dominant skill, Interlude recogniser, skillset
 
-**In code:** `packages/mania-difficulty/src/shape.ts`, `chartShapeWalk()`, `beatmap_pattern_analysis.shape_pattern`
+**In code:** `packages/mania-difficulty/src/shape.ts` (`shapesForKeyCount`), `packages/mania-difficulty/src/adapters/hitObject.ts`, `chartShapeWalk()`, `apps/server/src/map-analysis/computePatternAnalysis.ts:nullIllegalShapeLabels`, `beatmap_pattern_analysis.shape_pattern`
 
 **See:** [features/rework-dan-recommendations/](features/rework-dan-recommendations/index.md), [features/practice-library/](features/practice-library/index.md)
 

@@ -1,7 +1,7 @@
 
 import type { Db } from "@roxysu/db/types";
 import { PATTERN_ALGORITHM } from "@roxysu/mania-pattern-analysis";
-import { backfillPatternAnalysis } from "./computePatternAnalysis";
+import { backfillPatternAnalysis, nullIllegalShapeLabels } from "./computePatternAnalysis";
 import { publish } from "../shared/events";
 import { invalidatePlayerStatsCache } from "../analytics/playerStatsCache";
 import {
@@ -306,6 +306,16 @@ function startJob(
     db.$client
       .query(`DELETE FROM beatmap_pattern_analysis WHERE algorithm = ?`)
       .run(PATTERN_ALGORITHM);
+  }
+
+  // Relabel first: rows whose chart shape is not legal for the beatmap's key
+  // count (7K jumpstream, 4K bracket) lose their label and are refilled below
+  // by the missing-shape path.
+  const nulledShapes = nullIllegalShapeLabels(db);
+  if (nulledShapes > 0) {
+    console.log(
+      `[pattern-analysis] relabeled ${nulledShapes} rows whose chart shape is not valid for their key count`,
+    );
   }
 
   job.status = "running";

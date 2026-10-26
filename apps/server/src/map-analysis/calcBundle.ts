@@ -12,7 +12,7 @@ import { resolveHubBaseUrl } from "../hubUrl";
 import { APP_VERSION } from "../appVersion";
 import { publish } from "../shared/events";
 import { REWORK_ALGORITHM } from "./computeReworkDan";
-import { PATTERN_ALGORITHM } from "./computePatternAnalysis";
+import { PATTERN_ALGORITHM, nullIllegalShapeLabels } from "./computePatternAnalysis";
 import {
   CALC_BUNDLE_FILE_FORMAT,
   type CalcBundleFileHeader,
@@ -778,6 +778,8 @@ export type CalcBundleBootResult = {
   state: CalcBundlePullState;
   /** Bundle algorithm rows dropped because the shipped file has no entry for their hash (packaged replace path). */
   droppedLeftovers: number;
+  /** Pattern rows whose chart shape is not legal for the beatmap's key count; the pattern job refills them. */
+  nulledShapes: number;
 };
 
 export async function maybeApplyShippedCalcBundleOnBoot(
@@ -788,6 +790,7 @@ export async function maybeApplyShippedCalcBundleOnBoot(
     return {
       state: getCalcBundlePullState(),
       droppedLeftovers: 0,
+      nulledShapes: 0,
     };
   const version = APP_VERSION;
 
@@ -821,6 +824,7 @@ export async function maybeApplyShippedCalcBundleOnBoot(
     return {
       state: getCalcBundlePullState(),
       droppedLeftovers: 0,
+      nulledShapes: 0,
     };
   }
 
@@ -836,6 +840,12 @@ export async function maybeApplyShippedCalcBundleOnBoot(
   } else {
     console.log(
       "[calc-bundle] non-packaged boot gap-fill — no stored rows replaced or dropped",
+    );
+  }
+  const nulledShapes = nullIllegalShapeLabels(db);
+  if (nulledShapes > 0) {
+    console.log(
+      `[calc-bundle] nulled ${nulledShapes} chart-shape labels that are not valid for their key count — the pattern job refills them`,
     );
   }
   await setCalcBundleAppliedVersion(db, version);
@@ -854,6 +864,7 @@ export async function maybeApplyShippedCalcBundleOnBoot(
   return {
     state: getCalcBundlePullState(),
     droppedLeftovers,
+    nulledShapes,
   };
 }
 
@@ -871,6 +882,7 @@ export async function maybePullCalcBundleOnBoot(
       return {
         state: getCalcBundlePullState(),
         droppedLeftovers: 0,
+        nulledShapes: 0,
       };
     }
     const replaceAlgorithms = reworkReplaceAlgorithmsForBoot();
@@ -896,9 +908,11 @@ export async function maybePullCalcBundleOnBoot(
     console.log(
       `[calc-bundle] pull ${state.status}: applied=${state.applied} skipped=${state.skipped} unmatched=${state.unmatched}`,
     );
+    const nulledShapes = nullIllegalShapeLabels(db);
     return {
       state,
       droppedLeftovers: 0,
+      nulledShapes,
     };
   } catch (err) {
     console.error("[calc-bundle] boot pull failed", err);

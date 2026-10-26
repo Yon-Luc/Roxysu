@@ -1,5 +1,5 @@
 
-import { isShapeLabel } from "@roxysu/mania-difficulty";
+import { isShapeLabel, shapesForKeyCount } from "@roxysu/mania-difficulty";
 import type { Db } from "@roxysu/db/types";
 import { REWORK_ALGORITHM } from "../map-analysis/reworkEstimator";
 import { PATTERN_ALGORITHM } from "@roxysu/mania-pattern-analysis";
@@ -70,26 +70,10 @@ const SKILL_PATTERNS: readonly string[] = [
   "release",
 ];
 
-/** Chart shapes the classifier emits for that key count. */
+/** Chart shapes the classifier emits for that key count (shapesForKeyCount). */
 const SHAPE_PATTERNS: Record<PatternKeymode, readonly string[]> = {
-  4: [
-    "stream",
-    "trill",
-    "jumptrill",
-    "jumpstream",
-    "handstream",
-    "chordjack",
-    "chordstream",
-  ],
-  7: [
-    "stream",
-    "trill",
-    "jumptrill",
-    "jumpstream",
-    "chordjack",
-    "chordstream",
-    "bracket",
-  ],
+  4: shapesForKeyCount(4),
+  7: shapesForKeyCount(7),
 };
 
 function patternsForKeymode(keymode: PatternKeymode): readonly string[] {

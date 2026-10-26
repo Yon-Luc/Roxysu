@@ -4,6 +4,8 @@
  * Legacy Interlude names are still accepted so stored rows from an older
  * `algorithm` row keep rendering instead of showing raw snake_case.
  */
+import { shapesForKeyCount } from "@roxysu/mania-difficulty";
+
 const FALLBACK: Record<string, string> = {
   // current skill labels
   speed: "Speed",
@@ -45,37 +47,14 @@ export function weightPatternsForKeyCount(): readonly (typeof SKILL_LABEL_ORDER)
   return SKILL_LABEL_ORDER;
 }
 
-/** Chart-shape families shown as pattern weights. Bracket is 7K; handstream is 4K. */
-const SHAPE_LABEL_ORDER_4K = [
-  "stream",
-  "trill",
-  "jumptrill",
-  "jumpstream",
-  "handstream",
-  "chordjack",
-  "chordstream",
-] as const;
-
-const SHAPE_LABEL_ORDER_7K = [
-  "stream",
-  "trill",
-  "jumptrill",
-  "jumpstream",
-  "chordjack",
-  "chordstream",
-  "bracket",
-] as const;
-
-const SHAPE_LABEL_ORDER = [
-  ...SHAPE_LABEL_ORDER_4K,
-  "bracket",
-] as const;
-
+/**
+ * Chart-shape families shown as pattern weights, keymode-aware.
+ *
+ * Community terms differ per key count (osu! wiki pattern index): jumpstream
+ * and handstream are 4K, bracket is 7K and other non-4K modes.
+ */
 export function shapePatternsForKeyCount(
   keyCount: number | null | undefined,
 ): readonly string[] {
-  const keys = keyCount != null ? Math.round(keyCount) : null;
-  if (keys === 4) return SHAPE_LABEL_ORDER_4K;
-  if (keys === 7) return SHAPE_LABEL_ORDER_7K;
-  return SHAPE_LABEL_ORDER;
+  return shapesForKeyCount(keyCount);
 }

@@ -63,6 +63,23 @@ describe("shapeProfile", () => {
     expect(shape.jumpstreamScore).toBeGreaterThan(0);
   });
 
+  test("7k jumps beside singles are not jumpstream or chordstream", () => {
+    const cycle = [
+      [0, 1],
+      [3],
+      [1, 2],
+      [0],
+      [2, 3],
+      [1],
+    ];
+    const shape = shapeProfile(chart(7, repeat(cycle, 8)));
+    expect(shape.counts.jumpstream).toBe(0);
+    // A 2-note chord is not a chordstream outside 4K — those rows stay
+    // unlabeled, and the singles between them read as single-note stream.
+    expect(shape.counts.chordstream).toBe(0);
+    expect(shape.dominant).toBe("stream");
+  });
+
   test("chords that share a column are chordjacks", () => {
     const rows = repeat(
       [
@@ -107,6 +124,33 @@ describe("shapeProfile", () => {
       12,
     );
     expect(shapeProfile(chart(4, rows)).dominant).toBe("handstream");
+  });
+
+  test("7k size-3 chords beside singles are chordstream, never handstream", () => {
+    const rows = repeat(
+      [
+        [0, 1, 2],
+        [3],
+      ],
+      12,
+    );
+    const shape = shapeProfile(chart(7, rows));
+    expect(shape.counts.handstream).toBe(0);
+    expect(shape.dominant).toBe("chordstream");
+  });
+
+  test("4k chords are never bracket", () => {
+    const rows = repeat(
+      [
+        [0, 1, 2, 3],
+        [1, 2, 3],
+        [0, 1, 2, 3],
+      ],
+      8,
+    );
+    const shape = shapeProfile(chart(4, rows));
+    expect(shape.counts.bracket).toBe(0);
+    expect(shape.dominant).toBe("chordjack");
   });
 
   test("a speed-dominant jumpstream keeps both labels", () => {

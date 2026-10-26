@@ -10,6 +10,7 @@ import { startBmsSync } from "./bms/sync";
 import { startDanVariantJob } from "./map-analysis/danVariantJob";
 import { maybePullCalcBundleOnBoot } from "./map-analysis/calcBundle";
 import { startReworkDanBackfill } from "./map-analysis/reworkDanJob";
+import { startPatternAnalysisBackfill } from "./map-analysis/patternAnalysisJob";
 import { startCollectionMatchCache } from "./shared/collectionMatchCache";
 import { guardUpgradeSocketErrors } from "./shared/upgradeSocketGuard";
 import { clearStuckMirrorBatchLocks } from "./mirrors";
@@ -56,9 +57,12 @@ async function main() {
   const stopDanVariants = startDanVariantJob(db);
   startCollectionMatchCache(db);
   // Boot calc-bundle replace may drop stored rows the shipped file does not
-  // contain; recomputing only those keeps the version bump cheap.
+  // contain; recomputing only those keeps the version bump cheap. Nulled illegal
+  // chart shapes (keymode terms, e.g. 7K jumpstream) are refilled by the pattern
+  // job the same way.
   void maybePullCalcBundleOnBoot(db).then((boot) => {
     if (boot && boot.droppedLeftovers > 0) startReworkDanBackfill(db);
+    if (boot && boot.nulledShapes > 0) startPatternAnalysisBackfill(db);
   });
 
   console.log(`🦊 Roxysu (node) running at http://${hostname}:${port}`);

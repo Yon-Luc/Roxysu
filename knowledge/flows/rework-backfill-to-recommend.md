@@ -58,6 +58,9 @@ full dan backfill also fills the pattern store, so running both is not required.
 ```
 Settings POST /api/settings/pattern-analysis/start
     ↓
+nullIllegalShapeLabels — chart shapes invalid for the key count (7K jumpstream,
+    4K bracket) lose their label; keymode-scoped families via shapesForKeyCount
+    ↓
 @roxysu/mania-pattern-analysis  analyzeManiaBackfillFromOsuText
     (windowMs null — chart-level skills only, no timeline;
      every 128 notes, a heap-ceiling trip releases the graph, stores a failed

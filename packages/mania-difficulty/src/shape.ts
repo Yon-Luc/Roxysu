@@ -21,6 +21,49 @@ export const SHAPE_LABELS = [
 
 export type ShapeLabel = (typeof SHAPE_LABELS)[number];
 
+/**
+ * Chart-shape families valid for a key count, in display order.
+ *
+ * Per the osu! wiki pattern index (`Beatmap/Pattern/osu!mania`): jumpstream and
+ * handstream are 4K terms (a stream involving jumps/hands), so they cannot be a
+ * 7K chart shape. Bracket and chordstream belong to non-4K keymodes — outside
+ * 4K, chordstream names chords of 3+ notes. Single-note stream, trill,
+ * jumptrill and chordjack exist on every key count.
+ */
+const SHAPE_LABELS_4K = [
+  "stream",
+  "trill",
+  "jumptrill",
+  "jumpstream",
+  "handstream",
+  "chordjack",
+  "chordstream",
+] as const;
+
+const SHAPE_LABELS_NON4K = [
+  "stream",
+  "trill",
+  "jumptrill",
+  "chordjack",
+  "chordstream",
+  "bracket",
+] as const;
+
+/** Chart-shape families that may label a chart on the given key count. */
+export function shapesForKeyCount(
+  keyCount: number | null | undefined,
+): readonly ShapeLabel[] {
+  return keyCount === 4 ? SHAPE_LABELS_4K : SHAPE_LABELS_NON4K;
+}
+
+/** True when the family may label a chart on the given key count. */
+export function isShapeLabelForKeyCount(
+  keyCount: number | null | undefined,
+  label: string,
+): boolean {
+  return (shapesForKeyCount(keyCount) as readonly string[]).includes(label);
+}
+
 export type ShapeDensities = {
   jackDensity: number;
   chordDensity: number;

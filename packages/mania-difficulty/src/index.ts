@@ -67,7 +67,9 @@ export { shapeProfile } from "./shapeProfile";
 export {
   emptyShapeProfile,
   isShapeLabel,
+  isShapeLabelForKeyCount,
   shapeProfileFromWalk,
+  shapesForKeyCount,
   SHAPE_LABELS,
 } from "./shape";
 export type { ShapeDensities, ShapeLabel, ShapeProfile, ShapeWalk } from "./shape";

@@ -1116,3 +1116,91 @@ export function ensurePatternAnalysisForIdsSync(
 }
 
 export { PATTERN_QUERY_BACKFILL_LIMIT };
+
+/**
+ * Null chart-shape labels the family cannot legally carry for a beatmap's key
+ * count: jumpstream and handstream are 4K shapes, bracket is non-4K only (see
+ * `shapesForKeyCount`). Rows keep their dominant skill; the pattern job refills
+ * a nulled shape like any other missing label.
+ *
+ * Cheap two-statement pass — safe to run at every pattern job start and after a
+ * calc-bundle apply so old-formula labels cannot linger.
+ */
+export function nullIllegalShapeLabels(db: Db): number {
+  const illegalClause = (column: "shape_pattern" | "secondary_shape") => `
+        AND pa.error IS NULL
+        AND pa.${column} IS NOT NULL
+        AND (
+          CASE
+            WHEN ROUND(COALESCE(pa.column_count, b.circle_size, 0)) = 4
+              THEN pa.${column} = 'bracket'
+            ELSE pa.${column} IN ('jumpstream', 'handstream')
+          END
+        )
+  `;
+
+  const nulled = db.$client
+    .query(
+      `
+      SELECT COUNT(*) AS n
+      FROM beatmap_pattern_analysis pa
+      JOIN beatmaps b ON b.id = pa.beatmap_id
+      WHERE pa.algorithm = ?
+        AND (b.ruleset_short_name IS NULL OR lower(b.ruleset_short_name) = 'mania')
+        ${illegalClause("shape_pattern")}
+    `,
+    )
+    .get(PATTERN_ALGORITHM) as { n: number } | null;
+
+  const secondaryRow = db.$client
+    .query(
+      `
+      SELECT COUNT(*) AS n
+      FROM beatmap_pattern_analysis pa
+      JOIN beatmaps b ON b.id = pa.beatmap_id
+      WHERE pa.algorithm = ?
+        AND (b.ruleset_short_name IS NULL OR lower(b.ruleset_short_name) = 'mania')
+        ${illegalClause("secondary_shape")}
+    `,
+    )
+    .get(PATTERN_ALGORITHM) as { n: number } | null;
+
+  if (Number(nulled?.n ?? 0) > 0) {
+    // A bad primary shape invalidates the secondary too — they are paired on
+    // one walk.
+    db.$client
+      .query(
+        `
+        UPDATE beatmap_pattern_analysis AS pa
+        SET shape_pattern = NULL, secondary_shape = NULL
+        WHERE pa.algorithm = ? AND EXISTS (
+          SELECT 1 FROM beatmaps b
+          WHERE b.id = pa.beatmap_id
+            AND (b.ruleset_short_name IS NULL OR lower(b.ruleset_short_name) = 'mania')
+            ${illegalClause("shape_pattern")}
+        )
+      `,
+      )
+      .run(PATTERN_ALGORITHM);
+  }
+
+  if (Number(secondaryRow?.n ?? 0) > 0) {
+    // The secondary may be illegal even when the primary is fine.
+    db.$client
+      .query(
+        `
+        UPDATE beatmap_pattern_analysis AS pa
+        SET secondary_shape = NULL
+        WHERE pa.algorithm = ? AND EXISTS (
+          SELECT 1 FROM beatmaps b
+          WHERE b.id = pa.beatmap_id
+            AND (b.ruleset_short_name IS NULL OR lower(b.ruleset_short_name) = 'mania')
+            ${illegalClause("secondary_shape")}
+        )
+      `,
+      )
+      .run(PATTERN_ALGORITHM);
+  }
+
+  return Number(nulled?.n ?? 0) + Number(secondaryRow?.n ?? 0);
+}

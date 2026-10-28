@@ -22,7 +22,7 @@ function widgetLabel(
     case "preview":
       return labels?.preview ?? "Preview";
     case "patternWeights":
-      return labels?.patternWeights ?? "Pattern weights";
+      return labels?.patternWeights ?? "Patterns";
     case "densityOverTime":
       return labels?.densityOverTime ?? "Density over time";
     case "livePlay":

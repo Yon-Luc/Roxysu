@@ -253,7 +253,6 @@ export function SessionSevenKRecommend({
                       to="/stats"
                       search={{
                         granularity: "day",
-                        range: 30,
                         skillTopPlays,
                         skillAxis: "all",
                         keyCount,

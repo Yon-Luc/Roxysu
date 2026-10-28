@@ -261,6 +261,15 @@ describe("buildSampleKeys", () => {
       expect(date.getUTCDay()).toBe(1); // Monday
     }
   });
+
+  test("week granularity caps around 60 points for all-time ranges", () => {
+    const now = Date.UTC(2024, 5, 15, 18);
+    const keys = buildSampleKeys("week", 3 * 365, now); // ~157 weeks
+    expect(keys.length).toBeLessThanOrEqual(60);
+    expect(keys.length).toBeGreaterThan(1);
+    // Sampled means skipping weeks: the key count must be well under total weeks.
+    expect(keys.length).toBeLessThan(157);
+  });
 });
 
 describe("utc week helpers", () => {

@@ -304,7 +304,7 @@
       "densityOverTime": "Densidad en el tiempo",
       "densityOverTimeHint": "Densidad de notas por segundo con pistas de patterns locales.",
       "samplesCount": "{{count}} muestras",
-      "patternWeights": "Forma del chart",
+      "patternWeights": "Patterns",
       "hotspots": "Hotspots",
       "noDenseSections": "No se detectaron secciones densas.",
       "coveragePct": "{{pct}}% de cobertura",
@@ -994,7 +994,7 @@
     "widgets": {
       "identity": "Identidad",
       "preview": "Vista previa",
-      "patternWeights": "Forma del chart",
+      "patternWeights": "Patterns",
       "densityOverTime": "Densidad en el tiempo",
       "livePlay": "Juego en vivo",
       "rating": "Rating",

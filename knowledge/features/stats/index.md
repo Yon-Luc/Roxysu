@@ -28,7 +28,7 @@ Player skill bands / axes and related aggregate practice statistics beyond the d
 
 The accuracy-trend chart on the Stats page ("Progression") plots only the daily mean accuracy of graded plays; its Y axis runs from the lowest plotted point minus 5 (floor 0) up to 100, so high-accuracy players still see day-to-day movement. Dashboard trends come from stored `daily_stats` (`statistics.ts`), which does **not** apply the graded-play rule yet — accuracy there includes failed plays; reconciling those two engines is an open follow-up, not a silent inconsistency.
 
-Keymode scopes the whole page and stays in the header. Axis and top-plays sit with Current skill. Day/week only samples skill history, so it sits on that chart. Range windows skill history and progression, so the same control appears on both. The Patterns section sits directly under Current skill and follows its axis / top-plays controls; it adds a local Push / Accuracy / Consistency toggle and a shape-scoped plays panel (`SkillBandPlaysPanel` with `shape` / `heading` / `idSuffix`) that fetches `GET /api/stats/skill-plays?shape=…` — lists are shape-filtered there, the current level stays whole-mode.
+Keymode scopes the whole page and stays in the header. Axis and top-plays sit with Current skill. Day/week samples the skill history, so that control sits on that chart. Range is **all time**: every windowed figure (skill history, progression) spans from the earliest scoped local play through today, derived from the pass's `firstPlayedAt` — there is no 30d/90d/180d toggle. Skill history (day and week) samples to about 60 points; progression reports every day/week that has plays. The Patterns section sits directly under Current skill and follows its axis / top-plays controls; it adds a local Push / Accuracy / Consistency toggle and a shape-scoped plays panel (`SkillBandPlaysPanel` with `shape` / `heading` / `idSuffix`) that fetches `GET /api/stats/skill-plays?shape=…` — lists are shape-filtered there, the current level stays whole-mode.
 
 ## Business rules
 
@@ -56,7 +56,7 @@ Top mappers difficulty columns follow the same gate (`foldMapperRatings`): the R
 
 ## Stats cache invalidation
 
-`playerStatsCache` (10 min TTL) clears on `score.imported`, `score.updated`, `sync.finished`, `mastery.updated`, and explicitly on:
+`playerStatsCache` (10 min TTL, key `v6` — no `range)` clears on `score.imported`, `score.updated`, `sync.finished`, `mastery.updated`, and explicitly on:
 
 1. Customize changes to axis thresholds or recommend focus settings (`PATCH /api/settings` calls `invalidatePlayerStatsCache()`), because skill history and skillset mix read them at compute time.
 2. A finished dan variant job run that wrote variant rows (`danVariantJob.ts:finish`), because modded plays only count once a variant exists.

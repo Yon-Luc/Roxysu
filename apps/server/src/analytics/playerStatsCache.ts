@@ -12,7 +12,6 @@ const cache = new Map<string, CacheEntry>();
 
 export function playerStatsCacheKey(parts: {
   granularity: string;
-  range: number;
   skillTopPlays: number;
   keyCount: number;
   /** Resolved username filter; null/omit = all. */
@@ -20,10 +19,10 @@ export function playerStatsCacheKey(parts: {
   /** Resolved gamemode filter; null/omit = all. */
   gamemode?: string | null;
 }): string {
-  // v5: per-keymode stats + username + gamemode filter (NM + Mirror only)
+  // v6: all-time span — range removed from the key (v5 keys were per-range).
   const user = parts.username ?? "*";
   const mode = parts.gamemode ?? "*";
-  return `v5:${user}:${mode}:${parts.granularity}:${parts.range}:${parts.skillTopPlays}:k${parts.keyCount}`;
+  return `v6:${user}:${mode}:${parts.granularity}:${parts.skillTopPlays}:k${parts.keyCount}`;
 }
 
 export function getCachedPlayerStats<T>(key: string): T | null {

@@ -97,12 +97,10 @@ export async function putOverlaySkins(snapshot: unknown) {
 }
 
 export type StatsGranularity = "day" | "week";
-export type StatsRange = 30 | 90 | 180;
 export type StatsSkillAxis = "all" | "rc" | "ln" | "fln";
 
 export async function fetchStats(params?: {
   granularity?: StatsGranularity;
-  range?: StatsRange;
   skillTopPlays?: number;
   keyCount?: number;
 }) {
@@ -110,7 +108,6 @@ export async function fetchStats(params?: {
     await api.api.stats.get({
       query: {
         granularity: params?.granularity,
-        range: params?.range,
         skillTopPlays: params?.skillTopPlays,
         keyCount: params?.keyCount,
       },

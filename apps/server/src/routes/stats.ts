@@ -4,11 +4,9 @@ import { dbPlugin } from "../db-runtime";
 import {
   getPlayerStats,
   parseGranularity,
-  parseRange,
   parseSkillKeyCount,
   parseSkillTopPlays,
   type StatsGranularity,
-  type StatsRange,
 } from "../analytics/playerStats";
 import {
   getCachedPlayerStats,
@@ -30,7 +28,6 @@ async function buildStatsResponse(
   db: Db,
   opts: {
     granularity: StatsGranularity;
-    range: StatsRange;
     skillTopPlays: number;
     keyCount: number;
   },
@@ -111,14 +108,12 @@ export const statsRoutes = new Elysia({ prefix: "/stats" })
     "/",
     async ({ db, query }) => {
       const granularity = parseGranularity(query.granularity);
-      const range = parseRange(query.range);
       const skillTopPlays = parseSkillTopPlays(query.skillTopPlays);
       const keyCount = parseSkillKeyCount(query.keyCount);
       const usernames = resolveScoresUsernamesSync(db);
       const gamemode = resolveScoresGamemodeSync(db);
       const cacheKey = playerStatsCacheKey({
         granularity,
-        range,
         skillTopPlays,
         keyCount,
         username: scoresUsernameCacheKey(usernames),
@@ -130,7 +125,6 @@ export const statsRoutes = new Elysia({ prefix: "/stats" })
 
       const payload = await buildStatsResponse(db, {
         granularity,
-        range,
         skillTopPlays,
         keyCount,
       });
@@ -142,7 +136,7 @@ export const statsRoutes = new Elysia({ prefix: "/stats" })
         granularity: t.Optional(
           t.Union([t.Literal("day"), t.Literal("week")]),
         ),
-        range: t.Optional(t.Union([t.Number(), t.String()])),
+        // Legacy `range` query param ignored — stats are always all-time.
         skillTopPlays: t.Optional(t.Union([t.Number(), t.String()])),
         keyCount: t.Optional(t.Union([t.Number(), t.String()])),
       }),

@@ -39,7 +39,7 @@ Mania `GET /api/beatmaps/:id` reads the `.osu` file once for pattern detail. Den
 - `apps/server/public/components/ScoreCard.tsx` — shared score row (`compact` on Map Page; `beatmap` + `pbCompare` on sessions)
 - `apps/server/public/components/ShareScoreLinkButton.tsx` — copies the osu! score page URL
 - `apps/server/public/lib/osuUrls.ts:osuWebScoreUrl()`
-- `apps/server/public/components/mania-analysis/*` — shared pattern widgets
+- `apps/server/public/components/mania-analysis/*` — shared pattern widgets. `PatternWeightsPanel` lists chart-shape families sorted by share descending (ties keep the canonical family order); its heading reads "Patterns" (`practice.detail.patternWeights`).
 - `apps/server/src/routes/beatmaps.ts`
 - `apps/server/src/scores/parseStatistics.ts:parseScoreStatistics()`
 

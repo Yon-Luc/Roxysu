@@ -304,7 +304,7 @@
       "densityOverTime": "Density over time",
       "densityOverTimeHint": "Per-second note density with local pattern hints.",
       "samplesCount": "{{count}} samples",
-      "patternWeights": "Chart shape",
+      "patternWeights": "Patterns",
       "hotspots": "Hotspots",
       "noDenseSections": "No dense sections detected.",
       "coveragePct": "{{pct}}% coverage",
@@ -1001,7 +1001,7 @@
     "widgets": {
       "identity": "Identity",
       "preview": "Preview",
-      "patternWeights": "Chart shape",
+      "patternWeights": "Patterns",
       "densityOverTime": "Density over time",
       "livePlay": "Live play",
       "rating": "Rating",

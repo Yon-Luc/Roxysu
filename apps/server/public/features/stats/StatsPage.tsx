@@ -42,7 +42,6 @@ import {
   fetchStats,
   type SkillBandKind,
   type StatsGranularity,
-  type StatsRange,
   type StatsSkillAxis,
 } from "../../lib/api";
 import {
@@ -65,23 +64,19 @@ import {
 
 export function StatsPage({
   granularity,
-  range,
   skillTopPlays,
   skillAxis,
   keyCount,
   onGranularityChange,
-  onRangeChange,
   onSkillTopPlaysChange,
   onSkillAxisChange,
   onKeyCountChange,
 }: {
   granularity: StatsGranularity;
-  range: StatsRange;
   skillTopPlays: number;
   skillAxis: StatsSkillAxis;
   keyCount: number;
   onGranularityChange: (g: StatsGranularity) => void;
-  onRangeChange: (r: StatsRange) => void;
   onSkillTopPlaysChange: (n: number) => void;
   onSkillAxisChange: (a: StatsSkillAxis) => void;
   onKeyCountChange: (n: number) => void;
@@ -119,9 +114,9 @@ export function StatsPage({
   }, [skillAxis, skillTopPlays, keyCount]);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["stats", granularity, range, skillTopPlays, keyCount],
+    queryKey: ["stats", granularity, skillTopPlays, keyCount],
     queryFn: () =>
-      fetchStats({ granularity, range, skillTopPlays, keyCount }),
+      fetchStats({ granularity, skillTopPlays, keyCount }),
     // Stats only change after a sync completes; SSE sync.finished invalidates
     // this. Explicit staleTime prevents unnecessary refetches on tab focus.
     staleTime: 5 * 60_000,
@@ -173,19 +168,6 @@ export function StatsPage({
       onChange={onSkillAxisChange}
     />
   );
-  function rangeToggle() {
-    return (
-      <ToggleGroup
-        value={String(range)}
-        options={[
-          { id: "30", label: "30d" },
-          { id: "90", label: "90d" },
-          { id: "180", label: "180d" },
-        ]}
-        onChange={(v) => onRangeChange(Number(v) as StatsRange)}
-      />
-    );
-  }
   const granularityToggle = (
     <ToggleGroup
       value={granularity}
@@ -514,7 +496,6 @@ export function StatsPage({
           actions={
             <div className="flex flex-wrap items-center gap-2">
               {granularityToggle}
-              {rangeToggle()}
             </div>
           }
         >
@@ -584,7 +565,6 @@ export function StatsPage({
           <h2 className="font-display text-lg font-bold tracking-tight text-ink">
             {dict?.stats.progression ?? "Progression"}
           </h2>
-          {rangeToggle()}
         </div>
         <div className="grid gap-4 lg:grid-cols-2">
           <ChartCard title={dict?.stats.weeklyActivity ?? "Weekly activity"}>

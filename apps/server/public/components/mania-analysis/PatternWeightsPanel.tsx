@@ -20,11 +20,15 @@ export function PatternWeightsPanel({
   const detail = dict?.practice.detail;
   const patterns = shapePatternsForKeyCount(keyCount);
   const shares = composition ?? {};
-  const rows = patterns.map((pattern) => ({
-    pattern,
-    label: formatPatternLabel(pattern, detail?.patterns),
-    value: shares[pattern] ?? 0,
-  }));
+  const rows = patterns
+    .map((pattern) => ({
+      pattern,
+      label: formatPatternLabel(pattern, detail?.patterns),
+      value: shares[pattern] ?? 0,
+    }))
+    // Highest share first; equal shares keep the key-count family order
+    // (Array#sort is stable), and 0% families stay visible at the bottom.
+    .sort((a, b) => b.value - a.value);
 
   return (
     <div className="rounded-xl border border-white/8 bg-black/10 p-4">

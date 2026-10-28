@@ -85,21 +85,13 @@ const RANK_BUCKETS = [
 ] as const;
 
 export type StatsGranularity = "day" | "week";
-export type StatsRange = 30 | 90 | 180;
 
 export type PlayerStatsQuery = {
   granularity?: StatsGranularity;
-  range?: StatsRange;
   skillTopPlays?: number;
   /** Single mania keymode — never mixed (default 7). */
   keyCount?: number;
 };
-
-function parseRange(raw: unknown): StatsRange {
-  const n = Number(raw);
-  if (n === 90 || n === 180) return n;
-  return 30;
-}
 
 function parseGranularity(raw: unknown): StatsGranularity {
   return raw === "week" ? "week" : "day";
@@ -778,12 +770,9 @@ function buildTopMappers(
 function getKeymodeProgression(
   daily: Map<string, ProgressionBucket>,
   weekly: Map<string, ProgressionBucket>,
-  days: number,
-  weeks: number,
 ) {
   const ppTrend = [...daily.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
-    .slice(-days)
     .map(([day, b]) => ({
       day,
       totalPp: b.totalPp,
@@ -792,7 +781,6 @@ function getKeymodeProgression(
 
   const accuracyTrend = [...daily.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
-    .slice(-days)
     .map(([day, b]) => ({
       day,
       avgAccuracy: b.accCount > 0 ? b.accSum / b.accCount : null,
@@ -801,7 +789,6 @@ function getKeymodeProgression(
 
   const weeklyActivity = [...weekly.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
-    .slice(-weeks)
     .map(([weekStart, b]) => ({
       weekStart,
       playCount: b.playCount,
@@ -814,12 +801,9 @@ function getKeymodeProgression(
 
 export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
   const granularity = parseGranularity(query.granularity);
-  const range = parseRange(query.range);
   const skillTopPlays = parseSkillTopPlays(query.skillTopPlays);
   const keyCount = parseSkillKeyCount(query.keyCount ?? DEFAULT_SKILL_KEY_COUNT);
 
-  const trendDays = range;
-  const weekCount = Math.max(12, Math.ceil(range / 7));
   // Resolve the score scope (username + gamemode) once for every query below.
   const scope = scoreScopeFilter(db);
   const availableKeyCounts = listPlayedKeyCounts(db, scope);
@@ -852,20 +836,28 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
       lnRatio: rating.lnRatio,
     });
   }
+  // All-time span: every scoped local play from the earliest through today.
+  // Inclusive day count so the first play's day is sampled (>= 1).
+  const firstPlayed = pass.summary.firstPlayedAt;
+  const rangeDays =
+    firstPlayed == null
+      ? 1
+      : Math.max(
+          1,
+          Math.ceil(
+            (Date.now() - firstPlayed) / 86_400_000,
+          ),
+        );
+
   const skillBundle = estimateSevenKSkillWithHistoryFromPlays(skillPlays, {
     granularity,
-    rangeDays: range,
+    rangeDays,
     topPlays: skillTopPlays || focusSettings.topPlays,
     keyCount,
     axisThresholds,
     focusSettings,
   });
-  const progression = getKeymodeProgression(
-    pass.daily,
-    pass.weekly,
-    trendDays,
-    weekCount,
-  );
+  const progression = getKeymodeProgression(pass.daily, pass.weekly);
   const rankDistribution = getRankDistribution(pass.rankByLabel);
   const skillsetMix = getSkillsetMix(pass.candidates, variantOf, axisThresholds);
   const patternShapes = getPatternShapes(pass.candidates, {
@@ -886,7 +878,6 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
 
   return {
     granularity,
-    range,
     skillTopPlays,
     keyCount,
     availableKeyCounts,
@@ -916,7 +907,6 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
 
 export {
   parseGranularity,
-  parseRange,
   parseSkillTopPlays,
   parseSkillKeyCount,
   PERFECT_TOTAL_SCORE,

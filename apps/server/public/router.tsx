@@ -107,7 +107,7 @@ const HubAdminCalcBundlesPage = lazy(() =>
   })),
 );
 import { isDesktopShell } from "./lib/desktop";
-import type { StatsGranularity, StatsRange, StatsSkillAxis } from "./lib/api";
+import type { StatsGranularity, StatsSkillAxis } from "./lib/api";
 import {
   readSkillTopPlays,
   writeSkillTopPlays,
@@ -140,16 +140,13 @@ const statsRoute = createRoute({
     search: Record<string, unknown>,
   ): {
     granularity: StatsGranularity;
-    range: StatsRange;
     skillTopPlays: number;
     skillAxis: StatsSkillAxis;
     keyCount: number;
   } => {
     const granularity: StatsGranularity =
       search.granularity === "week" ? "week" : "day";
-    const rawRange = Number(search.range);
-    const range: StatsRange =
-      rawRange === 90 || rawRange === 180 ? rawRange : 30;
+    // Legacy `range` search param ignored — stats are always all-time.
     const rawTop = Number(search.skillTopPlays);
     const skillTopPlays =
       Number.isFinite(rawTop) && rawTop >= 1 && rawTop <= 500
@@ -165,24 +162,20 @@ const statsRoute = createRoute({
       Number.isFinite(rawKeys) && rawKeys >= 1 && rawKeys <= 18
         ? Math.round(rawKeys)
         : 7;
-    return { granularity, range, skillTopPlays, skillAxis, keyCount };
+    return { granularity, skillTopPlays, skillAxis, keyCount };
   },
   component: function StatsRoute() {
     const navigate = statsRoute.useNavigate();
-    const { granularity, range, skillTopPlays, skillAxis, keyCount } =
+    const { granularity, skillTopPlays, skillAxis, keyCount } =
       statsRoute.useSearch();
     return (
       <StatsPage
         granularity={granularity}
-        range={range}
         skillTopPlays={skillTopPlays}
         skillAxis={skillAxis}
         keyCount={keyCount}
         onGranularityChange={(next) =>
           navigate({ search: (prev) => ({ ...prev, granularity: next }) })
-        }
-        onRangeChange={(next) =>
-          navigate({ search: (prev) => ({ ...prev, range: next }) })
         }
         onSkillTopPlaysChange={(next) => {
           writeSkillTopPlays(next);

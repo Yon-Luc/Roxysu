@@ -79,7 +79,7 @@ export type SkillHistoryPoint = {
 
 export type SkillHistoryOptions = {
   granularity: "day" | "week";
-  /** Lookback window in days (e.g. 30 / 90 / 180). */
+  /** All-time lookback in days (earliest scoped play → today). */
   rangeDays: number;
   /** Top-rated plays per accuracy band (default 30). */
   topPlays?: number;
@@ -868,7 +868,8 @@ function buildSampleKeys(
   }
 
   const weeks = Math.max(1, Math.ceil(rangeDays / 7));
-  for (let i = weeks - 1; i >= 0; i--) {
+  const step = weeks > maxPoints ? Math.ceil(weeks / maxPoints) : 1;
+  for (let i = weeks - 1; i >= 0; i -= step) {
     const ms = nowMs - i * 7 * 86_400_000;
     keys.push(utcWeekStartKey(ms));
   }

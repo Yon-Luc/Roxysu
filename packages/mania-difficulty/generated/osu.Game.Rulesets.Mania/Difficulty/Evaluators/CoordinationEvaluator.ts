@@ -1,5 +1,5 @@
 // @generated from osu.Game.Rulesets.Mania/Difficulty/Evaluators/CoordinationEvaluator.cs
-// upstream sha: 475a159368ae695a29a7d7ac50c59481bb98d384
+// upstream sha: 1f2cc08cf06ca7644a02d1176537257b65d052f3
 // generator: 0.5.0
 // Do not edit by hand — regenerate with: bun run port:generate
 
@@ -10,11 +10,11 @@ import { CrossColumnUtils } from "../Utils/CrossColumnUtils";
 import { DiffUtils } from "../../../osu.Game/Rulesets/Difficulty/Utils/DiffUtils";
 import { TrillUtils } from "../Utils/TrillUtils";
 
+const coordination_multiplier = 2.22;
 
 /** Generated from C# class CoordinationEvaluator */
 export const CoordinationEvaluator = {
   EvaluateDifficultyOf(current: ManiaDifficultyHitObject): number {
-    const total_weight = 1.81659;
     let coordinationDifficulty = CoordinationEvaluator.calculateBoundaryPressure(current);
     let columnDelta = current.ColumnDelta;
     let depthInChord = ChordUtils.DepthInChord(current);
@@ -23,7 +23,7 @@ export const CoordinationEvaluator = {
     coordinationDifficulty += CoordinationEvaluator.calculateNoteWhileHolds(current);
     coordinationDifficulty *= CoordinationEvaluator.minijackPressure(current);
     coordinationDifficulty *= (current.ManipulationFactor * current.EnduranceFactor);
-    return (coordinationDifficulty * total_weight);
+    return (coordinationDifficulty * coordination_multiplier);
   },
 
   calculateBoundaryPressure(current: ManiaDifficultyHitObject): number {
@@ -70,8 +70,8 @@ export const CoordinationEvaluator = {
   },
 
   calculateChordDifficulty(current: ManiaDifficultyHitObject, depthInChord: number, columnDelta: number): number {
-    const load_per_extra_column = 2.75;
-    const shapeBonusWeight = 3.0;
+    const load_per_extra_column = 2.69;
+    const shapeBonusWeight = 2.4;
     if ((depthInChord < 2)) {
       return 0.0;
     }

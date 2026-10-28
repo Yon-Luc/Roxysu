@@ -108,7 +108,7 @@ Product writes use `algorithm = 'mania-difficulty'` (rework dan). Legacy Sunny/D
 10. `dan:` and `rework:` both match only `algorithm = 'mania-difficulty'` rows
    (`dr_r`). `axis:` uses rework `ln_ratio`.
 11. The mania difficulty port pin is `packages/mania-difficulty/upstream/revision.json`
-   (`loleur362/osu` branch `mania-difficulty`, currently `475a159`, the held-note multiplier merge; skill
+   (`loleur362/osu` branch `mania-difficulty`, currently `1f2cc08`, folded SS accuracy factors in coordination and release; skill
    curves use 100% accuracy as the base difficulty). A new pin changes star ratings.
    **Calculate missing dans** only fills missing rows and rows whose beatmap
    hash changed. **Recalculate all** (`POST /api/settings/rework-dan/recompute`)

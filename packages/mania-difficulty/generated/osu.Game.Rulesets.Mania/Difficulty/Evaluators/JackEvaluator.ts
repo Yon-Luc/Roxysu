@@ -1,5 +1,5 @@
 // @generated from osu.Game.Rulesets.Mania/Difficulty/Evaluators/JackEvaluator.cs
-// upstream sha: 475a159368ae695a29a7d7ac50c59481bb98d384
+// upstream sha: 1f2cc08cf06ca7644a02d1176537257b65d052f3
 // generator: 0.5.0
 // Do not edit by hand — regenerate with: bun run port:generate
 

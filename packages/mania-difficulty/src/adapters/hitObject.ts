@@ -910,14 +910,14 @@ function applyPatternContext(mapData: MapData): void {
   assignHeldNoteMultipliers(mapData);
 }
 
-const HOLD_RAMP_MS = 800.0;
-const HOLD_END_RAMP_MS = 180.0;
+const HOLD_WEIGHT = 0.78;
+const HOLD_RAMP_MS = 600.0;
+const HOLD_END_RAMP_MS = 110.0;
 const HOLD_EDGE_FACTOR = 0.4;
-const SHORT_HOLD_MS = 110.90068;
+const SHORT_HOLD_MS = 110.0;
 const SHORT_HOLD_STEEPNESS = 0.07;
-const HOLD_WEIGHT = 1.0;
-const HOLD_PRESSURE_CAP = 1.0;
-const HOLD_PRESSURE_SOFTNESS = 0.3;
+/** Distant holds interfere less than neighbouring holds. */
+const HOLD_COLUMN_FALLOFF = 0.12;
 
 /** Port of HeldNoteMultiplier.ProcessAndAssign. */
 function assignHeldNoteMultipliers(mapData: MapData): void {
@@ -930,23 +930,21 @@ function assignHeldNoteMultipliers(mapData: MapData): void {
 
 function evaluateHeldNoteMultiplier(current: ManiaDifficultyHitObject): number {
   let pressure = 0;
-  for (const hold of current.HeadOverlappedHolds) {
+  const holds = current.HeadOverlappedHolds;
+  for (let column = 0; column < holds.length; column++) {
+    const hold = holds[column];
     if (hold == null) continue;
-    pressure += heldNoteFactor(hold.StartTime, hold.EndTime, current.StartTime);
+    const distanceWeight =
+      1.0 / (1.0 + HOLD_COLUMN_FALLOFF * Math.abs(column - current.Column));
+    pressure +=
+      heldNoteFactor(hold.StartTime, hold.EndTime, current.StartTime) *
+      distanceWeight;
   }
+  // A hold in this very row has only just been pressed, so it counts as the smallest amount.
   if (current.BaseObject.IsHoldNote) {
     pressure += heldNoteFactor(current.StartTime, current.EndTime, current.StartTime);
   }
-  return 1.0 + HOLD_WEIGHT * softCapHoldPressure(pressure);
-}
-
-function softCapHoldPressure(pressure: number): number {
-  if (pressure <= HOLD_PRESSURE_CAP) return pressure;
-  return (
-    HOLD_PRESSURE_CAP +
-    HOLD_PRESSURE_SOFTNESS *
-      Math.log(1.0 + (pressure - HOLD_PRESSURE_CAP) / HOLD_PRESSURE_SOFTNESS)
-  );
+  return 1.0 + HOLD_WEIGHT * pressure;
 }
 
 function heldNoteFactor(startTime: number, endTime: number, time: number): number {

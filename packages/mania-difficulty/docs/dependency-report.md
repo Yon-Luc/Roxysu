@@ -2,7 +2,7 @@
 
 - **Upstream:** https://github.com/loleur362/osu
 - **Branch:** mania-difficulty
-- **SHA:** `1859fda79775fabbd451b625b7fef6f90aabab13`
+- **SHA:** `475a159368ae695a29a7d7ac50c59481bb98d384`
 - **Checkout:** `MANIA_DIFFICULTY_UPSTREAM` or `.cache/upstream` (via `bun run upstream:pin`)
 - **Report command:** `bun run port:report`
 

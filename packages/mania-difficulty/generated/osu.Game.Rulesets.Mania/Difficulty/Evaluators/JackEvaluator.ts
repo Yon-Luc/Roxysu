@@ -1,5 +1,5 @@
 // @generated from osu.Game.Rulesets.Mania/Difficulty/Evaluators/JackEvaluator.cs
-// upstream sha: 1859fda79775fabbd451b625b7fef6f90aabab13
+// upstream sha: 475a159368ae695a29a7d7ac50c59481bb98d384
 // generator: 0.5.0
 // Do not edit by hand — regenerate with: bun run port:generate
 
@@ -53,7 +53,7 @@ export const JackEvaluator = {
     const saturation_ceiling = 2.75;
     const saturation_floor_ms = 10.0;
     const slowest_mult = 0.3;
-    const same_shape_nerf = 0.6;
+    const same_shape_nerf = 0.85;
     if ((chordDepth < 2)) {
       return TrillUtils.TrillFactor(current);
     }
@@ -99,6 +99,7 @@ export const JackEvaluator = {
   calculateConcurrentHoldBonus(current: ManiaDifficultyHitObject): number {
     const held_neighbour_weight = 0.7;
     const held_note_weight = 1.0;
+    const held_neighbour_min_remaining_ms = 200.0;
     let totalColumns = current.PreviousHitObjects.length;
     if ((totalColumns == 1)) {
       return 1.0;
@@ -112,11 +113,12 @@ export const JackEvaluator = {
       if ((Math.abs((current.LastStartTimeInColumn(adjacentColumn) - current.StartTime)) <= ChordUtils.CHORD_TOLERANCE_MS)) {
         continue;
       }
-      if ((current.LastEndTimeInColumn(adjacentColumn) > (current.StartTime + ChordUtils.CHORD_TOLERANCE_MS))) {
+      if ((current.LastEndTimeInColumn(adjacentColumn) > (current.StartTime + held_neighbour_min_remaining_ms))) {
         (heldNeighbours++);
       }
     }
-    return (((1 + (heldNeighbours * held_neighbour_weight))) * ((1.0 + (held_note_weight * ((current.HeldNoteMultiplier - 1.0))))));
+    let heldNeighbourShare = (current.HeldNoteMultiplier - 1.0);
+    return (((1 + ((heldNeighbours * held_neighbour_weight) * heldNeighbourShare))) * ((1.0 + (held_note_weight * ((current.HeldNoteMultiplier - 1.0))))));
   },
 
   speedCap(value: number): number {

@@ -123,7 +123,7 @@ OSU_GAME_PATH=/path/to/checkout dotnet run --project tools/ReferenceRunner -- \
 {
   "repository": "https://github.com/loleur362/osu",
   "branch": "mania-difficulty",
-  "sha": "1859fda79775fabbd451b625b7fef6f90aabab13"
+  "sha": "475a159368ae695a29a7d7ac50c59481bb98d384"
 }
 ```
 

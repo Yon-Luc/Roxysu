@@ -1,5 +1,5 @@
 // @generated from osu.Game.Rulesets.Mania/Difficulty/Evaluators/Jack/FullChordJackEvaluator.cs
-// upstream sha: 1859fda79775fabbd451b625b7fef6f90aabab13
+// upstream sha: 475a159368ae695a29a7d7ac50c59481bb98d384
 // generator: 0.5.0
 // Do not edit by hand — regenerate with: bun run port:generate
 

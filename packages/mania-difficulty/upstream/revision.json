@@ -1,8 +1,8 @@
 {
   "repository": "https://github.com/loleur362/osu",
   "branch": "mania-difficulty",
-  "sha": "1859fda79775fabbd451b625b7fef6f90aabab13",
+  "sha": "475a159368ae695a29a7d7ac50c59481bb98d384",
   "generatorVersion": "0.5.0",
-  "pinnedAt": "2026-10-19",
-  "notes": "WIP mania SR rework. Six commits ahead of bd6bbda, through 1859fda (base difficulty is 100% accuracy). Do not track loleur362/master (ppy tip); use branch mania-difficulty."
+  "pinnedAt": "2026-10-28",
+  "notes": "WIP mania SR rework. Two commits ahead of 1859fda, through 475a159 (held-note multiplier merge: column falloff, no soft cap; coordination/jack/release retune; Total release weight 1.00). Base difficulty remains 100% accuracy. Do not track loleur362/master (ppy tip); use branch mania-difficulty."
 }

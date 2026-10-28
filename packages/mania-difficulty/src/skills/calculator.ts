@@ -29,7 +29,7 @@ import {
 const OVERALL_MULTIPLIER = 0.360643;
 const STAR_RATING_EXPONENT = 0.52899;
 const OD_WEIGHT = 0.188;
-const RELEASE_WEIGHT = 0.72;
+const RELEASE_WEIGHT = 1.0;
 const COMBINE_LAMBDA = 2;
 
 function scaleToStarRating(aggregatedDifficulty: number): number {

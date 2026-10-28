@@ -1,5 +1,5 @@
 // @generated from osu.Game.Rulesets.Mania/Difficulty/Evaluators/CoordinationEvaluator.cs
-// upstream sha: 1859fda79775fabbd451b625b7fef6f90aabab13
+// upstream sha: 475a159368ae695a29a7d7ac50c59481bb98d384
 // generator: 0.5.0
 // Do not edit by hand — regenerate with: bun run port:generate
 
@@ -10,28 +10,20 @@ import { CrossColumnUtils } from "../Utils/CrossColumnUtils";
 import { DiffUtils } from "../../../osu.Game/Rulesets/Difficulty/Utils/DiffUtils";
 import { TrillUtils } from "../Utils/TrillUtils";
 
-const coordination_multiplier = 2.22;
 
 /** Generated from C# class CoordinationEvaluator */
 export const CoordinationEvaluator = {
   EvaluateDifficultyOf(current: ManiaDifficultyHitObject): number {
+    const total_weight = 1.81659;
     let coordinationDifficulty = CoordinationEvaluator.calculateBoundaryPressure(current);
     let columnDelta = current.ColumnDelta;
     let depthInChord = ChordUtils.DepthInChord(current);
     coordinationDifficulty += CoordinationEvaluator.calculateChordDifficulty(current, depthInChord, columnDelta);
     coordinationDifficulty += CoordinationEvaluator.calculateShieldDifficulty(current);
+    coordinationDifficulty += CoordinationEvaluator.calculateNoteWhileHolds(current);
     coordinationDifficulty *= CoordinationEvaluator.minijackPressure(current);
     coordinationDifficulty *= (current.ManipulationFactor * current.EnduranceFactor);
-    return CoordinationEvaluator.saturate((coordinationDifficulty * coordination_multiplier));
-  },
-
-  saturate(strain: number): number {
-    const threshold = 20.0;
-    const strength = 0.5;
-    const width = 1.5;
-    let z = (((strain - threshold)) / width);
-    let softExcess = (width * ((Math.max(z, 0.0) + Math.log((1.0 + Math.exp((-Math.abs(z))))))));
-    return (strain - (strength * softExcess));
+    return (coordinationDifficulty * total_weight);
   },
 
   calculateBoundaryPressure(current: ManiaDifficultyHitObject): number {
@@ -125,11 +117,11 @@ export const CoordinationEvaluator = {
   },
 
   calculateShieldDifficulty(current: ManiaDifficultyHitObject): number {
-    const shield_weight = 0.75;
-    const scale_ms = 1300.0;
-    const min_delta_ms = 35.0;
-    const min_shield_ms = 250.0;
-    const full_shield_ms = 800.0;
+    const shield_weight = 1.00;
+    const jack_scale_ms = 120.0;
+    const jack_intensity = 320000.0;
+    const min_shield_ms = 150;
+    const full_shield_ms = 600;
     let holdLength = (current.EndTime - current.StartTime);
     if ((holdLength <= 0.0)) {
       return 0.0;
@@ -137,8 +129,13 @@ export const CoordinationEvaluator = {
     if ((current.PrevInColumn(0) === null)) {
       return 0.0;
     }
-    let intensity = Math.min((scale_ms / ((current.DeltaTime + min_delta_ms))), 20.0);
+    let intensity = Math.min((jack_intensity / ((current.ColumnDelta * ((current.ColumnDelta + jack_scale_ms))))), 20.0);
     return ((shield_weight * intensity) * DiffUtils.ReverseLerp(holdLength, min_shield_ms, full_shield_ms));
+  },
+
+  calculateNoteWhileHolds(current: ManiaDifficultyHitObject): number {
+    const held_note_weight = 1.5;
+    return (held_note_weight * ((current.HeldNoteMultiplier - 1.0)));
   },
 
   minijackPressure(hitObject: ManiaDifficultyHitObject): number {
@@ -146,8 +143,8 @@ export const CoordinationEvaluator = {
     const minijack_other_penalty = 0.9;
     const minijack_mult_floor = 0.02;
     const window_ms_minijack = 300.0;
-    const minijack_fast_ms = 60.0;
-    const minijack_slow_ms = 120.0;
+    const minijack_fast_ms = 40.0;
+    const minijack_slow_ms = 135.0;
     const acceleration_min = 1.0;
     const acceleration_max = 2.5;
     const density_window_ms = 400.0;
@@ -176,7 +173,10 @@ export const CoordinationEvaluator = {
       localNotes += row.Size;
     }
     let localDensity = DiffUtils.Smoothstep(localNotes, local_density_low, local_density_high);
-    let minijackMult = 1.0;
+    let minijackMult = DiffUtils.Smoothstep(jackDelta, minijack_slow_ms, minijack_fast_ms);
+    if ((minijackMult <= 0)) {
+      return 1.0;
+    }
     for (const column of hitObject.Row.Columns) {
       if ((column == hitObject.Column)) {
         continue;

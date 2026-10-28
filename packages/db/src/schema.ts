@@ -431,7 +431,7 @@ export const beatmapDanRatings = sqliteTable(
     sunnyStar: real("sunny_star"),
     lnRatio: real("ln_ratio"),
     columnCount: integer("column_count"),
-    /** Human-readable dan label, e.g. "Reform 5 mid" or "Regular 7 high". */
+    /** Human-readable dan label, e.g. "Reform 5" or "Regular 7+". */
     estDiff: text("est_diff"),
     error: text("error"),
     updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),

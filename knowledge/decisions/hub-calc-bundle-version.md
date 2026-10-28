@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-10
+last_verified: 2026-10-28
 confidence: verified
 touches:
   - packages/db/src/hub/schema.ts
@@ -40,7 +40,7 @@ Packaged installs read a local file instead of pulling the Hub: the bundle is ve
 - Hub key is `roxysu_version` (unique). Chunked admin `POST /admin/calc-bundles` with `replace=true` on the first chunk.
 - The calc bundle file header carries `format`, `roxysuVersion` (must equal `APP_VERSION` at boot), `algorithms`, `entryCount`. Entries carry no `onlineBeatmapId` and no null columns — the file only contains what the boot apply writes.
 - Clients store `jobs.calc_bundle_applied_version` after a successful file apply, Hub pull, or Hub 404 so boots do not repeat work.
-- Packaged replace is replace-**then-drop**: after the file's rows are written, `dropCalcBundleLeftovers()` deletes bundle-algorithm rows whose `beatmap_hash` is null or not in the file (temp table of file hashes + one `NOT IN (SELECT …)` delete per table, one transaction). The count travels back as `CalcBundleBootResult.droppedLeftovers`; the server entry points (`src/index.ts`, `src/index.node.ts`) start `startReworkDanBackfill` **only** when rows were dropped. Dan difficulty variants are not part of this — nothing recomputes them here.
+- Packaged replace is replace-**then-drop**: after the file's rows are written, `dropCalcBundleLeftovers()` deletes bundle-algorithm rows whose `beatmap_hash` is null or not in the file (temp table of file hashes + one `NOT IN (SELECT …)` delete per table, one transaction). The count travels back as `CalcBundleBootResult.droppedLeftovers`; the server entry points (`src/index.ts`, `src/index.node.ts`) start `startReworkDanBackfill` **only** when rows were dropped. Dan difficulty variants are not part of this — nothing recomputes them here. After the boot apply settles, those entry points relabel `est_diff` from stored stars (ratings and variants). A bundle may still carry band-suffixed labels; stars stay the bundle's, labels follow current `dans.json`.
 - On a successful shipped-file apply the server publishes `calc-bundle.applied` (once per product-version bump). The client invalidates `["beatmap"]` and `["practice"]` on it so an already-open beatmap page refetches after the boot apply finished.
 - Transport/5xx Hub failures (dev path) do not mark applied — retry next boot. A failed shipped-file read (packaged path) **does** mark applied, with the reason logged and shown in the pull state.
 - Packaged boot (`ROXYSU_PACKAGED=1` from `apps/desktop/main.js` when `paths.isPackaged`, or Nix `ROXYSU_RESOURCES`) applies the shipped file with `replaceAlgorithms` for `mania-difficulty` and `mania-skill-v1` only. Dev desktop and `bun run dev` do not read the file and do not replace.
@@ -53,7 +53,7 @@ Packaged installs read a local file instead of pulling the Hub: the bundle is ve
 
 - `apps/hub/src/services/calcBundles.ts`
 - `apps/server/src/map-analysis/calcBundle.ts` — export/iterate, batched apply, replace-then-drop (`dropCalcBundleLeftovers`, `CalcBundleBootResult`), boot dispatch, file build
-- `apps/server/src/index.ts`, `apps/server/src/index.node.ts` — boot calls; auto-start the missing backfill when `droppedLeftovers > 0`
+- `apps/server/src/index.ts`, `apps/server/src/index.node.ts` — boot calls; relabel stored dan labels after apply; auto-start the missing backfill when `droppedLeftovers > 0`
 - `apps/server/public/lib/sse.ts` — client invalidation on `calc-bundle.applied`
 - `apps/server/src/map-analysis/calcBundleFile.ts` — file format, read/validate
 - `apps/server/src/routes/settings.ts` — `GET /settings/calc-bundle/export-file`

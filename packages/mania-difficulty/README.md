@@ -16,28 +16,28 @@ no code change is needed.
 
 ```jsonc
 {
-  "bands": ["low", "mid/low", "mid", "mid/high", "high"],
   "tables": {
     "4": {
       "rice": [{ "name": "α", "id": "α", "floor": 6.9 }, { "name": "β", "id": "β", "floor": 7.2 }, { "name": "γ", "id": "γ", "floor": 7.8 }],
       "ln":   [{ "name": "LN 13", "id": "LN 13", "floor": 7.2 }]
     },
-    "7": { "rice": [{ "name": "Regular 7", "id": "Regular 7", "floor": 7.1 }], "ln": [] }
+    "7": { "rice": [{ "name": "Regular 7", "id": "Regular 7", "floor": 7.1 }, { "name": "Regular 7+", "id": "Regular 7", "floor": 7.17 }], "ln": [] }
   }
 }
 ```
 
-- A tier spans its `floor` to the next tier's floor. Only the **last** tier may set `ceiling`.
+- A tier spans its `floor` to the next tier's floor and is labelled with its bare `name`. The `--` / `++` rows are the split; labels do not append `low` / `mid` / `high`. Only the **last** tier may set `ceiling`.
 - Floors must strictly increase. The config is validated at import — an invalid file throws at boot.
 - `id` (optional) marks the base tier a sub-level belongs to: `Regular 7` / `Regular 7+` / `Regular 7++` all carry `id: "Regular 7"`. It must name a tier of the same table and stay contiguous; it defaults to the row's own `name`.
 - `aliases` (optional) are search spellings. On a base row an alias names the whole group — `Regular Gamma`, `Gamma` and the glyph `γ` all match every `Regular γ*` label; on other rows it matches only that row. Tier names and aliases are matched case-insensitively and merged across key modes; `expandReworkDanMatch()` resolves a token, and `rework:` uses it before falling back to generic token matching.
-- Each span is split into `bands`, so `rework:Alpha` still matches all five bands.
-- Below the first floor → `< {name} {lowest band}`. Above a declared last ceiling → `> {name} {highest band}`. A last tier **without** `ceiling` is an open-ended sentinel covering `[floor, ∞)` with just its name (e.g. `Regular >∞`).
+- Below the first floor → `< {name}`. Above a declared last ceiling → `> {name}`. A last tier **without** `ceiling` is an open-ended sentinel covering `[floor, ∞)` with just its name (e.g. `Regular >∞`).
 - An empty `ln` array falls back to that key count's `rice` tiers.
 - A key count with no table (6K) returns `Unknown difficulty`.
 
 Retuning a floor only needs a **relabel**, not a re-estimate — stored stars are
-re-mapped by `relabelReworkDanSync()` (`POST /api/settings/rework-dan/relabel`).
+re-mapped by `relabelReworkDanSync()` (`POST /api/settings/rework-dan/relabel`),
+including dan difficulty variants. Server boot runs the same pass after the
+calc-bundle apply.
 
 ## Dominant skill
 

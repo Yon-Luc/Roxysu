@@ -48,7 +48,7 @@ function escapeLikeLiteral(value: string): string {
 /**
  * Match rework dan labels without crossing tiers — "Regular 1" must not match "Regular 10".
  * Bare names (Alpha, Gamma, …) match as label tokens, not unconstrained substrings, so
- * `dan:Alpha` hits "Alpha Low" but not the out-of-band sentinel "< Alpha Low".
+ * `dan:Alpha` hits "Alpha" but not the out-of-band sentinel "< Alpha".
  */
 function compileDanMatch(
   value: string,
@@ -71,8 +71,8 @@ function compileDanMatch(
     ))`;
   }
 
-  // Token match: starts with tier+band, exact, or tier as a whole word mid/end label
-  // (e.g. Gamma in "Regular Gamma low", Zeta in "Emik Zeta Low").
+  // Token match: exact, or the tier as a whole word. The prefix clause also
+  // covers a leftover "{tier} low" label until relabel.
   const escaped = escapeLikeLiteral(value);
   const exact = push(value);
   const startsBand = push(`${escaped} %`);
@@ -232,9 +232,9 @@ function compileTerm(
       // generic label-token matching. `dan:` is an alias of `rework:`.
       const members = expandReworkDanMatch(String(term.value));
       if (members != null) {
-        // Labels are always "{tier} {band}" or a bare sentinel name, so
-        // exact-or-prefix per member is tier-safe: "Regular 1" cannot match
-        // "Regular 10 low" and a group covers each sub-level + band.
+        // Labels are the tier name (or a bare sentinel). Exact-or-prefix is
+        // tier-safe: "Regular 1" cannot match "Regular 10". The prefix also
+        // covers a leftover band suffix until relabel.
         const estDiff = "dr_r.est_diff";
         const clauses = members.map((name) => {
           const exact = push(name);

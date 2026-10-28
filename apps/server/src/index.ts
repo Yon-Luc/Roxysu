@@ -6,7 +6,10 @@ import { startAnalyticsPipeline } from "./analytics/pipeline";
 import { startBmsSync } from "./bms/sync";
 import { startDanVariantJob } from "./map-analysis/danVariantJob";
 import { maybePullCalcBundleOnBoot } from "./map-analysis/calcBundle";
-import { startReworkDanBackfill } from "./map-analysis/reworkDanJob";
+import {
+  relabelStoredReworkDans,
+  startReworkDanBackfill,
+} from "./map-analysis/reworkDanJob";
 import { startPatternAnalysisBackfill } from "./map-analysis/patternAnalysisJob";
 import { startCollectionMatchCache } from "./shared/collectionMatchCache";
 import { ensureTosuStarted, stopTosuAdapter } from "./tosu";
@@ -39,6 +42,8 @@ startCollectionMatchCache(db);
 // chart shapes (keymode terms, e.g. 7K jumpstream) are refilled by the pattern
 // job the same way.
 void maybePullCalcBundleOnBoot(db).then((boot) => {
+  // After apply, so a shipped bundle's band-suffixed labels do not stick.
+  relabelStoredReworkDans(db);
   if (boot && boot.droppedLeftovers > 0) startReworkDanBackfill(db);
   if (boot && boot.nulledShapes > 0) startPatternAnalysisBackfill(db);
 });

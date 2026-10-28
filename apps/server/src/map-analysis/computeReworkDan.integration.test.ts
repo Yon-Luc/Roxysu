@@ -201,6 +201,37 @@ describe("relabelReworkDanSync", () => {
     expect(relabelReworkDanSync(db)).toBe(0);
   });
 
+  test("rewrites dan difficulty variant labels from stored stars", () => {
+    const base = getReworkDan(db, MAP_4K)!;
+    const now = Date.now();
+    db.$client
+      .query(
+        `INSERT INTO beatmap_dan_rating_variants (
+           beatmap_id, algorithm, rate, ln_only, sunny_star, ln_ratio,
+           column_count, est_diff, error, updated_at
+         ) VALUES (?, ?, 1.5, 0, ?, ?, ?, 'Regular 1 mid', NULL, ?)`,
+      )
+      .run(
+        MAP_4K,
+        REWORK_ALGORITHM,
+        base.reworkStar,
+        base.lnRatio,
+        base.columnCount,
+        now,
+      );
+
+    expect(relabelReworkDanSync(db)).toBeGreaterThanOrEqual(1);
+
+    const variant = db.$client
+      .query(
+        `SELECT est_diff AS estDiff FROM beatmap_dan_rating_variants
+         WHERE beatmap_id = ? AND algorithm = ? AND rate = 1.5 AND ln_only = 0`,
+      )
+      .get(MAP_4K, REWORK_ALGORITHM) as { estDiff: string };
+    expect(variant.estDiff).toBe(base.estDiff);
+    expect(variant.estDiff).not.toContain("mid");
+  });
+
   test("never touches other algorithm rows", () => {
     db.$client
       .query(

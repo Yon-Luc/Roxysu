@@ -1,5 +1,4 @@
 {
-  "bands": ["low", "mid/low", "mid", "mid/high", "high"],
   "tables": {
     "4": {
       "rice": [

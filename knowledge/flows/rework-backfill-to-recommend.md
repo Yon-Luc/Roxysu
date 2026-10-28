@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-10
+last_verified: 2026-10-28
 confidence: verified
 touches:
   - apps/server/src/map-analysis/reworkDanJob.ts
@@ -47,8 +47,9 @@ GET /api/practice/recommend + Session Suggest UI
 
 Also see [hub-calc-bundle-pull.md](hub-calc-bundle-pull.md).
 
-Editing `dans.json` only needs `POST /api/settings/rework-dan/relabel`, which
-rewrites labels from stored stars without re-reading charts.
+Editing `dans.json` only needs a relabel, which rewrites labels from stored
+stars without re-reading charts. The same pass covers dan difficulty variants.
+Server boot runs it after the calc-bundle apply (`relabelStoredReworkDans`).
 
 The pattern job is still available for maps the dan job has not rated, but a
 full dan backfill also fills the pattern store, so running both is not required.

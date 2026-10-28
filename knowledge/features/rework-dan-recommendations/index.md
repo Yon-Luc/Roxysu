@@ -12,6 +12,8 @@ touches:
   - apps/server/src/map-analysis/calcBundleFile.ts
   - apps/desktop/main.js
   - apps/server/src/map-analysis/reworkDanJob.ts
+  - apps/server/src/index.ts
+  - apps/server/src/index.node.ts
   - apps/server/src/map-analysis/computeDanVariants.ts
   - apps/server/src/map-analysis/danVariantJob.ts
   - apps/server/src/analytics/playerStatsCache.ts
@@ -68,10 +70,11 @@ Product writes use `algorithm = 'mania-difficulty'` (rework dan). Legacy Sunny/D
 
 ## Rework dan rules
 
-1. Floors live in `packages/mania-difficulty/dans.json`. `bands` lists the band
-   suffixes; each `tables["<keys>"].rice` / `.ln` entry is
-   `{ name, id?, floor, ceiling? }`. Only the last tier may set `ceiling`.
-   Floors must strictly increase.
+1. Floors live in `packages/mania-difficulty/dans.json`. Each
+   `tables["<keys>"].rice` / `.ln` entry is `{ name, id?, floor, ceiling? }`.
+   A tier spans its floor to the next floor and is labelled with its bare
+   `name` — no `low` / `mid` / `high` suffix. The `--` / `++` rows are the
+   split. Only the last tier may set `ceiling`. Floors must strictly increase.
 2. `id` (optional) is the base tier a sub-level belongs to — the "Regular 7" /
    "Regular 7+" / "Regular 7++" rows all carry `id: "Regular 7"` so UIs can group
    them. It must name a tier of the same table and stay contiguous; it defaults
@@ -85,10 +88,10 @@ Product writes use `algorithm = 'mania-difficulty'` (rework dan). Legacy Sunny/D
    no `ln` rows, so 7K LN currently resolves on the rice floors.
 6. Key counts with no table (6K) return `Unknown difficulty` while still storing
    a star rating and skill breakdown.
-7. Below the first floor is a `<` sentinel; once past the table, labels come
-   from the last tier — an explicit `ceiling` yields a `>` sentinel (same shape
-   as legacy dan label matching, so `compileDanMatch` is reused unchanged), an
-   open-ended last tier yields the bare tier name.
+7. Below the first floor is a `< {name}` sentinel; once past the table, labels
+   come from the last tier — an explicit `ceiling` yields a `> {name}` sentinel
+   (same shape as legacy dan label matching, so `compileDanMatch` is reused
+   unchanged), an open-ended last tier yields the bare tier name.
 8. Aliases make tiers searchable beyond their literal label: a tier row may
    declare `aliases` — on a base row an alias covers its whole group
    (`rework:Gamma`, `rework:γ` and `rework:Regular Gamma` all match every
@@ -97,8 +100,11 @@ Product writes use `algorithm = 'mania-difficulty'` (rework dan). Legacy Sunny/D
    to generic label-token matching for sentinel lookups and unresolved values.
    Legacy `sunny:`, `daniel:`, `danstars`, and `sunnystars` fields are removed.
 9. Editing `dans.json` does **not** require re-estimation. `relabelReworkDanSync()`
-   recomputes labels from stored stars; exposed as `POST /api/settings/rework-dan/relabel`
-   and run automatically when the job starts with nothing missing.
+   recomputes labels from stored stars on the Dan ratings store and on dan
+   difficulty variants; exposed as `POST /api/settings/rework-dan/relabel`,
+   run when the job starts with nothing missing, and run after the boot
+   calc-bundle apply (`relabelStoredReworkDans`) so a shipped bundle's old
+   band suffixes do not stick. Stars stay the bundle's.
 10. `dan:` and `rework:` both match only `algorithm = 'mania-difficulty'` rows
    (`dr_r`). `axis:` uses rework `ln_ratio`.
 11. The mania difficulty port pin is `packages/mania-difficulty/upstream/revision.json`
@@ -258,7 +264,7 @@ old non-yielding loop).
 - `apps/server/src/map-analysis/reworkEstimator.ts:analyzeManiaOnceFromText` — single pass, both stores
 - `apps/server/src/map-analysis/reworkEstimator.ts:runReworkEstimatorFromText` — dan only, no profile
 - `apps/server/src/map-analysis/computeReworkDan.ts` — persistence + `relabelReworkDanSync`
-- `apps/server/src/map-analysis/reworkDanJob.ts` — Settings-started backfill
+- `apps/server/src/map-analysis/reworkDanJob.ts` — Settings-started backfill; `relabelStoredReworkDans` after boot calc-bundle apply
 - `resolveDanVariant()` / `danVariantKey()` — `packages/mania-judge`
 - `apps/server/src/analytics/recommend/*`
 - `GET /api/practice/recommend` — optional `keyCount` (default 7)

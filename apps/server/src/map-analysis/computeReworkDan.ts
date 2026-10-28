@@ -331,11 +331,23 @@ type ReworkRow = {
   ruleset_short_name: string | null;
 };
 
+type RelabelSource = {
+  reworkStar: number;
+  lnRatio: number;
+  columnCount: number;
+  estDiff: string | null;
+};
+
 /**
- * Re-apply current dan floors to cached rework ratings (no `.osu` re-read).
- * Run after editing `dans.json` so existing stars pick up the new labels.
+ * Re-apply current dan floors to cached rework ratings and dan difficulty
+ * variants (no `.osu` re-read). Run after editing `dans.json`, and after a
+ * boot calc-bundle apply, so existing stars pick up the new labels.
  */
 export function relabelReworkDanSync(db: Db): number {
+  return relabelReworkRatingsSync(db) + relabelReworkVariantsSync(db);
+}
+
+function relabelReworkRatingsSync(db: Db): number {
   const rows = db.$client
     .query(
       `
@@ -350,18 +362,16 @@ export function relabelReworkDanSync(db: Db): number {
         AND error IS NULL
     `,
     )
-    .all(REWORK_ALGORITHM) as Array<{
-    beatmapId: string;
-    reworkStar: number;
-    lnRatio: number;
-    columnCount: number;
-    estDiff: string | null;
-  }>;
+    .all(REWORK_ALGORITHM) as Array<
+    RelabelSource & {
+      beatmapId: string;
+    }
+  >;
 
   const now = Date.now();
   let updated = 0;
   for (const row of rows) {
-    const next = reworkDanLabel(row.reworkStar, row.lnRatio, row.columnCount);
+    const next = labelFor(row);
     if (next === row.estDiff) continue;
     db.$client
       .query(
@@ -375,6 +385,52 @@ export function relabelReworkDanSync(db: Db): number {
     updated += 1;
   }
   return updated;
+}
+
+function relabelReworkVariantsSync(db: Db): number {
+  const rows = db.$client
+    .query(
+      `
+      SELECT beatmap_id AS beatmapId, rate AS rate, ln_only AS lnOnly,
+             sunny_star AS reworkStar, ln_ratio AS lnRatio,
+             column_count AS columnCount, est_diff AS estDiff
+      FROM beatmap_dan_rating_variants
+      WHERE algorithm = ?
+        AND sunny_star IS NOT NULL
+        AND ln_ratio IS NOT NULL
+        AND column_count IS NOT NULL
+        AND error IS NULL
+    `,
+    )
+    .all(REWORK_ALGORITHM) as Array<
+    RelabelSource & {
+      beatmapId: string;
+      rate: number;
+      lnOnly: number;
+    }
+  >;
+
+  const now = Date.now();
+  let updated = 0;
+  for (const row of rows) {
+    const next = labelFor(row);
+    if (next === row.estDiff) continue;
+    db.$client
+      .query(
+        `
+        UPDATE beatmap_dan_rating_variants
+        SET est_diff = ?, updated_at = ?
+        WHERE beatmap_id = ? AND algorithm = ? AND rate = ? AND ln_only = ?
+      `,
+      )
+      .run(next, now, row.beatmapId, REWORK_ALGORITHM, row.rate, row.lnOnly);
+    updated += 1;
+  }
+  return updated;
+}
+
+function labelFor(row: RelabelSource): string {
+  return reworkDanLabel(row.reworkStar, row.lnRatio, row.columnCount);
 }
 
 /** Count mania maps still needing a first successful rework rating. */

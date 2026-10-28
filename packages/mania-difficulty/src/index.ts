@@ -38,7 +38,6 @@ export {
   reworkDanTierNames,
   reworkDanTiersFor,
   validateDanConfig,
-  REWORK_DAN_BANDS,
   REWORK_LN_RATIO_THRESHOLD,
   REWORK_OVER_BAND_PREFIX,
   REWORK_UNDER_BAND_PREFIX,

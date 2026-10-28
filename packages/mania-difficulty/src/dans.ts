@@ -2,15 +2,15 @@
  * Dan tier tables for the rework star rating.
  *
  * Source of truth is `dans.json` — edit that file to add or retune a dan.
- * This module validates it, expands each tier's floor span into the five
- * bands (low / mid/low / mid / mid/high / high), and looks up labels.
+ * This module validates it and looks up one label per tier. The `--` / `++`
+ * rows are the split; labels do not append low / mid / high.
  *
  * Table shape:
  * - `tables["<columnCount>"].rice` — tiers used below the LN ratio threshold.
  * - `tables["<columnCount>"].ln`   — tiers at/above it. Empty array falls back
  *   to the `rice` tiers, so a key count only needs `ln` rows once it diverges.
- * - A tier spans from its `floor` to the next tier's `floor`. Only the last
- *   tier may set an explicit `ceiling`.
+ * - A tier spans from its `floor` to the next tier's `floor` and is labelled
+ *   with its bare `name`. Only the last tier may set an explicit `ceiling`.
  * - `id` (optional) names the base tier a sub-level belongs to, e.g. the
  *   "Regular 7" / "Regular 7+" / "Regular 7++" rows all carry `id: "Regular 7"`.
  *   It defaults to the tier's own `name`; groups must be contiguous.
@@ -57,7 +57,6 @@ export type DanTierInput = {
 export type DanTableKind = "rice" | "ln";
 
 export type DanConfig = {
-  bands: string[];
   tables: Record<string, Record<DanTableKind, DanTierInput[]>>;
 };
 
@@ -66,21 +65,12 @@ export type DanInterval = [number, number, string];
 
 const CONFIG = dansJson as DanConfig;
 
-/** Keep generated band boundaries free of float drift in stored labels. */
-function round6(value: number): number {
-  return Math.round(value * 1e6) / 1e6;
-}
-
 /**
  * Validate a dan config. Returns a list of human-readable problems; empty
  * means valid. Callers should treat any entry as fatal at boot.
  */
 export function validateDanConfig(config: DanConfig = CONFIG): string[] {
   const errors: string[] = [];
-
-  if (!config.bands || config.bands.length === 0) {
-    errors.push("bands: must list at least one band name");
-  }
 
   for (const [keyCount, tables] of Object.entries(config.tables ?? {})) {
     if (!/^\d+$/.test(keyCount)) {
@@ -189,12 +179,10 @@ if (VALIDATION_ERRORS.length > 0) {
   );
 }
 
-export const REWORK_DAN_BANDS: readonly string[] = CONFIG.bands;
-
 /**
  * Search resolution, built once from the config: canonical tier names and
  * their declared aliases map to the tier names a dan label may start with.
- * - A base row's name resolves to its whole group (every sub-level band);
+ * - A base row's name resolves to its whole group (every `--` / `++` sub-level);
  *   a normal row's name resolves to itself. An alias on a base row covers
  *   its group; an alias anywhere else covers only that row.
  * - Keys are lowercase and members are MERGED across tables and kinds — a
@@ -242,12 +230,9 @@ export function expandReworkDanMatch(value: string): string[] | null {
   return members ? members : null;
 }
 
-/** Expand tiers + bands into contiguous `[lower, upper, label]` intervals. */
-export function expandDanTiers(
-  tiers: readonly DanTierInput[],
-  bands: readonly string[] = CONFIG.bands,
-): DanInterval[] {
-  if (tiers.length === 0 || bands.length === 0) return [];
+/** Expand tiers into contiguous `[lower, upper, label]` intervals, one per tier. */
+export function expandDanTiers(tiers: readonly DanTierInput[]): DanInterval[] {
+  if (tiers.length === 0) return [];
 
   const out: DanInterval[] = [];
   for (let i = 0; i < tiers.length; i++) {
@@ -255,21 +240,11 @@ export function expandDanTiers(
     const upper = tiers[i + 1]?.floor ?? tier.ceiling;
     if (upper == null || !Number.isFinite(upper)) {
       // A final tier without a ceiling is an open-ended sentinel: one
-      // unbounded interval labelled with the bare tier name (no band suffix).
+      // unbounded interval labelled with the bare tier name.
       if (i === tiers.length - 1) out.push([tier.floor, Infinity, tier.name]);
       continue;
     }
-
-    const span = upper - tier.floor;
-    const step = span / bands.length;
-    for (let b = 0; b < bands.length; b++) {
-      const lower = round6(tier.floor + step * b);
-      const isFinalBand = i === tiers.length - 1 && b === bands.length - 1;
-      const bandUpper = isFinalBand
-        ? upper
-        : round6(tier.floor + step * (b + 1));
-      out.push([lower, bandUpper, `${tier.name} ${bands[b]}`]);
-    }
+    out.push([tier.floor, upper, tier.name]);
   }
   return out;
 }
@@ -308,7 +283,7 @@ export function reworkDanIntervalTable(
   return expandDanTiers(tiers);
 }
 
-/** Tier names (bands stripped) for a key count — used by UI tier pickers. */
+/** Tier names for a key count — used by UI tier pickers. */
 export function reworkDanTierNames(
   columnCount: number,
   kind: DanTableKind = "rice",
@@ -363,10 +338,10 @@ export function reworkDanIntervalForStar(
 /**
  * Rework ★ → a single dan label.
  * - LN ratio < 20% → `rice` tiers, else `ln` tiers (empty `ln` falls back to `rice`).
- * - Below the first floor → `< {first} {lowest band}`.
+ * - Below the first floor → `< {first}`.
  * - A ceiling-less last tier is an open-ended sentinel: everything at/above
  *   its floor labels with the bare tier name.
- * - Above a declared last ceiling → `> {last} {highest band}`.
+ * - Above a declared last ceiling → `> {last}`.
  */
 export function reworkDanLabel(
   sr: number,
@@ -379,7 +354,7 @@ export function reworkDanLabel(
 
   const first = tiers[0]!;
   if (sr < first.floor) {
-    return `${REWORK_UNDER_BAND_PREFIX}${first.name} ${CONFIG.bands[0]}`;
+    return `${REWORK_UNDER_BAND_PREFIX}${first.name}`;
   }
 
   const hit = reworkDanIntervalForStar(sr, lnRatio, columnCount);
@@ -387,7 +362,7 @@ export function reworkDanLabel(
 
   const last = tiers[tiers.length - 1]!;
   if (last.ceiling != null && sr > last.ceiling) {
-    return `${REWORK_OVER_BAND_PREFIX}${last.name} ${CONFIG.bands[CONFIG.bands.length - 1]}`;
+    return `${REWORK_OVER_BAND_PREFIX}${last.name}`;
   }
   return REWORK_UNKNOWN_DAN;
 }

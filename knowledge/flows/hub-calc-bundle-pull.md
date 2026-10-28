@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-10
+last_verified: 2026-10-28
 confidence: verified
 touches:
   - apps/server/src/map-analysis/calcBundle.ts
@@ -89,6 +89,7 @@ Manual pull from Settings stays a Hub gap-fill on every install type
 - Only hash-matched maps receive bundle rows.
 - Bundles (Hub and file) carry `mania-difficulty` and `mania-skill-v1` only (other algorithm ids are ignored).
 - Packaged version bumps replace successful rework dan and dominant-skill rows the bundle contains, **then drop** bundle-algorithm rows the file does not contain; the entry points start the missing-only rework backfill when the drop deleted rows, so those maps are recomputed on the new formula. `bun desktop` does not replace or drop.
+- After that boot apply settles (including a no-op when this version was already applied), the entry points relabel stored rework dan labels from stars, including dan difficulty variants. A bundle may still carry `low` / `mid` / `high` suffixes; stars stay the bundle's, labels follow current `dans.json`.
 - Packaged boots never call the Hub; dev boots never read the file. A release without the file ships with no boot-time gap-fill (previous-version rows stay).
 - A manual Settings pull stays gap-fill.
 - `calc-bundle.applied` publishes once per successful packaged file apply; the client invalidates `["beatmap"]` / `["practice"]` so an already-open beatmap page refetches after the boot apply finishes. `jobs.updated` deliberately does not watch these queries.
@@ -99,7 +100,7 @@ Manual pull from Settings stays a Hub gap-fill on every install type
 - `apps/server/src/map-analysis/calcBundle.ts:maybePullCalcBundleOnBoot()` — boot dispatch (packaged → file, dev → Hub)
 - `apps/server/src/map-analysis/calcBundle.ts:maybeApplyShippedCalcBundleOnBoot()` — replace + drop (`dropCalcBundleLeftovers`), publishes `calc-bundle.applied`
 - `apps/server/src/map-analysis/calcBundle.ts:CalcBundleBootResult` — `droppedLeftovers` for the entry-point backfill decision
-- `apps/server/src/index.ts` / `src/index.node.ts` — auto-start `startReworkDanBackfill` when rows were dropped
+- `apps/server/src/index.ts` / `src/index.node.ts` — auto-start `startReworkDanBackfill` when rows were dropped; `relabelStoredReworkDans` after the boot apply
 - `apps/server/public/lib/sse.ts` — `calc-bundle.applied` → invalidate `["beatmap"]`, `["practice"]`
 - `apps/server/src/map-analysis/calcBundleFile.ts:readShippedCalcBundleFile()`
 - `apps/server/src/routes/settings.ts` — `GET /settings/calc-bundle/export-file`

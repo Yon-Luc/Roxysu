@@ -10,14 +10,12 @@ import {
   reworkDanTierNames,
   reworkDanTiersFor,
   validateDanConfig,
-  REWORK_DAN_BANDS,
   REWORK_LN_RATIO_THRESHOLD,
   REWORK_UNKNOWN_DAN,
   type DanConfig,
 } from "../../src/dans";
 
 const config = (over: Partial<DanConfig> = {}): DanConfig => ({
-  bands: ["low", "mid/low", "mid", "mid/high", "high"],
   tables: {
     4: {
       rice: [
@@ -201,22 +199,15 @@ describe("validateDanConfig", () => {
 });
 
 describe("expandDanTiers", () => {
-  test("splits each span into every band, contiguous", () => {
+  test("one interval per tier, contiguous, labelled with the tier name", () => {
     const rows = expandDanTiers([
       { name: "Alpha", floor: 6 },
       { name: "Beta", floor: 8, ceiling: 9 },
     ]);
-    // 2 tiers × 5 bands
-    expect(rows).toHaveLength(10);
-    expect(rows[0]).toEqual([6, 6.4, "Alpha low"]);
-    expect(rows[4]![2]).toBe("Alpha high");
-    expect(rows[5]![2]).toBe("Beta low");
-    // last tier's final band keeps the declared ceiling
-    expect(rows[9]).toEqual([8.8, 9, "Beta high"]);
-    // no gaps between bands
-    for (let i = 1; i < rows.length; i++) {
-      expect(rows[i]![0]).toBeCloseTo(rows[i - 1]![1], 9);
-    }
+    expect(rows).toEqual([
+      [6, 8, "Alpha"],
+      [8, 9, "Beta"],
+    ]);
   });
 
   test("a single final tier without a ceiling is an open-ended sentinel", () => {
@@ -224,9 +215,8 @@ describe("expandDanTiers", () => {
     expect(rows).toEqual([[9, Infinity, "Ω"]]);
   });
 
-  test("empty tiers or bands produce nothing", () => {
+  test("empty tiers produce nothing", () => {
     expect(expandDanTiers([])).toEqual([]);
-    expect(expandDanTiers([{ name: "A", floor: 1 }], [])).toEqual([]);
   });
 });
 
@@ -279,7 +269,7 @@ describe("reworkDanLabel", () => {
 
   test("maps 7K floors through the sub-level ladder", () => {
     expect(reworkDanLabel(8.61, 0, 7)).toContain("Regular γ--");
-    expect(reworkDanLabel(8.8, 0, 7)).toBe("Regular γ low");
+    expect(reworkDanLabel(8.8, 0, 7)).toBe("Regular γ");
     expect(reworkDanLabel(9.4, 0, 7)).toContain("Regular Ψ");
     expect(reworkDanLabel(10.9, 0, 7)).toContain("Regular ζ++");
     expect(reworkDanLabel(11.6, 0, 7)).toContain("Regular ★+");
@@ -287,13 +277,11 @@ describe("reworkDanLabel", () => {
     expect(reworkDanLabel(13.5, 0, 7)).toBe("Regular >∞");
   });
 
-  test("below the first floor is an under-band sentinel", () => {
-    expect(reworkDanLabel(2.5, 0, 4)).toBe(`< Reform 1 ${REWORK_DAN_BANDS[0]}`);
-    expect(reworkDanLabel(7.1, 0.5, 4)).toBe(`< LN 13 ${REWORK_DAN_BANDS[0]}`);
-    expect(reworkDanLabel(4.3, 0, 7)).toBe(
-      `< Regular 1 ${REWORK_DAN_BANDS[0]}`,
-    );
-    expect(reworkDanLabel(7.05, 0, 7)).toBe(`Regular 6++ high`);
+  test("below the first floor is an under sentinel", () => {
+    expect(reworkDanLabel(2.5, 0, 4)).toBe("< Reform 1");
+    expect(reworkDanLabel(7.1, 0.5, 4)).toBe("< LN 13");
+    expect(reworkDanLabel(4.3, 0, 7)).toBe("< Regular 1");
+    expect(reworkDanLabel(7.05, 0, 7)).toBe("Regular 6++");
   });
 
   test("the open-ended sentinel tier labels with its bare name above 4K high range", () => {
@@ -301,17 +289,13 @@ describe("reworkDanLabel", () => {
     expect(reworkDanLabel(11.6, 0.5, 4)).toBe("LN >18");
   });
 
-  test("each dan exposes all five bands in order", () => {
-    // β spans [7.2, 7.8) — probe each band's midpoint.
-    const tier = "β";
-    const seen = [7.26, 7.38, 7.5, 7.62, 7.74].map((sr) =>
-      reworkDanLabel(sr, 0, 4),
-    );
-    expect(seen.filter((l) => l.startsWith(tier))).toHaveLength(
-      REWORK_DAN_BANDS.length,
-    );
-    expect(new Set(seen).size).toBe(REWORK_DAN_BANDS.length);
-    expect(seen.map((l) => l.split(" ")[1])).toEqual([...REWORK_DAN_BANDS]);
+  test("a tier keeps one label across its span", () => {
+    // β spans [7.2, 7.8).
+    expect([7.2, 7.5, 7.79].map((sr) => reworkDanLabel(sr, 0, 4))).toEqual([
+      "β",
+      "β",
+      "β",
+    ]);
   });
 });
 
@@ -358,7 +342,7 @@ describe("expandReworkDanMatch", () => {
 
   test("sentinel-marked and unresolved tokens stay generic", () => {
     expect(expandReworkDanMatch(">θ")).toBeNull();
-    expect(expandReworkDanMatch("< Reform 1 low")).toBeNull();
+    expect(expandReworkDanMatch("< Reform 1")).toBeNull();
     // Spelled sentinel aliases resolve like any other member.
     expect(expandReworkDanMatch("Over Theta")).toEqual([">θ"]);
     expect(expandReworkDanMatch("Over Aeternium")).toEqual(["Regular >∞"]);
@@ -388,8 +372,7 @@ describe("reworkDanIntervalForStar", () => {
 
   test("inclusive lower bound, exclusive upper bound", () => {
     const first = reworkDanIntervalForStar(6.5, 0, 4);
-    expect(first?.[2]).toContain("Reform 10");
-    expect(first?.[2]).toContain("low");
+    expect(first?.[2]).toBe("Reform 10");
   });
 
   test("the open-ended sentinel matches everything above it", () => {

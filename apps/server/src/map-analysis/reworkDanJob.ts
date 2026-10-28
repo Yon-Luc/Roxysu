@@ -302,6 +302,20 @@ export function relabelReworkDan(db: Db): number {
 }
 
 /**
+ * Boot hook: rewrite stored dan labels after the calc-bundle apply.
+ * Stars stay whatever the bundle wrote; labels follow current `dans.json`.
+ * A failure here must not skip the missing backfill.
+ */
+export function relabelStoredReworkDans(db: Db): void {
+  try {
+    const n = relabelReworkDanSync(db);
+    if (n > 0) console.log(`[rework-dan] relabeled ${n} stored rows`);
+  } catch (err) {
+    console.error("[rework-dan] boot relabel failed", err);
+  }
+}
+
+/**
  * Delete every stored rework rating and dominant-skill row, then rate the
  * library again. Refuses while a pass is already in flight.
  */

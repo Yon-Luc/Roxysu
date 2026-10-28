@@ -7,6 +7,7 @@ touches:
   - apps/server/public/lib/ratingDisplay.ts
   - apps/server/src/routes/practice.ts
   - apps/server/src/query-language
+  - apps/server/src/query-language/scoreConjunction.ts
 ---
 
 # Practice library & query language
@@ -33,11 +34,12 @@ The searchable practice catalog — same query language powers collections and g
 6. `dan:` is an alias of `rework:`: both match `algorithm = 'mania-difficulty'` labels via `expandReworkDanMatch` on `dr_r`. `axis:` uses rework `ln_ratio` (`dr_r`).
 7. Rating display modes are `osu` | `rework` only. Stored prefs `dan` / `sunny` migrate to `rework`. **Enforced by:** `parseMode` / `primaryDanSource` / `formatPrimaryRating` in `apps/server/public/lib/ratingDisplay.ts`.
 8. Username/gamemode query context is resolved once and reused until settings change or a new import lands. The retry subselect is built only when the AST uses `retry:`.
-9. Play aggregates used by Practice/Search (`play_count`, best accuracy/pp/score/misses, `last_played_at`) are read from the `mastery` row, not rebuilt from `scores` on each request. Mastery must be refreshed by analytics after imports for those fields to stay current.
+9. Play aggregates used by Practice/Search (`play_count`, best accuracy/pp/score/misses, `last_played_at`) are read from the `mastery` row, not rebuilt from `scores` on each request, except the mod-scoped case in rule 14. Mastery must be refreshed by analytics after imports for the mastery fields to stay current.
 10. Ruleset equality filters (`mode:`, `key:`, `ln:`, gamemode clauses) use bare `ruleset_short_name = ?` (lowercase) so SQLite can use `beatmaps_ruleset_cs_idx`. `mode:catch` and `mode:ctb` compile to the stored short name `fruits`.
 11. The map page back control returns to the previous in-app page when one exists. With no previous page it opens Practice. The cover shows the map title only; preview, open in osu!, and more actions sit under it.
 12. Changing page, sort, or query keeps the previous cards and result count on screen and dims the grid (`aria-busy`) until the new result arrives; the skeleton shows only on the first load. Page buttons are disabled while the shown result is stale, and the distribution chart query starts only after the list resolves.
 13. Practice and collection result cards (`rx-card rx-card-grid`) animate only `transform` and `opacity` on hover (accent ring and tint on a pseudo-element). Hover styling applies only under `@media (hover: hover)`. See `architecture/client-theme.md`.
+14. `mods` conjoined with `acc`, `misses`, `score`, or `pp` filters those metrics to scores matching the mods. Accuracy, score, and PP use the best (`MAX`) of that set; misses uses the fewest (`MIN` of `statistics.miss`). A nomod score does not count. No matching score does not match. `mod:IN acc<95` is best Invert accuracy under 95%, not any Invert score under 95%, and not the mastery best. `OR` distributes the mod scope (`(mod:IN OR mod:DT) acc<95`). `mod:IN OR acc<95` and `acc>98 NOT mods:NF` stay separate (`NOT` blocks the scope). `grade` stays its own nomod check. Multiple `mods` terms in one AND must all be on the same score. `pp` reads stored `scores.pp` only. **Enforced by:** `foldScoreConjunctions` in `apps/server/src/query-language/scoreConjunction.ts`.
 
 ## Main flows
 
@@ -52,6 +54,7 @@ practice list / collection match / search
 ## Important symbols
 
 - `apps/server/src/query-language/*`
+- `apps/server/src/query-language/scoreConjunction.ts:foldScoreConjunctions()`
 - `apps/server/src/routes/practice.ts`
 - `apps/server/public/features/practice/PracticeListPage.tsx`
 - `apps/server/public/lib/ratingDisplay.ts:primaryDanLabel()`

@@ -38,7 +38,7 @@ One DSL powers practice search, collections, and global search:
 | `mods`, `acc`, `misses`, `score`, `pp` | `acc>98`, `mods:DT` |
 | `retry`, `mastery`, `played` | `mastery>80`, `played:never` |
 
-Boolean `AND` / `OR` / `NOT`, ranges (`stars:5..6`), comparisons (`acc>98`), and `^` prefix matches on text fields. Plain text without fields searches titles and artists.
+Boolean `AND` / `OR` / `NOT`, ranges (`stars:5..6`), comparisons (`acc>98`), and `^` prefix matches on text fields. Plain text without fields searches titles and artists. When `mods` is in the same AND as `acc`, `misses`, `score`, or `pp`, those apply only to scores with those mods: `mod:IN acc<95` is maps whose best Invert score is under 95% (a nomod play does not count). `acc>98 NOT mods:NF` still means best accuracy overall, and no NF score.
 
 Examples:
 

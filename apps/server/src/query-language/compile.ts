@@ -1,6 +1,10 @@
 import { expandReworkDanMatch, isShapeLabel } from "@roxysu/mania-difficulty";
 import type { AstNode, FieldTerm } from "./ast";
 import {
+  foldScoreConjunctions,
+  type FoldedNode,
+} from "./scoreConjunction";
+import {
   DEFAULT_AXIS_THRESHOLDS,
   type AxisThresholds,
 } from "../analytics/recommend/axisThresholds";
@@ -163,27 +167,13 @@ function compileTerm(
       }
       return mania;
     }
-    case "mods": {
-      let usernameClause = "";
-      if (usernames != null && usernames.length === 1) {
-        usernameClause = `AND s.user_username = ${push(usernames[0])}`;
-      } else if (usernames != null && usernames.length > 1) {
-        const placeholders = usernames.map((name) => push(name)).join(", ");
-        usernameClause = `AND s.user_username IN (${placeholders})`;
-      }
-      const gamemodeClause =
-        gamemode != null
-          ? `AND s.ruleset_short_name = ${push(gamemode.toLowerCase())}`
-          : "";
-      return `EXISTS (
-        SELECT 1 FROM scores s
-        WHERE s.beatmap_id = b.id
-          AND s.delete_pending = 0
-          ${usernameClause}
-          ${gamemodeClause}
-          AND s.mods LIKE ${push(likePattern(term.value))} ESCAPE '\\'
-      )`;
-    }
+    case "mods":
+      return compileModsExists(
+        { type: "term", term },
+        params,
+        usernames,
+        gamemode,
+      );
     case "acc": {
       if (term.min != null && term.max != null) {
         return `m.best_accuracy BETWEEN ${push(term.min / 100)} AND ${push(term.max / 100)}`;
@@ -354,6 +344,128 @@ function compileTerm(
   }
 }
 
+function scoreIdentitySql(
+  params: unknown[],
+  usernames: string[] | null,
+  gamemode: string | null,
+): string {
+  const push = (value: unknown) => {
+    params.push(value);
+    return "?";
+  };
+  let usernameClause = "";
+  if (usernames != null && usernames.length === 1) {
+    usernameClause = `AND s.user_username = ${push(usernames[0])}`;
+  } else if (usernames != null && usernames.length > 1) {
+    const placeholders = usernames.map((name) => push(name)).join(", ");
+    usernameClause = `AND s.user_username IN (${placeholders})`;
+  }
+  const gamemodeClause =
+    gamemode != null
+      ? `AND s.ruleset_short_name = ${push(gamemode.toLowerCase())}`
+      : "";
+  return `s.beatmap_id = b.id
+          AND s.delete_pending = 0
+          ${usernameClause}
+          ${gamemodeClause}`;
+}
+
+/** Boolean on `s.mods`. `node` is a positive mods expression. */
+function compileModsExpr(node: AstNode, params: unknown[]): string {
+  const push = (value: unknown) => {
+    params.push(value);
+    return "?";
+  };
+  if (node.type === "term" && node.term.type === "mods") {
+    return `s.mods LIKE ${push(likePattern(node.term.value))} ESCAPE '\\'`;
+  }
+  if (node.type === "and") {
+    return `(${compileModsExpr(node.left, params)} AND ${compileModsExpr(node.right, params)})`;
+  }
+  if (node.type === "or") {
+    return `(${compileModsExpr(node.left, params)} OR ${compileModsExpr(node.right, params)})`;
+  }
+  return "1=0";
+}
+
+function compileModsExists(
+  mods: AstNode,
+  params: unknown[],
+  usernames: string[] | null,
+  gamemode: string | null,
+): string {
+  return `EXISTS (
+        SELECT 1 FROM scores s
+        WHERE ${scoreIdentitySql(params, usernames, gamemode)}
+          AND ${compileModsExpr(mods, params)}
+      )`;
+}
+
+/**
+ * Best (MAX) or fewest (MIN) of a score metric over the mod-matching scores.
+ * GROUP BY makes the HAVING an aggregate query: no matching score yields no
+ * group, so the map does not match, and NOT of that match is true.
+ */
+function compileScoreAggregate(
+  term: FieldTerm,
+  mods: AstNode,
+  params: unknown[],
+  usernames: string[] | null,
+  gamemode: string | null,
+): string {
+  const havingParams: unknown[] = [];
+  const having = metricHaving(term, havingParams);
+  if (!having) return "1=1";
+  const where = `${scoreIdentitySql(params, usernames, gamemode)}
+          AND ${compileModsExpr(mods, params)}`;
+  params.push(...havingParams);
+  return `EXISTS (
+        SELECT 1 FROM scores s
+        WHERE ${where}
+        GROUP BY s.beatmap_id
+        HAVING ${having}
+      )`;
+}
+
+function metricHaving(term: FieldTerm, params: unknown[]): string | null {
+  const push = (value: unknown) => {
+    params.push(value);
+    return "?";
+  };
+  if (term.type === "acc") {
+    return havingNumeric("MAX(s.accuracy)", term, push, (n) => n / 100);
+  }
+  if (term.type === "misses") {
+    return havingNumeric(
+      "MIN(CAST(json_extract(s.statistics, '$.miss') AS INTEGER))",
+      term,
+      push,
+    );
+  }
+  if (term.type === "score") {
+    return havingNumeric("MAX(s.total_score)", term, push);
+  }
+  if (term.type === "pp" && term.op != null && term.value != null) {
+    return `MAX(s.pp) ${term.op} ${push(term.value)}`;
+  }
+  return null;
+}
+
+function havingNumeric(
+  expr: string,
+  term: { min?: number; max?: number; op?: string; value?: number },
+  push: (value: unknown) => string,
+  scale: (n: number) => number = (n) => n,
+): string | null {
+  if (term.min != null && term.max != null) {
+    return `${expr} BETWEEN ${push(scale(term.min))} AND ${push(scale(term.max))}`;
+  }
+  if (term.op != null && term.value != null) {
+    return `${expr} ${term.op} ${push(scale(term.value))}`;
+  }
+  return null;
+}
+
 export function compileQuery(
   ast: AstNode,
   opts?: {
@@ -366,8 +478,9 @@ export function compileQuery(
   const usernames = opts?.username ?? null;
   const gamemode = opts?.gamemode ?? null;
   const thresholds = opts?.axisThresholds ?? DEFAULT_AXIS_THRESHOLDS;
+  const folded = foldScoreConjunctions(ast);
 
-  function compileNode(node: AstNode): string {
+  function compileNode(node: FoldedNode): string {
     switch (node.type) {
       case "term":
         return compileTerm(node.term, params, usernames, gamemode, thresholds);
@@ -377,8 +490,18 @@ export function compileQuery(
         return `(${compileNode(node.left)} OR ${compileNode(node.right)})`;
       case "not":
         return `(NOT ${compileNode(node.node)})`;
+      case "modsMatch":
+        return compileModsExists(node.mods, params, usernames, gamemode);
+      case "scoreAggregate":
+        return compileScoreAggregate(
+          node.metric,
+          node.mods,
+          params,
+          usernames,
+          gamemode,
+        );
     }
   }
 
-  return { sql: compileNode(ast), params };
+  return { sql: compileNode(folded), params };
 }

@@ -81,10 +81,28 @@ const FIELDS: { field: string; meaning: string; example: string }[] = [
       "RC vs LN map split from rework LN ratio (≥20% LN = LN map). Same threshold as dan labels.",
     example: "key=7 axis:rc pattern:jack",
   },
-  { field: "mods / mod", meaning: "Mods used on a score", example: "mods:DT" },
-  { field: "acc / accuracy", meaning: "Best accuracy % (range or comparison)", example: "acc:90..92" },
-  { field: "misses / miss", meaning: "Best (fewest) miss count", example: "misses:0" },
-  { field: "score", meaning: "Best total score", example: "score>=900000" },
+  {
+    field: "mods / mod",
+    meaning:
+      "Mods on a score. With acc, misses, score, or pp in the same AND, those use only scores that have the mods.",
+    example: "mod:IN acc<95",
+  },
+  {
+    field: "acc / accuracy",
+    meaning:
+      "Best accuracy %. Alone, the mastery best. With mods, the best among those scores.",
+    example: "acc:90..92",
+  },
+  {
+    field: "misses / miss",
+    meaning: "Best (fewest) miss count. With mods, fewest among those scores.",
+    example: "misses:0",
+  },
+  {
+    field: "score",
+    meaning: "Best total score. With mods, best among those scores.",
+    example: "score>=900000",
+  },
   {
     field: "grade / rank",
     meaning:
@@ -93,7 +111,11 @@ const FIELDS: { field: string; meaning: string; example: string }[] = [
   },
   { field: "retry", meaning: "Retry count", example: "retry>10" },
   { field: "mastery", meaning: "Mastery level", example: "mastery>80" },
-  { field: "pp", meaning: "Best PP", example: "pp>=200" },
+  {
+    field: "pp",
+    meaning: "Best PP. With mods, best stored PP among those scores.",
+    example: "pp>=200",
+  },
   {
     field: "played",
     meaning: "Played within N days, or never (use NOT played:lastNd for stale)",
@@ -131,6 +153,7 @@ const EXAMPLES = [
   "mapper:Lasse OR mapper:Sotarks",
   "(mode:osu OR mode:mania) stars:6..7",
   "acc>98 NOT mods:NF",
+  "mod:IN acc<95",
   "mode:mania acc:96..98",
   "title:^SL_5 mastery>50",
   "acc:90..93 NOT played:last14d",

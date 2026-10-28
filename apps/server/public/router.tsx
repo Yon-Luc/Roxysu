@@ -81,6 +81,11 @@ const DownloadMapsPage = lazy(() =>
     default: m.DownloadMapsPage,
   })),
 );
+const ManiaParityPage = lazy(() =>
+  import("./features/mania-parity/ManiaParityPage").then((m) => ({
+    default: m.ManiaParityPage,
+  })),
+);
 const MarathonPage = lazy(() =>
   import("./features/marathon/MarathonPage").then((m) => ({
     default: m.MarathonPage,
@@ -260,6 +265,12 @@ const ratingLabRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/rating-lab",
   component: RatingLabPage,
+});
+
+const maniaParityRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/dev/parity",
+  component: ManiaParityPage,
 });
 
 const downloadMapsRoute = createRoute({
@@ -561,6 +572,7 @@ const routeTree = rootRoute.addChildren([
     hubAdminCalcBundlesRoute,
     hubDetailRoute,
     ...(isDesktopShell() ? [] : [ratingLabRoute]),
+    maniaParityRoute,
     skinRoute,
     settingsRoute,
     bmsRoute,

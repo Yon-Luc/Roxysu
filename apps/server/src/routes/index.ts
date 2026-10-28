@@ -21,6 +21,7 @@ import { skinRoutes } from "./skins";
 import { onlineScoreRoutes } from "./onlineScores";
 import { scoreTransferRoutes } from "./scoreTransfer";
 import { bmsRoutes } from "./bms";
+import { maniaParityRoutes } from "./maniaParity";
 
 const productApi = () =>
   new Elysia({ prefix: "/api" })
@@ -43,7 +44,8 @@ const productApi = () =>
     .use(tosuRoutes)
     .use(marathonRoutes)
     .use(skinRoutes)
-    .use(bmsRoutes);
+    .use(bmsRoutes)
+    .use(maniaParityRoutes);
 
 /** Desktop / Node product API (no Rating Lab). */
 export function createProductApiRoutes() {

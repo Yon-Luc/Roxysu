@@ -15,6 +15,7 @@ import {
   Clock,
   Download,
   Ellipsis,
+  GitCompare,
   Layers,
   Home,
   LayoutGrid,
@@ -33,6 +34,7 @@ import {
   X,
 } from "lucide-react";
 import { fetchSystemStatus } from "../lib/api";
+import { useDevParityVisible } from "../lib/devParity";
 import { formatAppVersionLabel } from "../lib/appVersion";
 import { isDesktopShell } from "../lib/desktop";
 import { useAppDict } from "../lib/i18n";
@@ -68,18 +70,24 @@ const ALL_NAV = [
   { to: "/skin", label: "Skin", labelKey: "skin", icon: Palette, group: "tools" },
   { to: "/settings", label: "Settings", labelKey: "settings", icon: Settings, group: "tools" },
   { to: "/rating-lab", label: "Rating Lab", labelKey: "ratingLab", icon: Star, group: "tools" },
+  { to: "/dev/parity", label: "Parity", labelKey: "maniaParity", icon: GitCompare, group: "tools" },
 ] as const;
 
 /** Hidden while the feature is still buggy / unfinished. Route may still exist. */
 const HIDDEN_NAV = new Set(["/marathon"]);
 const DESKTOP_HIDDEN_NAV = new Set(["/rating-lab"]);
+const DEV_ONLY_NAV = new Set(["/dev/parity"]);
 const MOBILE_PRIMARY = ["/", "/practice", "/sessions", "/stats"] as const;
 
 type NavItem = ReturnType<typeof useNavItems>[number];
 
 function useNavItems(dict: Dictionary["app"] | undefined) {
+  const showDevParity = useDevParityVisible();
   return useMemo(() => {
     let items = ALL_NAV.filter((item) => !HIDDEN_NAV.has(item.to));
+    if (!showDevParity) {
+      items = items.filter((item) => !DEV_ONLY_NAV.has(item.to));
+    }
     if (isDesktopShell()) {
       items = items.filter((item) => !DESKTOP_HIDDEN_NAV.has(item.to));
     }
@@ -87,7 +95,7 @@ function useNavItems(dict: Dictionary["app"] | undefined) {
       ...item,
       label: dict?.nav[item.labelKey] ?? item.label,
     }));
-  }, [dict]);
+  }, [dict, showDevParity]);
 }
 
 function readSidebarOpen(): boolean {

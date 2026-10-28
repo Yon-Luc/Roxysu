@@ -17,6 +17,7 @@ import {
 } from "../hubOAuthPending";
 import { APP_VERSION } from "../appVersion";
 import { resolveHubBaseUrl } from "../hubUrl";
+import { localParityAccess } from "../mania-parity/access";
 import { toIso } from "../shared/serialize";
 
 export { SYNC_PAUSE_WHEN_UNFOCUSED_KEY, SYNC_UI_FOCUSED_KEY };
@@ -215,6 +216,8 @@ export const systemRoutes = new Elysia({ prefix: "/system" })
         pauseWhenUnfocusedRow?.value === "1" && focusRow?.value === "0",
       /** Set when osu!lazer's Realm schema is newer than this Roxysu build. */
       schemaOutdated: readSchemaOutdated(schemaOutdatedRow?.value),
+      /** Dev compare page: mania-difficulty checkout on disk, or library player is Noy. */
+      devParity: localParityAccess(db).enabled,
       lastImport: lastImport
         ? {
             id: lastImport.id,

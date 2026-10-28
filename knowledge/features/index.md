@@ -29,3 +29,4 @@ One subdirectory per product surface. Terms: [vocabulary.md](../vocabulary.md).
 | Replay video export | [replay-video-export/](replay-video-export/index.md) |
 | Standalone tosu counter (mania notefield) | [tosu-counter/](tosu-counter/index.md) |
 | Roxysu Play (GPUIX native UI playground) | [roxysu-play/](roxysu-play/index.md) |
+| Mania difficulty port compare (dev) | [mania-parity/](mania-parity/index.md) |

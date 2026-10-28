@@ -23,6 +23,7 @@ import {
   searchablePageSections,
   type PageSectionDef,
 } from "../lib/pageSections";
+import { useDevParityVisible } from "../lib/devParity";
 import { useAppDict, t } from "../lib/i18n";
 import type { Dictionary } from "@roxysu/i18n";
 
@@ -39,6 +40,7 @@ const PAGE_LABEL_KEYS: Record<string, keyof Dictionary["app"]["nav"]> = {
   "/download-maps": "download",
   "/marathon": "marathon",
   "/rating-lab": "ratingLab",
+  "/dev/parity": "maniaParity",
   "/skin": "skin",
   "/settings": "settings",
 };
@@ -139,6 +141,11 @@ const ALL_PAGE_ITEMS: {
     keywords: ["dan", "fuse", "merge", "mania", "osz"],
   },
   { to: "/rating-lab", label: "Rating Lab", keywords: ["pp", "mania"] },
+  {
+    to: "/dev/parity",
+    label: "Parity",
+    keywords: ["csharp", "typescript", "mania", "difficulty", "rework", "dev"],
+  },
   { to: "/skin", label: "Skin", keywords: ["preview", "keybinds"] },
   { to: "/settings", label: "Settings", keywords: ["config", "preferences"] },
 ];
@@ -146,9 +153,13 @@ const ALL_PAGE_ITEMS: {
 /** Hidden while the feature is still buggy / unfinished. Route may still exist. */
 const HIDDEN_PAGES = new Set(["/marathon"]);
 const DESKTOP_HIDDEN_PAGES = new Set(["/rating-lab"]);
+const DEV_ONLY_PAGES = new Set(["/dev/parity"]);
 
-function pageItems() {
+function pageItems(showDevParity: boolean) {
   let items = ALL_PAGE_ITEMS.filter((item) => !HIDDEN_PAGES.has(item.to));
+  if (!showDevParity) {
+    items = items.filter((item) => !DEV_ONLY_PAGES.has(item.to));
+  }
   if (isDesktopShell()) {
     items = items.filter((item) => !DESKTOP_HIDDEN_PAGES.has(item.to));
   }
@@ -212,6 +223,7 @@ export function CommandPalette({
   const dialogRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const { dict } = useAppDict();
+  const showDevParity = useDevParityVisible();
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -300,7 +312,7 @@ export function CommandPalette({
     const trimmed = query.trim();
     const result: CommandItem[] = [];
 
-    for (const page of pageItems()) {
+    for (const page of pageItems(showDevParity)) {
       if (!itemMatches(page, trimmed)) continue;
       const clearsSection = page.to === "/settings" || page.to === "/skin";
       result.push({
@@ -445,6 +457,7 @@ export function CommandPalette({
     collectionsData,
     go,
     dict,
+    showDevParity,
   ]);
 
   useEffect(() => {

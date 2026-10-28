@@ -1,11 +1,12 @@
 ---
-last_verified: 2026-08
+last_verified: 2026-10-28
 confidence: verified
 touches:
   - packages/i18n/src/dictionary/app/{en,fr,es,pt}.json
   - apps/server/public/lib/i18n.ts
   - apps/server/public/features/overlay/OverlayPage.tsx
   - apps/server/public/features/rating-lab/RatingLabPage.tsx
+  - apps/server/public/features/mania-parity/ManiaParityPage.tsx
   - apps/server/public/features/download/DownloadMapsPage.tsx
   - apps/server/public/features/hub
 ---
@@ -28,7 +29,7 @@ chosen per-browser via `apps/server/public/lib/language.ts`.
 
 `nav, common, sync, dashboard, stats, practice, settings, skin, command,
 session, collection, nowSelected, marathon, media, overlay, ratingLab,
-download, hub`
+download, hub, maniaParity`
 
 `common` includes relative-time templates (`justNow`, `minutesAgo`,
 `hoursAgo`, `daysAgo`) consumed by `formatRelativeTime(iso, dict?.common)`.

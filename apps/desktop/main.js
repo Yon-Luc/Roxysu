@@ -427,17 +427,22 @@ function scheduleRealmRespawn(paths, sharedEnv) {
 
 /**
  * Optional In-game overlay host (Wayland wlr-layer-shell). Bundled by the Nix
- * packages into resources/overlay; dev falls back to a locally built
- * apps/overlay/roxysu-overlay. HTTP-only consumer of GET /api/overlay — never
- * touches Realm or the local mirror. Skipped on Windows (no layer-shell).
+ * packages into resources/overlay (Phase 8: Rust `roxysu-overlay` symlink).
+ * Dev prefers a local Rust build, then C rollback binary. HTTP-only consumer
+ * of GET /api/overlay — never touches Realm or the local mirror. Skipped on
+ * Windows (no layer-shell). Override: ROXYSU_OVERLAY_BIN.
  * @param {ReturnType<typeof resolveDesktopPaths>} paths
  */
 function resolveOverlayBin(paths) {
   const envBin = process.env.ROXYSU_OVERLAY_BIN?.trim();
   if (envBin) return fs.existsSync(envBin) ? envBin : null;
+  const root = paths.repoRoot;
   const candidates = [
     path.join(paths.resourcesDir, "overlay", "roxysu-overlay"),
-    paths.repoRoot ? path.join(paths.repoRoot, "apps", "overlay", "roxysu-overlay") : null,
+    root ? path.join(root, "apps", "overlay-rs", "target", "release", "roxysu-overlay-rs") : null,
+    root ? path.join(root, "apps", "overlay-rs", "target", "debug", "roxysu-overlay-rs") : null,
+    // C rollback (apps/overlay) if still built locally
+    root ? path.join(root, "apps", "overlay", "roxysu-overlay") : null,
   ].filter(Boolean);
   return candidates.find((candidate) => fs.existsSync(candidate)) || null;
 }

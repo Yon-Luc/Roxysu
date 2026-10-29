@@ -11,11 +11,9 @@
   libclang,
   version,
 }:
-# Rust in-game overlay host (apps/overlay-rs). Parallel to nix/overlay.nix (C).
-# Not bundled into the desktop package yet — Phase 8 cutover. Build with:
-#   nix build .#roxysu-overlay-rs
-# Point the desktop toggle at it for A/B:
-#   ROXYSU_OVERLAY_BIN=$(nix build --print-out-paths .#roxysu-overlay-rs)/bin/roxysu-overlay-rs
+# Rust in-game overlay host (apps/overlay-rs). Phase 8 default for desktop
+# packaging (provides `bin/roxysu-overlay` symlink for resources/overlay/).
+# C rollback: nix build .#roxysu-overlay-c
 rustPlatform.buildRustPackage {
   pname = "roxysu-overlay-rs";
   inherit version;
@@ -41,10 +39,15 @@ rustPlatform.buildRustPackage {
   # gtk-rs / webkit6-sys bindgen
   LIBCLANG_PATH = "${libclang.lib}/lib";
 
+  # Desktop packages expect resources/overlay/roxysu-overlay.
+  postInstall = ''
+    ln -s roxysu-overlay-rs "$out/bin/roxysu-overlay"
+  '';
+
   meta = {
     description = "Roxysu in-game overlay host (Rust; Wayland layer-shell + WebKitGTK)";
     license = lib.licenses.mit;
     platforms = ["x86_64-linux"];
-    mainProgram = "roxysu-overlay-rs";
+    mainProgram = "roxysu-overlay";
   };
 }

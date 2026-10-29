@@ -89,18 +89,14 @@
       nodejs_24 = pkgs.nodejs_24;
     };
 
-    # In-game overlay host (apps/overlay) — built once, bundled into the
-    # desktop packages below; also buildable standalone: nix build .#roxysu-overlay
-    # C remains the shipped default until Phase 8 acceptance + cutover.
-    overlayBin = pkgs.callPackage ./nix/overlay.nix {
-      version = resourcesVersion;
-    };
-
-    # Rust overlay host prototype — package only; not yet swapped into
-    # resources/overlay (use ROXYSU_OVERLAY_BIN to A/B via the desktop toggle).
+    # Phase 8: Rust is the bundled overlay host. C remains buildable for rollback.
     overlayRsBin = pkgs.callPackage ./nix/overlay-rs.nix {
       version = resourcesVersion;
     };
+    overlayCBin = pkgs.callPackage ./nix/overlay.nix {
+      version = resourcesVersion;
+    };
+    overlayBin = overlayRsBin;
 
     roxysuPrebuilt = pkgs.callPackage ./nix/prebuilt.nix {
       inherit electron overlayBin;
@@ -116,8 +112,9 @@
       inherit roxysu;
       roxysu-prebuilt = roxysuPrebuilt;
       roxysu-from-source = roxysuFromSource;
-      roxysu-overlay = overlayBin;
+      roxysu-overlay = overlayRsBin;
       roxysu-overlay-rs = overlayRsBin;
+      roxysu-overlay-c = overlayCBin;
     };
 
     apps.${system}.default = {

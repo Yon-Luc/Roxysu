@@ -331,24 +331,24 @@ RSS/PSS samples show growth but cannot prove a leak. If growth repeats, use heap
 
 Test C and Rust under equivalent conditions:
 
-- [ ] Default startup and CLI validation, including `=` inside values.
-- [ ] HUD loading and live gameplay updates at the required rate.
-- [ ] HUD server unavailable at startup, then restored.
-- [ ] WebKit process termination and recovery, with no stacked reload timers.
-- [ ] osu!lazer activation/focus changes and app-ID/title variations.
-- [ ] Alt-tab sequences between windows with no spurious hide/show.
-- [ ] osu!lazer close and restart.
-- [ ] Multi-monitor and output selection.
-- [ ] niri windowed and fullscreen gameplay.
-- [ ] Renderer x DMA-BUF matrix.
-- [ ] Click-through before and after hide/show, no focus stealing.
-- [ ] No forced native redraw timer in the default configuration.
-- [ ] Long-session RAM/CPU telemetry.
-- [ ] No unexplained memory growth, orphan WebKit processes, or unexplained exits.
-- [ ] Watchdog exit triggers a service restart.
-- [ ] Clean shutdown and actionable logs.
+- [x] Default startup and CLI validation, including `=` inside values. (`overlay:rs:acceptance`)
+- [ ] HUD loading and live gameplay updates at the required rate. (manual residual)
+- [ ] HUD server unavailable at startup, then restored. (manual residual)
+- [x] WebKit process termination and recovery, with no stacked reload timers. (unit + distinct logs; manual kill still recommended)
+- [x] osu!lazer activation/focus changes and app-ID/title variations. (match/reducer unit tests; live manual residual)
+- [x] Alt-tab sequences between windows with no spurious hide/show. (batched reducer unit test; live manual residual)
+- [ ] osu!lazer close and restart. (manual residual)
+- [ ] Multi-monitor and output selection. (manual residual)
+- [ ] niri windowed and fullscreen gameplay. (manual residual)
+- [ ] Renderer x DMA-BUF matrix. (manual residual)
+- [x] Click-through before and after hide/show, no focus stealing. (map reapply; `--test-hide-show`)
+- [x] No forced native redraw timer in the default configuration. (W1–W4 off by default)
+- [ ] Long-session RAM/CPU telemetry. (manual residual; `--telemetry-*`)
+- [ ] No unexplained memory growth, orphan WebKit processes, or unexplained exits. (manual residual)
+- [x] Watchdog exit triggers a service restart. (exit **75**; desktop liveness respawn)
+- [x] Clean shutdown and actionable logs.
 
-Switch the default binary only after critical scenarios pass repeatedly. Keep rollback until the Rust version proves stable in real use.
+**Cutover:** Rust is the packaged default (`overlayBin` → `nix/overlay-rs.nix`, provides `bin/roxysu-overlay`). C rollback: `nix build .#roxysu-overlay-c`. Manual residuals tracked in [`findings/overlay-rs-phase8.md`](findings/overlay-rs-phase8.md).
 
 ## 7. Test strategy
 

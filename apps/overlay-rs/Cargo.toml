@@ -3,7 +3,7 @@ name = "roxysu-overlay"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.85"
-description = "Roxysu in-game overlay host (Rust Phase 1 prototype)"
+description = "Roxysu in-game overlay host (Rust; Phase 2 CLI/config)"
 license = "MIT"
 publish = false
 

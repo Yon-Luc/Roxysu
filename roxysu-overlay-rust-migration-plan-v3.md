@@ -209,15 +209,15 @@ The C watchdog caps (450 FDs, 4200 MB) suggest past incidents. Treat them as hyp
 
 ### Phase 2 — CLI and configuration
 
-- [ ] Implement `clap` parsing; preserve option names and defaults.
-- [ ] Accept `--opt value` and `--opt=value`; leave `=` inside values alone (unit test with a URL containing `?bg=clear&limit=25`).
-- [ ] Typed fields for URL, match policy, dimensions, opacity, anchor, margin, monitor, thresholds.
-- [ ] Validate URL, numeric ranges, and conflicting options; error on invalid values instead of silently defaulting.
-- [ ] Expose `--gsk-renderer` and `--webkit-no-dmabuf` as typed options.
-- [ ] Keep `--list-windows`, `--debug`, `--follow-focus`.
-- [ ] Add diagnostic flags for W1–W5 (default off).
-- [ ] Ensure help text matches real behavior; implement cursor-output selection or document the real default.
-- [ ] Unit tests for valid and invalid configuration.
+- [x] Implement `clap` parsing; preserve option names and defaults. (`apps/overlay-rs/src/cli.rs`)
+- [x] Accept `--opt value` and `--opt=value`; leave `=` inside values alone (unit test with a URL containing `?bg=clear&limit=25`).
+- [x] Typed fields for URL, match policy, dimensions, opacity, anchor, margin, monitor, thresholds. (`config.rs`)
+- [x] Validate URL, numeric ranges, and conflicting options; error on invalid values instead of silently defaulting.
+- [x] Expose `--gsk-renderer` and `--webkit-no-dmabuf` as typed options.
+- [x] Keep `--list-windows`, `--debug`, `--follow-focus`.
+- [x] Add diagnostic flags for W1–W5 (default off). (`--diag-*`; behavior wired in Phase 3)
+- [x] Ensure help text matches real behavior; implement cursor-output selection or document the real default. (documented: compositor default)
+- [x] Unit tests for valid and invalid configuration. (13 tests)
 
 ### Phase 3 — Native overlay and live WebKit rendering
 

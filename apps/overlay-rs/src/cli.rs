@@ -1,0 +1,229 @@
+//! Clap CLI surface. Preserves C option names/defaults; validates via [`Config`].
+
+use anyhow::Result;
+use clap::Parser;
+
+use crate::config::{
+    Anchor, Config, DiagnosticFlags, GskRenderer, DEFAULT_HEIGHT, DEFAULT_MARGIN,
+    DEFAULT_MATCH_APP_ID, DEFAULT_OPACITY, DEFAULT_URL, DEFAULT_WATCHDOG_MAX_AGE_SEC,
+    DEFAULT_WATCHDOG_MAX_FDS, DEFAULT_WATCHDOG_MAX_RSS_MB, DEFAULT_WIDTH,
+};
+
+#[derive(Debug, Parser)]
+#[command(
+    name = "roxysu-overlay-rs",
+    about = "Roxysu in-game overlay host (Wayland layer-shell + WebKitGTK)",
+    long_about = "Draw the Roxysu /overlay HUD above osu!lazer on wlr-layer-shell compositors \
+(Hyprland, sway, niri, …).\n\n\
+The surface is always click-through. Requires the client app server (port 4321).\n\n\
+--output defaults to the compositor's choice when omitted (not the cursor output)."
+)]
+pub struct Cli {
+    /// HUD page URL. Both `--url VALUE` and `--url=VALUE` work; `=` inside the value is fine.
+    #[arg(long, default_value = DEFAULT_URL)]
+    pub url: String,
+
+    /// Anchored corner: top-left | top-right | bottom-left | bottom-right.
+    #[arg(long, default_value = "top-right", value_parser = parse_anchor)]
+    pub anchor: Anchor,
+
+    /// Margin from the anchored edges (all four), in pixels.
+    #[arg(long, default_value_t = DEFAULT_MARGIN)]
+    pub margin: i32,
+
+    /// Window width in pixels.
+    #[arg(long, default_value_t = DEFAULT_WIDTH)]
+    pub width: i32,
+
+    /// Window height in pixels.
+    #[arg(long, default_value_t = DEFAULT_HEIGHT)]
+    pub height: i32,
+
+    /// Window opacity in (0.0, 1.0].
+    #[arg(long, default_value_t = DEFAULT_OPACITY)]
+    pub opacity: f64,
+
+    /// Target monitor by connector or model. Omit for compositor default.
+    #[arg(long)]
+    pub output: Option<String>,
+
+    /// Show only while a matching app is focused (`true`/`false`, `1`/`0`, …).
+    #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
+    pub follow_focus: bool,
+
+    /// Case-insensitive substring matched against app_id (title if app_id empty).
+    #[arg(long, default_value = DEFAULT_MATCH_APP_ID)]
+    pub match_app_id: String,
+
+    /// Dump known foreign-toplevel windows and exit.
+    #[arg(long, default_value_t = false)]
+    pub list_windows: bool,
+
+    /// Print paint/debug stats (and enable W4 paint counter path when wired).
+    #[arg(long, default_value_t = false)]
+    pub debug: bool,
+
+    /// Force GTK GSK renderer: gl | ngl | cairo | vulkan.
+    #[arg(long, value_parser = parse_gsk)]
+    pub gsk_renderer: Option<GskRenderer>,
+
+    /// Disable WebKit DMA-BUF rendering (`WEBKIT_DISABLE_DMABUF_RENDERER=1`).
+    #[arg(long, default_value_t = false)]
+    pub webkit_no_dmabuf: bool,
+
+    /// W1 diagnostic: opacity flip + queue_draw timer (default off).
+    #[arg(long, default_value_t = false)]
+    pub diag_damage_tick: bool,
+
+    /// W2 diagnostic: injected CSS keepalive animation (default off).
+    #[arg(long, default_value_t = false)]
+    pub diag_inject_keepalive: bool,
+
+    /// W3 diagnostic: reassert layer/anchors on show/refocus (default off).
+    #[arg(long, default_value_t = false)]
+    pub diag_reassert_placement: bool,
+
+    /// W4 diagnostic: continuous tick callback (default off; implied by --debug later).
+    #[arg(long, default_value_t = false)]
+    pub diag_paint_counter: bool,
+
+    /// W5 diagnostic: JS page visibility toggle on hide/show (default off).
+    #[arg(long, default_value_t = false)]
+    pub diag_set_page_hidden: bool,
+
+    /// Watchdog max process age in seconds (Phase 6; stored now).
+    #[arg(long, default_value_t = DEFAULT_WATCHDOG_MAX_AGE_SEC)]
+    pub watchdog_max_age_sec: u64,
+
+    /// Watchdog max open FDs among descendants (Phase 6; stored now).
+    #[arg(long, default_value_t = DEFAULT_WATCHDOG_MAX_FDS)]
+    pub watchdog_max_fds: u64,
+
+    /// Watchdog max tree RSS in MiB (Phase 6; stored now).
+    #[arg(long, default_value_t = DEFAULT_WATCHDOG_MAX_RSS_MB)]
+    pub watchdog_max_rss_mb: u64,
+
+    /// After mapping, hide then show once to verify click-through survives remap.
+    #[arg(long, default_value_t = false, hide = true)]
+    pub test_hide_show: bool,
+}
+
+fn parse_anchor(s: &str) -> Result<Anchor, String> {
+    s.parse::<Anchor>().map_err(|e| e.to_string())
+}
+
+fn parse_gsk(s: &str) -> Result<GskRenderer, String> {
+    s.parse::<GskRenderer>().map_err(|e| e.to_string())
+}
+
+impl Cli {
+    pub fn into_config(self) -> Result<Config> {
+        let cfg = Config {
+            url: self.url,
+            anchor: self.anchor,
+            margin: self.margin,
+            width: self.width,
+            height: self.height,
+            opacity: self.opacity,
+            output: self.output,
+            follow_focus: self.follow_focus,
+            match_app_id: self.match_app_id,
+            list_windows: self.list_windows,
+            debug: self.debug,
+            gsk_renderer: self.gsk_renderer,
+            webkit_no_dmabuf: self.webkit_no_dmabuf,
+            diagnostics: DiagnosticFlags {
+                damage_tick: self.diag_damage_tick,
+                inject_keepalive: self.diag_inject_keepalive,
+                reassert_placement: self.diag_reassert_placement,
+                paint_counter: self.diag_paint_counter || self.debug,
+                set_page_hidden: self.diag_set_page_hidden,
+            },
+            watchdog_max_age_sec: self.watchdog_max_age_sec,
+            watchdog_max_fds: self.watchdog_max_fds,
+            watchdog_max_rss_mb: self.watchdog_max_rss_mb,
+            test_hide_show: self.test_hide_show,
+        };
+        cfg.validate()?;
+        Ok(cfg)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    #[test]
+    fn parses_url_equals_form_with_query_equals() {
+        let cli = Cli::try_parse_from([
+            "roxysu-overlay-rs",
+            "--url=http://127.0.0.1:4321/#/overlay?bg=clear&limit=25",
+        ])
+        .unwrap();
+        let cfg = cli.into_config().unwrap();
+        assert!(cfg.url.contains("bg=clear"));
+        assert!(cfg.url.contains("limit=25"));
+    }
+
+    #[test]
+    fn parses_url_separate_value_with_query_equals() {
+        let cli = Cli::try_parse_from([
+            "roxysu-overlay-rs",
+            "--url",
+            "http://host/#/overlay?bg=clear&limit=25",
+        ])
+        .unwrap();
+        let cfg = cli.into_config().unwrap();
+        assert_eq!(cfg.url, "http://host/#/overlay?bg=clear&limit=25");
+    }
+
+    #[test]
+    fn rejects_invalid_opacity_and_anchor() {
+        let err = Cli::try_parse_from(["roxysu-overlay-rs", "--opacity", "2.0"])
+            .unwrap()
+            .into_config()
+            .unwrap_err();
+        assert!(err.to_string().contains("opacity"));
+
+        let err = Cli::try_parse_from(["roxysu-overlay-rs", "--anchor", "middle"]);
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn follow_focus_and_diag_defaults() {
+        let cfg = Cli::try_parse_from(["roxysu-overlay-rs"])
+            .unwrap()
+            .into_config()
+            .unwrap();
+        assert!(cfg.follow_focus);
+        assert!(!cfg.diagnostics.damage_tick);
+        assert!(!cfg.diagnostics.inject_keepalive);
+        assert_eq!(cfg.anchor, Anchor::TopRight);
+        assert!(cfg.output.is_none());
+    }
+
+    #[test]
+    fn debug_implies_paint_counter_diag() {
+        let cfg = Cli::try_parse_from(["roxysu-overlay-rs", "--debug"])
+            .unwrap()
+            .into_config()
+            .unwrap();
+        assert!(cfg.debug);
+        assert!(cfg.diagnostics.paint_counter);
+    }
+
+    #[test]
+    fn gsk_and_dmabuf_flags() {
+        let cfg = Cli::try_parse_from([
+            "roxysu-overlay-rs",
+            "--gsk-renderer=cairo",
+            "--webkit-no-dmabuf",
+        ])
+        .unwrap()
+        .into_config()
+        .unwrap();
+        assert_eq!(cfg.gsk_renderer, Some(GskRenderer::Cairo));
+        assert!(cfg.webkit_no_dmabuf);
+    }
+}

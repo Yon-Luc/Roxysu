@@ -1,28 +1,42 @@
-# roxysu-overlay-rs (Phase 1 prototype)
+# roxysu-overlay-rs
 
-Rust proof of GTK4 + WebKitGTK 6 + gtk4-layer-shell + GDK click-through + dedicated
-`zwlr_foreign_toplevel` focus tracking. The C host in `apps/overlay/` remains the
-shipped default until later migration phases.
+Rust Wayland overlay host (GTK4 + WebKitGTK 6 + gtk4-layer-shell). The C host in
+`apps/overlay/` remains the shipped default until later migration phases.
 
 ## Build / run
 
 ```bash
-nix develop --command bash -lc 'cd apps/overlay-rs && cargo build'
-./apps/overlay-rs/target/debug/roxysu-overlay-rs --output=DP-4 \
-  --url='http://127.0.0.1:4321/#/overlay?bg=clear&limit=25&profile=Classic'
+nix develop --command bash apps/overlay-rs/run.sh --follow-focus false
+# or
+bun run overlay:rs -- --follow-focus false
 ```
 
-Or `bun run overlay:rs -- --follow-focus false` (args after `--` reach the binary via `run.sh`).
+## CLI (Phase 2)
 
-## Phase 1 flags
+Same option names as the C host, plus diagnostic and watchdog knobs. Invalid
+values error out (no silent fallback). Help documents the real `--output`
+default: compositor choice when omitted.
 
-| Flag | Purpose |
-|---|---|
-| `--url` | HUD URL (`=` inside values OK) |
-| `--output` | Monitor connector/model |
-| `--follow-focus` | `true`/`false` (clap `ArgAction::Set`) |
-| `--match-app-id` | Substring match (default `osu`) |
-| `--list-windows` | Dump foreign-toplevels and quit |
-| `--test-hide-show` | Hide then show once; verify click-through remap |
+| Flag | Default | Notes |
+|---|---|---|
+| `--url` | HUD with `bg=clear` | `--url=…` and `--url …`; `=` in values OK |
+| `--anchor` | `top-right` | top/bottom × left/right |
+| `--margin` | `0` | all four edges |
+| `--width` / `--height` | `1920` / `1090` | must be > 0 |
+| `--opacity` | `1.0` | `(0, 1]` |
+| `--output` | compositor default | connector or model |
+| `--follow-focus` | `true` | `true`/`false` |
+| `--match-app-id` | `osu` | case-insensitive substring |
+| `--list-windows` | off | dump foreign-toplevels |
+| `--debug` | off | also enables W4 paint-counter diag flag |
+| `--gsk-renderer` | unset | `gl`/`ngl`/`cairo`/`vulkan` |
+| `--webkit-no-dmabuf` | off | W7 |
+| `--diag-*` | off | W1–W5 (behavior in Phase 3+) |
+| `--watchdog-max-*` | C defaults | stored for Phase 6 |
 
-See [`findings/overlay-rs-phase1.md`](../../findings/overlay-rs-phase1.md).
+```bash
+cargo test   # in nix develop, under apps/overlay-rs
+```
+
+See [`findings/overlay-rs-phase1.md`](../../findings/overlay-rs-phase1.md) and the
+migration plan Phase 2 section.

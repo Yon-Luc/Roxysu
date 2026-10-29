@@ -12,37 +12,27 @@ use webkit6::prelude::*;
 use webkit6::WebView;
 
 use crate::click_through::{apply_click_through, ClickThroughMethod};
+use crate::config::Config;
 use crate::focus::{self, FocusCommand, FocusEvent};
-
-#[derive(Debug, Clone)]
-pub struct OverlayConfig {
-    pub url: String,
-    pub width: i32,
-    pub height: i32,
-    pub output: Option<String>,
-    pub follow_focus: bool,
-    pub match_app_id: String,
-    pub list_windows: bool,
-    pub test_hide_show: bool,
-}
 
 pub struct OverlayHost {
     window: ApplicationWindow,
     #[allow(dead_code)]
     webview: WebView,
-    config: OverlayConfig,
+    config: Config,
     mapped: Rc<RefCell<bool>>,
     click_method: Rc<RefCell<Option<ClickThroughMethod>>>,
 }
 
 impl OverlayHost {
-    pub fn new(app: &Application, config: OverlayConfig) -> Result<Self> {
+    pub fn new(app: &Application, config: Config) -> Result<Self> {
         let window = ApplicationWindow::builder()
             .application(app)
             .title("Roxysu overlay")
             .default_width(config.width)
             .default_height(config.height)
             .build();
+        window.set_opacity(config.opacity);
 
         window.init_layer_shell();
         window.set_layer(Layer::Overlay);
@@ -50,13 +40,14 @@ impl OverlayHost {
         window.set_exclusive_zone(-1);
         window.set_keyboard_mode(KeyboardMode::None);
 
-        // Default anchor: top-right (matches C host).
-        window.set_anchor(Edge::Top, true);
-        window.set_anchor(Edge::Bottom, false);
-        window.set_anchor(Edge::Left, false);
-        window.set_anchor(Edge::Right, true);
+        let top = config.anchor.top();
+        let left = config.anchor.left();
+        window.set_anchor(Edge::Top, top);
+        window.set_anchor(Edge::Bottom, !top);
+        window.set_anchor(Edge::Left, left);
+        window.set_anchor(Edge::Right, !left);
         for edge in [Edge::Top, Edge::Bottom, Edge::Left, Edge::Right] {
-            window.set_margin(edge, 0);
+            window.set_margin(edge, config.margin);
         }
 
         if let Some(ref name) = config.output {
@@ -98,6 +89,17 @@ impl OverlayHost {
             window.connect_unmap(move |_| {
                 *mapped.borrow_mut() = false;
             });
+        }
+
+        if config.diagnostics.damage_tick
+            || config.diagnostics.inject_keepalive
+            || config.diagnostics.reassert_placement
+            || config.diagnostics.set_page_hidden
+        {
+            warn!(
+                ?config.diagnostics,
+                "diagnostic workarounds requested; W1–W5 behavior is wired in Phase 3"
+            );
         }
 
         Ok(Self {

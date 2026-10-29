@@ -129,8 +129,8 @@
     # Install into PATH + app menu: nix profile install github:Yon-Luc/Roxysu
     #   or on NixOS: programs.roxysu.enable (see nixosModules above).
     devShells.${system}.default = pkgs.mkShell {
-      # GTK/webkit/layer-shell: builds apps/overlay (roxysu-overlay host).
-      # gpuixRuntimeDeps: dlopen targets for apps/play (@gpuix/native).
+      # GTK/webkit/layer-shell: builds apps/overlay (C host) and apps/overlay-rs
+      # (Rust Phase 1+ prototype). gpuixRuntimeDeps: dlopen for apps/play.
       buildInputs =
         [
           pkgs.bun
@@ -144,17 +144,27 @@
           pkgs.wayland-scanner
           pkgs.wlr-protocols
           pkgs.zenity
+          # Rust overlay host prototype (apps/overlay-rs)
+          pkgs.rustc
+          pkgs.cargo
+          pkgs.rustfmt
+          pkgs.clippy
+          pkgs.fontconfig
         ]
         ++ nativeDeps
         ++ gpuixRuntimeDeps;
 
       # Fallback build toolchain for node-gyp, in case a package's
       # prebuilt binary doesn't match the installed Node/Bun ABI.
+      # Also used by gtk-rs / webkit6-sys pkg-config + bindgen.
       nativeBuildInputs = with pkgs; [
         python3
         gcc
         gnumake
         pkg-config
+        # webkit6-sys / gtk4-sys may need clang for bindgen
+        clang
+        libclang
       ];
 
       NIX_LD = "${pkgs.stdenv.cc.libc}/lib/ld-linux-x86-64.so.2";

@@ -51,3 +51,7 @@ apps/overlay/gen/
 
 # shipped calc bundle file (admin export release artifact)
 apps/desktop/pack/
+
+# C baseline binary archive for Rust migration (Phase 0)
+apps/overlay/baselines/
+apps/overlay-rs/target/

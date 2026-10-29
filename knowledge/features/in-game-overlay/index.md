@@ -4,6 +4,7 @@ confidence: verified
 touches:
   - apps/overlay/main.c
   - apps/overlay/build.sh
+  - apps/overlay-rs/
   - flake.nix
   - nix/overlay.nix
   - nix/prebuilt.nix
@@ -165,3 +166,5 @@ Launch paths:
 - [vocabulary.md](../vocabulary.md) — In-game overlay
 - [features/overlay-editor/](../overlay-editor/index.md) — profiles behind `?profile=` URLs
 - [architecture/process-model.md](../architecture/process-model.md) — sibling process model
+- Rust host prototype (not shipped): `apps/overlay-rs/` — Phase 1 proof on branch
+  `overlay-rust-phase1`; see `findings/overlay-rs-phase1.md`. C host remains default.

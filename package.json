@@ -20,6 +20,8 @@
     "tosu-counter": "bun run --cwd apps/tosu-counter build",
     "overlay": "./apps/overlay/roxysu-overlay --output=DP-4",
     "overlay:build": "nix develop -c bash apps/overlay/build.sh",
+    "overlay:rs": "nix develop -c bash apps/overlay-rs/run.sh",
+    "overlay:rs:build": "nix develop -c bash -lc 'cd apps/overlay-rs && cargo build'",
     "desktop:pack": "bun run --cwd apps/desktop pack",
     "desktop:dist:win": "bun run --cwd apps/desktop dist:win",
     "desktop:dist:linux-resources": "bun run --cwd apps/desktop dist:linux-resources",

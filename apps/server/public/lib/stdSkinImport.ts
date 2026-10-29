@@ -7,6 +7,7 @@ import {
   type SkinIniColours,
 } from "./osuSkinIni";
 import { type StdPlayfieldSprites } from "./paintStdPlayfield";
+import { releaseSkinFields, releaseSkinImage } from "./skinImageRelease";
 import {
   defaultStdSkin,
   getStdSkin,
@@ -52,6 +53,12 @@ export const HITSOUND_EXTRAS = [
 type FileMap = Map<string, Uint8Array>;
 
 let spriteCache: StdPlayfieldSprites | null = null;
+
+function replaceSpriteCache(next: StdPlayfieldSprites | null): void {
+  const previous = spriteCache;
+  spriteCache = next;
+  if (previous && previous !== next) releaseSkinFields(previous);
+}
 let hitsoundBufferCache: Record<string, AudioBuffer> | null = null;
 let loadStarted = false;
 /** Bumped on apply/reset so a stale hydrate cannot overwrite fresher sprites. */
@@ -434,9 +441,9 @@ async function idbClear(): Promise<void> {
   db.close();
 }
 
-function emitSprites(): void {
+function emitSprites(reason: "change" | "hydrate" = "change"): void {
   if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event(SPRITE_EVENT));
+    window.dispatchEvent(new CustomEvent(SPRITE_EVENT, { detail: { reason } }));
   }
 }
 
@@ -590,7 +597,7 @@ export async function applyImportedStdSkin(
   const entries = Object.entries(draft.blobs);
   await idbPut(entries);
   if (epoch !== spriteEpoch) return;
-  spriteCache = draft.sprites;
+  replaceSpriteCache(draft.sprites);
   void decodeHitsoundBlobs(draft.blobs).then((buffers) => {
     if (epoch !== spriteEpoch) return;
     hitsoundBufferCache = buffers;
@@ -622,7 +629,7 @@ export async function applyImportedStdSkin(
 export async function resetImportedStdSkin(): Promise<void> {
   spriteEpoch += 1;
   await idbClear();
-  spriteCache = null;
+  replaceSpriteCache(null);
   hitsoundBufferCache = null;
   const defaults = defaultStdSkin();
   const current = getStdSkin();
@@ -702,7 +709,10 @@ async function hydrateSpritesFromRows(
       sprites.hit0 = img;
     }),
   ]);
-  if (epoch !== spriteEpoch) return;
+  if (epoch !== spriteEpoch) {
+    releaseSkinFields(sprites);
+    return;
+  }
 
   const ballFrames: DecodedSkinImage[] = [];
   for (let i = 0; i < 60; i += 1) {
@@ -721,7 +731,10 @@ async function hydrateSpritesFromRows(
     sprites.sliderballFrames = ballFrames;
     sprites.sliderball = ballFrames[0]!;
   }
-  if (epoch !== spriteEpoch) return;
+  if (epoch !== spriteEpoch) {
+    releaseSkinFields(sprites);
+    return;
+  }
 
   const followFrames: DecodedSkinImage[] = [];
   for (let i = 0; i < 60; i += 1) {
@@ -740,7 +753,10 @@ async function hydrateSpritesFromRows(
     sprites.followpointFrames = followFrames;
     sprites.followpoint = followFrames[0]!;
   }
-  if (epoch !== spriteEpoch) return;
+  if (epoch !== spriteEpoch) {
+    releaseSkinFields(sprites);
+    return;
+  }
 
   const defaults: Array<CanvasImageSource | null> = [];
   for (let d = 0; d <= 9; d += 1) {
@@ -751,10 +767,14 @@ async function hydrateSpritesFromRows(
     }
     defaults.push(await decodeBlob(row[1]));
   }
-  if (epoch !== spriteEpoch) return;
+  if (epoch !== spriteEpoch) {
+    releaseSkinFields(sprites);
+    for (const img of defaults) releaseSkinImage(img);
+    return;
+  }
   sprites.defaults = defaults;
-  spriteCache = sprites;
-  emitSprites();
+  replaceSpriteCache(sprites);
+  emitSprites("hydrate");
 
   const hsRows = rows.filter(([k]) => k.startsWith(HS_PREFIX));
   if (hsRows.length > 0) {
@@ -763,7 +783,7 @@ async function hydrateSpritesFromRows(
     const buffers = await decodeHitsoundBlobs(blobMap);
     if (epoch !== spriteEpoch) return;
     hitsoundBufferCache = buffers;
-    emitSprites();
+    emitSprites("hydrate");
   }
 }
 
@@ -880,10 +900,16 @@ export async function applyOverlayStdSpriteEntries(
   await hydrateSpritesFromRows(rows, epoch);
 }
 
-function subscribeSprites(onStoreChange: () => void): () => void {
-  ensureImportedStdSpritesLoaded();
+export function subscribeImportedStdSprites(
+  onStoreChange: (event: Event) => void,
+): () => void {
   window.addEventListener(SPRITE_EVENT, onStoreChange);
   return () => window.removeEventListener(SPRITE_EVENT, onStoreChange);
+}
+
+function subscribeSprites(onStoreChange: () => void): () => void {
+  ensureImportedStdSpritesLoaded();
+  return subscribeImportedStdSprites(onStoreChange);
 }
 
 export function useImportedStdSprites(): StdPlayfieldSprites | null {

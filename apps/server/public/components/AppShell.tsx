@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Dictionary } from "@roxysu/i18n";
 import {
   AudioLines,
@@ -34,6 +34,7 @@ import {
   X,
 } from "lucide-react";
 import { fetchSystemStatus } from "../lib/api";
+import { startOverlaySkinAutoSync } from "../lib/overlaySkins";
 import { useDevParityVisible } from "../lib/devParity";
 import { formatAppVersionLabel } from "../lib/appVersion";
 import { isDesktopShell } from "../lib/desktop";
@@ -150,6 +151,14 @@ const sideIconClass =
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { dict } = useAppDict();
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    return startOverlaySkinAutoSync({
+      onPublished: () => {
+        void queryClient.invalidateQueries({ queryKey: ["overlay", "skins"] });
+      },
+    });
+  }, [queryClient]);
   const nav = useNavItems(dict);
   const [sidebarOpen, setSidebarOpen] = useState(readSidebarOpen);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);

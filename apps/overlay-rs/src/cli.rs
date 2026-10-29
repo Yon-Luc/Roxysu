@@ -78,8 +78,14 @@ pub struct Cli {
     pub gsk_renderer: Option<GskRenderer>,
 
     /// Disable WebKit DMA-BUF rendering (`WEBKIT_DISABLE_DMABUF_RENDERER=1`).
+    /// Default on: a transparent DMA-BUF surface paints uninitialized pixels
+    /// after the overlay has been up for a while.
     #[arg(long, default_value_t = false)]
     pub webkit_no_dmabuf: bool,
+
+    /// Force the WebKit DMA-BUF renderer (opt out of the default disable).
+    #[arg(long, default_value_t = false)]
+    pub webkit_dmabuf: bool,
 
     /// W1 diagnostic: opacity flip + queue_draw timer (default off).
     #[arg(long, default_value_t = false)]
@@ -175,7 +181,9 @@ impl Cli {
             list_windows: self.list_windows,
             debug: self.debug,
             gsk_renderer: self.gsk_renderer,
-            webkit_no_dmabuf: self.webkit_no_dmabuf,
+            // On unless explicitly opted back in. `--webkit-no-dmabuf` stays
+            // accepted so older launchers keep working.
+            webkit_no_dmabuf: self.webkit_no_dmabuf || !self.webkit_dmabuf,
             diagnostics: DiagnosticFlags {
                 damage_tick: self.diag_damage_tick,
                 inject_keepalive: self.diag_inject_keepalive,
@@ -248,6 +256,7 @@ mod tests {
             .into_config()
             .unwrap();
         assert!(cfg.follow_focus);
+        assert!(cfg.webkit_no_dmabuf);
         assert!(!cfg.diagnostics.damage_tick);
         assert!(!cfg.diagnostics.inject_keepalive);
         assert_eq!(cfg.anchor, Anchor::TopRight);
@@ -306,6 +315,12 @@ mod tests {
         .unwrap();
         assert_eq!(cfg.gsk_renderer, Some(GskRenderer::Cairo));
         assert!(cfg.webkit_no_dmabuf);
+
+        let forced = Cli::try_parse_from(["roxysu-overlay-rs", "--webkit-dmabuf"])
+            .unwrap()
+            .into_config()
+            .unwrap();
+        assert!(!forced.webkit_no_dmabuf);
     }
 
     #[test]

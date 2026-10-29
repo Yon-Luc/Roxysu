@@ -85,8 +85,46 @@ export async function deleteOverlayProfile(id: string) {
   );
 }
 
+export type OverlaySkinMeta = {
+  updatedAt: string | null;
+  spritesUpdatedAt: string | null;
+  spriteCount: number;
+  mania?: unknown;
+  std?: unknown;
+  taiko?: unknown;
+  catch?: unknown;
+};
+
 export async function fetchOverlaySkins() {
-  return unwrap(await api.api.overlay.skins.get(), "/api/overlay/skins");
+  const data = unwrap(await api.api.overlay.skins.get(), "/api/overlay/skins");
+  if (data && typeof data === "object" && "snapshot" in data) return data;
+  return { snapshot: null };
+}
+
+/** Config plus sprite revision — not the base64 sprite map. */
+export async function fetchOverlaySkinMeta(): Promise<OverlaySkinMeta> {
+  const data = unwrap(
+    await api.api.overlay.skins.get({ query: { meta: "1" } }),
+    "/api/overlay/skins",
+  );
+  if (data && typeof data === "object" && "spriteCount" in data) {
+    const record = data as Record<string, unknown>;
+    return {
+      updatedAt: typeof record.updatedAt === "string" ? record.updatedAt : null,
+      spritesUpdatedAt:
+        typeof record.spritesUpdatedAt === "string" ? record.spritesUpdatedAt : null,
+      spriteCount: typeof record.spriteCount === "number" ? record.spriteCount : 0,
+      mania: record.mania ?? null,
+      std: record.std ?? null,
+      taiko: record.taiko ?? null,
+      catch: record.catch ?? null,
+    };
+  }
+  return {
+    updatedAt: null,
+    spritesUpdatedAt: null,
+    spriteCount: 0,
+  };
 }
 
 export async function putOverlaySkins(snapshot: unknown) {

@@ -11,6 +11,7 @@ touches:
   - apps/server/public/features/overlay-editor
   - apps/server/public/components/BeatmapPreviewEmbed.tsx
   - apps/server/public/router.tsx
+  - apps/server/public/components/AppShell.tsx
   - packages/i18n/src/dictionary/app
 ---
 
@@ -66,28 +67,30 @@ evaluated against **tosu live**. The editor stays dark so the canvas matches the
     Applied on the positioned wrapper in `OverlayStage` (rounded + padding +
     shadow); disabled by default.
 11. **Skin sync**: consumer contexts (OBS browser source / Wayland host) start
-    with empty skin stores, so the editor toolbar has *Push skins*: it
-    snapshots all four procedural skin configs plus imported .osk sprites
-    (data URLs) via `collectOverlaySkinSnapshot()` → `PUT /api/overlay/skins`
-    (settings key `overlay.skins`). Overlay pages apply the snapshot on load
-    (`applyOverlaySkinSnapshot`), restoring sprites into IndexedDB before the
-    configs hit the skin stores. Element option updates must always spread the
-    raw options object — never the normalized helper output, which would drop
-    sibling keys. Imported .osk sprites live in IndexedDB scoped to the exact
-    origin (localhost ≠ 127.0.0.1): pushing from an origin without them
-    publishes configs with zero sprites and consumers fall back to the
-    procedural default look — the editor toast warns on this case. The same
-    publish action (`publishOverlaySkins()`) is exposed on the Skin page
-    header, guaranteeing same-origin sprites at the moment of import. Once a
-    snapshot with sprites is published, every consumer converges to it
-    regardless of origin. Consumers load published sprites over HTTP
-    (`GET /api/overlay/skins/sprites/:id`, decoded from the stored data URLs
-    via `applyOverlaySpriteEntries()`) — no browser-side persistence is
-    involved in rendering them; the local mirror is the single source of
-    truth. The Skin page shows an **Overlay skin sync** card
-    (`OverlaySkinSyncCard.tsx`) with this browser's sprite count vs the
-    published snapshot — the way to locate which browser/app actually owns the
-    imported sprites (IndexedDB is per browser, per origin).
+    with empty skin stores. The main app publishes on skin change
+    (`startOverlaySkinAutoSync()` in AppShell, debounced): four procedural
+    configs go to `PUT /api/overlay/skins` (settings key `overlay.skins`).
+    Config-only edits omit `sprites`, and the route keeps the stored sprite
+    map. Sprite imports and resets send the map, including an empty map after
+    a reset in this browser. A browser whose config names an imported skin
+    but whose IndexedDB has no sprites does not publish — that would strip
+    sprites owned by another address (localhost ≠ 127.0.0.1). Startup
+    publishes once only when this browser already has sprites. The overlay
+    route does not publish: applying a snapshot writes the same skin stores,
+    and AppShell is not mounted there. The publisher listens for
+    same-document edits, so a second document applying the snapshot cannot
+    publish it back through a `storage` event. Consumers poll
+    `GET /api/overlay/skins?meta=1`. A config edit (`updatedAt`) applies the
+    four skin configs only. Sprites are decoded again only when
+    `spritesUpdatedAt` changes — re-decoding on every edit leaks GPU textures
+    until the layout paints as uninitialized pixels. Replaced sprites release
+    their `ImageBitmap`s. Sprites load over HTTP
+    (`GET /api/overlay/skins/sprites/:id` via `applyOverlaySpriteEntries()`).
+    The local mirror is the source of truth for consumers. The Skin page
+    **Overlay skin sync** card (`OverlaySkinSyncCard.tsx`) shows this
+    browser's sprite count, sync status, and the published time. Element
+    option updates must always spread the raw options object — never the
+    normalized helper output, which would drop sibling keys.
 12. The editor never offers *Create overlay profile* while the profile list is loading. Loading shows a spinner; a failed load shows the error with Retry; the create button appears only after a successful empty list and is disabled while a save or refetch is in flight, so a returning user cannot create a second profile by racing the load.
 13. Deleting an **Overlay profile** asks first (`ConfirmModal` naming the profile and its layer count) and stays busy until the profiles list refreshes. Removing a layer edits the unsaved draft only, so it shows an Undo toast (8 s) that reinserts the layer at its stack position; it does not ask first.
 
@@ -107,6 +110,7 @@ tosu live snapshot (SSE / useTosuLiveQuery) → trigger evaluation → hide/show
 - `apps/server/public/features/overlay/OverlayStage.tsx` — fixed-size stage, fit-scale, positioning
 - `apps/server/public/features/overlay/OverlayElements.tsx` — element renderers
 - `apps/server/public/features/overlay-editor/OverlayEditorPage.tsx` — editor page
+- `apps/server/public/lib/overlaySkins.ts` — `startOverlaySkinAutoSync()`, `applyOverlaySkinSnapshot()`
 
 ## Dependencies
 

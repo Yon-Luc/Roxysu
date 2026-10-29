@@ -126,6 +126,9 @@ export function startPlayfieldRaf(opts: {
       raf = 0;
       return;
     }
+    // The browser can drop a canvas bitmap that sat hidden. A change-gated
+    // paint would leave that uninitialized memory on screen.
+    paintNow();
     startRaf();
   }
 

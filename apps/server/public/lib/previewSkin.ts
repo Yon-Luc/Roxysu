@@ -458,6 +458,12 @@ export function copyKeymodeColors(from: Keymode, to: Keymode): void {
   });
 }
 
+/** Same-document edits only. Cross-document `storage` events stay on the hook. */
+export function subscribePreviewSkin(onStoreChange: () => void): () => void {
+  window.addEventListener(EVENT, onStoreChange);
+  return () => window.removeEventListener(EVENT, onStoreChange);
+}
+
 function subscribe(onStoreChange: () => void): () => void {
   function onChange() {
     // Reload from storage on cross-tab updates; same-tab setPreviewSkin already updated cache.

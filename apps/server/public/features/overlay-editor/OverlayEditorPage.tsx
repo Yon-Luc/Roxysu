@@ -16,7 +16,6 @@ import {
   type OverlayProfile,
 } from "../../lib/api";
 import { ConfirmModal } from "../../components/ConfirmModal";
-import { publishOverlaySkins } from "../../lib/overlaySkins";
 import { pushToast } from "../../lib/toasts";
 import { useAppDict } from "../../lib/i18n";
 import { useTosuLiveQuery } from "../../lib/useTosuLiveQuery";
@@ -189,10 +188,6 @@ export function OverlayEditorPage() {
       setDraftForId(null);
       setPendingDelete(null);
     },
-  });
-
-  const pushSkinsMutation = useMutation({
-    mutationFn: publishOverlaySkins,
   });
 
   const snapshotQuery = useTosuLiveQuery();
@@ -487,15 +482,6 @@ export function OverlayEditorPage() {
                     Copy URL
                   </button>
                 ) : null}
-                <button
-                  type="button"
-                  className="rx-btn !px-3 !py-1 text-xs"
-                  disabled={pushSkinsMutation.isPending}
-                  onClick={() => pushSkinsMutation.mutate(undefined)}
-                  title="Publish this browser's preview skins (incl. imported .osk) for overlay consumers"
-                >
-                  {pushSkinsMutation.isPending ? "Pushing…" : "Push skins"}
-                </button>
               </div>
               <button
                 type="button"

@@ -20,6 +20,7 @@ import {
   type ImportedManiaLayout,
   type Keymode,
 } from "./previewSkin";
+import { releaseSkinFields } from "./skinImageRelease";
 
 export type SkinImage = CanvasImageSource;
 
@@ -60,6 +61,13 @@ type FileMap = Map<string, Uint8Array>;
 
 let spriteCache: Partial<Record<Keymode, ManiaSkinSprites>> = {};
 let loadStarted = false;
+/** Bumped when a newer hydrate starts so a stale decode cannot replace it. */
+let spriteEpoch = 0;
+
+function releaseManiaCache(): void {
+  for (const sprites of Object.values(spriteCache)) releaseSkinFields(sprites);
+  spriteCache = {};
+}
 
 function normalizePath(path: string): string {
   return path.replace(/\\/g, "/").replace(/^\/+/, "");
@@ -285,9 +293,9 @@ async function idbClear(): Promise<void> {
   db.close();
 }
 
-function emitSprites(): void {
+function emitSprites(reason: "change" | "hydrate" = "change"): void {
   if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event(SPRITE_EVENT));
+    window.dispatchEvent(new CustomEvent(SPRITE_EVENT, { detail: { reason } }));
   }
 }
 
@@ -525,6 +533,7 @@ export async function applyImportedManiaSkin(
 
 export async function resetImportedKeymode(keys: Keymode): Promise<void> {
   await idbDeletePrefix(`${keys}:`);
+  releaseSkinFields(spriteCache[keys]);
   delete spriteCache[keys];
   const skin = getPreviewSkin();
   setPreviewSkin({
@@ -539,18 +548,23 @@ export async function resetImportedKeymode(keys: Keymode): Promise<void> {
 
 export async function resetAllImported(): Promise<void> {
   await idbClear();
-  spriteCache = {};
+  spriteEpoch += 1;
+  releaseManiaCache();
   resetPreviewSkin();
   emitSprites();
 }
 
 async function hydrateFromIdb(): Promise<void> {
-  await hydrateSpritesFromRows(await idbGetAll());
+  const epoch = ++spriteEpoch;
+  const rows = await idbGetAll();
+  if (epoch !== spriteEpoch) return;
+  await hydrateSpritesFromRows(rows, epoch);
 }
 
 /** Decode sprite blobs into the per-keymode cache and notify listeners. */
 async function hydrateSpritesFromRows(
   rows: Array<[string, Blob]>,
+  epoch: number,
 ): Promise<void> {
   const grouped: Partial<Record<Keymode, ManiaSkinBlobs>> = {};
   for (const [key, blob] of rows) {
@@ -609,9 +623,15 @@ async function hydrateSpritesFromRows(
     jobs.push(assign("stageHint"));
     jobs.push(assign("stageBottom"));
     await Promise.all(jobs);
+    if (epoch !== spriteEpoch) {
+      releaseSkinFields(sprites);
+      return;
+    }
+    const previous = spriteCache[keys];
     spriteCache[keys] = sprites;
+    releaseSkinFields(previous);
   }
-  emitSprites();
+  if (epoch === spriteEpoch) emitSprites("hydrate");
 }
 
 export function ensureImportedSpritesLoaded(): void {
@@ -660,7 +680,8 @@ export async function importImportedSprites(
   }
   if (pairs.length === 0) return;
   await idbPut(pairs);
-  spriteCache = {};
+  spriteEpoch += 1;
+  releaseManiaCache();
   loadStarted = false;
   ensureImportedSpritesLoaded();
 }
@@ -687,9 +708,10 @@ export async function applyOverlaySpriteEntries(
     }
   }
   if (rows.length === 0) return;
-  spriteCache = {};
+  const epoch = ++spriteEpoch;
+  releaseManiaCache();
   loadStarted = true;
-  await hydrateSpritesFromRows(rows);
+  await hydrateSpritesFromRows(rows, epoch);
 }
 
 export function getImportedManiaSprites(keys: number): ManiaSkinSprites | null {
@@ -710,10 +732,16 @@ export async function loadImportedManiaSprites(
   return spriteCache[keys as Keymode] ?? null;
 }
 
-function subscribeSprites(onStoreChange: () => void): () => void {
-  ensureImportedSpritesLoaded();
+export function subscribeImportedManiaSprites(
+  onStoreChange: (event: Event) => void,
+): () => void {
   window.addEventListener(SPRITE_EVENT, onStoreChange);
   return () => window.removeEventListener(SPRITE_EVENT, onStoreChange);
+}
+
+function subscribeSprites(onStoreChange: () => void): () => void {
+  ensureImportedSpritesLoaded();
+  return subscribeImportedManiaSprites(onStoreChange);
 }
 
 export function useImportedManiaSprites(keys: number): ManiaSkinSprites | null {

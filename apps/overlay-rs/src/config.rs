@@ -187,7 +187,7 @@ impl Default for Config {
             list_windows: false,
             debug: false,
             gsk_renderer: None,
-            webkit_no_dmabuf: false,
+            webkit_no_dmabuf: true,
             diagnostics: DiagnosticFlags::default(),
             watchdog: true,
             watchdog_interval_sec: DEFAULT_WATCHDOG_INTERVAL_SEC,

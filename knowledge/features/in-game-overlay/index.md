@@ -47,11 +47,10 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
    batch; Hide uses short hysteresis (`--hide-hysteresis-ms`, default 80).
    Missing protocol on first connect → always-visible fallback; later drops
    leave visibility unchanged and reconnect with backoff.
-8. **Self-heal**: `web-process-terminated` reloads after 1 s; `load-failed`
+8. **DMA-BUF is off by default.** A transparent WebKit surface using DMA-BUF paints uninitialized GPU memory (random pixels where the layout should be) after the host has been up for a while. `WEBKIT_DISABLE_DMABUF_RENDERER=1` is set by the desktop spawn and by `apps/overlay-rs/run.sh`. `--webkit-dmabuf` / `ROXYSU_OVERLAY_DMABUF=1` opts back in. `--gsk-renderer` stays available for renderer A/B. **Self-heal**: `web-process-terminated` reloads after 1 s; `load-failed`
    (HUD/server) retries at 3 s / 15 s after >5 failures via a **single-slot**
    reload state machine (no stacked timers). Distinct log lines for load-fail
-   vs web-process crash. `--webkit-no-dmabuf` / `--gsk-renderer` remain for
-   A/B when rendering stalls.
+   vs web-process crash.
 9. Visibility is a hard map/unmap of the layer surface (soft opacity-only hide
    failed historically on Wayland + WebKit).
 10. **Default path does not force redraw.** W1–W5 compositor force-present

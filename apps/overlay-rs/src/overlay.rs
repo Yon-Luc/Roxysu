@@ -3,24 +3,26 @@ use gdk4::prelude::*;
 use gtk4::prelude::*;
 use gtk4::{Application, ApplicationWindow};
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::mpsc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tracing::{info, warn};
 use webkit6::prelude::*;
-use webkit6::WebView;
+use webkit6::{LoadEvent, WebView};
 
 use crate::click_through::{apply_click_through, ClickThroughMethod};
 use crate::config::Config;
+use crate::diagnostics;
 use crate::focus::{self, FocusCommand, FocusEvent};
+use crate::reload::{ReloadMachine, ReloadTrigger, ScheduleResult};
 
 pub struct OverlayHost {
     window: ApplicationWindow,
-    #[allow(dead_code)]
     webview: WebView,
     config: Config,
     mapped: Rc<RefCell<bool>>,
+    shown: Rc<RefCell<bool>>,
     click_method: Rc<RefCell<Option<ClickThroughMethod>>>,
 }
 
@@ -65,6 +67,7 @@ impl OverlayHost {
         window.set_child(Some(&webview));
 
         let mapped = Rc::new(RefCell::new(false));
+        let shown = Rc::new(RefCell::new(false));
         let click_method = Rc::new(RefCell::new(None));
 
         {
@@ -91,22 +94,22 @@ impl OverlayHost {
             });
         }
 
-        if config.diagnostics.damage_tick
-            || config.diagnostics.inject_keepalive
-            || config.diagnostics.reassert_placement
-            || config.diagnostics.set_page_hidden
-        {
-            warn!(
-                ?config.diagnostics,
-                "diagnostic workarounds requested; W1–W5 behavior is wired in Phase 3"
-            );
-        }
+        wire_reload(&webview, &config.url);
+        diagnostics::install_timers(
+            &window,
+            &webview,
+            config.diagnostics,
+            config.debug,
+            Rc::clone(&mapped),
+            Rc::clone(&shown),
+        );
 
         Ok(Self {
             window,
             webview,
             config,
             mapped,
+            shown,
             click_method,
         })
     }
@@ -145,24 +148,34 @@ impl OverlayHost {
                 "follow-focus enabled; waiting for matching activation"
             );
         } else {
-            self.window.present();
+            self.apply_show();
             info!("follow-focus disabled; always visible");
         }
 
         if self.config.test_hide_show {
             let window = self.window.clone();
+            let webview = self.webview.clone();
             let mapped = Rc::clone(&self.mapped);
+            let shown = Rc::clone(&self.shown);
             let click_method = Rc::clone(&self.click_method);
+            let diagnostics = self.config.diagnostics;
+            let anchor = self.config.anchor;
             glib::timeout_add_local_once(Duration::from_secs(2), move || {
                 info!("test-hide-show: hiding");
+                diagnostics::on_hide(&webview, diagnostics);
                 window.set_visible(false);
+                *shown.borrow_mut() = false;
                 let window2 = window.clone();
+                let webview2 = webview.clone();
                 let mapped = Rc::clone(&mapped);
+                let shown = Rc::clone(&shown);
                 let click_method = Rc::clone(&click_method);
                 glib::timeout_add_local_once(Duration::from_millis(500), move || {
                     info!("test-hide-show: showing again");
                     window2.set_visible(true);
                     window2.present();
+                    *shown.borrow_mut() = true;
+                    diagnostics::on_show(&webview2, &window2, anchor, diagnostics);
                     glib::timeout_add_local_once(Duration::from_millis(300), move || {
                         let still_mapped = *mapped.borrow();
                         let method = *click_method.borrow();
@@ -179,6 +192,18 @@ impl OverlayHost {
         Ok(())
     }
 
+    fn apply_show(&self) {
+        self.window.set_visible(true);
+        self.window.present();
+        *self.shown.borrow_mut() = true;
+        diagnostics::on_show(
+            &self.webview,
+            &self.window,
+            self.config.anchor,
+            self.config.diagnostics,
+        );
+    }
+
     fn start_focus_tracking(&self) -> Result<()> {
         let (tx, rx) = async_channel::unbounded::<FocusCommand>();
 
@@ -193,22 +218,40 @@ impl OverlayHost {
             .context("spawn focus thread")?;
 
         let window = self.window.clone();
+        let webview = self.webview.clone();
+        let shown = Rc::clone(&self.shown);
         let last = Rc::new(RefCell::new(None::<bool>));
+        let last_reassert = Rc::new(Cell::new(None::<Instant>));
+        let diagnostics = self.config.diagnostics;
+        let anchor = self.config.anchor;
+
         glib::spawn_future_local(async move {
             while let Ok(cmd) = rx.recv().await {
                 match cmd {
                     FocusCommand::Show => {
-                        if *last.borrow() != Some(true) {
+                        let was_shown = *last.borrow() == Some(true);
+                        if !was_shown {
                             info!("focus: show");
                             window.set_visible(true);
                             window.present();
+                            *shown.borrow_mut() = true;
+                            diagnostics::on_show(&webview, &window, anchor, diagnostics);
                             *last.borrow_mut() = Some(true);
+                        } else {
+                            diagnostics::on_refocus_while_shown(
+                                &window,
+                                anchor,
+                                diagnostics,
+                                &last_reassert,
+                            );
                         }
                     }
                     FocusCommand::Hide => {
                         if *last.borrow() != Some(false) {
                             info!("focus: hide");
+                            diagnostics::on_hide(&webview, diagnostics);
                             window.set_visible(false);
+                            *shown.borrow_mut() = false;
                             *last.borrow_mut() = Some(false);
                         }
                     }
@@ -220,6 +263,85 @@ impl OverlayHost {
         });
 
         Ok(())
+    }
+}
+
+fn wire_reload(webview: &WebView, url: &str) {
+    let machine = Rc::new(RefCell::new(ReloadMachine::new()));
+    let url = Rc::new(url.to_string());
+
+    {
+        let machine = Rc::clone(&machine);
+        webview.connect_load_changed(move |_, event| {
+            if event == LoadEvent::Finished {
+                machine.borrow_mut().on_load_finished();
+                info!("webkit: load finished");
+            }
+        });
+    }
+
+    {
+        let machine = Rc::clone(&machine);
+        let url = Rc::clone(&url);
+        let webview_weak = webview.downgrade();
+        webview.connect_load_failed(move |_, _event, failing_uri, error| {
+            warn!(
+                failing_uri,
+                error = %error,
+                "webkit: load failed"
+            );
+            schedule_reload(
+                &machine,
+                ReloadTrigger::LoadFailed,
+                &url,
+                &webview_weak,
+            );
+            // true = handled (suppress default error page if any)
+            true
+        });
+    }
+
+    {
+        let machine = Rc::clone(&machine);
+        let url = Rc::clone(&url);
+        let webview_weak = webview.downgrade();
+        webview.connect_web_process_terminated(move |_, reason| {
+            warn!(?reason, "webkit: web process terminated");
+            schedule_reload(
+                &machine,
+                ReloadTrigger::WebProcessTerminated,
+                &url,
+                &webview_weak,
+            );
+        });
+    }
+}
+
+fn schedule_reload(
+    machine: &Rc<RefCell<ReloadMachine>>,
+    trigger: ReloadTrigger,
+    url: &Rc<String>,
+    webview_weak: &glib::object::WeakRef<WebView>,
+) {
+    let result = machine.borrow_mut().on_trigger(trigger);
+    match result {
+        ScheduleResult::AlreadyPending => {
+            info!(?trigger, "reload already pending; ignoring");
+        }
+        ScheduleResult::Schedule { delay } => {
+            let failures = machine.borrow().consecutive_load_failures();
+            info!(?trigger, ?delay, failures, "scheduling webview reload");
+            let machine = Rc::clone(machine);
+            let url = Rc::clone(url);
+            let webview_weak = webview_weak.clone();
+            glib::timeout_add_local_once(delay, move || {
+                machine.borrow_mut().on_timer_fired();
+                if let Some(webview) = webview_weak.upgrade() {
+                    info!(%url, "reloading webview");
+                    webview.load_uri(&url);
+                }
+            });
+        }
     }
 }
 

@@ -1,16 +1,20 @@
-//! Roxysu overlay host (Rust). Phase 2: full CLI/config. Later: reload, telemetry, watchdog.
+//! Roxysu overlay host (Rust). Phase 3: WebKit lifecycle, diagnostic W1–W5, shutdown.
 
 mod click_through;
 mod cli;
 mod config;
+mod diagnostics;
 mod focus;
 mod overlay;
+mod reload;
 
 use anyhow::{bail, Context, Result};
 use clap::Parser;
 use gtk4::prelude::*;
 use gtk4::{Application, CssProvider, STYLE_PROVIDER_PRIORITY_APPLICATION};
 use gtk4_layer_shell::is_supported as layer_shell_supported;
+use std::cell::RefCell;
+use std::rc::Rc;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 
@@ -41,9 +45,20 @@ fn main() -> Result<()> {
         .flags(gtk4::gio::ApplicationFlags::NON_UNIQUE)
         .build();
 
+    // Follow-focus starts hidden; hold so GtkApplication does not exit.
+    // Drop the hold on shutdown so quit is clean (GApplication handles SIGINT/SIGTERM).
+    let hold: Rc<RefCell<Option<gtk4::gio::ApplicationHoldGuard>>> =
+        Rc::new(RefCell::new(None));
+    {
+        let hold = Rc::clone(&hold);
+        app.connect_shutdown(move |_| {
+            info!("overlay host shutting down");
+            let _ = hold.borrow_mut().take();
+        });
+    }
+
     app.connect_activate(move |app| {
-        // Follow-focus starts hidden; hold so GtkApplication does not exit.
-        std::mem::forget(app.hold());
+        *hold.borrow_mut() = Some(app.hold());
 
         if let Err(err) = run_app(app, config.clone()) {
             eprintln!("roxysu-overlay-rs: {err:#}");

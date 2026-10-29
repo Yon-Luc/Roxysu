@@ -19,7 +19,7 @@ Crate: [`apps/overlay-rs`](../apps/overlay-rs/)
 | Typed `Config` + validation | `src/config.rs` |
 | `--url` with `=` in values | clap + unit tests |
 | `--gsk-renderer` / `--webkit-no-dmabuf` | CLI → `Config::apply_process_env` |
-| W1–W5 `--diag-*` (default off) | flags stored; warn until Phase 3 wires behavior |
+| W1–W5 `--diag-*` (default off) | flags stored; behavior wired in Phase 3 |
 | Honest `--output` help | compositor default when omitted |
 | Watchdog threshold fields | stored for Phase 6 |
 | Unit tests | 13 passing (`cargo test`) |

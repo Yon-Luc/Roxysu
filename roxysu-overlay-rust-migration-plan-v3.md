@@ -221,14 +221,14 @@ The C watchdog caps (450 FDs, 4200 MB) suggest past incidents. Treat them as hyp
 
 ### Phase 3 — Native overlay and live WebKit rendering
 
-- [ ] GTK4 window and layer-shell configuration.
-- [ ] Load the existing HUD without changing its data source or cadence.
-- [ ] Verify rapid gameplay-data changes stay visible and responsive.
-- [ ] Remove W1–W4 from the default path; keep each behind its own diagnostic flag.
-- [ ] Compare each workaround individually under niri, especially fullscreen osu!lazer, across the renderer x DMA-BUF matrix.
-- [ ] Log WebKit load failures and web-process termination.
-- [ ] Implement a **single reload state machine**: one pending-reload slot (no stacked timers from `load-failed` plus `web-process-terminated`), bounded backoff, reset on load finished.
-- [ ] Clean shutdown.
+- [x] GTK4 window and layer-shell configuration. (Phases 1–2; retained)
+- [x] Load the existing HUD without changing its data source or cadence. (HTTP-only `load_uri`)
+- [ ] Verify rapid gameplay-data changes stay visible and responsive. (manual live check; see findings)
+- [x] Remove W1–W4 from the default path; keep each behind its own diagnostic flag. (`--diag-*`; `--debug` ⇒ W4)
+- [ ] Compare each workaround individually under niri, especially fullscreen osu!lazer, across the renderer x DMA-BUF matrix. (manual)
+- [x] Log WebKit load failures and web-process termination.
+- [x] Implement a **single reload state machine**: one pending-reload slot (no stacked timers from `load-failed` plus `web-process-terminated`), bounded backoff, reset on load finished. (`reload.rs`)
+- [x] Clean shutdown. (drop `ApplicationHoldGuard` on `shutdown`; GApplication SIGINT/SIGTERM)
 
 **Exit criteria:** the HUD stays responsive without timer-driven redraw hacks. If it fails, the failure is reproducible and tied to a specific rendering/compositing condition.
 

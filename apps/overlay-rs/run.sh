@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build and run the Phase 1 Rust overlay host. Extra args go to roxysu-overlay-rs.
+# Build and run the Rust overlay host. Extra args go to roxysu-overlay-rs.
 set -euo pipefail
 cd "$(dirname "$0")"
 cargo build

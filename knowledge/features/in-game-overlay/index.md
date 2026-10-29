@@ -166,5 +166,6 @@ Launch paths:
 - [vocabulary.md](../vocabulary.md) — In-game overlay
 - [features/overlay-editor/](../overlay-editor/index.md) — profiles behind `?profile=` URLs
 - [architecture/process-model.md](../architecture/process-model.md) — sibling process model
-- Rust host prototype (not shipped): `apps/overlay-rs/` — Phase 1 proof on branch
-  `overlay-rust-phase1`; see `findings/overlay-rs-phase1.md`. C host remains default.
+- Rust host prototype (not shipped): `apps/overlay-rs/` on branch `overlay-rust-phase1`
+  — Phases 1–3 (CLI, layer-shell, reload SM, `--diag-*` W1–W5). See
+  `findings/overlay-rs-phase3.md`. C host remains default.

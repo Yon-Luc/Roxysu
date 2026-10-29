@@ -83,7 +83,7 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub diag_reassert_placement: bool,
 
-    /// W4 diagnostic: continuous tick callback (default off; implied by --debug later).
+    /// W4 diagnostic: continuous tick callback (default off; implied by --debug).
     #[arg(long, default_value_t = false)]
     pub diag_paint_counter: bool,
 

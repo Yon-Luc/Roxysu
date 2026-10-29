@@ -16,10 +16,12 @@ pub const DEFAULT_HEIGHT: i32 = 1090;
 pub const DEFAULT_OPACITY: f64 = 1.0;
 pub const DEFAULT_MARGIN: i32 = 0;
 
-/// Watchdog defaults mirrored from the C host (used later in Phase 6).
+/// Watchdog defaults mirrored from the C host (Phase 6).
 pub const DEFAULT_WATCHDOG_MAX_AGE_SEC: u64 = 1800;
 pub const DEFAULT_WATCHDOG_MAX_FDS: u64 = 450;
 pub const DEFAULT_WATCHDOG_MAX_RSS_MB: u64 = 4200;
+pub const DEFAULT_WATCHDOG_INTERVAL_SEC: u64 = 20;
+pub const DEFAULT_WATCHDOG_BREACH_SAMPLES: u32 = 3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Anchor {
@@ -147,9 +149,17 @@ pub struct Config {
     pub gsk_renderer: Option<GskRenderer>,
     pub webkit_no_dmabuf: bool,
     pub diagnostics: DiagnosticFlags,
+    /// When false, no resource watchdog (useful for long telemetry soaks).
+    pub watchdog: bool,
+    pub watchdog_interval_sec: u64,
+    /// 0 disables the age cap (prefer systemd/desktop Restart for longevity).
     pub watchdog_max_age_sec: u64,
     pub watchdog_max_fds: u64,
     pub watchdog_max_rss_mb: u64,
+    /// Optional cgroup memory.current cap in MiB (`None` = unused).
+    pub watchdog_max_cgroup_mb: Option<u64>,
+    /// Consecutive breaching samples required before exit.
+    pub watchdog_breach_samples: u32,
     /// 0 = telemetry off; otherwise sample interval in seconds (Phase 5).
     pub telemetry_interval_sec: u64,
     /// Optional CSV path for telemetry rows.
@@ -179,9 +189,13 @@ impl Default for Config {
             gsk_renderer: None,
             webkit_no_dmabuf: false,
             diagnostics: DiagnosticFlags::default(),
+            watchdog: true,
+            watchdog_interval_sec: DEFAULT_WATCHDOG_INTERVAL_SEC,
             watchdog_max_age_sec: DEFAULT_WATCHDOG_MAX_AGE_SEC,
             watchdog_max_fds: DEFAULT_WATCHDOG_MAX_FDS,
             watchdog_max_rss_mb: DEFAULT_WATCHDOG_MAX_RSS_MB,
+            watchdog_max_cgroup_mb: None,
+            watchdog_breach_samples: DEFAULT_WATCHDOG_BREACH_SAMPLES,
             telemetry_interval_sec: 0,
             telemetry_csv: None,
             telemetry_phase: "steady".into(),
@@ -214,14 +228,21 @@ impl Config {
         if self.hide_hysteresis_ms > 5_000 {
             bail!("--hide-hysteresis-ms must be <= 5000");
         }
-        if self.watchdog_max_age_sec == 0 {
-            bail!("--watchdog-max-age-sec must be > 0");
+        // max_age_sec == 0 means disabled (Phase 6).
+        if self.watchdog_interval_sec == 0 {
+            bail!("--watchdog-interval-sec must be > 0");
         }
         if self.watchdog_max_fds == 0 {
             bail!("--watchdog-max-fds must be > 0");
         }
         if self.watchdog_max_rss_mb == 0 {
             bail!("--watchdog-max-rss-mb must be > 0");
+        }
+        if self.watchdog_breach_samples == 0 {
+            bail!("--watchdog-breach-samples must be > 0");
+        }
+        if let Some(0) = self.watchdog_max_cgroup_mb {
+            bail!("--watchdog-max-cgroup-mb must be > 0 when set");
         }
         if self.list_windows && self.test_hide_show {
             bail!("--list-windows and --test-hide-show conflict");
@@ -247,6 +268,16 @@ impl Config {
 
     pub fn match_policy(&self) -> MatchPolicy {
         MatchPolicy::new(self.match_app_id.clone(), self.match_mode)
+    }
+
+    pub fn watchdog_thresholds(&self) -> crate::watchdog::Thresholds {
+        crate::watchdog::Thresholds {
+            max_age_sec: (self.watchdog_max_age_sec > 0).then_some(self.watchdog_max_age_sec),
+            max_fds: self.watchdog_max_fds,
+            max_rss_mb: self.watchdog_max_rss_mb,
+            max_cgroup_mb: self.watchdog_max_cgroup_mb,
+            breach_samples: self.watchdog_breach_samples,
+        }
     }
 }
 

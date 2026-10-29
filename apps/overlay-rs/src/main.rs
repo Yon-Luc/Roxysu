@@ -1,4 +1,4 @@
-//! Roxysu overlay host (Rust). Phase 5: observation-only resource telemetry.
+//! Roxysu overlay host (Rust). Phase 6: watchdog + lifecycle recovery.
 
 mod click_through;
 mod cli;
@@ -8,6 +8,7 @@ mod focus;
 mod overlay;
 mod reload;
 mod telemetry;
+mod watchdog;
 
 use anyhow::{bail, Context, Result};
 use clap::Parser;
@@ -24,6 +25,7 @@ use crate::cli::Cli;
 use crate::config::Config;
 use crate::overlay::OverlayHost;
 use crate::telemetry::SamplerHandle;
+use crate::watchdog::WatchdogHandle;
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -53,11 +55,16 @@ fn main() -> Result<()> {
     let hold: Rc<RefCell<Option<gtk4::gio::ApplicationHoldGuard>>> =
         Rc::new(RefCell::new(None));
     let sampler: Rc<RefCell<Option<SamplerHandle>>> = Rc::new(RefCell::new(None));
+    let watchdog_h: Rc<RefCell<Option<WatchdogHandle>>> = Rc::new(RefCell::new(None));
     {
         let hold = Rc::clone(&hold);
         let sampler = Rc::clone(&sampler);
+        let watchdog_h = Rc::clone(&watchdog_h);
         app.connect_shutdown(move |_| {
             info!("overlay host shutting down");
+            if let Some(handle) = watchdog_h.borrow_mut().take() {
+                handle.stop();
+            }
             if let Some(handle) = sampler.borrow_mut().take() {
                 handle.stop();
             }
@@ -68,7 +75,7 @@ fn main() -> Result<()> {
     app.connect_activate(move |app| {
         *hold.borrow_mut() = Some(app.hold());
 
-        if let Err(err) = run_app(app, config.clone(), &sampler) {
+        if let Err(err) = run_app(app, config.clone(), &sampler, &watchdog_h) {
             eprintln!("roxysu-overlay-rs: {err:#}");
             std::process::exit(1);
         }
@@ -86,6 +93,7 @@ fn run_app(
     app: &Application,
     config: Config,
     sampler: &Rc<RefCell<Option<SamplerHandle>>>,
+    watchdog_h: &Rc<RefCell<Option<WatchdogHandle>>>,
 ) -> Result<()> {
     if std::env::var_os("WAYLAND_DISPLAY").is_none()
         && std::env::var_os("WAYLAND_SOCKET").is_none()
@@ -124,6 +132,13 @@ fn run_app(
             config.telemetry_interval_sec,
             config.telemetry_phase.clone(),
             csv,
+        ));
+    }
+
+    if config.watchdog {
+        *watchdog_h.borrow_mut() = Some(watchdog::start(
+            config.watchdog_interval_sec,
+            config.watchdog_thresholds(),
         ));
     }
 

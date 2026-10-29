@@ -11,42 +11,30 @@ nix develop --command bash apps/overlay-rs/run.sh --follow-focus false
 bun run overlay:rs -- --follow-focus false
 ```
 
-## CLI (Phases 2–5)
-
-Same option names as the C host, plus diagnostic, focus, telemetry, and watchdog
-knobs. Invalid values error out (no silent fallback).
+## CLI (Phases 2–6)
 
 | Flag | Default | Notes |
 |---|---|---|
-| `--url` | HUD with `bg=clear` | `--url=…` and `--url …`; `=` in values OK |
-| `--anchor` | `top-right` | top/bottom × left/right |
-| `--margin` | `0` | all four edges |
-| `--width` / `--height` | `1920` / `1090` | must be > 0 |
-| `--opacity` | `1.0` | `(0, 1]` |
-| `--output` | compositor default | connector or model |
-| `--follow-focus` | `true` | `true`/`false` |
-| `--match-app-id` | `osu` | needle for match policy |
-| `--match-mode` | `contains` | `contains` \| `exact` |
-| `--hide-hysteresis-ms` | `80` | delay before Hide; cancelled by Show |
-| `--list-windows` | off | dump foreign-toplevels |
-| `--debug` | off | W4 tick diag + real frame-clock paint stats |
-| `--gsk-renderer` | unset | `gl`/`ngl`/`cairo`/`vulkan` |
-| `--webkit-no-dmabuf` | off | W7 |
-| `--diag-*` | off | W1–W5 compositor force-present hacks |
-| `--telemetry-interval-sec` | `0` | 0 = off; try `5` for diagnostic soaks |
-| `--telemetry-csv` | unset | append CSV rows (created if missing) |
-| `--telemetry-phase` | `steady` | label column for the run |
-| `--watchdog-max-*` | C defaults | stored for Phase 6 |
+| `--url` | HUD with `bg=clear` | `=` inside values OK |
+| `--follow-focus` | `true` | |
+| `--match-app-id` / `--match-mode` | `osu` / `contains` | `exact` available |
+| `--hide-hysteresis-ms` | `80` | |
+| `--telemetry-interval-sec` | `0` | observation only |
+| `--telemetry-csv` | unset | |
+| `--watchdog` | `true` | `--watchdog=false` for long soaks |
+| `--watchdog-interval-sec` | `20` | |
+| `--watchdog-max-age-sec` | `1800` | `0` = disable age cap |
+| `--watchdog-max-fds` | `450` | descendants |
+| `--watchdog-max-rss-mb` | `4200` | descendant RSS only |
+| `--watchdog-max-cgroup-mb` | unset | optional |
+| `--watchdog-breach-samples` | `3` | consecutive breaches before exit |
+| `--diag-*` / `--debug` | off | W1–W5; debug also frame-clock paints |
+| `--gsk-renderer` / `--webkit-no-dmabuf` | unset / off | W7 |
 
-Telemetry is observation-only (no kills). Samples run on a background thread.
+Watchdog exits with code **75** (not 0) so `Restart=on-failure` works.
 
 ```bash
-bun run overlay:rs -- --telemetry-interval-sec=5 \
-  --telemetry-csv=/tmp/overlay-rs-telem.csv
+cargo test   # nix develop, under apps/overlay-rs
 ```
 
-```bash
-cargo test   # in nix develop, under apps/overlay-rs
-```
-
-See [`findings/overlay-rs-phase5.md`](../../findings/overlay-rs-phase5.md).
+See [`findings/overlay-rs-phase6.md`](../../findings/overlay-rs-phase6.md).

@@ -333,7 +333,7 @@ fn wire_reload(webview: &WebView, url: &str) {
             warn!(
                 failing_uri,
                 error = %error,
-                "webkit: load failed"
+                "webkit: load failed (likely HUD/server unreachable; not a web-process crash)"
             );
             schedule_reload(
                 &machine,
@@ -351,7 +351,7 @@ fn wire_reload(webview: &WebView, url: &str) {
         let url = Rc::clone(&url);
         let webview_weak = webview.downgrade();
         webview.connect_web_process_terminated(move |_, reason| {
-            warn!(?reason, "webkit: web process terminated");
+            warn!(?reason, "webkit: web process terminated (crash/kill; distinct from HUD load-fail)");
             schedule_reload(
                 &machine,
                 ReloadTrigger::WebProcessTerminated,

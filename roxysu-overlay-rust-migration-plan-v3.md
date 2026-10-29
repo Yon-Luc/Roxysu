@@ -306,16 +306,16 @@ RSS/PSS samples show growth but cannot prove a leak. If growth repeats, use heap
 
 ### Phase 6 — Watchdog and lifecycle recovery
 
-- [ ] Process-tree discovery and policy in separate modules; scans off the GTK main loop.
-- [ ] Explicit, documented thresholds for runtime, FDs, and RSS/PSS (or cgroup memory).
-- [ ] Log the measurements and exact reason for any action.
-- [ ] Reconsider the unconditional 30-minute exit; prefer measured policy.
-- [ ] Use a **non-zero exit code** for watchdog-triggered exits (or document the service restart policy) so `Restart=on-failure` works.
-- [ ] Prefer a user-level service manager restart policy over a hard internal timeout.
-- [ ] Bounded WebKit retry/backoff (see Phase 3 state machine).
-- [ ] Distinguish a local HUD server outage from a WebKit process crash.
-- [ ] Define recovery when focus tracking disconnects.
-- [ ] Never terminate on a single noisy sample; require repeated samples over a window.
+- [x] Process-tree discovery and policy in separate modules; scans off the GTK main loop. (`watchdog/`)
+- [x] Explicit, documented thresholds for runtime, FDs, and RSS/PSS (or cgroup memory). (`--watchdog-max-*`; optional `--watchdog-max-cgroup-mb`)
+- [x] Log the measurements and exact reason for any action.
+- [x] Reconsider the unconditional 30-minute exit; prefer measured policy. (`--watchdog-max-age-sec 0` disables; age still default 1800 for C parity)
+- [x] Use a **non-zero exit code** for watchdog-triggered exits (or document the service restart policy) so `Restart=on-failure` works. (exit **75**)
+- [x] Prefer a user-level service manager restart policy over a hard internal timeout. (documented; age optional)
+- [x] Bounded WebKit retry/backoff (see Phase 3 state machine).
+- [x] Distinguish a local HUD server outage from a WebKit process crash. (distinct log lines)
+- [x] Define recovery when focus tracking disconnects. (Phase 4 reconnect / Unavailable)
+- [x] Never terminate on a single noisy sample; require repeated samples over a window. (`--watchdog-breach-samples` default 3)
 
 ### Phase 7 — NixOS integration and reproducible builds
 

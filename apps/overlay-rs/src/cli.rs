@@ -5,8 +5,9 @@ use clap::Parser;
 
 use crate::config::{
     Anchor, Config, DiagnosticFlags, GskRenderer, DEFAULT_HEIGHT, DEFAULT_MARGIN,
-    DEFAULT_MATCH_APP_ID, DEFAULT_OPACITY, DEFAULT_URL, DEFAULT_WATCHDOG_MAX_AGE_SEC,
-    DEFAULT_WATCHDOG_MAX_FDS, DEFAULT_WATCHDOG_MAX_RSS_MB, DEFAULT_WIDTH,
+    DEFAULT_MATCH_APP_ID, DEFAULT_OPACITY, DEFAULT_URL, DEFAULT_WATCHDOG_BREACH_SAMPLES,
+    DEFAULT_WATCHDOG_INTERVAL_SEC, DEFAULT_WATCHDOG_MAX_AGE_SEC, DEFAULT_WATCHDOG_MAX_FDS,
+    DEFAULT_WATCHDOG_MAX_RSS_MB, DEFAULT_WIDTH,
 };
 use crate::focus::MatchMode;
 
@@ -100,17 +101,33 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub diag_set_page_hidden: bool,
 
-    /// Watchdog max process age in seconds (Phase 6; stored now).
+    /// Enable resource watchdog (default on, like C). Disable for long soaks.
+    #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
+    pub watchdog: bool,
+
+    /// Watchdog scan interval in seconds.
+    #[arg(long, default_value_t = DEFAULT_WATCHDOG_INTERVAL_SEC)]
+    pub watchdog_interval_sec: u64,
+
+    /// Max process age in seconds (`0` = disable age cap; prefer service Restart).
     #[arg(long, default_value_t = DEFAULT_WATCHDOG_MAX_AGE_SEC)]
     pub watchdog_max_age_sec: u64,
 
-    /// Watchdog max open FDs among descendants (Phase 6; stored now).
+    /// Max open FDs among descendants (host excluded).
     #[arg(long, default_value_t = DEFAULT_WATCHDOG_MAX_FDS)]
     pub watchdog_max_fds: u64,
 
-    /// Watchdog max tree RSS in MiB (Phase 6; stored now).
+    /// Max descendant-tree RSS in MiB (host excluded; C-compatible).
     #[arg(long, default_value_t = DEFAULT_WATCHDOG_MAX_RSS_MB)]
     pub watchdog_max_rss_mb: u64,
+
+    /// Optional cgroup memory.current cap in MiB.
+    #[arg(long)]
+    pub watchdog_max_cgroup_mb: Option<u64>,
+
+    /// Consecutive breaching samples required before exit (anti-noise).
+    #[arg(long, default_value_t = DEFAULT_WATCHDOG_BREACH_SAMPLES)]
+    pub watchdog_breach_samples: u32,
 
     /// Memory telemetry interval in seconds (0 = off). Observation only; no kills.
     #[arg(long, default_value_t = 0)]
@@ -166,9 +183,13 @@ impl Cli {
                 paint_counter: self.diag_paint_counter || self.debug,
                 set_page_hidden: self.diag_set_page_hidden,
             },
+            watchdog: self.watchdog,
+            watchdog_interval_sec: self.watchdog_interval_sec,
             watchdog_max_age_sec: self.watchdog_max_age_sec,
             watchdog_max_fds: self.watchdog_max_fds,
             watchdog_max_rss_mb: self.watchdog_max_rss_mb,
+            watchdog_max_cgroup_mb: self.watchdog_max_cgroup_mb,
+            watchdog_breach_samples: self.watchdog_breach_samples,
             telemetry_interval_sec: self.telemetry_interval_sec,
             telemetry_csv: self.telemetry_csv,
             telemetry_phase: self.telemetry_phase,
@@ -285,5 +306,29 @@ mod tests {
         .unwrap();
         assert_eq!(cfg.gsk_renderer, Some(GskRenderer::Cairo));
         assert!(cfg.webkit_no_dmabuf);
+    }
+
+    #[test]
+    fn watchdog_defaults_and_disable_age() {
+        let cfg = Cli::try_parse_from(["roxysu-overlay-rs"])
+            .unwrap()
+            .into_config()
+            .unwrap();
+        assert!(cfg.watchdog);
+        assert_eq!(cfg.watchdog_interval_sec, 20);
+        assert_eq!(cfg.watchdog_breach_samples, 3);
+
+        let cfg = Cli::try_parse_from([
+            "roxysu-overlay-rs",
+            "--watchdog=false",
+            "--watchdog-max-age-sec=0",
+            "--watchdog-breach-samples=5",
+        ])
+        .unwrap()
+        .into_config()
+        .unwrap();
+        assert!(!cfg.watchdog);
+        assert!(cfg.watchdog_thresholds().max_age_sec.is_none());
+        assert_eq!(cfg.watchdog_breach_samples, 5);
     }
 }

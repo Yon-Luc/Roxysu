@@ -84,6 +84,12 @@ pub fn parse_stat_cpu_ticks(stat: &str) -> Option<(u64, u64)> {
     Some((utime, stime))
 }
 
+/// Count entries in `/proc/<pid>/fd` (best-effort; may undercount without permission).
+pub fn read_fd_count(pid: i32) -> Option<u64> {
+    let dir = fs::read_dir(proc_path(pid, "fd")).ok()?;
+    Some(dir.count() as u64)
+}
+
 pub fn read_meminfo_kib() -> Option<(u64, u64)> {
     let raw = fs::read_to_string("/proc/meminfo").ok()?;
     parse_meminfo_kib(&raw)

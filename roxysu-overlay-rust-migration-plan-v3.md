@@ -1,5 +1,8 @@
 # Rust Migration Plan (v3): `roxysu-overlay`
 
+> **Status (2026-10):** Migration complete. C host removed; Rust (`apps/overlay-rs`)
+> is the only implementation. This document is historical.
+
 > Revision notes: the C code is now treated as a frozen, tagged baseline and rollback target (no C fixes). The plan adds a full workaround inventory, a C-side A/B test, a C behavior table, event batching for focus, an explicit matching policy, a dedicated Wayland connection, retry coalescing, and more robust memory measurement.
 
 ## 1. Goal
@@ -348,7 +351,7 @@ Test C and Rust under equivalent conditions:
 - [x] Watchdog exit triggers a service restart. (exit **75**; desktop liveness respawn)
 - [x] Clean shutdown and actionable logs.
 
-**Cutover:** Rust is the packaged default (`overlayBin` → `nix/overlay-rs.nix`, provides `bin/roxysu-overlay`). C rollback: `nix build .#roxysu-overlay-c`. Manual residuals tracked in [`findings/overlay-rs-phase8.md`](findings/overlay-rs-phase8.md).
+**Cutover:** Rust is the only host (`overlayBin` → `nix/overlay-rs.nix`, provides `bin/roxysu-overlay`). C tree removed. Manual residuals tracked in [`findings/overlay-rs-phase8.md`](findings/overlay-rs-phase8.md).
 
 ## 7. Test strategy
 

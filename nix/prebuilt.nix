@@ -9,7 +9,7 @@
   zlib,
   openssl,
   icu,
-  # In-game overlay host derivation (nix/overlay.nix); null skips bundling.
+  # In-game overlay host derivation (nix/overlay-rs.nix); null skips bundling.
   overlayBin ? null,
   # Path to the unpacked `roxysu/` app root (main.js, resources/, …).
   src,

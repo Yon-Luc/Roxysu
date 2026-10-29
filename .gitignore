@@ -44,14 +44,9 @@ result-*
 # local branch pin / scratch (not source)
 .branch-*.json
 
-# apps/overlay build artifact
-apps/overlay/roxysu-overlay
-# apps/overlay generated wayland protocol code
-apps/overlay/gen/
 
 # shipped calc bundle file (admin export release artifact)
 apps/desktop/pack/
 
 # C baseline binary archive for Rust migration (Phase 0)
-apps/overlay/baselines/
 apps/overlay-rs/target/

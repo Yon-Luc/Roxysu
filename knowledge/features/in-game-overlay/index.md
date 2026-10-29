@@ -2,11 +2,9 @@
 last_verified: 2026-10
 confidence: verified
 touches:
-  - apps/overlay/main.c
-  - apps/overlay/build.sh
   - apps/overlay-rs/
   - flake.nix
-  - nix/overlay.nix
+  - nix/overlay-rs.nix
   - nix/prebuilt.nix
   - nix/package.nix
   - apps/desktop/main.js
@@ -20,8 +18,9 @@ touches:
 
 ## Purpose
 
-Standalone Wayland host (`apps/overlay`) that draws the existing `/overlay` HUD
-page above fullscreen osu!lazer on wlr-layer-shell compositors (Hyprland, sway,
+Standalone Wayland host (`apps/overlay-rs`, binary `roxysu-overlay-rs` /
+packaged name `roxysu-overlay`) that draws the existing `/overlay` HUD page
+above fullscreen osu!lazer on wlr-layer-shell compositors (Hyprland, sway,
 niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
 `overlay` layer.
 
@@ -30,123 +29,77 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
 1. Data reaches the HUD **only** through client-app HTTP (`GET /api/overlay`,
    same page as the OBS browser-source route `#/overlay?bg=clear`). The host
    never touches Realm or the local mirror directly.
-2. The surface is display-only: always click-through (empty input region via
-   `wl_surface_set_input_region`) and keyboard mode `NONE`.
+2. The surface is display-only: always click-through (empty GDK input region)
+   and keyboard mode `NONE`. Click-through is reapplied on every `map`.
 3. The host paints no background of its own (window + webview forced
    transparent via CSS); all translucency comes from the page's `bg=clear`
-   variant. Without this the GtkWindow theme color shows through as grey.
+   variant.
 4. Linux + zwlr_layer_shell_v1 only. On X11 / non-layer-shell compositors it
    exits with guidance to use the same URL as an OBS browser source instead.
 5. The host is version-agnostic to lazer; only the compositor contract matters.
 6. Layer placement: `OVERLAY` layer, `exclusive_zone = -1`, anchored corner per
    `--anchor`, so panels/fullscreen windows never displace it.
-7. **Focus following** (default on): via `zwlr_foreign_toplevel_management`,
-   the surface shows only while a window whose `app_id` (fallback title)
-   contains `--match-app-id` (default `osu`) is activated. Compositors without
-   that protocol degrade to always-visible with a stderr notice.
-8. **Self-heal**: a dead web process (OOM, GPU/DMA-BUF crash) leaves the last
-   frame on screen forever — symptom: overlay freezes as a static image.
-   `web-process-terminated` reloads after 1s; `load-failed` retries with
-   backoff (3s, then 15s after 5 consecutive failures). If crashes recur,
-   try `--webkit-no-dmabuf`.
-   `--follow-focus 0` disables; `--list-windows` dumps app_id/title/focused
-   state for tuning the match string.
-8. Visibility is a hard map/unmap of the layer surface. Softer approaches all
-   failed in practice: GTK4 opacity is ignored on Wayland toplevels and does
-   not reach WebKitGTK's composited output; injected page-visibility JS
-   commits stall because the compositor never recomposes an unchanged-mapped
-   overlay above fullscreen games (visual state lagged events by one
-   focus-period until each fullscreen enter/exit forced recomposition).
-9. Every remap reasserts placement (explicit `gtk_widget_set_visible(TRUE)`
-   before `present()` to undo the hide, then anchors, `set_layer(TOP)` then
-   `set_layer(OVERLAY)`, plus queue_draw and page-visibility reset) so the
-   compositor re-slots the fresh surface above fullscreen windows instead of
-   leaving remapped overlays below them. A repeated focus event for an
-   already shown surface also reasserts placement (throttled to once per
-   second). Status: compiled, not yet validated on a compositor (F-039).
-10. While shown, a 300ms tick oscillates view opacity 1↔0.999 + requests a
-    PAINT phase, and each show injects a permanent sub-visible CSS animation
-    (`roxysu-keepalive`) so WebKit produces fresh frames continuously —
-    forcing real buffer churn so live HUD updates recompose above fullscreen
-    games instead of freezing until remap. `--debug` prints paints-per-5s:
-    high paints + frozen screen = compositor-side culling; zero paints =
-    frame-clock starvation. `--gsk-renderer` / `--webkit-no-dmabuf` exist to
-    A/B the GTK/WebKit rendering paths when updates stall on niri.
-11. Focus tracking uses its own Wayland event queue + GSource on the GDK
-   connection; protocol C code is generated at build time by wayland-scanner
-   from wlr-protocols into `apps/overlay/gen/` (gitignored).
-12. **Desktop bundling** (NixOS packages): Phase 8 cutover — `nix/overlay-rs.nix`
-   builds the **Rust** host; `nix/prebuilt.nix` / `nix/package.nix` symlink
-   `bin/roxysu-overlay` into `resources/overlay/roxysu-overlay`. Electron
-   (`spawnOverlayHost`) prefers that path, then local
-   `apps/overlay-rs/target/{release,debug}/roxysu-overlay-rs`, then C
-   `apps/overlay/roxysu-overlay` for rollback. Override: `ROXYSU_OVERLAY_BIN`.
-   C package remains `nix build .#roxysu-overlay-c`. Linux + Wayland only.
-   Data rules unchanged: HTTP-only consumer.
-13. **Arg form**: the host pre-splits every argv token on `=` into
-   `--key value`, so values containing `=` must be passed as a single
-   `--key=value` token. Electron passes `--url=http://…?bg=clear`; passing
-   the URL as a separate argv value breaks parsing (`unknown option 'clear'`).
-14. **Host URL setting**: `settings` key `overlay.host_url` holds the full HUD
-   URL (Settings page → In-game overlay section). Missing/empty → default
-   `#/overlay?bg=clear`; non-http(s) values are rejected by the PATCH handler.
-   **Enable toggle**: `settings` key `overlay.host_enabled` (`"1"`/`"0"`,
-   missing = enabled) turns the host off entirely — the Electron shell stops
-   the child and suppresses the liveness respawn while off.
-   The Electron shell polls `GET /api/settings` (~4s) and applies both keys:
-   stop/spawn-restart of the host child whenever they change — plain
-   client-app HTTP, no IPC. The same poll is also the liveness respawner: if
-    the host child exits on its own (crash, signal, or watchdog), it is respawned
-   within ~4s, rate-limited to one auto-respawn per 15s
-   (`OVERLAY_RESPAWN_GAP_MS`) so a crashing binary cannot spin the poll.
-   The gap applies only while the desired `--url=` token equals the one the
-   exited child was spawned with; when the URL changed, the shell stops any
-   running child and spawns at once, even inside the gap.
-    **Failed polls**: a failed settings read (HTTP error or 2s timeout) carries
-    no new intent. After 5 consecutive failures the shell stops a live host.
-    The last known toggle does not gate that stop: a disable already cleared
-    the child, and a dead server with the toggle still on must not keep
-    drawing. One failed poll does not stop the host. A successful read resets
-    the counter and, if the toggle is on and no child is running, spawns
-    again. Decision logic:
-   `apps/desktop/overlayApplyPolicy.js:decideOverlayApply()` (pure,
-   unit-tested).
-15. **Resource watchdog**: the host self-terminates before driver state
-   degrades. Every 20s it sums RSS over its process tree (WebKit children)
-   and takes the max open-fd count; measured on NVIDIA 595.84 + WebKitGTK,
-   continuous frame churn leaks ~8 fds/min and tens of MB/min until the
-   kernel floods with `NVRM: can't alloc VA space` (~18 min in) and every
-   frame degrades into noise — see rule 10's churn requirement for why the
-   churn exists. Caps (env-overridable): tree age > 1800s
-   (`ROXYSU_WATCHDOG_MAX_AGE_SEC`), descendant fds > 450
-   (`ROXYSU_WATCHDOG_MAX_FDS`), tree RSS > 4200MB
-   (`ROXYSU_WATCHDOG_MAX_RSS_MB`). On breach the host logs
-   `watchdog: … exiting for clean respawn` and exits 0; the desktop poll
-   respawns it fresh within ~4s (rule 14). Restart cost: a ~1s HUD blink;
-   alternative cost: system-wide GPU allocation failure cascade.
+7. **Focus following** (default on): dedicated Wayland connection for
+   `zwlr_foreign_toplevel_management`; show only while a matching window is
+   activated. Match policy default `contains` (case-insensitive substring of
+   `--match-app-id`, default `osu`); title is used only when `app_id` is empty.
+   `--match-mode exact` available. Visibility is evaluated once per dispatch
+   batch; Hide uses short hysteresis (`--hide-hysteresis-ms`, default 80).
+   Missing protocol on first connect → always-visible fallback; later drops
+   leave visibility unchanged and reconnect with backoff.
+8. **Self-heal**: `web-process-terminated` reloads after 1 s; `load-failed`
+   (HUD/server) retries at 3 s / 15 s after >5 failures via a **single-slot**
+   reload state machine (no stacked timers). Distinct log lines for load-fail
+   vs web-process crash. `--webkit-no-dmabuf` / `--gsk-renderer` remain for
+   A/B when rendering stalls.
+9. Visibility is a hard map/unmap of the layer surface (soft opacity-only hide
+   failed historically on Wayland + WebKit).
+10. **Default path does not force redraw.** W1–W5 compositor force-present
+    hacks are behind `--diag-*` (and `--debug` implies W4 paint counter).
+    WebKit already redraws on HUD content change. `--debug` also reports real
+    frame-clock paint counts.
+11. Focus tracking runs off the GTK thread and posts Show/Hide to the main
+    context over a channel.
+12. **Desktop bundling**: `nix/overlay-rs.nix` builds the host; packages symlink
+    `bin/roxysu-overlay` into `resources/overlay/roxysu-overlay`. Electron
+    (`spawnOverlayHost`) uses that path, then local
+    `apps/overlay-rs/target/{release,debug}/roxysu-overlay-rs`. Override:
+    `ROXYSU_OVERLAY_BIN`. Linux + Wayland only.
+13. **CLI**: clap accepts `--url=VALUE` and `--url VALUE` with `=` inside
+    values. Electron still passes `--url=http://…?bg=clear`.
+14. **Host URL setting**: `overlay.host_url` / enable toggle `overlay.host_enabled`
+    as before — Electron polls settings (~4s), stop/spawn/restart, liveness
+    respawn with `OVERLAY_RESPAWN_GAP_MS`. Decision logic:
+    `apps/desktop/overlayApplyPolicy.js:decideOverlayApply()`.
+15. **Resource watchdog** (default on): off GTK thread; descendant RSS / max
+    descendant FDs / optional age / optional cgroup. Requires
+    `--watchdog-breach-samples` consecutive breaches (default 3), then exits
+    **75** (not 0) so `Restart=on-failure` / desktop respawn work. Age cap
+    disable with `--watchdog-max-age-sec 0`. Observation-only telemetry via
+    `--telemetry-interval-sec` / `--telemetry-csv`.
 
 ## Main flow
 
 ```
-apps/overlay (C: GTK4 + gtk4-layer-shell + WebKitGTK 6)
+apps/overlay-rs (GTK4 + gtk4-layer-shell + WebKitGTK 6)
     │  loads http://127.0.0.1:<port>/#/overlay?limit=N&bg=clear
     ▼
 client app server → GET /api/overlay (live session / recent scores)
 ```
 
 Launch paths:
-- Standalone: `nix develop` → `./apps/overlay/build.sh` → `./roxysu-overlay`
-- NixOS desktop package: bundled by the flake, spawned automatically by
-  `apps/desktop/main.js` (see business rule 12)
-
-(flags: `--url --anchor --margin --width --height --opacity --output
---match-app-id --follow-focus --list-windows`; values with `=` must use
-`--key=value` form — rule 13).
+- Dev: `bun run overlay` / `cargo run` under `apps/overlay-rs`
+- Nix: `nix build .#roxysu-overlay` → desktop package bundles it
+- Desktop: Settings toggle → `spawnOverlayHost`
 
 ## Important symbols
 
-- `apps/overlay/main.c` — host entry point
-- `nix/overlay.nix` — self-contained host derivation (`nix build .#roxysu-overlay`)
+- `apps/overlay-rs/src/main.rs` — host entry
+- `apps/overlay-rs/src/overlay.rs` — window / WebKit / focus wiring
+- `apps/overlay-rs/src/focus/` — match policy + batched reducer + Wayland
+- `apps/overlay-rs/src/reload.rs` — single-slot reload SM
+- `apps/overlay-rs/src/watchdog/` — resource policy + exit 75
+- `nix/overlay-rs.nix` — derivation (`nix build .#roxysu-overlay`)
 - `apps/server/public/features/overlay/OverlayPage.tsx` — rendered HUD page
 - `apps/server/src/routes/overlay.ts` — `/api/overlay`
 
@@ -166,7 +119,4 @@ Launch paths:
 - [vocabulary.md](../vocabulary.md) — In-game overlay
 - [features/overlay-editor/](../overlay-editor/index.md) — profiles behind `?profile=` URLs
 - [architecture/process-model.md](../architecture/process-model.md) — sibling process model
-- Rust host is the packaged default (Phase 8): `apps/overlay-rs/`,
-  `nix build .#roxysu-overlay`. Settings toggle starts it. C rollback:
-  `.#roxysu-overlay-c` or `ROXYSU_OVERLAY_BIN`. See
-  `findings/overlay-rs-phase8.md`.
+- Migration archive: `findings/overlay-rs-phase*.md`, `findings/overlay-c-phase0-baseline.md`

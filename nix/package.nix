@@ -18,7 +18,7 @@
   cacert,
   # Set after first build: nix build .#roxysu 2>&1 | … got: sha256-…
   bunDepsHash ? "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-  # In-game overlay host derivation (nix/overlay.nix); null skips bundling.
+  # In-game overlay host derivation (nix/overlay-rs.nix); null skips bundling.
   overlayBin ? null,
 }: let
   pname = "roxysu";

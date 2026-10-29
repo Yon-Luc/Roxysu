@@ -89,14 +89,10 @@
       nodejs_24 = pkgs.nodejs_24;
     };
 
-    # Phase 8: Rust is the bundled overlay host. C remains buildable for rollback.
-    overlayRsBin = pkgs.callPackage ./nix/overlay-rs.nix {
+    # In-game overlay host (Rust). Bundled as resources/overlay/roxysu-overlay.
+    overlayBin = pkgs.callPackage ./nix/overlay-rs.nix {
       version = resourcesVersion;
     };
-    overlayCBin = pkgs.callPackage ./nix/overlay.nix {
-      version = resourcesVersion;
-    };
-    overlayBin = overlayRsBin;
 
     roxysuPrebuilt = pkgs.callPackage ./nix/prebuilt.nix {
       inherit electron overlayBin;
@@ -112,9 +108,8 @@
       inherit roxysu;
       roxysu-prebuilt = roxysuPrebuilt;
       roxysu-from-source = roxysuFromSource;
-      roxysu-overlay = overlayRsBin;
-      roxysu-overlay-rs = overlayRsBin;
-      roxysu-overlay-c = overlayCBin;
+      roxysu-overlay = overlayBin;
+      roxysu-overlay-rs = overlayBin;
     };
 
     apps.${system}.default = {
@@ -134,8 +129,7 @@
     # Install into PATH + app menu: nix profile install github:Yon-Luc/Roxysu
     #   or on NixOS: programs.roxysu.enable (see nixosModules above).
     devShells.${system}.default = pkgs.mkShell {
-      # GTK/webkit/layer-shell: builds apps/overlay (C host) and apps/overlay-rs
-      # (Rust Phase 1+ prototype). gpuixRuntimeDeps: dlopen for apps/play.
+      # GTK/webkit/layer-shell: builds apps/overlay-rs. gpuixRuntimeDeps: dlopen for apps/play.
       buildInputs =
         [
           pkgs.bun
@@ -146,10 +140,7 @@
           pkgs.gtk4-layer-shell
           pkgs.webkitgtk_6_0
           pkgs.wayland
-          pkgs.wayland-scanner
-          pkgs.wlr-protocols
           pkgs.zenity
-          # Rust overlay host prototype (apps/overlay-rs)
           pkgs.rustc
           pkgs.cargo
           pkgs.rustfmt

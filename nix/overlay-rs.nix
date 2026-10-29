@@ -11,9 +11,8 @@
   libclang,
   version,
 }:
-# Rust in-game overlay host (apps/overlay-rs). Phase 8 default for desktop
-# packaging (provides `bin/roxysu-overlay` symlink for resources/overlay/).
-# C rollback: nix build .#roxysu-overlay-c
+# Rust in-game overlay host (apps/overlay-rs). Desktop packaging expects
+# `bin/roxysu-overlay` (symlink to `roxysu-overlay-rs`).
 rustPlatform.buildRustPackage {
   pname = "roxysu-overlay-rs";
   inherit version;

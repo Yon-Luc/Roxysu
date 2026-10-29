@@ -11,22 +11,15 @@ status: done
 
 ## Cutover (done)
 
-| Before | After |
+Rust is the only overlay host. C sources (`apps/overlay/`, `nix/overlay.nix`)
+were removed after Phase 8.
+
+| Item | Status |
 |---|---|
-| Packaged `overlayBin` = C (`nix/overlay.nix`) | Packaged `overlayBin` = Rust (`nix/overlay-rs.nix`) |
-| `resources/overlay/roxysu-overlay` → C | → Rust (`roxysu-overlay` symlink to `roxysu-overlay-rs`) |
-| Dev resolve: C binary only | Prefers Rust `target/{release,debug}`, then C rollback |
-| `bun run overlay` | Rust host (`overlay:c` keeps C) |
-
-**Rollback**
-
-```bash
-# One-shot
-ROXYSU_OVERLAY_BIN=$(nix build --print-out-paths .#roxysu-overlay-c)/bin/roxysu-overlay
-
-# Or rebuild packages with overlayBin = overlayCBin in flake.nix
-nix build .#roxysu-overlay-c
-```
+| Packaged `overlayBin` | `nix/overlay-rs.nix` |
+| `resources/overlay/roxysu-overlay` | symlink → `roxysu-overlay-rs` |
+| Dev resolve | packaged path, then `target/{release,debug}` |
+| `bun run overlay` | Rust |
 
 ## Automated gate (PASS)
 

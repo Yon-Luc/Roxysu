@@ -563,14 +563,14 @@ A user-built mania chart made by concatenating several same-key-count maps from 
 
 ### In-game overlay
 
-Standalone Wayland host (`apps/overlay`) that draws the `/overlay` HUD page
+Standalone Wayland host (`apps/overlay-rs`) that draws the `/overlay` HUD page
 above fullscreen osu!lazer via wlr-layer-shell (overlay layer, always
 click-through). wlroots-family compositors only; data comes exclusively from
 client-app HTTP (`GET /api/overlay`).
 
 **Not:** the `/overlay` page alone (the OBS browser-source HUD), **Now selected**
 
-**In code:** `apps/overlay/main.c`
+**In code:** `apps/overlay-rs/` (binary `roxysu-overlay-rs`, packaged as `roxysu-overlay`)
 
 **See:** [features/in-game-overlay/](features/in-game-overlay/index.md)
 

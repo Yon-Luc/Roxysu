@@ -1,4 +1,4 @@
-//! Roxysu overlay host (Rust). Phase 3: WebKit lifecycle, diagnostic W1–W5, shutdown.
+//! Roxysu overlay host (Rust). Phase 4: batched focus reducer + match policy.
 
 mod click_through;
 mod cli;

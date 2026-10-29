@@ -8,6 +8,7 @@ use crate::config::{
     DEFAULT_MATCH_APP_ID, DEFAULT_OPACITY, DEFAULT_URL, DEFAULT_WATCHDOG_MAX_AGE_SEC,
     DEFAULT_WATCHDOG_MAX_FDS, DEFAULT_WATCHDOG_MAX_RSS_MB, DEFAULT_WIDTH,
 };
+use crate::focus::MatchMode;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -51,9 +52,17 @@ pub struct Cli {
     #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
     pub follow_focus: bool,
 
-    /// Case-insensitive substring matched against app_id (title if app_id empty).
+    /// Case-insensitive needle matched against app_id (title if app_id empty).
     #[arg(long, default_value = DEFAULT_MATCH_APP_ID)]
     pub match_app_id: String,
+
+    /// How to apply --match-app-id: contains (C default) | exact.
+    #[arg(long, default_value = "contains", value_parser = parse_match_mode)]
+    pub match_mode: MatchMode,
+
+    /// Milliseconds to wait before Hide (cancels if Show arrives). Softens alt-tab flicker.
+    #[arg(long, default_value_t = 80)]
+    pub hide_hysteresis_ms: u64,
 
     /// Dump known foreign-toplevel windows and exit.
     #[arg(long, default_value_t = false)]
@@ -116,6 +125,10 @@ fn parse_gsk(s: &str) -> Result<GskRenderer, String> {
     s.parse::<GskRenderer>().map_err(|e| e.to_string())
 }
 
+fn parse_match_mode(s: &str) -> Result<MatchMode, String> {
+    s.parse::<MatchMode>().map_err(|e| e.to_string())
+}
+
 impl Cli {
     pub fn into_config(self) -> Result<Config> {
         let cfg = Config {
@@ -128,6 +141,8 @@ impl Cli {
             output: self.output,
             follow_focus: self.follow_focus,
             match_app_id: self.match_app_id,
+            match_mode: self.match_mode,
+            hide_hysteresis_ms: self.hide_hysteresis_ms,
             list_windows: self.list_windows,
             debug: self.debug,
             gsk_renderer: self.gsk_renderer,
@@ -201,6 +216,17 @@ mod tests {
         assert!(!cfg.diagnostics.inject_keepalive);
         assert_eq!(cfg.anchor, Anchor::TopRight);
         assert!(cfg.output.is_none());
+        assert_eq!(cfg.match_mode, MatchMode::Contains);
+        assert_eq!(cfg.hide_hysteresis_ms, 80);
+    }
+
+    #[test]
+    fn match_mode_exact() {
+        let cfg = Cli::try_parse_from(["roxysu-overlay-rs", "--match-mode=exact"])
+            .unwrap()
+            .into_config()
+            .unwrap();
+        assert_eq!(cfg.match_mode, MatchMode::Exact);
     }
 
     #[test]

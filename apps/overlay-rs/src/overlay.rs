@@ -117,11 +117,11 @@ impl OverlayHost {
     pub fn present_initial(self) -> Result<()> {
         if self.config.list_windows {
             let (tx, rx) = mpsc::channel::<FocusEvent>();
-            let match_app_id = self.config.match_app_id.clone();
+            let policy = self.config.match_policy();
             std::thread::Builder::new()
                 .name("overlay-focus".into())
                 .spawn(move || {
-                    if let Err(err) = focus::run_list_windows(tx, match_app_id) {
+                    if let Err(err) = focus::run_list_windows(tx, policy) {
                         eprintln!("roxysu-overlay-rs: list-windows failed: {err:#}");
                     }
                 })
@@ -207,11 +207,11 @@ impl OverlayHost {
     fn start_focus_tracking(&self) -> Result<()> {
         let (tx, rx) = async_channel::unbounded::<FocusCommand>();
 
-        let match_app_id = self.config.match_app_id.clone();
+        let policy = self.config.match_policy();
         std::thread::Builder::new()
             .name("overlay-focus".into())
             .spawn(move || {
-                if let Err(err) = focus::run_focus_loop(match_app_id, tx) {
+                if let Err(err) = focus::run_focus_loop(policy, tx) {
                     eprintln!("roxysu-overlay-rs: focus thread exited: {err:#}");
                 }
             })
@@ -222,13 +222,17 @@ impl OverlayHost {
         let shown = Rc::clone(&self.shown);
         let last = Rc::new(RefCell::new(None::<bool>));
         let last_reassert = Rc::new(Cell::new(None::<Instant>));
+        let hide_epoch = Rc::new(Cell::new(0u64));
         let diagnostics = self.config.diagnostics;
         let anchor = self.config.anchor;
+        let hysteresis = self.config.hide_hysteresis_ms;
 
         glib::spawn_future_local(async move {
             while let Ok(cmd) = rx.recv().await {
                 match cmd {
                     FocusCommand::Show => {
+                        // Cancel any pending hysteretic hide.
+                        hide_epoch.set(hide_epoch.get().wrapping_add(1));
                         let was_shown = *last.borrow() == Some(true);
                         if !was_shown {
                             info!("focus: show");
@@ -247,16 +251,57 @@ impl OverlayHost {
                         }
                     }
                     FocusCommand::Hide => {
-                        if *last.borrow() != Some(false) {
+                        if *last.borrow() == Some(false) {
+                            continue;
+                        }
+                        if hysteresis == 0 {
                             info!("focus: hide");
                             diagnostics::on_hide(&webview, diagnostics);
                             window.set_visible(false);
                             *shown.borrow_mut() = false;
                             *last.borrow_mut() = Some(false);
+                            continue;
                         }
+                        let epoch = hide_epoch.get().wrapping_add(1);
+                        hide_epoch.set(epoch);
+                        let window = window.clone();
+                        let webview = webview.clone();
+                        let shown = Rc::clone(&shown);
+                        let last = Rc::clone(&last);
+                        let hide_epoch = Rc::clone(&hide_epoch);
+                        glib::timeout_add_local_once(
+                            Duration::from_millis(hysteresis),
+                            move || {
+                                if hide_epoch.get() != epoch {
+                                    return; // cancelled by Show
+                                }
+                                if *last.borrow() == Some(false) {
+                                    return;
+                                }
+                                info!(hysteresis_ms = hysteresis, "focus: hide");
+                                diagnostics::on_hide(&webview, diagnostics);
+                                window.set_visible(false);
+                                *shown.borrow_mut() = false;
+                                *last.borrow_mut() = Some(false);
+                            },
+                        );
                     }
                     FocusCommand::Disconnected => {
                         warn!("focus tracking disconnected; leaving visibility unchanged");
+                    }
+                    FocusCommand::Unavailable => {
+                        warn!(
+                            "foreign-toplevel unavailable; falling back to always-visible \
+                             (same as --follow-focus false)"
+                        );
+                        hide_epoch.set(hide_epoch.get().wrapping_add(1));
+                        if *last.borrow() != Some(true) {
+                            window.set_visible(true);
+                            window.present();
+                            *shown.borrow_mut() = true;
+                            diagnostics::on_show(&webview, &window, anchor, diagnostics);
+                            *last.borrow_mut() = Some(true);
+                        }
                     }
                 }
             }

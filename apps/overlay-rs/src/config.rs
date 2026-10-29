@@ -6,6 +6,8 @@
 use anyhow::{bail, Result};
 use std::str::FromStr;
 
+use crate::focus::{MatchMode, MatchPolicy};
+
 pub const DEFAULT_URL: &str =
     "http://127.0.0.1:4321/#/overlay?bg=clear&limit=25&profile=Classic";
 pub const DEFAULT_MATCH_APP_ID: &str = "osu";
@@ -136,6 +138,10 @@ pub struct Config {
     pub output: Option<String>,
     pub follow_focus: bool,
     pub match_app_id: String,
+    /// `contains` (C default) or `exact`.
+    pub match_mode: MatchMode,
+    /// Delay before applying Hide so brief focus gaps (alt-tab) do not flicker.
+    pub hide_hysteresis_ms: u64,
     pub list_windows: bool,
     pub debug: bool,
     pub gsk_renderer: Option<GskRenderer>,
@@ -160,6 +166,8 @@ impl Default for Config {
             output: None,
             follow_focus: true,
             match_app_id: DEFAULT_MATCH_APP_ID.to_string(),
+            match_mode: MatchMode::Contains,
+            hide_hysteresis_ms: 80,
             list_windows: false,
             debug: false,
             gsk_renderer: None,
@@ -194,6 +202,9 @@ impl Config {
         if self.match_app_id.is_empty() {
             bail!("--match-app-id must not be empty");
         }
+        if self.hide_hysteresis_ms > 5_000 {
+            bail!("--hide-hysteresis-ms must be <= 5000");
+        }
         if self.watchdog_max_age_sec == 0 {
             bail!("--watchdog-max-age-sec must be > 0");
         }
@@ -217,6 +228,10 @@ impl Config {
         if self.webkit_no_dmabuf {
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         }
+    }
+
+    pub fn match_policy(&self) -> MatchPolicy {
+        MatchPolicy::new(self.match_app_id.clone(), self.match_mode)
     }
 }
 
@@ -283,6 +298,8 @@ mod tests {
         assert!("nope".parse::<Anchor>().is_err());
         assert_eq!("cairo".parse::<GskRenderer>().unwrap(), GskRenderer::Cairo);
         assert!("metal".parse::<GskRenderer>().is_err());
+        assert_eq!("exact".parse::<MatchMode>().unwrap(), MatchMode::Exact);
+        assert!("regex".parse::<MatchMode>().is_err());
     }
 
     #[test]

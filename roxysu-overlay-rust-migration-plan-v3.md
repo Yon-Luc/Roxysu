@@ -234,21 +234,22 @@ The C watchdog caps (450 FDs, 4200 MB) suggest past incidents. Treat them as hyp
 
 ### Phase 4 — Event-driven Wayland focus tracking
 
-- [ ] Dedicated Wayland connection for `zwlr_foreign_toplevel_manager_v1`.
-- [ ] Pure focus reducer: toplevel add/update/close events in, `Show`/`Hide` commands out.
-- [ ] **Batch events:** evaluate once per dispatch batch rather than on every `done`, so alt-tab between windows does not cause a transient "nothing matched" hide/show cycle. Optionally add a short, measured hysteresis on hide.
-- [ ] Apply window-state changes only when the computed visibility changes.
-- [ ] Define the match policy explicitly (see below) and test it.
-- [ ] Handle missing app IDs, title changes, window destruction, and osu!lazer restarts.
-- [ ] Handle protocol connection failure; define reconnect behavior and what visibility to use while disconnected.
-- [ ] Reapply click-through on every map.
-- [ ] Keep GTK operations on the GTK main context (channel to main thread).
-- [ ] Unit tests for matching logic and focus transitions, including batched sequences.
+- [x] Dedicated Wayland connection for `zwlr_foreign_toplevel_manager_v1`. (`focus/wayland.rs`)
+- [x] Pure focus reducer: toplevel add/update/close events in, `Show`/`Hide` commands out. (`focus/reducer.rs`)
+- [x] **Batch events:** evaluate once per dispatch batch rather than on every `done`, so alt-tab between windows does not cause a transient "nothing matched" hide/show cycle. Optionally add a short, measured hysteresis on hide. (`end_batch` + `--hide-hysteresis-ms` default 80)
+- [x] Apply window-state changes only when the computed visibility changes.
+- [x] Define the match policy explicitly (see below) and test it. (`focus/matching.rs`; `--match-mode contains|exact`)
+- [x] Handle missing app IDs, title changes, window destruction, and osu!lazer restarts.
+- [x] Handle protocol connection failure; define reconnect behavior and what visibility to use while disconnected. (first fail → always-visible; later drop → leave as-is + reconnect backoff)
+- [x] Reapply click-through on every map. (Phase 1 `connect_map`; retained)
+- [x] Keep GTK operations on the GTK main context (channel to main thread).
+- [x] Unit tests for matching logic and focus transitions, including batched sequences.
 
-Match policy (decide and document):
+Match policy (decided):
 
-- C behavior: case-insensitive substring of `app_id`; the title is only consulted when `app_id` is empty; default pattern `osu`.
-- Options to consider: `exact`, `contains` (default), `regex`; separate `--match-title`; guard against false positives from a short substring like `osu`.
+- Default **`contains`**: case-insensitive substring of `app_id`; title only when `app_id` is empty; needle default `osu` (C-compatible).
+- **`exact`**: case-insensitive full-string equality (`--match-mode exact`) to avoid short-needle false positives.
+- `regex` / separate `--match-title` deferred.
 
 **Exit criteria:** focus changes are event-driven with no focus polling or redraw timers; HUD content updates continue independently; alt-tab sequences produce no spurious hide/show.
 

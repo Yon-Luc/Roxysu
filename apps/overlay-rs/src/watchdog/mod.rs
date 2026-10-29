@@ -12,5 +12,5 @@ mod policy;
 mod runner;
 mod scan;
 
-pub use policy::{BreachReason, Measurement, Thresholds};
-pub use runner::{start, WatchdogHandle, WATCHDOG_EXIT_CODE};
+pub use policy::Thresholds;
+pub use runner::{start, WatchdogHandle};

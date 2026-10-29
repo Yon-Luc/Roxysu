@@ -75,14 +75,17 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
 11. Focus tracking uses its own Wayland event queue + GSource on the GDK
    connection; protocol C code is generated at build time by wayland-scanner
    from wlr-protocols into `apps/overlay/gen/` (gitignored).
-12. **Desktop bundling** (NixOS packages): `nix/overlay.nix` builds the host as
-   a self-contained derivation (autoPatchelf bakes GTK4/WebKitGTK RPATHs into
-   the binary); `nix/prebuilt.nix` / `nix/package.nix` symlink it to
-   `resources/overlay/roxysu-overlay`. The Electron shell (`spawnOverlayHost`
-   in `apps/desktop/main.js`) spawns it after server readiness — Linux +
-   Wayland session only, skipped with a log line otherwise. Override/dev
-   path: `ROXYSU_OVERLAY_BIN` or a locally built `apps/overlay/roxysu-overlay`.
-   Data rules unchanged: HTTP-only consumer.
+12. **Desktop bundling** (NixOS packages): `nix/overlay.nix` builds the **C**
+   host as a self-contained derivation (autoPatchelf bakes GTK4/WebKitGTK
+   RPATHs into the binary); `nix/prebuilt.nix` / `nix/package.nix` symlink it
+   to `resources/overlay/roxysu-overlay`. The Electron shell
+   (`spawnOverlayHost` in `apps/desktop/main.js`) spawns it after server
+   readiness — Linux + Wayland session only, skipped with a log line
+   otherwise. Override/dev path: `ROXYSU_OVERLAY_BIN` or a locally built
+   `apps/overlay/roxysu-overlay`. Rust prototype: `nix build
+   .#roxysu-overlay-rs` (`nix/overlay-rs.nix`); not bundled yet — point
+   `ROXYSU_OVERLAY_BIN` at `…/bin/roxysu-overlay-rs` to A/B via the same
+   enable toggle. Data rules unchanged: HTTP-only consumer.
 13. **Arg form**: the host pre-splits every argv token on `=` into
    `--key value`, so values containing `=` must be passed as a single
    `--key=value` token. Electron passes `--url=http://…?bg=clear`; passing
@@ -166,6 +169,6 @@ Launch paths:
 - [vocabulary.md](../vocabulary.md) — In-game overlay
 - [features/overlay-editor/](../overlay-editor/index.md) — profiles behind `?profile=` URLs
 - [architecture/process-model.md](../architecture/process-model.md) — sibling process model
-- Rust host prototype (not shipped): `apps/overlay-rs/` on branch `overlay-rust-phase1`
-  — Phases 1–6 (through watchdog exit 75 + consecutive breach window). See
-  `findings/overlay-rs-phase6.md`. C host remains default.
+- Rust host prototype (not shipped): `apps/overlay-rs/` — Phases 1–7
+  (`nix build .#roxysu-overlay-rs`). Toggle still starts C unless
+  `ROXYSU_OVERLAY_BIN` overrides. See `findings/overlay-rs-phase7.md`.

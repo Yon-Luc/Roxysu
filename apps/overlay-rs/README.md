@@ -1,40 +1,39 @@
 # roxysu-overlay-rs
 
 Rust Wayland overlay host (GTK4 + WebKitGTK 6 + gtk4-layer-shell). The C host in
-`apps/overlay/` remains the shipped default until later migration phases.
+`apps/overlay/` remains the **shipped default** (desktop toggle + Nix package).
 
 ## Build / run
 
 ```bash
-nix develop --command bash apps/overlay-rs/run.sh --follow-focus false
-# or
+# Dev (debug)
 bun run overlay:rs -- --follow-focus false
+
+# Release via cargo
+bun run overlay:rs:release
+
+# Nix package (release + tests)
+nix build .#roxysu-overlay-rs
+./result/bin/roxysu-overlay-rs --help
 ```
 
-## CLI (Phases 2–6)
+## Desktop toggle?
 
-| Flag | Default | Notes |
-|---|---|---|
-| `--url` | HUD with `bg=clear` | `=` inside values OK |
-| `--follow-focus` | `true` | |
-| `--match-app-id` / `--match-mode` | `osu` / `contains` | `exact` available |
-| `--hide-hysteresis-ms` | `80` | |
-| `--telemetry-interval-sec` | `0` | observation only |
-| `--telemetry-csv` | unset | |
-| `--watchdog` | `true` | `--watchdog=false` for long soaks |
-| `--watchdog-interval-sec` | `20` | |
-| `--watchdog-max-age-sec` | `1800` | `0` = disable age cap |
-| `--watchdog-max-fds` | `450` | descendants |
-| `--watchdog-max-rss-mb` | `4200` | descendant RSS only |
-| `--watchdog-max-cgroup-mb` | unset | optional |
-| `--watchdog-breach-samples` | `3` | consecutive breaches before exit |
-| `--diag-*` / `--debug` | off | W1–W5; debug also frame-clock paints |
-| `--gsk-renderer` / `--webkit-no-dmabuf` | unset / off | W7 |
+**Not wired by default.** Settings → In-game overlay enable still spawns
+`roxysu-overlay` (C). To try Rust through the same toggle:
 
-Watchdog exits with code **75** (not 0) so `Restart=on-failure` works.
+```bash
+export ROXYSU_OVERLAY_BIN="$(nix build --print-out-paths .#roxysu-overlay-rs)/bin/roxysu-overlay-rs"
+# launch Roxysu desktop
+```
+
+## CLI
+
+See migration plan Phases 2–6. Highlights: `--match-mode`, `--telemetry-*`,
+`--watchdog*` (exit 75), `--diag-*`.
 
 ```bash
 cargo test   # nix develop, under apps/overlay-rs
 ```
 
-See [`findings/overlay-rs-phase6.md`](../../findings/overlay-rs-phase6.md).
+See [`findings/overlay-rs-phase7.md`](../../findings/overlay-rs-phase7.md).

@@ -91,7 +91,14 @@
 
     # In-game overlay host (apps/overlay) — built once, bundled into the
     # desktop packages below; also buildable standalone: nix build .#roxysu-overlay
+    # C remains the shipped default until Phase 8 acceptance + cutover.
     overlayBin = pkgs.callPackage ./nix/overlay.nix {
+      version = resourcesVersion;
+    };
+
+    # Rust overlay host prototype — package only; not yet swapped into
+    # resources/overlay (use ROXYSU_OVERLAY_BIN to A/B via the desktop toggle).
+    overlayRsBin = pkgs.callPackage ./nix/overlay-rs.nix {
       version = resourcesVersion;
     };
 
@@ -110,6 +117,7 @@
       roxysu-prebuilt = roxysuPrebuilt;
       roxysu-from-source = roxysuFromSource;
       roxysu-overlay = overlayBin;
+      roxysu-overlay-rs = overlayRsBin;
     };
 
     apps.${system}.default = {

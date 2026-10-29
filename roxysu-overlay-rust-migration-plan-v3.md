@@ -319,13 +319,13 @@ RSS/PSS samples show growth but cannot prove a leak. If growth repeats, use heap
 
 ### Phase 7 — NixOS integration and reproducible builds
 
-- [ ] Add Rust builds to the existing project workflow.
-- [ ] Declare GTK4, WebKitGTK, layer-shell, Wayland protocol, and other native dependencies in the Nix environment.
-- [ ] Pin the Rust toolchain and dependency sources.
-- [ ] Test development and optimized release builds.
-- [ ] Verify runtime library availability.
-- [ ] Update launch scripts and package metadata only after acceptance tests pass.
-- [ ] Keep the tagged C binary available for rollback.
+- [x] Add Rust builds to the existing project workflow. (`nix build .#roxysu-overlay-rs`, `bun run overlay:rs:release`)
+- [x] Declare GTK4, WebKitGTK, layer-shell, Wayland protocol, and other native dependencies in the Nix environment. (`nix/overlay-rs.nix` + `devShell`)
+- [x] Pin the Rust toolchain and dependency sources. (flake `nixpkgs` rustc/cargo + `Cargo.lock`)
+- [x] Test development and optimized release builds. (devShell cargo + Nix release package; 43 tests in checkPhase)
+- [x] Verify runtime library availability. (auto RPATH via rustPlatform / GTK store paths)
+- [x] Update launch scripts and package metadata only after acceptance tests pass. (**not cut over** — C stays `overlayBin`; A/B via `ROXYSU_OVERLAY_BIN`)
+- [x] Keep the tagged C binary available for rollback. (`nix build .#roxysu-overlay`, tag `c-baseline`)
 
 ### Phase 8 — Acceptance tests and cutover
 

@@ -78,12 +78,12 @@ pub struct Cli {
     pub gsk_renderer: Option<GskRenderer>,
 
     /// Disable WebKit DMA-BUF rendering (`WEBKIT_DISABLE_DMABUF_RENDERER=1`).
-    /// Default on: a transparent DMA-BUF surface paints uninitialized pixels
-    /// after the overlay has been up for a while.
+    /// Off by default: the fallback renderer paints the view's grey background
+    /// across the whole window on each partial repaint.
     #[arg(long, default_value_t = false)]
     pub webkit_no_dmabuf: bool,
 
-    /// Force the WebKit DMA-BUF renderer (opt out of the default disable).
+    /// Keep the WebKit DMA-BUF renderer. Wins over `--webkit-no-dmabuf`.
     #[arg(long, default_value_t = false)]
     pub webkit_dmabuf: bool,
 
@@ -181,9 +181,7 @@ impl Cli {
             list_windows: self.list_windows,
             debug: self.debug,
             gsk_renderer: self.gsk_renderer,
-            // On unless explicitly opted back in. `--webkit-no-dmabuf` stays
-            // accepted so older launchers keep working.
-            webkit_no_dmabuf: self.webkit_no_dmabuf || !self.webkit_dmabuf,
+            webkit_no_dmabuf: self.webkit_no_dmabuf && !self.webkit_dmabuf,
             diagnostics: DiagnosticFlags {
                 damage_tick: self.diag_damage_tick,
                 inject_keepalive: self.diag_inject_keepalive,
@@ -256,7 +254,7 @@ mod tests {
             .into_config()
             .unwrap();
         assert!(cfg.follow_focus);
-        assert!(cfg.webkit_no_dmabuf);
+        assert!(!cfg.webkit_no_dmabuf);
         assert!(!cfg.diagnostics.damage_tick);
         assert!(!cfg.diagnostics.inject_keepalive);
         assert_eq!(cfg.anchor, Anchor::TopRight);

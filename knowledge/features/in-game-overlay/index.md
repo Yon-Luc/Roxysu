@@ -47,7 +47,7 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
    batch; Hide uses short hysteresis (`--hide-hysteresis-ms`, default 80).
    Missing protocol on first connect → always-visible fallback; later drops
    leave visibility unchanged and reconnect with backoff.
-8. **DMA-BUF is off by default.** A transparent WebKit surface using DMA-BUF paints uninitialized GPU memory (random pixels where the layout should be) after the host has been up for a while. `WEBKIT_DISABLE_DMABUF_RENDERER=1` is set by the desktop spawn and by `apps/overlay-rs/run.sh`. `--webkit-dmabuf` / `ROXYSU_OVERLAY_DMABUF=1` opts back in. `--gsk-renderer` stays available for renderer A/B. **Self-heal**: `web-process-terminated` reloads after 1 s; `load-failed`
+8. **DMA-BUF stays on.** Forcing it off (`--webkit-no-dmabuf`, `WEBKIT_DISABLE_DMABUF_RENDERER=1`) makes WebKitGTK repaint only the damaged region and fill the rest of the window with its default grey background. The host window is screen-sized, so each HUD poll then flashes a grey sheet over the display. `--webkit-dmabuf` wins if both flags are passed. `--gsk-renderer` stays available for renderer A/B. Long-run garbage pixels are avoided by releasing replaced sprite images and decoding sprites only when the sprite set changes (see overlay-editor). **Self-heal**: `web-process-terminated` reloads after 1 s; `load-failed`
    (HUD/server) retries at 3 s / 15 s after >5 failures via a **single-slot**
    reload state machine (no stacked timers). Distinct log lines for load-fail
    vs web-process crash.

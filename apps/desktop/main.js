@@ -463,10 +463,9 @@ function spawnOverlayHost(paths, urlArg) {
   const { fd } = openChildLogFd(paths.dataDir, "overlay");
   desktopLog(`spawn overlay bin=${bin} ${urlArg}`);
   overlayAppliedUrlArg = urlArg;
-  // Transparent WebKit surfaces using DMA-BUF start showing uninitialized
-  // GPU memory (random pixels) after the overlay has been up for a while.
+  // Do not set WEBKIT_DISABLE_DMABUF_RENDERER. On a transparent WebKitGTK
+  // surface that fallback fills the whole window with grey on each HUD update.
   overlayChild = spawn(bin, [urlArg], {
-    env: { ...process.env, WEBKIT_DISABLE_DMABUF_RENDERER: "1" },
     stdio: ["ignore", fd, fd],
     windowsHide: true,
     shell: false,

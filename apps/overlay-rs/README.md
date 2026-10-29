@@ -11,11 +11,10 @@ nix develop --command bash apps/overlay-rs/run.sh --follow-focus false
 bun run overlay:rs -- --follow-focus false
 ```
 
-## CLI (Phases 2–4)
+## CLI (Phases 2–5)
 
-Same option names as the C host, plus diagnostic, focus, and watchdog knobs.
-Invalid values error out (no silent fallback). Help documents the real
-`--output` default: compositor choice when omitted.
+Same option names as the C host, plus diagnostic, focus, telemetry, and watchdog
+knobs. Invalid values error out (no silent fallback).
 
 | Flag | Default | Notes |
 |---|---|---|
@@ -27,27 +26,27 @@ Invalid values error out (no silent fallback). Help documents the real
 | `--output` | compositor default | connector or model |
 | `--follow-focus` | `true` | `true`/`false` |
 | `--match-app-id` | `osu` | needle for match policy |
-| `--match-mode` | `contains` | `contains` \| `exact` (title only if app_id empty) |
+| `--match-mode` | `contains` | `contains` \| `exact` |
 | `--hide-hysteresis-ms` | `80` | delay before Hide; cancelled by Show |
 | `--list-windows` | off | dump foreign-toplevels |
-| `--debug` | off | also enables W4 paint-counter |
+| `--debug` | off | W4 tick diag + real frame-clock paint stats |
 | `--gsk-renderer` | unset | `gl`/`ngl`/`cairo`/`vulkan` |
 | `--webkit-no-dmabuf` | off | W7 |
 | `--diag-*` | off | W1–W5 compositor force-present hacks |
+| `--telemetry-interval-sec` | `0` | 0 = off; try `5` for diagnostic soaks |
+| `--telemetry-csv` | unset | append CSV rows (created if missing) |
+| `--telemetry-phase` | `steady` | label column for the run |
 | `--watchdog-max-*` | C defaults | stored for Phase 6 |
 
-Default path does **not** run W1–W5 — WebKit redraws on HUD content change.
+Telemetry is observation-only (no kills). Samples run on a background thread.
 
-Focus: dedicated Wayland connection; pure reducer flushed once per dispatch
-batch; GTK show/hide only on the main context. First foreign-toplevel failure
-falls back to always-visible; later disconnects leave visibility unchanged and
-reconnect with backoff.
-
-Reload policy (single pending slot): web-process crash → 1 s; load fail → 3 s,
-then 15 s after more than five consecutive failures; reset on load finished.
+```bash
+bun run overlay:rs -- --telemetry-interval-sec=5 \
+  --telemetry-csv=/tmp/overlay-rs-telem.csv
+```
 
 ```bash
 cargo test   # in nix develop, under apps/overlay-rs
 ```
 
-See [`findings/overlay-rs-phase4.md`](../../findings/overlay-rs-phase4.md).
+See [`findings/overlay-rs-phase5.md`](../../findings/overlay-rs-phase5.md).

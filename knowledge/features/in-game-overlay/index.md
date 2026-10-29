@@ -167,5 +167,6 @@ Launch paths:
 - [features/overlay-editor/](../overlay-editor/index.md) — profiles behind `?profile=` URLs
 - [architecture/process-model.md](../architecture/process-model.md) — sibling process model
 - Rust host prototype (not shipped): `apps/overlay-rs/` on branch `overlay-rust-phase1`
-  — Phases 1–4 (CLI, layer-shell, reload SM, batched focus reducer, match
-  policy). See `findings/overlay-rs-phase4.md`. C host remains default.
+  — Phases 1–5 (CLI, layer-shell, reload SM, batched focus, match policy,
+  observation-only telemetry). See `findings/overlay-rs-phase5.md`. C host
+  remains default.

@@ -94,8 +94,8 @@ pub fn install_timers(
 
     if flags.paint_counter {
         info!("diag W4: paint_counter tick callback enabled");
-        let paint_count = Rc::new(Cell::new(0u32));
-        let count_cb = Rc::clone(&paint_count);
+        let tick_count = Rc::new(Cell::new(0u32));
+        let count_cb = Rc::clone(&tick_count);
         webview.add_tick_callback(move |_, _| {
             count_cb.set(count_cb.get().saturating_add(1));
             glib::ControlFlow::Continue
@@ -104,9 +104,9 @@ pub fn install_timers(
             let mapped = Rc::clone(&mapped);
             let shown = Rc::clone(&shown);
             glib::timeout_add_local(Duration::from_secs(5), move || {
-                let n = paint_count.replace(0);
+                let n = tick_count.replace(0);
                 eprintln!(
-                    "roxysu-overlay-rs: paints/5s={n} mapped={} shown={}",
+                    "roxysu-overlay-rs: W4 ticks/5s={n} mapped={} shown={}",
                     *mapped.borrow() as u8,
                     *shown.borrow() as u8
                 );
@@ -114,6 +114,51 @@ pub fn install_timers(
             });
         }
     }
+
+    // Phase 5: when --debug, count real frame-clock paint events (not ticks).
+    if debug {
+        install_frame_paint_stats(window, Rc::clone(&mapped), Rc::clone(&shown));
+    }
+}
+
+fn install_frame_paint_stats(
+    window: &ApplicationWindow,
+    mapped: Rc<RefCell<bool>>,
+    shown: Rc<RefCell<bool>>,
+) {
+    let armed = Rc::new(Cell::new(false));
+    let window_weak = window.downgrade();
+    // Attach once after the surface exists (map).
+    window.connect_map(move |win| {
+        if armed.get() {
+            return;
+        }
+        let Some(surface) = win.surface() else {
+            return;
+        };
+        armed.set(true);
+        let paint_count = Rc::new(Cell::new(0u32));
+        let count_cb = Rc::clone(&paint_count);
+        surface.frame_clock().connect_paint(move |_| {
+            count_cb.set(count_cb.get().saturating_add(1));
+        });
+        let mapped = Rc::clone(&mapped);
+        let shown = Rc::clone(&shown);
+        let window_weak = window_weak.clone();
+        glib::timeout_add_local(Duration::from_secs(5), move || {
+            let n = paint_count.replace(0);
+            eprintln!(
+                "roxysu-overlay-rs: frame_paints/5s={n} mapped={} shown={}",
+                *mapped.borrow() as u8,
+                *shown.borrow() as u8
+            );
+            if window_weak.upgrade().is_none() {
+                return glib::ControlFlow::Break;
+            }
+            glib::ControlFlow::Continue
+        });
+    });
+    info!("debug: frame-clock paint counter armed (reports every 5s after map)");
 }
 
 pub fn on_show(

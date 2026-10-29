@@ -268,15 +268,15 @@ Observation first; do not terminate the app based on memory measurements yet.
 
 #### Sampling implementation
 
-- [ ] Configurable interval (start at 5 s for diagnostic runs).
-- [ ] Never sample per frame.
-- [ ] Keep `/proc` reads off the GTK main loop.
-- [ ] Timestamped CSV or structured logs.
-- [ ] Record PID, process name, role, and process start time (guards against PID reuse).
-- [ ] Handle inaccessible or disappearing `/proc` entries gracefully.
-- [ ] Optional or low-overhead in normal use.
-- [ ] Sampler stops cleanly at shutdown.
-- [ ] Paint statistics (when `--debug`): count real frame-clock `paint` events, not a tick callback. The C counter is tick-based and probably reports roughly the refresh rate rather than actual repaints.
+- [x] Configurable interval (start at 5 s for diagnostic runs). (`--telemetry-interval-sec`; 0 = off)
+- [x] Never sample per frame.
+- [x] Keep `/proc` reads off the GTK main loop. (`telemetry/` background thread)
+- [x] Timestamped CSV or structured logs. (`--telemetry-csv` + tracing summary)
+- [x] Record PID, process name, role, and process start time (guards against PID reuse).
+- [x] Handle inaccessible or disappearing `/proc` entries gracefully.
+- [x] Optional or low-overhead in normal use. (default off)
+- [x] Sampler stops cleanly at shutdown.
+- [x] Paint statistics (when `--debug`): count real frame-clock `paint` events, not a tick callback. The C counter is tick-based and probably reports roughly the refresh rate rather than actual repaints.
 
 Suggested CSV columns:
 
@@ -298,11 +298,11 @@ RSS/PSS samples show growth but cannot prove a leak. If growth repeats, use heap
 
 #### RAM acceptance criteria
 
-- [ ] 60–120 minute soak shows no unexplained unbounded growth across repeated runs.
-- [ ] Host and WebKit memory documented separately.
-- [ ] WebKit crashes/restarts do not accumulate orphan processes or steadily raise tree memory.
-- [ ] Sampling overhead is negligible.
-- [ ] Any automatic thresholds rest on measured behavior with a documented rationale.
+- [ ] 60–120 minute soak shows no unexplained unbounded growth across repeated runs. (manual)
+- [x] Host and WebKit memory documented separately. (roles in CSV / summary log)
+- [ ] WebKit crashes/restarts do not accumulate orphan processes or steadily raise tree memory. (manual soak)
+- [ ] Sampling overhead is negligible. (manual)
+- [ ] Any automatic thresholds rest on measured behavior with a documented rationale. (Phase 6)
 
 ### Phase 6 — Watchdog and lifecycle recovery
 

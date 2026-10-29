@@ -1,4 +1,4 @@
-//! Roxysu overlay host (Rust). Phase 4: batched focus reducer + match policy.
+//! Roxysu overlay host (Rust). Phase 5: observation-only resource telemetry.
 
 mod click_through;
 mod cli;
@@ -7,6 +7,7 @@ mod diagnostics;
 mod focus;
 mod overlay;
 mod reload;
+mod telemetry;
 
 use anyhow::{bail, Context, Result};
 use clap::Parser;
@@ -14,6 +15,7 @@ use gtk4::prelude::*;
 use gtk4::{Application, CssProvider, STYLE_PROVIDER_PRIORITY_APPLICATION};
 use gtk4_layer_shell::is_supported as layer_shell_supported;
 use std::cell::RefCell;
+use std::path::PathBuf;
 use std::rc::Rc;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
@@ -21,6 +23,7 @@ use tracing_subscriber::EnvFilter;
 use crate::cli::Cli;
 use crate::config::Config;
 use crate::overlay::OverlayHost;
+use crate::telemetry::SamplerHandle;
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -49,10 +52,15 @@ fn main() -> Result<()> {
     // Drop the hold on shutdown so quit is clean (GApplication handles SIGINT/SIGTERM).
     let hold: Rc<RefCell<Option<gtk4::gio::ApplicationHoldGuard>>> =
         Rc::new(RefCell::new(None));
+    let sampler: Rc<RefCell<Option<SamplerHandle>>> = Rc::new(RefCell::new(None));
     {
         let hold = Rc::clone(&hold);
+        let sampler = Rc::clone(&sampler);
         app.connect_shutdown(move |_| {
             info!("overlay host shutting down");
+            if let Some(handle) = sampler.borrow_mut().take() {
+                handle.stop();
+            }
             let _ = hold.borrow_mut().take();
         });
     }
@@ -60,7 +68,7 @@ fn main() -> Result<()> {
     app.connect_activate(move |app| {
         *hold.borrow_mut() = Some(app.hold());
 
-        if let Err(err) = run_app(app, config.clone()) {
+        if let Err(err) = run_app(app, config.clone(), &sampler) {
             eprintln!("roxysu-overlay-rs: {err:#}");
             std::process::exit(1);
         }
@@ -74,7 +82,11 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn run_app(app: &Application, config: Config) -> Result<()> {
+fn run_app(
+    app: &Application,
+    config: Config,
+    sampler: &Rc<RefCell<Option<SamplerHandle>>>,
+) -> Result<()> {
     if std::env::var_os("WAYLAND_DISPLAY").is_none()
         && std::env::var_os("WAYLAND_SOCKET").is_none()
     {
@@ -103,8 +115,18 @@ fn run_app(app: &Application, config: Config) -> Result<()> {
         STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
 
-    let host = OverlayHost::new(app, config)?;
+    let host = OverlayHost::new(app, config.clone())?;
     host.present_initial()?;
+
+    if config.telemetry_interval_sec > 0 {
+        let csv = config.telemetry_csv.as_ref().map(PathBuf::from);
+        *sampler.borrow_mut() = Some(telemetry::start(
+            config.telemetry_interval_sec,
+            config.telemetry_phase.clone(),
+            csv,
+        ));
+    }
+
     info!("overlay host ready");
     Ok(())
 }

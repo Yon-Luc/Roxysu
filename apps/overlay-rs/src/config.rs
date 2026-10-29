@@ -150,6 +150,12 @@ pub struct Config {
     pub watchdog_max_age_sec: u64,
     pub watchdog_max_fds: u64,
     pub watchdog_max_rss_mb: u64,
+    /// 0 = telemetry off; otherwise sample interval in seconds (Phase 5).
+    pub telemetry_interval_sec: u64,
+    /// Optional CSV path for telemetry rows.
+    pub telemetry_csv: Option<String>,
+    /// Label written into each sample (startup/steady/gameplay/…).
+    pub telemetry_phase: String,
     /// Phase 1 test hook; not a C flag.
     pub test_hide_show: bool,
 }
@@ -176,6 +182,9 @@ impl Default for Config {
             watchdog_max_age_sec: DEFAULT_WATCHDOG_MAX_AGE_SEC,
             watchdog_max_fds: DEFAULT_WATCHDOG_MAX_FDS,
             watchdog_max_rss_mb: DEFAULT_WATCHDOG_MAX_RSS_MB,
+            telemetry_interval_sec: 0,
+            telemetry_csv: None,
+            telemetry_phase: "steady".into(),
             test_hide_show: false,
         }
     }
@@ -216,6 +225,12 @@ impl Config {
         }
         if self.list_windows && self.test_hide_show {
             bail!("--list-windows and --test-hide-show conflict");
+        }
+        if self.telemetry_interval_sec > 0 && self.telemetry_interval_sec < 1 {
+            bail!("--telemetry-interval-sec must be 0 (off) or >= 1");
+        }
+        if self.telemetry_phase.is_empty() {
+            bail!("--telemetry-phase must not be empty");
         }
         Ok(())
     }

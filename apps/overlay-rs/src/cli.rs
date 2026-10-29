@@ -112,6 +112,18 @@ pub struct Cli {
     #[arg(long, default_value_t = DEFAULT_WATCHDOG_MAX_RSS_MB)]
     pub watchdog_max_rss_mb: u64,
 
+    /// Memory telemetry interval in seconds (0 = off). Observation only; no kills.
+    #[arg(long, default_value_t = 0)]
+    pub telemetry_interval_sec: u64,
+
+    /// Append telemetry CSV rows to this path (created if missing).
+    #[arg(long)]
+    pub telemetry_csv: Option<String>,
+
+    /// Phase label stored in each telemetry sample.
+    #[arg(long, default_value = "steady")]
+    pub telemetry_phase: String,
+
     /// After mapping, hide then show once to verify click-through survives remap.
     #[arg(long, default_value_t = false, hide = true)]
     pub test_hide_show: bool,
@@ -157,6 +169,9 @@ impl Cli {
             watchdog_max_age_sec: self.watchdog_max_age_sec,
             watchdog_max_fds: self.watchdog_max_fds,
             watchdog_max_rss_mb: self.watchdog_max_rss_mb,
+            telemetry_interval_sec: self.telemetry_interval_sec,
+            telemetry_csv: self.telemetry_csv,
+            telemetry_phase: self.telemetry_phase,
             test_hide_show: self.test_hide_show,
         };
         cfg.validate()?;
@@ -227,6 +242,25 @@ mod tests {
             .into_config()
             .unwrap();
         assert_eq!(cfg.match_mode, MatchMode::Exact);
+    }
+
+    #[test]
+    fn telemetry_flags() {
+        let cfg = Cli::try_parse_from([
+            "roxysu-overlay-rs",
+            "--telemetry-interval-sec=5",
+            "--telemetry-csv=/tmp/overlay-telem.csv",
+            "--telemetry-phase=gameplay",
+        ])
+        .unwrap()
+        .into_config()
+        .unwrap();
+        assert_eq!(cfg.telemetry_interval_sec, 5);
+        assert_eq!(
+            cfg.telemetry_csv.as_deref(),
+            Some("/tmp/overlay-telem.csv")
+        );
+        assert_eq!(cfg.telemetry_phase, "gameplay");
     }
 
     #[test]

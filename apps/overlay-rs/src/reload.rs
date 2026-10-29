@@ -40,6 +40,7 @@ impl ReloadMachine {
         self.consecutive_load_failures
     }
 
+    #[cfg(test)]
     pub fn is_pending(&self) -> bool {
         self.pending
     }

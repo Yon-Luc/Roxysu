@@ -8,7 +8,6 @@ import {
   type SkinIniColours,
 } from "./osuSkinIni";
 import type { CatchPlayfieldSprites } from "./paintCatchPlayfield";
-import { releaseSkinFields } from "./skinImageRelease";
 import {
   defaultCatchSkin,
   getCatchSkin,
@@ -38,12 +37,6 @@ type FileMap = Map<string, Uint8Array>;
 type DecodedSkinImage = ImageBitmap | HTMLImageElement;
 
 let spriteCache: CatchPlayfieldSprites | null = null;
-
-function replaceSpriteCache(next: CatchPlayfieldSprites | null): void {
-  const previous = spriteCache;
-  spriteCache = next;
-  if (previous && previous !== next) releaseSkinFields(previous);
-}
 let loadStarted = false;
 let spriteEpoch = 0;
 
@@ -392,8 +385,8 @@ async function idbGetAll(): Promise<Array<[string, Blob]>> {
   return rows;
 }
 
-function emitSprites(reason: "change" | "hydrate" = "change"): void {
-  window.dispatchEvent(new CustomEvent(SPRITE_EVENT, { detail: { reason } }));
+function emitSprites(): void {
+  window.dispatchEvent(new Event(SPRITE_EVENT));
 }
 
 function coloursToSkinPatch(
@@ -425,7 +418,7 @@ export async function applyImportedCatchSkin(
   await idbClear();
   await idbPut(Object.entries(draft.blobs));
   if (epoch !== spriteEpoch) return;
-  replaceSpriteCache(draft.sprites);
+  spriteCache = draft.sprites;
   const meta: ImportedCatchSkinMeta = {
     name: draft.name,
     colours: {
@@ -447,7 +440,7 @@ export async function applyImportedCatchSkin(
 export async function resetImportedCatchSkin(): Promise<void> {
   spriteEpoch += 1;
   await idbClear();
-  replaceSpriteCache(null);
+  spriteCache = null;
   const defaults = defaultCatchSkin();
   const current = getCatchSkin();
   setCatchSkin({
@@ -533,12 +526,9 @@ async function hydrateSpritesFromRows(
       sprites.lighting = img;
     }),
   ]);
-  if (epoch !== spriteEpoch) {
-    releaseSkinFields(sprites);
-    return;
-  }
-  replaceSpriteCache(sprites);
-  emitSprites("hydrate");
+  if (epoch !== spriteEpoch) return;
+  spriteCache = sprites;
+  emitSprites();
 }
 
 export function ensureImportedCatchSpritesLoaded(): void {
@@ -590,7 +580,7 @@ export async function applyOverlayCatchSpriteEntries(
 ): Promise<void> {
   const catchKeys = keys.filter((k) => k.startsWith(KEY_PREFIX));
   if (catchKeys.length === 0) {
-    replaceSpriteCache(null);
+    spriteCache = null;
     emitSprites();
     return;
   }
@@ -648,16 +638,10 @@ export async function countImportedCatchSprites(): Promise<number> {
   }
 }
 
-export function subscribeImportedCatchSprites(
-  onStoreChange: (event: Event) => void,
-): () => void {
-  window.addEventListener(SPRITE_EVENT, onStoreChange);
-  return () => window.removeEventListener(SPRITE_EVENT, onStoreChange);
-}
-
 function subscribeSprites(onStoreChange: () => void): () => void {
   ensureImportedCatchSpritesLoaded();
-  return subscribeImportedCatchSprites(onStoreChange);
+  window.addEventListener(SPRITE_EVENT, onStoreChange);
+  return () => window.removeEventListener(SPRITE_EVENT, onStoreChange);
 }
 
 export function useImportedCatchSprites(): CatchPlayfieldSprites | null {

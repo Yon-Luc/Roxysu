@@ -20,7 +20,6 @@ import {
   type ImportedManiaLayout,
   type Keymode,
 } from "./previewSkin";
-import { releaseSkinFields } from "./skinImageRelease";
 
 export type SkinImage = CanvasImageSource;
 
@@ -61,13 +60,6 @@ type FileMap = Map<string, Uint8Array>;
 
 let spriteCache: Partial<Record<Keymode, ManiaSkinSprites>> = {};
 let loadStarted = false;
-/** Bumped when a newer hydrate starts so a stale decode cannot replace it. */
-let spriteEpoch = 0;
-
-function releaseManiaCache(): void {
-  for (const sprites of Object.values(spriteCache)) releaseSkinFields(sprites);
-  spriteCache = {};
-}
 
 function normalizePath(path: string): string {
   return path.replace(/\\/g, "/").replace(/^\/+/, "");
@@ -293,9 +285,9 @@ async function idbClear(): Promise<void> {
   db.close();
 }
 
-function emitSprites(reason: "change" | "hydrate" = "change"): void {
+function emitSprites(): void {
   if (typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent(SPRITE_EVENT, { detail: { reason } }));
+    window.dispatchEvent(new Event(SPRITE_EVENT));
   }
 }
 
@@ -533,7 +525,6 @@ export async function applyImportedManiaSkin(
 
 export async function resetImportedKeymode(keys: Keymode): Promise<void> {
   await idbDeletePrefix(`${keys}:`);
-  releaseSkinFields(spriteCache[keys]);
   delete spriteCache[keys];
   const skin = getPreviewSkin();
   setPreviewSkin({
@@ -548,23 +539,18 @@ export async function resetImportedKeymode(keys: Keymode): Promise<void> {
 
 export async function resetAllImported(): Promise<void> {
   await idbClear();
-  spriteEpoch += 1;
-  releaseManiaCache();
+  spriteCache = {};
   resetPreviewSkin();
   emitSprites();
 }
 
 async function hydrateFromIdb(): Promise<void> {
-  const epoch = ++spriteEpoch;
-  const rows = await idbGetAll();
-  if (epoch !== spriteEpoch) return;
-  await hydrateSpritesFromRows(rows, epoch);
+  await hydrateSpritesFromRows(await idbGetAll());
 }
 
 /** Decode sprite blobs into the per-keymode cache and notify listeners. */
 async function hydrateSpritesFromRows(
   rows: Array<[string, Blob]>,
-  epoch: number,
 ): Promise<void> {
   const grouped: Partial<Record<Keymode, ManiaSkinBlobs>> = {};
   for (const [key, blob] of rows) {
@@ -623,15 +609,9 @@ async function hydrateSpritesFromRows(
     jobs.push(assign("stageHint"));
     jobs.push(assign("stageBottom"));
     await Promise.all(jobs);
-    if (epoch !== spriteEpoch) {
-      releaseSkinFields(sprites);
-      return;
-    }
-    const previous = spriteCache[keys];
     spriteCache[keys] = sprites;
-    releaseSkinFields(previous);
   }
-  if (epoch === spriteEpoch) emitSprites("hydrate");
+  emitSprites();
 }
 
 export function ensureImportedSpritesLoaded(): void {
@@ -680,8 +660,7 @@ export async function importImportedSprites(
   }
   if (pairs.length === 0) return;
   await idbPut(pairs);
-  spriteEpoch += 1;
-  releaseManiaCache();
+  spriteCache = {};
   loadStarted = false;
   ensureImportedSpritesLoaded();
 }
@@ -708,10 +687,9 @@ export async function applyOverlaySpriteEntries(
     }
   }
   if (rows.length === 0) return;
-  const epoch = ++spriteEpoch;
-  releaseManiaCache();
+  spriteCache = {};
   loadStarted = true;
-  await hydrateSpritesFromRows(rows, epoch);
+  await hydrateSpritesFromRows(rows);
 }
 
 export function getImportedManiaSprites(keys: number): ManiaSkinSprites | null {
@@ -732,16 +710,10 @@ export async function loadImportedManiaSprites(
   return spriteCache[keys as Keymode] ?? null;
 }
 
-export function subscribeImportedManiaSprites(
-  onStoreChange: (event: Event) => void,
-): () => void {
-  window.addEventListener(SPRITE_EVENT, onStoreChange);
-  return () => window.removeEventListener(SPRITE_EVENT, onStoreChange);
-}
-
 function subscribeSprites(onStoreChange: () => void): () => void {
   ensureImportedSpritesLoaded();
-  return subscribeImportedManiaSprites(onStoreChange);
+  window.addEventListener(SPRITE_EVENT, onStoreChange);
+  return () => window.removeEventListener(SPRITE_EVENT, onStoreChange);
 }
 
 export function useImportedManiaSprites(keys: number): ManiaSkinSprites | null {

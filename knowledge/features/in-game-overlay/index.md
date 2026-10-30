@@ -47,10 +47,11 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
    batch; Hide uses short hysteresis (`--hide-hysteresis-ms`, default 80).
    Missing protocol on first connect → always-visible fallback; later drops
    leave visibility unchanged and reconnect with backoff.
-8. **DMA-BUF stays on.** Forcing it off (`--webkit-no-dmabuf`, `WEBKIT_DISABLE_DMABUF_RENDERER=1`) makes WebKitGTK repaint only the damaged region and fill the rest of the window with its default grey background. The host window is screen-sized, so each HUD poll then flashes a grey sheet over the display. `--webkit-dmabuf` wins if both flags are passed. `--gsk-renderer` stays available for renderer A/B. Long-run garbage pixels are avoided by releasing replaced sprite images and decoding sprites only when the sprite set changes (see overlay-editor). **Self-heal**: `web-process-terminated` reloads after 1 s; `load-failed`
+8. **Self-heal**: `web-process-terminated` reloads after 1 s; `load-failed`
    (HUD/server) retries at 3 s / 15 s after >5 failures via a **single-slot**
    reload state machine (no stacked timers). Distinct log lines for load-fail
-   vs web-process crash.
+   vs web-process crash. `--webkit-no-dmabuf` / `--gsk-renderer` remain for
+   A/B when rendering stalls.
 9. Visibility is a hard map/unmap of the layer surface (soft opacity-only hide
    failed historically on Wayland + WebKit).
 10. **Default path does not force redraw.** W1–W5 compositor force-present

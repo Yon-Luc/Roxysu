@@ -1,7 +1,7 @@
 import { focusManager, useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { fetchOverlay, fetchOverlaySkinMeta, fetchOverlaySkins } from "../../lib/api";
-import { applyOverlaySkinSnapshot, type OverlaySkinSnapshot } from "../../lib/overlaySkins";
+import { fetchOverlay, fetchOverlaySkins } from "../../lib/api";
+import { applyOverlaySkinSnapshot } from "../../lib/overlaySkins";
 import { useTosuLiveQuery } from "../../lib/useTosuLiveQuery";
 import { defaultOverlayProfile } from "@server/overlay/profiles";
 import {
@@ -16,7 +16,6 @@ const OVERLAY_CLASS = "overlay-mode";
 // SSE already refreshes on score.imported; poll is a CEF/OBS safety net.
 const LIVE_POLL_MS = 4_000;
 const IDLE_POLL_MS = 15_000;
-const SKIN_META_POLL_MS = 2_000;
 
 type OverlayBg = "solid" | "clear";
 
@@ -100,95 +99,22 @@ export function OverlayPage({
     payload?.profile ?? (profileRef != null ? null : defaultOverlayProfile());
   const snapshotQuery = useTosuLiveQuery({ enabled: profileRef != null });
 
-  const skinMetaQuery = useQuery({
-    queryKey: ["overlay", "skins", "meta"],
-    queryFn: fetchOverlaySkinMeta,
-    enabled: profileRef != null,
-    staleTime: 0,
-    refetchInterval: SKIN_META_POLL_MS,
-    refetchIntervalInBackground: true,
-    networkMode: "always",
-  });
-
   // Consumer contexts (OBS browser source / Wayland host) start with empty
-  // skin stores. Apply once for first paint. Later polls apply config edits
-  // without re-decoding sprites; sprites reload only when their revision
-  // changes. Decoding on every config publish leaks GPU textures until the
-  // layout paints as uninitialized pixels.
-  const [appliedSkins, setAppliedSkins] = useState<{
-    configAt: string | null;
-    spritesAt: string | null;
-  } | null>(null);
+  // skin stores; apply the server-side snapshot so they match the editor.
   useEffect(() => {
     if (!profileRef) return;
     let cancelled = false;
     void fetchOverlaySkins()
-      .then(async ({ snapshot }) => {
-        if (cancelled) return;
-        const typed = snapshot as OverlaySkinSnapshot | null;
-        if (typed) await applyOverlaySkinSnapshot(typed, { sprites: true });
-        if (!cancelled) {
-          setAppliedSkins({
-            configAt: typed?.updatedAt ?? null,
-            spritesAt: typed?.spritesUpdatedAt ?? typed?.updatedAt ?? null,
-          });
-        }
+      .then(({ snapshot }) => {
+        if (!cancelled && snapshot) return applyOverlaySkinSnapshot(snapshot);
       })
       .catch(() => {
-        if (!cancelled) {
-          setAppliedSkins((current) => current ?? { configAt: null, spritesAt: null });
-        }
+        /* skins are best-effort */
       });
     return () => {
       cancelled = true;
     };
   }, [profileRef]);
-
-  const skinMeta = skinMetaQuery.data;
-  useEffect(() => {
-    if (!profileRef || !skinMeta || !appliedSkins) return;
-    const nextConfig = skinMeta.updatedAt;
-    const nextSprites = skinMeta.spritesUpdatedAt ?? skinMeta.updatedAt;
-    const configChanged = nextConfig !== appliedSkins.configAt;
-    const spritesChanged = nextSprites !== appliedSkins.spritesAt;
-    if (!configChanged && !spritesChanged) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        if (spritesChanged) {
-          const { snapshot } = await fetchOverlaySkins();
-          if (cancelled || !snapshot) return;
-          const typed = snapshot as OverlaySkinSnapshot;
-          await applyOverlaySkinSnapshot(typed, { sprites: true });
-          if (!cancelled) {
-            setAppliedSkins({
-              configAt: typed.updatedAt ?? nextConfig,
-              spritesAt: typed.spritesUpdatedAt ?? typed.updatedAt ?? nextSprites,
-            });
-          }
-          return;
-        }
-        await applyOverlaySkinSnapshot(
-          {
-            updatedAt: nextConfig ?? undefined,
-            mania: skinMeta.mania as OverlaySkinSnapshot["mania"],
-            std: skinMeta.std,
-            taiko: skinMeta.taiko,
-            catch: skinMeta.catch,
-          },
-          { sprites: false },
-        );
-        if (!cancelled) {
-          setAppliedSkins({ configAt: nextConfig, spritesAt: appliedSkins.spritesAt });
-        }
-      } catch {
-        /* skins are best-effort */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [profileRef, skinMeta, appliedSkins]);
 
   const ctx: OverlayElementContext = useMemo(
     () => ({

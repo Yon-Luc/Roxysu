@@ -176,12 +176,6 @@ export function resetCatchSkin(): void {
   setCatchSkin(defaultCatchSkin());
 }
 
-/** Same-document edits only. Cross-document `storage` events stay on the hook. */
-export function subscribeCatchSkin(onStoreChange: () => void): () => void {
-  window.addEventListener(EVENT, onStoreChange);
-  return () => window.removeEventListener(EVENT, onStoreChange);
-}
-
 function subscribe(onStoreChange: () => void): () => void {
   function onChange() {
     try {

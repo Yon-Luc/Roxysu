@@ -583,15 +583,13 @@
     "resetKeymode": "Restablecer {{keys}}K",
     "resetAll": "Restablecer todo",
     "resetColumns": "Restablecer columnas",
+    "pushOverlay": "Publicar al overlay",
     "overlaySync": {
       "title": "Sincronización de skins del overlay",
-      "hint": "El overlay sigue los skins de esta aplicación. OBS y el host Wayland recogen los cambios solos.",
-      "syncing": "Sincronizando…",
-      "synced": "Sincronizado",
-      "empty": "Aún no hay nada sincronizado",
-      "mismatch": "Este navegador tiene sprites que aún no están en el overlay.",
-      "missingSprites": "Hay un skin importado configurado, pero sus sprites no están en este navegador. Abre Roxysu en la misma dirección (localhost o 127.0.0.1) donde lo importaste.",
-      "error": "No se pudieron sincronizar los skins con el overlay."
+      "hint": "Los consumidores del overlay (OBS / host Wayland) usan la instantánea publicada abajo — publica tras cambiar skins.",
+      "push": "Publicar al overlay",
+      "pushing": "Publicando…",
+      "mismatch": "Este navegador tiene sprites sin publicar — publica para actualizar el overlay."
     },
     "shapes": {
       "flat": "Plana",

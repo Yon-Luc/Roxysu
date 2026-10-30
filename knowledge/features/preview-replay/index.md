@@ -406,9 +406,7 @@ Realm skin extract (full / reconcile):
 
 - Paint modules are pure; React wrappers are rAF via `startPlayfieldRaf`.
   The loop skips `paint*` when map time and a snapshot (size, skin, mask,
-  notes) are unchanged, and cancels while `document.hidden`. Becoming
-  visible always paints once, because the browser may have dropped the
-  canvas bitmap while hidden. Preview /
+  notes) are unchanged, and cancels while `document.hidden`. Preview /
   rewatch / embed leave the optional `heartbeatHz` off so paused canvases
   idle; tosu-counter passes `heartbeatHz: 30` for hidden-iframe recovery
   (change-gated while visible, force-paint while `document.hidden`). Video

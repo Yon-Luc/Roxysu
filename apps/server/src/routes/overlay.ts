@@ -125,46 +125,6 @@ async function listRecentOverlayScores(
     .limit(limit);
 }
 
-type StoredOverlaySkins = {
-  updatedAt?: string;
-  /** Changes only when the sprite map is replaced, not on config edits. */
-  spritesUpdatedAt?: string;
-  mania?: unknown;
-  std?: unknown;
-  taiko?: unknown;
-  catch?: unknown;
-  sprites?: Record<string, string>;
-};
-
-function parseStoredOverlaySkins(value: string | null | undefined): StoredOverlaySkins | null {
-  if (!value) return null;
-  try {
-    const parsed = JSON.parse(value) as StoredOverlaySkins;
-    return parsed && typeof parsed === "object" ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-function sanitizeOverlaySprites(raw: unknown): Record<string, string> {
-  const sprites: Record<string, string> = {};
-  if (raw == null || typeof raw !== "object") return sprites;
-  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
-    // Imported .osk blobs are stored without a MIME type, so exported
-    // data URLs may read "data:application/octet-stream;base64,…" —
-    // accept any base64 data URL, not just image/*.
-    if (
-      typeof value === "string" &&
-      value.startsWith("data:") &&
-      value.includes(";base64,") &&
-      value.length <= 8_000_000
-    ) {
-      sprites[key.slice(0, 128)] = value;
-    }
-  }
-  return sprites;
-}
-
 export const overlayRoutes = new Elysia({ prefix: "/overlay" })
   .use(dbPlugin)
   .get(
@@ -259,59 +219,41 @@ export const overlayRoutes = new Elysia({ prefix: "/overlay" })
       return { ok: true };
     },
   )
-  .get(
-    "/skins",
-    async ({ db, query }) => {
-      const [row] = await db
-        .select()
-        .from(settings)
-        .where(eq(settings.key, OVERLAY_SKINS_KEY))
-        .limit(1);
-      const snapshot = parseStoredOverlaySkins(row?.value);
-      if (query.meta === "1") {
-        return {
-          updatedAt: snapshot?.updatedAt ?? null,
-          spritesUpdatedAt: snapshot?.spritesUpdatedAt ?? null,
-          spriteCount: Object.keys(snapshot?.sprites ?? {}).length,
-          mania: snapshot?.mania ?? null,
-          std: snapshot?.std ?? null,
-          taiko: snapshot?.taiko ?? null,
-          catch: snapshot?.catch ?? null,
-        };
-      }
-      return { snapshot };
-    },
-    {
-      query: t.Object({
-        meta: t.Optional(t.String()),
-      }),
-    },
-  )
+  .get("/skins", async ({ db }) => {
+    const [row] = await db
+      .select()
+      .from(settings)
+      .where(eq(settings.key, OVERLAY_SKINS_KEY))
+      .limit(1);
+    if (!row?.value) return { snapshot: null };
+    try {
+      return { snapshot: JSON.parse(row.value) };
+    } catch {
+      return { snapshot: null };
+    }
+  })
   .put(
     "/skins",
     async ({ db, body }) => {
       const raw = body as Record<string, unknown>;
-      const replaceSprites =
-        raw.sprites != null && typeof raw.sprites === "object";
-      const [row] = await db
-        .select()
-        .from(settings)
-        .where(eq(settings.key, OVERLAY_SKINS_KEY))
-        .limit(1);
-      const existing = parseStoredOverlaySkins(row?.value);
-      const now = new Date().toISOString();
-      // Config edits must not bump the sprite revision. Consumers decode
-      // every sprite into a GPU texture; doing that on each color tweak
-      // exhausts the GPU and the layout comes back as uninitialized pixels.
-      const sprites = replaceSprites
-        ? sanitizeOverlaySprites(raw.sprites)
-        : (existing?.sprites ?? {});
-      const spritesUpdatedAt = replaceSprites
-        ? now
-        : (existing?.spritesUpdatedAt ?? existing?.updatedAt ?? null);
+      const sprites: Record<string, string> = {};
+      if (raw.sprites != null && typeof raw.sprites === "object") {
+        for (const [key, value] of Object.entries(raw.sprites)) {
+          // Imported .osk blobs are stored without a MIME type, so exported
+          // data URLs may read "data:application/octet-stream;base64,…" —
+          // accept any base64 data URL, not just image/*.
+          if (
+            typeof value === "string" &&
+            value.startsWith("data:") &&
+            value.includes(";base64,") &&
+            value.length <= 8_000_000
+          ) {
+            sprites[key.slice(0, 128)] = value;
+          }
+        }
+      }
       const snapshot = {
-        updatedAt: now,
-        spritesUpdatedAt,
+        updatedAt: new Date().toISOString(),
         mania: raw.mania ?? null,
         std: raw.std ?? null,
         taiko: raw.taiko ?? null,

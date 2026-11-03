@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-10
+last_verified: 2026-11
 confidence: verified
 touches:
   - apps/overlay-rs/
@@ -53,7 +53,12 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
    vs web-process crash. `--webkit-no-dmabuf` / `--gsk-renderer` remain for
    A/B when rendering stalls.
 9. Visibility is a hard map/unmap of the layer surface (soft opacity-only hide
-   failed historically on Wayland + WebKit).
+   failed historically on Wayland + WebKit). The surface stays unmapped until
+    focus wants it and the page has posted a transparent frame (two animation
+    frames after load, or a 1.5s fallback). It unmaps again on navigation,
+    load failure, and web-process termination so a reload cannot paint
+    WebKit's opaque grey clear over the playfield. The first 50ms after map
+    stay at opacity 0 to cover that clear when the compositor honors opacity.
 10. **Default path does not force redraw.** W1–W5 compositor force-present
     hacks are behind `--diag-*` (and `--debug` implies W4 paint counter).
     WebKit already redraws on HUD content change. `--debug` also reports real
@@ -66,7 +71,8 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
     `apps/overlay-rs/target/{release,debug}/roxysu-overlay-rs`. Override:
     `ROXYSU_OVERLAY_BIN`. Linux + Wayland only.
 13. **CLI**: clap accepts `--url=VALUE` and `--url VALUE` with `=` inside
-    values. Electron still passes `--url=http://…?bg=clear`.
+    values. Electron still passes `--url=http://…?bg=clear` and
+    `--watchdog-max-age-sec=0`.
 14. **Host URL setting**: `overlay.host_url` / enable toggle `overlay.host_enabled`
     as before — Electron polls settings (~4s), stop/spawn/restart, liveness
     respawn with `OVERLAY_RESPAWN_GAP_MS`. Decision logic:
@@ -75,8 +81,11 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
     descendant FDs / optional age / optional cgroup. Requires
     `--watchdog-breach-samples` consecutive breaches (default 3), then exits
     **75** (not 0) so `Restart=on-failure` / desktop respawn work. Age cap
-    disable with `--watchdog-max-age-sec 0`. Observation-only telemetry via
-    `--telemetry-interval-sec` / `--telemetry-csv`.
+    disable with `--watchdog-max-age-sec 0`. The desktop shell passes that:
+    the binary default (1800s) plus desktop respawn was a clockwork HUD
+    refresh over the playfield. FD and RSS caps still recover a leak.
+    Observation-only telemetry via `--telemetry-interval-sec` /
+    `--telemetry-csv`.
 
 ## Main flow
 

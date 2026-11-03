@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ConfirmModal } from "../../components/ConfirmModal";
+import { GenerateCollectionsModal } from "./GenerateCollectionsModal";
 import { ListSkeleton } from "../../components/LoadingSkeleton";
 import { PageTitle } from "../../components/PageTitle";
 import { QueryLanguageHelpButton } from "../../components/QueryLanguageHelpModal";
@@ -38,6 +39,7 @@ export function CollectionsPage() {
   const [pendingDelete, setPendingDelete] = useState<SmartCollectionItem | null>(
     null,
   );
+  const [generateOpen, setGenerateOpen] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["collections"],
@@ -168,9 +170,18 @@ export function CollectionsPage() {
       </section>
 
       <section className="space-y-3">
-        <h2 className="font-display text-lg font-bold tracking-tight text-ink">
-          {dict?.collection.newCollection ?? "New collection"}
-        </h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="font-display text-lg font-bold tracking-tight text-ink">
+            {dict?.collection.newCollection ?? "New collection"}
+          </h2>
+          <button
+            type="button"
+            className="rx-btn shrink-0"
+            onClick={() => setGenerateOpen(true)}
+          >
+            {dict?.collection.generateOpen ?? "Generate"}
+          </button>
+        </div>
         <form
         className="rx-panel grid gap-3 p-4 sm:grid-cols-[1fr_2fr_auto] sm:p-5"
         onSubmit={(e) => {
@@ -209,6 +220,12 @@ export function CollectionsPage() {
         ) : null}
         </form>
       </section>
+
+      <GenerateCollectionsModal
+        open={generateOpen}
+        existingNames={smartItems.map((item) => item.name)}
+        onClose={() => setGenerateOpen(false)}
+      />
 
       {isLoading ? (
         <ListSkeleton count={5} showThumbnail={false} />

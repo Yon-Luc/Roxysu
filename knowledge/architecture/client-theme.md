@@ -1,10 +1,11 @@
 ---
-last_verified: 2026-10
+last_verified: 2026-10-30
 confidence: verified
 touches:
   - apps/server/public/features/practice/PracticeListPage.tsx
   - apps/server/public/features/collections/CollectionResultsPage.tsx
   - apps/server/public/global.css
+  - apps/server/public/features/collections/GenerateCollectionsModal.tsx
   - apps/server/public/lib/theme.ts
   - apps/server/public/lib/chartStyles.ts
   - apps/server/public/features/settings/sections/AppearanceSection.tsx
@@ -27,6 +28,7 @@ Keep client app text readable in both dark and light appearance. Tokens live in 
 3a. Error copy on that dark chrome (for example a failed preview load) uses `on-media-danger` (`text-on-media-danger`), a pastel that stays readable on the scrim in both appearances. **Not:** `text-danger` (flips to a dark hue under `html.light`) and **not** raw Tailwind pastels such as `text-rose-300`. Put the message on a `bg-black/*` panel so it stays legible over bright cover art.
 5. The OBS overlay page is always dark with `overlay-text` shadows — it does not use page tokens.
 6. Hover paint on cards applies only under `@media (hover: hover)`. Dense grid cards add `rx-card-grid` next to `rx-card`: hover animates only `transform` and `opacity` (accent ring and tint on `::after`) so the cover image is not repainted. **Not:** `background` or `box-shadow` transitions on grid cards.
+7. Occasional dialogs may enter with `.rx-dialog-scrim` / `.rx-dialog-panel`: opacity plus a short transform (`translateY(8px)` on small screens, `scale(0.96)` from `sm`). Exit is instant. `prefers-reduced-motion` keeps the opacity fade and drops the transform. **Not:** `transition: all`, `scale(0)`, or motion on keyboard-repeat actions.
 
 ## Implementation
 

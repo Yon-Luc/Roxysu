@@ -438,18 +438,39 @@ export function BeatmapPreviewEmbed({
   }, [audioUrl, audioMountGen]);
 
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || !audioUrl) return;
     if (!playingAllowed) {
+      // Freeze even if the element already unmounted — the clock holds the
+      // position the media element no longer has.
       holdAndFreeze();
       return;
     }
-    if (autoPlay && audio.paused) {
-      void audio.play().catch(() => {
-        /* ignore */
-      });
-    }
-  }, [playingAllowed, autoPlay, audioUrl, holdAndFreeze]);
+    const audio = audioRef.current;
+    if (!audio || !audioUrl) return;
+    const at = clockRef.current.nowMs();
+    const resume = () => {
+      try {
+        if (
+          Number.isFinite(at) &&
+          at > 0 &&
+          Math.abs((audio.currentTime || 0) * 1000 - at) > 400
+        ) {
+          audio.currentTime = at / 1000;
+        }
+      } catch {
+        // InvalidStateError before metadata
+      }
+      if (autoPlay && audio.paused) {
+        void audio.play().catch(() => {
+          /* ignore */
+        });
+      }
+    };
+    if (audio.readyState >= 1) resume();
+    else audio.addEventListener("loadedmetadata", resume, { once: true });
+    return () => {
+      audio.removeEventListener("loadedmetadata", resume);
+    };
+  }, [playingAllowed, autoPlay, audioUrl, holdAndFreeze, audioMountGen]);
 
   useEffect(() => {
     if (!syncActive || syncTimeMs == null) {
@@ -547,7 +568,7 @@ export function BeatmapPreviewEmbed({
         aria-hidden
       />
 
-      {audioUrl ? (
+      {audioUrl && playingAllowed ? (
         <audio
           ref={bindAudioRef}
           src={audioUrl}

@@ -6,6 +6,7 @@ mod config;
 mod diagnostics;
 mod focus;
 mod overlay;
+mod present;
 mod reload;
 mod telemetry;
 mod watchdog;

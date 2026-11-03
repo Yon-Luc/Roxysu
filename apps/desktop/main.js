@@ -465,7 +465,9 @@ function spawnOverlayHost(paths, urlArg) {
   overlayAppliedUrlArg = urlArg;
   // Do not set WEBKIT_DISABLE_DMABUF_RENDERER. On a transparent WebKitGTK
   // surface that fallback fills the whole window with grey on each HUD update.
-  overlayChild = spawn(bin, [urlArg], {
+  // Age cap is off: a 30-minute exit plus this respawn is a full HUD refresh
+  // over the playfield. FD and RSS caps still exit 75 so a real leak recovers.
+  overlayChild = spawn(bin, [urlArg, "--watchdog-max-age-sec=0"], {
     stdio: ["ignore", fd, fd],
     windowsHide: true,
     shell: false,

@@ -418,6 +418,23 @@ export async function createCollection(body: { name: string; query: string }) {
   );
 }
 
+export async function createCollections(body: {
+  items: { name: string; query: string }[];
+}): Promise<{
+  created: number;
+  skipped: number;
+  items: { id: number; name: string; query: string }[];
+}> {
+  return unwrap(
+    await api.api.collections.batch.post(body),
+    "/api/collections/batch",
+  ) as {
+    created: number;
+    skipped: number;
+    items: { id: number; name: string; query: string }[];
+  };
+}
+
 export async function deleteCollection(id: number) {
   return unwrap(
     await api.api.collections({ id: String(id) }).delete(),

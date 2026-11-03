@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use gdk4::prelude::*;
 use gtk4::prelude::*;
+use gtk4::gio;
 use gtk4::{Application, ApplicationWindow};
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 use std::cell::{Cell, RefCell};
@@ -9,13 +10,51 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 use tracing::{info, warn};
 use webkit6::prelude::*;
-use webkit6::{LoadEvent, WebView};
+use webkit6::{LoadEvent, UserContentManager, WebView};
 
 use crate::click_through::{apply_click_through, ClickThroughMethod};
 use crate::config::Config;
 use crate::diagnostics;
 use crate::focus::{self, FocusCommand, FocusEvent};
+use crate::present::should_map_overlay;
 use crate::reload::{ReloadMachine, ReloadTrigger, ScheduleResult};
+
+/// Hide the first presents after map. WebKit's initial buffer on a newly
+/// mapped transparent view is often opaque grey; window opacity covers that
+/// even when the compositor ignores a later opacity-only hide.
+const REVEAL_DELAY: Duration = Duration::from_millis(50);
+/// If the page never posts ready (script error), still show the HUD.
+const READY_FALLBACK: Duration = Duration::from_millis(1500);
+
+const PAGE_READY_JS: &str = r#"(function(){
+  try {
+    var path = (location.hash || "").replace(/^#/, "").split("?")[0];
+    if (path === "/overlay") {
+      document.documentElement.classList.add("overlay-mode");
+      document.documentElement.style.background = "transparent";
+      if (document.body) document.body.style.background = "transparent";
+    }
+  } catch (e) {}
+  var raf = window.requestAnimationFrame || function(cb){ cb(); };
+  raf(function(){ raf(function(){
+    try { window.webkit.messageHandlers.roxysuOverlayReady.postMessage("ready"); } catch (e) {}
+  }); });
+})();"#;
+
+struct PageGate {
+    window: ApplicationWindow,
+    webview: WebView,
+    /// Focus policy (or always-visible fallback) wants the surface up.
+    wants_visible: Cell<bool>,
+    /// Page posted a transparent frame, or the fallback fired.
+    page_ready: Cell<bool>,
+    shown: Rc<RefCell<bool>>,
+    opacity: f64,
+    anchor: crate::config::Anchor,
+    diagnostics: crate::config::DiagnosticFlags,
+    ready_fallback: RefCell<Option<glib::SourceId>>,
+    reveal_fallback: RefCell<Option<glib::SourceId>>,
+}
 
 pub struct OverlayHost {
     window: ApplicationWindow,
@@ -24,6 +63,7 @@ pub struct OverlayHost {
     mapped: Rc<RefCell<bool>>,
     shown: Rc<RefCell<bool>>,
     click_method: Rc<RefCell<Option<ClickThroughMethod>>>,
+    gate: Rc<PageGate>,
 }
 
 impl OverlayHost {
@@ -34,7 +74,10 @@ impl OverlayHost {
             .default_width(config.width)
             .default_height(config.height)
             .build();
-        window.set_opacity(config.opacity);
+        // Stay invisible until a transparent frame exists. A mapped WebKit
+        // surface clears to opaque grey and covers the playfield.
+        window.set_opacity(0.0);
+        window.set_visible(false);
 
         window.init_layer_shell();
         window.set_layer(Layer::Overlay);
@@ -60,10 +103,15 @@ impl OverlayHost {
             info!(output = %name, "pinned to monitor");
         }
 
-        let webview = WebView::new();
+        let content = UserContentManager::new();
+        if !content.register_script_message_handler("roxysuOverlayReady", None) {
+            warn!("failed to register roxysuOverlayReady; HUD will use the ready fallback");
+        }
+        let webview = WebView::builder()
+            .user_content_manager(&content)
+            .build();
         let transparent = gdk4::RGBA::new(0.0, 0.0, 0.0, 0.0);
         webview.set_background_color(&transparent);
-        webview.load_uri(&config.url);
         window.set_child(Some(&webview));
 
         let mapped = Rc::new(RefCell::new(false));
@@ -94,7 +142,27 @@ impl OverlayHost {
             });
         }
 
-        wire_reload(&webview, &config.url);
+        let gate = Rc::new(PageGate {
+            window: window.clone(),
+            webview: webview.clone(),
+            wants_visible: Cell::new(false),
+            page_ready: Cell::new(false),
+            shown: Rc::clone(&shown),
+            opacity: config.opacity,
+            anchor: config.anchor,
+            diagnostics: config.diagnostics,
+            ready_fallback: RefCell::new(None),
+            reveal_fallback: RefCell::new(None),
+        });
+        {
+            let gate = Rc::clone(&gate);
+            content.connect_script_message_received(
+                Some("roxysuOverlayReady"),
+                move |_, _| on_page_ready(&gate),
+            );
+        }
+        wire_reload(&webview, &config.url, Rc::clone(&gate));
+        webview.load_uri(&config.url);
         diagnostics::install_timers(
             &window,
             &webview,
@@ -111,6 +179,7 @@ impl OverlayHost {
             mapped,
             shown,
             click_method,
+            gate,
         })
     }
 
@@ -148,8 +217,9 @@ impl OverlayHost {
                 "follow-focus enabled; waiting for matching activation"
             );
         } else {
-            self.apply_show();
-            info!("follow-focus disabled; always visible");
+            self.gate.wants_visible.set(true);
+            sync_gate(&self.gate);
+            info!("follow-focus disabled; always visible once the page is transparent");
         }
 
         if self.config.test_hide_show {
@@ -192,18 +262,6 @@ impl OverlayHost {
         Ok(())
     }
 
-    fn apply_show(&self) {
-        self.window.set_visible(true);
-        self.window.present();
-        *self.shown.borrow_mut() = true;
-        diagnostics::on_show(
-            &self.webview,
-            &self.window,
-            self.config.anchor,
-            self.config.diagnostics,
-        );
-    }
-
     fn start_focus_tracking(&self) -> Result<()> {
         let (tx, rx) = async_channel::unbounded::<FocusCommand>();
 
@@ -218,14 +276,13 @@ impl OverlayHost {
             .context("spawn focus thread")?;
 
         let window = self.window.clone();
-        let webview = self.webview.clone();
-        let shown = Rc::clone(&self.shown);
         let last = Rc::new(RefCell::new(None::<bool>));
         let last_reassert = Rc::new(Cell::new(None::<Instant>));
         let hide_epoch = Rc::new(Cell::new(0u64));
         let diagnostics = self.config.diagnostics;
         let anchor = self.config.anchor;
         let hysteresis = self.config.hide_hysteresis_ms;
+        let gate = Rc::clone(&self.gate);
 
         glib::spawn_future_local(async move {
             while let Ok(cmd) = rx.recv().await {
@@ -236,10 +293,8 @@ impl OverlayHost {
                         let was_shown = *last.borrow() == Some(true);
                         if !was_shown {
                             info!("focus: show");
-                            window.set_visible(true);
-                            window.present();
-                            *shown.borrow_mut() = true;
-                            diagnostics::on_show(&webview, &window, anchor, diagnostics);
+                            gate.wants_visible.set(true);
+                            sync_gate(&gate);
                             *last.borrow_mut() = Some(true);
                         } else {
                             diagnostics::on_refocus_while_shown(
@@ -256,19 +311,16 @@ impl OverlayHost {
                         }
                         if hysteresis == 0 {
                             info!("focus: hide");
-                            diagnostics::on_hide(&webview, diagnostics);
-                            window.set_visible(false);
-                            *shown.borrow_mut() = false;
+                            gate.wants_visible.set(false);
+                            sync_gate(&gate);
                             *last.borrow_mut() = Some(false);
                             continue;
                         }
                         let epoch = hide_epoch.get().wrapping_add(1);
                         hide_epoch.set(epoch);
-                        let window = window.clone();
-                        let webview = webview.clone();
-                        let shown = Rc::clone(&shown);
                         let last = Rc::clone(&last);
                         let hide_epoch = Rc::clone(&hide_epoch);
+                        let gate = Rc::clone(&gate);
                         glib::timeout_add_local_once(
                             Duration::from_millis(hysteresis),
                             move || {
@@ -279,9 +331,8 @@ impl OverlayHost {
                                     return;
                                 }
                                 info!(hysteresis_ms = hysteresis, "focus: hide");
-                                diagnostics::on_hide(&webview, diagnostics);
-                                window.set_visible(false);
-                                *shown.borrow_mut() = false;
+                                gate.wants_visible.set(false);
+                                sync_gate(&gate);
                                 *last.borrow_mut() = Some(false);
                             },
                         );
@@ -296,10 +347,8 @@ impl OverlayHost {
                         );
                         hide_epoch.set(hide_epoch.get().wrapping_add(1));
                         if *last.borrow() != Some(true) {
-                            window.set_visible(true);
-                            window.present();
-                            *shown.borrow_mut() = true;
-                            diagnostics::on_show(&webview, &window, anchor, diagnostics);
+                            gate.wants_visible.set(true);
+                            sync_gate(&gate);
                             *last.borrow_mut() = Some(true);
                         }
                     }
@@ -311,16 +360,26 @@ impl OverlayHost {
     }
 }
 
-fn wire_reload(webview: &WebView, url: &str) {
+fn wire_reload(webview: &WebView, url: &str, gate: Rc<PageGate>) {
     let machine = Rc::new(RefCell::new(ReloadMachine::new()));
     let url = Rc::new(url.to_string());
 
     {
         let machine = Rc::clone(&machine);
+        let gate = Rc::clone(&gate);
+        let webview_weak = webview.downgrade();
         webview.connect_load_changed(move |_, event| {
+            if event == LoadEvent::Started {
+                // A navigation (including our own reload) discards the
+                // transparent frame. Unmap until the next ready signal.
+                on_navigation_started(&gate);
+            }
             if event == LoadEvent::Finished {
                 machine.borrow_mut().on_load_finished();
                 info!("webkit: load finished");
+                if let Some(webview) = webview_weak.upgrade() {
+                    request_page_ready(&webview, &gate);
+                }
             }
         });
     }
@@ -329,7 +388,9 @@ fn wire_reload(webview: &WebView, url: &str) {
         let machine = Rc::clone(&machine);
         let url = Rc::clone(&url);
         let webview_weak = webview.downgrade();
+        let gate = Rc::clone(&gate);
         webview.connect_load_failed(move |_, _event, failing_uri, error| {
+            on_navigation_started(&gate);
             warn!(
                 failing_uri,
                 error = %error,
@@ -350,8 +411,10 @@ fn wire_reload(webview: &WebView, url: &str) {
         let machine = Rc::clone(&machine);
         let url = Rc::clone(&url);
         let webview_weak = webview.downgrade();
+        let gate = Rc::clone(&gate);
         webview.connect_web_process_terminated(move |_, reason| {
             warn!(?reason, "webkit: web process terminated (crash/kill; distinct from HUD load-fail)");
+            on_navigation_started(&gate);
             schedule_reload(
                 &machine,
                 ReloadTrigger::WebProcessTerminated,
@@ -387,6 +450,99 @@ fn schedule_reload(
                 }
             });
         }
+    }
+}
+
+fn on_navigation_started(gate: &Rc<PageGate>) {
+    gate.page_ready.set(false);
+    cancel_source(&gate.ready_fallback);
+    cancel_source(&gate.reveal_fallback);
+    gate.window.set_opacity(0.0);
+    sync_gate(gate);
+}
+
+fn on_page_ready(gate: &Rc<PageGate>) {
+    if gate.page_ready.get() {
+        return;
+    }
+    gate.page_ready.set(true);
+    cancel_source(&gate.ready_fallback);
+    info!("page ready; overlay may map");
+    sync_gate(gate);
+}
+
+fn request_page_ready(webview: &WebView, gate: &Rc<PageGate>) {
+    webview.evaluate_javascript(
+        PAGE_READY_JS,
+        None,
+        Some("roxysu-overlay"),
+        None::<&gio::Cancellable>,
+        |_| {},
+    );
+    arm_ready_fallback(gate);
+}
+
+fn arm_ready_fallback(gate: &Rc<PageGate>) {
+    cancel_source(&gate.ready_fallback);
+    let gate_cb = Rc::clone(gate);
+    let id = glib::timeout_add_local(READY_FALLBACK, move || {
+        gate_cb.ready_fallback.borrow_mut().take();
+        if !gate_cb.page_ready.get() {
+            warn!("page-ready signal missing; mapping after fallback");
+            gate_cb.page_ready.set(true);
+            sync_gate(&gate_cb);
+        }
+        glib::ControlFlow::Break
+    });
+    *gate.ready_fallback.borrow_mut() = Some(id);
+}
+
+fn arm_reveal(gate: &Rc<PageGate>) {
+    cancel_source(&gate.reveal_fallback);
+    let gate_cb = Rc::clone(gate);
+    let id = glib::timeout_add_local(REVEAL_DELAY, move || {
+        gate_cb.reveal_fallback.borrow_mut().take();
+        if *gate_cb.shown.borrow() && gate_cb.page_ready.get() && gate_cb.wants_visible.get()
+        {
+            gate_cb.window.set_opacity(gate_cb.opacity);
+            info!("overlay revealed");
+        }
+        glib::ControlFlow::Break
+    });
+    *gate.reveal_fallback.borrow_mut() = Some(id);
+}
+
+fn cancel_source(slot: &RefCell<Option<glib::SourceId>>) {
+    if let Some(id) = slot.borrow_mut().take() {
+        id.remove();
+    }
+}
+
+fn sync_gate(gate: &Rc<PageGate>) {
+    let map = should_map_overlay(gate.wants_visible.get(), gate.page_ready.get());
+    let shown = *gate.shown.borrow();
+    if map {
+        if !shown {
+            info!("mapping overlay after transparent frame");
+            gate.window.set_opacity(0.0);
+            gate.window.set_visible(true);
+            gate.window.present();
+            *gate.shown.borrow_mut() = true;
+            diagnostics::on_show(
+                &gate.webview,
+                &gate.window,
+                gate.anchor,
+                gate.diagnostics,
+            );
+        }
+        arm_reveal(gate);
+    } else if shown {
+        info!("unmapping overlay so a reload cannot grey the playfield");
+        cancel_source(&gate.reveal_fallback);
+        gate.window.set_opacity(0.0);
+        diagnostics::on_hide(&gate.webview, gate.diagnostics);
+        gate.window.set_visible(false);
+        *gate.shown.borrow_mut() = false;
     }
 }
 

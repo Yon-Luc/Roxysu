@@ -310,6 +310,44 @@ html.light .rx-select option {
   background: var(--color-surface);
 }
 
+/* Occasional dialog enter. Exit is instant so dismiss stays responsive. */
+.rx-dialog-scrim {
+  opacity: 0;
+  transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.rx-dialog-scrim[data-open="true"] {
+  opacity: 1;
+}
+
+.rx-dialog-panel {
+  opacity: 0;
+  transform: translateY(8px);
+  transform-origin: center;
+  transition:
+    opacity 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@media (min-width: 640px) {
+  .rx-dialog-panel {
+    transform: scale(0.96);
+  }
+}
+
+.rx-dialog-panel[data-open="true"] {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rx-dialog-scrim,
+  .rx-dialog-panel {
+    transform: none;
+    transition: opacity 150ms ease;
+  }
+}
+
 /* Dual-thumb range: two stacked inputs; only thumbs receive pointer events. */
 .rx-dual-range input[type="range"] {
   pointer-events: none;

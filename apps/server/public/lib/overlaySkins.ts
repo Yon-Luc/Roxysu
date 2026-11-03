@@ -62,6 +62,9 @@ export async function collectOverlaySkinSnapshot(): Promise<OverlaySkinSnapshot>
   };
 }
 
+/** Same document must not re-decode the published sprite set on a remount. */
+let appliedSnapshotToken: string | null = null;
+
 /**
  * Apply a server-side snapshot to the local skin stores. Used on overlay
  * consumer pages (OBS / Wayland host): sprites load straight from the server
@@ -72,6 +75,9 @@ export async function applyOverlaySkinSnapshot(
   snapshot: OverlaySkinSnapshot | null | undefined,
 ): Promise<void> {
   if (!snapshot) return;
+  const token = `${snapshot.updatedAt ?? ""}:${Object.keys(snapshot.sprites ?? {}).length}`;
+  if (appliedSnapshotToken === token) return;
+  let spritesOk = true;
   try {
     const spriteKeys = Object.keys(snapshot.sprites ?? {});
     if (spriteKeys.length > 0) {
@@ -84,7 +90,9 @@ export async function applyOverlaySkinSnapshot(
       await applyOverlayCatchSpriteDataUrls(snapshot.sprites);
     }
   } catch {
-    // Sprites are best-effort; configs still apply.
+    // Sprites are best-effort; configs still apply. Leave the token unset so
+    // a later call can retry the decode instead of sticking on a failed load.
+    spritesOk = false;
   }
   try {
     if (snapshot.mania) setPreviewSkin(snapshot.mania);
@@ -94,6 +102,7 @@ export async function applyOverlaySkinSnapshot(
   } catch {
     // ignore malformed snapshots
   }
+  if (spritesOk) appliedSnapshotToken = token;
 }
 
 /**

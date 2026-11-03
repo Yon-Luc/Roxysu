@@ -29,7 +29,12 @@ import {
 import {
   readCachedMatchCount,
   refreshCollectionMatchCount,
+  scheduleRefreshAllMatchCounts,
 } from "../shared/collectionMatchCache";
+import {
+  COLLECTION_BATCH_MAX,
+  selectNewCollectionRows,
+} from "../shared/collectionBatch";
 import {
   buildCollectionExportZip,
   isOszBuildError,
@@ -426,6 +431,74 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
       body: t.Object({
         name: t.String({ minLength: 1 }),
         query: t.String({ minLength: 1 }),
+      }),
+    },
+  )
+  .post(
+    "/batch",
+    async ({ db, body, set }) => {
+      const prepared: { name: string; query: string }[] = [];
+      for (const item of body.items) {
+        const name = item.name.trim();
+        const query = item.query.trim();
+        if (!name || !query) {
+          set.status = 400;
+          return { error: "Name and query are required" };
+        }
+        try {
+          parseQuery(query);
+        } catch (err) {
+          if (err instanceof QueryParseError) {
+            set.status = 400;
+            return { error: err.message };
+          }
+          throw err;
+        }
+        prepared.push({ name, query });
+      }
+
+      const wanted = [...new Set(prepared.map((item) => item.name))];
+      const existingRows = db
+        .select({ name: collections.name })
+        .from(collections)
+        .where(inArray(collections.name, wanted))
+        .all();
+      const { insert, skipped } = selectNewCollectionRows(
+        prepared,
+        existingRows.map((row) => row.name),
+      );
+
+      const created =
+        insert.length === 0
+          ? []
+          : db.transaction((tx) =>
+              tx.insert(collections).values(insert).returning().all(),
+            );
+
+      if (created.length > 0) {
+        scheduleRefreshAllMatchCounts(db);
+        publish({ type: "collection.updated" });
+      }
+
+      return {
+        created: created.length,
+        skipped,
+        items: created.map((row) => ({
+          id: row.id,
+          name: row.name,
+          query: row.query,
+        })),
+      };
+    },
+    {
+      body: t.Object({
+        items: t.Array(
+          t.Object({
+            name: t.String({ minLength: 1, maxLength: 200 }),
+            query: t.String({ minLength: 1, maxLength: 2000 }),
+          }),
+          { minItems: 1, maxItems: COLLECTION_BATCH_MAX },
+        ),
       }),
     },
   )

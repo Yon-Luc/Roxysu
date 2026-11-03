@@ -10,6 +10,14 @@
 		<meta name="theme-color" content="#121212">
 		<script>
 			try {
+				var hashPath = (location.hash || "").replace(/^#/, "").split("?")[0];
+				if (hashPath === "/overlay") {
+					document.documentElement.classList.add("overlay-mode");
+					document.documentElement.style.background = "transparent";
+					document.addEventListener("DOMContentLoaded", function () {
+						if (document.body) document.body.style.background = "transparent";
+					});
+				}
 				var mode = localStorage.getItem("roxysu:theme");
 				var light = false;
 				if (mode === "light") light = true;

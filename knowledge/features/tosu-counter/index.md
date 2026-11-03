@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-10
+last_verified: 2026-11
 confidence: verified
 touches:
   - apps/tosu-counter/
@@ -99,7 +99,7 @@ mania notefield synced to the live in-game time.
     localStorage (`roxysu:tosu-counter-settings`).     Rendering is driven by
     `apps/server/public/lib/playfieldRaf.ts` with `heartbeatHz: 30` (opt-in;
     preview/rewatch modals leave it off). The loop is change-gated
-    `requestAnimationFrame` plus a ~30fps timer: while `document.hidden` the
+    `requestAnimationFrame` (drops to a 200ms poll while the clock is frozen, so a paused preview does not keep a 60fps composite) plus a ~30fps timer: while `document.hidden` the
     heartbeat force-paints so idle preview recovers when the dashboard iframe
     was invisible; while visible it stays change-gated so it does not
     double-paint with rAF. `invalidate()` paints synchronously. The counter

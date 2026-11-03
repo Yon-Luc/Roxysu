@@ -46,6 +46,8 @@ export function startPlayfieldRaf(opts: {
 }): { stop: () => void; invalidate: () => void } {
   let raf = 0;
   let timer = 0;
+  let idleTimer = 0;
+  let stableFrames = 0;
   let running = true;
   let lastT = Number.NaN;
   let lastSnap: readonly unknown[] | null = null;
@@ -59,14 +61,16 @@ export function startPlayfieldRaf(opts: {
   // that makes in-page edits show up immediately — independent of rAF, which
   // is throttled or paused inside embedded iframes (e.g. the tosu dashboard
   // preview reports `document.hidden` while still being visible on screen).
-  function renderOnce() {
+  function renderOnce(): boolean {
     const tMs = opts.getTimeMs();
     const snap = opts.snapshot();
     if (tMs !== lastT || !sameSnap(lastSnap, snap)) {
       lastT = tMs;
       lastSnap = snap;
       opts.paint(tMs);
+      return true;
     }
+    return false;
   }
 
   // Unconditional paint — used by the heartbeat while the document is hidden
@@ -81,12 +85,45 @@ export function startPlayfieldRaf(opts: {
     opts.paint(tMs);
   }
 
+  function clearIdle() {
+    if (idleTimer) {
+      window.clearTimeout(idleTimer);
+      idleTimer = 0;
+    }
+  }
+
+  // A frozen clock (preview paused while a map is playing) must not keep a
+  // 60fps composite loop. On a transparent WebKit overlay that loop leaks
+  // DMA-BUF fds until the host is killed and the playfield flashes grey.
+  function scheduleAfter(changed: boolean) {
+    if (!running) return;
+    const hidden = typeof document !== "undefined" && document.hidden;
+    if (!hidden && typeof requestAnimationFrame === "function") {
+      if (changed) stableFrames = 0;
+      else stableFrames += 1;
+      // One identical sample is not a pause — audio time can repeat for a
+      // frame. Drop the 60fps loop only after the clock has actually settled.
+      if (changed || stableFrames < 2) {
+        clearIdle();
+        raf = requestAnimationFrame(frame);
+        return;
+      }
+    }
+    if (hidden || heartbeatHz > 0) {
+      clearIdle();
+      return;
+    }
+    if (idleTimer) return;
+    idleTimer = window.setTimeout(() => {
+      idleTimer = 0;
+      frame();
+    }, 200) as unknown as number;
+  }
+
   function frame() {
     if (!running) return;
-    renderOnce();
-    if (typeof requestAnimationFrame === "function") {
-      raf = requestAnimationFrame(frame);
-    }
+    raf = 0;
+    scheduleAfter(renderOnce());
   }
 
   // Heartbeat: timer-driven tick for embedded iframes where rAF is
@@ -99,7 +136,7 @@ export function startPlayfieldRaf(opts: {
       paintNow();
       return;
     }
-    renderOnce();
+    if (renderOnce()) startRaf();
   }
 
   function startRaf() {
@@ -116,7 +153,12 @@ export function startPlayfieldRaf(opts: {
   function invalidate() {
     lastT = Number.NaN;
     lastSnap = null;
-    renderOnce();
+    clearIdle();
+    if (raf && typeof cancelAnimationFrame === "function") {
+      cancelAnimationFrame(raf);
+    }
+    raf = 0;
+    frame();
   }
 
   function onVisibility() {
@@ -140,7 +182,10 @@ export function startPlayfieldRaf(opts: {
   return {
     stop: () => {
       running = false;
-      if (raf) cancelAnimationFrame(raf);
+      if (raf && typeof cancelAnimationFrame === "function") {
+        cancelAnimationFrame(raf);
+      }
+      clearIdle();
       if (timer) clearInterval(timer);
       if (typeof document !== "undefined") {
         document.removeEventListener("visibilitychange", onVisibility);

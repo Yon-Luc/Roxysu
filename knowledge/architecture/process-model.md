@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-10
+last_verified: 2026-11
 confidence: verified
 touches:
   - docs/architecture.md
@@ -40,7 +40,7 @@ Analytics → HTTP /api + SSE → React UI
 - **No IPC** between realm-reader and server; both use the same local mirror file.
 - The client app detects new imports by **polling** the `imports` table, then runs analytics and emits SSE.
 - Optional **tosu** WebSocket feeds live in-progress map state (not the score source of truth).
-- Optional **in-game overlay** host (`apps/overlay-rs`) renders `#/overlay` above lazer on wlr-layer-shell Wayland; client-app HTTP only, no direct store access. On NixOS packages the Electron shell spawns it as a third child (`resources/overlay/roxysu-overlay`), stops or spawns it per the `overlay.host_enabled` toggle, restarts it when the `overlay.host_url` setting changes, and respawns it if it exits (watchdog exit **75** — see in-game-overlay rule 15).
+- Optional **in-game overlay** host (`apps/overlay-rs`) renders `#/overlay` above lazer on wlr-layer-shell Wayland; client-app HTTP only, no direct store access. On NixOS packages the Electron shell spawns it as a third child (`resources/overlay/roxysu-overlay`), stops or spawns it per the `overlay.host_enabled` toggle, restarts it when the `overlay.host_url` setting changes, and respawns it if it exits (watchdog exit **75** — see in-game-overlay rule 15). Desktop disables the age cap (`--watchdog-max-age-sec=0`); the host does not map until the HUD frame is transparent.
 - **Server shutdown order:** on SIGINT/SIGTERM the client app stops its subscriptions and HTTP listener, awaits background writers via `shutdownBackgroundWork()` (analytics run, backfill jobs, mirror batch; 3 s bound), and only then closes the local mirror and exits. See [features/live-sync/](../features/live-sync/index.md) rule 19.
 - Desktop Electron shell spawns server + realm-reader (+ bundled overlay host on Linux/Wayland); same model as `bun run dev`.
 - **Realm-reader respawn:** the Electron shell respawns an unexpectedly exited realm-reader with exponential backoff and gives up after repeated short-lived runs (see [features/desktop/](../features/desktop/index.md)); the server exiting still ends the whole app.

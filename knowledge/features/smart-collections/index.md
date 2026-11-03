@@ -1,10 +1,12 @@
 ---
-last_verified: 2026-10
+last_verified: 2026-10-30
 confidence: verified
 touches:
   - apps/server/public/features/collections/CollectionsPage.tsx
-  - apps/server/public/features/collections/CollectionResultsPage.tsx
+  - apps/server/public/features/collections/GenerateCollectionsModal.tsx
+  - apps/server/public/features/collections/generateCollections.ts
   - apps/server/src/routes/collections.ts
+  - apps/server/src/shared/collectionBatch.ts
   - apps/server/src/shared/syncCollections.ts
   - apps/server/src/shared/realmWriteLock.ts
   - apps/realm-reader/src/backupBeforeWrite.ts
@@ -33,6 +35,7 @@ Dynamic practice playlists that stay current as the practice library grows; opti
 7. Collection write-back, online score pull commit, and score transfer commit share one exclusive Realm write lock. A second Realm write of any kind, not only another write-back, is rejected with HTTP 409 `in_flight`. The extraction pause (`sync.realm_reader_paused`) is reference-counted: set to `"1"` by the first holder and back to `"0"` only when the last holder releases, always in `finally`, so a refused or failed writer never clears another writer's pause.
 8. Deleting a smart collection always asks first: the Delete button opens `ConfirmModal` naming the collection. The modal stays busy until the delete request and the collections list refresh finish; an error stays in the modal. Deleting never edits Realm; a copy already written to lazer is removed at the next collection write-back (rule 4).
 9. The collection results page keeps the header (name, query, count, export) and the previous page of cards on screen while another page loads, and dims the grid. The skeleton shows only when there is no payload for this collection yet; another collection's payload never stands in.
+10. The Collections page can generate many collections at once from rework star buckets, accuracy bands, or rework dan base tiers. The generator opens in a modal from the new-collection row; the page itself stays the single-query form. Each row is still a query string. A name that already exists is skipped, not overwritten. Generation does not write to Realm. Star and accuracy buckets are half-open except the last, which includes its upper bound, so a boundary value is in only one collection. Accuracy bands match best accuracy, so unplayed maps are absent. Star and dan collections include unplayed maps that already have a rework row.
 
 ## Security rules
 
@@ -48,7 +51,10 @@ Client app API has no auth. Collection write-back is still gated by process-safe
 
 ## Important symbols
 
-- `apps/server/src/routes/collections.ts` — overlapping write-back → 409 `in_flight`
+- `apps/server/src/routes/collections.ts` — overlapping write-back → 409 `in_flight`; `POST /api/collections/batch` inserts generated rows and skips existing names
+- `apps/server/src/shared/collectionBatch.ts` — `selectNewCollectionRows()`, `COLLECTION_BATCH_MAX`
+- `apps/server/public/features/collections/GenerateCollectionsModal.tsx` — generator dialog
+- `apps/server/public/features/collections/generateCollections.ts` — star, accuracy, and rework dan query builder
 - `apps/server/src/shared/realmWriteLock.ts` — `tryAcquireRealmWriteLock()`, `acquireExtractionPause()`; shared by all three Realm writers
 - `apps/realm-reader/src/backupBeforeWrite.ts:backupThenOpenForWrite()` — probe, backup, then open for write; used by all three realm-reader writers
 - `apps/server/src/shared/syncCollections.ts` — `invalidateCollectionMd5Cache()`; Node/desktop loads realm-reader via `realmSyncModulePath()` (packaged `syncCollections.js` or monorepo `src/syncCollections.ts`, whichever exists under `ROXYSU_REALM_READER_DIR`)

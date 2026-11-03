@@ -56,18 +56,26 @@
 
     runtimeLibraryPath = pkgs.lib.makeLibraryPath (nativeDeps ++ gpuixRuntimeDeps);
 
-    # Prefer a newer Electron major when available. The wrapped
-    # `${electron}/bin/electron` must be used on NixOS — the raw
+    # The wrapped `${electron}/bin/electron` must be used on NixOS — the raw
     # `libexec/electron/electron` binary often SIGILL's without the wrapper.
-    # Flake nixpkgs currently has through electron_42 (no _43 yet).
-    electron =
-      if pkgs ? electron_42
-      then pkgs.electron_42
+    # nixpkgs sets meta.knownVulnerabilities ("Electron version … is EOL")
+    # once a major leaves the support window, then refuses to evaluate it.
+    # Take the newest major that is still allowed. Keep apps/desktop's
+    # `electron` dependency on that same major so Windows installers match.
+    electron = let
+      names = map (n: "electron_${toString n}") (pkgs.lib.range 42 60);
+      present = builtins.filter (name: builtins.hasAttr name pkgs) names;
+      allowed = builtins.filter (
+        name: (pkgs.${name}.meta.knownVulnerabilities or []) == []
+      ) present;
+    in
+      if allowed != []
+      then pkgs.${pkgs.lib.last allowed}
       else pkgs.electron;
 
     # After changing bun.lock, rebuild once, then paste the printed sha256 here:
     #   nix build .#roxysu-from-source
-    bunDepsHash = "sha256-HLkHrhkUdQPFc1M1MNYOPoiJJN3d5MQGXm5SR14cnlw=";
+    bunDepsHash = "sha256-LGEGjNVMjpUkjFzaJa9Uyv81CaRtmlMc9sFJy0CgbmY=";
 
     resourcesRoot =
       if builtins.pathExists (linux-resources + "/roxysu")

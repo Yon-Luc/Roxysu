@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-10
+last_verified: 2026-11
 confidence: verified
 touches:
   - apps/desktop/main.js
@@ -14,6 +14,7 @@ touches:
   - nix/package.nix
   - docs/electron-plan.md
   - publish.sh
+  - flake.nix
 ---
 
 # Desktop
@@ -41,6 +42,11 @@ Distribute Roxysu as a desktop app without changing the local-mirror-centric arc
   `RoxysuPreview.zip` (standalone Tosu counter) to the GitHub release, pins
   `linux-resources` to the versioned GitHub tarball, then force-moves the tag
   to that lock commit
+
+## Business rules
+
+1. The desktop shell uses the newest Electron major nixpkgs still allows (`meta.knownVulnerabilities` empty). Electron 42 is end-of-life and Nix refuses to evaluate it. Windows installers bundle the same major from `apps/desktop` `electron` via electron-builder. Child processes use the bundled Node runtime, not Electron's Node.
+   **Status:** verified
 
 ## Dependencies
 

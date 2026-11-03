@@ -123,9 +123,15 @@ describe("score conjunction sql", () => {
 
   function matches(id: string, query: string): boolean {
     const { sql, params } = compiled(query);
+    const bindings = params.map((value) => {
+      if (typeof value !== "string" && typeof value !== "number") {
+        throw new Error(`unexpected sql param: ${String(value)}`);
+      }
+      return value;
+    });
     const row = db
       .query(`SELECT 1 AS hit FROM beatmaps b WHERE b.id = ? AND (${sql})`)
-      .get(id, ...params) as { hit: number } | null;
+      .get(id, ...bindings) as { hit: number } | null;
     return row != null;
   }
 

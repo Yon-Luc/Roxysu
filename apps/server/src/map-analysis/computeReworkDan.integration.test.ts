@@ -228,7 +228,9 @@ describe("relabelReworkDanSync", () => {
          WHERE beatmap_id = ? AND algorithm = ? AND rate = 1.5 AND ln_only = 0`,
       )
       .get(MAP_4K, REWORK_ALGORITHM) as { estDiff: string };
-    expect(variant.estDiff).toBe(base.estDiff);
+    const expected = base.estDiff;
+    if (expected == null) throw new Error("base rework label missing");
+    expect(variant.estDiff).toBe(expected);
     expect(variant.estDiff).not.toContain("mid");
   });
 

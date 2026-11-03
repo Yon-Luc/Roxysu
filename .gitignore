@@ -45,8 +45,9 @@ result-*
 .branch-*.json
 
 
-# shipped calc bundle file (admin export release artifact)
-apps/desktop/pack/
+# Local pack scratch. The calc bundle file is tracked so CI can ship it.
+apps/desktop/pack/*
+!apps/desktop/pack/calc-bundle.ndjson.gz
 
 # C baseline binary archive for Rust migration (Phase 0)
 apps/overlay-rs/target/

@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-10-28
+last_verified: 2026-11
 confidence: verified
 touches:
   - apps/server/src/map-analysis/calcBundle.ts
@@ -31,9 +31,9 @@ run dev client app → Settings/Community → Hub admin → Calc bundles
   ↓
 "Download release file (.ndjson.gz)" → GET /api/settings/calc-bundle/export-file?version=<next>
   ↓ (buildCalcBundleFileBytes: header + stripped entries, gzip)
-save as apps/desktop/pack/calc-bundle.ndjson.gz   ← gitignored admin artifact
+save as apps/desktop/pack/calc-bundle.ndjson.gz   ← committed so CI checkout can pack it
   ↓
-pack release (electron-builder afterPack / Nix installPhase) → resources/calc-bundle.ndjson.gz
+pack release (electron-builder afterPack / pack-linux-resources / Nix installPhase) → resources/calc-bundle.ndjson.gz
   (build:stage warns when the file is missing or its header version ≠ package version)
   (optionally "Export & upload" publishes the same rows to the Hub store for dev users)
 ```
@@ -106,5 +106,5 @@ Manual pull from Settings stays a Hub gap-fill on every install type
 - `apps/server/src/routes/settings.ts` — `GET /settings/calc-bundle/export-file`
 - `apps/server/public/features/hub/HubAdminCalcBundlesPage.tsx` — download + upload buttons
 - `apps/desktop/main.js` — sets `ROXYSU_PACKAGED=1` only when `paths.isPackaged`, passes `ROXYSU_CALC_BUNDLE_FILE` when `resources/calc-bundle.ndjson.gz` exists
-- `apps/desktop/scripts/after-pack.mjs` / `nix/package.nix` — stage the file into `resources/`
+- `apps/desktop/scripts/after-pack.mjs` / `apps/desktop/scripts/pack-linux-resources.mjs` / `nix/package.nix` — stage the file into `resources/`
 - `apps/server/src/routes/settings.ts` `POST /settings/calc-bundle/export-upload` — admin Hub upload

@@ -122,6 +122,16 @@ cpSync(
   path.join(bundleRoot, "resources", "realm-reader.tgz"),
 );
 
+const calcBundleSrc = path.join(desktopRoot, "pack/calc-bundle.ndjson.gz");
+if (existsSync(calcBundleSrc)) {
+  cpSync(calcBundleSrc, path.join(bundleRoot, "resources", "calc-bundle.ndjson.gz"));
+  log("shipped calc bundle → resources/calc-bundle.ndjson.gz");
+} else {
+  log(
+    "note: no apps/desktop/pack/calc-bundle.ndjson.gz — this release ships without a calc bundle file",
+  );
+}
+
 const nodeVersion = existsSync(path.join(stageDir, "node", "VERSION"))
   ? readFileSync(path.join(stageDir, "node", "VERSION"), "utf8").trim()
   : process.versions.node;

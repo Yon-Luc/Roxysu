@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-10-28
+last_verified: 2026-11
 confidence: verified
 touches:
   - packages/db/src/hub/schema.ts
@@ -17,6 +17,7 @@ touches:
   - apps/desktop/main.js
   - apps/desktop/scripts/after-pack.mjs
   - apps/desktop/scripts/build-pack.mjs
+  - apps/desktop/scripts/pack-linux-resources.mjs
   - nix/package.nix
   - knowledge/vocabulary.md
 ---
@@ -27,7 +28,7 @@ touches:
 
 One **Hub calc bundle** per Roxysu product version (e.g. `0.1.17`). Each bundle may include rows for `mania-difficulty` and `mania-skill-v1` only. Match clients to bundles by product version only — not by separate algorithm pins. Apply Hub rows into the local mirror by beatmap content hash. On a packaged install, a product-version bump **replaces** successful `mania-difficulty` and `mania-skill-v1` rows that the bundle contains; bundle algorithm rows the file does **not** contain are **dropped** (their content hash is not vouched for by the new formula, so the beatmap page must not keep showing the previous formula's star) and re-enter the missing-only rework backfill, which the server entry points start when the drop actually deleted rows. `bun desktop` leaves `ROXYSU_PACKAGED` unset, so the dev library is gap-filled only and is not replaced. A manual pull from Settings stays gap-fill on every install. Admin may upload for a future version before release. Public pull is killable via `HUB_CALC_BUNDLES=0`.
 
-**Packaged installs ship the bundle as a file and never call the Hub at boot.** Before packing a release, the admin generates the **Calc bundle file** for the upcoming version (`GET /settings/calc-bundle/export-file`), saves it as `apps/desktop/pack/calc-bundle.ndjson.gz`, and the release artifact stages it into `resources/`. At boot a packaged install reads that file (path passed via `ROXYSU_CALC_BUNDLE_FILE` from `apps/desktop/main.js`), validates its header version against `APP_VERSION`, applies it with the replace semantics above, and marks applied. A missing/unreadable/mismatched file still marks applied — the file cannot self-heal between boots — and logs a warning; **there is no Hub fallback on the packaged boot path by design.** Dev boots (`bun desktop`, `bun run dev`) keep the Hub pull as the only gap-fill source. The file cannot be regenerated for other users: only the release that shipped it carries its rows.
+**Packaged installs ship the bundle as a file and never call the Hub at boot.** Before packing a release, the admin generates the **Calc bundle file** for the upcoming version (`GET /settings/calc-bundle/export-file`), saves it as `apps/desktop/pack/calc-bundle.ndjson.gz` and commits that file (the rest of `apps/desktop/pack/` stays ignored) so the CI checkout can stage it into `resources/`. At boot a packaged install reads that file (path passed via `ROXYSU_CALC_BUNDLE_FILE` from `apps/desktop/main.js`), validates its header version against `APP_VERSION`, applies it with the replace semantics above, and marks applied. A missing/unreadable/mismatched file still marks applied — the file cannot self-heal between boots — and logs a warning; **there is no Hub fallback on the packaged boot path by design.** Dev boots (`bun desktop`, `bun run dev`) keep the Hub pull as the only gap-fill source. The file cannot be regenerated for other users: only the release that shipped it carries its rows.
 
 ## Reason
 
@@ -59,5 +60,5 @@ Packaged installs read a local file instead of pulling the Hub: the bundle is ve
 - `apps/server/src/routes/settings.ts` — `GET /settings/calc-bundle/export-file`
 - `apps/server/public/features/hub/HubAdminCalcBundlesPage.tsx` — admin export/upload/download
 - `apps/desktop/main.js` — `ROXYSU_CALC_BUNDLE_FILE` env passthrough
-- `apps/desktop/scripts/after-pack.mjs` — electron-builder staging; `nix/package.nix` — Nix staging
+- `apps/desktop/scripts/after-pack.mjs` — electron-builder staging; `apps/desktop/scripts/pack-linux-resources.mjs` — Linux resources tarball; `nix/package.nix` — from-source Nix staging
 - `apps/desktop/scripts/build-pack.mjs` — presence + header-version warning

@@ -384,6 +384,7 @@ in
         --set ELECTRON_SKIP_BINARY_DOWNLOAD "1" \
         --set ROXYSU_RESOURCES "$resources" \
         --set ROXYSU_NODE_BIN "${nodejs}/bin/node" \
+        --set ROXYSU_LIBRARY_PATH "${lib.makeLibraryPath nativeLibs}" \
         --set-default HUB_URL "https://roxysu-api.yonx.app" \
         --prefix LD_LIBRARY_PATH : "${lib.makeLibraryPath nativeLibs}" \
         --prefix PATH : "${lib.makeBinPath [nodejs]}"

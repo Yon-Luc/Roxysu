@@ -149,6 +149,11 @@ function resolveTsx(repoRoot, serverDir, realmDir) {
  */
 function spawnNodeEntry(paths, entry, cwd, extraEnv, label, nodeArgs = []) {
   const env = { ...process.env, ...extraEnv };
+  // Nix wrappers put Chromium libs on LD_LIBRARY_PATH. Node and its .node
+  // addons must see only libstdc++, zlib, openssl, and icu. Unset on dev
+  // and Windows, where the inherited path is the right one.
+  const libraryPath = process.env.ROXYSU_LIBRARY_PATH?.trim();
+  if (libraryPath) env.LD_LIBRARY_PATH = libraryPath;
   if (env.NODE_OPTIONS) desktopLog(`${label} NODE_OPTIONS=${env.NODE_OPTIONS}`);
 
   if (paths.isPackaged || entry.endsWith(".js")) {

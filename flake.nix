@@ -106,6 +106,7 @@
       inherit electron overlayBin;
       src = resourcesRoot;
       version = resourcesVersion;
+      nodejs_22 = pkgs.nodejs_22;
     };
 
     # Default: prebuilt (fast). From-source remains available for hacking the package.

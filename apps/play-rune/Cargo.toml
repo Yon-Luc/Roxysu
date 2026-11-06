@@ -1,0 +1,16 @@
+[package]
+name = "roxysu-play-rune"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.87"
+description = "Experimental Roxysu Play Rune prototype (overlay + fake telemetry)"
+license = "MIT"
+publish = false
+
+[[bin]]
+name = "roxysu-play-rune"
+path = "src/main.rs"
+
+[dependencies]
+# Pin recorded in docs/rune-migration/rune-pin.md — do not float on a branch name.
+rune = { git = "https://github.com/anomalyco/rune", rev = "a57ffe07a05bdd1920908e6f97db91ceadea5bcc" }

@@ -138,7 +138,8 @@
     # Install into PATH + app menu: nix profile install github:Yon-Luc/Roxysu
     #   or on NixOS: programs.roxysu.enable (see nixosModules above).
     devShells.${system}.default = pkgs.mkShell {
-      # GTK/webkit/layer-shell: builds apps/overlay-rs. gpuixRuntimeDeps: dlopen for apps/play.
+      # GTK/webkit/layer-shell: builds apps/overlay-rs. gpuixRuntimeDeps: dlopen for apps/play
+      # and apps/play-rune (wgpu / winit Wayland+Vulkan).
       buildInputs =
         [
           pkgs.bun
@@ -149,12 +150,17 @@
           pkgs.gtk4-layer-shell
           pkgs.webkitgtk_6_0
           pkgs.wayland
+          pkgs.wayland-protocols
+          pkgs.libxkbcommon
+          pkgs.vulkan-loader
+          pkgs.shaderc
           pkgs.zenity
           pkgs.rustc
           pkgs.cargo
           pkgs.rustfmt
           pkgs.clippy
           pkgs.fontconfig
+          pkgs.pkg-config
         ]
         ++ nativeDeps
         ++ gpuixRuntimeDeps;
@@ -190,6 +196,7 @@
         echo "Refresh a github:Yon-Luc/Roxysu input: nix flake update --refresh"
         echo "From-source fallback: nix build .#roxysu-from-source"
         echo "Roxysu Play (GPUIX): bun run play"
+        echo "Roxysu Play Rune prototype: bun run play:rune"
       '';
     };
   };

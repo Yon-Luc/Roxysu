@@ -649,13 +649,15 @@ no client app required.
 Experimental native desktop shell for Roxysu UI experiments, built with
 **GPUIX** (React reconciler → Zed's GPUI). Renders via Metal / DirectX /
 Vulkan — no Electron and no web view. Lives in `apps/play`; not part of the
-client app process model yet.
+client app process model yet. An isolated Rune feasibility prototype lives in
+`apps/play-rune` and does not replace the GPUIX shell.
 
-**Not:** `apps/desktop` (Electron shell), client app React UI in `apps/server/public`
+**Not:** `apps/desktop` (Electron shell), client app React UI in `apps/server/public`,
+**In-game overlay** (`apps/overlay-rs`)
 
-**In code:** `apps/play/`, `@gpuix/react`
+**In code:** `apps/play/`, `@gpuix/react`; prototype `apps/play-rune/`
 
-**See:** [features/roxysu-play/](features/roxysu-play/index.md)
+**See:** [features/roxysu-play/](features/roxysu-play/index.md), `docs/rune-migration/`
 
 ---
 

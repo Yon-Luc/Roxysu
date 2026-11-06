@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-10
+last_verified: 2026-11
 confidence: verified
 touches:
   - apps/play/
@@ -10,6 +10,8 @@ touches:
   - apps/play/src/assets/
   - apps/play/package.json
   - apps/play/scripts/dev.sh
+  - apps/play-rune/
+  - docs/rune-migration/
   - flake.nix
   - package.json
 ---
@@ -20,6 +22,12 @@ touches:
 
 Native GPU-accelerated playground for Roxysu UI, using GPUIX (React bindings
 for Zed's GPUI). Exists to explore a non-Electron desktop surface.
+
+A separate **Rune prototype** (`apps/play-rune`) evaluates whether the Rune
+native UI framework can host transparent / topmost / click-through overlays on
+Wayland. It does **not** replace GPUIX Roxysu Play and must not be treated as
+the product shell until a documented go decision. Migration notes live under
+`docs/rune-migration/`.
 
 ## Business meaning
 
@@ -38,6 +46,9 @@ until explicitly promoted.
 6. Song select narrows a Realm collection to mania beatmaps of the selected key count in one query: ruleset short name and `circle_size` are conditions on the join that resolves collection hashes to beatmap ids. It does not look beatmaps up one by one.
    **Status:** verified
    **Enforced by:** `apps/play/src/database/CollectionRepository.ts:getRealmBeatmapIds()` called from `apps/play/src/songselect/SongSelect.ts`; test `apps/play/src/songselect/SongSelect.test.ts`
+7. The Rune prototype must stay isolated from GPUIX Play: no shared process, and Rune must not write Realm or replace `play_*` persistence until explicitly promoted.
+   **Status:** verified
+   **Enforced by:** separate crate `apps/play-rune` (binary `roxysu-play-rune`); root script `bun run play:rune`
 
 ## Security rules
 
@@ -105,6 +116,8 @@ bun --hot apps/play/src/app.tsx
 - `apps/play/src/assets/LazerAssetResolver.ts` — hash → lazer `files/` path resolution
 - `apps/play/src/test.tsx` — legacy VSRG benchmark (preserved)
 - `flake.nix` — `gpuixRuntimeDeps`, `runtimeLibraryPath`
+- `apps/play-rune/` — isolated Rune overlay + fake telemetry prototype (pinned Rune git rev)
+- `docs/rune-migration/` — baseline, acceptance criteria, pin, platform matrix
 
 ## UI component architecture
 
@@ -140,6 +153,7 @@ DialogViewport (FloatingLayer, sideOffset 0, full-window flex-centered)
 
 - `@gpuix/react` / `@gpuix/native` (npm)
 - Nix flake runtime libs on NixOS (Wayland, Vulkan, X11, libxkbcommon, …)
+- Rune prototype only: `rune` crate pinned in `apps/play-rune/Cargo.toml` (see `docs/rune-migration/rune-pin.md`)
 
 ## Depended on by
 
@@ -149,13 +163,20 @@ DialogViewport (FloatingLayer, sideOffset 0, full-window flex-centered)
 
 Opens a native OS window; quits when the last window closes (GPUIX default).
 
+Rune prototype opens a control window plus per-display overlay surfaces; closing
+the control window closes overlays. Does not spawn or replace the **In-game overlay**
+host (`apps/overlay-rs`).
+
 ## Failure behavior
 
 - NixOS without flake env + Wayland session → `NoWaylandLib` panic at init.
 - Workaround without flake: unset `WAYLAND_DISPLAY` to force X11 (if X11 libs resolve).
+- Rune prototype: unsupported click-through logs `click-through: …` and continues.
 
 ## Related knowledge
 
-- [vocabulary.md](../../vocabulary.md) — **Roxysu Play**
+- [vocabulary.md](../../vocabulary.md) — **Roxysu Play**, **In-game overlay**
 - [architecture/tech-stack.md](../../architecture/tech-stack.md)
 - [desktop/](../desktop/index.md) — Electron shell (different stack)
+- [in-game-overlay/](../in-game-overlay/index.md) — production Wayland overlay host (not the Rune prototype)
+- `docs/rune-migration/` — migration baseline and platform matrix

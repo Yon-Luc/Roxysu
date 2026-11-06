@@ -30,6 +30,7 @@ Offline-first practice analytics for osu!lazer. Source of truth for **how** is t
 | `packages/i18n`, `hub-client` | i18n + typed hub client |
 | `apps/tosu-counter` | Standalone mania notefield **Tosu counter** (no client app needed) |
 | `apps/play` | **Roxysu Play** — experimental GPUIX native UI (no Electron) |
+| `apps/play-rune` | Rune overlay feasibility prototype for Roxysu Play (does not replace GPUIX) |
 
 ## Bootstrap note
 

@@ -9,6 +9,8 @@
  * Auto Gauge (`AG`) is the ruleset's stored marker for a resolved Normal gauge.
  */
 
+import { parseScoreStatisticsDetailed } from "./scoreStatistics";
+
 export const BMS_RULESET = "bms";
 
 /** Mods that change competitive comparability. Gauge mods are not in this set. */
@@ -82,25 +84,8 @@ export type BmsInterpretation = {
   autoplay: boolean;
 };
 
-function readCount(raw: Record<string, unknown>, key: string): number | null {
-  if (!(key in raw)) return null;
-  const value = raw[key];
-  const n = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(n) || n < 0) return null;
-  return Math.floor(n);
-}
-
-function parseObject(raw: string | null | undefined): Record<string, unknown> | null {
-  if (raw == null || raw.trim() === "") return null;
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return null;
-    }
-    return parsed as Record<string, unknown>;
-  } catch {
-    return null;
-  }
+function countOrNull(present: boolean, value: number): number | null {
+  return present ? value : null;
 }
 
 export function parseModAcronyms(mods: string | null | undefined): string[] {
@@ -226,16 +211,16 @@ export function interpretBmsScore(input: {
   totalScore: number;
   accuracy: number;
 }): BmsInterpretation {
-  const stats = parseObject(input.statistics);
-  const maximum = parseObject(input.maximumStatistics);
+  const stats = parseScoreStatisticsDetailed(input.statistics);
+  const maximum = parseScoreStatisticsDetailed(input.maximumStatistics);
   const judgements: BmsJudgements = stats
     ? {
-        pgreat: readCount(stats, "perfect"),
-        great: readCount(stats, "great"),
-        good: readCount(stats, "good"),
-        bad: readCount(stats, "ok"),
-        poor: readCount(stats, "meh"),
-        miss: readCount(stats, "miss"),
+        pgreat: countOrNull(stats.present.perfect, stats.judgments.perfect),
+        great: countOrNull(stats.present.great, stats.judgments.great),
+        good: countOrNull(stats.present.good, stats.judgments.good),
+        bad: countOrNull(stats.present.ok, stats.judgments.ok),
+        poor: countOrNull(stats.present.meh, stats.judgments.meh),
+        miss: countOrNull(stats.present.miss, stats.judgments.miss),
         ePoor: null,
       }
     : {
@@ -252,7 +237,9 @@ export function interpretBmsScore(input: {
     judgements.pgreat == null && judgements.great == null
       ? null
       : (judgements.pgreat ?? 0) * 2 + (judgements.great ?? 0);
-  const maxPerfect = maximum ? readCount(maximum, "perfect") : null;
+  const maxPerfect = maximum
+    ? countOrNull(maximum.present.perfect, maximum.judgments.perfect)
+    : null;
   const maxExScore = maxPerfect == null ? null : maxPerfect * 2;
   const acronyms = parseModAcronyms(input.mods);
   const accuracy = Number.isFinite(input.accuracy) ? input.accuracy : 0;

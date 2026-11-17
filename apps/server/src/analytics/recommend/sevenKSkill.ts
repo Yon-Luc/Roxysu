@@ -449,9 +449,9 @@ function coldStartFromPlays(
   const ln = weightedMean(lnPoints);
   const fln = weightedMean(flnPoints);
   const overall = allPoints.length > 0 ? weightedMean(allPoints) : 0;
-  const comfortRc = rc > 0 ? rc : overall;
-  const comfortLn = ln > 0 ? ln : overall;
-  const comfortFln = fln > 0 ? fln : overall;
+  const comfortRc = rc;
+  const comfortLn = ln;
+  const comfortFln = fln;
   return emptySkill({
     overall,
     rc: comfortRc,
@@ -535,9 +535,9 @@ function coldStartFromMastery(
   const ln = weightedMean(lnPoints);
   const fln = weightedMean(flnPoints);
   const overall = allPoints.length > 0 ? weightedMean(allPoints) : 0;
-  const comfortRc = rc > 0 ? rc : overall;
-  const comfortLn = ln > 0 ? ln : overall;
-  const comfortFln = fln > 0 ? fln : overall;
+  const comfortRc = rc;
+  const comfortLn = ln;
+  const comfortFln = fln;
   return emptySkill({
     overall,
     rc: comfortRc,
@@ -699,9 +699,9 @@ export function estimateSevenKSkillFromPlays(
   const ln = weightedMean(lnPoints);
   const fln = weightedMean(flnPoints);
   const overall = weightedMean(allPoints);
-  const comfortRc = rc > 0 ? rc : overall;
-  const comfortLn = ln > 0 ? ln : overall;
-  const comfortFln = fln > 0 ? fln : overall;
+  const comfortRc = rc;
+  const comfortLn = ln;
+  const comfortFln = fln;
 
   return applyBandLevels(
     emptySkill({
@@ -1019,9 +1019,9 @@ export function skillForAxis(
     return skill.consistencyLn;
   }
   if (!axis || axis === "overall") return skill.overall;
-  if (axis === "rc") return skill.rc > 0 ? skill.rc : skill.overall;
-  if (axis === "fln") return skill.fln > 0 ? skill.fln : skill.overall;
-  return skill.ln > 0 ? skill.ln : skill.overall;
+  if (axis === "rc") return skill.rc;
+  if (axis === "fln") return skill.fln;
+  return skill.ln;
 }
 
 /** Weaker of RC/LN/FLN comfort skills (ties prefer fewer sample plays). */
@@ -1030,17 +1030,17 @@ export function weakestAxis(skill: SevenKSkillProfile): MapAxis {
     [
       {
         axis: "rc" as const,
-        value: skill.rc > 0 ? skill.rc : skill.overall,
+        value: skill.rc,
         plays: skill.rcPlays,
       },
       {
         axis: "ln" as const,
-        value: skill.ln > 0 ? skill.ln : skill.overall,
+        value: skill.ln,
         plays: skill.lnPlays,
       },
       {
         axis: "fln" as const,
-        value: skill.fln > 0 ? skill.fln : skill.overall,
+        value: skill.fln,
         plays: skill.flnPlays,
       },
     ] satisfies Array<{ axis: MapAxis; value: number; plays: number }>

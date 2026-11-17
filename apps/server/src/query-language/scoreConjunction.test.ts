@@ -69,7 +69,7 @@ describe("score conjunction compile", () => {
 
   test("misses, score, and pp aggregate over the same mod set", () => {
     expect(compiled("mod:IN misses<5").sql).toContain(
-      "MIN(CAST(json_extract(s.statistics, '$.miss') AS INTEGER))",
+      "MIN(CASE",
     );
     expect(compiled("mod:IN score>=900000").sql).toContain("MAX(s.total_score)");
     expect(compiled("mod:IN pp>=200").sql).toContain("MAX(s.pp)");

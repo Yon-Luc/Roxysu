@@ -154,15 +154,15 @@ export function DashboardPage() {
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Stat
-              label={dict?.dashboard.playsToday ?? "Plays today"}
+              label={dict?.dashboard.playsToday ?? "Plays today (UTC)"}
               value={snapshot.playsToday.toLocaleString()}
             />
             <Stat
-              label={dict?.dashboard.playsLast7Days ?? "Last 7 days"}
+              label={dict?.dashboard.playsLast7Days ?? "Last 7 days (UTC)"}
               value={snapshot.playsLast7Days.toLocaleString()}
             />
             <Stat
-              label={dict?.dashboard.activeDayStreak ?? "Active-day streak"}
+              label={dict?.dashboard.activeDayStreak ?? "Active-day streak (UTC)"}
               value={snapshot.activeDayStreak.toLocaleString()}
             />
             {lastClosed ? (

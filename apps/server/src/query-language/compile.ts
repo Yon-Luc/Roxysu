@@ -1,4 +1,5 @@
 import { expandReworkDanMatch, isShapeLabel } from "@roxysu/mania-difficulty";
+import { scoreMissCountSql } from "@roxysu/db/score-statistics";
 import type { AstNode, FieldTerm } from "./ast";
 import {
   foldScoreConjunctions,
@@ -437,7 +438,7 @@ function metricHaving(term: FieldTerm, params: unknown[]): string | null {
   }
   if (term.type === "misses") {
     return havingNumeric(
-      "MIN(CAST(json_extract(s.statistics, '$.miss') AS INTEGER))",
+      `MIN(${scoreMissCountSql("s.statistics")})`,
       term,
       push,
     );

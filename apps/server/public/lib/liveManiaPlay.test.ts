@@ -5,12 +5,12 @@ import { judgeError, maniaHitWindows } from "./maniaWindows";
 describe("maniaHitWindows", () => {
   test("matches server OD8 windows", () => {
     const w = maniaHitWindows(8);
-    expect(w.perfect).toBe(16);
-    expect(w.great).toBe(40);
-    expect(w.good).toBe(73);
-    expect(w.ok).toBe(103);
-    expect(w.meh).toBe(127);
-    expect(w.miss).toBe(154);
+    expect(w.perfect).toBe(16.5);
+    expect(w.great).toBe(40.5);
+    expect(w.good).toBe(73.5);
+    expect(w.ok).toBe(103.5);
+    expect(w.meh).toBe(127.5);
+    expect(w.miss).toBe(164.5);
   });
 
   test("judgeError picks tightest window", () => {
@@ -25,6 +25,16 @@ describe("maniaHitWindows", () => {
 });
 
 describe("LiveManiaPlay", () => {
+  test("EZ uses the halved OD windows", () => {
+    const play = new LiveManiaPlay({
+      notes: [{ column: 0, startMs: 1000, endMs: 1000 }],
+      columnCount: 4,
+      overallDifficulty: 8,
+      hitWindows: { easy: true },
+    });
+    expect(play.windows).toEqual(maniaHitWindows(4));
+  });
+
   test("perfect press on a tap", () => {
     const play = new LiveManiaPlay({
       notes: [{ column: 0, startMs: 1000, endMs: 1000 }],

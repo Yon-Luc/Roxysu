@@ -6,11 +6,7 @@ import {
   type JudgmentResult,
   type JudgmentSummary,
 } from "./windows";
-import {
-  adjustOverallDifficulty,
-  scaleManiaHitWindows,
-  type ModAcronyms,
-} from "./mods";
+import { toHitWindowOptions, type ModAcronyms } from "./mods";
 
 export type ReplayFrame = {
   /** Map-clock time in milliseconds. */
@@ -58,8 +54,10 @@ export function simulateManiaJudgments(args: {
   mods: ModAcronyms;
 }): { judgments: ReplayJudgment[]; summary: JudgmentSummary } {
   const { frames, columnCount, mods } = args;
-  const od = adjustOverallDifficulty(args.overallDifficulty, mods);
-  const windows = scaleManiaHitWindows(maniaHitWindows(od), mods.rate);
+  const windows = maniaHitWindows(
+    args.overallDifficulty,
+    toHitWindowOptions(mods),
+  );
   const missWindow = windows.miss;
 
   const notes: NoteState[] = args.notes.map((n, index) => {

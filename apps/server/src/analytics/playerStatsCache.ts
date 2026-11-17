@@ -19,10 +19,10 @@ export function playerStatsCacheKey(parts: {
   /** Resolved gamemode filter; null/omit = all. */
   gamemode?: string | null;
 }): string {
-  // v6: all-time span — range removed from the key (v5 keys were per-range).
+  // v7: graded skill candidates, map-based skillset mix, gap-filled accuracy.
   const user = parts.username ?? "*";
   const mode = parts.gamemode ?? "*";
-  return `v6:${user}:${mode}:${parts.granularity}:${parts.skillTopPlays}:k${parts.keyCount}`;
+  return `v7:${user}:${mode}:${parts.granularity}:${parts.skillTopPlays}:k${parts.keyCount}`;
 }
 
 export function getCachedPlayerStats<T>(key: string): T | null {

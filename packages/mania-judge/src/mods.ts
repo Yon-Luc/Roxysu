@@ -1,9 +1,15 @@
+import type { ManiaHitWindowOptions } from "./windows";
+
 export type ModAcronyms = {
   acronyms: string[];
   rate: number;
   mirror: boolean;
   easy: boolean;
   hardRock: boolean;
+  /** Classic (CL): stable hit windows, unless ScoreV2 is also active. */
+  classic: boolean;
+  /** ScoreV2 (SV2 or V2): Classic then uses the default lazer window curve. */
+  scoreV2: boolean;
   /** Invert (IN): rice converted to inverted full LNs. */
   invert: boolean;
   /** Hold Off (HO): long notes flattened to rice. */
@@ -89,6 +95,8 @@ export function parseScoreMods(mods: string | null | undefined): ModAcronyms {
     mirror: set.has("MR"),
     easy: set.has("EZ"),
     hardRock: set.has("HR"),
+    classic: set.has("CL"),
+    scoreV2: set.has("SV2") || set.has("V2"),
     invert: set.has(INVERT_ACRONYM),
     holdOff: set.has(HOLD_OFF_ACRONYM),
   };
@@ -147,6 +155,17 @@ export function isNomodOrMirrorOnly(mods: string | null | undefined): boolean {
   );
 }
 
+/** Hit-window options for a parsed score. Convert is not a mod. */
+export function toHitWindowOptions(mods: ModAcronyms): ManiaHitWindowOptions {
+  return {
+    classic: mods.classic,
+    scoreV2: mods.scoreV2,
+    rate: mods.rate,
+    easy: mods.easy,
+    hardRock: mods.hardRock,
+  };
+}
+
 export function adjustOverallDifficulty(
   od: number,
   mods: ModAcronyms,
@@ -158,8 +177,10 @@ export function adjustOverallDifficulty(
 }
 
 /**
- * Scale mania hit windows for a playback rate mod.
- * Matches lazer mania: windows grow/shrink in map-time so real-world len stays stable.
+ * Scale already-built window widths by a playback rate.
+ * `maniaHitWindows` applies rate itself (`floor(width * rate) + 0.5`).
+ * Use this only when the widths are still the unscaled curve.
+ * Rate 1 returns the same object.
  */
 export function scaleManiaHitWindows<T extends Record<string, number>>(
   windows: T,

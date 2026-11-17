@@ -15,24 +15,117 @@ export type HitWindows = {
   miss: number;
 };
 
-/** Standard (non-convert) mania hit windows from OD. Values are half-widths in ms. */
-export function maniaHitWindows(od: number): HitWindows {
-  const trunc = (n: number) => Math.trunc(n);
+/**
+ * Mods that change lazer mania hit windows.
+ * Classic without ScoreV2 uses the stable curve. Classic with ScoreV2, and
+ * every non-Classic score, uses the default DifficultyRange curve.
+ * `convert` only changes the Classic (non-ScoreV2) curve.
+ * `rate` is the playback speed (DT/HT); windows scale in map time.
+ * EZ/HR adjust overall difficulty before the curve (EZ ×0.5, HR ×1.4, cap 10).
+ */
+export type ManiaHitWindowOptions = {
+  classic?: boolean;
+  scoreV2?: boolean;
+  convert?: boolean;
+  rate?: number;
+  easy?: boolean;
+  hardRock?: boolean;
+};
+
+/** osu! DifficultyRange: min at OD 0, mid at OD 5, max at OD 10. */
+function difficultyRange(
+  difficulty: number,
+  min: number,
+  mid: number,
+  max: number,
+): number {
+  if (difficulty > 5) return mid + ((max - mid) * (difficulty - 5)) / 5;
+  if (difficulty < 5) return mid + ((mid - min) * (difficulty - 5)) / 5;
+  return mid;
+}
+
+function adjustedOd(od: number, options: ManiaHitWindowOptions): number {
+  let next = od;
+  if (options.hardRock) next = Math.min(10, next * 1.4);
+  if (options.easy) next = next * 0.5;
+  return next;
+}
+
+function rateMultiplier(rate: number | undefined): number {
+  if (rate == null || !Number.isFinite(rate) || rate <= 0) return 1;
+  return rate;
+}
+
+/**
+ * Lazer mania hit windows (`ManiaHitWindows.updateWindows`).
+ * Half-widths in milliseconds, always `floor(width * rate) + 0.5`.
+ */
+export function maniaHitWindows(
+  od: number,
+  options: ManiaHitWindowOptions = {},
+): HitWindows {
+  const difficulty = adjustedOd(od, options);
+  const multiplier = rateMultiplier(options.rate);
+  const scale = (width: number) => Math.floor(width * multiplier) + 0.5;
+  const classic = Boolean(options.classic) && !options.scoreV2;
+
+  if (classic && options.convert) {
+    const rounded = Math.round(difficulty);
+    return {
+      perfect: scale(16),
+      great: scale(rounded > 4 ? 34 : 47),
+      good: scale(rounded > 4 ? 67 : 77),
+      ok: scale(97),
+      meh: scale(121),
+      miss: scale(158),
+    };
+  }
+
+  if (classic) {
+    const invertedOd = Math.min(10, Math.max(0, 10 - difficulty));
+    return {
+      perfect: scale(16),
+      great: scale(34 + 3 * invertedOd),
+      good: scale(67 + 3 * invertedOd),
+      ok: scale(97 + 3 * invertedOd),
+      meh: scale(121 + 3 * invertedOd),
+      miss: scale(158 + 3 * invertedOd),
+    };
+  }
+
   return {
-    perfect: 16,
-    great: trunc(64 - 3 * od),
-    good: trunc(97 - 3 * od),
-    ok: trunc(127 - 3 * od),
-    meh: trunc(151 - 3 * od),
-    miss: trunc(178 - 3 * od),
+    perfect: scale(difficultyRange(difficulty, 22.4, 19.4, 13.9)),
+    great: scale(difficultyRange(difficulty, 64, 49, 34)),
+    good: scale(difficultyRange(difficulty, 97, 82, 67)),
+    ok: scale(difficultyRange(difficulty, 127, 112, 97)),
+    meh: scale(difficultyRange(difficulty, 151, 136, 121)),
+    miss: scale(difficultyRange(difficulty, 188, 173, 158)),
   };
 }
 
+/** Stable identity for a window set, used to rebuild a live judge. */
+export function maniaHitWindowKey(
+  od: number,
+  options: ManiaHitWindowOptions = {},
+): string {
+  return [
+    od,
+    options.classic ? 1 : 0,
+    options.scoreV2 ? 1 : 0,
+    options.convert ? 1 : 0,
+    options.rate ?? 1,
+    options.easy ? 1 : 0,
+    options.hardRock ? 1 : 0,
+  ].join("|");
+}
+
+/** Compare a hit error (ms, sign ignored) to lazer half-windows. */
 export function judgeError(
   absError: number,
   windows: HitWindows,
 ): JudgmentResult {
-  const err = Math.round(absError);
+  const err = Math.abs(absError);
+  if (!Number.isFinite(err)) return "miss";
   if (err <= windows.perfect) return "perfect";
   if (err <= windows.great) return "great";
   if (err <= windows.good) return "good";

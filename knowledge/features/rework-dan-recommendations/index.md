@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-10-28
+last_verified: 2026-11-28
 confidence: verified
 touches:
   - packages/mania-difficulty
@@ -60,6 +60,8 @@ Product writes use `algorithm = 'mania-difficulty'` (rework dan). Legacy Sunny/D
    (`recommend.focus_settings`, Customize tab). Defaults: Push closed
    90–95% band targeting 100% ±8% of that band’s skill; Accuracy 99%+;
    Consistency 96–99%; Deficit at weak-axis comfort skill ±10%.
+   An axis with no plays keeps comfort 0 and is skipped by `weakestAxis`
+   instead of inheriting overall skill.
    **Enforced by:** `readFocusSettingsSync` / `estimateSevenKSkillFromPlays` /
    `recommendPush|Accuracy|Consistency|Deficit` in
    `apps/server/src/analytics/recommend/focusSettings.ts` + `sevenKSkill.ts` +

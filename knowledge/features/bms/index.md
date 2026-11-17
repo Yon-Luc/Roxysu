@@ -1,8 +1,9 @@
 ---
-last_verified: 2026-10
+last_verified: 2026-11
 confidence: verified
 touches:
   - packages/db/src/bmsInterpret.ts
+  - packages/db/src/scoreStatistics.ts
   - packages/db/src/schema.ts
   - packages/db/drizzle/0028_bms.sql
   - apps/server/src/bms/derive.ts
@@ -34,8 +35,9 @@ BMS is a ruleset already present in the local mirror. This feature interprets th
 
 ## Business rules
 
-1. EX score is `perfect * 2 + great`. Max EX is `maximum_statistics.perfect * 2`. Normalized score is the stored total score.
+1. EX score is `perfect * 2 + great`. Max EX is `maximum_statistics.perfect * 2`. Normalized score is the stored total score. Judgment keys are read as lowercase, PascalCase, or HitResult integers (`perfect`/`Perfect`/`6`, miss is `1`). A missing miss/bad/poor key stays null, so a lamp is not awarded just because the writer omitted a zero.
    **Status:** verified
+   **Enforced by:** `packages/db/src/scoreStatistics.ts` and `interpretBmsScore`
 2. A BMS variant is the sorted partitioning mods. Gauge mods stay a separate field. No gauge mod stays null. Stored `AG` means Normal.
    **Status:** verified
 3. Combo lamps come only from judgement counts. A missing bad, poor, or miss count stays a null lamp. Clear lamps stay null. Rank is the DJ grade, not a clear.

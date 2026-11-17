@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-10
+last_verified: 2026-11
 confidence: verified
 touches:
   - apps/server/src/analytics/session.ts
@@ -55,7 +55,7 @@ Live sessions keep the **Current session** label in headings; the generated name
 11. The Current session **Now selected** panel shows ephemeral tosu `analysis.rework` (Rework dan).
 12. Sessions list page keeps the current-session CTA at the top, then recent sessions (default **7**), then a GitHub-style activity calendar from `daily_stats` (~53 weeks UTC). The CTA uses the same panel as Home. The calendar says that a day click filters the list above.
 13. `GET /api/sessions` returns `{ current, items, activity }` where `activity` is `{ day, playCount }[]` from `getDailyActivity` (missing days = 0 plays in the UI).
-14. Clicking a calendar day filters the list to sessions whose `startedAt` falls on that UTC day (`YYYY-MM-DD`). Clicking the day again or **Show all** clears the filter. With no day selected, **Show all** expands beyond the default 7 (API still caps `items` at 100).
+14. Clicking a calendar day loads sessions whose `startedAt` falls on that UTC day (`GET /api/sessions?day=YYYY-MM-DD`, cap 50), including days outside the latest 100 sessions. Clicking the day again or **Show all** clears the filter. With no day selected, **Show all** expands beyond the default 7 (that list still caps `items` at 100).
 15. Session detail score lists use shared `ScoreCard` (`variant="beatmap"`) with map cover, judgments, and PB comparison. A submitted score (`online_id` > 0) shows **Share link**, which copies `https://osu.ppy.sh/scores/{onlineId}`. Unsubmitted scores (`-1` or `0`) do not.
 16. Each session score may include `judgments` (from `scores.statistics`) and `pbCompare`:
     - when `isPb` — previous best on that beatmap (`kind: "previous"`), if one exists

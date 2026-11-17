@@ -5,7 +5,7 @@ import {
   capitalizeSessionName,
   generateSessionName,
 } from "@roxysu/session-names";
-import { and, asc, count, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { publish } from "../shared/events";
 import { REWORK_ALGORITHM } from "../map-analysis/reworkEstimator";
 import {
@@ -637,6 +637,26 @@ export async function countSessionPbs(db: Db, sessionId: number): Promise<number
       ),
     );
   return Number(row?.n ?? 0);
+}
+
+const UTC_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Sessions whose start falls on a UTC day. Capped; not the recent-100 list. */
+export async function listSessionsOnUtcDay(db: Db, day: string, limit = 50) {
+  if (!UTC_DAY.test(day)) return [];
+  const start = new Date(`${day}T00:00:00.000Z`);
+  if (Number.isNaN(start.getTime())) return [];
+  const end = new Date(start.getTime() + 86_400_000);
+  const rows = await db
+    .select()
+    .from(sessions)
+    .where(and(gte(sessions.startedAt, start), lt(sessions.startedAt, end)))
+    .orderBy(desc(sessions.startedAt))
+    .limit(limit);
+  return rows.map((row) => ({
+    ...row,
+    name: sessionDisplayName(row),
+  }));
 }
 
 export async function listSessions(db: Db, limit = 50) {

@@ -13,6 +13,7 @@
     "./settings-keys": "./src/settings-keys.ts",
     "./stale-imports": "./src/failStaleRunningImports.ts",
     "./bms": "./src/bmsInterpret.ts",
+    "./score-statistics": "./src/scoreStatistics.ts",
     "./bms-tables": "./src/bmsTables.ts",
     "./path": "./src/path.ts"
   },

@@ -23,19 +23,20 @@ export function SessionsPage() {
   const [showAll, setShowAll] = useState(false);
   const { data, isLoading, error } = useQuery({
     queryKey: ["sessions"],
-    queryFn: fetchSessions,
+    queryFn: () => fetchSessions(),
+  });
+  const dayQuery = useQuery({
+    queryKey: ["sessions", "day", selectedDay],
+    queryFn: () => fetchSessions(selectedDay!),
+    enabled: selectedDay != null,
   });
 
   const visibleItems = useMemo(() => {
     if (!data) return [];
-    if (selectedDay) {
-      return data.items.filter(
-        (s) => sessionStartedUtcDay(s.startedAt) === selectedDay,
-      );
-    }
+    if (selectedDay) return dayQuery.data?.items ?? [];
     if (showAll) return data.items;
     return data.items.slice(0, DEFAULT_VISIBLE);
-  }, [data, selectedDay, showAll]);
+  }, [data, dayQuery.data, selectedDay, showAll]);
 
   if (isLoading) {
     return (
@@ -162,7 +163,11 @@ export function SessionsPage() {
           ) : null}
         </div>
 
-        {data.items.length === 0 ? (
+        {selectedDay && dayQuery.isLoading ? (
+          <p className="text-sm text-muted">
+            {dict?.session.loadingDay ?? "Loading sessions…"}
+          </p>
+        ) : data.items.length === 0 ? (
           <p className="text-sm text-muted">{dict?.session.noSessionsYet}</p>
         ) : visibleItems.length === 0 ? (
           <p className="text-sm text-muted">

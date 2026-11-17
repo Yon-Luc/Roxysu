@@ -2,11 +2,13 @@ import {
   accuracyFromCounts,
   emptyJudgmentCounts,
   judgeError,
+  maniaHitWindowKey,
   maniaHitWindows,
   type HitWindows,
   type JudgmentCounts,
   type JudgmentResult,
   type JudgmentSummary,
+  type ManiaHitWindowOptions,
 } from "./maniaWindows";
 
 export type LiveNote = {
@@ -48,6 +50,7 @@ const HOLD_EPS_MS = 20;
 export class LiveManiaPlay {
   readonly columnCount: number;
   readonly overallDifficulty: number;
+  readonly windowKey: string;
   readonly windows: HitWindows;
   private readonly missWindow: number;
   private readonly notes: NoteState[];
@@ -65,11 +68,17 @@ export class LiveManiaPlay {
     columnCount: number;
     overallDifficulty: number;
     practiceRange?: PracticeRange | null;
+    /** Score mods that change windows. Omitted for nomod practice. */
+    hitWindows?: ManiaHitWindowOptions;
   }) {
     const { columnCount, practiceRange } = args;
     this.columnCount = Math.max(1, columnCount);
     this.overallDifficulty = args.overallDifficulty;
-    this.windows = maniaHitWindows(args.overallDifficulty);
+    this.windowKey = maniaHitWindowKey(
+      args.overallDifficulty,
+      args.hitWindows,
+    );
+    this.windows = maniaHitWindows(args.overallDifficulty, args.hitWindows);
     this.missWindow = this.windows.miss;
 
     const filtered = args.notes

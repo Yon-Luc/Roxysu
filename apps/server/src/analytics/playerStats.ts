@@ -106,6 +106,19 @@ function dayKey(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+function utcDayIndex(ms: number): number {
+  const d = new Date(ms);
+  return Math.floor(
+    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) / 86_400_000,
+  );
+}
+
+function addUtcDays(day: string, delta: number): string {
+  const d = new Date(`${day}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
 function weekStartKey(d: Date): string {
   const copy = new Date(
     Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()),
@@ -385,7 +398,7 @@ function streamManiaPass(
       pass.byMapper.set(mapperKey, cur);
     }
 
-    if (!row.hidden && row.beatmapId != null) {
+    if (graded && !row.hidden && row.beatmapId != null) {
       pass.candidates.push({
         beatmapId: row.beatmapId,
         mods: row.mods,
@@ -476,9 +489,16 @@ function getSkillsetMix(
   let rc = 0;
   let ln = 0;
   let fln = 0;
+  const seen = new Set<string>();
   for (const play of plays) {
     const rating = danRatingFor(play, variantOf);
     if (!rating) continue;
+    const variant = resolveDanVariant(play.mods);
+    const key = variant
+      ? `${play.beatmapId}|${variant.rate}|${variant.lnOnly ? 1 : 0}`
+      : `${play.beatmapId}|nm`;
+    if (seen.has(key)) continue;
+    seen.add(key);
     const axis = classifyMapAxis(rating.lnRatio, thresholds);
     if (axis === "fln") fln += 1;
     else if (axis === "ln") ln += 1;
@@ -779,13 +799,14 @@ function getKeymodeProgression(
       playCount: b.playCount,
     }));
 
-  const accuracyTrend = [...daily.entries()]
+  const playedDays = [...daily.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([day, b]) => ({
       day,
       avgAccuracy: b.accCount > 0 ? b.accSum / b.accCount : null,
       playCount: b.playCount,
     }));
+  const accuracyTrend = fillIdleAccuracyDays(playedDays);
 
   const weeklyActivity = [...weekly.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
@@ -793,10 +814,38 @@ function getKeymodeProgression(
       weekStart,
       playCount: b.playCount,
       totalPp: b.totalPp,
-      avgAccuracy: b.playCount > 0 ? b.accSum / b.playCount : null,
+      avgAccuracy: b.accCount > 0 ? b.accSum / b.accCount : null,
     }));
 
   return { ppTrend, accuracyTrend, weeklyActivity };
+}
+
+function fillIdleAccuracyDays(
+  points: Array<{
+    day: string;
+    avgAccuracy: number | null;
+    playCount: number;
+  }>,
+) {
+  if (points.length < 2) return points;
+  const byDay = new Map(points.map((point) => [point.day, point]));
+  const end = points[points.length - 1]!.day;
+  const out = [];
+  let cursor = points[0]!.day;
+  while (cursor <= end) {
+    out.push(
+      byDay.get(cursor) ?? {
+        day: cursor,
+        avgAccuracy: null,
+        playCount: 0,
+      },
+    );
+    if (cursor === end) break;
+    const next = addUtcDays(cursor, 1);
+    if (next <= cursor) break;
+    cursor = next;
+  }
+  return out;
 }
 
 export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
@@ -842,12 +891,7 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
   const rangeDays =
     firstPlayed == null
       ? 1
-      : Math.max(
-          1,
-          Math.ceil(
-            (Date.now() - firstPlayed) / 86_400_000,
-          ),
-        );
+      : Math.max(1, utcDayIndex(Date.now()) - utcDayIndex(firstPlayed) + 1);
 
   const skillBundle = estimateSevenKSkillWithHistoryFromPlays(skillPlays, {
     granularity,

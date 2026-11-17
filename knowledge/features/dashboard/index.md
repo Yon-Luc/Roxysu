@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-10
+last_verified: 2026-11
 confidence: verified
 touches:
   - apps/server/public/components/CommandPalette.tsx
@@ -34,10 +34,12 @@ The OBS overlay must not poll this dashboard payload. Overlay idle recent scores
 2. Home shows at most **8** recent scores (`playedAt` descending). **See more** links to `/practice` (default sort `lastPlayed` desc).
    **Status:** verified
 
-3. Practice snapshot is local-only: derived from `daily_stats` plus the newest closed session (`endedAt` set). No remote news or osu! API.
+3. Practice snapshot is local-only: derived from `daily_stats` plus the newest closed session (`endedAt` set). No remote news or osu! API. Plays today, last 7 days, and the active-day streak are UTC day buckets (labelled UTC). The streak still starts at the latest day that has plays.
    **Status:** verified
+4. Home weekly activity is the last 12 UTC calendar weeks, including weeks with zero plays. A window with no plays stays empty. It is not the latest 12 weeks that happen to have rows, and it is not keymode-filtered. Home does not show the stored weekly accuracy field.
+   **Enforced by:** `getWeeklyActivity` in `apps/server/src/analytics/progression.ts` — status: verified
 
-4. The command palette (Ctrl/Cmd+K) is a modal dialog: it focuses its input on open, traps Tab / Shift+Tab inside the dialog (`focusTrapTarget()`), pulls focus back in if it lands behind the scrim, locks body scroll, and restores focus to the previously focused element on close. The shortcut does not open the palette while another `[aria-modal=true]` dialog is open, unless the event target is already inside the palette (so Ctrl/Cmd+K can still close it). `ConfirmModal`'s trap stays.
+5. The command palette (Ctrl/Cmd+K) is a modal dialog: it focuses its input on open, traps Tab / Shift+Tab inside the dialog (`focusTrapTarget()`), pulls focus back in if it lands behind the scrim, locks body scroll, and restores focus to the previously focused element on close. The shortcut does not open the palette while another `[aria-modal=true]` dialog is open, unless the event target is already inside the palette (so Ctrl/Cmd+K can still close it). `ConfirmModal`'s trap stays.
    **Status:** verified
 
 ## Main flows

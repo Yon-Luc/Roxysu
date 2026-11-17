@@ -316,8 +316,13 @@ export async function fetchScoreReplay(id: string) {
   );
 }
 
-export async function fetchSessions() {
-  return unwrap(await api.api.sessions.get(), "/api/sessions");
+export async function fetchSessions(day?: string) {
+  return unwrap(
+    await api.api.sessions.get({
+      query: day ? { day } : {},
+    }),
+    "/api/sessions",
+  );
 }
 
 export async function fetchSession(

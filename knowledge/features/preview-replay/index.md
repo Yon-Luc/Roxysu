@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-10
+last_verified: 2026-11
 confidence: verified
 touches:
   - apps/server/public/components/BeatmapPreviewModal.tsx
@@ -248,7 +248,15 @@ Playfield = the visual layer for that ruleset (notefield, 512×384, or taiko lan
     `osuSkinIni.ts` `[CatchTheBeat]`, `overlaySkins.ts` — status: verified by
     `osuSkinIni.test.ts`.
 
-9. Judges are visual-quality approximations, not full lazer sims.
+9. Replay note scanning is still an approximation of a full lazer ruleset sim.
+   Mania hit windows are not: `maniaHitWindows` follows lazer
+   `ManiaHitWindows` (default DifficultyRange, Classic, Classic convert, and
+   Classic+ScoreV2 back on the default curve), including `floor(width * rate) + 0.5`,
+   EZ (OD × 0.5), and HR (OD × 1.4, cap 10). Score rewatch and its live judge
+   pass the score's CL / SV2 / V2 / DT / HT / EZ / HR mods. Preview practice
+   stays nomod. Errors are compared unrounded.
+   **Source:** `packages/mania-judge/src/windows.ts`, `simulate.ts`,
+   `ScoreReplayModal.tsx` — status: verified by `windows.test.ts`
 
 10. Preview and rewatch match the pattern-conversion mods **Invert (IN)** and
     **Hold Off (HO)**: mania charts are converted before display/judging so

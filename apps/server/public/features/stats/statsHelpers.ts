@@ -103,7 +103,7 @@ export function historyBandValue(
   point: NonNullable<PlayerStats["skillHistory"]>[number],
   band: "push" | "accuracy" | "consistency",
   axis: StatsSkillAxis,
-): number {
+): number | null {
   if (axis === "all") return point[band];
   const key = `${band}${axis.charAt(0).toUpperCase()}${axis.slice(1)}` as
     | "pushRc"
@@ -116,7 +116,7 @@ export function historyBandValue(
     | "consistencyLn"
     | "consistencyFln";
   const axisValue = point[key];
-  return axisValue > 0 ? axisValue : point[band];
+  return axisValue > 0 ? axisValue : null;
 }
 
 export function skillTooltipFormatter(
@@ -126,6 +126,7 @@ export function skillTooltipFormatter(
   axis: StatsSkillAxis,
 ): [string, string] {
   const label = String(name ?? "");
+  if (value == null || value === "") return ["—", label];
   const n = typeof value === "number" ? value : Number(value);
   return [
     formatSkillRating({

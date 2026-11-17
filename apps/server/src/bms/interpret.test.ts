@@ -131,6 +131,19 @@ describe("interpretBmsScore", () => {
     ).toBeNull();
   });
 
+  test("PascalCase perfect counts toward EX and does not invent a lamp", () => {
+    const row = interpretBmsScore({
+      statistics: JSON.stringify({ Perfect: 1 }),
+      maximumStatistics: JSON.stringify({ "6": 1 }),
+      mods: "[]",
+      totalScore: 1,
+      accuracy: 1,
+    });
+    expect(row.exScore).toBe(2);
+    expect(row.maxExScore).toBe(2);
+    expect(row.comboLampId).toBeNull();
+  });
+
   test("grade thresholds are cumulative", () => {
     expect(gradeMeets("max", "aaa")).toBe(true);
     expect(gradeMeets("aa", "aaa")).toBe(false);

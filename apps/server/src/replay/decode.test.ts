@@ -175,7 +175,7 @@ describe("simulateManiaJudgments", () => {
 describe("maniaHitWindows", () => {
   test("OD8 great window", () => {
     const w = maniaHitWindows(8);
-    expect(w.perfect).toBe(16);
-    expect(w.great).toBe(40);
+    expect(w.perfect).toBe(16.5);
+    expect(w.great).toBe(40.5);
   });
 });

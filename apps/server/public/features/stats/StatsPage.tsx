@@ -290,17 +290,17 @@ export function StatsPage({
   const skillsetBars = [
     {
       axis: dict?.stats.axisRice ?? "Rice",
-      plays: mix?.rc ?? 0,
+      maps: mix?.rc ?? 0,
       pct: mix?.rcPct ?? 0,
     },
     {
       axis: dict?.stats.axisLn ?? "LN",
-      plays: mix?.ln ?? 0,
+      maps: mix?.ln ?? 0,
       pct: mix?.lnPct ?? 0,
     },
     {
       axis: dict?.stats.axisFln ?? "FLN",
-      plays: mix?.fln ?? 0,
+      maps: mix?.fln ?? 0,
       pct: mix?.flnPct ?? 0,
     },
   ];
@@ -530,6 +530,7 @@ export function StatsPage({
                 <Legend />
                 <Line
                   type="monotone"
+                  connectNulls={false}
                   dataKey="push"
                   name={dict?.stats.bandPush ?? "Push"}
                   stroke={charts.chartAlt}
@@ -538,6 +539,7 @@ export function StatsPage({
                 />
                 <Line
                   type="monotone"
+                  connectNulls={false}
                   dataKey="accuracy"
                   name={dict?.stats.bandAccuracy ?? "Accuracy"}
                   stroke={charts.chart}
@@ -546,6 +548,7 @@ export function StatsPage({
                 />
                 <Line
                   type="monotone"
+                  connectNulls={false}
                   dataKey="consistency"
                   name={dict?.stats.bandConsistency ?? "Consistency"}
                   stroke={charts.chartCons}
@@ -652,7 +655,8 @@ export function StatsPage({
                     dot={false}
                   />
                   <Line
-                    type="monotone"
+                    type="linear"
+                    connectNulls={false}
                     dataKey="avgAccuracy"
                     name={dict?.stats.bandAccuracy ?? "Accuracy"}
                     stroke={charts.chart}
@@ -791,16 +795,21 @@ export function StatsPage({
                   <Tooltip
                     contentStyle={charts.tooltip}
                     formatter={(value, name) => {
-                      if (name === "plays") {
+                      if (name === "maps") {
                         return [
                           Number(value).toLocaleString(),
-                          dict?.stats.plays ?? "plays",
+                          dict?.stats.skillsetUnit ?? "maps",
                         ];
                       }
                       return [value, name];
                     }}
                   />
-                  <Bar dataKey="plays" fill={charts.chart} radius={[4, 4, 0, 0]} />
+                  <Bar
+                    dataKey="maps"
+                    name="maps"
+                    fill={charts.chart}
+                    radius={[4, 4, 0, 0]}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             )}

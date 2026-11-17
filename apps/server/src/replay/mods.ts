@@ -1,5 +1,6 @@
 export {
   parseScoreMods,
+  toHitWindowOptions,
   isNomodOrMirrorOnly,
   adjustOverallDifficulty,
   scaleManiaHitWindows,

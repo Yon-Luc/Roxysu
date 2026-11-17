@@ -7,6 +7,7 @@ import {
   getSessionById,
   listSessionScores,
   listSessions,
+  listSessionsOnUtcDay,
 } from "../analytics/session";
 import { getDailyActivity } from "../analytics/progression";
 import {
@@ -141,18 +142,35 @@ async function sessionDetailPayload(
 
 export const sessionRoutes = new Elysia({ prefix: "/sessions" })
   .use(dbPlugin)
-  .get("/", async ({ db }) => {
-    const [items, current, activity] = await Promise.all([
-      listSessions(db, 100),
-      getCurrentSession(db),
-      getDailyActivity(db, 371),
-    ]);
-    return {
-      current: current ? serializeSession(current) : null,
-      items: items.map(serializeSession),
-      activity,
-    };
-  })
+  .get(
+    "/",
+    async ({ db, query }) => {
+      const day = query.day?.trim();
+      if (day) {
+        const items = await listSessionsOnUtcDay(db, day, 50);
+        return {
+          current: null,
+          items: items.map(serializeSession),
+          activity: [],
+        };
+      }
+      const [items, current, activity] = await Promise.all([
+        listSessions(db, 100),
+        getCurrentSession(db),
+        getDailyActivity(db, 371),
+      ]);
+      return {
+        current: current ? serializeSession(current) : null,
+        items: items.map(serializeSession),
+        activity,
+      };
+    },
+    {
+      query: t.Object({
+        day: t.Optional(t.String()),
+      }),
+    },
+  )
   .get(
     "/:id",
     async ({ db, params, query, set }) => {

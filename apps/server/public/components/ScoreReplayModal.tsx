@@ -45,9 +45,11 @@ import {
 } from "../lib/replayAccuracy";
 import {
   emptyJudgmentCounts,
+  maniaHitWindowKey,
   maniaHitWindows,
   type JudgmentSummary,
 } from "../lib/maniaWindows";
+import { parseScoreMods, toHitWindowOptions } from "@server/replay/mods";
 import {
   localBeatmapAudioUrl,
   localBeatmapCoverUrl,
@@ -433,11 +435,14 @@ export function ScoreReplayModal({
       return null;
     }
     const od = replay.beatmap.overallDifficulty ?? 0;
+    const hitWindows = toHitWindowOptions(parseScoreMods(replay.score.mods));
     const existing = livePlayRef.current;
     if (
       existing &&
       existing.columnCount === replay.beatmap.columnCount &&
-      existing.overallDifficulty === od
+      existing.overallDifficulty === od &&
+      existing.windowKey ===
+        maniaHitWindowKey(od, hitWindows)
     ) {
       return existing;
     }
@@ -446,6 +451,7 @@ export function ScoreReplayModal({
       columnCount: replay.beatmap.columnCount,
       overallDifficulty: od,
       practiceRange: effectivePracticeRange(),
+      hitWindows,
     });
     livePlayRef.current = play;
     return play;
@@ -655,7 +661,7 @@ export function ScoreReplayModal({
       setLiveSummary(EMPTY_SUMMARY);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- rebuild when chart identity changes
-  }, [scoreId, replayData?.beatmap.id, replayData?.beatmap.overallDifficulty]);
+  }, [scoreId, replayData?.beatmap.id, replayData?.beatmap.overallDifficulty, replayData?.score.mods]);
 
   // Tick live judge while in play mode.
   useEffect(() => {
@@ -1395,6 +1401,7 @@ export function ScoreReplayModal({
                       }
                       windows={maniaHitWindows(
                         replayData.beatmap.overallDifficulty ?? 0,
+                        toHitWindowOptions(parseScoreMods(replayData.score.mods)),
                       )}
                       showTiming={isPlay}
                       judgments={

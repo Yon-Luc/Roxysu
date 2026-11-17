@@ -16,6 +16,7 @@ import {
   getOsuDataPath,
   resolveLazerFilePath,
 } from "../shared/lazer-files";
+import { readResponseTextCapped } from "../readCappedText";
 import type {
   TosuLiveAnalysis,
   TosuLiveBeatmap,
@@ -55,14 +56,16 @@ async function lookupBeatmap(
   return null;
 }
 
+const MAX_TOSU_OSU_BYTES = 20 * 1024 * 1024;
+
 async function fetchCurrentOsuText(host: string): Promise<string | null> {
   try {
     const res = await fetch(`http://${host}/files/beatmap/file`, {
       signal: AbortSignal.timeout(8_000),
     });
     if (!res.ok) return null;
-    const text = await res.text();
-    return text.trim() ? text : null;
+    const text = await readResponseTextCapped(res, MAX_TOSU_OSU_BYTES);
+    return text?.trim() ? text : null;
   } catch {
     return null;
   }

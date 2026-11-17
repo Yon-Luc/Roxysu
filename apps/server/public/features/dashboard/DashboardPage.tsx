@@ -21,7 +21,7 @@ import { ChartCard } from "../../components/ChartCard";
 import { EmptyChart } from "../../components/EmptyChart";
 import { Stat } from "../../components/Stat";
 import { fetchDashboard } from "../../lib/api";
-import { useAppDict } from "../../lib/i18n";
+import { useAppDict, t } from "../../lib/i18n";
 import {
   formatAccuracy,
   formatChartDay,
@@ -34,7 +34,7 @@ import {
 } from "../../lib/ratingDisplay";
 import { useChartStyles } from "../../lib/chartStyles";
 import { formatDuration } from "../stats/statsHelpers";
-import roxyIcon from "../../roxy.png";
+import roxyIcon from "../../icons/icon-192.png";
 
 export function DashboardPage() {
   const ratingMode = useRatingDisplayMode();
@@ -77,7 +77,10 @@ export function DashboardPage() {
   if (error || !data) {
     return (
       <p className="text-danger">
-        Failed to load dashboard: {error?.message ?? "unknown error"}
+        {t(dict?.dashboard.failedToLoad, {
+          error: error?.message ?? dict?.common.unknownError ?? "unknown error",
+        }) ||
+          `Failed to load dashboard: ${error?.message ?? "unknown error"}`}
       </p>
     );
   }

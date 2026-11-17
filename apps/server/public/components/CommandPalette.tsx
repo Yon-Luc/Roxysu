@@ -289,7 +289,7 @@ export function CommandPalette({
 
   const { data: sessionsData } = useQuery({
     queryKey: ["sessions"],
-    queryFn: fetchSessions,
+    queryFn: () => fetchSessions(),
     enabled: open,
     staleTime: 60_000,
   });

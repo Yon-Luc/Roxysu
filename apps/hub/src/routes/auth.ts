@@ -13,6 +13,7 @@ import {
   createHandoff,
   createOAuthState,
   isValidHandoffChallenge,
+  OAuthStateStoreFullError,
 } from "../services/oauthState";
 import { allowRateLimit } from "../services/rateLimit";
 import { clientIp } from "../services/clientIp";
@@ -63,7 +64,7 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
   // -------------------------------------------------------------------------
   .get(
     "/login",
-    ({ query, redirect }) => {
+    ({ query, redirect, request, server }) => {
       const client = query.client === "desktop" ? "desktop" : "web";
       const nonce = query.nonce?.trim() || null;
       if (client === "desktop" && !nonce) {
@@ -76,8 +77,19 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
           message: "Login requires a handoff challenge (base64url SHA-256)",
         });
       }
-      const state = createOAuthState(client, nonce, query.challenge);
-      return redirect(buildAuthorizationUrl(state));
+      const ip = clientIp(request, server);
+      if (!allowRateLimit(`login:${ip}`, { limit: 10, windowMs: 60_000 })) {
+        return status(429, { message: "Too many login attempts" });
+      }
+      try {
+        const state = createOAuthState(client, nonce, query.challenge);
+        return redirect(buildAuthorizationUrl(state));
+      } catch (err) {
+        if (err instanceof OAuthStateStoreFullError) {
+          return status(503, { message: "Login is temporarily unavailable" });
+        }
+        throw err;
+      }
     },
     {
       query: t.Object({
@@ -176,7 +188,15 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
         return status(500, { message: "Failed to issue session token" });
       }
 
-      const handoffId = createHandoff(token, stateEntry.challenge);
+      let handoffId: string;
+      try {
+        handoffId = createHandoff(token, stateEntry.challenge);
+      } catch (err) {
+        if (err instanceof OAuthStateStoreFullError) {
+          return status(503, { message: "Login is temporarily unavailable" });
+        }
+        throw err;
+      }
 
       if (stateEntry.client === "desktop") {
         if (!stateEntry.nonce) {

@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-10
+last_verified: 2026-11
 confidence: verified
 touches:
   - apps/server/src/score-transfer/transfer.ts
@@ -21,9 +21,11 @@ roxysu-scores.json
     ↓
 other PC → preview: already / can add / current version / not installed
     ↓
-confirm: lazer closed, backup client.realm
+preview stores that file under an upload id (a second preview does not replace it)
     ↓
-re-classify the saved file, realm.write Score rows
+confirm: lazer closed, backup client.realm, commit sends the upload id
+    ↓
+re-classify that file, realm.write Score rows
     ↓
 upsert mirror + import row (watermark copied, not moved backward)
     ↓
@@ -32,7 +34,7 @@ analytics sessions/mastery/stats
 
 ## Business guarantee
 
-No Realm write without an explicit confirm. A locked Realm aborts. A backup exists before the write. The extraction cursor does not jump backward. Scores not in the file are not deleted.
+No Realm write without an explicit confirm of the previewed upload id. A locked Realm aborts. A backup exists before the write. The extraction cursor does not jump backward. Scores not in the file are not deleted.
 
 ## Implementation references
 

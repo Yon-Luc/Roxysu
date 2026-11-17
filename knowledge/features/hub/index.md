@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-10
+last_verified: 2026-11
 confidence: verified
 touches:
   - apps/hub/src/routes/auth.ts
@@ -25,6 +25,7 @@ touches:
   - apps/server/public/features/hub
   - apps/server/public/lib/hub.ts
   - apps/server/src/hubUrl.ts
+  - apps/server/src/hubFetch.ts
   - apps/server/src/mirrors/hubSearch.ts
   - apps/server/src/map-analysis/calcBundle.ts
   - apps/server/src/map-analysis/calcBundleFile.ts
@@ -77,7 +78,7 @@ Networked collaboration / discovery — not required for offline practice analyt
    **Enforced by:** hub admin checks — status: verified
    **Unauthorized result:** forbidden
 
-4b. Hub calc bundle admin upload/list/delete require admin role. Public `GET /calc-bundles/:version` is unauthenticated but killable.
+4b. Hub calc bundle admin upload/list/delete require admin role. Public `GET /calc-bundles/:version` is unauthenticated but killable, and limited to 10 requests per IP each minute.
    **Enforced by:** `apps/hub/src/routes/admin.ts` + `requireAdmin`; `apps/hub/src/services/hubEnv.ts:isHubCalcBundlesEnabled()` — status: verified
    **Unauthorized result:** 403 on admin routes; 503 when kill switch off
 
@@ -92,8 +93,9 @@ Networked collaboration / discovery — not required for offline practice analyt
    **Enforced by:** `apps/hub/src/services/hubEnv.ts:resolveCorsOrigin()` / `isHubPublished()` — status: verified
    **Unauthorized result:** process does not bind
 
-8. Collection star/mode/key stats are computed from maps on the Hub; client-supplied stats are not accepted. When the collection lists beatmap online ids, only those difficulties are sampled; otherwise every difficulty of each beatmapset is sampled.
-   **Enforced by:** `apps/hub/src/routes/collections.ts` POST/PUT — status: verified
+8. Collection star/mode/key stats are computed from maps on the Hub; client-supplied stats are not accepted. When the collection lists beatmap online ids, only those difficulties are sampled; otherwise every difficulty of each beatmapset is sampled. Star min/max come from the dominant mode only. Create and update allow 5 writes per user each minute. The Hinamizawa fan-out stops after 10 seconds and the collection is still saved with whatever stats were collected.
+   **Enforced by:** `apps/hub/src/routes/collections.ts` POST/PUT and `apps/hub/src/services/collectionStats.ts:aggregateCollectionStats()` — status: verified
+   **Unauthorized result:** 429 when the write limit is exceeded
 
 9. Public `GET /search` returns the hub search index only. Cache miss is empty (`cached: false`); it does not live-proxy Hinamizawa.
    **Enforced by:** `apps/hub/src/routes/search.ts` — status: verified
@@ -108,9 +110,9 @@ Networked collaboration / discovery — not required for offline practice analyt
     **Enforced by:** `apps/server/src/map-analysis/calcBundle.ts:applyCalcBundle()` + `apps/server/src/map-analysis/calcBundle.ts:maybePullCalcBundleOnBoot()` — status: verified
     **See:** [decisions/hub-calc-bundle-version.md](../../decisions/hub-calc-bundle-version.md)
 
-13. BMS score batches belong to the authenticated Hub user. A `userId` in the body is ignored. Trust is always `community_submitted`. The stored DJ grade and combo lamp are computed from the submitted accuracy and judgement counts. A score whose mods include autoplay is rejected.
-    **Enforced by:** `apps/hub/src/routes/bms.ts` `POST /api/bms/scores/batch` and `apps/hub/src/services/bms.ts:ingestBmsScore()` — status: verified
-    **Unauthorized result:** 401 before insert
+13. BMS score batches belong to the authenticated Hub user. A `userId` in the body is ignored. Trust is always `community_submitted`. The stored DJ grade and combo lamp are computed from the submitted accuracy and judgement counts. A score whose mods include autoplay is rejected. Chart title, artist, key count, and sha256 are filled only while the stored field is null.
+   **Enforced by:** `apps/hub/src/routes/bms.ts` `POST /api/bms/scores/batch` and `apps/hub/src/services/bms.ts:ingestBmsScore()` — status: verified
+   **Unauthorized result:** 401 before insert
 
 14. A private BMS profile (`hub_users.bms_profile_public = 0`) is hidden from everyone except that user. Missing and private profiles both return 404.
     **Enforced by:** `apps/hub/src/services/bms.ts:readBmsProfile()` and the other public BMS reads — status: verified
@@ -127,9 +129,9 @@ Networked collaboration / discovery — not required for offline practice analyt
 17. Insane, Satellite, and Stella are stored when the Hub starts, from the catalogues shipped in `packages/db/bms-tables`. Their identity is the bundled source name, so a later start does not add a second version of the same catalogue.
     **Enforced by:** `apps/hub/src/services/bms.ts:seedBundledBmsTables()` — status: verified
 
-18. Hub OAuth handoff redeem needs a handoff verifier, and the Hub always generates the handoff id. A `handoff` query param on `GET /auth/login` is ignored. Desktop login sends a local nonce (`nonce`), which is echoed on the localhost redirect (`h` + `n`) so only that pending login learns the Hub id. The client that starts login keeps a high-entropy verifier (never in a URL or redirect) and sends only its SHA-256 challenge (required). The Hub stores the challenge with the one-time JWT and redeems it only via `POST /auth/handoff/:id` with the matching verifier (constant-time compare). A wrong or missing verifier returns the same 404 as an unknown id, does not consume the handoff, and still counts toward the per-IP rate limit (30 per minute). Knowing an id the caller chose is not enough, because that id is not the one stored. The `GET` redeem no longer exists.
+18. Hub OAuth handoff redeem needs a handoff verifier, and the Hub always generates the handoff id. A `handoff` query param on `GET /auth/login` is ignored. Desktop login sends a local nonce (`nonce`), which is echoed on the localhost redirect (`h` + `n`) so only that pending login learns the Hub id. The client that starts login keeps a high-entropy verifier (never in a URL or redirect) and sends only its SHA-256 challenge (required). The Hub stores the challenge with the one-time JWT and redeems it only via `POST /auth/handoff/:id` with the matching verifier (constant-time compare). A wrong or missing verifier returns the same 404 as an unknown id, does not consume the handoff, and still counts toward the per-IP rate limit (30 per minute). Knowing an id the caller chose is not enough, because that id is not the one stored. The `GET` redeem no longer exists. `GET /auth/login` allows 10 attempts per IP each minute. A full in-memory state or handoff map returns 503 and does not drop a live entry. OAuth code exchange and `/me` abort after 15 seconds.
    **Enforced by:** `apps/hub/src/services/oauthState.ts:consumeHandoff()` and `apps/hub/src/routes/auth.ts` `/login`, `POST /handoff/:id` — status: verified
-   **Unauthorized result:** 404 (login without a valid challenge: 400)
+   **Unauthorized result:** 404 (login without a valid challenge: 400; over the login limit: 429; store full: 503)
 
 19. The client app's Hub calc bundle upload sends the admin bearer only to `resolveHubBaseUrl()`. A request body `hubUrl` does not exist and is ignored.
    **Enforced by:** `apps/server/src/map-analysis/calcBundle.ts:uploadCalcBundleToHub()` — status: verified
@@ -143,17 +145,18 @@ Networked collaboration / discovery — not required for offline practice analyt
 
 - `apps/hub/src/*`
 - `apps/hub/src/services/cache.ts:hashQueryParams()` — SHA-256 (32 hex) of **base** params only; boot rehashes/strips secondary fields from stored `query_params`. Download Maps still forwards secondary filters + `sort` via `mirrorParamsToHubQuery`; Hub looks up by base then SQL-filters index rows.
-- `apps/hub/src/services/searchIndex.ts` — persist stubs as rows; `GET /search` pages in SQL; `GET /search/all` dumps ids/compact/full. Boot `migrateBlobsToRows()` lifts leftover JSON blobs.
+- `apps/hub/src/services/searchIndex.ts` — persist stubs as rows; `GET /search` pages in SQL; `GET /search/all` dumps ids/compact/full. `fields=full` is clamped to 2,000 sets. Boot `migrateBlobsToRows()` lifts leftover JSON blobs.
 - `apps/hub/src/services/cache.ts:parseStoredStubs()` — dual-read leftover blob JSON for one-shot migration only
 - `apps/hub/src/services/hinamizawa.ts:fetchAllBeatmapsetStubs()` — cache refresh crawls Hinamizawa search pages into enriched stubs; optional `keymode` keeps sets using embedded `beatmaps[].cs`. Do not N+1 `/s/{id}` for key filter
 - `apps/hub/src/services/cache.ts:refreshCacheSingleFlight()` — the only entry point for index refresh (never call `refreshCache` directly from a route or the cron)
 - `apps/hub/src/services/hubEnv.ts:isHubSearchIndexEnabled()` / `isHubSearchHttpCacheEnabled()` — prod kill switches
 - `apps/server/public/features/hub/HubAdminCachePage.tsx` — admin prime UI: base fields only (mode, status, keys, sort, frequency); secondary filters are runtime on Download Maps
 - `apps/server/public/features/hub/HubAdminCalcBundlesPage.tsx` — admin Hub calc bundle upload/list/delete
-- `apps/hub/src/services/calcBundles.ts` / `routes/calcBundles.ts` — version-keyed calc bundle store + public GET
+- `apps/hub/src/services/calcBundles.ts` / `routes/calcBundles.ts` — version-keyed calc bundle store + public GET (10 per IP each minute on `/:version`)
 - `apps/server/src/map-analysis/calcBundle.ts` — export/iterate, pull, gap-fill apply, boot dispatch, calc bundle file build
 - `apps/server/src/map-analysis/calcBundleFile.ts` — calc bundle file format + read/validate
-- `apps/server/src/hubUrl.ts:resolveHubBaseUrl()` — shared Hub URL for Community, OAuth redeem, and Download Maps (`HUB_URL`; localhost in `bun run dev`, `https://roxysu-api.yonx.app` when `ROXYSU_DESKTOP=1`)
+- `apps/server/src/hubUrl.ts:resolveHubBaseUrl()` — shared Hub URL for Community, OAuth redeem, and Download Maps (`HUB_URL` must be http(s) with a host and no userinfo; localhost in `bun run dev`, `https://roxysu-api.yonx.app` when `ROXYSU_DESKTOP=1`)
+- `apps/server/src/hubFetch.ts:hubFetch()` — Hub fetch with a timeout (15 s for BMS batch and OAuth redeem; 200 s for ranked bests) and a capped JSON body
 - `apps/server/public/lib/hub.ts` — runtime Community client (clears JWT on Hub 401; delete + export). `packages/hub-client` is the Node Eden client and is not used in the browser
 - `apps/server/public/features/hub/HubSessionChip.tsx` — app-wide osu! OAuth state on the right of the sidebar scores/maps lines. On small screens it floats bottom-right above the tab bar, and sits in the More sheet while that sheet is open. Logged out shows Log in; logged in shows avatar and username. Same JWT as Community. Not client app auth.
 - `apps/server/src/mirrors/hubSearch.ts:mirrorParamsToHubQuery()` / `tryFetchAllHubCachedIds()` — maps Download params to Hub GET `/search` (page) or `/search/all` (count/download-all). Circuit breaker skips Hub for 30s after timeout/5xx.
@@ -167,7 +170,7 @@ Networked collaboration / discovery — not required for offline practice analyt
 - Publishing a smart or Realm collection sends those beatmap online ids. Saving it locally stores them on the hub-added row and collection write-back includes only those beatmaps.
 - Community Added tab renders from local hub-added rows; ownership uses `POST /api/mirrors/ownership/diff` rather than shipping every owned set ID.
 - OAuth callback accepts only `h=` (handoff id), never a JWT or verifier in the URL. `HubCallbackPage` does not redeem until the `system-status` query has resolved, and redeems once (the once-ref is set before the await) so it never POSTs the verifier to the `useHubUrl` localhost default
-- `apps/hub/src/db.ts` — `bun run db:migrate` and Hub boot both apply Hub store migrations
+- `apps/hub/src/db.ts` — `bun run db:migrate` and Hub boot both apply Hub store migrations. The Hub store uses WAL, foreign keys, and `busy_timeout` 5000.
 - `apps/hub/Dockerfile` — build context is repo root. Copy every `apps/*/package.json` so `bun.lock`'s workspace graph stays valid under `--frozen-lockfile`.
 - `apps/hub/docker-compose.yml` — Coolify run config: pull prebuilt image, named volume at `/app/data`, `expose` 4322 (no host `ports`), `HUB_TRUST_PROXY=1`, production CORS allowlist for local Community; defaults `HUB_SEARCH_HTTP_CACHE=0` for safe rollout.
 
@@ -230,7 +233,7 @@ update tag validation — status: verified
 ## Failure behavior
 
 1. Community Log out removes the JWT from `localStorage` only. Hub does not keep a revoke list; a copied JWT stays valid until expiry (30 days). Hub 401 still clears the stored JWT.
-2. OAuth pending codes and handoffs live in Hub process memory and are lost on restart. A web login must finish in the same browser tab (its verifier is in `sessionStorage`); a login opened elsewhere cannot be redeemed.
+2. OAuth pending codes and handoffs live in Hub process memory and are lost on restart. A web login must finish in the same browser tab (its verifier is in `sessionStorage`); a login opened elsewhere cannot be redeemed. Login is limited to 10 attempts per IP each minute. When the in-memory map is full, a new login gets 503 and a live state stays.
 
 ## Related knowledge
 

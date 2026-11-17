@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { checkLanguage } from "@roxysu/i18n";
 import type { Locale } from "@roxysu/i18n";
 
@@ -25,6 +25,7 @@ export function getLanguage(): Locale {
 
 export function setLanguage(locale: Locale): void {
   localStorage.setItem(STORAGE_KEY, locale);
+  document.documentElement.lang = locale;
   window.dispatchEvent(new Event(EVENT_NAME));
 }
 
@@ -38,5 +39,9 @@ function subscribe(onStoreChange: () => void): () => void {
 }
 
 export function useLanguage(): Locale {
-  return useSyncExternalStore(subscribe, getLanguage, () => "en" as const);
+  const lang = useSyncExternalStore(subscribe, getLanguage, () => "en" as const);
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
+  return lang;
 }

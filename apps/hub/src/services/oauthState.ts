@@ -2,7 +2,14 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 const STATE_TTL_MS = 10 * 60 * 1000;
 const HANDOFF_TTL_MS = 5 * 60 * 1000;
-const MAX_ENTRIES = 5_000;
+export const OAUTH_STATE_MAX_ENTRIES = 5_000;
+
+export class OAuthStateStoreFullError extends Error {
+  constructor() {
+    super("OAuth state store is full");
+    this.name = "OAuthStateStoreFullError";
+  }
+}
 
 export type OAuthClientKind = "web" | "desktop";
 
@@ -28,20 +35,15 @@ type HandoffEntry = {
 const oauthStates = new Map<string, StateEntry>();
 const handoffs = new Map<string, HandoffEntry>();
 
-function pruneMap<T extends { expiresAt: number }>(map: Map<string, T>): void {
+function pruneExpired<T extends { expiresAt: number }>(map: Map<string, T>): void {
   const now = Date.now();
   for (const [key, value] of map) {
     if (value.expiresAt <= now) map.delete(key);
   }
-  if (map.size <= MAX_ENTRIES) return;
-  // Drop oldest-ish by iterating insertion order.
-  const overflow = map.size - MAX_ENTRIES;
-  let i = 0;
-  for (const key of map.keys()) {
-    map.delete(key);
-    i += 1;
-    if (i >= overflow) break;
-  }
+}
+
+function assertStoreRoom(map: Map<string, unknown>): void {
+  if (map.size >= OAUTH_STATE_MAX_ENTRIES) throw new OAuthStateStoreFullError();
 }
 
 function randomId(): string {
@@ -80,7 +82,8 @@ export function createOAuthState(
   if (!isValidHandoffChallenge(challenge)) {
     throw new Error("Invalid handoff challenge");
   }
-  pruneMap(oauthStates);
+  pruneExpired(oauthStates);
+  assertStoreRoom(oauthStates);
   const id = randomId();
   oauthStates.set(id, {
     client,
@@ -94,7 +97,7 @@ export function createOAuthState(
 /** One-time consume of OAuth state. Returns null if missing/expired. */
 export function consumeOAuthState(state: string | undefined): StateEntry | null {
   if (!state?.trim()) return null;
-  pruneMap(oauthStates);
+  pruneExpired(oauthStates);
   const entry = oauthStates.get(state);
   oauthStates.delete(state);
   if (!entry) return null;
@@ -111,7 +114,8 @@ export function createHandoff(token: string, challenge: string): string {
   if (!isValidHandoffChallenge(challenge)) {
     throw new Error("Invalid handoff challenge");
   }
-  pruneMap(handoffs);
+  pruneExpired(handoffs);
+  assertStoreRoom(handoffs);
   const id = randomId();
   handoffs.set(id, {
     token,
@@ -132,7 +136,7 @@ export function consumeHandoff(
   verifier: string | undefined,
 ): string | null {
   if (!id?.trim()) return null;
-  pruneMap(handoffs);
+  pruneExpired(handoffs);
   const entry = handoffs.get(id);
   if (!entry) return null;
   if (entry.expiresAt <= Date.now()) {

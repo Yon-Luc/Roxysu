@@ -1,6 +1,9 @@
 import type { Db } from "@roxysu/db/types";
-import { dailyStats, weeklyStats } from "@roxysu/db/schema";
-import { desc, gte } from "drizzle-orm";
+import { dailyStats, scores, weeklyStats } from "@roxysu/db/schema";
+import { and, desc, eq, gte } from "drizzle-orm";
+import { localDayKey } from "../shared/localDay";
+import { scoresGamemodeCondition, resolveScoresGamemodeSync } from "./scoreGamemode";
+import { resolveScoresUsernamesSync, scoresUsernameCondition } from "./scoreUsername";
 
 /** Read-model helpers for dashboard PP/accuracy trends. */
 export async function getPpTrend(db: Db, days = 30) {
@@ -109,4 +112,38 @@ export async function getDailyActivity(db: Db, days = 371) {
       day: r.day,
       playCount: r.playCount,
     }));
+}
+
+/**
+ * Play counts for the session calendar. Offset 0 reads UTC `daily_stats`.
+ * Any other offset recounts recent scores onto that local calendar date.
+ */
+export async function getCalendarActivity(
+  db: Db,
+  days = 371,
+  tzOffsetMinutes = 0,
+) {
+  if (tzOffsetMinutes === 0) return getDailyActivity(db, days);
+  const since = new Date(Date.now() - days * 86_400_000);
+  const rows = await db
+    .select({ playedAt: scores.playedAt })
+    .from(scores)
+    .where(
+      and(
+        eq(scores.deletePending, false),
+        gte(scores.playedAt, since),
+        scoresUsernameCondition(resolveScoresUsernamesSync(db)),
+        scoresGamemodeCondition(resolveScoresGamemodeSync(db)),
+      ),
+    );
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const played =
+      row.playedAt instanceof Date ? row.playedAt : new Date(row.playedAt);
+    const day = localDayKey(played, tzOffsetMinutes);
+    counts.set(day, (counts.get(day) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([day, playCount]) => ({ day, playCount }));
 }

@@ -1,5 +1,6 @@
 import { formatModAcronym, parseModEntries } from "@server/replay/mods";
 import { t } from "./i18n";
+import { getLanguage } from "./language";
 
 export type RelativeTimeLabels = {
   justNow?: string;
@@ -23,10 +24,16 @@ export function formatScore(value: number | null | undefined): string {
   return value.toLocaleString();
 }
 
-export function formatMisses(value: number | null | undefined): string {
+export function formatMisses(
+  value: number | null | undefined,
+  labels?: { fc?: string; one?: string; many?: string },
+): string {
   if (value == null) return "—";
-  if (value === 0) return "FC";
-  return `${value}x miss`;
+  if (value === 0) return labels?.fc ?? "FC";
+  if (value === 1) {
+    return labels?.one ? t(labels.one, { count: value }) : "1 miss";
+  }
+  return labels?.many ? t(labels.many, { count: value }) : `${value} misses`;
 }
 
 export function formatStars(value: number | null | undefined): string {
@@ -73,26 +80,26 @@ export function formatRelativeTime(
   return new Date(iso).toLocaleDateString();
 }
 
-const CHART_MONTHS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-] as const;
+const chartMonthFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function chartMonthName(month: number): string {
+  const locale = getLanguage();
+  let fmt = chartMonthFormatters.get(locale);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat(locale, {
+      month: "short",
+      timeZone: "UTC",
+    });
+    chartMonthFormatters.set(locale, fmt);
+  }
+  return fmt.format(new Date(Date.UTC(2020, month, 1)));
+}
 
 /** Short UTC day label for chart axes (avoids full timezone Date#toString). */
 export function formatChartDay(value: unknown): string {
   const parts = chartDayParts(value);
   if (!parts) return value == null ? "" : String(value);
-  return `${CHART_MONTHS[parts.month]!} ${parts.day}`;
+  return `${chartMonthName(parts.month)} ${parts.day}`;
 }
 
 function chartDayParts(

@@ -83,42 +83,45 @@ export const DensityOverTimeChart = memo(function DensityOverTimeChart({
             width={40}
           />
           <Tooltip
-            contentStyle={charts.tooltip}
-            labelFormatter={(_, payload) => {
-              const sample = payload?.[0]?.payload as
-                | ManiaDensitySampleView
+            content={({ active, payload }) => {
+              if (!active || !payload?.length) return null;
+              const sample = payload[0]?.payload as
+                | (typeof chartData)[number]
                 | undefined;
-              return sample
-                ? `${formatClock(sample.startMs)} - ${formatClock(sample.endMs)}`
-                : "";
-            }}
-            formatter={(value, name, item) => {
-              if (name === "notesPerSecond") {
-                return [
-                  `${Number(value).toFixed(1)} NPS`,
-                  detail?.tooltipDensity ?? "Density",
-                ];
-              }
-              if (name === "peakChordSize") {
-                return [
-                  `${value}K`,
-                  detail?.tooltipPeakChord ?? "Peak chord",
-                ];
-              }
-              const payload = item.payload as (typeof chartData)[number];
-              if (name === "displayPattern") {
-                return [
-                  payload.displaySecondary
-                    ? `${payload.displayPattern} + ${payload.displaySecondary}`
-                    : payload.displayPattern,
-                  detail?.tooltipPattern ?? "Pattern",
-                ];
-              }
-              return [String(value), String(name)];
+              if (!sample) return null;
+              const pattern = sample.displaySecondary
+                ? `${sample.displayPattern} + ${sample.displaySecondary}`
+                : sample.displayPattern;
+              return (
+                <div
+                  className="rounded-lg px-3 py-2 text-xs"
+                  style={charts.tooltip}
+                >
+                  <div>
+                    {formatClock(sample.startMs)} - {formatClock(sample.endMs)}
+                  </div>
+                  <div>
+                    {sample.notesPerSecond.toFixed(1)} NPS
+                    {" · "}
+                    {detail?.tooltipDensity ?? "Density"}
+                  </div>
+                  <div>
+                    {pattern}
+                    {" · "}
+                    {detail?.tooltipPattern ?? "Pattern"}
+                  </div>
+                  <div>
+                    {sample.peakChordSize}K
+                    {" · "}
+                    {detail?.tooltipPeakChord ?? "Peak chord"}
+                  </div>
+                </div>
+              );
             }}
           />
           <Area
-            type="monotone"
+            type="linear"
+            isAnimationActive={false}
             dataKey="notesPerSecond"
             stroke={charts.chart}
             fill={`url(#${gradientId})`}

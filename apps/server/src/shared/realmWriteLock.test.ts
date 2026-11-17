@@ -46,7 +46,7 @@ describe("realm write lock", () => {
     expect(tryAcquireRealmWriteLock(db, "collection_write_back")).toBeNull();
 
     // Real writers surface the refusal as in_flight (HTTP 409 on their routes).
-    const transfer = await commitScoreTransfer(db);
+    const transfer = await commitScoreTransfer(db, "00000000-0000-4000-8000-000000000001");
     expect(transfer).toMatchObject({ ok: false, code: "in_flight" });
     const writeBack = await syncCollectionsToLazer(db);
     expect(writeBack).toMatchObject({ ok: false, error: { code: "in_flight" } });
@@ -63,7 +63,7 @@ describe("realm write lock", () => {
     await lease.pauseExtraction(0);
     expect(await pauseValue()).toBe("1");
 
-    await commitScoreTransfer(db);
+    await commitScoreTransfer(db, "00000000-0000-4000-8000-000000000001");
     await syncCollectionsToLazer(db);
     expect(await pauseValue()).toBe("1");
 

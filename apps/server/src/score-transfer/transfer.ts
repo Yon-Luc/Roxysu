@@ -1,5 +1,15 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -30,7 +40,60 @@ import {
   type RealmWriteLease,
 } from "../shared/realmWriteLock";
 
-const MAX_UPLOAD_BYTES = 256 * 1024 * 1024;
+export const MAX_UPLOAD_BYTES = 256 * 1024 * 1024;
+const UPLOAD_TTL_MS = 30 * 60 * 1000;
+const WRITE_CLI_TIMEOUT_MS = 45_000;
+
+export function scoreTransferTooLarge(byteLength: number): boolean {
+  return byteLength > MAX_UPLOAD_BYTES;
+}
+
+type UploadStore = { dir?: string };
+
+function uploadRoot(dir?: string): string {
+  const root =
+    dir?.trim() ||
+    process.env.ROXYSU_SCORE_TRANSFER_DIR?.trim() ||
+    path.join(tmpdir(), "roxysu-score-transfer");
+  mkdirSync(root, { recursive: true });
+  return root;
+}
+
+function safeUploadId(id: string): string | null {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+    ? id
+    : null;
+}
+
+export function scoreTransferUploadFile(uploadId: string, dir?: string): string | null {
+  const id = safeUploadId(uploadId);
+  if (!id) return null;
+  return path.join(uploadRoot(dir), id, "upload.json");
+}
+
+export function sweepExpiredScoreTransferUploads(now = Date.now(), dir?: string): void {
+  let names: string[] = [];
+  try {
+    names = readdirSync(uploadRoot(dir));
+  } catch {
+    return;
+  }
+  for (const name of names) {
+    if (!safeUploadId(name)) continue;
+    const file = path.join(uploadRoot(dir), name, "upload.json");
+    try {
+      if (now - statSync(file).mtimeMs > UPLOAD_TTL_MS) {
+        rmSync(path.join(uploadRoot(dir), name), { recursive: true, force: true });
+      }
+    } catch {
+      // already gone
+    }
+  }
+}
+
+export function discardScoreTransferUploads(dir?: string): void {
+  rmSync(uploadRoot(dir), { recursive: true, force: true });
+}
 
 export type TransferPreview = {
   found: number;
@@ -54,12 +117,6 @@ function realmReaderDir(): string {
   if (fromEnv) return fromEnv;
   const here = path.dirname(fileURLToPath(import.meta.url));
   return path.resolve(here, "../../../realm-reader");
-}
-
-function uploadPath(): string {
-  const dir = path.join(tmpdir(), "roxysu-score-transfer");
-  mkdirSync(dir, { recursive: true });
-  return path.join(dir, "upload.json");
 }
 
 function toMs(value: Date | number | null | undefined): number {
@@ -285,9 +342,10 @@ export function exportScoreTransferStream(
 export async function previewScoreTransfer(
   db: Db,
   bytes: Uint8Array,
-): Promise<TransferPreview | { error: string }> {
+  store: UploadStore = {},
+): Promise<(TransferPreview & { uploadId: string }) | { error: string }> {
   if (bytes.byteLength === 0) return { error: "Missing score file" };
-  if (bytes.byteLength > MAX_UPLOAD_BYTES) return { error: "Score file is too large" };
+  if (scoreTransferTooLarge(bytes.byteLength)) return { error: "Score file is too large" };
   let raw: unknown;
   try {
     raw = JSON.parse(new TextDecoder().decode(bytes));
@@ -296,9 +354,14 @@ export async function previewScoreTransfer(
   }
   const parsed = parseScoreTransferFile(raw);
   if ("error" in parsed) return parsed;
-  writeFileSync(uploadPath(), bytes);
+  sweepExpiredScoreTransferUploads(Date.now(), store.dir);
+  const uploadId = randomUUID();
+  const file = scoreTransferUploadFile(uploadId, store.dir);
+  if (!file) return { error: "Could not store the score file" };
+  mkdirSync(path.dirname(file), { recursive: true });
+  writeFileSync(file, bytes);
   const index = await loadIndex(db);
-  return summarize(parsed.file, parsed.invalid, index);
+  return { ...summarize(parsed.file, parsed.invalid, index), uploadId };
 }
 
 function addableRows(file: ScoreTransferFile, index: ReturnType<typeof buildTransferIndex>): ScoreTransferRow[] {
@@ -358,6 +421,26 @@ function parseCliResult(stdout: string): TransferWriteResult {
   return parsed;
 }
 
+/** Clears the timer. `onTimeout` runs once if the timer fires first. */
+export function armProcessTimeout(
+  kill: () => void,
+  timeoutMs: number,
+  onTimeout: () => void,
+): () => void {
+  let settled = false;
+  const timer = setTimeout(() => {
+    if (settled) return;
+    settled = true;
+    kill();
+    onTimeout();
+  }, timeoutMs);
+  return () => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
+  };
+}
+
 function runWriteCli(payloadPath: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   return new Promise((resolve, reject) => {
     const child = spawn(
@@ -371,6 +454,20 @@ function runWriteCli(payloadPath: string): Promise<{ stdout: string; stderr: str
     );
     let stdout = "";
     let stderr = "";
+    let settled = false;
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      clear();
+      fn();
+    };
+    const clear = armProcessTimeout(
+      () => {
+        child.kill("SIGKILL");
+      },
+      WRITE_CLI_TIMEOUT_MS,
+      () => finish(() => reject(new Error("Score write timed out"))),
+    );
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
@@ -379,26 +476,46 @@ function runWriteCli(payloadPath: string): Promise<{ stdout: string; stderr: str
     child.stderr.on("data", (chunk: string) => {
       stderr += chunk;
     });
-    child.on("error", reject);
+    child.on("error", (err) => finish(() => reject(err)));
     child.on("close", (code) => {
-      resolve({ stdout, stderr, exitCode: code ?? 1 });
+      finish(() => resolve({ stdout, stderr, exitCode: code ?? 1 }));
     });
   });
 }
 
-export async function commitScoreTransfer(db: Db): Promise<TransferWriteResult> {
+export async function commitScoreTransfer(
+  db: Db,
+  uploadId: string,
+  store: UploadStore = {},
+): Promise<TransferWriteResult> {
+  if (!safeUploadId(uploadId)) {
+    return { ok: false, error: "Choose the score file again.", code: "other" };
+  }
   const lease = tryAcquireRealmWriteLock(db, "score_transfer_commit");
   if (!lease) return { ok: false, error: realmWriteBusyMessage(), code: "in_flight" };
   try {
-    return await runCommit(db, lease);
+    return await runCommit(db, lease, uploadId, store);
   } finally {
     await lease.release();
   }
 }
 
-async function runCommit(db: Db, lease: RealmWriteLease): Promise<TransferWriteResult> {
-  const stored = uploadPath();
-  if (!existsSync(stored)) {
+async function runCommit(
+  db: Db,
+  lease: RealmWriteLease,
+  uploadId: string,
+  store: UploadStore,
+): Promise<TransferWriteResult> {
+  const stored = scoreTransferUploadFile(uploadId, store.dir);
+  if (!stored || !existsSync(stored)) {
+    return { ok: false, error: "Choose the score file again.", code: "other" };
+  }
+  try {
+    if (Date.now() - statSync(stored).mtimeMs > UPLOAD_TTL_MS) {
+      rmSync(path.dirname(stored), { recursive: true, force: true });
+      return { ok: false, error: "Choose the score file again.", code: "other" };
+    }
+  } catch {
     return { ok: false, error: "Choose the score file again.", code: "other" };
   }
   let raw: unknown;
@@ -448,11 +565,17 @@ async function runCommit(db: Db, lease: RealmWriteLease): Promise<TransferWriteR
           };
         }
         result = parseCliResult(stdout);
+      } catch (err) {
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : "Score write failed",
+          code: "other",
+        };
       } finally {
         rmSync(tempDir, { recursive: true, force: true });
       }
     }
-    if (result.ok) rmSync(stored, { force: true });
+    if (result.ok) rmSync(path.dirname(stored), { recursive: true, force: true });
     return result;
   } finally {
     await lease.release();

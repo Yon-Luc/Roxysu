@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { normalizeRankedBest } from "./osuScoreShape";
-import { resetOsuBudgetForTests, acquireOsuSlot, releaseOsuSlot, osuBudgetSnapshot } from "./osuBudget";
+import {
+  resetOsuBudgetForTests,
+  acquireOsuSlot,
+  releaseOsuSlot,
+  osuBudgetSnapshot,
+  markOsuParked,
+  OsuPullTimeoutError,
+} from "./osuBudget";
 
 describe("normalizeRankedBest", () => {
   test("reads the 20220705 score shape", () => {
@@ -50,5 +57,15 @@ describe("osu budget gate", () => {
     expect(snap.inFlight).toBe(1);
     releaseOsuSlot();
     expect(osuBudgetSnapshot(1_000).inFlight).toBe(0);
+  });
+
+  test("an aborted wait does not take a slot", async () => {
+    resetOsuBudgetForTests();
+    markOsuParked(Date.now() + 60_000);
+    const controller = new AbortController();
+    const pending = acquireOsuSlot(Date.now, controller.signal);
+    controller.abort();
+    await expect(pending).rejects.toBeInstanceOf(OsuPullTimeoutError);
+    expect(osuBudgetSnapshot().inFlight).toBe(0);
   });
 });

@@ -1,5 +1,7 @@
 import Elysia, { status, t } from "elysia";
+import { clientIp } from "../services/clientIp";
 import { isHubCalcBundlesEnabled } from "../services/hubEnv";
+import { allowRateLimit } from "../services/rateLimit";
 import {
   getCalcBundleByVersion,
   listCalcBundleEntries,
@@ -28,7 +30,13 @@ export const calcBundleRoutes = new Elysia({ prefix: "/calc-bundles" })
   )
   .get(
     "/:version",
-    async ({ params, set }) => {
+    async ({ params, set, request, server }) => {
+      const ip = clientIp(request, server);
+      if (!allowRateLimit(`calc-bundle:${ip}`, { limit: 10, windowMs: 60_000 })) {
+        set.status = 429;
+        set.headers["Cache-Control"] = "no-store";
+        return { message: "Too many calc bundle requests" };
+      }
       if (!isHubCalcBundlesEnabled()) {
         set.headers["Cache-Control"] = "no-store";
         return status(503, { message: "Hub calc bundles disabled" });

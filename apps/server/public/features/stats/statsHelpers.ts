@@ -104,7 +104,7 @@ export function historyBandValue(
   band: "push" | "accuracy" | "consistency",
   axis: StatsSkillAxis,
 ): number | null {
-  if (axis === "all") return point[band];
+  if (axis === "all") return point[band] > 0 ? point[band] : null;
   const key = `${band}${axis.charAt(0).toUpperCase()}${axis.slice(1)}` as
     | "pushRc"
     | "pushLn"

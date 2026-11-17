@@ -5,6 +5,8 @@ import type { HubSearchStub, SearchSecondaryFilters } from "./cache";
 
 const INSERT_CHUNK = 200;
 export const SEARCH_ALL_MAX_SETS = 100_000;
+/** `fields=full` embeds every difficulty. Compact/ids keep the larger cap. */
+export const SEARCH_ALL_FULL_MAX_SETS = 2_000;
 
 export function escapeLikePattern(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");

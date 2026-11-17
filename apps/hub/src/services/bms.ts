@@ -235,10 +235,18 @@ export async function ingestBmsScore(
         .onConflictDoUpdate({
           target: bmsCharts.md5,
           set: {
-            ...(score.chart.sha256 ? { sha256: score.chart.sha256.toLowerCase() } : {}),
-            ...(score.chart.title ? { title: score.chart.title } : {}),
-            ...(score.chart.artist ? { artist: score.chart.artist } : {}),
-            ...(score.chart.keyCount != null ? { keyCount: score.chart.keyCount } : {}),
+            ...(score.chart.sha256
+              ? { sha256: sql`COALESCE(${bmsCharts.sha256}, ${score.chart.sha256.toLowerCase()})` }
+              : {}),
+            ...(score.chart.title
+              ? { title: sql`COALESCE(${bmsCharts.title}, ${score.chart.title})` }
+              : {}),
+            ...(score.chart.artist
+              ? { artist: sql`COALESCE(${bmsCharts.artist}, ${score.chart.artist})` }
+              : {}),
+            ...(score.chart.keyCount != null
+              ? { keyCount: sql`COALESCE(${bmsCharts.keyCount}, ${score.chart.keyCount})` }
+              : {}),
             updatedAt: new Date(),
           },
         });

@@ -8,7 +8,7 @@ import { drizzle } from "drizzle-orm/bun-sqlite";
 import { migrate } from "drizzle-orm/bun-sqlite/migrator";
 import { eq } from "drizzle-orm";
 import * as schema from "@roxysu/db/hub";
-import { bmsScores, hubUsers } from "@roxysu/db/hub";
+import { bmsCharts, bmsScores, hubUsers } from "@roxysu/db/hub";
 import {
   importTable,
   ingestBmsBatch,
@@ -97,6 +97,28 @@ describe("ingestBmsBatch", () => {
     expect(again.duplicate).toBe(true);
     expect(again.versionId).toBe(created.versionId);
     expect(created.entries).toBe(1);
+  });
+
+  test("a later score fills empty chart fields and leaves a title in place", async () => {
+    const md5 = "cd".repeat(16);
+    const first = inbound("score-meta-1");
+    first.chart = { md5, keyCount: 7 };
+    const fill = inbound("score-meta-2");
+    fill.chart = { md5, title: "original", artist: "first", keyCount: 4 };
+    expect((await ingestBmsBatch(db, 1, "install-1", [first])).results[0]?.status).toBe("accepted");
+    expect((await ingestBmsBatch(db, 2, "install-2", [fill])).results[0]?.status).toBe("accepted");
+    const filled = await db.select().from(bmsCharts).where(eq(bmsCharts.md5, md5));
+    expect(filled[0]?.title).toBe("original");
+    expect(filled[0]?.artist).toBe("first");
+    expect(filled[0]?.keyCount).toBe(7);
+
+    const poison = inbound("score-meta-3");
+    poison.chart = { md5, title: "poison", artist: "second", keyCount: 4 };
+    expect((await ingestBmsBatch(db, 2, "install-2", [poison])).results[0]?.status).toBe("accepted");
+    const kept = await db.select().from(bmsCharts).where(eq(bmsCharts.md5, md5));
+    expect(kept[0]?.title).toBe("original");
+    expect(kept[0]?.artist).toBe("first");
+    expect(kept[0]?.keyCount).toBe(7);
   });
 
   test("rejects autoplay and stores grade and lamp from the payload counts", async () => {

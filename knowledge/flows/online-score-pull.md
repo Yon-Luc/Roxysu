@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-10
+last_verified: 2026-11
 confidence: verified
 touches:
   - apps/server/src/online-scores/pull.ts
@@ -21,7 +21,7 @@ Settings → pick one ruleset
     ↓
 Hub JWT osu id must match the lazer score user
     ↓
-Hub pages scores/best (store by score id, 50/min, 4 in flight)
+Hub pages scores/best (store by score id, 50/min, 4 in flight, 3 min deadline, 80 page cap)
     ↓
 preview: already / can add / current version / not installed
     ↓

@@ -181,6 +181,31 @@ describe("BMS backfill resume", () => {
     expect(again.uploaded).toBe(5);
   });
 
+  test("a failed batch returns uploading rows to retry_wait", async () => {
+    let seen = "";
+    await drainBmsQueue(db, {
+      force: true,
+      limit: 1,
+      post: async (body) => {
+        seen = body.scores[0]?.localScoreId ?? "";
+        throw new Error("Hub did not respond");
+      },
+    });
+    expect(seen).not.toBe("");
+    const row = await db
+      .select()
+      .from(bmsSyncQueue)
+      .where(eq(bmsSyncQueue.scoreId, seen))
+      .get();
+    expect(row?.state).toBe("retry_wait");
+    const stuck = await db
+      .select()
+      .from(bmsSyncQueue)
+      .where(eq(bmsSyncQueue.state, "uploading"))
+      .all();
+    expect(stuck).toHaveLength(0);
+  });
+
   test("score history stays on a bounded page", async () => {
     const page = await listLocalScores(db, { variant: "standard", limit: 20 });
     expect(page.scores).toHaveLength(20);

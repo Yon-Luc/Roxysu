@@ -1,6 +1,8 @@
 const UA = "roxysu-hub/0.1 (+https://github.com/Yon-Luc/Roxysu)";
 const INFO_TIMEOUT_MS = 12_000;
 const FETCH_CONCURRENCY = 8;
+/** One create/update may not fan out for the rest of the hour. */
+export const COLLECTION_STATS_DEADLINE_MS = 10_000;
 
 export type HubRuleset = "osu" | "taiko" | "fruits" | "mania";
 
@@ -89,15 +91,11 @@ export function aggregateCollectionStats(
     };
   }
 
-  let starsMin: number | null = null;
-  let starsMax: number | null = null;
   const modeCounts = new Map<HubRuleset, number>();
   const keyCounts = new Map<number, number>();
 
   for (const d of diffs) {
     if (!(d.stars > 0)) continue;
-    starsMin = starsMin == null ? d.stars : Math.min(starsMin, d.stars);
-    starsMax = starsMax == null ? d.stars : Math.max(starsMax, d.stars);
     modeCounts.set(d.mode, (modeCounts.get(d.mode) ?? 0) + 1);
     if (d.mode === "mania" && d.keys != null && d.keys > 0) {
       keyCounts.set(d.keys, (keyCounts.get(d.keys) ?? 0) + 1);
@@ -110,6 +108,16 @@ export function aggregateCollectionStats(
     if (count > bestModeCount) {
       dominantMode = mode;
       bestModeCount = count;
+    }
+  }
+
+  let starsMin: number | null = null;
+  let starsMax: number | null = null;
+  if (dominantMode) {
+    for (const d of diffs) {
+      if (d.mode !== dominantMode || !(d.stars > 0)) continue;
+      starsMin = starsMin == null ? d.stars : Math.min(starsMin, d.stars);
+      starsMax = starsMax == null ? d.stars : Math.max(starsMax, d.stars);
     }
   }
 
@@ -164,17 +172,25 @@ function diffsFromHinaiPayload(
   return out;
 }
 
+type StatsFetch = (
+  input: string,
+  init: { headers: Record<string, string>; signal: AbortSignal },
+) => Promise<Response>;
+
 async function fetchHinaiSetDiffs(
   setId: number,
-  allowedBeatmapIds?: Set<number>,
+  allowedBeatmapIds: Set<number> | undefined,
+  parent: AbortSignal,
+  fetchImpl: StatsFetch,
 ): Promise<DiffSample[]> {
+  if (parent.aborted) return [];
   if (!Number.isSafeInteger(setId) || setId <= 0) return [];
   try {
-    const res = await fetch(
+    const res = await fetchImpl(
       `https://mirror.hinamizawa.ai/v3/osu/beatmaps/s/${setId}`,
       {
         headers: { accept: "application/json", "user-agent": UA },
-        signal: AbortSignal.timeout(INFO_TIMEOUT_MS),
+        signal: AbortSignal.any([parent, AbortSignal.timeout(INFO_TIMEOUT_MS)]),
       },
     );
     if (!res.ok) return [];
@@ -191,6 +207,7 @@ async function fetchHinaiSetDiffs(
 export async function computeCollectionStatsFromSetIds(
   setIds: number[],
   beatmapIds?: number[],
+  opts?: { deadlineMs?: number; fetchImpl?: StatsFetch },
 ): Promise<CollectionPlayStats> {
   const unique = [
     ...new Set(setIds.filter((id) => Number.isSafeInteger(id) && id > 0)),
@@ -199,12 +216,23 @@ export async function computeCollectionStatsFromSetIds(
     beatmapIds != null && beatmapIds.length > 0
       ? new Set(beatmapIds.filter((id) => Number.isSafeInteger(id) && id > 0))
       : undefined;
+  const fetchImpl = opts?.fetchImpl ?? fetch;
+  const deadline = new AbortController();
+  const timer = setTimeout(
+    () => deadline.abort(),
+    opts?.deadlineMs ?? COLLECTION_STATS_DEADLINE_MS,
+  );
   const diffs: DiffSample[] = [];
-  for (const batch of chunk(unique, FETCH_CONCURRENCY * 2)) {
-    const parts = await mapPool(batch, FETCH_CONCURRENCY, (setId) =>
-      fetchHinaiSetDiffs(setId, allowed),
-    );
-    for (const list of parts) diffs.push(...list);
+  try {
+    for (const batch of chunk(unique, FETCH_CONCURRENCY * 2)) {
+      if (deadline.signal.aborted) break;
+      const parts = await mapPool(batch, FETCH_CONCURRENCY, (setId) =>
+        fetchHinaiSetDiffs(setId, allowed, deadline.signal, fetchImpl),
+      );
+      for (const list of parts) diffs.push(...list);
+    }
+  } finally {
+    clearTimeout(timer);
   }
   return aggregateCollectionStats(diffs);
 }

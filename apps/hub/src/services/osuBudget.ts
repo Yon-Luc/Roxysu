@@ -22,8 +22,26 @@ let inFlight = 0;
 let parkedUntil = 0;
 let seeded = false;
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+export class OsuPullTimeoutError extends Error {
+  constructor(message = "osu! score pull timed out") {
+    super(message);
+    this.name = "OsuPullTimeoutError";
+  }
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.reject(new OsuPullTimeoutError());
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new OsuPullTimeoutError());
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 export function resetOsuBudgetForTests(): void {
@@ -64,11 +82,15 @@ export function osuBudgetSnapshot(now = Date.now()): OsuBudgetSnapshot {
 }
 
 /** Wait until a call is allowed, then count it. Caller must `releaseOsuSlot`. */
-export async function acquireOsuSlot(now: Clock = Date.now): Promise<void> {
+export async function acquireOsuSlot(
+  now: Clock = Date.now,
+  signal?: AbortSignal,
+): Promise<void> {
   for (;;) {
+    if (signal?.aborted) throw new OsuPullTimeoutError();
     const t = now();
     if (parkedUntil > t) {
-      await sleep(Math.min(parkedUntil - t, 5_000));
+      await sleep(Math.min(parkedUntil - t, 5_000), signal);
       continue;
     }
     prune(t);
@@ -81,7 +103,7 @@ export async function acquireOsuSlot(now: Clock = Date.now): Promise<void> {
       hits.length >= OSU_MAX_PER_MINUTE && hits[0] != null
         ? hits[0] + 60_000 - t + 25
         : 40;
-    await sleep(Math.max(25, wait));
+    await sleep(Math.max(25, wait), signal);
   }
 }
 

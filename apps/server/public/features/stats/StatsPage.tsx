@@ -1,6 +1,6 @@
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -59,8 +59,9 @@ import { useChartStyles } from "../../lib/chartStyles";
 import { useAppDict, t } from "../../lib/i18n";
 import {
   buildStatsGradeQuery,
-  openInPractice,
+  practiceSearchForQuery,
 } from "../../lib/practiceSearch";
+import { statsKeyCountSource } from "../../lib/skillKeyCount";
 
 export function StatsPage({
   granularity,
@@ -122,6 +123,16 @@ export function StatsPage({
     staleTime: 5 * 60_000,
     placeholderData: keepPreviousData,
   });
+
+  const correctedDefaultKey = useRef(false);
+  useEffect(() => {
+    if (correctedDefaultKey.current) return;
+    if (statsKeyCountSource() !== "default") return;
+    const preferred = data?.preferredKeyCount;
+    if (preferred == null || preferred === keyCount) return;
+    correctedDefaultKey.current = true;
+    onKeyCountChange(preferred);
+  }, [data?.preferredKeyCount, keyCount, onKeyCountChange]);
 
   const history = data?.skillHistory ?? [];
   const accTrend = data?.accuracyTrend ?? [];
@@ -529,7 +540,8 @@ export function StatsPage({
                 />
                 <Legend />
                 <Line
-                  type="monotone"
+                  type="linear"
+                  isAnimationActive={false}
                   connectNulls={false}
                   dataKey="push"
                   name={dict?.stats.bandPush ?? "Push"}
@@ -538,7 +550,8 @@ export function StatsPage({
                   strokeWidth={2.5}
                 />
                 <Line
-                  type="monotone"
+                  type="linear"
+                  isAnimationActive={false}
                   connectNulls={false}
                   dataKey="accuracy"
                   name={dict?.stats.bandAccuracy ?? "Accuracy"}
@@ -547,7 +560,8 @@ export function StatsPage({
                   strokeWidth={2.5}
                 />
                 <Line
-                  type="monotone"
+                  type="linear"
+                  isAnimationActive={false}
                   connectNulls={false}
                   dataKey="consistency"
                   name={dict?.stats.bandConsistency ?? "Consistency"}
@@ -739,14 +753,16 @@ export function StatsPage({
                       onClick={(_data, index) => {
                         const rank = ranks[index];
                         if (!rank || rank.count === 0) return;
-                        openInPractice(
-                          buildStatsGradeQuery(
-                            keyCount,
-                            skillAxis,
-                            rank.label,
+                        void navigate({
+                          to: "/practice",
+                          search: practiceSearchForQuery(
+                            buildStatsGradeQuery(
+                              keyCount,
+                              skillAxis,
+                              rank.label,
+                            ),
                           ),
-                        );
-                        void navigate({ to: "/practice" });
+                        });
                       }}
                     >
                       {ranks.map((rank) => (

@@ -1,4 +1,5 @@
 import { Elysia, t } from "elysia";
+import { QUERY_MAX } from "../requestLimits";
 import { dbPlugin } from "../db-runtime";
 import { toIso } from "../shared/serialize";
 import {
@@ -152,7 +153,7 @@ export const practiceRoutes = new Elysia({ prefix: "/practice" })
       query: t.Object({
         page: t.Optional(t.Numeric()),
         pageSize: t.Optional(t.Numeric()),
-        q: t.Optional(t.String()),
+        q: t.Optional(t.String({ maxLength: QUERY_MAX })),
         sortBy: t.Optional(t.String()),
         sortDir: t.Optional(t.String()),
       }),
@@ -193,9 +194,9 @@ export const practiceRoutes = new Elysia({ prefix: "/practice" })
     },
     {
       query: t.Object({
-        q: t.Optional(t.String()),
+        q: t.Optional(t.String({ maxLength: QUERY_MAX })),
         count: t.Optional(t.Numeric()),
-        exclude: t.Optional(t.String()),
+        exclude: t.Optional(t.String({ maxLength: QUERY_MAX })),
       }),
     },
   )
@@ -218,7 +219,7 @@ export const practiceRoutes = new Elysia({ prefix: "/practice" })
     },
     {
       query: t.Object({
-        q: t.Optional(t.String()),
+        q: t.Optional(t.String({ maxLength: QUERY_MAX })),
         metric: t.Optional(t.String()),
       }),
     },
@@ -321,8 +322,8 @@ export const practiceRoutes = new Elysia({ prefix: "/practice" })
         focus: t.Optional(t.String()),
         skillset: t.Optional(t.String()),
         count: t.Optional(t.Numeric()),
-        exclude: t.Optional(t.String()),
-        q: t.Optional(t.String()),
+        exclude: t.Optional(t.String({ maxLength: QUERY_MAX })),
+        q: t.Optional(t.String({ maxLength: QUERY_MAX })),
         topPlays: t.Optional(t.Union([t.Number(), t.String()])),
         keyCount: t.Optional(t.Union([t.Number(), t.String()])),
       }),

@@ -30,7 +30,17 @@
     "justNow": "just now",
     "minutesAgo": "{{n}}m ago",
     "hoursAgo": "{{n}}h ago",
-    "daysAgo": "{{n}}d ago"
+    "daysAgo": "{{n}}d ago",
+    "fc": "FC",
+    "missOne": "{{count}} miss",
+    "missMany": "{{count}} misses",
+    "unknownError": "unknown error",
+    "pageError": "This page hit an error.",
+    "pageMissing": "This page does not exist.",
+    "backHome": "Back to Home",
+    "retry": "Retry",
+    "previewFailed": "Preview failed to load",
+    "replayFailed": "Failed to load replay"
   },
   "sync": {
     "paused": "Paused",
@@ -79,7 +89,26 @@
     "beatmapDeleted": "Beatmap deleted",
     "removedFromGame": "Removed from the game",
     "noDerivedStats": "No derived stats yet — analytics pipeline will fill this after sync.",
-    "loadingSummary": "Loading practice summary…"
+    "loadingSummary": "Loading practice summary…",
+    "failedToLoad": "Failed to load dashboard: {{error}}"
+  },
+  "replayAnalysis": {
+    "title": "Analysis",
+    "subtitle": "Approximate judge — practice signal only.",
+    "fidelity": "Simulated accuracy differs from stored by {{points}} pts ({{simulated}} vs {{stored}}). Miss locations may be imperfect.",
+    "timing": "Timing",
+    "noTiming": "No timing samples (all miss / empty).",
+    "histogramNote": "Edge bars include hits worse than ±100 ms.",
+    "columns": "Columns",
+    "heatNote": "Column heat counts note heads, not LN tails.",
+    "missPatterns": "Miss patterns",
+    "noMisses": "No misses",
+    "misses": "Misses ({{count}})",
+    "clean": "Clean — no simulated misses.",
+    "col": "col {{n}}",
+    "tail": "tail",
+    "early": "early",
+    "late": "late"
   },
   "stats": {
     "pageHint": "{{keyCount}}K · times in UTC",
@@ -852,7 +881,9 @@
       "sevenK": "7K recommendations",
       "sevenKHint": "Ranked picks from your Rework skill estimate (Push, Accuracy, Consistency, Deficit, Skillset).",
       "fourK": "4K recommendations",
-      "fourKHint": "Ranked picks from your Rework skill estimate (Push, Accuracy, Consistency, Deficit, Skillset)."
+      "fourKHint": "Ranked picks from your Rework skill estimate (Push, Accuracy, Consistency, Deficit, Skillset).",
+      "key": "{{keyCount}}K recommendations",
+      "keyHint": "Ranked picks from your Rework skill estimate (Push, Accuracy, Consistency, Deficit, Skillset)."
     },
     "shuffling": "Shuffling…",
     "shuffle": "Shuffle",

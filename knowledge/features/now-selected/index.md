@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-10
+last_verified: 2026-11
 confidence: verified
 touches:
   - apps/server/public/features/now-selected
@@ -39,6 +39,7 @@ While song-selecting or playing, open **Now selected** (optionally `#/now-select
 10. Personal play count / best accuracy / best PP use `GET /api/beatmaps/:id/stats`, not the full practice-profile payload.
 11. Live play ticks patch the tosu live query cache (`tosu.updated` `reason: play`). HTTP poll of `GET /api/tosu/live` runs only when SSE is down.
 12. The analysis rating widget shows ephemeral `analysis.rework` (Rework dan + ★). Same content on the Current session **Now selected** panel.
+13. Density, shape, and hotspots render only when `GET /api/tosu/live/analysis` returns the checksum of the map currently selected. A payload for another map, or a cleared `checksum: null` caught mid-switch, is not cached under the previous map (`liveAnalysisMatches` throws before React Query stores it). The Analyzing chip stays until a matching payload arrives.
 
 ## Security rules
 

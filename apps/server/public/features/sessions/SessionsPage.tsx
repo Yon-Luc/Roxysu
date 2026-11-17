@@ -10,24 +10,28 @@ import { PageTitle } from "../../components/PageTitle";
 import { fetchSessions } from "../../lib/api";
 import { formatRelativeTime } from "../../lib/format";
 import { useAppDict, t } from "../../lib/i18n";
+import { useLanguage } from "../../lib/language";
 import {
   SessionActivityCalendar,
-  sessionStartedUtcDay,
+  sessionStartedLocalDay,
+  useLocalClock,
 } from "./SessionActivityCalendar";
 
 const DEFAULT_VISIBLE = 7;
 
 export function SessionsPage() {
   const { dict } = useAppDict();
+  const locale = useLanguage();
+  const { tzOffset, todayKey } = useLocalClock();
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
   const { data, isLoading, error } = useQuery({
-    queryKey: ["sessions"],
-    queryFn: () => fetchSessions(),
+    queryKey: ["sessions", tzOffset, todayKey],
+    queryFn: () => fetchSessions(undefined, tzOffset),
   });
   const dayQuery = useQuery({
-    queryKey: ["sessions", "day", selectedDay],
-    queryFn: () => fetchSessions(selectedDay!),
+    queryKey: ["sessions", "day", selectedDay, tzOffset],
+    queryFn: () => fetchSessions(selectedDay!, tzOffset),
     enabled: selectedDay != null,
   });
 
@@ -218,10 +222,12 @@ export function SessionsPage() {
       <SessionActivityCalendar
         activity={data.activity ?? []}
         sessionDayStats={data.items.map((s) => ({
-          day: sessionStartedUtcDay(s.startedAt),
+          day: sessionStartedLocalDay(s.startedAt, tzOffset),
           plays: s.scoreCount,
         }))}
         selectedDay={selectedDay}
+        todayKey={todayKey}
+        locale={locale}
         onSelectDay={(day) => {
           setSelectedDay(day);
           if (day) setShowAll(false);

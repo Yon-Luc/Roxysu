@@ -9,6 +9,7 @@ import { readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { and, eq } from "drizzle-orm";
 
+import { assertSafeExecutablePath } from "../executablePath";
 import {
   getOsuDataPath,
   resolveLazerFilePath,
@@ -182,6 +183,9 @@ async function runCalculator(
   beatmapPath: string,
   versionId: string,
 ): Promise<CliOutput> {
+  const checked = assertSafeExecutablePath(executablePath);
+  if (!checked.ok) throw new Error(checked.error);
+  const executable = checked.path;
   const args = [
     "--mods",
     "NM",
@@ -192,7 +196,7 @@ async function runCalculator(
 
   if (typeof Bun !== "undefined" && typeof Bun.spawn === "function") {
     const proc = Bun.spawn({
-      cmd: [executablePath, ...args],
+      cmd: [executable, ...args],
       stdout: "pipe",
       stderr: "pipe",
     });
@@ -219,7 +223,7 @@ async function runCalculator(
   }
 
   return new Promise((resolve, reject) => {
-    const proc = spawn(executablePath, args, {
+    const proc = spawn(executable, args, {
       stdio: ["ignore", "pipe", "pipe"],
     });
 

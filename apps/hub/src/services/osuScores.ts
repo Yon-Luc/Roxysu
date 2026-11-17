@@ -9,6 +9,7 @@ import { db } from "../db";
 import {
   acquireOsuSlot,
   markOsuParked,
+  OsuPullTimeoutError,
   osuBudgetSnapshot,
   releaseOsuSlot,
   seedOsuBudget,
@@ -26,6 +27,50 @@ import { createKeyedFlights } from "./singleFlight";
 
 const TOKEN_URL = "https://osu.ppy.sh/oauth/token";
 const API = "https://osu.ppy.sh/api/v2";
+
+/** One outbound osu! HTTP call, including the client-credentials token fetch. */
+export const OSU_HTTP_TIMEOUT_MS = 15_000;
+/** Whole ranked-best pull, including 429 sleeps and the page walk. */
+export const OSU_PULL_DEADLINE_MS = 180_000;
+/** A 429 cannot park the shared budget longer than this. */
+export const OSU_RETRY_AFTER_CAP_SEC = 60;
+/** Stop a walk that never sees a short page. 80 × 100 scores. */
+export const OSU_MAX_PAGES = 80;
+
+export { OsuPullTimeoutError };
+
+export function retryAfterMs(header: string | null): number {
+  const sec = Number(header ?? "60");
+  const safe = Number.isFinite(sec) && sec > 0 ? sec : 60;
+  return Math.min(safe, OSU_RETRY_AFTER_CAP_SEC) * 1000;
+}
+
+/** Next ranked-best offsets, never more than the pages still allowed. */
+export function rankedBestPageOffsets(
+  offset: number,
+  pagesFetched: number,
+  maxPages = OSU_MAX_PAGES,
+): number[] {
+  const room = maxPages - pagesFetched;
+  if (room <= 0) return [];
+  const stride = Math.min(4, room);
+  return Array.from({ length: stride }, (_, i) => offset + i * RANKED_BEST_PAGE);
+}
+
+function throwIfPullAborted(signal: AbortSignal): void {
+  if (signal.aborted) throw new OsuPullTimeoutError();
+}
+
+function outboundSignal(parent: AbortSignal): AbortSignal {
+  return AbortSignal.any([parent, AbortSignal.timeout(OSU_HTTP_TIMEOUT_MS)]);
+}
+
+function rethrowFetchAbort(err: unknown, parent: AbortSignal): never {
+  if (parent.aborted || (err instanceof Error && err.name === "AbortError")) {
+    throw new OsuPullTimeoutError();
+  }
+  throw err;
+}
 
 type Token = { access: string; expiresAt: number };
 let token: Token | null = null;
@@ -55,7 +100,8 @@ async function ensureBudgetSeeded(): Promise<void> {
   return budgetReady;
 }
 
-async function clientToken(): Promise<string> {
+async function clientToken(signal: AbortSignal): Promise<string> {
+  throwIfPullAborted(signal);
   const now = Date.now();
   if (token && token.expiresAt > now + 60_000) return token.access;
   const clientId = process.env.OSU_CLIENT_ID;
@@ -63,16 +109,22 @@ async function clientToken(): Promise<string> {
   if (!clientId || !clientSecret) {
     throw new Error("osu! API credentials are not configured on the Hub");
   }
-  const res = await fetch(TOKEN_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({
-      client_id: clientId,
-      client_secret: clientSecret,
-      grant_type: "client_credentials",
-      scope: "public",
-    }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(TOKEN_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: "client_credentials",
+        scope: "public",
+      }),
+      signal: outboundSignal(signal),
+    });
+  } catch (err) {
+    rethrowFetchAbort(err, signal);
+  }
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`osu! token failed: ${res.status} ${text.slice(0, 200)}`);
@@ -151,24 +203,30 @@ function readRemaining(res: Response): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-async function osuGet(path: string): Promise<Response> {
+async function osuGet(path: string, signal: AbortSignal): Promise<Response> {
+  throwIfPullAborted(signal);
   await ensureBudgetSeeded();
-  await acquireOsuSlot();
+  await acquireOsuSlot(Date.now, signal);
   try {
-    const access = await clientToken();
-    const res = await fetch(`${API}${path}`, {
-      headers: {
-        Authorization: `Bearer ${access}`,
-        Accept: "application/json",
-        "x-api-version": OSU_API_VERSION,
-        "User-Agent": "roxysu-hub/0.1 (+https://github.com/Yon-Luc/Roxysu)",
-      },
-    });
+    const access = await clientToken(signal);
+    let res: Response;
+    try {
+      res = await fetch(`${API}${path}`, {
+        headers: {
+          Authorization: `Bearer ${access}`,
+          Accept: "application/json",
+          "x-api-version": OSU_API_VERSION,
+          "User-Agent": "roxysu-hub/0.1 (+https://github.com/Yon-Luc/Roxysu)",
+        },
+        signal: outboundSignal(signal),
+      });
+    } catch (err) {
+      rethrowFetchAbort(err, signal);
+    }
     const remaining = readRemaining(res);
     await recordCall(res.status, remaining);
     if (res.status === 429) {
-      const retry = Number(res.headers.get("retry-after") ?? "60");
-      const until = Date.now() + (Number.isFinite(retry) ? retry : 60) * 1000;
+      const until = Date.now() + retryAfterMs(res.headers.get("retry-after"));
       markOsuParked(until);
       await db
         .insert(osuApiPark)
@@ -184,19 +242,33 @@ async function osuGet(path: string): Promise<Response> {
   }
 }
 
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.reject(new OsuPullTimeoutError());
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new OsuPullTimeoutError());
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 async function fetchBestPage(
   osuUserId: number,
   ruleset: ScoreRuleset,
   offset: number,
+  signal: AbortSignal,
 ): Promise<RankedBest[]> {
   const path = `/users/${osuUserId}/scores/best?mode=${ruleset}&limit=${RANKED_BEST_PAGE}&offset=${offset}&legacy_only=0`;
-  let res = await osuGet(path);
+  let res = await osuGet(path, signal);
   for (let attempt = 0; res.status === 429 && attempt < 6; attempt++) {
-    const retry = Number(res.headers.get("retry-after") ?? "60");
-    await new Promise((resolve) =>
-      setTimeout(resolve, (Number.isFinite(retry) ? retry : 60) * 1000),
-    );
-    res = await osuGet(path);
+    throwIfPullAborted(signal);
+    await sleep(retryAfterMs(res.headers.get("retry-after")), signal);
+    res = await osuGet(path, signal);
   }
   if (res.status === 429) {
     throw new Error("osu! rate limit");
@@ -276,32 +348,35 @@ async function replaceStored(
   ruleset: ScoreRuleset,
   scores: RankedBest[],
 ): Promise<void> {
-  await db
-    .delete(osuBestScores)
-    .where(
-      and(eq(osuBestScores.osuUserId, osuUserId), eq(osuBestScores.ruleset, ruleset)),
-    );
   const now = new Date();
   const chunk = 80;
-  for (let i = 0; i < scores.length; i += chunk) {
-    const slice = scores.slice(i, i + chunk);
-    if (slice.length === 0) continue;
-    await db.insert(osuBestScores).values(
-      slice.map((score) => ({
-        osuUserId,
-        ruleset,
-        scoreId: score.id,
-        payloadJson: JSON.stringify(score),
-        fetchedAt: now,
-      })),
-    );
-  }
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(osuBestScores)
+      .where(
+        and(eq(osuBestScores.osuUserId, osuUserId), eq(osuBestScores.ruleset, ruleset)),
+      );
+    for (let i = 0; i < scores.length; i += chunk) {
+      const slice = scores.slice(i, i + chunk);
+      if (slice.length === 0) continue;
+      await tx.insert(osuBestScores).values(
+        slice.map((score) => ({
+          osuUserId,
+          ruleset,
+          scoreId: score.id,
+          payloadJson: JSON.stringify(score),
+          fetchedAt: now,
+        })),
+      );
+    }
+  });
 }
 
 async function walkPages(
   osuUserId: number,
   ruleset: ScoreRuleset,
   firstPage: RankedBest[] | null,
+  signal: AbortSignal,
 ): Promise<RankedBest[]> {
   const all: RankedBest[] = [];
   const seen = new Set<number>();
@@ -329,9 +404,13 @@ async function walkPages(
   }
 
   for (;;) {
-    const offsets = [0, 1, 2, 3].map((i) => offset + i * RANKED_BEST_PAGE);
+    throwIfPullAborted(signal);
+    const offsets = rankedBestPageOffsets(offset, pages);
+    if (offsets.length === 0) {
+      throw new Error("osu! score pull exceeded the page cap");
+    }
     const pagesBatch = await Promise.all(
-      offsets.map((pageOffset) => fetchBestPage(osuUserId, ruleset, pageOffset)),
+      offsets.map((pageOffset) => fetchBestPage(osuUserId, ruleset, pageOffset, signal)),
     );
     let stop = false;
     for (const page of pagesBatch) {
@@ -348,12 +427,10 @@ async function walkPages(
       scoreCount: all.length,
     });
     if (stop) break;
-    offset += OSU_PAGE_STRIDE;
+    offset += offsets.length * RANKED_BEST_PAGE;
   }
   return all;
 }
-
-const OSU_PAGE_STRIDE = RANKED_BEST_PAGE * 4;
 
 type PullResult = { scores: RankedBest[]; fromCache: boolean; budget: PullBudget };
 
@@ -384,6 +461,26 @@ async function runPullRankedBests(
   ruleset: ScoreRuleset,
   force: boolean,
 ): Promise<PullResult> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), OSU_PULL_DEADLINE_MS);
+  try {
+    return await runPullBody(osuUserId, ruleset, force, controller.signal);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await setProgress(osuUserId, ruleset, { status: "error", message });
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function runPullBody(
+  osuUserId: number,
+  ruleset: ScoreRuleset,
+  force: boolean,
+  signal: AbortSignal,
+): Promise<PullResult> {
+  throwIfPullAborted(signal);
   await ensureBudgetSeeded();
   const existing = await db
     .select()
@@ -399,7 +496,7 @@ async function runPullRankedBests(
     Date.now() - new Date(existing.completeAt).getTime() < SCORE_PULL_FRESH_MS;
 
   if (fresh) {
-    const page0 = await fetchBestPage(osuUserId, ruleset, 0);
+    const page0 = await fetchBestPage(osuUserId, ruleset, 0, signal);
     const top = page0[0]?.id ?? null;
     if (top === (existing?.topScoreId ?? null)) {
       await recordCacheHit();
@@ -407,7 +504,7 @@ async function runPullRankedBests(
       return { scores, fromCache: true, budget: await budgetView() };
     }
     await setProgress(osuUserId, ruleset, { status: "running", pagesFetched: 1, scoreCount: page0.length });
-    const scores = await walkPages(osuUserId, ruleset, page0);
+    const scores = await walkPages(osuUserId, ruleset, page0, signal);
     await replaceStored(osuUserId, ruleset, scores);
     await setProgress(osuUserId, ruleset, {
       status: "done",
@@ -421,23 +518,17 @@ async function runPullRankedBests(
   }
 
   await setProgress(osuUserId, ruleset, { status: "running", pagesFetched: 0, scoreCount: 0, message: null });
-  try {
-    const scores = await walkPages(osuUserId, ruleset, null);
-    await replaceStored(osuUserId, ruleset, scores);
-    await setProgress(osuUserId, ruleset, {
-      status: "done",
-      scoreCount: scores.length,
-      topScoreId: scores[0]?.id ?? null,
-      pagesFetched: Math.max(1, Math.ceil(scores.length / RANKED_BEST_PAGE)),
-      complete: true,
-      message: null,
-    });
-    return { scores, fromCache: false, budget: await budgetView() };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    await setProgress(osuUserId, ruleset, { status: "error", message });
-    throw err;
-  }
+  const scores = await walkPages(osuUserId, ruleset, null, signal);
+  await replaceStored(osuUserId, ruleset, scores);
+  await setProgress(osuUserId, ruleset, {
+    status: "done",
+    scoreCount: scores.length,
+    topScoreId: scores[0]?.id ?? null,
+    pagesFetched: Math.max(1, Math.ceil(scores.length / RANKED_BEST_PAGE)),
+    complete: true,
+    message: null,
+  });
+  return { scores, fromCache: false, budget: await budgetView() };
 }
 
 export async function readPullProgress(osuUserId: number, ruleset: ScoreRuleset) {

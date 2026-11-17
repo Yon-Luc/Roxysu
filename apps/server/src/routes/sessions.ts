@@ -9,7 +9,8 @@ import {
   listSessions,
   listSessionsOnUtcDay,
 } from "../analytics/session";
-import { getDailyActivity } from "../analytics/progression";
+import { getCalendarActivity } from "../analytics/progression";
+import { clampTzOffset } from "../shared/localDay";
 import {
   loadManiaPpCurves,
   resolveScorePp,
@@ -146,8 +147,9 @@ export const sessionRoutes = new Elysia({ prefix: "/sessions" })
     "/",
     async ({ db, query }) => {
       const day = query.day?.trim();
+      const tzOffset = clampTzOffset(query.tzOffset);
       if (day) {
-        const items = await listSessionsOnUtcDay(db, day, 50);
+        const items = await listSessionsOnUtcDay(db, day, 50, tzOffset);
         return {
           current: null,
           items: items.map(serializeSession),
@@ -157,7 +159,7 @@ export const sessionRoutes = new Elysia({ prefix: "/sessions" })
       const [items, current, activity] = await Promise.all([
         listSessions(db, 100),
         getCurrentSession(db),
-        getDailyActivity(db, 371),
+        getCalendarActivity(db, 371, tzOffset),
       ]);
       return {
         current: current ? serializeSession(current) : null,
@@ -168,6 +170,7 @@ export const sessionRoutes = new Elysia({ prefix: "/sessions" })
     {
       query: t.Object({
         day: t.Optional(t.String()),
+        tzOffset: t.Optional(t.Union([t.Number(), t.String()])),
       }),
     },
   )

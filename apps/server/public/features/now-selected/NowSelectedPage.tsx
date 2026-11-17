@@ -10,7 +10,6 @@ import {
 import { ModBadges } from "../../components/ModBadges";
 import {
   fetchBeatmapStats,
-  fetchTosuLiveAnalysis,
   startTosu,
   type TosuLive,
 } from "../../lib/api";
@@ -23,6 +22,11 @@ import {
 } from "../../lib/osuUrls";
 import { useTosuLiveQuery } from "../../lib/useTosuLiveQuery";
 import { NowSelectedSettingsModal } from "./NowSelectedSettingsModal";
+import {
+  queryTosuLiveAnalysis,
+  retryLiveAnalysis,
+  selectLivePatternDetail,
+} from "../../lib/liveAnalysis";
 import {
   loadNowSelectedLayout,
   saveNowSelectedLayout,
@@ -123,12 +127,13 @@ export function NowSelectedPage({
   const checksum = data?.beatmap?.checksum ?? null;
   const analysisQuery = useQuery({
     queryKey: ["tosu", "live", "analysis", checksum],
-    queryFn: fetchTosuLiveAnalysis,
+    queryFn: queryTosuLiveAnalysis,
     enabled:
       Boolean(checksum) &&
       data?.status === "connected" &&
       !data.analysis.analyzing,
     staleTime: 60_000,
+    retry: retryLiveAnalysis,
   });
 
   const matchedBeatmapId = data?.matchedBeatmapId ?? null;
@@ -151,7 +156,7 @@ export function NowSelectedPage({
   const hasMap = Boolean(beatmap?.title || beatmap?.checksum);
   const showMania = isManiaBeatmap(beatmap);
   const chip = statusLabel(dict, data);
-  const patternDetail = analysisQuery.data?.detail ?? null;
+  const patternDetail = selectLivePatternDetail(analysisQuery.data, checksum);
 
   const analysisLabel =
     dict?.settings.ratingDisplay.rework?.labelReworkDan ?? "Rework dan";

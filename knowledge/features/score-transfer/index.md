@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-10
+last_verified: 2026-11
 confidence: verified
 touches:
   - apps/server/src/score-transfer/transfer.ts
@@ -8,6 +8,7 @@ touches:
   - apps/server/src/score-transfer/format.ts
   - apps/realm-reader/src/writeScoreTransfer.ts
   - apps/realm-reader/src/scoreTransferMatch.ts
+  - apps/server/src/routes/scoreTransfer.ts
   - apps/server/public/features/settings/sections/ScoreTransferSection.tsx
 ---
 
@@ -28,9 +29,10 @@ A manual, add-only exchange. Export reads the local mirror. The write goes into 
 3. A score is already present when its online id is positive and known, its legacy online id is positive and known, or the beatmap, played-at (5 seconds), total score, and ruleset match. Online id `0` is not an identity.
 4. A score can be added when its beatmap is installed. A positive beatmap online id with a checksum mismatch still attaches to the current file. An unsubmitted map matches by md5, then hash — never by online id `0`.
 5. The write is manual. Lazer must be closed. `client.realm` is copied first, before the write connection opens (last 5 backups kept). Extraction is paused for the write. The commit holds the shared Realm write lock (see `features/smart-collections/` rule 7); a second Realm write gets HTTP 409 `in_flight`.
-6. Written scores get a new Realm id, standardised `TotalScoreVersion` 30000019, and no replay. Statistics JSON is copied through.
-7. The write process upserts those rows into the local mirror and records an import whose watermark is copied from the previous successful extraction.
-8. Scores absent from the file are left alone. Two PCs converge by exporting each way.
+6. Preview stores the file under its own upload id. Commit must send that id. A later preview does not replace an earlier one. The route rejects a body over 256 MiB before reading it. An upload older than 30 minutes is refused, and shutdown discards whatever is still stored. The Bun write child is killed if it has not finished in 45 seconds, and that releases the Realm write lock.
+7. Written scores get a new Realm id, standardised `TotalScoreVersion` 30000019, and no replay. Statistics JSON is copied through.
+8. The write process upserts those rows into the local mirror and records an import whose watermark is copied from the previous successful extraction.
+9. Scores absent from the file are left alone. Two PCs converge by exporting each way.
 
 ## Security rules
 

@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-10
+last_verified: 2026-11
 confidence: verified
 touches:
   - apps/server/src/tosu
@@ -24,7 +24,7 @@ Optional WebSocket integration with **tosu** for live in-progress map state (ove
 ## Business rules
 
 1. tosu is **not** the score source of truth — Realm extraction → local mirror remains authoritative for plays.
-2. The lean snapshot (`GET /api/tosu/live`) stays small — it is published on play ticks. Full mania pattern detail is cached on checksum change and served separately (`GET /api/tosu/live/analysis`).
+2. The lean snapshot (`GET /api/tosu/live`) stays small — it is published on play ticks. Full mania pattern detail is cached on checksum change and served separately (`GET /api/tosu/live/analysis`). Now Selected and the overlay density element cache that payload only when its `checksum` matches the selected map (`queryTosuLiveAnalysis`); a mid-switch empty or foreign payload is not stored.
 3. `tosu.updated` SSE is `{ reason: "play" | "full", ... }`. Play ticks (rate-limited to 500ms) patch play + beatmap state + `beatmapTimeMs` (tosu `beatmap.time.live`, ms) in the client cache. Full invalidation is for checksum/status changes. A play tick that arrives before any live snapshot is cached (cold load) refetches `/api/tosu/live` instead of being dropped (`applyTosuUpdated` in `public/lib/sse.ts`).
 4. Client HTTP poll of the lean snapshot is a reconnect fallback only (`useTosuLiveQuery`); it also runs when the cached snapshot reports disabled (slower interval), so a wrongly cached "adapter off" state self-heals instead of wedging. The Current session panel does not poll while hidden.
 5. The adapter must be bootstrapped before `/api/tosu/live` is served — `getTosuLiveSnapshot()` reads module-level settings that only adapter init populates, so an uninitialized read reports `enabled: false`. Both entry points (`src/index.ts` Bun, `src/index.node.ts` Node/desktop) call `void ensureTosuStarted(db)` at boot, and the route awaits the same guarded promise (`ensureTosuStarted` in `src/tosu/live.ts`).
@@ -34,6 +34,7 @@ Optional WebSocket integration with **tosu** for live in-progress map state (ove
 9. Auto-start never stacks tosu processes. `decideSpawn` (`src/tosu/spawnGate.ts`) skips a spawn while the previously spawned pid is alive, backs off 60 s then 120 s between attempts, and stops after 3 consecutive attempts, pushing a warning to the live warnings list in each case. A reachable HTTP probe, or a manual `POST /api/tosu/start`, resets the gate. Detached tosu children are still not killed on Roxysu shutdown.
 10. The 15 s probe loop only refreshes warnings. It publishes `tosu.updated` (`full`) only when the warning list changed; beatmap, play and analysis changes publish themselves.
 11. An in-flight HTTP probe must not spawn tosu or rewrite warnings after live is stopped or reloaded disabled. `startTosuAdapter` and `stopTosuAdapter` bump `probeEpoch` before any await; `refreshProbeAndMaybeSpawn` bails after the probe if that epoch moved, settings are disabled, or the db is gone.
+12. `tosu.host` is a host and optional port. A path, query, or userinfo is rejected on save, and a stored value that fails that check is not used (the adapter falls back to `127.0.0.1:24050`). The live `.osu` fetch stops at 20 MiB. Auto-start only spawns an absolute path to a regular file.
 
 ## Important symbols
 

@@ -14,6 +14,7 @@ import {
   sampleAudioClock,
 } from "../lib/audioClock";
 import { clamp, formatClock } from "../lib/format";
+import { useAppDict } from "../lib/i18n";
 import { useStdSkin } from "../lib/stdSkin";
 import { useImportedStdSprites } from "../lib/stdSkinImport";
 import { useImportedCatchSprites } from "../lib/catchSkinImport";
@@ -103,6 +104,7 @@ export function BeatmapPreviewModal({
   initialMods?: string[];
 }) {
   const titleId = useId();
+  const { dict } = useAppDict();
   const dialogRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [audioMountGen, setAudioMountGen] = useState(0);
@@ -1042,12 +1044,12 @@ export function BeatmapPreviewModal({
             >
               <div className="max-w-md rounded-xl border border-white/10 bg-black/55 px-5 py-4 shadow-lg shadow-black/40">
                 <p className="text-sm font-semibold text-on-media">
-                  Preview failed to load
+                  {dict?.common.previewFailed ?? "Preview failed to load"}
                 </p>
                 <p className="mt-1 text-sm text-on-media-danger">
                   {error instanceof Error
                     ? error.message
-                    : "Failed to load preview"}
+                    : dict?.common.previewFailed ?? "Failed to load preview"}
                 </p>
                 <button
                   type="button"

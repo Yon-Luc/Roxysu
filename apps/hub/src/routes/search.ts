@@ -12,6 +12,7 @@ import {
   ensureSearchIndexRows,
   querySearchIndexAll,
   querySearchIndexPage,
+  SEARCH_ALL_FULL_MAX_SETS,
   SEARCH_ALL_MAX_SETS,
 } from "../services/searchIndex";
 import { allowRateLimit } from "../services/rateLimit";
@@ -178,9 +179,14 @@ export const searchRoutes = new Elysia({ prefix: "/search" })
       await ensureSearchIndexRows(db, row.id, parseStoredStubs);
 
       const secondary = secondaryFiltersFromQuery(params);
+      const dumpFields = fields === "ids" ? "ids" : fields === "full" ? "full" : "compact";
+      const maxSets =
+        dumpFields === "full"
+          ? Math.min(max ?? SEARCH_ALL_FULL_MAX_SETS, SEARCH_ALL_FULL_MAX_SETS)
+          : max;
       const dump = await querySearchIndexAll(db, row.id, secondary, {
-        fields: fields === "ids" ? "ids" : fields === "full" ? "full" : "compact",
-        maxSets: max,
+        fields: dumpFields,
+        maxSets,
       });
 
       setNoStore(set);

@@ -1,18 +1,31 @@
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { fetchPlayedKeyModes } from "../../lib/api";
+import { useAppDict, t } from "../../lib/i18n";
 import { SessionUpNext } from "./SessionUpNext";
 import { SessionSevenKRecommend } from "./SessionSevenKRecommend";
-import { useAppDict } from "../../lib/i18n";
 
 const PREFS_KEY = "rx-session-suggest-tab";
+const CHIP_LIMIT = 6;
+const FALLBACK_KEY_COUNTS = [4, 7];
 
-type SuggestTab = "up-next" | "7k" | "4k";
+type SuggestTab = "up-next" | number;
 
-const TABS: SuggestTab[] = ["up-next", "7k", "4k"];
+function parseStoredTab(raw: string | null): SuggestTab | null {
+  if (raw == null) return null;
+  if (raw === "up-next") return "up-next";
+  if (raw === "7k") return 7;
+  if (raw === "4k") return 4;
+  const n = Number(raw);
+  if (Number.isFinite(n) && n >= 1 && n <= 18) return Math.round(n);
+  return null;
+}
 
-function loadTab(): SuggestTab {
+function loadTab(keyCounts: number[]): SuggestTab {
   try {
-    const raw = localStorage.getItem(PREFS_KEY);
-    if (raw === "7k" || raw === "4k" || raw === "up-next") return raw;
+    const stored = parseStoredTab(localStorage.getItem(PREFS_KEY));
+    if (stored === "up-next") return "up-next";
+    if (typeof stored === "number" && keyCounts.includes(stored)) return stored;
   } catch {
     /* ignore */
   }
@@ -26,19 +39,46 @@ export function SessionSuggest({
   rulesetShortName: string | null;
   excludeBeatmapIds: string[];
 }) {
-  const [tab, setTab] = useState<SuggestTab>(() => loadTab());
   const { dict } = useAppDict();
+  const keysQuery = useQuery({
+    queryKey: ["stats", "key-counts"],
+    queryFn: fetchPlayedKeyModes,
+    staleTime: 5 * 60_000,
+  });
+  const keyCounts =
+    keysQuery.data?.keyCounts ??
+    (keysQuery.isError ? FALLBACK_KEY_COUNTS : null);
+  const [tab, setTab] = useState<SuggestTab | null>(null);
 
   useEffect(() => {
-    localStorage.setItem(PREFS_KEY, tab);
+    if (!keyCounts) return;
+    setTab((current) => {
+      if (current === "up-next") return current;
+      if (typeof current === "number" && keyCounts.includes(current)) {
+        return current;
+      }
+      return loadTab(keyCounts);
+    });
+  }, [keyCounts]);
+
+  useEffect(() => {
+    if (tab == null) return;
+    try {
+      localStorage.setItem(PREFS_KEY, String(tab));
+    } catch {
+      /* ignore */
+    }
   }, [tab]);
 
+  const activeKey = typeof tab === "number" ? tab : null;
+  const visibleTab = tab ?? "up-next";
   const activeHint =
-    tab === "up-next"
+    visibleTab === "up-next"
       ? dict?.session.suggestTabs.upNextHint
-      : tab === "4k"
-        ? dict?.session.suggestTabs.fourKHint
-        : dict?.session.suggestTabs.sevenKHint;
+      : dict?.session.suggestTabs.keyHint ??
+        dict?.session.suggestTabs.sevenKHint;
+
+  const useSelect = (keyCounts?.length ?? 0) > CHIP_LIMIT;
 
   return (
     <section className="space-y-4">
@@ -50,42 +90,73 @@ export function SessionSuggest({
       </div>
 
       <div
-        className="flex flex-wrap gap-2"
+        className="flex flex-wrap items-center gap-2"
         role="tablist"
         aria-label={dict?.session.suggestionModeAria}
       >
-        {TABS.map((id) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={tab === id}
-            className={
-              tab === id
-                ? "rx-chip bg-accent-glow text-accent"
-                : "rx-chip bg-elevated text-muted hover:text-ink"
-            }
-            onClick={() => setTab(id)}
+        <button
+          type="button"
+          role="tab"
+          aria-selected={visibleTab === "up-next"}
+          className={
+            visibleTab === "up-next"
+              ? "rx-chip bg-accent-glow text-accent"
+              : "rx-chip bg-elevated text-muted hover:text-ink"
+          }
+          onClick={() => setTab("up-next")}
+        >
+          {dict?.session.suggestTabs.upNext}
+        </button>
+        {keyCounts && useSelect ? (
+          <select
+            className="rx-select"
+            aria-label={dict?.session.suggestionModeAria}
+            value={activeKey ?? ""}
+            onChange={(event) => {
+              const next = Number(event.target.value);
+              if (Number.isFinite(next)) setTab(next);
+            }}
           >
-            {id === "up-next"
-              ? dict?.session.suggestTabs.upNext
-              : id === "4k"
-                ? dict?.session.suggestTabs.fourK
-                : dict?.session.suggestTabs.sevenK}
-          </button>
-        ))}
+            <option value="" disabled>
+              {dict?.session.suggestTabs.keyHint ?? "Key count"}
+            </option>
+            {keyCounts.map((keyCount) => (
+              <option key={keyCount} value={keyCount}>
+                {t(dict?.session.suggestTabs.key, { keyCount }) ||
+                  `${keyCount}K`}
+              </option>
+            ))}
+          </select>
+        ) : (
+          keyCounts?.map((keyCount) => (
+            <button
+              key={keyCount}
+              type="button"
+              role="tab"
+              aria-selected={tab === keyCount}
+              className={
+                tab === keyCount
+                  ? "rx-chip bg-accent-glow text-accent"
+                  : "rx-chip bg-elevated text-muted hover:text-ink"
+              }
+              onClick={() => setTab(keyCount)}
+            >
+              {t(dict?.session.suggestTabs.key, { keyCount }) || `${keyCount}K`}
+            </button>
+          ))
+        )}
       </div>
 
       <div role="tabpanel">
-        {tab === "up-next" ? (
+        {visibleTab === "up-next" || activeKey == null ? (
           <SessionUpNext
             rulesetShortName={rulesetShortName}
             excludeBeatmapIds={excludeBeatmapIds}
           />
         ) : (
           <SessionSevenKRecommend
-            key={tab === "4k" ? 4 : 7}
-            keyCount={tab === "4k" ? 4 : 7}
+            key={activeKey}
+            keyCount={activeKey}
             excludeBeatmapIds={excludeBeatmapIds}
           />
         )}

@@ -4,6 +4,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { OVERLAY_SKINS_KEY } from "@roxysu/db/settings-keys";
 
 import { dbPlugin } from "../db-runtime";
+import { PROFILE_REF_MAX } from "../requestLimits";
 import { toIso } from "../shared/serialize";
 import { getCurrentSession, listSessionScores } from "../analytics/session";
 import {
@@ -183,7 +184,7 @@ export const overlayRoutes = new Elysia({ prefix: "/overlay" })
     {
       query: t.Object({
         limit: t.Optional(t.Numeric()),
-        profile: t.Optional(t.String()),
+        profile: t.Optional(t.String({ maxLength: PROFILE_REF_MAX })),
       }),
     },
   )

@@ -17,9 +17,7 @@ import { useAppDict, t } from "../../lib/i18n";
 import type { Dictionary } from "@roxysu/i18n";
 import { SessionSuggestMapRow } from "./SessionSuggestMapRow";
 
-type RecommendKeyCount = 4 | 7;
-
-function prefsKey(keyCount: RecommendKeyCount): string {
+function prefsKey(keyCount: number): string {
   return `rx-session-${keyCount}k-recommend`;
 }
 
@@ -68,7 +66,7 @@ const AXIS_OPTIONS: { id: RecommendSkillset; label: string }[] = [
   { id: "fln", label: "FLN" },
 ];
 
-function loadPrefs(keyCount: RecommendKeyCount): RecPrefs {
+function loadPrefs(keyCount: number): RecPrefs {
   try {
     const raw = localStorage.getItem(prefsKey(keyCount));
     if (!raw) return DEFAULT_PREFS;
@@ -95,7 +93,7 @@ function loadPrefs(keyCount: RecommendKeyCount): RecPrefs {
   }
 }
 
-function savePrefs(keyCount: RecommendKeyCount, prefs: RecPrefs) {
+function savePrefs(keyCount: number, prefs: RecPrefs) {
   localStorage.setItem(prefsKey(keyCount), JSON.stringify(prefs));
 }
 
@@ -103,7 +101,7 @@ export function SessionSevenKRecommend({
   keyCount = 7,
   excludeBeatmapIds,
 }: {
-  keyCount?: RecommendKeyCount;
+  keyCount?: number;
   excludeBeatmapIds: string[];
 }) {
   const { dict } = useAppDict();

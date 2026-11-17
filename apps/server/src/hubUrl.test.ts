@@ -29,4 +29,11 @@ describe("resolveHubBaseUrl", () => {
       "https://hub.example",
     );
   });
+
+  test("refuses a non-http scheme and userinfo", () => {
+    expect(() => resolveHubBaseUrl("file:///tmp/hub")).toThrow(/http/);
+    expect(() => resolveHubBaseUrl("https://user:secret@hub.example")).toThrow(
+      /credentials/,
+    );
+  });
 });

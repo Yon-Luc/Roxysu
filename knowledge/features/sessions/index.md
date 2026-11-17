@@ -5,6 +5,7 @@ touches:
   - apps/server/src/analytics/session.ts
   - apps/server/src/analytics/progression.ts
   - apps/server/src/routes/sessions.ts
+  - apps/server/src/shared/localDay.ts
   - apps/server/src/routes/overlay.ts
   - apps/server/src/scores/pbCompare.ts
   - apps/server/src/analytics/retry.ts
@@ -53,15 +54,15 @@ Live sessions keep the **Current session** label in headings; the generated name
 9. Up Next samples debounce the query string. Suggest/recommend over-fetch and **client-filter** session-played beatmap IDs so each new play does not change the React Query key. Shuffle bumps a key instead of double-fetching.
 10. Session score rows whose beatmap was removed from the game (`beatmapId` null after Realm orphan cleanup) display as “Beatmap deleted” / “Removed from the game”, not Untitled/Unknown.
 11. The Current session **Now selected** panel shows ephemeral tosu `analysis.rework` (Rework dan).
-12. Sessions list page keeps the current-session CTA at the top, then recent sessions (default **7**), then a GitHub-style activity calendar from `daily_stats` (~53 weeks UTC). The CTA uses the same panel as Home. The calendar says that a day click filters the list above.
-13. `GET /api/sessions` returns `{ current, items, activity }` where `activity` is `{ day, playCount }[]` from `getDailyActivity` (missing days = 0 plays in the UI).
-14. Clicking a calendar day loads sessions whose `startedAt` falls on that UTC day (`GET /api/sessions?day=YYYY-MM-DD`, cap 50), including days outside the latest 100 sessions. Clicking the day again or **Show all** clears the filter. With no day selected, **Show all** expands beyond the default 7 (that list still caps `items` at 100).
+12. Sessions list page keeps the current-session CTA at the top, then recent sessions (default **7**), then a GitHub-style activity calendar (~53 weeks). Days are the player's local calendar date. The week starts on Monday when `Intl.Locale` week info says so, and every weekday row is labelled. The grid recomputes "today" on a one-minute timer and when the tab becomes visible. The CTA uses the same panel as Home. The calendar says that a day click filters the list above.
+13. `GET /api/sessions` returns `{ current, items, activity }` where `activity` is `{ day, playCount }[]`. With `tzOffset=0` (or omitted) those days are UTC `daily_stats`. Any other `tzOffset` (`Date#getTimezoneOffset` minutes) recounts recent scores onto that local date (`getCalendarActivity`).
+14. Clicking a calendar day loads sessions whose `startedAt` falls on that local day (`GET /api/sessions?day=YYYY-MM-DD&tzOffset=`, cap 50), including days outside the latest 100 sessions. The same `localDayKey` helper builds the grid, the recent-list day stats, and the query range. Clicking the day again or **Show all** clears the filter. With no day selected, **Show all** expands beyond the default 7 (that list still caps `items` at 100).
 15. Session detail score lists use shared `ScoreCard` (`variant="beatmap"`) with map cover, judgments, and PB comparison. A submitted score (`online_id` > 0) shows **Share link**, which copies `https://osu.ppy.sh/scores/{onlineId}`. Unsubmitted scores (`-1` or `0`) do not.
 16. Each session score may include `judgments` (from `scores.statistics`) and `pbCompare`:
     - when `isPb` — previous best on that beatmap (`kind: "previous"`), if one exists
     - when not PB — current PB on that beatmap (`kind: "current"`)
     Ranking is the single `comparePbRank` shared with `runRetryEngine` (`is_pb`): resolved PP, then accuracy, then the earlier play. Resolved PP is `resolveScorePp` (stored Realm PP, else the lazer-master curve estimate for no-mod / mirror-only mania scores), the same value mastery `best_pp` ranks by. A null-PP no-mod mania score can therefore be the PB over a score with a tiny stored PP. Lookup is batched per distinct beatmap in the score window.
-17. Current session layout: stats → Now selected → recommendations → score cards at the bottom. 4K/7K recommend does not offer Send to marathon.
+17. Current session layout: stats → Now selected → recommendations → score cards at the bottom. Suggest offers Up next plus one tab per played mania key count (`GET /api/stats/keys`; 4 and 7 stay available). A key-count tab does not offer Send to marathon.
 18. Recommendation focus bands (Push / Accuracy / Consistency / Deficit) and topPlays are configured in Settings → Customize (`recommend.focus_settings`); session recommend reads those settings.
 19. Active session detail (live or closed, not idle) offers **Copy as image**: one dark branded PNG. Clipboard write is armed in the click turn via a deferred `ClipboardItem` promise (required by Chromium user activation), then the card is captured. Fallback: Electron `writeClipboardImage`, then download. Card header uses absolute dates (same calendar day → one date + time window; different days → full start/end datetimes). Plays / PBs / Duration are centered in the two-column layout. Up to **20** highlight scores with judgments and PB compare — no session display name, no ruleset, no relative “ago” times. With **9+** highlights the card goes **wider** (two even columns) instead of taller; “+N more plays” only when the session has more than 20 plays. Highlights prefer PBs by PP, then fill with non-PBs by PP (`pickSessionShareHighlights`). Share may refetch with `limit=500` when the UI score window is incomplete.
 20. Session rebuild after new scores is a **delta repair** first (`tryRepairSessionDelta`), full rebuild second. Sessions are blocks of the global timeline split by gaps over 30 minutes, so new scores can only reshape the sessions within one gap of them (plus the open session, which is always re-evaluated so it closes once stale). The repair re-buckets those sessions' scores together with the new scores and reconciles them with the same routine as the full rebuild, so gaps inside the batch, scores older than the open session, closing the open session, and merging or extending closed sessions all produce the same partition as a full rebuild. It returns null (full rebuild) only when `sessions.score_count` outside the repaired sessions plus the repaired scores does not equal the number of in-scope scores, i.e. the stored sessions are not a trustworthy partition. Deletes and watermark resets do not use the delta path (the pipeline forces a full rebuild).
@@ -89,7 +90,7 @@ Live sessions keep the **Current session** label in headings; the generated name
 - `apps/server/public/components/ShareScoreLinkButton.tsx` — copies the osu! score page URL when `onlineId` > 0
 - `apps/server/public/features/sessions/SessionActivityCalendar.tsx` — contribution grid
 - `apps/server/public/features/sessions/SessionSuggest.tsx` — Up Next / 4K / 7K tabs
-- `apps/server/public/features/sessions/SessionSevenKRecommend.tsx` — Rework recommend panel (`keyCount` 4 or 7)
+- `apps/server/public/features/sessions/SessionSevenKRecommend.tsx` — Rework recommend panel for one mania key count (1–18)
 
 ## Implementation
 

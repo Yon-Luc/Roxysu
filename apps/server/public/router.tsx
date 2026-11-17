@@ -1,12 +1,15 @@
-import { lazy } from "react";
+import { lazy, useEffect } from "react";
 import {
+  Link,
   Outlet,
   createHashHistory,
   createRootRoute,
   createRoute,
   createRouter,
   useNavigate,
+  type ErrorComponentProps,
 } from "@tanstack/react-router";
+import { useAppDict } from "./lib/i18n";
 import { AppShell } from "./components/AppShell";
 import { PracticeListPage } from "./features/practice/PracticeListPage";
 import { PracticeProfilePage } from "./features/practice/PracticeProfilePage";
@@ -117,6 +120,51 @@ import {
   readSkillTopPlays,
   writeSkillTopPlays,
 } from "./lib/skillTopPlays";
+import {
+  readSkillKeyCount,
+  skillKeyCountFromSearch,
+  writeSkillKeyCount,
+} from "./lib/skillKeyCount";
+import {
+  parsePracticeSearch,
+  readStoredPracticeSearch,
+  writeStoredPracticeSearch,
+  type StoredPracticeSearch,
+} from "./lib/practiceSearch";
+
+function PageError({ error, reset }: ErrorComponentProps) {
+  const { dict } = useAppDict();
+  return (
+    <div className="space-y-3">
+      <p className="font-semibold text-ink">
+        {dict?.common.pageError ?? "This page hit an error."}
+      </p>
+      <p className="text-sm text-muted">{error.message}</p>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className="rx-btn" onClick={() => reset()}>
+          {dict?.common.retry ?? "Retry"}
+        </button>
+        <Link to="/" className="rx-btn">
+          {dict?.common.backHome ?? "Back to Home"}
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function PageMissing() {
+  const { dict } = useAppDict();
+  return (
+    <div className="space-y-3">
+      <p className="font-semibold text-ink">
+        {dict?.common.pageMissing ?? "This page does not exist."}
+      </p>
+      <Link to="/" className="rx-btn">
+        {dict?.common.backHome ?? "Back to Home"}
+      </Link>
+    </div>
+  );
+}
 
 const rootRoute = createRootRoute({
   component: () => <Outlet />,
@@ -162,11 +210,8 @@ const statsRoute = createRoute({
       rawAxis === "rc" || rawAxis === "ln" || rawAxis === "fln"
         ? rawAxis
         : "all";
-    const rawKeys = Number(search.keyCount);
     const keyCount =
-      Number.isFinite(rawKeys) && rawKeys >= 1 && rawKeys <= 18
-        ? Math.round(rawKeys)
-        : 7;
+      skillKeyCountFromSearch(search.keyCount) ?? readSkillKeyCount();
     return { granularity, skillTopPlays, skillAxis, keyCount };
   },
   component: function StatsRoute() {
@@ -189,9 +234,10 @@ const statsRoute = createRoute({
         onSkillAxisChange={(next) =>
           navigate({ search: (prev) => ({ ...prev, skillAxis: next }) })
         }
-        onKeyCountChange={(next) =>
-          navigate({ search: (prev) => ({ ...prev, keyCount: next }) })
-        }
+        onKeyCountChange={(next) => {
+          writeSkillKeyCount(next);
+          navigate({ search: (prev) => ({ ...prev, keyCount: next }) });
+        }}
       />
     );
   },
@@ -200,7 +246,36 @@ const statsRoute = createRoute({
 const practiceRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/practice",
-  component: PracticeListPage,
+  validateSearch: parsePracticeSearch,
+  component: function PracticeRoute() {
+    const raw = practiceRoute.useSearch();
+    const search: StoredPracticeSearch = {
+      q: raw.q ?? "",
+      page: raw.page ?? 1,
+      sortBy: raw.sortBy ?? "lastPlayed",
+      sortDir: raw.sortDir ?? "desc",
+      metric: raw.metric ?? "accuracy",
+    };
+    const navigate = practiceRoute.useNavigate();
+    useEffect(() => {
+      const hash = window.location.hash;
+      if (!hash.includes("?")) {
+        void navigate({
+          search: readStoredPracticeSearch(),
+          replace: true,
+        });
+      }
+    }, [navigate]);
+    return (
+      <PracticeListPage
+        search={search}
+        onSearchChange={(next) => {
+          writeStoredPracticeSearch(next);
+          void navigate({ search: next });
+        }}
+      />
+    );
+  },
 });
 
 const practiceProfileRoute = createRoute({
@@ -592,6 +667,8 @@ const routeTree = rootRoute.addChildren([
 
 export const router = createRouter({
   routeTree,
+  defaultErrorComponent: PageError,
+  defaultNotFoundComponent: PageMissing,
   // Hash history avoids needing server SPA fallback under Bun static/fullstack.
   history: createHashHistory(),
   // Remember window scroll per path + search so sidebar and back both return

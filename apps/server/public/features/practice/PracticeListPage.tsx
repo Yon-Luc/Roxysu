@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   Bar,
@@ -46,11 +46,7 @@ import {
 import { useChartStyles } from "../../lib/chartStyles";
 import { useAppDict, t } from "../../lib/i18n";
 import type { Dictionary } from "@roxysu/i18n";
-import {
-  readStoredPracticeSearch,
-  writeStoredPracticeSearch,
-  type StoredPracticeSearch,
-} from "../../lib/practiceSearch";
+import { type StoredPracticeSearch } from "../../lib/practiceSearch";
 
 const SORT_OPTIONS: PracticeSortBy[] = [
   "lastPlayed",
@@ -174,7 +170,13 @@ function mergeRangeIntoQuery(
   return cleanupMergedQuery(`${base} ${clause}`);
 }
 
-export function PracticeListPage() {
+export function PracticeListPage({
+  search,
+  onSearchChange,
+}: {
+  search: StoredPracticeSearch;
+  onSearchChange: (next: StoredPracticeSearch) => void;
+}) {
   const ratingMode = useRatingDisplayMode();
   const { dict } = useAppDict();
   const charts = useChartStyles();
@@ -185,37 +187,17 @@ export function PracticeListPage() {
       dict?.settings.ratingDisplay.rework?.labelReworkStar ??
       "Rework star rating",
   };
-  const [stored] = useState(readStoredPracticeSearch);
-  const [q, setQ] = useState(stored.q);
-  const [page, setPage] = useState(stored.page);
-  const [submitted, setSubmitted] = useState(stored.q);
-  const [sortBy, setSortBy] = useState<PracticeSortBy>(stored.sortBy);
-  const [sortDir, setSortDir] = useState<PracticeSortDir>(stored.sortDir);
-  const [metric, setMetric] = useState<PracticeMetric>(stored.metric);
+  const { q: submitted, page, sortBy, sortDir, metric } = search;
+  const [q, setQ] = useState(submitted);
   const [queryHistory, setQueryHistory] = useState<string[]>([]);
   const [distributionOpen, setDistributionOpen] = useState(false);
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   useEffect(() => {
-    if (pathname !== "/practice") return;
-    const stored = readStoredPracticeSearch();
-    setQ(stored.q);
-    setSubmitted(stored.q);
-    setPage(stored.page);
-    setSortBy(stored.sortBy);
-    setSortDir(stored.sortDir);
-    setMetric(stored.metric);
-  }, [pathname]);
+    setQ(submitted);
+  }, [submitted]);
 
-  function persist(next: Partial<StoredPracticeSearch> & { q?: string }) {
-    const state: StoredPracticeSearch = {
-      q: next.q ?? submitted,
-      page: next.page ?? page,
-      sortBy: next.sortBy ?? sortBy,
-      sortDir: next.sortDir ?? sortDir,
-      metric: next.metric ?? metric,
-    };
-    writeStoredPracticeSearch(state);
+  function update(next: Partial<StoredPracticeSearch>) {
+    onSearchChange({ ...search, ...next });
   }
 
   const { data, isLoading, error, isFetching, isPlaceholderData } = useQuery({
@@ -275,9 +257,7 @@ export function PracticeListPage() {
       setQueryHistory([]);
     }
     setQ(nextQ);
-    setSubmitted(nextQ);
-    setPage(1);
-    persist({ q: nextQ, page: 1 });
+    update({ q: nextQ, page: 1 });
   }
 
   function undoQuery() {
@@ -285,9 +265,7 @@ export function PracticeListPage() {
     const previous = queryHistory[queryHistory.length - 1] ?? "";
     setQueryHistory((prev) => prev.slice(0, -1));
     setQ(previous);
-    setSubmitted(previous);
-    setPage(1);
-    persist({ q: previous, page: 1 });
+    update({ q: previous, page: 1 });
   }
 
   return (
@@ -372,8 +350,7 @@ export function PracticeListPage() {
               value={metric}
               onChange={(e) => {
                 const next = e.target.value as PracticeMetric;
-                setMetric(next);
-                persist({ metric: next });
+                update({ metric: next });
               }}
             >
               {METRIC_OPTIONS.map((value) => (
@@ -462,9 +439,7 @@ export function PracticeListPage() {
                 value={sortBy}
                 onChange={(e) => {
                   const next = e.target.value as PracticeSortBy;
-                  setSortBy(next);
-                  setPage(1);
-                  persist({ sortBy: next, page: 1 });
+                  update({ sortBy: next, page: 1 });
                 }}
               >
                 {SORT_OPTIONS.map((value) => (
@@ -482,9 +457,7 @@ export function PracticeListPage() {
                 value={sortDir}
                 onChange={(e) => {
                   const next = e.target.value as PracticeSortDir;
-                  setSortDir(next);
-                  setPage(1);
-                  persist({ sortDir: next, page: 1 });
+                  update({ sortDir: next, page: 1 });
                 }}
               >
                 <option value="asc">
@@ -608,7 +581,11 @@ export function PracticeListPage() {
                       />
                       <CardStat
                         label={dict?.practice.sortLabels.misses ?? "Misses"}
-                        value={formatMisses(item.bestMisses)}
+                        value={formatMisses(item.bestMisses, {
+                          fc: dict?.common.fc,
+                          one: dict?.common.missOne,
+                          many: dict?.common.missMany,
+                        })}
                       />
                       <CardStat
                         label={dict?.practice.sortLabels.score ?? "Score"}
@@ -643,8 +620,7 @@ export function PracticeListPage() {
               disabled={page <= 1 || isPlaceholderData}
               onClick={() => {
                 const next = Math.max(1, page - 1);
-                setPage(next);
-                persist({ page: next });
+                update({ page: next });
               }}
               className="rx-btn"
             >
@@ -655,8 +631,7 @@ export function PracticeListPage() {
               disabled={page >= totalPages || isPlaceholderData}
               onClick={() => {
                 const next = page + 1;
-                setPage(next);
-                persist({ page: next });
+                update({ page: next });
               }}
               className="rx-btn"
             >

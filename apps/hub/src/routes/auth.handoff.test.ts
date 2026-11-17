@@ -78,4 +78,14 @@ describe("auth handoff routes", () => {
     const res = await app.handle(new Request("http://localhost/auth/login"));
     expect(res.status).toBe(400);
   });
+
+  test("the 11th login from one IP in a minute is rejected", async () => {
+    const url = `http://localhost/auth/login?challenge=${CHALLENGE}`;
+    for (let i = 0; i < 10; i++) {
+      const res = await app.handle(new Request(url));
+      expect(res.status).toBe(302);
+    }
+    const blocked = await app.handle(new Request(url));
+    expect(blocked.status).toBe(429);
+  });
 });

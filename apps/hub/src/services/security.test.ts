@@ -11,6 +11,8 @@ import {
   createOAuthState,
   handoffChallengeFor,
   isValidHandoffChallenge,
+  OAUTH_STATE_MAX_ENTRIES,
+  OAuthStateStoreFullError,
 } from "./oauthState";
 import { allowRateLimit, clearRateLimitBuckets } from "./rateLimit";
 
@@ -82,6 +84,15 @@ describe("oauthState", () => {
     expect(consumeHandoff(id, "short")).toBeNull();
     expect(consumeHandoff(id, CHALLENGE)).toBeNull();
     expect(consumeHandoff(id, VERIFIER)).toBe("jwt-token");
+  });
+
+  test("a full state map refuses a new login instead of evicting a live one", () => {
+    const first = createOAuthState("web", null, CHALLENGE);
+    for (let i = 1; i < OAUTH_STATE_MAX_ENTRIES; i++) {
+      createOAuthState("web", null, CHALLENGE);
+    }
+    expect(() => createOAuthState("web", null, CHALLENGE)).toThrow(OAuthStateStoreFullError);
+    expect(consumeOAuthState(first)?.challenge).toBe(CHALLENGE);
   });
 
   test("caller cannot choose the handoff id", () => {

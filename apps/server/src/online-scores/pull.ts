@@ -12,6 +12,7 @@ import {
 import { defaultDbPath } from "@roxysu/db/path";
 import type { Db } from "@roxysu/db/types";
 import { resolveScoresUsernames } from "../analytics/scoreUsername";
+import { HubTimeoutError, hubFetch, readHubJson } from "../hubFetch";
 import { resolveHubBaseUrl } from "../hubUrl";
 import {
   classifyRankedBest,
@@ -157,10 +158,20 @@ async function hubPull(
   const url = new URL(`${resolveHubBaseUrl()}/osu/scores/best`);
   url.searchParams.set("ruleset", ruleset);
   if (force) url.searchParams.set("force", "1");
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${hubJwt}`, Accept: "application/json" },
-  });
-  const data = (await res.json().catch(() => ({}))) as {
+  // Longer than the Hub pull deadline (3 min) so a finished 503 wins over a client abort.
+  const HUB_PULL_TIMEOUT_MS = 200_000;
+  let res: Response;
+  try {
+    res = await hubFetch(
+      url.toString(),
+      { headers: { Authorization: `Bearer ${hubJwt}`, Accept: "application/json" } },
+      HUB_PULL_TIMEOUT_MS,
+    );
+  } catch (err) {
+    if (err instanceof HubTimeoutError) throw new Error("Hub score pull timed out");
+    throw err;
+  }
+  const data = (await readHubJson(res)) as {
     message?: string;
     osuId?: number;
     username?: string;

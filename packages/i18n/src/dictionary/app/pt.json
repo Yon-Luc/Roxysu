@@ -30,7 +30,17 @@
     "justNow": "agora",
     "minutesAgo": "há {{n}} min",
     "hoursAgo": "há {{n}} h",
-    "daysAgo": "há {{n}} d"
+    "daysAgo": "há {{n}} d",
+    "fc": "FC",
+    "missOne": "{{count}} miss",
+    "missMany": "{{count}} misses",
+    "unknownError": "erro desconhecido",
+    "pageError": "Esta página encontrou um erro.",
+    "pageMissing": "Esta página não existe.",
+    "backHome": "Voltar ao início",
+    "retry": "Tentar de novo",
+    "previewFailed": "A pré-visualização falhou",
+    "replayFailed": "O replay falhou ao carregar"
   },
   "sync": {
     "paused": "Pausado",
@@ -79,7 +89,26 @@
     "beatmapDeleted": "Beatmap apagada",
     "removedFromGame": "Removida do jogo",
     "noDerivedStats": "Ainda sem stats derivadas — o pipeline de analytics preenche isso depois da sync.",
-    "loadingSummary": "A carregar resumo de prática…"
+    "loadingSummary": "A carregar resumo de prática…",
+    "failedToLoad": "Falha ao carregar o início: {{error}}"
+  },
+  "replayAnalysis": {
+    "title": "Análise",
+    "subtitle": "Juiz aproximado — só um sinal de prática.",
+    "fidelity": "A precisão simulada difere {{points}} pts ({{simulated}} vs {{stored}}). Os misses podem estar inexatos.",
+    "timing": "Timing",
+    "noTiming": "Sem amostras de timing (tudo miss / vazio).",
+    "histogramNote": "As barras nas pontas incluem hits piores que ±100 ms.",
+    "columns": "Colunas",
+    "heatNote": "O calor conta cabeças de nota, não caudas de LN.",
+    "missPatterns": "Padrões de miss",
+    "noMisses": "Sem misses",
+    "misses": "Misses ({{count}})",
+    "clean": "Limpo — sem misses simulados.",
+    "col": "col {{n}}",
+    "tail": "cauda",
+    "early": "cedo",
+    "late": "tarde"
   },
   "stats": {
     "pageHint": "{{keyCount}}K · horários em UTC",
@@ -846,7 +875,9 @@
       "sevenK": "Recomendações 7K",
       "sevenKHint": "Picks ranqueados da sua estimativa de skill Rework (Push, Acc, Consistency, Deficit, Skillset).",
       "fourK": "Recomendações 4K",
-      "fourKHint": "Picks ranqueados da sua estimativa de skill Rework (Push, Acc, Consistency, Deficit, Skillset)."
+      "fourKHint": "Picks ranqueados da sua estimativa de skill Rework (Push, Acc, Consistency, Deficit, Skillset).",
+      "key": "Recomendações {{keyCount}}K",
+      "keyHint": "Picks ranqueados da sua estimativa de skill Rework (Push, Acc, Consistency, Deficit, Skillset)."
     },
     "shuffling": "Embaralhando…",
     "shuffle": "Shuffle",

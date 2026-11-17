@@ -49,7 +49,7 @@ import { JobsOnboardingModal } from "../features/settings/JobsOnboardingModal";
 import { toggleTheme, useResolvedTheme } from "../lib/theme";
 import { ToastHost } from "../lib/toasts";
 import { PageHeaderSkeleton, SkeletonBlock } from "./LoadingSkeleton";
-import roxyIcon from "../roxy.png";
+import roxyIcon from "../icons/icon-192.png";
 
 const APP_VERSION_LABEL = formatAppVersionLabel();
 

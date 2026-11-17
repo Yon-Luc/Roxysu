@@ -1,5 +1,6 @@
 const OSU_TOKEN_URL = "https://osu.ppy.sh/oauth/token";
 const OSU_ME_URL = "https://osu.ppy.sh/api/v2/me";
+const OSU_OAUTH_TIMEOUT_MS = 15_000;
 
 export interface OsuUser {
   id: number;
@@ -23,6 +24,7 @@ export async function exchangeCode(code: string): Promise<string> {
       grant_type: "authorization_code",
       redirect_uri: process.env.OSU_REDIRECT_URI,
     }),
+    signal: AbortSignal.timeout(OSU_OAUTH_TIMEOUT_MS),
   });
 
   if (!res.ok) {
@@ -43,6 +45,7 @@ export async function fetchOsuMe(accessToken: string): Promise<OsuUser> {
       Authorization: `Bearer ${accessToken}`,
       "User-Agent": "roxysu-hub/0.1 (+https://github.com/Yon-Luc/Roxysu)",
     },
+    signal: AbortSignal.timeout(OSU_OAUTH_TIMEOUT_MS),
   });
 
   if (!res.ok) {

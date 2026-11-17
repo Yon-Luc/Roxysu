@@ -17,6 +17,7 @@ export async function probeTosuHttp(
       signal: AbortSignal.timeout(timeoutMs),
     });
     httpUp = res.ok || res.status < 500;
+    await res.body?.cancel().catch(() => {});
   } catch {
     httpUp = false;
   }

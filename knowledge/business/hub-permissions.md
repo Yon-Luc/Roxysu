@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-10
+last_verified: 2026-11
 confidence: verified
 touches:
   - apps/hub/src/middleware/auth.ts
@@ -40,8 +40,8 @@ touches:
 8. BMS score upload uses the authenticated Hub user. A body user id is ignored. The Hub computes DJ grade and combo lamp from the submitted counts and rejects autoplay. Private BMS profiles 404 for everyone except the owner. Table import is admin-only and limited to allowlisted HTTPS URLs.
    **Enforced by:** `apps/hub/src/routes/bms.ts` and `apps/hub/src/services/bms.ts:validateInbound()` — status: verified
 
-9. Hub OAuth handoff redeem requires the handoff verifier held by the client that started login (only its SHA-256 challenge travels in URLs). Wrong verifier: 404, handoff kept, rate-limited per IP.
-   **Enforced by:** `apps/hub/src/services/oauthState.ts:consumeHandoff()` — status: verified
+9. Hub OAuth handoff redeem requires the handoff verifier held by the client that started login (only its SHA-256 challenge travels in URLs). Wrong verifier: 404, handoff kept, rate-limited per IP. `GET /auth/login` is limited to 10 attempts per IP each minute. A full state or handoff map returns 503 and does not evict a live entry.
+   **Enforced by:** `apps/hub/src/services/oauthState.ts:consumeHandoff()` and `apps/hub/src/routes/auth.ts` `/login` — status: verified
 
 10. Calc bundle upload from the client app targets only `resolveHubBaseUrl()`; no caller-supplied Hub URL receives the admin bearer.
    **Enforced by:** `apps/server/src/map-analysis/calcBundle.ts:uploadCalcBundleToHub()` — status: verified
@@ -50,4 +50,4 @@ touches:
 
 ## Failure behavior
 
-Community logout is local-only (clears `localStorage`). Hub does not revoke JWTs server-side. OAuth callback redeems `h=` only (plus the client-held verifier); a JWT in the URL is ignored. Pending login handoffs are in Hub process memory.
+Community logout is local-only (clears `localStorage`). Hub does not revoke JWTs server-side. OAuth callback redeems `h=` only (plus the client-held verifier); a JWT in the URL is ignored. Pending login handoffs are in Hub process memory. A full map refuses new entries instead of dropping an in-flight login.

@@ -68,6 +68,9 @@ import {
   setCachedOsuDataOverride,
   validateOsuDataPath,
 } from "../shared/osu-paths";
+import { assertSafeExecutablePath } from "../executablePath";
+import { parseOverlayHostUrl } from "../overlayUrl";
+import { HOST_MAX, PATH_MAX, URL_MAX } from "../requestLimits";
 import {
   DEFAULT_TOSU_HOST,
   TOSU_ENABLED_KEY,
@@ -427,14 +430,13 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
           await db
             .delete(settings)
             .where(eq(settings.key, OVERLAY_HOST_URL_KEY));
-        } else if (
-          trimmed.startsWith("http://") ||
-          trimmed.startsWith("https://")
-        ) {
-          await upsertSetting(db, OVERLAY_HOST_URL_KEY, trimmed);
         } else {
-          set.status = 400;
-          return { error: "overlayHostUrl must be an http(s) URL" };
+          const parsed = parseOverlayHostUrl(trimmed);
+          if (!parsed.ok) {
+            set.status = 400;
+            return { error: parsed.error };
+          }
+          await upsertSetting(db, OVERLAY_HOST_URL_KEY, parsed.url);
         }
       }
 
@@ -445,7 +447,11 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
 
       if (body.tosuHost !== undefined) {
         const host = normalizeTosuHost(body.tosuHost);
-        await upsertSetting(db, TOSU_HOST_KEY, host);
+        if (!host.ok) {
+          set.status = 400;
+          return { error: host.error };
+        }
+        await upsertSetting(db, TOSU_HOST_KEY, host.host);
         tosuChanged = true;
       }
 
@@ -456,11 +462,12 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
         ) {
           await deleteSetting(db, TOSU_EXECUTABLE_PATH_KEY);
         } else {
-          await upsertSetting(
-            db,
-            TOSU_EXECUTABLE_PATH_KEY,
-            body.tosuExecutablePath.trim(),
-          );
+          const checked = assertSafeExecutablePath(body.tosuExecutablePath);
+          if (!checked.ok) {
+            set.status = 400;
+            return { error: checked.error };
+          }
+          await upsertSetting(db, TOSU_EXECUTABLE_PATH_KEY, checked.path);
         }
         tosuChanged = true;
       }
@@ -470,6 +477,7 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
       }
 
       if (body.maniaRatingExecutables) {
+        const maniaPaths: Array<{ versionId: string; path: string | null }> = [];
         for (const [versionId, execPath] of Object.entries(
           body.maniaRatingExecutables,
         )) {
@@ -478,11 +486,19 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
             set.status = 400;
             return { error: `Unknown mania rating version: ${versionId}` };
           }
-          await setExecutablePath(
-            db,
-            versionId,
-            typeof execPath === "string" ? execPath : null,
-          );
+          if (typeof execPath !== "string" || execPath.trim() === "") {
+            maniaPaths.push({ versionId, path: null });
+            continue;
+          }
+          const checked = assertSafeExecutablePath(execPath);
+          if (!checked.ok) {
+            set.status = 400;
+            return { error: checked.error };
+          }
+          maniaPaths.push({ versionId, path: checked.path });
+        }
+        for (const item of maniaPaths) {
+          await setExecutablePath(db, item.versionId, item.path);
         }
       }
 
@@ -564,23 +580,28 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
          * Gamemode filter: "auto", "*", or a ruleset short name
          * (`osu` / `taiko` / `fruits` / `mania`, aliases std/ctb accepted).
          */
-        scoresGamemodeFilter: t.Optional(t.String()),
+        scoresGamemodeFilter: t.Optional(t.String({ maxLength: 32 })),
         /** Absolute lazer data dir, or null/"" to clear the override. */
-        osuDataPath: t.Optional(t.Union([t.String(), t.Null()])),
+        osuDataPath: t.Optional(t.Union([t.String({ maxLength: PATH_MAX }), t.Null()])),
         /**
          * Full HUD URL for the desktop in-game overlay host, or null/"" to
          * reset to the default (#/overlay?bg=clear).
          */
-        overlayHostUrl: t.Optional(t.Union([t.String(), t.Null()])),
+        overlayHostUrl: t.Optional(t.Union([t.String({ maxLength: URL_MAX }), t.Null()])),
         /** Enable/disable the desktop in-game overlay host (Wayland). */
         overlayEnabled: t.Optional(t.Boolean()),
         tosuEnabled: t.Optional(t.Boolean()),
-        tosuHost: t.Optional(t.String()),
+        tosuHost: t.Optional(t.String({ maxLength: HOST_MAX })),
         /** Absolute path to tosu binary, or null/"" to clear. */
-        tosuExecutablePath: t.Optional(t.Union([t.String(), t.Null()])),
+        tosuExecutablePath: t.Optional(
+          t.Union([t.String({ maxLength: PATH_MAX }), t.Null()]),
+        ),
         /** Mania rating lab calculator paths keyed by version id. */
         maniaRatingExecutables: t.Optional(
-          t.Record(t.String(), t.Union([t.String(), t.Null()])),
+          t.Record(
+            t.String({ maxLength: 64 }),
+            t.Union([t.String({ maxLength: PATH_MAX }), t.Null()]),
+          ),
         ),
         /**
          * Rice→LN classification boundary (ln_ratio 0–1). Must be &lt; fln.

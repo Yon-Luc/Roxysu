@@ -48,8 +48,9 @@ BMS is a ruleset already present in the local mirror. This feature interprets th
    **Enforced by:** `apps/server/src/bms/derive.ts` and `apps/hub/src/services/bms.ts:validateInbound()`
 5. A rescan rebuilds `bms_score_details` and does not reset a `synced` or `rejected` queue row.
    **Status:** verified
-6. Disabling upload stops new sends. It does not delete local or Hub scores.
+6. Disabling upload stops new sends. It does not delete local or Hub scores. The Hub batch POST aborts after 15 seconds. A failed or timed-out batch moves those rows from `uploading` to `retry_wait`.
    **Status:** verified
+   **Enforced by:** `apps/server/src/hubFetch.ts:hubFetch()` and `apps/server/src/bms/sync.ts:drainBmsQueue()`
 7. Table completion counts DJ grades and combo lamps. Clear-type lamps are not counted as clears. Insane, Satellite, and Stella ship with the app. Each level lists that table's charts, and a chart counts when the player has a matching score. Bundled rows are stamped `importedAt` 0 (and existing `bundled://` rows are updated to 0 even when the in-memory seed flag skips inserts) so a Hub import of the same table id wins. The tables GET schedules a background refresh that must not reject the process if settings reads fail; the response does not wait on that refresh.
    **Status:** verified
    **Enforced by:** `packages/db/src/bmsTables.ts:loadBundledBmsTables()` and `apps/server/src/bms/localProfile.ts:seedBundledLocalTables()`
@@ -74,7 +75,7 @@ BMS is a ruleset already present in the local mirror. This feature interprets th
 1. Local `/api/bms` follows the client app: no user auth. The Hub JWT used for background upload is stored in local settings and is not returned by the status route.
    **Enforced by:** `apps/server/src/bms/sync.ts:bmsSyncStatus()` — status: verified
    **Unauthorized result:** N/A on the client app
-2. Hub score ownership is the authenticated principal. A body user id is ignored. Trust is `community_submitted`. Ingest requires `pgreat` and `great`, stores EX and accuracy computed from those counts (`exScoreFromCounts`, accuracy = EX / max EX), and rejects a client `exScore` or `accuracy` that disagrees. DJ grade comes from that computed accuracy. Combo lamp comes from the counts. Autoplay is rejected. Startup recomputes stored rows from their counts; rows with no pgreat/great lose `djGrade` and `exScore`.
+2. Hub score ownership is the authenticated principal. A body user id is ignored. Trust is `community_submitted`. Ingest requires `pgreat` and `great`, stores EX and accuracy computed from those counts (`exScoreFromCounts`, accuracy = EX / max EX), and rejects a client `exScore` or `accuracy` that disagrees. DJ grade comes from that computed accuracy. Combo lamp comes from the counts. Autoplay is rejected. Chart title, artist, key count, and sha256 stay once set; a later score fills only a null field. Startup recomputes stored rows from their counts; rows with no pgreat/great lose `djGrade` and `exScore`.
    **Enforced by:** `apps/hub/src/routes/bms.ts` and `apps/hub/src/services/bms.ts:ingestBmsScore()` — status: verified
    **Unauthorized result:** 401
 3. Private profiles and missing profiles both 404 for non-owners.

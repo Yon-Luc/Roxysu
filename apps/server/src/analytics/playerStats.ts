@@ -129,11 +129,47 @@ function weekStartKey(d: Date): string {
   return copy.toISOString().slice(0, 10);
 }
 
-function listPlayedKeyCounts(db: Db, user: ScoreScope): number[] {
+export type PlayedKeyModes = {
+  /** Played mania key counts, plus 4 and 7 so those modes stay reachable. */
+  keyCounts: number[];
+  /** Key count with the most plays, or 7 when the player has none. */
+  preferredKeyCount: number;
+};
+
+export function playedKeyModesFromRows(
+  rows: Array<{ keyCount: number; plays: number }>,
+): PlayedKeyModes {
+  const played = rows
+    .map((row) => ({
+      keyCount: Math.round(Number(row.keyCount)),
+      plays: Number(row.plays),
+    }))
+    .filter(
+      (row) =>
+        Number.isFinite(row.keyCount) &&
+        row.keyCount >= 1 &&
+        row.keyCount <= 18 &&
+        Number.isFinite(row.plays) &&
+        row.plays > 0,
+    )
+    .sort((a, b) => b.plays - a.plays || a.keyCount - b.keyCount);
+
+  const preferredKeyCount = played[0]?.keyCount ?? DEFAULT_SKILL_KEY_COUNT;
+  const keys = played.map((row) => row.keyCount);
+  for (const preset of [4, 7]) {
+    if (!keys.includes(preset)) keys.push(preset);
+  }
+  return {
+    keyCounts: [...new Set(keys)].sort((a, b) => a - b),
+    preferredKeyCount,
+  };
+}
+
+function listPlayedKeyModes(db: Db, user: ScoreScope): PlayedKeyModes {
   const rows = db.$client
     .query(
       `
-      SELECT DISTINCT CAST(b.circle_size AS INTEGER) AS keyCount
+      SELECT CAST(b.circle_size AS INTEGER) AS keyCount, COUNT(*) AS plays
       FROM scores s
       JOIN beatmaps b ON b.id = s.beatmap_id
       WHERE s.delete_pending = 0
@@ -141,19 +177,16 @@ function listPlayedKeyCounts(db: Db, user: ScoreScope): number[] {
         AND b.hidden = 0
         AND LOWER(COALESCE(b.ruleset_short_name, '')) = 'mania'
         AND b.circle_size IS NOT NULL
-      ORDER BY keyCount ASC
+      GROUP BY CAST(b.circle_size AS INTEGER)
     `,
     )
-    .all(...user.params) as Array<{ keyCount: number }>;
+    .all(...user.params) as Array<{ keyCount: number; plays: number }>;
 
-  const keys = rows
-    .map((r) => Math.round(Number(r.keyCount)))
-    .filter((n) => Number.isFinite(n) && n >= 1 && n <= 18);
-  // Always offer 4K/7K even with no plays yet.
-  for (const preset of [4, 7]) {
-    if (!keys.includes(preset)) keys.push(preset);
-  }
-  return [...new Set(keys)].sort((a, b) => a - b);
+  return playedKeyModesFromRows(rows);
+}
+
+export function getPlayedKeyModes(db: Db): PlayedKeyModes {
+  return listPlayedKeyModes(db, scoreScopeFilter(db));
 }
 
 /**
@@ -855,7 +888,8 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
 
   // Resolve the score scope (username + gamemode) once for every query below.
   const scope = scoreScopeFilter(db);
-  const availableKeyCounts = listPlayedKeyCounts(db, scope);
+  const { keyCounts: availableKeyCounts, preferredKeyCount } =
+    listPlayedKeyModes(db, scope);
   const curves = loadManiaPpCurvesSync(db);
   const pass = streamManiaPass(db, scope, keyCount, curves);
   const variantOf = loadDanVariantLookup(db, pass.candidates);
@@ -925,6 +959,7 @@ export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
     skillTopPlays,
     keyCount,
     availableKeyCounts,
+    preferredKeyCount,
     summary: {
       ...summary,
       sessionCount: sessionStats.sessionCount,

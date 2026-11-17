@@ -7,10 +7,10 @@ import {
   fetchPracticeSample,
   type PracticeItem,
 } from "../../lib/api";
+import { practiceSearchForQuery } from "../../lib/practiceSearch";
 import { SessionSuggestMapRow } from "./SessionSuggestMapRow";
 
 const PREFS_KEY = "rx-session-up-next";
-const PRACTICE_SEARCH_KEY = "roxysu:practice-search";
 
 type AccMode = "improve" | "reach";
 type BandPreset = "90-93" | "93-97" | "custom";
@@ -144,26 +144,6 @@ function savePrefs(prefs: UpNextPrefs) {
   localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
 }
 
-function openInPractice(query: string) {
-  try {
-    const raw = localStorage.getItem(PRACTICE_SEARCH_KEY);
-    const prev = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
-    localStorage.setItem(
-      PRACTICE_SEARCH_KEY,
-      JSON.stringify({
-        ...prev,
-        q: query,
-        page: 1,
-      }),
-    );
-  } catch {
-    localStorage.setItem(
-      PRACTICE_SEARCH_KEY,
-      JSON.stringify({ q: query, page: 1 }),
-    );
-  }
-}
-
 export function SessionUpNext({
   rulesetShortName,
   excludeBeatmapIds,
@@ -269,8 +249,8 @@ export function SessionUpNext({
         </button>
         <Link
           to="/practice"
+          search={practiceSearchForQuery(prefs.query.trim())}
           className="rx-btn"
-          onClick={() => openInPractice(prefs.query.trim())}
         >
           {t(dict?.session.openInPractice) || "Open in Beatmaps"}
         </Link>

@@ -1,9 +1,10 @@
-import { Elysia } from "elysia";
+import { Elysia, t } from "elysia";
 import { dbPlugin } from "../db-runtime";
 import {
   commitScoreTransfer,
   exportScoreTransferStream,
   previewScoreTransfer,
+  scoreTransferTooLarge,
 } from "../score-transfer/transfer";
 
 export const scoreTransferRoutes = new Elysia({ prefix: "/score-transfer" })
@@ -31,6 +32,14 @@ export const scoreTransferRoutes = new Elysia({ prefix: "/score-transfer" })
       set.status = 400;
       return { error: "Missing score file" };
     }
+    if (uploaded.size === 0) {
+      set.status = 400;
+      return { error: "Missing score file" };
+    }
+    if (scoreTransferTooLarge(uploaded.size)) {
+      set.status = 400;
+      return { error: "Score file is too large" };
+    }
     const result = await previewScoreTransfer(db, new Uint8Array(await uploaded.arrayBuffer()));
     if ("error" in result) {
       set.status = 400;
@@ -38,8 +47,8 @@ export const scoreTransferRoutes = new Elysia({ prefix: "/score-transfer" })
     }
     return result;
   })
-  .post("/commit", async ({ db, set }) => {
-    const result = await commitScoreTransfer(db);
+  .post("/commit", async ({ db, body, set }) => {
+    const result = await commitScoreTransfer(db, body.uploadId);
     if (!result.ok) {
       if (result.code === "locked") set.status = 423;
       else if (result.code === "schema_mismatch" || result.code === "in_flight") set.status = 409;
@@ -47,4 +56,8 @@ export const scoreTransferRoutes = new Elysia({ prefix: "/score-transfer" })
       return { error: result.error, code: result.code };
     }
     return result;
+  }, {
+    body: t.Object({
+      uploadId: t.String({ minLength: 36, maxLength: 36 }),
+    }),
   });

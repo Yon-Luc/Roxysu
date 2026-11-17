@@ -32,6 +32,19 @@ describe("osu score routes access", () => {
     expect(res.status).toBe(401);
   });
 
+  test("retry-after is capped and the page walk stops at the cap", async () => {
+    const { retryAfterMs, rankedBestPageOffsets, OSU_MAX_PAGES } = await import(
+      "../services/osuScores"
+    );
+    expect(retryAfterMs("3600")).toBe(60_000);
+    expect(retryAfterMs(null)).toBe(60_000);
+    expect(retryAfterMs("1")).toBe(1_000);
+    expect(retryAfterMs("nope")).toBe(60_000);
+    expect(rankedBestPageOffsets(0, 0)).toHaveLength(4);
+    expect(rankedBestPageOffsets(100, OSU_MAX_PAGES - 1)).toEqual([100]);
+    expect(rankedBestPageOffsets(0, OSU_MAX_PAGES)).toEqual([]);
+  });
+
   test("GET /osu/scores/progress still requires auth", async () => {
     const res = await app.handle(
       new Request("http://localhost/osu/scores/progress?ruleset=mania"),

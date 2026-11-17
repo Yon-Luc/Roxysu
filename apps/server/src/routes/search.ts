@@ -1,4 +1,5 @@
 import { Elysia, t } from "elysia";
+import { QUERY_MAX } from "../requestLimits";
 import { dbPlugin } from "../db-runtime";
 import { toIso } from "../shared/serialize";
 import {
@@ -67,7 +68,7 @@ export const searchRoutes = new Elysia({ prefix: "/search" })
     },
     {
       query: t.Object({
-        q: t.Optional(t.String()),
+        q: t.Optional(t.String({ maxLength: QUERY_MAX })),
         page: t.Optional(t.Numeric()),
         pageSize: t.Optional(t.Numeric()),
       }),

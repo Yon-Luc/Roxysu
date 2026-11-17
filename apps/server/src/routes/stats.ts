@@ -2,6 +2,7 @@ import { Elysia, t } from "elysia";
 import type { Db } from "@roxysu/db/types";
 import { dbPlugin } from "../db-runtime";
 import {
+  getPlayedKeyModes,
   getPlayerStats,
   parseGranularity,
   parseSkillKeyCount,
@@ -104,6 +105,7 @@ export const statsRoutes = new Elysia({ prefix: "/stats" })
       }),
     },
   )
+  .get("/keys", ({ db }) => getPlayedKeyModes(db))
   .get(
     "/",
     async ({ db, query }) => {

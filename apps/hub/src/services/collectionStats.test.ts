@@ -12,8 +12,47 @@ describe("aggregateCollectionStats", () => {
     ]);
     expect(stats.dominantMode).toBe("mania");
     expect(stats.dominantKeys).toBe(7);
-    expect(stats.starsMin).toBe(3.0);
+    expect(stats.starsMin).toBe(4.2);
     expect(stats.starsMax).toBe(6.1);
+  });
+
+  test("a tied mode count keeps the first mode and ignores the other star range", () => {
+    const stats = aggregateCollectionStats([
+      { mode: "mania", stars: 5, keys: 7 },
+      { mode: "osu", stars: 6, keys: null },
+    ]);
+    expect(stats.dominantMode).toBe("mania");
+    expect(stats.dominantKeys).toBe(7);
+    expect(stats.starsMin).toBe(5);
+    expect(stats.starsMax).toBe(5);
+  });
+});
+
+describe("computeCollectionStatsFromSetIds deadline", () => {
+  test("returns when the deadline fires instead of waiting out every fetch", async () => {
+    const { computeCollectionStatsFromSetIds } = await import("./collectionStats");
+    const started = Date.now();
+    const stats = await computeCollectionStatsFromSetIds(
+      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      undefined,
+      {
+        deadlineMs: 40,
+        fetchImpl: (_url, init) =>
+          new Promise((resolve, reject) => {
+            const timer = setTimeout(
+              () => resolve(new Response("{}", { status: 200 })),
+              5_000,
+            );
+            init.signal.addEventListener("abort", () => {
+              clearTimeout(timer);
+              reject(new DOMException("aborted", "AbortError"));
+            });
+          }),
+      },
+    );
+    expect(Date.now() - started).toBeLessThan(1_000);
+    expect(stats.dominantMode).toBeNull();
+    expect(stats.starsMin).toBeNull();
   });
 });
 

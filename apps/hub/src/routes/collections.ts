@@ -35,6 +35,10 @@ import { hubModeTagForRuleset, parseHubSearchQuery } from "../services/hubSearch
 import { allowRateLimit } from "../services/rateLimit";
 import { clientIp } from "../services/clientIp";
 
+function allowCollectionWrite(userId: number): boolean {
+  return allowRateLimit(`collection-write:${userId}`, { limit: 5, windowMs: 60_000 });
+}
+
 function parseTagFilters(raw: {
   tag?: string;
   tags?: string | string[];
@@ -507,6 +511,9 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
   .post(
     "/",
     async ({ body, user }) => {
+      if (!allowCollectionWrite(user.sub)) {
+        return status(429, { message: "Too many collection writes" });
+      }
       const tags = uniqueTags(body.tags);
       const invalidTags = tags.filter((tag) => !VALID_TAGS.includes(tag as Tag));
       if (invalidTags.length > 0) {
@@ -588,6 +595,9 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
   .put(
     "/:id",
     async ({ params, body, user }) => {
+      if (!allowCollectionWrite(user.sub)) {
+        return status(429, { message: "Too many collection writes" });
+      }
       const col = await db
         .select()
         .from(collections)

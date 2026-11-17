@@ -11,6 +11,7 @@ import {
   type TimingStats,
 } from "../lib/replayPatterns";
 import { formatAccuracy, formatClockFrac } from "../lib/format";
+import { useAppDict, t } from "../lib/i18n";
 import { JUDGMENT_COLORS } from "./ManiaNotefield";
 
 export type ReplayAnalysis = ReturnType<typeof buildReplayAnalysis>;
@@ -80,32 +81,35 @@ export function ReplayAnalysisPanel({
     fidelityWarn,
     accDelta,
   } = analysis;
+  const { dict } = useAppDict();
+  const copy = dict?.replayAnalysis;
 
   return (
     <aside className="flex h-full min-h-0 w-full flex-col gap-3 overflow-y-auto border-t border-white/10 bg-black/55 p-3 backdrop-blur sm:border-l sm:border-t-0 sm:p-4">
       <div>
         <h3 className="text-[11px] font-semibold uppercase tracking-wide text-on-media-muted">
-          Analysis
+          {copy?.title ?? "Analysis"}
         </h3>
         <p className="mt-0.5 text-xs text-on-media-muted">
-          Approximate judge — practice signal only.
+          {copy?.subtitle ?? "Approximate judge — practice signal only."}
         </p>
       </div>
 
       {fidelityWarn ? (
         <div className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-100/90">
-          Simulated accuracy differs from stored by{" "}
-          {(accDelta * 100).toFixed(1)} pts (
-          {formatAccuracy(data.simulated.accuracy)} vs{" "}
-          {formatAccuracy(data.score.accuracy)}). Miss locations may be
-          imperfect.
+          {t(copy?.fidelity, {
+            points: (accDelta * 100).toFixed(1),
+            simulated: formatAccuracy(data.simulated.accuracy),
+            stored: formatAccuracy(data.score.accuracy),
+          }) ||
+            `Simulated accuracy differs from stored by ${(accDelta * 100).toFixed(1)} pts.`}
         </div>
       ) : null}
 
       {timing && timing.count > 0 ? (
         <section>
           <h4 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-on-media-muted">
-            Timing
+            {copy?.timing ?? "Timing"}
           </h4>
           <div className="mb-2 flex flex-wrap gap-x-3 gap-y-1 text-xs tabular-nums text-on-media-muted">
             <span>
@@ -113,26 +117,36 @@ export function ReplayAnalysisPanel({
               {timing.mean.toFixed(1)}ms
             </span>
             <span>σ {timing.stddev.toFixed(1)}ms</span>
-            <span>early {timing.earlyPct.toFixed(0)}%</span>
-            <span>late {timing.latePct.toFixed(0)}%</span>
+            <span>
+              {copy?.early ?? "early"} {timing.earlyPct.toFixed(0)}%
+            </span>
+            <span>
+              {copy?.late ?? "late"} {timing.latePct.toFixed(0)}%
+            </span>
           </div>
           <TimingHistogram timing={timing} />
+          <p className="mt-1 text-[10px] text-on-media-muted">
+            {copy?.histogramNote ??
+              "Edge bars include hits worse than ±100 ms."}
+          </p>
         </section>
       ) : (
-        <p className="text-xs text-on-media-muted">No timing samples (all miss / empty).</p>
+        <p className="text-xs text-on-media-muted">
+          {copy?.noTiming ?? "No timing samples (all miss / empty)."}
+        </p>
       )}
 
       {columnHeat.length > 0 ? (
         <section>
           <h4 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-on-media-muted">
-            Columns
+            {copy?.columns ?? "Columns"}
           </h4>
           <div className="flex gap-1">
             {columnHeat.map((c) => (
               <div
                 key={c.column}
                 className="min-w-0 flex-1 text-center"
-                title={`Col ${c.column + 1}: ${c.missCount} miss · ${
+                title={`${t(copy?.col, { n: c.column + 1 }) || `col ${c.column + 1}`}: ${c.missCount} · ${
                   c.meanAbsError != null
                     ? `±${c.meanAbsError.toFixed(1)}ms`
                     : "—"
@@ -156,13 +170,16 @@ export function ReplayAnalysisPanel({
               </div>
             ))}
           </div>
+          <p className="mt-1 text-[10px] text-on-media-muted">
+            {copy?.heatNote ?? "Column heat counts note heads, not LN tails."}
+          </p>
         </section>
       ) : null}
 
       {tagCounts ? (
         <section>
           <h4 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-on-media-muted">
-            Miss patterns
+            {copy?.missPatterns ?? "Miss patterns"}
           </h4>
           <div className="flex flex-wrap gap-1.5">
             {(Object.keys(PATTERN_TAG_LABEL) as PatternTag[]).map((tag) => {
@@ -178,7 +195,9 @@ export function ReplayAnalysisPanel({
               );
             })}
             {misses.length === 0 ? (
-              <span className="text-xs text-on-media-muted">No misses</span>
+              <span className="text-xs text-on-media-muted">
+                {copy?.noMisses ?? "No misses"}
+              </span>
             ) : null}
           </div>
         </section>
@@ -186,10 +205,13 @@ export function ReplayAnalysisPanel({
 
       <section className="min-h-0 flex-1">
         <h4 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-on-media-muted">
-          Misses ({misses.length})
+          {t(copy?.misses, { count: misses.length }) ||
+            `Misses (${misses.length})`}
         </h4>
         {misses.length === 0 ? (
-          <p className="text-xs text-on-media-muted">Clean — no simulated misses.</p>
+          <p className="text-xs text-on-media-muted">
+            {copy?.clean ?? "Clean — no simulated misses."}
+          </p>
         ) : (
           <ul className="flex max-h-48 flex-col gap-1 overflow-y-auto sm:max-h-none">
             {misses.map((m) => {
@@ -211,8 +233,9 @@ export function ReplayAnalysisPanel({
                         {formatClockFrac(m.tMs)}
                       </span>
                       <span className="tabular-nums text-on-media-muted">
-                        col {m.column + 1}
-                        {m.isTail ? " · tail" : ""}
+                        {t(copy?.col, { n: m.column + 1 }) ||
+                          `col ${m.column + 1}`}
+                        {m.isTail ? ` · ${copy?.tail ?? "tail"}` : ""}
                       </span>
                     </div>
                     <div className="flex flex-wrap gap-1">

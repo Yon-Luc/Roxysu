@@ -5,7 +5,12 @@ import {
 import { ModBadges } from "../../components/ModBadges";
 import { BeatmapPreviewEmbed } from "../../components/BeatmapPreviewEmbed";
 import { DensityOverTimeChart } from "../../components/mania-analysis";
-import { fetchBeatmapStats, fetchTosuLiveAnalysis, type TosuLive } from "../../lib/api";
+import { fetchBeatmapStats, type TosuLive } from "../../lib/api";
+import {
+  queryTosuLiveAnalysis,
+  retryLiveAnalysis,
+  selectLivePatternDetail,
+} from "../../lib/liveAnalysis";
 import { useAppDict } from "../../lib/i18n";
 import {
   formatAccuracy,
@@ -404,14 +409,16 @@ export function DensityElement({ ctx }: { ctx: OverlayElementContext }) {
   const checksum = snapshot?.beatmap?.checksum ?? null;
   const analysisQuery = useQuery({
     queryKey: ["tosu", "live", "analysis", checksum],
-    queryFn: fetchTosuLiveAnalysis,
+    queryFn: queryTosuLiveAnalysis,
     enabled:
       Boolean(checksum) &&
       snapshot?.status === "connected" &&
       !snapshot.analysis.analyzing,
     staleTime: 60_000,
+    retry: retryLiveAnalysis,
   });
-  const samples = analysisQuery.data?.detail?.samples ?? [];
+  const samples =
+    selectLivePatternDetail(analysisQuery.data, checksum)?.samples ?? [];
   if (samples.length === 0) return null;
   return (
     <DensityOverTimeChart

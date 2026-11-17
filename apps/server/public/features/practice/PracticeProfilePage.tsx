@@ -540,23 +540,28 @@ function PatternDensityHints({
     | Record<string, string>
     | undefined;
   const hints: string[] = [];
-  const dominant = pattern.dominantPattern === "stream" ? "delay" : pattern.dominantPattern;
+  const dominant = pattern.dominantPattern;
   const fallback: Record<string, string> = {
     jack: "jack",
     chord: "chord",
-    delay: "delay",
+    stream: "stream",
     bracket: "bracket",
   };
 
-  const add = (label: string, value: number | null, key: string) => {
-    if (value == null || value < 0.08 || key === dominant) return;
-    hints.push(`${hintWords?.[label] ?? fallback[label]} ${Math.round(value * 100)}%`);
+  const add = (label: string, value: number | null, shapes: string[]) => {
+    if (value == null || value < 0.08) return;
+    if (dominant && shapes.includes(dominant)) return;
+    const word =
+      label === "stream"
+        ? formatPatternLabel("stream", dict?.practice.detail.patterns)
+        : hintWords?.[label] ?? fallback[label];
+    hints.push(`${word} ${Math.round(value * 100)}%`);
   };
 
-  add("jack", pattern.jackDensity, "jack");
-  add("chord", pattern.chordDensity, "chordjack");
-  add("delay", pattern.streamDensity, "delay");
-  add("bracket", pattern.bracketDensity, "bracket");
+  add("jack", pattern.jackDensity, ["jack", "chordjack", "anchor"]);
+  add("chord", pattern.chordDensity, ["chordjack", "chord"]);
+  add("stream", pattern.streamDensity, ["stream", "jumpstream", "handstream"]);
+  add("bracket", pattern.bracketDensity, ["bracket"]);
 
   if (hints.length === 0) return null;
 

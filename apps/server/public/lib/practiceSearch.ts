@@ -76,27 +76,43 @@ export function readStoredPracticeSearch(): StoredPracticeSearch {
 }
 
 export function writeStoredPracticeSearch(state: StoredPracticeSearch) {
-  localStorage.setItem(PRACTICE_SEARCH_KEY, JSON.stringify(state));
+  try {
+    localStorage.setItem(PRACTICE_SEARCH_KEY, JSON.stringify(state));
+  } catch {
+    // ignore quota / private mode
+  }
 }
 
-export function openInPractice(query: string) {
-  try {
-    const raw = localStorage.getItem(PRACTICE_SEARCH_KEY);
-    const prev = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
-    localStorage.setItem(
-      PRACTICE_SEARCH_KEY,
-      JSON.stringify({
-        ...prev,
-        q: query,
-        page: 1,
-      }),
-    );
-  } catch {
-    localStorage.setItem(
-      PRACTICE_SEARCH_KEY,
-      JSON.stringify({ q: query, page: 1 }),
-    );
-  }
+const PRACTICE_SEARCH_FIELDS = ["q", "page", "sortBy", "sortDir", "metric"] as const;
+
+export function practiceSearchIsEmpty(search: Record<string, unknown>): boolean {
+  return !PRACTICE_SEARCH_FIELDS.some((key) => {
+    const value = search[key];
+    return value != null && value !== "";
+  });
+}
+
+/**
+ * URL search when present; otherwise the last stored filter (or defaults).
+ * Fields stay optional in the type so plain links to `/practice` stay valid.
+ */
+export function parsePracticeSearch(
+  search: Record<string, unknown>,
+): Partial<StoredPracticeSearch> {
+  if (practiceSearchIsEmpty(search)) return readStoredPracticeSearch();
+  const page = Number(search.page);
+  return {
+    q: typeof search.q === "string" ? search.q : "",
+    page: Number.isFinite(page) && page >= 1 ? Math.floor(page) : 1,
+    sortBy: isSortBy(search.sortBy) ? search.sortBy : "lastPlayed",
+    sortDir: isSortDir(search.sortDir) ? search.sortDir : "desc",
+    metric: isMetric(search.metric) ? search.metric : "accuracy",
+  };
+}
+
+/** Search payload for “open these maps in Beatmaps”, keeping the last sort. */
+export function practiceSearchForQuery(query: string): StoredPracticeSearch {
+  return { ...readStoredPracticeSearch(), q: query, page: 1 };
 }
 
 /** Practice query for a stats rank bucket, matching current keymode and axis. */

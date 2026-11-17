@@ -4,6 +4,7 @@ import { existsSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { dbPlugin } from "./db-runtime";
+import { originGuard } from "./originGuard";
 import { createProductApiRoutes } from "./routes";
 import { sseRoutes } from "./sse";
 
@@ -87,6 +88,7 @@ export async function createApp(options: CreateAppOptions) {
   const assetsDir = path.resolve(options.staticAssetsDir);
 
   return new Elysia({ adapter: node() })
+    .use(originGuard())
     .use(dbPlugin)
     .use(createProductApiRoutes())
     .use(sseRoutes)

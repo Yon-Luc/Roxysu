@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-10
+last_verified: 2026-11
 confidence: verified
 touches:
   - apps/server/public/features/practice/PracticeProfilePage.tsx
@@ -28,6 +28,7 @@ Per-beatmap deep dive: cover, core stats, recent scores with judgment detail, se
 3. Secondary map actions (Export Map, Export Set, View on website) live in a More menu; Preview, Open in osu!, and Copy search stay primary.
 4. Score Timeline uses the shared `ScoreCard` (`variant="compact"`), including judgment counts parsed from local mirror `scores.statistics` when present. Session detail uses the same component with `variant="beatmap"` (cover + PB compare).
 5. When a score's `online_id` is greater than 0, the score card shows **Share link**. It copies `https://osu.ppy.sh/scores/{onlineId}`. `online_id` of `-1` or `0` means the score was not submitted, and the button is hidden.
+6. Pattern hints name the chart shape that was actually detected. A chordjack map does not get a “jack” hint, and a stream map keeps the stream label. The density chart tooltip reads notes per second, the window’s pattern, and peak chord size from the sample.
 
 ## Implementation
 
@@ -39,7 +40,7 @@ Mania `GET /api/beatmaps/:id` reads the `.osu` file once for pattern detail. Den
 - `apps/server/public/components/ScoreCard.tsx` — shared score row (`compact` on Map Page; `beatmap` + `pbCompare` on sessions)
 - `apps/server/public/components/ShareScoreLinkButton.tsx` — copies the osu! score page URL
 - `apps/server/public/lib/osuUrls.ts:osuWebScoreUrl()`
-- `apps/server/public/components/mania-analysis/*` — shared pattern widgets. `PatternWeightsPanel` lists chart-shape families sorted by share descending (ties keep the canonical family order); its heading reads "Patterns" (`practice.detail.patternWeights`).
+- `apps/server/public/components/mania-analysis/*` — shared pattern widgets. `PatternWeightsPanel` lists chart-shape families sorted by share descending (ties keep the canonical family order); its heading reads "Patterns" (`practice.detail.patternWeights`). `DensityOverTimeChart` draws a linear area and a tooltip from the sample payload.
 - `apps/server/src/routes/beatmaps.ts`
 - `apps/server/src/scores/parseStatistics.ts:parseScoreStatistics()`
 

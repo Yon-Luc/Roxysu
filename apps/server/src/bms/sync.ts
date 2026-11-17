@@ -15,7 +15,7 @@ import {
 } from "@roxysu/db/settings-keys";
 import { and, asc, eq, isNull, lte, or, sql } from "drizzle-orm";
 import type { Db } from "@roxysu/db/types";
-import { resolveHubBaseUrl } from "../hubUrl";
+import { hubFetch, readHubJson } from "../hubFetch";
 import { enqueueNewScores } from "./derive";
 import { readSetting, writeSetting } from "./settings";
 
@@ -416,7 +416,7 @@ export async function postBmsBatch(
   | { ok: true; results: BmsBatchResult[] }
   | { ok: false; status: number; message: string }
 > {
-  const res = await fetch(`${resolveHubBaseUrl()}/api/bms/scores/batch`, {
+  const res = await hubFetch("/api/bms/scores/batch", {
     method: "POST",
     headers: {
       accept: "application/json",
@@ -425,7 +425,7 @@ export async function postBmsBatch(
     },
     body: JSON.stringify(body),
   });
-  const data = (await res.json().catch(() => ({}))) as {
+  const data = (await readHubJson(res)) as {
     results?: BmsBatchResult[];
     message?: string;
   };

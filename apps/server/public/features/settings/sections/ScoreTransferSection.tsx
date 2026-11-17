@@ -4,6 +4,7 @@ import { pageSectionDomId } from "../../../lib/pageSections";
 import { useAppDict } from "../../../lib/i18n";
 
 type Preview = {
+  uploadId: string;
   found: number;
   already: number;
   add: number;
@@ -68,8 +69,12 @@ export function ScoreTransferSection() {
   });
 
   const commitMut = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/score-transfer/commit", { method: "POST" });
+    mutationFn: async (uploadId: string) => {
+      const res = await fetch("/api/score-transfer/commit", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ uploadId }),
+      });
       const data = (await res.json().catch(() => ({}))) as {
         added: number;
         backupPath: string;
@@ -259,7 +264,9 @@ export function ScoreTransferSection() {
                   type="button"
                   className="rx-btn-primary"
                   disabled={commitMut.isPending}
-                  onClick={() => commitMut.mutate()}
+                  onClick={() => {
+                    if (preview?.uploadId) commitMut.mutate(preview.uploadId);
+                  }}
                 >
                   {commitMut.isPending
                     ? (copy?.scoreTransferWriting ?? "Writing…")

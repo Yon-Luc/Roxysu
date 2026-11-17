@@ -16,6 +16,7 @@ import {
   verifyHubOAuthHandoffVerifier,
 } from "../hubOAuthPending";
 import { APP_VERSION } from "../appVersion";
+import { hubFetch, readHubJson } from "../hubFetch";
 import { resolveHubBaseUrl } from "../hubUrl";
 import { localParityAccess } from "../mania-parity/access";
 import { toIso } from "../shared/serialize";
@@ -51,10 +52,6 @@ const HUB_OAUTH_DONE_HTML = `<!DOCTYPE html>
   </main>
 </body>
 </html>`;
-
-function hubBaseUrl(): string {
-  return resolveHubBaseUrl();
-}
 
 function readSchemaOutdated(
   value: string | null | undefined,
@@ -146,8 +143,8 @@ export const systemRoutes = new Elysia({ prefix: "/system" })
       }
 
       try {
-        const res = await fetch(
-          `${hubBaseUrl()}/auth/handoff/${encodeURIComponent(hubId)}`,
+        const res = await hubFetch(
+          `/auth/handoff/${encodeURIComponent(hubId)}`,
           {
             method: "POST",
             headers: {
@@ -158,7 +155,7 @@ export const systemRoutes = new Elysia({ prefix: "/system" })
             cache: "no-store",
           },
         );
-        const data = (await res.json().catch(() => ({}))) as {
+        const data = (await readHubJson(res)) as {
           token?: string;
           message?: string;
         };

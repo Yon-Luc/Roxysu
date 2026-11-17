@@ -2,7 +2,6 @@ const CACHE = "roxysu-shell-v1";
 const PRECACHE = [
   "/",
   "/manifest.webmanifest",
-  "/roxy.png",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
   "/icons/icon-512-maskable.png",
@@ -36,7 +35,6 @@ self.addEventListener("fetch", (event) => {
   // Static brand assets: cache-first
   if (
     url.pathname.startsWith("/icons/") ||
-    url.pathname === "/roxy.png" ||
     url.pathname === "/manifest.webmanifest"
   ) {
     event.respondWith(

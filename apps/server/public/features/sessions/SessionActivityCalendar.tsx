@@ -1,8 +1,11 @@
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  buildActivityGrid,
+  localDayKey,
+  weekStartsOnMonday,
+} from "@server/shared/localDay";
 
 type ActivityDay = { day: string; playCount: number };
-
-const WEEKDAY_LABELS = ["", "Mon", "", "Wed", "", "Fri", ""] as const;
 
 /** Empty + 4 green levels via CSS var (Tailwind opacity utilities are unreliable here). */
 const INTENSITY_BG = [
@@ -12,16 +15,6 @@ const INTENSITY_BG = [
   "color-mix(in srgb, var(--color-chart-cons) 75%, transparent)",
   "var(--color-chart-cons)",
 ] as const;
-
-function utcDayKey(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-
-function addUtcDays(d: Date, delta: number): Date {
-  const next = new Date(d);
-  next.setUTCDate(next.getUTCDate() + delta);
-  return next;
-}
 
 function intensityLevel(weight: number, max: number): 0 | 1 | 2 | 3 | 4 {
   if (weight <= 0 || max <= 0) return 0;
@@ -40,52 +33,60 @@ function readPlayCount(row: ActivityDay | Record<string, unknown>): number {
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
-function buildWeekGrid(weeks: number): { day: string; future: boolean }[] {
-  const now = new Date();
-  const today = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
-  );
-  let start = addUtcDays(today, -(weeks * 7 - 1));
-  start = addUtcDays(start, -start.getUTCDay());
-  const end = addUtcDays(start, weeks * 7 - 1);
-
-  const cells: { day: string; future: boolean }[] = [];
-  for (let d = start; d.getTime() <= end.getTime(); d = addUtcDays(d, 1)) {
-    cells.push({
-      day: utcDayKey(d),
-      future: d.getTime() > today.getTime(),
-    });
-  }
-  return cells;
+function weekdayLabels(mondayStart: boolean, locale: string): string[] {
+  const monday = new Date(2026, 0, 5);
+  const fmt = new Intl.DateTimeFormat(locale, { weekday: "short" });
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(monday);
+    date.setDate(monday.getDate() + (mondayStart ? index : index - 1));
+    return fmt.format(date);
+  });
 }
 
 function monthLabels(
   cells: { day: string }[],
   weeks: number,
+  locale: string,
 ): { weekIndex: number; label: string }[] {
   const labels: { weekIndex: number; label: string }[] = [];
+  const fmt = new Intl.DateTimeFormat(locale, { month: "short" });
   let lastMonth = -1;
   for (let w = 0; w < weeks; w++) {
     const cell = cells[w * 7];
     if (!cell) continue;
-    const month = Number(cell.day.slice(5, 7)) - 1;
-    if (month !== lastMonth) {
-      labels.push({
-        weekIndex: w,
-        label: new Date(`${cell.day}T00:00:00.000Z`).toLocaleString(undefined, {
-          month: "short",
-          timeZone: "UTC",
-        }),
-      });
-      lastMonth = month;
+    const [year, month, date] = cell.day.split("-").map(Number);
+    const when = new Date(year!, (month ?? 1) - 1, date ?? 1);
+    if (when.getMonth() !== lastMonth) {
+      labels.push({ weekIndex: w, label: fmt.format(when) });
+      lastMonth = when.getMonth();
     }
   }
   return labels;
 }
 
+/** Local calendar date and timezone offset, refreshed across midnight. */
+export function useLocalClock() {
+  const read = () => {
+    const now = new Date();
+    const tzOffset = now.getTimezoneOffset();
+    return { tzOffset, todayKey: localDayKey(now, tzOffset) };
+  };
+  const [clock, setClock] = useState(read);
+  useEffect(() => {
+    const refresh = () => setClock(read());
+    const id = window.setInterval(refresh, 60_000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, []);
+  return clock;
+}
+
 export type SessionDayStat = {
   day: string;
-  /** Plays in sessions that started this UTC day. */
+  /** Plays in sessions that started this local day. */
   plays: number;
 };
 
@@ -94,6 +95,8 @@ export function SessionActivityCalendar({
   sessionDayStats,
   selectedDay,
   onSelectDay,
+  todayKey,
+  locale,
   title,
   dayStatsLabel,
   lessLabel,
@@ -101,10 +104,12 @@ export function SessionActivityCalendar({
   hint,
 }: {
   activity: ActivityDay[];
-  /** Per-day aggregates from the sessions list (startedAt UTC day). */
+  /** Per-day aggregates from the sessions list (local start day). */
   sessionDayStats?: SessionDayStat[];
   selectedDay: string | null;
   onSelectDay: (day: string | null) => void;
+  todayKey: string;
+  locale?: string;
   title: string;
   dayStatsLabel: (day: string, plays: number, sessions: number) => string;
   lessLabel: string;
@@ -112,7 +117,16 @@ export function SessionActivityCalendar({
   hint?: string;
 }) {
   const weeks = 53;
-  const cells = useMemo(() => buildWeekGrid(weeks), []);
+  const resolvedLocale =
+    locale || (typeof navigator !== "undefined" ? navigator.language : "en");
+  const weekLocale =
+    typeof navigator !== "undefined" ? navigator.language : resolvedLocale;
+  const mondayStart = weekStartsOnMonday(weekLocale);
+  const labels = weekdayLabels(mondayStart, resolvedLocale);
+  const cells = useMemo(
+    () => buildActivityGrid({ weeks, todayKey, mondayStart }),
+    [todayKey, mondayStart],
+  );
 
   const playByDay = useMemo(() => {
     const map = new Map<string, number>();
@@ -145,7 +159,6 @@ export function SessionActivityCalendar({
       const fromStats = playByDay.get(day) ?? 0;
       const fromSessions = sessionsByDay.plays.get(day) ?? 0;
       const sessions = sessionsByDay.sessions.get(day) ?? 0;
-      // Prefer daily_stats (full-year); fall back to session score totals.
       const plays = fromStats > 0 ? fromStats : fromSessions;
       const weight = plays > 0 ? plays : sessions;
       map.set(day, { plays, sessions, weight });
@@ -162,9 +175,11 @@ export function SessionActivityCalendar({
     return max;
   }, [cells, dayMetrics]);
 
-  const months = useMemo(() => monthLabels(cells, weeks), [cells]);
+  const months = useMemo(
+    () => monthLabels(cells, weeks, resolvedLocale),
+    [cells, resolvedLocale],
+  );
 
-  /** Rows = weekday (Sun→Sat), columns = weeks. */
   const rows: { day: string; future: boolean }[][] = Array.from(
     { length: 7 },
     () => [],
@@ -183,7 +198,7 @@ export function SessionActivityCalendar({
         key={`label-${dow}`}
         className="flex items-center justify-end pr-1 text-[9px] leading-none text-muted sm:text-[10px]"
       >
-        {WEEKDAY_LABELS[dow]}
+        {labels[dow]}
       </div>,
     );
     for (const cell of rows[dow]!) {
@@ -227,7 +242,7 @@ export function SessionActivityCalendar({
       {hint ? <p className="mb-3 mt-0.5 text-xs text-muted">{hint}</p> : <div className="mb-3" />}
       <div className="w-full min-w-0">
         <div className="mb-1 flex gap-0.5 text-[10px] text-muted sm:text-xs">
-          <div className="w-6 shrink-0 sm:w-7" />
+          <div className="w-9 shrink-0 sm:w-10" />
           <div className="relative h-4 min-w-0 flex-1">
             {months.map((m) => (
               <span
@@ -247,7 +262,7 @@ export function SessionActivityCalendar({
         <div
           className="grid w-full gap-0.5"
           style={{
-            gridTemplateColumns: `1.5rem repeat(${weeks}, minmax(0, 1fr))`,
+            gridTemplateColumns: `2.25rem repeat(${weeks}, minmax(0, 1fr))`,
             gridTemplateRows: "repeat(7, minmax(0, 1fr))",
           }}
         >
@@ -270,6 +285,9 @@ export function SessionActivityCalendar({
   );
 }
 
-export function sessionStartedUtcDay(startedAt: string): string {
-  return new Date(startedAt).toISOString().slice(0, 10);
+export function sessionStartedLocalDay(
+  startedAt: string,
+  tzOffsetMinutes: number,
+): string {
+  return localDayKey(new Date(startedAt), tzOffsetMinutes);
 }

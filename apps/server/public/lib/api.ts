@@ -99,6 +99,10 @@ export async function putOverlaySkins(snapshot: unknown) {
 export type StatsGranularity = "day" | "week";
 export type StatsSkillAxis = "all" | "rc" | "ln" | "fln";
 
+export async function fetchPlayedKeyModes() {
+  return unwrap(await api.api.stats.keys.get(), "/api/stats/keys");
+}
+
 export async function fetchStats(params?: {
   granularity?: StatsGranularity;
   skillTopPlays?: number;
@@ -316,10 +320,13 @@ export async function fetchScoreReplay(id: string) {
   );
 }
 
-export async function fetchSessions(day?: string) {
+export async function fetchSessions(day?: string, tzOffsetMinutes?: number) {
   return unwrap(
     await api.api.sessions.get({
-      query: day ? { day } : {},
+      query: {
+        day,
+        tzOffset: tzOffsetMinutes,
+      },
     }),
     "/api/sessions",
   );
@@ -891,9 +898,11 @@ export async function fetchTosuLive() {
   return unwrap(await api.api.tosu.live.get(), "/api/tosu/live");
 }
 
-export async function fetchTosuLiveAnalysis() {
+export async function fetchTosuLiveAnalysis(signal?: AbortSignal) {
   return unwrap(
-    await api.api.tosu.live.analysis.get(),
+    await api.api.tosu.live.analysis.get({
+      fetch: signal ? { signal } : {},
+    }),
     "/api/tosu/live/analysis",
   );
 }

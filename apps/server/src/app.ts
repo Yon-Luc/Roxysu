@@ -2,6 +2,7 @@ import "./db";
 import { Elysia } from "elysia";
 import { staticPlugin } from "@elysiajs/static";
 import { dbPlugin } from "./db-runtime";
+import { originGuard } from "./originGuard";
 import { createFullApiRoutes } from "./routes";
 import { sseRoutes } from "./sse";
 
@@ -10,6 +11,7 @@ import { sseRoutes } from "./sse";
  * Node uses `createApp({ runtime: "node" })` instead.
  */
 export const app = new Elysia()
+  .use(originGuard())
   .use(dbPlugin)
   .use(createFullApiRoutes())
   .use(sseRoutes)

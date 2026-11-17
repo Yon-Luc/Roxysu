@@ -30,7 +30,17 @@
     "justNow": "ahora mismo",
     "minutesAgo": "hace {{n}} min",
     "hoursAgo": "hace {{n}} h",
-    "daysAgo": "hace {{n}} d"
+    "daysAgo": "hace {{n}} d",
+    "fc": "FC",
+    "missOne": "{{count}} miss",
+    "missMany": "{{count}} misses",
+    "unknownError": "error desconocido",
+    "pageError": "Esta página encontró un error.",
+    "pageMissing": "Esta página no existe.",
+    "backHome": "Volver al inicio",
+    "retry": "Reintentar",
+    "previewFailed": "No se pudo cargar la vista previa",
+    "replayFailed": "No se pudo cargar el replay"
   },
   "sync": {
     "paused": "En pausa",
@@ -79,7 +89,26 @@
     "beatmapDeleted": "Beatmap eliminada",
     "removedFromGame": "Eliminada del juego",
     "noDerivedStats": "Aún no hay estadísticas derivadas — el pipeline de análisis las completará tras la sincronización.",
-    "loadingSummary": "Cargando resumen de práctica…"
+    "loadingSummary": "Cargando resumen de práctica…",
+    "failedToLoad": "No se pudo cargar el inicio: {{error}}"
+  },
+  "replayAnalysis": {
+    "title": "Análisis",
+    "subtitle": "Juez aproximado — solo una señal de práctica.",
+    "fidelity": "La precisión simulada difiere {{points}} pts ({{simulated}} vs {{stored}}). Los misses pueden ser imprecisos.",
+    "timing": "Timing",
+    "noTiming": "Sin muestras de timing (todo miss / vacío).",
+    "histogramNote": "Las barras de los extremos incluyen hits peores que ±100 ms.",
+    "columns": "Columnas",
+    "heatNote": "El calor cuenta cabezas de nota, no colas de LN.",
+    "missPatterns": "Patrones de miss",
+    "noMisses": "Sin misses",
+    "misses": "Misses ({{count}})",
+    "clean": "Limpio — sin misses simulados.",
+    "col": "col {{n}}",
+    "tail": "cola",
+    "early": "pronto",
+    "late": "tarde"
   },
   "stats": {
     "pageHint": "{{keyCount}}K · horas en UTC",
@@ -845,7 +874,9 @@
       "sevenK": "Recomendaciones 7K",
       "sevenKHint": "Selecciones con ranking de tu estimación de habilidad Rework (Push, Accuracy, Consistency, Deficit, Skillset).",
       "fourK": "Recomendaciones 4K",
-      "fourKHint": "Selecciones con ranking de tu estimación de habilidad Rework (Push, Accuracy, Consistency, Deficit, Skillset)."
+      "fourKHint": "Selecciones con ranking de tu estimación de habilidad Rework (Push, Accuracy, Consistency, Deficit, Skillset).",
+      "key": "Recomendaciones {{keyCount}}K",
+      "keyHint": "Selecciones con ranking de tu estimación de habilidad Rework (Push, Accuracy, Consistency, Deficit, Skillset)."
     },
     "shuffling": "Mezclando…",
     "shuffle": "Mezclar",

@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
 import path from "node:path";
+import { assertSafeExecutablePath } from "../executablePath";
 
 export type SpawnTosuResult =
   | { ok: true; pid: number }
@@ -20,16 +20,14 @@ export function spawnTosu(executablePath: string): SpawnTosuResult {
     };
   }
 
-  if (!existsSync(trimmed)) {
-    return {
-      ok: false,
-      warning: `Tosu executable not found at ${trimmed}.`,
-    };
+  const checked = assertSafeExecutablePath(trimmed);
+  if (!checked.ok) {
+    return { ok: false, warning: checked.error };
   }
 
   try {
-    const cwd = path.dirname(trimmed);
-    const child = spawn(trimmed, [], {
+    const cwd = path.dirname(checked.path);
+    const child = spawn(checked.path, [], {
       cwd,
       detached: true,
       stdio: "ignore",

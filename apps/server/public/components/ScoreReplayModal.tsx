@@ -16,6 +16,7 @@ import {
   sampleAudioClock,
 } from "../lib/audioClock";
 import { clamp, formatAccuracy, formatClock } from "../lib/format";
+import { useAppDict } from "../lib/i18n";
 import { useStdSkin } from "../lib/stdSkin";
 import { useImportedStdSprites } from "../lib/stdSkinImport";
 import { useImportedCatchSprites } from "../lib/catchSkinImport";
@@ -248,6 +249,7 @@ export function ScoreReplayModal({
   onClose: () => void;
 }) {
   const titleId = useId();
+  const { dict } = useAppDict();
   const dialogRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const clockRef = useRef(new AudioClock());
@@ -1352,7 +1354,9 @@ export function ScoreReplayModal({
             </p>
           ) : error ? (
             <p className="px-5 py-10 text-center text-sm text-rose-300">
-              {error instanceof Error ? error.message : "Failed to load replay"}
+              {error instanceof Error
+                ? error.message
+                : dict?.common.replayFailed ?? "Failed to load replay"}
             </p>
           ) : data ? (
             <>

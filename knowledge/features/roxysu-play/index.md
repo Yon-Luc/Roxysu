@@ -11,6 +11,15 @@ touches:
   - apps/play/package.json
   - apps/play/scripts/dev.sh
   - apps/play-rune/
+  - apps/play-rune/src/catalog.rs
+  - apps/play-rune/src/chart.rs
+  - apps/play-rune/src/gameplay.rs
+  - apps/play-rune/src/play_view.rs
+  - apps/play-rune/src/playfield_raster.rs
+  - apps/play-rune/src/model.rs
+  - apps/play-rune/src/settings.rs
+  - apps/play-rune/src/keybinds.rs
+  - apps/play-rune/src/shell.rs
   - docs/rune-migration/
   - flake.nix
   - package.json
@@ -25,9 +34,10 @@ for Zed's GPUI). Exists to explore a non-Electron desktop surface.
 
 A separate **Rune prototype** (`apps/play-rune`) evaluates whether the Rune
 native UI framework can host transparent / topmost / click-through overlays on
-Wayland. It does **not** replace GPUIX Roxysu Play and must not be treated as
-the product shell until a documented go decision. Migration notes live under
-`docs/rune-migration/`.
+Wayland, a Play-like shell backed by a **read-only local mirror** (mania 7K),
+and a silent playfield/judgment slice. It does **not** replace GPUIX Roxysu
+Play and must not be treated as the product shell until a documented go
+decision. Migration notes live under `docs/rune-migration/`.
 
 ## Business meaning
 
@@ -49,6 +59,21 @@ until explicitly promoted.
 7. The Rune prototype must stay isolated from GPUIX Play: no shared process, and Rune must not write Realm or replace `play_*` persistence until explicitly promoted.
    **Status:** verified
    **Enforced by:** separate crate `apps/play-rune` (binary `roxysu-play-rune`); root script `bun run play:rune`
+8. Rune prototype automated API smoke is available via `bun run play:rune:smoke` (`--acceptance-smoke`); it does not replace human click-through checks on Niri.
+   **Status:** verified
+   **Enforced by:** `apps/play-rune/src/main.rs` acceptance smoke thread; results recorded in `docs/rune-migration/platform-matrix.md`
+9. Feel / FPS checks for the Rune playfield use `bun run play:rune:release` (debug is not the performance baseline). During play, `P` toggles present sink `Pixels` ↔ `NativeSurface` on the same chart clock; the perf LiveText reports fps and stage timings.
+   **Status:** verified
+   **Enforced by:** `apps/play-rune/run-release.sh`, `package.json` script `play:rune:release`, `PlaySession::toggle_sink()`
+10. Rune play shows a live resource line (RSS, process CPU%, optional nvidia-smi GPU mem) and plays chart audio via rodio when the local mirror row has `audio_file_hash` resolving under lazer `files/`. Gameplay time is always wall-clock; audio starts after lead-in but does not drive the clock (avoids buffer-step stutter). `nvidia-smi` is sampled at most every 2s.
+   **Status:** verified
+   **Enforced by:** `apps/play-rune/src/resources.rs`, `apps/play-rune/src/audio.rs`, `PlaySession::song_time_ms()`
+11. Rune play scroll speed matches GPUIX (pixels/second at display height; default 400). Skin sprites are optional PNG blits from lazer `skins/` (or `ROXYSU_PLAY_SKIN`); `I` toggles skin vs procedural fills so raster_ms can be compared on the perf HUD.
+   **Status:** verified
+   **Enforced by:** `apps/play-rune/src/playfield_raster.rs` (`pixels_per_ms`), `apps/play-rune/src/skin.rs`, `PlaySession::toggle_skin()`
+12. Rune Settings tab (session-only, not persisted yet) controls playfield scale, hit position, stage offset, 7K keybinds, layout-edit default, and near-fullscreen resize. In play: F11 / Fullscreen button toggles window size to the primary display; F2 / Edit layout enables drag-to-move the stage (lazer-like); judgments spawn short column lighting + receptor bursts on the playfield raster.
+   **Status:** verified
+   **Enforced by:** `apps/play-rune/src/shell.rs` Settings tab, `apps/play-rune/src/keybinds.rs`, `PlaySession` layout Live offset + `HitFlash` in `playfield_raster.rs`, `Shared::toggle_fullscreen()`
 
 ## Security rules
 
@@ -117,6 +142,15 @@ bun --hot apps/play/src/app.tsx
 - `apps/play/src/test.tsx` — legacy VSRG benchmark (preserved)
 - `flake.nix` — `gpuixRuntimeDeps`, `runtimeLibraryPath`
 - `apps/play-rune/` — isolated Rune overlay + fake telemetry prototype (pinned Rune git rev)
+- `apps/play-rune/src/playfield_raster.rs` — half-res CPU playfield (210×280 → scaled display); RGBA/BGRA; hit flashes blend over lanes
+- `apps/play-rune/src/model.rs:PlaySession` — raster present via `Pixels`/`NativeSurface`; rodio music; perf + resource LiveText
+- `apps/play-rune/src/audio.rs` — rodio DeviceSink + Player; starts after lead-in; wall clock stays authoritative
+- `apps/play-rune/src/resources.rs` — `/proc` RSS + CPU%; optional `nvidia-smi` per-pid GPU mem
+- `apps/play-rune/src/settings.rs` — scroll, skin, playfield scale/hit/offset, lane keys, layout edit
+- `apps/play-rune/src/keybinds.rs` — physical key name ↔ `PhysicalKeyCode` for 7K remaps
+- `apps/play-rune/src/skin.rs` — minimal mania note/key PNG load for blit A/B
+- `apps/play-rune/src/model.rs:PlaySession::tick()` — advances judgment + sink upload without view rebuild (rebuild only on sink toggle / scale / layout edit)
+- `apps/play-rune/src/playfield_raster.rs:HitFlash` — mania-like lane lighting after judgments
 - `docs/rune-migration/` — baseline, acceptance criteria, pin, platform matrix
 
 ## UI component architecture

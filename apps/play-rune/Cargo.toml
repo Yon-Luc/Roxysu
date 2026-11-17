@@ -14,3 +14,8 @@ path = "src/main.rs"
 [dependencies]
 # Pin recorded in docs/rune-migration/rune-pin.md — do not float on a branch name.
 rune = { git = "https://github.com/anomalyco/rune", rev = "a57ffe07a05bdd1920908e6f97db91ceadea5bcc" }
+rusqlite = { version = "0.32", features = ["bundled"] }
+thiserror = "2"
+rodio = "0.23"
+libc = "0.2"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }

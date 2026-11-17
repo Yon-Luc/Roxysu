@@ -1,26 +1,38 @@
-# Roxysu Play — Rune prototype
+# Roxysu Play — Rune shell
 
-Isolated feasibility probe for replacing GPUIX presentation with
-[Rune](https://github.com/anomalyco/rune). Does **not** replace `apps/play`.
+Isolated Rune frontend evaluating GPUIX → Rune. **Does not replace** `apps/play`.
 
-Pinned Rune revision: see [`docs/rune-migration/rune-pin.md`](../../docs/rune-migration/rune-pin.md).
+Pinned Rune: [`docs/rune-migration/rune-pin.md`](../../docs/rune-migration/rune-pin.md).
+
+## Features
+
+| Area | Status |
+|---|---|
+| Library | Read-only **local mirror** mania 7K list (first 200 by title) |
+| Start | Loads `.osu` from lazer `files/` via beatmap `hash` |
+| Play | CPU playfield → `Pixels`/`NativeSurface` + rodio audio (`S D F Space J K L`, Esc) |
+| Scroll | osu!mania-style px/s (default 400); `[` `]` in play / library ± buttons |
+| Skin | Optional PNG blit from lazer `skins/` (`I` A/B vs procedural; `ROXYSU_PLAY_SKIN`) |
+| Perf HUD | fps · raster_ms · set_ms · sink (`P`) — compare skin on/off here |
+| Resources | rss / cpu% / gpu · audio status |
+| Overlay | Click-through / show-hide prototype |
+| GPUIX Play | Unchanged fallback |
+
+Paths (override with env):
+
+- Mirror: `DB_PATH` or `ROXYSU_DATA_DIR/data.sqlite` or monorepo `apps/server/data.sqlite`
+- Lazer: `OSU_DATA_PATH` or `~/.local/share/osu`
 
 ## Run
 
 ```bash
-nix develop -c bun run play:rune
-# or
-nix develop -c bash apps/play-rune/run.sh
+# Feel / FPS baseline (optimized)
+bun run play:rune:release
+
+# Fast iterate (debug — not a performance baseline)
+bun run play:rune
+bun run play:rune:smoke
+nix develop -c bash -lc 'cd apps/play-rune && cargo test'
 ```
 
-Headless smoke (when the display server is unavailable):
-
-```bash
-nix develop -c bash apps/play-rune/run.sh -- --snap /tmp/play-rune.png
-```
-
-## What it does
-
-1. Control window — show/hide overlay, toggle click-through.
-2. Per-display `WindowOptions::overlay` surface — transparent, borderless, topmost.
-3. Fake telemetry thread (~10 Hz) writing a coalesced `LiveText` status (latest-wins).
+During play, read the mono perf line. Press `P` to toggle `Pixels` ↔ `NativeSurface` on the same chart/clock.

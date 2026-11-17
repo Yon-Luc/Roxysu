@@ -55,3 +55,12 @@ Full GPUIX vs Rune comparison tables belong in `benchmark-results.md` (later pha
 6. Fake telemetry feed updates a counter / status on the overlay.
 7. One representative status widget.
 8. Basic multi-monitor note (one overlay per display if Rune reports multiple).
+
+## Automated smoke
+
+`bun run play:rune:smoke` runs `--acceptance-smoke`: waits for overlays, asserts
+telemetry ticks advance, toggles click-through and visibility via `WindowHandle`,
+prints `ACCEPTANCE_SMOKE RESULT pass|fail`, then closes the control window.
+
+This covers API readiness. Human pointer / focus / fullscreen checks remain
+manual (see `platform-matrix.md`).

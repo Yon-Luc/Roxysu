@@ -6,41 +6,61 @@
 
 Legend: `supported` · `limited` · `unsupported` · `not yet tested`
 
+Automated API checks use `bun run play:rune:smoke` (`--acceptance-smoke`). These verify
+Rune handle APIs and telemetry coalescing; they do **not** replace a human pointer
+test for true click-through against another client.
+
 ## Environments
 
-| Capability | Headless | NixOS + KDE Wayland (session at smoke) | NixOS + Niri Wayland | X11 | Windows |
+| Capability | Headless | NixOS + KDE Wayland | NixOS + Niri Wayland (nested under KDE) | X11 | Windows |
 |---|---|---|---|---|---|
-| Control window opens | supported (`--snap`) | supported (process stays up; dual-monitor host) | not yet tested | not yet tested | not yet tested |
-| Transparent overlay | supported (straight-alpha PNG export) | limited — overlays created; visual chrome not photographed this session | not yet tested | not yet tested | not yet tested |
-| Borderless / always-on-top | n/a (virtual display) | limited — `WindowOptions::overlay` applied; compositor behaviour not measured | not yet tested | not yet tested | not yet tested |
-| Click-through on/off | n/a | not yet tested (manual pointer check) | not yet tested | not yet tested | not yet tested |
-| Show / hide overlay | n/a | not yet tested (control buttons present) | not yet tested | not yet tested | not yet tested |
+| Control window opens | supported (`--snap`) | supported | supported (briefly; see notes) | not yet tested | not yet tested |
+| Transparent overlay | supported (straight-alpha PNG) | limited — overlays created; visual chrome not photographed | limited — overlay created on Niri Wayland socket; nested NVIDIA/winit dmabuf noisy | not yet tested | not yet tested |
+| Borderless / always-on-top | n/a | limited — `WindowOptions::overlay` applied | limited — same API path under Niri socket | not yet tested | not yet tested |
+| Click-through on/off (API) | n/a | supported (`--acceptance-smoke`) | supported until compositor drop | not yet tested | not yet tested |
+| Click-through (human pointer) | n/a | not yet tested | not yet tested | not yet tested | not yet tested |
+| Show / hide overlay (API) | n/a | supported | limited — hide succeeds; show-after-hide hit Wayland disconnect in nested run | not yet tested | not yet tested |
 | Focus steal | n/a | not yet tested | not yet tested | not yet tested | not yet tested |
-| Multi-monitor overlays | headless uses one virtual display | supported — `overlay-0` and `overlay-1` both reported ready | not yet tested | not yet tested | not yet tested |
-| Fake telemetry updates | limited — LiveText path compiled; snap is single frame | supported — telemetry thread + `wake()` while process runs | not yet tested | not yet tested | not yet tested |
+| Multi-monitor overlays | one virtual display | supported (2 overlays) | limited — nested config exposes 1 winit output | not yet tested | not yet tested |
+| Fake telemetry updates | limited (single-frame snap) | supported | supported | not yet tested | not yet tested |
 | Fractional scaling | not yet tested | not yet tested | not yet tested | not yet tested | not yet tested |
 | Fullscreen game under overlay | not yet tested | not yet tested | not yet tested | not yet tested | not yet tested |
-| Interactive edge overlay (`App::overlay`) | n/a | unsupported on Wayland per Rune docs (pointer not wired) — prototype uses `WindowOptions::overlay` instead | unsupported (same) | limited (override-redirect path) | limited |
+| Interactive edge overlay (`App::overlay`) | n/a | unsupported on Wayland (Rune docs) | unsupported (same) | limited | limited |
+| Full login Niri session (non-nested) | n/a | n/a | not yet tested | n/a | n/a |
 
 ## Session notes (2026-11-06)
 
-- Host: NixOS, `WAYLAND_DISPLAY=wayland-1`, `XDG_CURRENT_DESKTOP=KDE`, NVIDIA GeForce RTX 5070 (Vulkan via wgpu).
-- `niri` 26.04 is installed but **this smoke did not run inside a Niri session** (`NIRI_SOCKET` unset). Primary-target Niri checks remain open.
-- Headless: `./target/debug/roxysu-play-rune --snap /tmp/.../control.png --window controls` produced a 960×720 RGBA PNG; GPU init ~400 ms.
-- Interactive: control + two overlays logged `play-rune: overlay-N ready (window_number=None)` (`window_number` is macOS-oriented).
+### Headless
+
+- `./target/debug/roxysu-play-rune --snap … --window controls` → 960×720 RGBA PNG; GPU NVIDIA RTX 5070 / Vulkan.
+
+### KDE Wayland (active session)
+
+- `WAYLAND_DISPLAY=wayland-1`, `XDG_CURRENT_DESKTOP=KDE`.
+- `--acceptance-smoke` **RESULT pass**: overlays≥1, telemetry advances, click-through false/true, hide/show.
+- Dual-monitor host: `overlay-0` and `overlay-1` both ready (smoke counted ≥1 early; second overlay still created).
+
+### Nested Niri (under KDE)
+
+- Command: `niri -c /tmp/…/config.kdl -- …/roxysu-play-rune --acceptance-smoke`
+- Socket: `wayland-2` / `NIRI_SOCKET=…niri.wayland-2.…sock`
+- Output: single `Smithay Winit` 1080×840; NVIDIA nested path logs `dmabuf import failed to mmap` and missing `EGL_EXT_device_drm`.
+- Smoke got: overlays=1, telemetry pass, click-through pass, hide pass; then `Io error: Connection reset by peer` and Rune panic on exit before final show assert / clean RESULT line.
+- **Interpretation:** Nesting is enough to prove the binary talks to a Niri Wayland server, but not a substitute for a real Niri login. Wayland hide may destroy the surface (Rune docs); recreate/show under nested NVIDIA is fragile.
 
 ## Known framework limits (carry forward)
 
-1. Wayland **interactive** layer-shell edge overlays are unavailable in Rune — do not use `App::overlay` for clickable HUDs on Niri.
+1. Wayland **interactive** layer-shell edge overlays are unavailable in Rune — use `WindowOptions::overlay`, not `App::overlay`, for clickable HUDs.
 2. Monitor list is a **startup snapshot** — hot-plug untested.
-3. Unsupported click-through prints a platform error (prototype logs `click-through: …`).
+3. Unsupported click-through prints a platform error (prototype stores it for smoke).
+4. On Wayland, hide/close semantics differ from X11/macOS (surface destroy) — validate show-after-hide on a real Niri login.
 
-## Next smoke on Niri
-
-From a Niri session:
+## Next smoke (full Niri login)
 
 ```bash
-nix develop -c bun run play:rune
+# Inside a Niri session:
+nix develop -c bun run play:rune:smoke
+nix develop -c bun run play:rune   # then manually verify pointer click-through over a fullscreen client
 ```
 
-Then verify transparency over a fullscreen client, click-through toggle, focus, and hide/show. Update this matrix in the same change.
+Update this matrix when those land.

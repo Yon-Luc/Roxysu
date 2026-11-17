@@ -642,17 +642,18 @@ export async function countSessionPbs(db: Db, sessionId: number): Promise<number
 
 /**
  * Sessions whose start falls on a calendar day at `tzOffsetMinutes`
- * (`Date#getTimezoneOffset`; 0 keeps the UTC day). Capped; not the recent-100 list.
+ * (`Date#getTimezoneOffset`; 0 keeps the UTC day). Every session on that day,
+ * unless `limit` is set.
  */
 export async function listSessionsOnUtcDay(
   db: Db,
   day: string,
-  limit = 50,
+  limit?: number,
   tzOffsetMinutes = 0,
 ) {
   const range = localDayRange(day, tzOffsetMinutes);
   if (!range) return [];
-  const rows = await db
+  const query = db
     .select()
     .from(sessions)
     .where(
@@ -661,20 +662,18 @@ export async function listSessionsOnUtcDay(
         lt(sessions.startedAt, range.end),
       ),
     )
-    .orderBy(desc(sessions.startedAt))
-    .limit(limit);
+    .orderBy(desc(sessions.startedAt));
+  const rows = limit == null ? await query : await query.limit(limit);
   return rows.map((row) => ({
     ...row,
     name: sessionDisplayName(row),
   }));
 }
 
-export async function listSessions(db: Db, limit = 50) {
-  const rows = await db
-    .select()
-    .from(sessions)
-    .orderBy(desc(sessions.startedAt))
-    .limit(limit);
+/** Newest first. Omit `limit` to return every session. */
+export async function listSessions(db: Db, limit?: number) {
+  const query = db.select().from(sessions).orderBy(desc(sessions.startedAt));
+  const rows = limit == null ? await query : await query.limit(limit);
   return rows.map((row) => ({
     ...row,
     name: sessionDisplayName(row),

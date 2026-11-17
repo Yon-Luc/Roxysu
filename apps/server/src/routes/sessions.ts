@@ -149,7 +149,7 @@ export const sessionRoutes = new Elysia({ prefix: "/sessions" })
       const day = query.day?.trim();
       const tzOffset = clampTzOffset(query.tzOffset);
       if (day) {
-        const items = await listSessionsOnUtcDay(db, day, 50, tzOffset);
+        const items = await listSessionsOnUtcDay(db, day, undefined, tzOffset);
         return {
           current: null,
           items: items.map(serializeSession),
@@ -157,7 +157,7 @@ export const sessionRoutes = new Elysia({ prefix: "/sessions" })
         };
       }
       const [items, current, activity] = await Promise.all([
-        listSessions(db, 100),
+        listSessions(db),
         getCurrentSession(db),
         getCalendarActivity(db, 371, tzOffset),
       ]);

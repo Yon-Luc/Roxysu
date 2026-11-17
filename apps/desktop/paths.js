@@ -1,6 +1,9 @@
 const path = require("node:path");
 const fs = require("node:fs");
-const { execFileSync } = require("node:child_process");
+const { execFile } = require("node:child_process");
+const { promisify } = require("node:util");
+
+const execFileAsync = promisify(execFile);
 
 /**
  * Resolve monorepo vs packaged Electron resource layouts.
@@ -118,35 +121,29 @@ function ensureParentDir(filePath) {
 }
 
 /**
- * Extract packaged realm-reader.tgz into userData on first use so the install
- * tree stays small for Defender (archive is one file vs ~GB of natives).
+ * True when the packaged archive still needs to be unpacked. Dev layouts
+ * (no archive) throw if the reader tree is missing and otherwise return false.
  * @param {{ realmArchive: string | null, realmDir: string, realmEntry: string }} paths
  */
-function ensureRealmExtracted(paths) {
+function realmExtractNeeded(paths) {
   if (!paths.realmArchive) {
-    // Dev / unpacked layout already has realmDir.
     if (!fs.existsSync(paths.realmEntry) && !fs.existsSync(paths.realmDir)) {
       throw new Error(`realm-reader missing at ${paths.realmDir}`);
     }
-    return;
+    return false;
   }
-
   const marker = path.join(paths.realmDir, ".roxysu-extracted");
-  if (fs.existsSync(marker) && fs.existsSync(paths.realmEntry)) {
-    return;
-  }
+  return !(fs.existsSync(marker) && fs.existsSync(paths.realmEntry));
+}
 
-  fs.mkdirSync(paths.realmDir, { recursive: true });
-  // Windows 10+ and macOS/Linux ship a tar that understands gzip.
-  execFileSync(
-    "tar",
-    ["-xzf", paths.realmArchive, "-C", paths.realmDir, "--strip-components=1"],
-    { stdio: "inherit" },
-  );
-  // tarball root is "realm-reader/..." — if strip failed on some tar, flatten.
+/**
+ * Finish an extract: flatten a tar that ignored --strip-components, then
+ * write the marker. The marker is written only after the entry exists.
+ * @param {{ realmArchive: string | null, realmDir: string, realmEntry: string }} paths
+ */
+function finalizeRealmExtract(paths) {
   const nested = path.join(paths.realmDir, "realm-reader", "index.js");
   if (!fs.existsSync(paths.realmEntry) && fs.existsSync(nested)) {
-    // Move nested contents up.
     const nestedDir = path.join(paths.realmDir, "realm-reader");
     for (const name of fs.readdirSync(nestedDir)) {
       fs.renameSync(path.join(nestedDir, name), path.join(paths.realmDir, name));
@@ -158,11 +155,35 @@ function ensureRealmExtracted(paths) {
       `realm extract did not produce ${paths.realmEntry} from ${paths.realmArchive}`,
     );
   }
-  fs.writeFileSync(marker, new Date().toISOString(), "utf8");
+  fs.writeFileSync(
+    path.join(paths.realmDir, ".roxysu-extracted"),
+    new Date().toISOString(),
+    "utf8",
+  );
+}
+
+/**
+ * Extract packaged realm-reader.tgz into userData on first use so the install
+ * tree stays small for Defender (archive is one file vs ~GB of natives).
+ * Async so the Electron main process can keep painting during first launch.
+ * @param {{ realmArchive: string | null, realmDir: string, realmEntry: string }} paths
+ */
+async function ensureRealmExtracted(paths) {
+  if (!realmExtractNeeded(paths)) return;
+  fs.mkdirSync(paths.realmDir, { recursive: true });
+  // Windows 10+ and macOS/Linux ship a tar that understands gzip.
+  await execFileAsync(
+    "tar",
+    ["-xzf", paths.realmArchive, "-C", paths.realmDir, "--strip-components=1"],
+    { windowsHide: true },
+  );
+  finalizeRealmExtract(paths);
 }
 
 module.exports = {
   resolveDesktopPaths,
   ensureParentDir,
   ensureRealmExtracted,
+  realmExtractNeeded,
+  finalizeRealmExtract,
 };

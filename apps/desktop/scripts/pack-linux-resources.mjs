@@ -97,6 +97,9 @@ const appFiles = [
   "paths.js",
   "respawnPolicy.js",
   "overlayApplyPolicy.js",
+  "urlPolicy.js",
+  "stopChild.js",
+  "waitForServer.js",
   "splash.html",
   "package.json",
 ];

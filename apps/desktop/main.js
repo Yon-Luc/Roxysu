@@ -7,6 +7,9 @@ const { resolveDesktopPaths, ensureParentDir, ensureRealmExtracted } = require("
 const { startAutoUpdate } = require("./auto-update");
 const { decideRespawn } = require("./respawnPolicy");
 const { decideOverlayApply, childIsAlive } = require("./overlayApplyPolicy");
+const { appOrigin, isAppUrl, canOpenExternal, senderIsApp } = require("./urlPolicy");
+const { stopChild: stopChildProcess } = require("./stopChild");
+const { waitForServer } = require("./waitForServer");
 
 // Stable userData folder: %APPDATA%\Roxysu (Windows) / XDG or Application Support.
 app.setName("Roxysu");
@@ -40,7 +43,13 @@ const processStartedAt = Date.now();
 
 const PORT = Number(process.env.ROXYSU_PORT ?? 4321);
 const HOST = process.env.ROXYSU_HOST ?? "127.0.0.1";
+const APP_ORIGIN = appOrigin(HOST, PORT);
 const WINDOW_READY_MARKER = "electron-window-ready";
+/** Caps a session-share PNG before nativeImage decode. */
+const MAX_CLIPBOARD_IMAGE_BYTES = 15 * 1024 * 1024;
+/** Aborted when shutdown starts so a splash wait cannot finish into a dead window. */
+/** @type {AbortController | null} */
+let startupAbort = null;
 
 /**
  * Resolve a writable log dir before whenReady (userData may still work via env/name).
@@ -196,44 +205,51 @@ function spawnNodeEntry(paths, entry, cwd, extraEnv, label, nodeArgs = []) {
 }
 
 /**
- * @param {number} port
- * @param {string} host
- * @param {number} timeoutMs
+ * Send http(s) and osu: to the OS. Other schemes are ignored.
+ * @param {string} url
  */
-function waitForServer(port, host, timeoutMs = 180_000) {
-  const started = Date.now();
-  const healthPath = "/api/system/healthz";
-  return new Promise((resolve, reject) => {
-    const tryOnce = () => {
-      const req = http.get({ host, port, path: healthPath, timeout: 1500 }, (res) => {
-        res.resume();
-        if ((res.statusCode ?? 500) < 500) {
-          resolve(undefined);
-          return;
-        }
-        retry();
-      });
-      req.on("error", retry);
-      req.on("timeout", () => {
-        req.destroy();
-        retry();
-      });
-    };
-
-    const retry = () => {
-      if (Date.now() - started > timeoutMs) {
-        reject(
-          new Error(
-            `Timed out waiting for Roxysu at http://${host}:${port}${healthPath}`,
-          ),
-        );
-        return;
-      }
-      setTimeout(tryOnce, 250);
-    };
-
-    tryOnce();
+function openExternalSafe(url) {
+  if (!canOpenExternal(url)) return;
+  desktopLog(`openExternal (navigation) ${url}`);
+  void shell.openExternal(url).catch((err) => {
+    desktopLog(`openExternal failed: ${err}`);
   });
+}
+
+/**
+ * Keep the preload on the app origin. New windows are denied so a
+ * target=_blank page cannot inherit roxysuDesktop. In-place osu:// and
+ * http(s) navigations go to the system instead of blanking this window.
+ * @param {BrowserWindow} win
+ */
+function attachWindowGuards(win) {
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    openExternalSafe(url);
+    return { action: "deny" };
+  });
+
+  const blockOffApp = (event, url) => {
+    if (isAppUrl(url, APP_ORIGIN)) return;
+    event.preventDefault();
+    openExternalSafe(url);
+  };
+  win.webContents.on("will-navigate", blockOffApp);
+  win.webContents.on("will-redirect", blockOffApp);
+}
+
+/**
+ * @param {Electron.IpcMainInvokeEvent} event
+ */
+function ipcSenderIsApp(event) {
+  const frameUrl = event.senderFrame?.url;
+  if (typeof frameUrl === "string" && frameUrl.length > 0) {
+    return senderIsApp(frameUrl, APP_ORIGIN);
+  }
+  try {
+    return senderIsApp(event.sender?.getURL?.() ?? "", APP_ORIGIN);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -321,6 +337,8 @@ function createSplashWindow(paths) {
     },
   });
 
+  attachWindowGuards(mainWindow);
+
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
@@ -344,21 +362,43 @@ function createSplashWindow(paths) {
   signalWindowReady(paths.dataDir);
 }
 
+/** One start at a time so a slow extract cannot spawn two readers. */
+/** @type {Promise<"running" | "failed" | "spawned"> | null} */
+let realmStartPromise = null;
+
 /**
  * @param {ReturnType<typeof resolveDesktopPaths>} paths
  * @param {NodeJS.ProcessEnv} sharedEnv
- * @returns {"running" | "failed" | "spawned"}
+ * @returns {Promise<"running" | "failed" | "spawned">}
  */
 function spawnRealmReader(paths, sharedEnv) {
+  if (realmStartPromise) return realmStartPromise;
+  const job = startRealmReader(paths, sharedEnv);
+  realmStartPromise = job.finally(() => {
+    realmStartPromise = null;
+  });
+  return realmStartPromise;
+}
+
+/**
+ * @param {ReturnType<typeof resolveDesktopPaths>} paths
+ * @param {NodeJS.ProcessEnv} sharedEnv
+ * @returns {Promise<"running" | "failed" | "spawned">}
+ */
+async function startRealmReader(paths, sharedEnv) {
   // An exited child is not "killed", so check exit state, not `killed`.
   // Signal death leaves exitCode null; childIsAlive treats that as dead.
   if (childIsAlive(realmChild)) return "running";
+  if (shuttingDown) return "failed";
   try {
-    ensureRealmExtracted(paths);
+    await ensureRealmExtracted(paths);
   } catch (err) {
     desktopLog(`realm extract failed: ${err}`);
     return "failed";
   }
+  // Quit during extract must not spawn a reader that shutdown already missed.
+  if (shuttingDown) return "failed";
+  if (childIsAlive(realmChild)) return "running";
   if (!fs.existsSync(paths.realmEntry)) {
     desktopLog(`realm entry missing: ${paths.realmEntry}`);
     return "failed";
@@ -424,9 +464,14 @@ function scheduleRealmRespawn(paths, sharedEnv) {
   realmRespawnTimer = setTimeout(() => {
     realmRespawnTimer = null;
     if (shuttingDown) return;
-    if (spawnRealmReader(paths, sharedEnv) === "failed") {
-      scheduleRealmRespawn(paths, sharedEnv);
-    }
+    void spawnRealmReader(paths, sharedEnv)
+      .then((result) => {
+        if (result === "failed") scheduleRealmRespawn(paths, sharedEnv);
+      })
+      .catch((err) => {
+        desktopLog(`realm-reader start failed: ${err}`);
+        scheduleRealmRespawn(paths, sharedEnv);
+      });
   }, decision.delayMs);
 }
 
@@ -491,8 +536,17 @@ function spawnOverlayHost(paths, urlArg) {
 const OVERLAY_URL_DEFAULT = `--url=http://${HOST}:${PORT}/#/overlay?bg=clear`;
 const OVERLAY_SETTINGS_POLL_MS = 4000;
 const OVERLAY_RESPAWN_GAP_MS = 15000;
-/** How long a child gets to exit after SIGTERM before it is SIGKILLed. */
-const CHILD_STOP_GRACE_MS = 5000;
+
+/**
+ * SIGTERM, then SIGKILL, then give up so Quit cannot wait forever.
+ * Timing lives in stopChild.js.
+ * @param {import("node:child_process").ChildProcess | null} child
+ * @param {string} label
+ * @returns {Promise<void>}
+ */
+function stopChild(child, label) {
+  return stopChildProcess(child, label, { log: desktopLog });
+}
 
 /**
  * Read the In-game overlay host settings from the client app settings store
@@ -633,43 +687,6 @@ async function loadAppIntoWindow() {
   await mainWindow.loadURL(url);
 }
 
-/**
- * SIGTERM the child, then SIGKILL after CHILD_STOP_GRACE_MS. Resolves once the
- * child has exited (or could not be signalled). The server and realm-reader
- * install cooperative SIGTERM handlers that may be slow (or, mid-extraction,
- * unresponsive), so a bare SIGTERM can leave them alive after Electron exits.
- * @param {import("node:child_process").ChildProcess | null} child
- * @param {string} label
- * @returns {Promise<void>}
- */
-function stopChild(child, label) {
-  if (!child || child.exitCode !== null || child.signalCode !== null) {
-    return Promise.resolve();
-  }
-  return new Promise((resolve) => {
-    const killTimer = setTimeout(() => {
-      desktopLog(`${label} ignored SIGTERM for ${CHILD_STOP_GRACE_MS}ms — SIGKILL`);
-      try {
-        child.kill("SIGKILL");
-      } catch (err) {
-        desktopLog(`failed to SIGKILL ${label}: ${err}`);
-        resolve();
-      }
-    }, CHILD_STOP_GRACE_MS);
-    child.once("exit", () => {
-      clearTimeout(killTimer);
-      resolve();
-    });
-    try {
-      child.kill("SIGTERM");
-    } catch (err) {
-      desktopLog(`failed to stop ${label}: ${err}`);
-      clearTimeout(killTimer);
-      resolve();
-    }
-  });
-}
-
 function closeChildLogs() {
   for (const fd of childLogFdByLabel.values()) {
     try {
@@ -692,6 +709,10 @@ let shutdownPromise = null;
 function shutdown() {
   if (shutdownPromise) return shutdownPromise;
   shuttingDown = true;
+  if (startupAbort) {
+    startupAbort.abort();
+    startupAbort = null;
+  }
   if (overlayPollTimer) {
     clearInterval(overlayPollTimer);
     overlayPollTimer = null;
@@ -714,7 +735,10 @@ function shutdown() {
   return shutdownPromise;
 }
 
-ipcMain.handle("roxysu:open-external", async (_event, url) => {
+ipcMain.handle("roxysu:open-external", async (event, url) => {
+  if (!ipcSenderIsApp(event)) {
+    throw new Error("Invalid sender");
+  }
   if (typeof url !== "string" || !url.trim()) {
     throw new Error("Invalid URL");
   }
@@ -731,14 +755,17 @@ ipcMain.handle("roxysu:open-external", async (_event, url) => {
   await shell.openExternal(parsed.toString());
 });
 
-ipcMain.handle("roxysu:write-clipboard-image", async (_event, bytes) => {
+ipcMain.handle("roxysu:write-clipboard-image", async (event, bytes) => {
+  if (!ipcSenderIsApp(event)) {
+    throw new Error("Invalid sender");
+  }
   if (bytes == null) {
     throw new Error("Invalid image");
   }
   const buf = Buffer.isBuffer(bytes)
     ? bytes
     : Buffer.from(bytes instanceof ArrayBuffer ? bytes : new Uint8Array(bytes));
-  if (buf.length === 0) {
+  if (buf.length === 0 || buf.length > MAX_CLIPBOARD_IMAGE_BYTES) {
     throw new Error("Invalid image");
   }
   const image = nativeImage.createFromBuffer(buf);
@@ -857,10 +884,12 @@ if (!gotLock) {
 
     void setSplashStatus("Waiting for server");
     desktopLog("waitForServer start");
+    startupAbort = new AbortController();
 
     try {
-      await waitForServer(PORT, HOST);
+      await waitForServer(PORT, HOST, 180_000, { signal: startupAbort.signal });
     } catch (err) {
+      if (shuttingDown) return;
       desktopLog(`waitForServer failed: ${err}`);
       desktopLog(`see logs under ${path.join(paths.dataDir, "logs")}`);
       await setSplashStatus("Failed to start — see logs", { animateDots: false });
@@ -868,17 +897,34 @@ if (!gotLock) {
       app.exit(1);
       return;
     }
+    if (shuttingDown) return;
 
     desktopLog("waitForServer ok");
     await setSplashStatus("Opening Home");
-    await maybeClearHttpCache(paths);
-    await loadAppIntoWindow();
+    try {
+      await maybeClearHttpCache(paths);
+      await loadAppIntoWindow();
+    } catch (err) {
+      if (shuttingDown) return;
+      desktopLog(`loadAppIntoWindow failed: ${err}`);
+      await setSplashStatus("Failed to open Home — see logs", { animateDots: false });
+      await shutdown();
+      app.exit(1);
+      return;
+    }
+    if (shuttingDown) return;
     desktopLog("ready");
 
-    // Defer Realm until the UI is up; extract archive lazily (shrink AV scan at install).
-    if (spawnRealmReader(paths, sharedEnv) === "failed") {
-      scheduleRealmRespawn(paths, sharedEnv);
-    }
+    // Defer Realm until the UI is up. Extract is async so the first packaged
+    // launch does not freeze the window while tar runs.
+    void spawnRealmReader(paths, sharedEnv)
+      .then((result) => {
+        if (result === "failed") scheduleRealmRespawn(paths, sharedEnv);
+      })
+      .catch((err) => {
+        desktopLog(`realm-reader start failed: ${err}`);
+        scheduleRealmRespawn(paths, sharedEnv);
+      });
 
     // Optional Wayland in-game overlay host (bundled on NixOS packages):
     // spawns from the overlay.host_enabled / overlay.host_url settings and
@@ -891,11 +937,24 @@ if (!gotLock) {
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         void (async () => {
-          createSplashWindow(paths);
-          await loadAppIntoWindow();
+          try {
+            createSplashWindow(paths);
+            await loadAppIntoWindow();
+          } catch (err) {
+            desktopLog(`activate load failed: ${err}`);
+          }
         })();
       }
     });
+  }).catch(async (err) => {
+    desktopLog(`whenReady failed: ${err}`);
+    if (shuttingDown) return;
+    try {
+      await shutdown();
+    } catch (shutdownErr) {
+      desktopLog(`shutdown failed: ${shutdownErr}`);
+    }
+    app.exit(1);
   });
 
   app.on("window-all-closed", () => {
@@ -903,15 +962,17 @@ if (!gotLock) {
   });
 
   // Hold the quit until every child has exited (SIGKILL after the grace
-  // period), otherwise they can outlive Electron and keep ROXYSU_PORT / the
-  // overlay layer surface.
+  // period, then a short deadline if the process never emits exit). Otherwise
+  // children can outlive Electron and keep ROXYSU_PORT / the overlay surface.
   let quitAfterShutdown = false;
   app.on("before-quit", (event) => {
     if (quitAfterShutdown) return;
     event.preventDefault();
-    void shutdown().then(() => {
-      quitAfterShutdown = true;
-      app.quit();
-    });
+    void shutdown()
+      .catch((err) => desktopLog(`shutdown failed: ${err}`))
+      .finally(() => {
+        quitAfterShutdown = true;
+        app.quit();
+      });
   });
 }

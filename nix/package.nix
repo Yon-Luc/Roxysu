@@ -348,6 +348,9 @@ in
          apps/desktop/paths.js \
          apps/desktop/respawnPolicy.js \
          apps/desktop/overlayApplyPolicy.js \
+         apps/desktop/urlPolicy.js \
+         apps/desktop/stopChild.js \
+         apps/desktop/waitForServer.js \
          apps/desktop/splash.html \
          apps/desktop/package.json \
          "$appdir/"

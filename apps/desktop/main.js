@@ -7,7 +7,11 @@ const fs = require("node:fs");
 const { resolveDesktopPaths, ensureParentDir, ensureRealmExtracted } = require("./paths");
 const { startAutoUpdate } = require("./auto-update");
 const { classifyServerExit, decideRespawn } = require("./respawnPolicy");
-const { decideOverlayApply, childIsAlive } = require("./overlayApplyPolicy");
+const {
+  OVERLAY_MAX_RESPAWNS,
+  childIsAlive,
+  decideOverlayApply,
+} = require("./overlayApplyPolicy");
 const { createApplyGate, executeOverlayDecision } = require("./overlayApplyLoop");
 const {
   MAX_OVERLAY_SETTINGS_BYTES,
@@ -52,6 +56,8 @@ let overlayAppliedOutput = null;
 let overlayAppliedRestartAt = null;
 /** Timestamp of the last overlay host spawn (liveness respawn rate limit). */
 let overlaySpawnedAt = 0;
+/** When the current overlay child exited (ms), for the DD-10 uptime check. */
+let overlayExitedAt = 0;
 /** Overlay host setting poll timer. @type {NodeJS.Timeout | null} */
 let overlayPollTimer = null;
 /** Timestamp of the last server spawn (used for exit diagnostics). */
@@ -976,6 +982,7 @@ function spawnOverlayHost(paths, urlArg, output) {
   overlaySpawnedAt = Date.now();
   const child = overlayChild;
   child.on("exit", (code, signal) => {
+    if (child === overlayChild) overlayExitedAt = Date.now();
     if (!shuttingDown) {
       desktopLog(`overlay exited code=${code} signal=${signal}`);
     }
@@ -1073,6 +1080,10 @@ function watchOverlayHostSetting(paths) {
   let consecutiveFailures = 0;
   /** Last successfully read enable toggle; null until the first read. */
   let lastKnownEnabled = null;
+  /** DD-10: quick liveness respawns in a row. */
+  let respawnFailures = 0;
+  /** DD-10: park reason already logged, so a parked host logs once. */
+  let loggedParkReason = null;
   /** D2: one poll run in flight; a call mid-flight coalesces into one re-run. */
   const applyGate = createApplyGate();
 
@@ -1099,9 +1110,29 @@ function watchOverlayHostSetting(paths) {
         respawnGapMs: OVERLAY_RESPAWN_GAP_MS,
         consecutiveFailures,
         lastKnownEnabled,
+        respawnFailures,
+        childExitCode: overlayChild?.exitCode ?? null,
+        childUptimeMs:
+          overlayChild && !childIsAlive(overlayChild) && overlayExitedAt >= overlaySpawnedAt
+            ? overlayExitedAt - overlaySpawnedAt
+            : null,
       });
       consecutiveFailures = decision.consecutiveFailures;
       lastKnownEnabled = decision.lastKnownEnabled;
+      respawnFailures = decision.respawnFailures;
+
+      if (decision.reason === "unsupported-session" || decision.reason === "respawn-exhausted") {
+        if (loggedParkReason !== decision.reason) {
+          loggedParkReason = decision.reason;
+          desktopLog(
+            decision.reason === "unsupported-session"
+              ? "overlay parked: this session cannot host it (exit 78: no Wayland or no wlr-layer-shell). Change an overlay setting or press Restart to try again."
+              : `overlay parked after ${respawnFailures} quick crashes. Change an overlay setting or press Restart to try again.`,
+          );
+        }
+      } else if (decision.action !== "noop") {
+        loggedParkReason = null;
+      }
 
       if (decision.action === "stop") {
         desktopLog(
@@ -1112,7 +1143,7 @@ function watchOverlayHostSetting(paths) {
       } else if (decision.action === "spawn") {
         if (decision.reason === "liveness-respawn") {
           desktopLog(
-            `overlay liveness respawn (previous exit code=${overlayChild?.exitCode})`,
+            `overlay liveness respawn ${respawnFailures}/${OVERLAY_MAX_RESPAWNS} (previous exit code=${overlayChild?.exitCode})`,
           );
         } else if (decision.reason === "url-changed") {
           desktopLog("overlay url changed — restarting host");

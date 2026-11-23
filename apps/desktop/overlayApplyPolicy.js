@@ -13,6 +13,34 @@
 const OVERLAY_MAX_POLL_FAILURES = 5;
 
 /**
+ * DD-10: liveness respawns in a row (each child dying before
+ * OVERLAY_STABLE_UPTIME_MS) before the shell parks the host until the user
+ * changes something (toggle, URL, monitor, restart button).
+ */
+const OVERLAY_MAX_RESPAWNS = 5;
+/** A child that ran at least this long resets the respawn backoff. */
+const OVERLAY_STABLE_UPTIME_MS = 60_000;
+/** Upper bound of the doubling respawn gap. */
+const OVERLAY_MAX_RESPAWN_GAP_MS = 5 * 60_000;
+/**
+ * Exit status of an overlay host that cannot run in this session (no
+ * Wayland, compositor without wlr-layer-shell such as GNOME). Matches
+ * UNSUPPORTED_EXIT_CODE in apps/overlay-rs/src/lifecycle.rs. Never respawned.
+ */
+const OVERLAY_EXIT_UNSUPPORTED = 78;
+
+/**
+ * Gap before the next liveness respawn after `failures` quick deaths:
+ * base, 2×, 4×, … capped at OVERLAY_MAX_RESPAWN_GAP_MS.
+ * @param {number} baseGapMs
+ * @param {number} failures
+ */
+function overlayRespawnGapMs(baseGapMs, failures) {
+  const n = Math.max(0, Math.floor(failures || 0));
+  return Math.min(baseGapMs * 2 ** Math.min(n, 20), OVERLAY_MAX_RESPAWN_GAP_MS);
+}
+
+/**
  * A spawned child is alive only while both exit fields are still null.
  * Signal death sets `signalCode` and leaves `exitCode` null. `killed` is not
  * this check — an exited child is not `killed`.
@@ -40,6 +68,10 @@ function childIsAlive(child) {
  * @property {number} consecutiveFailures Failed polls in a row before this one.
  * @property {boolean | null} lastKnownEnabled Last successfully read toggle.
  * @property {number} [maxPollFailures]
+ * @property {number} [respawnFailures] Quick liveness respawns in a row (DD-10).
+ * @property {number | null} [childExitCode] Exit code of the exited child.
+ * @property {number | null} [childUptimeMs] How long the exited child ran.
+ * @property {number} [maxRespawns]
  */
 
 /**
@@ -52,6 +84,7 @@ function childIsAlive(child) {
  * @property {number | null} [restartAt] For `spawn`: restart nonce to record as applied.
  * @property {number} consecutiveFailures
  * @property {boolean | null} lastKnownEnabled
+ * @property {number} respawnFailures Carry forward (DD-10).
  */
 
 /**
@@ -60,6 +93,7 @@ function childIsAlive(child) {
  */
 function decideOverlayApply(input) {
   const maxFailures = input.maxPollFailures ?? OVERLAY_MAX_POLL_FAILURES;
+  const respawnFailures = Math.max(0, Math.floor(input.respawnFailures ?? 0));
 
   if (!input.settings) {
     // A failed poll carries no new intent. One failure must not kill the HUD.
@@ -74,15 +108,18 @@ function decideOverlayApply(input) {
       reason: shouldStop ? "poll-failures" : "poll-failed",
       consecutiveFailures,
       lastKnownEnabled: input.lastKnownEnabled,
+      respawnFailures,
     };
   }
 
   const { enabled, hostUrl } = input.settings;
-  const base = { consecutiveFailures: 0, lastKnownEnabled: enabled };
+  const base = { consecutiveFailures: 0, lastKnownEnabled: enabled, respawnFailures };
 
   if (!enabled) {
+    // Turning the overlay off (and back on) clears a parked host (DD-10).
     return {
       ...base,
+      respawnFailures: 0,
       action: input.hasChild ? "stop" : "noop",
       reason: "disabled",
     };
@@ -112,6 +149,7 @@ function decideOverlayApply(input) {
     if (restartRequested) {
       return {
         ...base,
+        respawnFailures: 0,
         action: "spawn",
         reason: "restart-requested",
         stopRunning: true,
@@ -123,6 +161,7 @@ function decideOverlayApply(input) {
     if (unchanged) return { ...base, action: "noop", reason: "up-to-date" };
     return {
       ...base,
+      respawnFailures: 0,
       action: "spawn",
       reason: changeReason,
       stopRunning: true,
@@ -135,18 +174,36 @@ function decideOverlayApply(input) {
   if (input.hasChild && input.childExited) {
     // F-038: the crash-loop gap only rate-limits a plain liveness respawn. A
     // changed URL or monitor is an explicit user edit and applies immediately,
-    // and so is a restart request.
-    if (!restartRequested && unchanged && input.now - input.spawnedAt < input.respawnGapMs) {
-      return { ...base, action: "noop", reason: "respawn-gap" };
+    // and so is a restart request. Both also clear the DD-10 backoff / park.
+    if (restartRequested || !unchanged) {
+      return {
+        ...base,
+        respawnFailures: 0,
+        action: "spawn",
+        reason: restartRequested ? "restart-requested" : changeReason,
+        stopRunning: false,
+        urlArg,
+        output,
+        restartAt,
+      };
+    }
+    // DD-10: a host that ran long enough was healthy; start the backoff over.
+    const failures =
+      (input.childUptimeMs ?? 0) >= OVERLAY_STABLE_UPTIME_MS ? 0 : respawnFailures;
+    if (input.childExitCode === OVERLAY_EXIT_UNSUPPORTED) {
+      return { ...base, respawnFailures: failures, action: "noop", reason: "unsupported-session" };
+    }
+    if (failures >= (input.maxRespawns ?? OVERLAY_MAX_RESPAWNS)) {
+      return { ...base, respawnFailures: failures, action: "noop", reason: "respawn-exhausted" };
+    }
+    if (input.now - input.spawnedAt < overlayRespawnGapMs(input.respawnGapMs, failures)) {
+      return { ...base, respawnFailures: failures, action: "noop", reason: "respawn-gap" };
     }
     return {
       ...base,
+      respawnFailures: failures + 1,
       action: "spawn",
-      reason: restartRequested
-        ? "restart-requested"
-        : unchanged
-          ? "liveness-respawn"
-          : changeReason,
+      reason: "liveness-respawn",
       stopRunning: false,
       urlArg,
       output,
@@ -165,4 +222,13 @@ function decideOverlayApply(input) {
   };
 }
 
-module.exports = { OVERLAY_MAX_POLL_FAILURES, childIsAlive, decideOverlayApply };
+module.exports = {
+  OVERLAY_EXIT_UNSUPPORTED,
+  OVERLAY_MAX_POLL_FAILURES,
+  OVERLAY_MAX_RESPAWNS,
+  OVERLAY_MAX_RESPAWN_GAP_MS,
+  OVERLAY_STABLE_UPTIME_MS,
+  childIsAlive,
+  decideOverlayApply,
+  overlayRespawnGapMs,
+};

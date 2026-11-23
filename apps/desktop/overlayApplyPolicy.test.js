@@ -3,9 +3,14 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const {
+  OVERLAY_EXIT_UNSUPPORTED,
   OVERLAY_MAX_POLL_FAILURES,
+  OVERLAY_MAX_RESPAWNS,
+  OVERLAY_MAX_RESPAWN_GAP_MS,
+  OVERLAY_STABLE_UPTIME_MS,
   childIsAlive,
   decideOverlayApply,
+  overlayRespawnGapMs,
 } = require("./overlayApplyPolicy.js");
 
 const DEFAULT_ARG = "--url=http://127.0.0.1:3000/#/overlay?bg=clear";
@@ -411,5 +416,87 @@ describe("decideOverlayApply: restart nonce (D-NEW-1)", () => {
       }),
     );
     expect(d).toMatchObject({ action: "stop", reason: "disabled" });
+  });
+});
+
+describe("decideOverlayApply: crash-loop backoff and park (DD-10)", () => {
+  const exited = (overrides = {}) =>
+    input({
+      hasChild: true,
+      childExited: true,
+      appliedUrlArg: DEFAULT_ARG,
+      childExitCode: 1,
+      childUptimeMs: 500,
+      ...overrides,
+    });
+
+  test("the gap doubles per quick death and is capped", () => {
+    expect(overlayRespawnGapMs(GAP, 0)).toBe(GAP);
+    expect(overlayRespawnGapMs(GAP, 1)).toBe(2 * GAP);
+    expect(overlayRespawnGapMs(GAP, 3)).toBe(8 * GAP);
+    expect(overlayRespawnGapMs(GAP, 50)).toBe(OVERLAY_MAX_RESPAWN_GAP_MS);
+  });
+
+  test("a liveness respawn counts the failure and waits the doubled gap next", () => {
+    const first = decideOverlayApply(exited({ spawnedAt: 1_000_000 - GAP }));
+    expect(first).toMatchObject({ action: "spawn", reason: "liveness-respawn", respawnFailures: 1 });
+    const tooSoon = decideOverlayApply(
+      exited({ respawnFailures: 1, spawnedAt: 1_000_000 - GAP - 1 }),
+    );
+    expect(tooSoon).toMatchObject({ action: "noop", reason: "respawn-gap", respawnFailures: 1 });
+    const later = decideOverlayApply(exited({ respawnFailures: 1, spawnedAt: 1_000_000 - 2 * GAP }));
+    expect(later).toMatchObject({ action: "spawn", respawnFailures: 2 });
+  });
+
+  test("parks after the respawn budget", () => {
+    const d = decideOverlayApply(exited({ respawnFailures: OVERLAY_MAX_RESPAWNS, spawnedAt: 0 }));
+    expect(d).toMatchObject({ action: "noop", reason: "respawn-exhausted" });
+  });
+
+  test("a host that ran long enough resets the budget", () => {
+    const d = decideOverlayApply(
+      exited({
+        respawnFailures: OVERLAY_MAX_RESPAWNS,
+        childUptimeMs: OVERLAY_STABLE_UPTIME_MS,
+        spawnedAt: 0,
+      }),
+    );
+    expect(d).toMatchObject({ action: "spawn", reason: "liveness-respawn", respawnFailures: 1 });
+  });
+
+  test("exit 78 (session cannot host the overlay) is never respawned", () => {
+    const d = decideOverlayApply(exited({ childExitCode: OVERLAY_EXIT_UNSUPPORTED, spawnedAt: 0 }));
+    expect(d).toMatchObject({ action: "noop", reason: "unsupported-session" });
+  });
+
+  test("a restart request, URL or monitor change un-parks", () => {
+    const restart = decideOverlayApply(
+      exited({
+        childExitCode: OVERLAY_EXIT_UNSUPPORTED,
+        settings: { enabled: true, hostUrl: null, restartAt: 5 },
+      }),
+    );
+    expect(restart).toMatchObject({ action: "spawn", reason: "restart-requested", respawnFailures: 0 });
+    const url = decideOverlayApply(
+      exited({
+        respawnFailures: OVERLAY_MAX_RESPAWNS,
+        settings: { enabled: true, hostUrl: "http://127.0.0.1:4321/#/overlay" },
+      }),
+    );
+    expect(url).toMatchObject({ action: "spawn", reason: "url-changed", respawnFailures: 0 });
+    const output = decideOverlayApply(
+      exited({
+        respawnFailures: OVERLAY_MAX_RESPAWNS,
+        settings: { enabled: true, hostUrl: null, output: "DP-1" },
+      }),
+    );
+    expect(output).toMatchObject({ action: "spawn", reason: "output-changed", respawnFailures: 0 });
+  });
+
+  test("disabling clears the budget", () => {
+    const d = decideOverlayApply(
+      exited({ respawnFailures: OVERLAY_MAX_RESPAWNS, settings: { enabled: false, hostUrl: null } }),
+    );
+    expect(d).toMatchObject({ action: "stop", reason: "disabled", respawnFailures: 0 });
   });
 });

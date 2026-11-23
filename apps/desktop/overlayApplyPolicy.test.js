@@ -217,6 +217,53 @@ describe("decideOverlayApply: F-066 poll failures", () => {
     expect(d.action).toBe("noop");
   });
 
+  test("a changed monitor restarts a running host and bypasses the gap", () => {
+    const running = decideOverlayApply(
+      input({
+        settings: { enabled: true, hostUrl: null, output: "DP-4" },
+        hasChild: true,
+        appliedUrlArg: DEFAULT_ARG,
+        appliedOutput: null,
+      }),
+    );
+    expect(running).toMatchObject({
+      action: "spawn",
+      reason: "output-changed",
+      stopRunning: true,
+      output: "DP-4",
+      urlArg: DEFAULT_ARG,
+    });
+
+    const insideGap = decideOverlayApply(
+      input({
+        settings: { enabled: true, hostUrl: null, output: "DP-4" },
+        hasChild: true,
+        childExited: true,
+        appliedUrlArg: DEFAULT_ARG,
+        appliedOutput: null,
+        spawnedAt: 1_000_000 - 1000,
+      }),
+    );
+    expect(insideGap).toMatchObject({
+      action: "spawn",
+      reason: "output-changed",
+      stopRunning: false,
+      output: "DP-4",
+    });
+  });
+
+  test("an unchanged monitor stays up to date", () => {
+    const d = decideOverlayApply(
+      input({
+        settings: { enabled: true, hostUrl: null, output: "DP-4" },
+        hasChild: true,
+        appliedUrlArg: DEFAULT_ARG,
+        appliedOutput: "DP-4",
+      }),
+    );
+    expect(d).toMatchObject({ action: "noop", reason: "up-to-date" });
+  });
+
   test("a successful poll resets the failure counter", () => {
     const d = decideOverlayApply(
       input({

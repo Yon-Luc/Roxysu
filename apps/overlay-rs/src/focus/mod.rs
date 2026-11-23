@@ -1,22 +1,49 @@
-//! Event-driven Wayland focus tracking (Phase 4).
+//! Event-driven Wayland focus tracking.
 //!
-//! - [`matching`] — C-compatible match policy (`contains` default, optional `exact`)
+//! - [`matching`] — `contains` default; title only when `app_id` is empty
 //! - [`reducer`] — pure Show/Hide state machine, flushed once per dispatch batch
-//! - [`wayland`] — dedicated foreign-toplevel connection off the GTK thread
+//! - [`wayland`] — `zwlr_foreign_toplevel_manager_v1`, else Plasma window management
+//! - [`grant`] — KWin `.desktop` grant for the privileged Plasma global
 
+mod grant;
 mod matching;
+mod plasma;
 mod reducer;
 mod wayland;
 
+pub use grant::install_plasma_grant;
 pub use matching::{MatchMode, MatchPolicy};
-pub use wayland::{run_focus_loop, run_list_windows, FocusEvent};
+pub use reducer::{OutputHint, OutputRect};
+pub use wayland::{run_list_windows, spawn_focus_loop, FocusEvent, FocusHandle};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FocusCommand {
-    Show,
+    /// Matched window is activated. `output` is a pin hint when `--output` is unset.
+    Show {
+        output: Option<OutputHint>,
+    },
     Hide,
-    /// Connection dropped after a successful session; leave visibility unchanged.
+    /// Connection dropped after a session that had a backend; leave visibility unchanged.
     Disconnected,
-    /// First connect failed (no protocol / no display); fall back to always-visible.
-    Unavailable,
+    /// No usable backend yet. Stay unmapped and keep retrying.
+    Unavailable {
+        reason: String,
+    },
+}
+
+/// A missing focus protocol does not force the overlay visible.
+/// Always-visible is only `--follow-focus=false`, which never reaches this path.
+pub fn visibility_after_unavailable(currently_wants_visible: bool) -> bool {
+    currently_wants_visible
+}
+
+#[cfg(test)]
+mod tests {
+    use super::visibility_after_unavailable;
+
+    #[test]
+    fn unavailable_does_not_force_visible() {
+        assert!(!visibility_after_unavailable(false));
+        assert!(visibility_after_unavailable(true));
+    }
 }

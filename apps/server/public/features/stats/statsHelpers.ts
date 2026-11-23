@@ -99,6 +99,60 @@ export function skillBandMaps(
   return values[band][axis];
 }
 
+export const SKILL_EVOLUTION_BANDS = ["push", "accuracy", "consistency"] as const;
+
+export type SkillEvolutionBand = (typeof SKILL_EVOLUTION_BANDS)[number];
+
+export type SkillEvolutionPoint = {
+  push: number | null;
+  accuracy: number | null;
+  consistency: number | null;
+};
+
+export function isSkillEvolutionBand(value: unknown): value is SkillEvolutionBand {
+  return (
+    value === "push" || value === "accuracy" || value === "consistency"
+  );
+}
+
+function finiteBandValues(
+  points: readonly SkillEvolutionPoint[],
+  bands: readonly SkillEvolutionBand[],
+): number[] {
+  const values: number[] = [];
+  for (const point of points) {
+    for (const band of bands) {
+      const value = point[band];
+      if (value != null && Number.isFinite(value)) values.push(value);
+    }
+  }
+  return values;
+}
+
+function domainFromValues(values: readonly number[]): [number, number] {
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  if (min === max) return [min, min + 1];
+  return [min, max];
+}
+
+/** Y-axis extent for Skill evolution. Floor is the lowest plotted skill level. */
+export function skillEvolutionDomain(
+  points: readonly SkillEvolutionPoint[],
+  focus: SkillEvolutionBand | null,
+): [number, number] {
+  const focused = finiteBandValues(
+    points,
+    focus ? [focus] : SKILL_EVOLUTION_BANDS,
+  );
+  if (focused.length > 0) return domainFromValues(focused);
+  if (focus) {
+    const combined = finiteBandValues(points, SKILL_EVOLUTION_BANDS);
+    if (combined.length > 0) return domainFromValues(combined);
+  }
+  return [0, 1];
+}
+
 export function historyBandValue(
   point: NonNullable<PlayerStats["skillHistory"]>[number],
   band: "push" | "accuracy" | "consistency",

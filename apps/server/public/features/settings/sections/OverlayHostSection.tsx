@@ -8,24 +8,35 @@ export function OverlayHostSection({ data }: { data: SettingsPayload }) {
   const queryClient = useQueryClient();
   const { dict } = useAppDict();
   const hostUrl = data.overlay.hostUrl;
+  const output = data.overlay.output;
   const enabled = data.overlay.enabled;
   const [draft, setDraft] = useState(hostUrl ?? "");
+  const [outputDraft, setOutputDraft] = useState(output ?? "");
 
   useEffect(() => {
     setDraft(hostUrl ?? "");
   }, [hostUrl]);
 
+  useEffect(() => {
+    setOutputDraft(output ?? "");
+  }, [output]);
+
   const urlMut = useMutation({
-    mutationFn: (body: { overlayHostUrl?: string | null; overlayEnabled?: boolean }) =>
-      patchSettings(body),
+    mutationFn: (body: {
+      overlayHostUrl?: string | null;
+      overlayEnabled?: boolean;
+      overlayOutput?: string | null;
+    }) => patchSettings(body),
     onSuccess: (next) => {
       if ("error" in next) return;
       queryClient.setQueryData(["settings"], next);
       setDraft(next.overlay.hostUrl ?? "");
+      setOutputDraft(next.overlay.output ?? "");
     },
   });
 
   const dirty = (draft.trim() || null) !== (hostUrl ?? null);
+  const outputDirty = (outputDraft.trim() || null) !== (output ?? null);
 
   return (
     <section
@@ -93,6 +104,49 @@ export function OverlayHostSection({ data }: { data: SettingsPayload }) {
           onClick={() => urlMut.mutate({ overlayHostUrl: null })}
         >
           {dict?.settings.overlayHostClear ?? "Use default"}
+        </button>
+      </div>
+
+      <label className="mt-4 block">
+        <span className="text-xs font-semibold uppercase tracking-wide text-faint">
+          {dict?.settings.overlayOutputLabel ?? "Monitor"}
+        </span>
+        <input
+          type="text"
+          value={outputDraft}
+          onChange={(e) => setOutputDraft(e.target.value)}
+          placeholder="DP-4"
+          disabled={urlMut.isPending}
+          className="mt-1.5 w-full rounded-xl border border-line bg-elevated/50 px-3 py-2 font-mono text-sm text-ink placeholder:text-faint focus:border-accent focus:outline-none disabled:opacity-60"
+          spellCheck={false}
+          autoComplete="off"
+        />
+        <span className="mt-1.5 block text-sm text-muted">
+          {dict?.settings.overlayOutputDesc ??
+            "Connector or model, for example DP-4. Leave empty to follow the osu! window. Saving restarts the overlay within a few seconds."}
+        </span>
+      </label>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          className="rx-btn-primary"
+          disabled={urlMut.isPending || !outputDirty}
+          onClick={() =>
+            urlMut.mutate({ overlayOutput: outputDraft.trim() || null })
+          }
+        >
+          {urlMut.isPending
+            ? dict?.settings.saving ?? "Saving…"
+            : dict?.settings.overlayOutputSave ?? "Save monitor"}
+        </button>
+        <button
+          type="button"
+          className="rx-btn"
+          disabled={urlMut.isPending || output == null}
+          onClick={() => urlMut.mutate({ overlayOutput: null })}
+        >
+          {dict?.settings.overlayOutputClear ?? "Follow osu!"}
         </button>
       </div>
 

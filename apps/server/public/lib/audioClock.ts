@@ -5,14 +5,24 @@
  * makes scrollers look stuttery even when canvas paints at 144Hz. This clock
  * samples the media time when it changes and interpolates with performance.now()
  * between samples, while staying locked to playbackRate / pause / seek.
- * Pausing freezes the interpolated time (the next coarse sample usually sits
- * behind it), and resuming holds that position until the media pointer really
- * moves, so the playfield never snaps back on pause or resume.
+ *
+ * A seek (`set` to a new position) locks out raw samples that have not arrived
+ * at that position yet, so a stale `currentTime` cannot pull the playfield
+ * backward and then forward. While playing, a sample that merely lags the
+ * interpolator does not rewind it either. Pausing freezes the interpolated
+ * time, and resuming continues from that frozen time once the media pointer
+ * actually moves — a lagging sample never becomes the drawn position.
  */
-/** A media sample this far from the current position is treated as a seek. */
+/** A media sample this far from the interpolator is treated as a real discontinuity. */
 const SEEK_SNAP_MS = 250;
-/** Resume holds the frozen position at most this long before following media again. */
+/** Resume holds the frozen position at most this long before advancing again. */
 const RESUME_HOLD_MS = 250;
+/** How long a `set()` keeps rejecting samples that are still at the old time. */
+const SEEK_LOCK_MS = 400;
+/** A sample this close to the seek target has arrived (about one audio frame). */
+const SEEK_ARRIVE_MS = 50;
+/** Smaller than this, `set()` is a rebase and does not arm a seek lock. */
+const SEEK_LOCK_EPSILON_MS = 0.5;
 
 export class AudioClock {
   private mediaMs = 0;
@@ -23,12 +33,16 @@ export class AudioClock {
   /**
    * Resume hold: `play` fires before audio actually starts, and the media
    * clock can still sit where it was (a step behind the interpolated time) or
-   * step back briefly while the pipeline restarts. Holding the frozen
-   * position instead of interpolating ahead of the sound is what removes the
-   * mini rollback on resume.
+   * step back briefly while the pipeline restarts. Stay on the frozen
+   * position until that pointer moves, then interpolate forward from it.
    */
   private holding = false;
   private holdUntilNowMs = 0;
+  /** Media sample observed on the pause → play edge. Forward motion ends the hold. */
+  private resumeRawMs = Number.NaN;
+  /** `set()` target. Samples outside {@link SEEK_ARRIVE_MS} are stale until the lock ends. */
+  private seekTarget = 0;
+  private seekLockUntil = 0;
 
   /** Force position (seek, pause freeze, track change). */
   set(
@@ -36,12 +50,20 @@ export class AudioClock {
     opts?: { playing?: boolean; rate?: number; now?: number },
   ): void {
     const now = opts?.now ?? performance.now();
+    const prev = this.nowMs(now);
     this.mediaMs = mediaMs;
     this.samplePerfMs = now;
     this.lastRawMediaMs = mediaMs;
     this.holding = false;
     if (opts?.playing != null) this.playing = opts.playing;
     if (opts?.rate != null) this.rate = Math.max(0.01, opts.rate);
+    // Rebasing onto the current presentation time (embed live-sync glide)
+    // must not start a lock. A real jump does, so rAF can keep sampling the
+    // pre-seek currentTime without rewinding the notes.
+    if (Math.abs(mediaMs - prev) > SEEK_LOCK_EPSILON_MS) {
+      this.seekTarget = mediaMs;
+      this.seekLockUntil = now + SEEK_LOCK_MS;
+    }
   }
 
   /**
@@ -62,24 +84,33 @@ export class AudioClock {
 
     if (opts?.playing != null && opts.playing !== this.playing) {
       if (opts.playing) {
-        // Resume: start from the frozen position and wait for the media
-        // pointer to actually move. Adopting raw immediately (still stale, or
-        // rewound while the pipeline restarts) snapped the playfield backward.
+        // Resume: the pause branch already froze the interpolated time into
+        // mediaMs. Wait for the media pointer to actually move before
+        // advancing, and never adopt a sample that is still behind it.
         this.holding = true;
         this.holdUntilNowMs = now + RESUME_HOLD_MS;
-        if (Number.isFinite(rawMediaMs)) this.lastRawMediaMs = rawMediaMs;
+        this.resumeRawMs = Number.isFinite(rawMediaMs) ? rawMediaMs : Number.NaN;
       } else {
         // Pause: freeze at the interpolated time. The next coarse media sample
         // is usually behind it and must not pull the position back.
         this.holding = false;
         this.mediaMs = this.nowMs(now);
         this.samplePerfMs = now;
-        if (Number.isFinite(rawMediaMs)) this.lastRawMediaMs = rawMediaMs;
       }
       this.playing = opts.playing;
     }
 
     if (!Number.isFinite(rawMediaMs)) return;
+
+    // In-flight seek: the element is still reporting the pre-seek time (or a
+    // timeupdate queued before the seek). Ignore it for the whole lock, even
+    // after one sample has already landed on the target.
+    if (
+      now < this.seekLockUntil &&
+      Math.abs(rawMediaMs - this.seekTarget) > SEEK_ARRIVE_MS
+    ) {
+      return;
+    }
 
     if (!this.playing) {
       // While paused only a real seek (a large jump) moves the position.
@@ -94,22 +125,32 @@ export class AudioClock {
     }
 
     if (this.holding) {
-      // Stay frozen until the media pointer reaches the held position (the
-      // pipeline has really started / caught up) or the hold times out.
-      if (rawMediaMs >= this.mediaMs || now >= this.holdUntilNowMs) {
+      const moved =
+        Number.isFinite(this.resumeRawMs) &&
+        rawMediaMs > this.resumeRawMs + SEEK_LOCK_EPSILON_MS;
+      const caughtUp = rawMediaMs >= this.mediaMs;
+      if (moved || caughtUp || now >= this.holdUntilNowMs) {
         this.holding = false;
-        this.mediaMs = rawMediaMs;
+        // Caught up or ahead: take the sample. Still behind: keep the frozen
+        // presentation time and start interpolating from it.
+        if (caughtUp) this.mediaMs = rawMediaMs;
         this.samplePerfMs = now;
         this.lastRawMediaMs = rawMediaMs;
       }
       return;
     }
 
-    // Coarse media clock ticked or seeked — take the new truth.
-    if (rawMediaMs !== this.lastRawMediaMs) {
+    if (rawMediaMs === this.lastRawMediaMs) return;
+
+    const predicted = this.mediaMs + (now - this.samplePerfMs) * this.rate;
+    const delta = rawMediaMs - predicted;
+    this.lastRawMediaMs = rawMediaMs;
+    if (Math.abs(delta) > SEEK_SNAP_MS || delta > 0) {
+      // Real discontinuity, or the media clock is a little ahead of us.
+      // A sample merely behind the interpolator is the coarse clock lagging;
+      // snapping to it is the back-and-forth on the playfield.
       this.mediaMs = rawMediaMs;
       this.samplePerfMs = now;
-      this.lastRawMediaMs = rawMediaMs;
     }
   }
 

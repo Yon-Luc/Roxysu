@@ -1,14 +1,25 @@
-//! Dedicated Wayland connection for `zwlr_foreign_toplevel_manager_v1`.
-//! Dispatches off the GTK thread; emits commands only after each batch.
+//! Dedicated Wayland connection for focus tracking.
+//!
+//! Tries `zwlr_foreign_toplevel_manager_v1` first (niri, sway, Hyprland).
+//! If that global is missing, [`super::plasma`] handles KWin. Dispatches off
+//! the GTK thread and emits commands only after each batch.
+
+use std::collections::{HashMap, HashSet};
+use std::os::fd::AsRawFd;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc;
+use std::sync::Arc;
+use std::thread::{self, JoinHandle};
+use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
-use std::sync::mpsc;
-use std::thread;
-use std::time::Duration;
 use tracing::{info, warn};
-use wayland_client::globals::{registry_queue_init, GlobalListContents};
+use wayland_client::globals::{registry_queue_init, GlobalList, GlobalListContents};
+use wayland_client::protocol::wl_output::{self, WlOutput};
 use wayland_client::protocol::wl_registry;
-use wayland_client::{Connection, Dispatch, Proxy, QueueHandle};
+use wayland_client::{Connection, Dispatch, EventQueue, Proxy, QueueHandle};
+use wayland_protocols_plasma::plasma_window_management::client::org_kde_plasma_window::OrgKdePlasmaWindow;
+use wayland_protocols_plasma::plasma_window_management::client::org_kde_plasma_window_management::OrgKdePlasmaWindowManagement;
 use wayland_protocols_wlr::foreign_toplevel::v1::client::{
     zwlr_foreign_toplevel_handle_v1::{self, ZwlrForeignToplevelHandleV1},
     zwlr_foreign_toplevel_manager_v1::{self, ZwlrForeignToplevelManagerV1},
@@ -18,26 +29,113 @@ use super::matching::MatchPolicy;
 use super::reducer::{FocusReducer, ToplevelEvent, ToplevelId, VisibilityCommand};
 use super::FocusCommand;
 
+const PUMP_TIMEOUT_MS: i32 = 500;
+
 #[derive(Debug)]
 pub enum FocusEvent {
     Dump(Vec<String>),
 }
 
-struct Session {
-    reducer: FocusReducer,
+pub struct FocusHandle {
+    stop: Arc<AtomicBool>,
+    join: Option<JoinHandle<()>>,
+}
+
+impl FocusHandle {
+    pub fn stop(mut self) {
+        self.stop.store(true, Ordering::SeqCst);
+        if let Some(join) = self.join.take() {
+            let _ = join.join();
+        }
+        info!("focus tracking stopped");
+    }
+}
+
+impl Drop for FocusHandle {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::SeqCst);
+        if let Some(join) = self.join.take() {
+            let _ = join.join();
+        }
+    }
+}
+
+pub(super) struct Session {
+    pub(super) reducer: FocusReducer,
     cmd_tx: Option<async_channel::Sender<FocusCommand>>,
     dump_tx: Option<mpsc::Sender<FocusEvent>>,
     list_only: bool,
     finished: bool,
+    /// Set once the steady-state loop is reached, so a later drop is a
+    /// disconnect rather than "no backend".
+    entered: bool,
+    stop: Option<Arc<AtomicBool>>,
+    output_names: HashMap<u32, String>,
+    /// Bound output proxies. Names are copied into `output_names`.
+    #[allow(dead_code)]
+    outputs: Vec<WlOutput>,
+    pending_outputs: Vec<(ToplevelId, u32)>,
+    /// Kept alive so the bound globals are not destroyed with the last proxy.
+    #[allow(dead_code)]
+    wlr_manager: Option<ZwlrForeignToplevelManagerV1>,
+    #[allow(dead_code)]
+    pub(super) plasma_manager: Option<OrgKdePlasmaWindowManagement>,
+    pub(super) plasma_windows: HashMap<u32, OrgKdePlasmaWindow>,
+    pub(super) seen_plasma: HashSet<u32>,
+    backend: &'static str,
 }
 
 impl Session {
-    fn emit_visibility(&self, cmd: VisibilityCommand) {
+    fn live(
+        policy: MatchPolicy,
+        cmd_tx: async_channel::Sender<FocusCommand>,
+        stop: Arc<AtomicBool>,
+    ) -> Self {
+        Self {
+            reducer: FocusReducer::new(policy),
+            cmd_tx: Some(cmd_tx),
+            dump_tx: None,
+            list_only: false,
+            finished: false,
+            entered: false,
+            stop: Some(stop),
+            output_names: HashMap::new(),
+            outputs: Vec::new(),
+            pending_outputs: Vec::new(),
+            wlr_manager: None,
+            plasma_manager: None,
+            plasma_windows: HashMap::new(),
+            seen_plasma: HashSet::new(),
+            backend: "none",
+        }
+    }
+
+    fn list(policy: MatchPolicy, dump_tx: mpsc::Sender<FocusEvent>) -> Self {
+        Self {
+            reducer: FocusReducer::new(policy),
+            cmd_tx: None,
+            dump_tx: Some(dump_tx),
+            list_only: true,
+            finished: false,
+            entered: false,
+            stop: None,
+            output_names: HashMap::new(),
+            outputs: Vec::new(),
+            pending_outputs: Vec::new(),
+            wlr_manager: None,
+            plasma_manager: None,
+            plasma_windows: HashMap::new(),
+            seen_plasma: HashSet::new(),
+            backend: "none",
+        }
+    }
+
+    pub(super) fn emit_visibility(&self, cmd: VisibilityCommand) {
         let Some(tx) = self.cmd_tx.as_ref() else {
             return;
         };
         let out = match cmd {
-            VisibilityCommand::Show => FocusCommand::Show,
+            VisibilityCommand::Show { output } => FocusCommand::Show { output },
             VisibilityCommand::Hide => FocusCommand::Hide,
         };
         if tx.send_blocking(out).is_err() {
@@ -45,61 +143,141 @@ impl Session {
         }
     }
 
-    fn flush_batch(&mut self) {
+    pub(super) fn flush_batch(&mut self) {
         if let Some(cmd) = self.reducer.end_batch() {
             self.emit_visibility(cmd);
         }
     }
+
+    fn stopped(&self) -> bool {
+        self.stop
+            .as_ref()
+            .is_some_and(|stop| stop.load(Ordering::Relaxed))
+    }
+
+    fn note_output_name(&mut self, output_id: u32, name: String) {
+        self.output_names.insert(output_id, name.clone());
+        let pending = std::mem::take(&mut self.pending_outputs);
+        for (id, oid) in pending {
+            if oid == output_id {
+                self.reducer.apply(ToplevelEvent::OutputEnter {
+                    id,
+                    name: name.clone(),
+                });
+            } else {
+                self.pending_outputs.push((id, oid));
+            }
+        }
+    }
+
+    fn output_entered(&mut self, toplevel: ToplevelId, output_id: u32) {
+        if let Some(name) = self.output_names.get(&output_id).cloned() {
+            self.reducer
+                .apply(ToplevelEvent::OutputEnter { id: toplevel, name });
+        } else {
+            self.pending_outputs.push((toplevel, output_id));
+        }
+    }
+
+    fn output_left(&mut self, toplevel: ToplevelId, output_id: u32) {
+        self.pending_outputs
+            .retain(|(id, oid)| !(*id == toplevel && *oid == output_id));
+        if let Some(name) = self.output_names.get(&output_id).cloned() {
+            self.reducer
+                .apply(ToplevelEvent::OutputLeave { id: toplevel, name });
+        }
+    }
+}
+
+pub fn spawn_focus_loop(
+    policy: MatchPolicy,
+    cmd_tx: async_channel::Sender<FocusCommand>,
+) -> Result<FocusHandle> {
+    let stop = Arc::new(AtomicBool::new(false));
+    let stop_thread = Arc::clone(&stop);
+    let join = thread::Builder::new()
+        .name("overlay-focus".into())
+        .spawn(move || {
+            if let Err(err) = run_focus_loop(policy, cmd_tx, stop_thread) {
+                eprintln!("roxysu-overlay-rs: focus thread exited: {err:#}");
+            }
+        })
+        .context("spawn focus thread")?;
+    Ok(FocusHandle {
+        stop,
+        join: Some(join),
+    })
 }
 
 pub fn run_list_windows(tx: mpsc::Sender<FocusEvent>, policy: MatchPolicy) -> Result<()> {
-    let mut session = Session {
-        reducer: FocusReducer::new(policy),
-        cmd_tx: None,
-        dump_tx: Some(tx),
-        list_only: true,
-        finished: false,
-    };
+    let mut session = Session::list(policy, tx);
     run_once(&mut session)
 }
 
-/// Focus loop with reconnect. First-connect failure → [`FocusCommand::Unavailable`].
-/// Later drops → [`FocusCommand::Disconnected`] (visibility unchanged) then retry.
-pub fn run_focus_loop(
+/// Reconnect forever. The first failure to find a backend emits
+/// [`FocusCommand::Unavailable`] and retries. A drop after a live session
+/// emits [`FocusCommand::Disconnected`].
+fn run_focus_loop(
     policy: MatchPolicy,
     cmd_tx: async_channel::Sender<FocusCommand>,
+    stop: Arc<AtomicBool>,
 ) -> Result<()> {
-    let mut first = true;
+    let mut had_session = false;
+    let mut announced = false;
     let mut backoff = Duration::from_secs(1);
 
-    loop {
-        let mut session = Session {
-            reducer: FocusReducer::new(policy.clone()),
-            cmd_tx: Some(cmd_tx.clone()),
-            dump_tx: None,
-            list_only: false,
-            finished: false,
-        };
-
-        match run_once(&mut session) {
+    while !stop.load(Ordering::Relaxed) {
+        let mut session = Session::live(policy.clone(), cmd_tx.clone(), Arc::clone(&stop));
+        let result = run_once(&mut session);
+        if stop.load(Ordering::Relaxed) {
+            return Ok(());
+        }
+        let entered = session.entered;
+        let wait = match result {
             Ok(()) => {
-                // Manager finished or clean exit — try to reconnect.
-                first = false;
-                warn!("foreign-toplevel session ended; reconnecting");
+                had_session = true;
+                announced = false;
+                backoff = Duration::from_secs(1);
+                warn!("focus session ended; reconnecting");
                 let _ = cmd_tx.send_blocking(FocusCommand::Disconnected);
+                backoff
             }
-            Err(err) if first => {
-                let _ = cmd_tx.send_blocking(FocusCommand::Unavailable);
-                return Err(err);
+            Err(err) if entered || had_session => {
+                had_session = true;
+                announced = false;
+                backoff = Duration::from_secs(1);
+                warn!(error = %err, "focus session failed; reconnecting");
+                let _ = cmd_tx.send_blocking(FocusCommand::Disconnected);
+                backoff
             }
             Err(err) => {
-                warn!(error = %err, "foreign-toplevel session failed; reconnecting");
-                let _ = cmd_tx.send_blocking(FocusCommand::Disconnected);
+                if !announced {
+                    let reason = format!("{err:#}");
+                    let _ = cmd_tx.send_blocking(FocusCommand::Unavailable { reason });
+                    announced = true;
+                } else {
+                    warn!(error = %err, "focus session still unavailable; retrying");
+                }
+                let wait = backoff;
+                backoff = backoff.saturating_mul(2).min(Duration::from_secs(30));
+                wait
             }
-        }
+        };
+        sleep_backoff(wait, &stop);
+    }
+    Ok(())
+}
 
-        thread::sleep(backoff);
-        backoff = (backoff.saturating_mul(2)).min(Duration::from_secs(30));
+fn sleep_backoff(total: Duration, stop: &AtomicBool) {
+    let step = Duration::from_millis(100);
+    let mut left = total;
+    while left > Duration::ZERO {
+        if stop.load(Ordering::Relaxed) {
+            return;
+        }
+        let slice = if left < step { left } else { step };
+        thread::sleep(slice);
+        left = left.saturating_sub(slice);
     }
 }
 
@@ -109,10 +287,12 @@ fn run_once(session: &mut Session) -> Result<()> {
         registry_queue_init::<Session>(&conn).context("init Wayland registry")?;
     let qh = queue.handle();
 
-    let _manager: ZwlrForeignToplevelManagerV1 = match globals.bind(&qh, 1..=3, ()) {
-        Ok(m) => m,
-        Err(_) => bail!("compositor lacks zwlr_foreign_toplevel_manager_v1"),
-    };
+    bind_outputs(&globals, &qh, session);
+    queue
+        .roundtrip(session)
+        .context("wayland roundtrip for output names")?;
+
+    bind_backend(&globals, &qh, session)?;
 
     for _ in 0..8 {
         queue.roundtrip(session).context("wayland roundtrip")?;
@@ -138,18 +318,116 @@ fn run_once(session: &mut Session) -> Result<()> {
     }
 
     info!(
+        backend = session.backend,
         match_app_id = %session.reducer.policy().needle(),
         match_mode = %session.reducer.policy().mode(),
-        "foreign-toplevel focus loop running on dedicated connection"
+        "focus loop running on dedicated connection"
     );
+    session.entered = true;
 
     loop {
-        if session.finished {
+        if session.finished || session.stopped() {
             return Ok(());
         }
-        queue.blocking_dispatch(session).context("wayland dispatch")?;
+        pump(&mut queue, session).context("wayland dispatch")?;
         session.flush_batch();
     }
+}
+
+fn bind_outputs(globals: &GlobalList, qh: &QueueHandle<Session>, session: &mut Session) {
+    let registry = globals.registry();
+    for global in globals.contents().clone_list() {
+        if global.interface != "wl_output" {
+            continue;
+        }
+        let version = if global.version >= 4 {
+            4
+        } else {
+            global.version.max(1)
+        };
+        let output: WlOutput = registry.bind(global.name, version, qh, ());
+        session.outputs.push(output);
+    }
+}
+
+fn bind_backend(
+    globals: &GlobalList,
+    qh: &QueueHandle<Session>,
+    session: &mut Session,
+) -> Result<()> {
+    match globals.bind::<ZwlrForeignToplevelManagerV1, _, _>(qh, 1..=3, ()) {
+        Ok(manager) => {
+            session.backend = "zwlr_foreign_toplevel_manager_v1";
+            session.wlr_manager = Some(manager);
+            return Ok(());
+        }
+        Err(wayland_client::globals::BindError::NotPresent) => {}
+        Err(err) => return Err(err).context("bind zwlr_foreign_toplevel_manager_v1"),
+    }
+
+    match globals.bind::<OrgKdePlasmaWindowManagement, _, _>(qh, 7..=18, ()) {
+        Ok(manager) => {
+            session.backend = "org_kde_plasma_window_management";
+            session.plasma_manager = Some(manager);
+            Ok(())
+        }
+        Err(wayland_client::globals::BindError::NotPresent) => {
+            bail!(
+                "compositor has neither zwlr_foreign_toplevel_manager_v1 nor \
+                 org_kde_plasma_window_management. On Plasma that global is privileged: \
+                 the host writes ~/.local/share/applications/dev.roxysu.overlay.desktop \
+                 (Exec = this binary, X-KDE-Wayland-Interfaces = org_kde_plasma_window_management) \
+                 and refreshes the KDE service cache. Follow-focus stays unmapped until KWin grants it. \
+                 --follow-focus=false forces an always-visible layer."
+            )
+        }
+        Err(err) => Err(err).context("bind org_kde_plasma_window_management"),
+    }
+}
+
+fn pump(queue: &mut EventQueue<Session>, session: &mut Session) -> Result<()> {
+    queue
+        .dispatch_pending(session)
+        .context("dispatch pending")?;
+    queue.flush().context("flush wayland")?;
+    let Some(guard) = queue.prepare_read() else {
+        queue
+            .dispatch_pending(session)
+            .context("dispatch pending")?;
+        return Ok(());
+    };
+    if session.stopped() {
+        drop(guard);
+        return Ok(());
+    }
+    let mut fds = [libc::pollfd {
+        fd: guard.connection_fd().as_raw_fd(),
+        events: libc::POLLIN,
+        revents: 0,
+    }];
+    let rc = unsafe { libc::poll(fds.as_mut_ptr(), 1, PUMP_TIMEOUT_MS) };
+    if rc < 0 {
+        let err = std::io::Error::last_os_error();
+        drop(guard);
+        if err.kind() == std::io::ErrorKind::Interrupted {
+            return Ok(());
+        }
+        return Err(err).context("poll wayland fd");
+    }
+    if rc == 0 {
+        drop(guard);
+        return Ok(());
+    }
+    if let Err(err) = guard.read() {
+        if err.to_string().contains("WouldBlock") || err.to_string().contains("would block") {
+            return Ok(());
+        }
+        return Err(err).context("read wayland events");
+    }
+    queue
+        .dispatch_pending(session)
+        .context("dispatch pending")?;
+    Ok(())
 }
 
 impl Dispatch<wl_registry::WlRegistry, GlobalListContents> for Session {
@@ -161,6 +439,28 @@ impl Dispatch<wl_registry::WlRegistry, GlobalListContents> for Session {
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
+    }
+}
+
+impl Dispatch<WlOutput, ()> for Session {
+    fn event(
+        session: &mut Self,
+        output: &WlOutput,
+        event: wl_output::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        let id = output.id().protocol_id();
+        match event {
+            wl_output::Event::Name { name } => session.note_output_name(id, name),
+            wl_output::Event::Geometry { model, .. } => {
+                if !model.is_empty() && !session.output_names.contains_key(&id) {
+                    session.note_output_name(id, model);
+                }
+            }
+            _ => {}
+        }
     }
 }
 
@@ -206,27 +506,35 @@ impl Dispatch<ZwlrForeignToplevelHandleV1, ()> for Session {
         let id = ToplevelId(handle.id().protocol_id());
         match event {
             Event::Title { title } => {
-                session
-                    .reducer
-                    .apply(ToplevelEvent::Title { id, title });
+                session.reducer.apply(ToplevelEvent::Title { id, title });
             }
             Event::AppId { app_id } => {
-                session
-                    .reducer
-                    .apply(ToplevelEvent::AppId { id, app_id });
+                session.reducer.apply(ToplevelEvent::AppId { id, app_id });
             }
             Event::State { state: states } => {
-                let activated = states.chunks_exact(4).any(|chunk| {
+                let mut activated = false;
+                let mut minimized = false;
+                for chunk in states.chunks_exact(4) {
                     let v = u32::from_ne_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
-                    v == (zwlr_foreign_toplevel_handle_v1::State::Activated as u32)
+                    if v == zwlr_foreign_toplevel_handle_v1::State::Activated as u32 {
+                        activated = true;
+                    } else if v == zwlr_foreign_toplevel_handle_v1::State::Minimized as u32 {
+                        minimized = true;
+                    }
+                }
+                session.reducer.apply(ToplevelEvent::State {
+                    id,
+                    activated,
+                    minimized,
                 });
-                session
-                    .reducer
-                    .apply(ToplevelEvent::State { id, activated });
             }
-            Event::Done => {
-                // Batched: visibility evaluated after dispatch returns.
+            Event::OutputEnter { output } => {
+                session.output_entered(id, output.id().protocol_id());
             }
+            Event::OutputLeave { output } => {
+                session.output_left(id, output.id().protocol_id());
+            }
+            Event::Done => {}
             Event::Closed => {
                 session.reducer.apply(ToplevelEvent::Closed(id));
             }

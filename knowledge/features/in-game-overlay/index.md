@@ -39,14 +39,28 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
 5. The host is version-agnostic to lazer; only the compositor contract matters.
 6. Layer placement: `OVERLAY` layer, `exclusive_zone = -1`, anchored corner per
    `--anchor`, so panels/fullscreen windows never displace it.
-7. **Focus following** (default on): dedicated Wayland connection for
-   `zwlr_foreign_toplevel_management`; show only while a matching window is
-   activated. Match policy default `contains` (case-insensitive substring of
-   `--match-app-id`, default `osu`); title is used only when `app_id` is empty.
-   `--match-mode exact` available. Visibility is evaluated once per dispatch
-   batch; Hide uses short hysteresis (`--hide-hysteresis-ms`, default 80).
-   Missing protocol on first connect → always-visible fallback; later drops
-   leave visibility unchanged and reconnect with backoff.
+7. **Focus following** (default on): a second Wayland connection, off the GTK
+   thread. Prefer `zwlr_foreign_toplevel_manager_v1` (niri, sway, Hyprland,
+   river). If that global is missing, bind read-only
+   `org_kde_plasma_window_management` (KWin). The Plasma global is privileged:
+   before connect the host writes
+   `~/.local/share/applications/dev.roxysu.overlay.desktop` whose `Exec` is the
+   canonical overlay binary and whose `X-KDE-Wayland-Interfaces` lists that
+   protocol, then runs `kbuildsycoca6` when the file changed. The Nix package
+   also installs that desktop file for the store path. The host does not send
+   close, move, resize, or state-change requests. Show while a matched window
+   is activated and not minimized. Match policy is unchanged: `contains` on
+   `app_id` (default needle `osu`); title is used only when `app_id` is empty.
+   `resource_name` is printed by `--list-windows` and is not a match haystack
+   (a browser tab titled osu! must not match). On Show, if `--output` is unset,
+   pin the layer surface to that window's output (`wl_output` name, or Plasma
+   geometry against a `GdkMonitor`). An explicit `--output` wins and is not
+   overridden. `--match-mode exact` remains. Visibility is evaluated once per
+   dispatch batch; Hide uses short hysteresis (`--hide-hysteresis-ms`, default
+   80). First-connect failure stays unmapped, logs the reason, and retries
+   with backoff (1 s doubling to 30 s). Later drops leave visibility unchanged
+   and reconnect. `--follow-focus=false` is the always-visible path. The focus
+   thread stops and joins on GTK shutdown.
 8. **Self-heal**: `web-process-terminated` reloads after 1 s; `load-failed`
    (HUD/server) retries at 3 s / 15 s after >5 failures via a **single-slot**
    reload state machine (no stacked timers). Distinct log lines for load-fail
@@ -73,9 +87,12 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
 13. **CLI**: clap accepts `--url=VALUE` and `--url VALUE` with `=` inside
     values. Electron still passes `--url=http://…?bg=clear` and
     `--watchdog-max-age-sec=0`.
-14. **Host URL setting**: `overlay.host_url` / enable toggle `overlay.host_enabled`
-    as before — Electron polls settings (~4s), stop/spawn/restart, liveness
-    respawn with `OVERLAY_RESPAWN_GAP_MS`. Decision logic:
+14. **Host settings**: `overlay.host_url`, enable toggle `overlay.host_enabled`,
+    and optional monitor `overlay.host_output` (connector or model). Electron
+    polls settings (~4s), stop/spawn/restart, liveness respawn with
+    `OVERLAY_RESPAWN_GAP_MS`. A saved output is passed as one `--output=`
+    argument; empty means follow the matched window. A URL or monitor change
+    restarts immediately. Decision logic:
     `apps/desktop/overlayApplyPolicy.js:decideOverlayApply()`.
 15. **Resource watchdog** (default on): off GTK thread; descendant RSS / max
     descendant FDs / optional age / optional cgroup. Requires
@@ -86,6 +103,28 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
     refresh over the playfield. FD and RSS caps still recover a leak.
     Observation-only telemetry via `--telemetry-interval-sec` /
     `--telemetry-csv`.
+
+## Security rules
+
+1. The Plasma window-management connection is observe-only. It does not send
+   `close`, `set_state`, move, resize, or virtual-desktop requests.
+   **Enforced by:** `apps/overlay-rs/src/focus/plasma.rs` — status: verified
+   **Unauthorized result:** those requests are not implemented.
+
+2. The `.desktop` grant lets this binary see other windows' app ids and titles.
+   Titles are not written at info. `--list-windows` prints them because the
+   operator asked for the dump.
+   **Enforced by:** `apps/overlay-rs/src/focus/plasma.rs` (no title `info!`) and
+   `apps/overlay-rs/src/focus/grant.rs` — status: verified
+   **Unauthorized result:** without the grant KWin does not advertise the
+   global, and the host stays unmapped.
+
+3. A missing focus protocol does not map the overlay.
+   **Enforced by:** `visibility_after_unavailable` in
+   `apps/overlay-rs/src/focus/mod.rs`, applied from
+   `FocusCommand::Unavailable` — status: verified
+   **Unauthorized result:** the surface stays unmapped. `--follow-focus=false`
+   is the explicit always-visible path.
 
 ## Main flow
 
@@ -105,7 +144,7 @@ Launch paths:
 
 - `apps/overlay-rs/src/main.rs` — host entry
 - `apps/overlay-rs/src/overlay.rs` — window / WebKit / focus wiring
-- `apps/overlay-rs/src/focus/` — match policy + batched reducer + Wayland
+- `apps/overlay-rs/src/focus/` — match policy, reducer, wlr + Plasma backends, `.desktop` grant
 - `apps/overlay-rs/src/reload.rs` — single-slot reload SM
 - `apps/overlay-rs/src/watchdog/` — resource policy + exit 75
 - `nix/overlay-rs.nix` — derivation (`nix build .#roxysu-overlay`)

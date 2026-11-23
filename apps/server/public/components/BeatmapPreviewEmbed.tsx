@@ -38,6 +38,7 @@ import {
   resolveManiaScroll,
   SKIP_MS,
 } from "./previewPrefs";
+import { bindWheelSeek } from "./wheelSeek";
 import { useAppDict } from "../lib/i18n";
 import { parseScoreMods } from "@server/replay/mods";
 
@@ -116,6 +117,8 @@ export function BeatmapPreviewEmbed({
   const liveSyncSampleRef = useRef<LiveSyncSample | null>(null);
   /** User pause or pause-while-playing: do not follow tosu until times are already close. */
   const holdSyncRef = useRef(false);
+  const seekByRef = useRef<(deltaMs: number) => void>(() => {});
+  const [stageEl, setStageEl] = useState<HTMLDivElement | null>(null);
   const lengthMsRef = useRef(0);
   const durationMsRef = useRef(0);
   const audioUrlRef = useRef<string | null>(null);
@@ -233,6 +236,9 @@ export function BeatmapPreviewEmbed({
     publishUiTimeRef.current(next, true);
     stdHitsounds.onSeek(next);
   }
+  seekByRef.current = (deltaMs) => {
+    seekTo(mapTimeMs() + deltaMs);
+  };
 
   const holdAndFreeze = useCallback(() => {
     holdSyncRef.current = true;
@@ -242,6 +248,21 @@ export function BeatmapPreviewEmbed({
     publishUiTimeRef.current(frozen, true);
     audioRef.current?.pause();
   }, []);
+
+  useEffect(() => {
+    if (!stageEl) return;
+    return bindWheelSeek(stageEl, {
+      seekBy: (deltaMs) => seekByRef.current(deltaMs),
+      beforeSeek: () => {
+        if (
+          syncSampleFresh(liveSyncSampleRef.current) &&
+          !holdSyncRef.current
+        ) {
+          holdAndFreeze();
+        }
+      },
+    });
+  }, [stageEl, holdAndFreeze]);
 
   function togglePlay() {
     const audio = audioRef.current;
@@ -596,7 +617,11 @@ export function BeatmapPreviewEmbed({
               : (dict?.nowSelected.previewFailed ?? "Failed to load preview")}
           </p>
         ) : data ? (
-          <div className={stageShellClass} style={stageHeightStyle}>
+          <div
+            ref={setStageEl}
+            className={stageShellClass}
+            style={stageHeightStyle}
+          >
             {isMania ? (
               <NotefieldStage
                 columnCount={data.columnCount}

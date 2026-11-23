@@ -11,25 +11,84 @@ use super::matching::MatchPolicy;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ToplevelId(pub u32);
 
+/// Window centre is not enough for a monitor that only overlaps a corner.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OutputRect {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+}
+
+/// Pin hint. A name is a `wl_output` connector (or model). A rect is Plasma
+/// global geometry, resolved to a `GdkMonitor` on the GTK thread.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OutputHint {
+    Name(String),
+    Rect(OutputRect),
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ToplevelInfo {
     pub app_id: String,
     pub title: String,
+    /// XWayland resource name. Dumped by `--list-windows`. Not a match haystack.
+    pub resource_name: String,
     pub activated: bool,
+    pub minimized: bool,
+    /// Most recently entered output name last.
+    pub output_names: Vec<String>,
+    pub bounds: Option<OutputRect>,
+}
+
+impl ToplevelInfo {
+    fn output_hint(&self) -> Option<OutputHint> {
+        if let Some(name) = self.output_names.last() {
+            return Some(OutputHint::Name(name.clone()));
+        }
+        self.bounds.map(OutputHint::Rect)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ToplevelEvent {
     Added(ToplevelId),
-    Title { id: ToplevelId, title: String },
-    AppId { id: ToplevelId, app_id: String },
-    State { id: ToplevelId, activated: bool },
+    Title {
+        id: ToplevelId,
+        title: String,
+    },
+    AppId {
+        id: ToplevelId,
+        app_id: String,
+    },
+    /// Stored for `--list-windows`. Does not change visibility.
+    ResourceName {
+        id: ToplevelId,
+        resource_name: String,
+    },
+    State {
+        id: ToplevelId,
+        activated: bool,
+        minimized: bool,
+    },
+    OutputEnter {
+        id: ToplevelId,
+        name: String,
+    },
+    OutputLeave {
+        id: ToplevelId,
+        name: String,
+    },
+    Bounds {
+        id: ToplevelId,
+        rect: OutputRect,
+    },
     Closed(ToplevelId),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VisibilityCommand {
-    Show,
+    Show { output: Option<OutputHint> },
     Hide,
 }
 
@@ -38,6 +97,7 @@ pub struct FocusReducer {
     policy: MatchPolicy,
     toplevels: HashMap<ToplevelId, ToplevelInfo>,
     last_visible: Option<bool>,
+    last_hint: Option<OutputHint>,
     dirty: bool,
     waiting_logged: bool,
 }
@@ -48,6 +108,7 @@ impl FocusReducer {
             policy,
             toplevels: HashMap::new(),
             last_visible: None,
+            last_hint: None,
             dirty: false,
             waiting_logged: false,
         }
@@ -83,10 +144,47 @@ impl FocusReducer {
                     }
                 }
             }
-            ToplevelEvent::State { id, activated } => {
+            ToplevelEvent::ResourceName { id, resource_name } => {
                 if let Some(tl) = self.toplevels.get_mut(&id) {
-                    if tl.activated != activated {
+                    tl.resource_name = resource_name;
+                }
+            }
+            ToplevelEvent::State {
+                id,
+                activated,
+                minimized,
+            } => {
+                if let Some(tl) = self.toplevels.get_mut(&id) {
+                    if tl.activated != activated || tl.minimized != minimized {
                         tl.activated = activated;
+                        tl.minimized = minimized;
+                        self.dirty = true;
+                    }
+                }
+            }
+            ToplevelEvent::OutputEnter { id, name } => {
+                if let Some(tl) = self.toplevels.get_mut(&id) {
+                    if tl.output_names.last() == Some(&name) {
+                        return;
+                    }
+                    tl.output_names.retain(|existing| existing != &name);
+                    tl.output_names.push(name);
+                    self.dirty = true;
+                }
+            }
+            ToplevelEvent::OutputLeave { id, name } => {
+                if let Some(tl) = self.toplevels.get_mut(&id) {
+                    let before = tl.output_names.len();
+                    tl.output_names.retain(|existing| existing != &name);
+                    if tl.output_names.len() != before {
+                        self.dirty = true;
+                    }
+                }
+            }
+            ToplevelEvent::Bounds { id, rect } => {
+                if let Some(tl) = self.toplevels.get_mut(&id) {
+                    if tl.bounds != Some(rect) {
+                        tl.bounds = Some(rect);
                         self.dirty = true;
                     }
                 }
@@ -108,13 +206,17 @@ impl FocusReducer {
 
         let mut any_match = false;
         let mut match_focused = false;
+        let mut focused_hint = None;
         for tl in self.toplevels.values() {
             if !self.policy.matches(&tl.app_id, &tl.title) {
                 continue;
             }
             any_match = true;
-            if tl.activated {
+            if tl.activated && !tl.minimized {
                 match_focused = true;
+                if focused_hint.is_none() {
+                    focused_hint = tl.output_hint();
+                }
             }
         }
 
@@ -131,11 +233,24 @@ impl FocusReducer {
         }
 
         if self.last_visible == Some(match_focused) {
+            if match_focused && focused_hint != self.last_hint {
+                self.last_hint = focused_hint.clone();
+                return Some(VisibilityCommand::Show {
+                    output: focused_hint,
+                });
+            }
             return None;
         }
         self.last_visible = Some(match_focused);
+        self.last_hint = if match_focused {
+            focused_hint.clone()
+        } else {
+            None
+        };
         Some(if match_focused {
-            VisibilityCommand::Show
+            VisibilityCommand::Show {
+                output: focused_hint,
+            }
         } else {
             VisibilityCommand::Hide
         })
@@ -146,10 +261,12 @@ impl FocusReducer {
             .values()
             .map(|tl| {
                 format!(
-                    "{} app_id='{}' title='{}'",
+                    "{} app_id='{}' title='{}' resource_name='{}' minimized={}",
                     if tl.activated { "*" } else { " " },
                     tl.app_id,
-                    tl.title
+                    tl.title,
+                    tl.resource_name,
+                    tl.minimized as u8
                 )
             })
             .collect()
@@ -165,6 +282,14 @@ mod tests {
         FocusReducer::new(MatchPolicy::new("osu", MatchMode::Contains))
     }
 
+    fn state(id: u32, activated: bool, minimized: bool) -> ToplevelEvent {
+        ToplevelEvent::State {
+            id: ToplevelId(id),
+            activated,
+            minimized,
+        }
+    }
+
     #[test]
     fn show_only_when_matched_and_activated() {
         let mut r = reducer();
@@ -173,66 +298,169 @@ mod tests {
             id: ToplevelId(1),
             app_id: "osu!".into(),
         });
-        r.apply(ToplevelEvent::State {
-            id: ToplevelId(1),
-            activated: false,
-        });
+        r.apply(state(1, false, false));
         assert_eq!(r.end_batch(), Some(VisibilityCommand::Hide));
 
-        r.apply(ToplevelEvent::State {
-            id: ToplevelId(1),
-            activated: true,
-        });
-        assert_eq!(r.end_batch(), Some(VisibilityCommand::Show));
+        r.apply(state(1, true, false));
+        assert_eq!(
+            r.end_batch(),
+            Some(VisibilityCommand::Show { output: None })
+        );
         assert_eq!(r.end_batch(), None);
     }
 
     #[test]
-    fn alt_tab_batch_skips_transient_hide() {
+    fn minimized_matched_window_stays_hidden() {
         let mut r = reducer();
-        // osu focused
         r.apply(ToplevelEvent::Added(ToplevelId(1)));
         r.apply(ToplevelEvent::AppId {
             id: ToplevelId(1),
             app_id: "osu!".into(),
         });
-        r.apply(ToplevelEvent::State {
+        r.apply(state(1, true, true));
+        assert_eq!(r.end_batch(), Some(VisibilityCommand::Hide));
+
+        r.apply(state(1, true, false));
+        assert_eq!(
+            r.end_batch(),
+            Some(VisibilityCommand::Show { output: None })
+        );
+    }
+
+    #[test]
+    fn output_move_while_shown_emits_new_show() {
+        let mut r = reducer();
+        r.apply(ToplevelEvent::Added(ToplevelId(1)));
+        r.apply(ToplevelEvent::AppId {
             id: ToplevelId(1),
-            activated: true,
+            app_id: "osu!".into(),
         });
-        // other window
+        r.apply(state(1, true, false));
+        r.apply(ToplevelEvent::OutputEnter {
+            id: ToplevelId(1),
+            name: "DP-4".into(),
+        });
+        assert_eq!(
+            r.end_batch(),
+            Some(VisibilityCommand::Show {
+                output: Some(OutputHint::Name("DP-4".into()))
+            })
+        );
+
+        r.apply(ToplevelEvent::OutputLeave {
+            id: ToplevelId(1),
+            name: "DP-4".into(),
+        });
+        r.apply(ToplevelEvent::OutputEnter {
+            id: ToplevelId(1),
+            name: "DP-5".into(),
+        });
+        assert_eq!(
+            r.end_batch(),
+            Some(VisibilityCommand::Show {
+                output: Some(OutputHint::Name("DP-5".into()))
+            })
+        );
+        assert_eq!(r.end_batch(), None);
+    }
+
+    #[test]
+    fn bounds_change_while_shown_emits_new_show() {
+        let mut r = reducer();
+        r.apply(ToplevelEvent::Added(ToplevelId(1)));
+        r.apply(ToplevelEvent::AppId {
+            id: ToplevelId(1),
+            app_id: "osu!".into(),
+        });
+        r.apply(state(1, true, false));
+        let first = OutputRect {
+            x: 0,
+            y: 0,
+            width: 1920,
+            height: 1080,
+        };
+        r.apply(ToplevelEvent::Bounds {
+            id: ToplevelId(1),
+            rect: first,
+        });
+        assert_eq!(
+            r.end_batch(),
+            Some(VisibilityCommand::Show {
+                output: Some(OutputHint::Rect(first))
+            })
+        );
+        let second = OutputRect {
+            x: 1920,
+            y: 0,
+            width: 1920,
+            height: 1080,
+        };
+        r.apply(ToplevelEvent::Bounds {
+            id: ToplevelId(1),
+            rect: second,
+        });
+        assert_eq!(
+            r.end_batch(),
+            Some(VisibilityCommand::Show {
+                output: Some(OutputHint::Rect(second))
+            })
+        );
+    }
+
+    #[test]
+    fn resource_name_is_dumped_and_does_not_match() {
+        let mut r = reducer();
+        r.apply(ToplevelEvent::Added(ToplevelId(1)));
+        r.apply(ToplevelEvent::AppId {
+            id: ToplevelId(1),
+            app_id: "dotnet".into(),
+        });
+        r.apply(ToplevelEvent::Title {
+            id: ToplevelId(1),
+            title: "Firefox".into(),
+        });
+        r.apply(ToplevelEvent::ResourceName {
+            id: ToplevelId(1),
+            resource_name: "osu!".into(),
+        });
+        r.apply(state(1, true, false));
+        assert_eq!(r.end_batch(), Some(VisibilityCommand::Hide));
+        let lines = r.dump_lines();
+        assert!(lines
+            .iter()
+            .any(|line| line.contains("resource_name='osu!'")));
+        assert!(lines.iter().any(|line| line.contains("app_id='dotnet'")));
+    }
+
+    #[test]
+    fn alt_tab_batch_skips_transient_hide() {
+        let mut r = reducer();
+        r.apply(ToplevelEvent::Added(ToplevelId(1)));
+        r.apply(ToplevelEvent::AppId {
+            id: ToplevelId(1),
+            app_id: "osu!".into(),
+        });
+        r.apply(state(1, true, false));
         r.apply(ToplevelEvent::Added(ToplevelId(2)));
         r.apply(ToplevelEvent::AppId {
             id: ToplevelId(2),
             app_id: "firefox".into(),
         });
-        assert_eq!(r.end_batch(), Some(VisibilityCommand::Show));
+        assert_eq!(
+            r.end_batch(),
+            Some(VisibilityCommand::Show { output: None })
+        );
 
-        // Mid alt-tab: osu deactivates then firefox activates — if evaluated
-        // per-event we'd Hide then stay Hidden; batched we only care about
-        // the end state. Here both still present: osu deactivated, firefox
-        // activated → Hide once.
-        r.apply(ToplevelEvent::State {
-            id: ToplevelId(1),
-            activated: false,
-        });
-        // Without end_batch yet — no command emitted.
-        r.apply(ToplevelEvent::State {
-            id: ToplevelId(2),
-            activated: true,
-        });
+        r.apply(state(1, false, false));
+        r.apply(state(2, true, false));
         assert_eq!(r.end_batch(), Some(VisibilityCommand::Hide));
 
-        // Alt-tab back: firefox off, osu on — single Show at batch end.
-        r.apply(ToplevelEvent::State {
-            id: ToplevelId(2),
-            activated: false,
-        });
-        r.apply(ToplevelEvent::State {
-            id: ToplevelId(1),
-            activated: true,
-        });
-        assert_eq!(r.end_batch(), Some(VisibilityCommand::Show));
+        r.apply(state(2, false, false));
+        r.apply(state(1, true, false));
+        assert_eq!(
+            r.end_batch(),
+            Some(VisibilityCommand::Show { output: None })
+        );
     }
 
     #[test]
@@ -243,11 +471,11 @@ mod tests {
             id: ToplevelId(1),
             app_id: "osu!".into(),
         });
-        r.apply(ToplevelEvent::State {
-            id: ToplevelId(1),
-            activated: true,
-        });
-        assert_eq!(r.end_batch(), Some(VisibilityCommand::Show));
+        r.apply(state(1, true, false));
+        assert_eq!(
+            r.end_batch(),
+            Some(VisibilityCommand::Show { output: None })
+        );
 
         r.apply(ToplevelEvent::Closed(ToplevelId(1)));
         assert_eq!(r.end_batch(), Some(VisibilityCommand::Hide));
@@ -257,17 +485,17 @@ mod tests {
     fn title_change_can_start_matching() {
         let mut r = reducer();
         r.apply(ToplevelEvent::Added(ToplevelId(1)));
-        r.apply(ToplevelEvent::State {
-            id: ToplevelId(1),
-            activated: true,
-        });
+        r.apply(state(1, true, false));
         assert_eq!(r.end_batch(), Some(VisibilityCommand::Hide));
 
         r.apply(ToplevelEvent::Title {
             id: ToplevelId(1),
             title: "osu!lazer".into(),
         });
-        assert_eq!(r.end_batch(), Some(VisibilityCommand::Show));
+        assert_eq!(
+            r.end_batch(),
+            Some(VisibilityCommand::Show { output: None })
+        );
     }
 
     #[test]

@@ -6,13 +6,16 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  Curve,
   Legend,
   Line,
   LineChart,
+  LineDrawShape,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
+  type LineDrawShapeProps,
 } from "recharts";
 import { PageTitle } from "../../components/PageTitle";
 import {
@@ -33,10 +36,13 @@ import { PatternShapesSection } from "./components/PatternShapesSection";
 import {
   formatDuration,
   historyBandValue,
+  isSkillEvolutionBand,
   skillAxisLabel,
   skillBandMaps,
   skillBandValue,
+  skillEvolutionDomain,
   skillTooltipFormatter,
+  type SkillEvolutionBand,
 } from "./statsHelpers";
 import {
   fetchStats,
@@ -62,6 +68,37 @@ import {
   practiceSearchForQuery,
 } from "../../lib/practiceSearch";
 import { statsKeyCountSource } from "../../lib/skillKeyCount";
+
+function formatSkillEvolutionTick(
+  value: number,
+  domain: readonly [number, number],
+): string {
+  const span = domain[1] - domain[0];
+  const decimals = span >= 2 ? 1 : span >= 0.2 ? 2 : 3;
+  return value.toFixed(decimals);
+}
+
+/** Visible stroke plus a wider transparent hit target so the line itself is clickable. */
+function SkillEvolutionLineShape(props: LineDrawShapeProps) {
+  const {
+    animationElapsedTime: _elapsed,
+    isAnimating: _animating,
+    isEntrance: _entrance,
+    visibleLength: _visible,
+    ...curveProps
+  } = props;
+  return (
+    <>
+      <LineDrawShape {...props} />
+      <Curve
+        {...curveProps}
+        stroke="transparent"
+        strokeWidth={14}
+        style={{ cursor: "pointer" }}
+      />
+    </>
+  );
+}
 
 export function StatsPage({
   granularity,
@@ -96,6 +133,7 @@ export function StatsPage({
     isPreset ? (skillTopPlays as TopPlaysTab) : "custom",
   );
   const [expandedBand, setExpandedBand] = useState<SkillBandKind | null>(null);
+  const [focusBand, setFocusBand] = useState<SkillEvolutionBand | null>(null);
   const [belowFoldReady, setBelowFoldReady] = useState(false);
 
   useEffect(() => {
@@ -113,6 +151,10 @@ export function StatsPage({
   useEffect(() => {
     setExpandedBand(null);
   }, [skillAxis, skillTopPlays, keyCount]);
+
+  useEffect(() => {
+    setFocusBand(null);
+  }, [skillAxis, granularity, keyCount]);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["stats", granularity, skillTopPlays, keyCount],
@@ -166,6 +208,13 @@ export function StatsPage({
     if (points.length === 0) return [95, 100];
     return [Math.max(0, Math.floor(Math.min(...points) - 5)), 100];
   }, [accChart]);
+  const skillDomain = useMemo(
+    () => skillEvolutionDomain(chartHistory, focusBand),
+    [chartHistory, focusBand],
+  );
+  const toggleSkillFocus = (band: SkillEvolutionBand) => {
+    setFocusBand((prev) => (prev === band ? null : band));
+  };
 
   const axisToggle = (
     <ToggleGroup
@@ -530,6 +579,11 @@ export function StatsPage({
                   width={40}
                   axisLine={false}
                   tickLine={false}
+                  domain={skillDomain}
+                  allowDataOverflow={false}
+                  tickFormatter={(value) =>
+                    formatSkillEvolutionTick(Number(value), skillDomain)
+                  }
                 />
                 <Tooltip
                   contentStyle={charts.tooltip}
@@ -538,7 +592,15 @@ export function StatsPage({
                     skillTooltipFormatter(ratingMode, value, name, skillAxis)
                   }
                 />
-                <Legend />
+                <Legend
+                  wrapperStyle={{ cursor: "pointer" }}
+                  inactiveColor={charts.tick.fill}
+                  onClick={(entry) => {
+                    if (isSkillEvolutionBand(entry.dataKey)) {
+                      toggleSkillFocus(entry.dataKey);
+                    }
+                  }}
+                />
                 <Line
                   type="linear"
                   isAnimationActive={false}
@@ -547,7 +609,11 @@ export function StatsPage({
                   name={dict?.stats.bandPush ?? "Push"}
                   stroke={charts.chartAlt}
                   dot={false}
-                  strokeWidth={2.5}
+                  strokeWidth={focusBand === "push" ? 3.5 : 2.5}
+                  hide={focusBand != null && focusBand !== "push"}
+                  shape={SkillEvolutionLineShape}
+                  style={{ cursor: "pointer" }}
+                  onClick={() => toggleSkillFocus("push")}
                 />
                 <Line
                   type="linear"
@@ -557,7 +623,11 @@ export function StatsPage({
                   name={dict?.stats.bandAccuracy ?? "Accuracy"}
                   stroke={charts.chart}
                   dot={false}
-                  strokeWidth={2.5}
+                  strokeWidth={focusBand === "accuracy" ? 3.5 : 2.5}
+                  hide={focusBand != null && focusBand !== "accuracy"}
+                  shape={SkillEvolutionLineShape}
+                  style={{ cursor: "pointer" }}
+                  onClick={() => toggleSkillFocus("accuracy")}
                 />
                 <Line
                   type="linear"
@@ -567,7 +637,11 @@ export function StatsPage({
                   name={dict?.stats.bandConsistency ?? "Consistency"}
                   stroke={charts.chartCons}
                   dot={false}
-                  strokeWidth={2.5}
+                  strokeWidth={focusBand === "consistency" ? 3.5 : 2.5}
+                  hide={focusBand != null && focusBand !== "consistency"}
+                  shape={SkillEvolutionLineShape}
+                  style={{ cursor: "pointer" }}
+                  onClick={() => toggleSkillFocus("consistency")}
                 />
               </LineChart>
             </ResponsiveContainer>

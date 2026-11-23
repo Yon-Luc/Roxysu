@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { PlayerStats } from "../../lib/api";
-import { historyBandValue } from "./statsHelpers";
+import { historyBandValue, skillEvolutionDomain } from "./statsHelpers";
 
 type Point = NonNullable<PlayerStats["skillHistory"]>[number];
 
@@ -56,5 +56,73 @@ describe("historyBandValue", () => {
     expect(historyBandValue(row, "push", "fln")).toBe(4);
     expect(historyBandValue(row, "accuracy", "fln")).toBe(3);
     expect(historyBandValue(row, "consistency", "ln")).toBe(2);
+  });
+});
+
+describe("skillEvolutionDomain", () => {
+  test("the floor is the lowest band, not zero", () => {
+    expect(
+      skillEvolutionDomain(
+        [
+          { push: 4, accuracy: 1, consistency: 3 },
+          { push: 6, accuracy: 2, consistency: 5 },
+        ],
+        null,
+      ),
+    ).toEqual([1, 6]);
+  });
+
+  test("null gaps are skipped", () => {
+    expect(
+      skillEvolutionDomain(
+        [
+          { push: null, accuracy: 2, consistency: 5 },
+          { push: null, accuracy: null, consistency: 4 },
+        ],
+        null,
+      ),
+    ).toEqual([2, 5]);
+  });
+
+  test("a focused band uses only its own low and high", () => {
+    expect(
+      skillEvolutionDomain(
+        [
+          { push: 8, accuracy: 1, consistency: 3 },
+          { push: 9, accuracy: 1.4, consistency: 6 },
+        ],
+        "accuracy",
+      ),
+    ).toEqual([1, 1.4]);
+  });
+
+  test("a flat series keeps that floor and lifts the ceiling by 1", () => {
+    expect(
+      skillEvolutionDomain(
+        [
+          { push: 4, accuracy: 1, consistency: 3 },
+          { push: 5, accuracy: 1, consistency: 3 },
+        ],
+        "accuracy",
+      ),
+    ).toEqual([1, 2]);
+  });
+
+  test("a focused band with no points falls back to the combined range", () => {
+    expect(
+      skillEvolutionDomain(
+        [{ push: 3, accuracy: null, consistency: 5 }],
+        "accuracy",
+      ),
+    ).toEqual([3, 5]);
+  });
+
+  test("an empty series is [0, 1]", () => {
+    expect(
+      skillEvolutionDomain(
+        [{ push: null, accuracy: null, consistency: null }],
+        null,
+      ),
+    ).toEqual([0, 1]);
   });
 });

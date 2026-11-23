@@ -99,6 +99,7 @@ import {
   type PreviewPrefs,
   type PreviewRuleset,
 } from "./previewPrefs";
+import { bindWheelSeek } from "./wheelSeek";
 import {
   buildReplayVideoFilename,
   discardStreamedFile,
@@ -262,6 +263,7 @@ export function ScoreReplayModal({
   const lengthMsRef = useRef(0);
   const durationMsRef = useRef(0);
   const modeRef = useRef<ModalMode>("rewatch");
+  const seekByRef = useRef<(deltaMs: number) => void>(() => {});
   const livePlayRef = useRef<LiveManiaPlay | null>(null);
   const dataRef = useRef<
     Awaited<ReturnType<typeof fetchScoreReplay>> | undefined
@@ -536,6 +538,15 @@ export function ScoreReplayModal({
   function seekBy(deltaMs: number) {
     seekTo(mapTimeMs() + deltaMs);
   }
+  seekByRef.current = seekBy;
+
+  useEffect(() => {
+    if (!stageEl) return;
+    return bindWheelSeek(stageEl, {
+      allow: () => modeRef.current !== "play",
+      seekBy: (deltaMs) => seekByRef.current(deltaMs),
+    });
+  }, [stageEl]);
 
   function togglePlay() {
     const audio = audioRef.current;
@@ -1782,7 +1793,8 @@ export function ScoreReplayModal({
                         {formatActionCodes(actionKeybinds.testFromHere)} test
                         here · {formatActionCodes(actionKeybinds.playPause)}{" "}
                         play · {formatActionCodes(actionKeybinds.seekBack)}{" "}
-                        {formatActionCodes(actionKeybinds.seekForward)} skip ·{" "}
+                        {formatActionCodes(actionKeybinds.seekForward)} skip ·
+                        wheel seek · shift 5s ·{" "}
                         {formatActionCodes(actionKeybinds.stop)} stop ·{" "}
                         {formatActionCodes(actionKeybinds.fullscreen)}{" "}
                         fullscreen ·{" "}

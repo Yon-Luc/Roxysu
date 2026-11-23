@@ -11,6 +11,8 @@ touches:
   - apps/server/public/components/JudgmentCounterOverlay.tsx
   - apps/server/public/components/previewPrefs.ts
   - apps/server/public/components/previewPrefs.test.ts
+  - apps/server/public/components/wheelSeek.ts
+  - apps/server/public/components/wheelSeek.test.ts
   - apps/server/public/lib/previewSkin.test.ts
   - apps/server/public/lib/api.ts
   - apps/server/public/lib/audioClock.ts
@@ -179,6 +181,19 @@ Playfield = the visual layer for that ruleset (notefield, 512×384, or taiko lan
     (no navigate-away); Settings → Appearance → Keybinds uses the same modal.
     **Source:** `lib/keybinds.ts`, `KeybindModal.tsx`, `BeatmapPreviewModal.tsx`,
     `ScoreReplayModal.tsx`.
+
+5e. **Wheel seek** on the beatmap preview, score rewatch, and embedded preview
+    playfield moves the playhead. Wheel down seeks later. One typical mouse
+    notch is 250ms; Shift is 5s (the same step as skip, `SKIP_MS`). Trackpad
+    deltas scale with `deltaY`. Deltas in one frame are one seek. Play mode
+    ignores the wheel. Ctrl/Meta is left to the browser. Events whose target
+    is inside `aside`, `input`, `textarea`, `select`, `button`, or `a` are
+    ignored, so the rewatch analysis list and the sliders keep their own
+    wheel behavior. On the embed, a fresh tosu sample driving the clock makes
+    the first wheel tick take the pause hold before seeking.
+    **Source:** `components/wheelSeek.ts:wheelSeekDeltaMs`,
+    `BeatmapPreviewModal.tsx`, `ScoreReplayModal.tsx`,
+    `BeatmapPreviewEmbed.tsx` — status: verified by `wheelSeek.test.ts`.
 
 6. An **imported mania skin** can replace the procedural mania skin per keymode.
    Drop an `.osk` or `skin.ini` folder on Skin → Mania, beatmap preview, or score
@@ -421,14 +436,19 @@ Realm skin extract (full / reconcile):
   export calls the same paint.
 - Scrubber / clock labels use `createUiTimePublisher` (~10 Hz, force on
   seek / play / pause / ended) so media `timeupdate` does not re-render the
-  whole modal every tick. Authoritative time stays on `AudioClock`. Pause
-  freezes the interpolated time (the next coarse media sample usually sits
-  behind it), and resume holds that position until the media pointer really
-  moves (bounded by `RESUME_HOLD_MS`, ~250 ms in `lib/audioClock.ts`), so
-  resuming does not snap to a stale or rewound `currentTime` sample. Media
-  jumps are only followed when they exceed ~250 ms; smaller backward dips do
-  not reset the rewatch HUD scan (`REWIND_SCAN_TOLERANCE_MS` in
-  `ScoreReplayModal.tsx`).
+  whole modal every tick. Authoritative time stays on `AudioClock`. `set()`
+  to a new position arms a seek lock (~400 ms). Until it ends, raw samples
+  more than ~50 ms from that target are ignored, including a stale
+  `currentTime` the playfield sampler reads on the next frame and a late
+  `timeupdate` after one sample has already arrived. Rebasing with
+  `set(current presentation time)` does not arm or extend the lock. While
+  playing, a sample behind the interpolator does not rewind it; a sample a
+  little ahead catches up. A jump larger than ~250 ms snaps only once the
+  lock has expired. Pause freezes the interpolated time. Resume holds that
+  frozen time until `currentTime` moves (or `RESUME_HOLD_MS`, ~250 ms), then
+  interpolates forward from it — a sample that is still behind is not
+  adopted. Smaller backward dips do not reset the rewatch HUD scan
+  (`REWIND_SCAN_TOLERANCE_MS` in `ScoreReplayModal.tsx`).
 - Score rewatch HUD ticks incrementally through judgments and calls `setHud`
   only when combo / accuracy / last result change (counts ride the same update).
   Paused + unchanged time   skips the scan. Combo, accuracy, and running counts are draggable playfield

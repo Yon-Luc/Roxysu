@@ -42,9 +42,13 @@ describe("AudioClock", () => {
     clock.observe(500, { playing: false, rate: 1, now: 10 });
     expect(clock.nowMs(10)).toBe(510);
 
-    // A seek while paused (large jump) is a real position change.
+    // Seek lock from set() is still active, so a far sample is stale.
     clock.observe(100, { playing: false, rate: 1, now: 20 });
-    expect(clock.nowMs(20)).toBe(100);
+    expect(clock.nowMs(20)).toBe(510);
+
+    // After the lock, a large jump while paused is a real position change.
+    clock.observe(100, { playing: false, rate: 1, now: 450 });
+    expect(clock.nowMs(450)).toBe(100);
   });
 
   test("resume holds until the media pointer advances", () => {
@@ -66,17 +70,71 @@ describe("AudioClock", () => {
     expect(clock.nowMs(150)).toBeCloseTo(530, 5);
   });
 
-  test("resume hold times out and follows media again", () => {
+  test("resume hold times out without snapping backward", () => {
     const clock = new AudioClock();
     clock.set(500, { playing: true, rate: 1, now: 0 });
     clock.observe(480, { playing: false, rate: 1, now: 20 });
     clock.observe(480, { playing: true, rate: 1, now: 30 });
     expect(clock.nowMs(100)).toBe(520);
 
-    // Held longer than RESUME_HOLD_MS while media never moved: follow media.
+    // Held longer than RESUME_HOLD_MS while media never caught up: keep the
+    // frozen time and interpolate forward. Do not adopt the lagging sample.
     clock.observe(480, { playing: true, rate: 1, now: 400 });
-    expect(clock.nowMs(400)).toBe(480);
-    expect(clock.nowMs(410)).toBeCloseTo(490, 5);
+    expect(clock.nowMs(400)).toBe(520);
+    expect(clock.nowMs(410)).toBeCloseTo(530, 5);
+  });
+
+  test("resume does not adopt a sample that is still behind", () => {
+    const clock = new AudioClock();
+    clock.set(500, { playing: true, rate: 1, now: 0 });
+    clock.observe(480, { playing: false, rate: 1, now: 20 });
+    expect(clock.nowMs(20)).toBe(520);
+
+    clock.observe(480, { playing: true, rate: 1, now: 30 });
+    // Pointer moved forward from the resume sample, but has not reached 520.
+    clock.observe(500, { playing: true, rate: 1, now: 80 });
+    expect(clock.nowMs(80)).toBe(520);
+    expect(clock.nowMs(90)).toBeCloseTo(530, 5);
+  });
+
+  test("lagging media sample does not rewind the interpolator", () => {
+    const clock = new AudioClock();
+    clock.set(1000, { playing: true, rate: 1, now: 0 });
+    // Past the seek lock. The coarse sample is 20ms behind the interpolator.
+    clock.observe(1480, { playing: true, rate: 1, now: 500 });
+    expect(clock.nowMs(500)).toBeCloseTo(1500, 5);
+    expect(clock.nowMs(516)).toBeCloseTo(1516, 5);
+
+    // A sample a little ahead still catches up so the clock stays with the sound.
+    clock.observe(1540, { playing: true, rate: 1, now: 520 });
+    expect(clock.nowMs(520)).toBe(1540);
+    expect(clock.nowMs(528)).toBeCloseTo(1548, 5);
+  });
+
+  test("seek lock ignores stale currentTime for the whole window", () => {
+    const clock = new AudioClock();
+    clock.set(1000, { playing: true, rate: 1, now: 0 });
+    clock.set(5000, { playing: true, rate: 1, now: 10 });
+    expect(clock.nowMs(10)).toBe(5000);
+
+    // rAF still samples the pre-seek currentTime.
+    clock.observe(1000, { playing: true, rate: 1, now: 20 });
+    expect(clock.nowMs(20)).toBeCloseTo(5010, 5);
+    expect(clock.nowMs(30)).toBeCloseTo(5020, 5);
+
+    // One sample lands on the target; a late timeupdate still must not rewind.
+    clock.observe(5010, { playing: true, rate: 1, now: 40 });
+    expect(clock.nowMs(40)).toBeCloseTo(5030, 5);
+    clock.observe(1000, { playing: true, rate: 1, now: 50 });
+    expect(clock.nowMs(50)).toBeCloseTo(5040, 5);
+  });
+
+  test("rebasing onto the current time does not extend the seek lock", () => {
+    const clock = new AudioClock();
+    clock.set(1000, { playing: false, rate: 1, now: 0 });
+    clock.set(1000, { playing: false, rate: 1, now: 390 });
+    clock.observe(0, { playing: false, rate: 1, now: 410 });
+    expect(clock.nowMs(410)).toBe(0);
   });
 
   test("seek set jumps immediately", () => {

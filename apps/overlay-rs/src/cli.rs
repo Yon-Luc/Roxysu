@@ -45,7 +45,7 @@ pub struct Cli {
     #[arg(long, default_value_t = DEFAULT_OPACITY)]
     pub opacity: f64,
 
-    /// Target monitor by connector or model. Omit for compositor default.
+    /// Pin to this connector or model. When omitted, follow the matched window's output.
     #[arg(long)]
     pub output: Option<String>,
 
@@ -65,7 +65,7 @@ pub struct Cli {
     #[arg(long, default_value_t = 80)]
     pub hide_hysteresis_ms: u64,
 
-    /// Dump known foreign-toplevel windows and exit.
+    /// Dump toplevels (wlr-foreign-toplevel or Plasma window management) and exit.
     #[arg(long, default_value_t = false)]
     pub list_windows: bool,
 

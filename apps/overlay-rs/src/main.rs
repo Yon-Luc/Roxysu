@@ -1,7 +1,7 @@
 //! Roxysu overlay host (Rust). Phase 6: watchdog + lifecycle recovery.
 
-mod click_through;
 mod cli;
+mod click_through;
 mod config;
 mod diagnostics;
 mod focus;
@@ -24,6 +24,7 @@ use tracing_subscriber::EnvFilter;
 
 use crate::cli::Cli;
 use crate::config::Config;
+use crate::focus::FocusHandle;
 use crate::overlay::OverlayHost;
 use crate::telemetry::SamplerHandle;
 use crate::watchdog::WatchdogHandle;
@@ -53,16 +54,20 @@ fn main() -> Result<()> {
 
     // Follow-focus starts hidden; hold so GtkApplication does not exit.
     // Drop the hold on shutdown so quit is clean (GApplication handles SIGINT/SIGTERM).
-    let hold: Rc<RefCell<Option<gtk4::gio::ApplicationHoldGuard>>> =
-        Rc::new(RefCell::new(None));
+    let hold: Rc<RefCell<Option<gtk4::gio::ApplicationHoldGuard>>> = Rc::new(RefCell::new(None));
     let sampler: Rc<RefCell<Option<SamplerHandle>>> = Rc::new(RefCell::new(None));
     let watchdog_h: Rc<RefCell<Option<WatchdogHandle>>> = Rc::new(RefCell::new(None));
+    let focus_h: Rc<RefCell<Option<FocusHandle>>> = Rc::new(RefCell::new(None));
     {
         let hold = Rc::clone(&hold);
         let sampler = Rc::clone(&sampler);
         let watchdog_h = Rc::clone(&watchdog_h);
+        let focus_h = Rc::clone(&focus_h);
         app.connect_shutdown(move |_| {
             info!("overlay host shutting down");
+            if let Some(handle) = focus_h.borrow_mut().take() {
+                handle.stop();
+            }
             if let Some(handle) = watchdog_h.borrow_mut().take() {
                 handle.stop();
             }
@@ -76,7 +81,7 @@ fn main() -> Result<()> {
     app.connect_activate(move |app| {
         *hold.borrow_mut() = Some(app.hold());
 
-        if let Err(err) = run_app(app, config.clone(), &sampler, &watchdog_h) {
+        if let Err(err) = run_app(app, config.clone(), &sampler, &watchdog_h, &focus_h) {
             eprintln!("roxysu-overlay-rs: {err:#}");
             std::process::exit(1);
         }
@@ -95,9 +100,9 @@ fn run_app(
     config: Config,
     sampler: &Rc<RefCell<Option<SamplerHandle>>>,
     watchdog_h: &Rc<RefCell<Option<WatchdogHandle>>>,
+    focus_h: &Rc<RefCell<Option<FocusHandle>>>,
 ) -> Result<()> {
-    if std::env::var_os("WAYLAND_DISPLAY").is_none()
-        && std::env::var_os("WAYLAND_SOCKET").is_none()
+    if std::env::var_os("WAYLAND_DISPLAY").is_none() && std::env::var_os("WAYLAND_SOCKET").is_none()
     {
         bail!(
             "no Wayland display detected.\n\
@@ -109,8 +114,12 @@ fn run_app(
     if !layer_shell_supported() {
         bail!(
             "compositor does not support zwlr_layer_shell_v1.\n\
-             Use a wlroots-family compositor (Hyprland, sway, niri, river, KDE)."
+             Use a layer-shell compositor (Hyprland, sway, niri, river, KDE)."
         );
+    }
+
+    if config.follow_focus || config.list_windows {
+        focus::install_plasma_grant();
     }
 
     let display = gdk4::Display::default().context("no GDK display")?;
@@ -125,7 +134,7 @@ fn run_app(
     );
 
     let host = OverlayHost::new(app, config.clone())?;
-    host.present_initial()?;
+    host.present_initial(focus_h)?;
 
     if config.telemetry_interval_sec > 0 {
         let csv = config.telemetry_csv.as_ref().map(PathBuf::from);

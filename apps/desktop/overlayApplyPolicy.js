@@ -25,12 +25,13 @@ function childIsAlive(child) {
 
 /**
  * @typedef {object} OverlayApplyInput
- * @property {{ enabled: boolean, hostUrl: string | null } | null} settings
+ * @property {{ enabled: boolean, hostUrl: string | null, output?: string | null } | null} settings
  *   Null when the settings poll failed (HTTP error or timeout).
  * @property {string} defaultUrlArg `--url=…` token used when hostUrl is null.
  * @property {boolean} hasChild A host child object exists.
  * @property {boolean} childExited The child object exists and has exited.
  * @property {string | null} appliedUrlArg Token the child was last spawned with.
+ * @property {string | null} [appliedOutput] Monitor override the child was last spawned with.
  * @property {number} spawnedAt Timestamp (ms) of the last spawn.
  * @property {number} now Timestamp (ms).
  * @property {number} respawnGapMs Liveness respawn rate limit.
@@ -45,6 +46,7 @@ function childIsAlive(child) {
  * @property {string} [reason]
  * @property {boolean} [stopRunning] For `spawn`: SIGTERM the live child first.
  * @property {string} [urlArg] For `spawn`: the `--url=…` token to use.
+ * @property {string | null} [output] For `spawn`: monitor override, or null to follow the window.
  * @property {number} consecutiveFailures
  * @property {boolean | null} lastKnownEnabled
  */
@@ -84,31 +86,40 @@ function decideOverlayApply(input) {
   }
 
   const urlArg = hostUrl === null ? input.defaultUrlArg : `--url=${hostUrl}`;
+  const output =
+    typeof input.settings.output === "string" && input.settings.output.trim()
+      ? input.settings.output.trim()
+      : null;
   const urlUnchanged = urlArg === input.appliedUrlArg;
+  const outputUnchanged = output === (input.appliedOutput ?? null);
+  const unchanged = urlUnchanged && outputUnchanged;
+  const changeReason = !urlUnchanged ? "url-changed" : "output-changed";
 
   if (input.hasChild && !input.childExited) {
-    if (urlUnchanged) return { ...base, action: "noop", reason: "up-to-date" };
+    if (unchanged) return { ...base, action: "noop", reason: "up-to-date" };
     return {
       ...base,
       action: "spawn",
-      reason: "url-changed",
+      reason: changeReason,
       stopRunning: true,
       urlArg,
+      output,
     };
   }
 
   if (input.hasChild && input.childExited) {
     // F-038: the crash-loop gap only rate-limits a plain liveness respawn. A
-    // changed URL is an explicit user edit and applies immediately.
-    if (urlUnchanged && input.now - input.spawnedAt < input.respawnGapMs) {
+    // changed URL or monitor is an explicit user edit and applies immediately.
+    if (unchanged && input.now - input.spawnedAt < input.respawnGapMs) {
       return { ...base, action: "noop", reason: "respawn-gap" };
     }
     return {
       ...base,
       action: "spawn",
-      reason: urlUnchanged ? "liveness-respawn" : "url-changed",
+      reason: unchanged ? "liveness-respawn" : changeReason,
       stopRunning: false,
       urlArg,
+      output,
     };
   }
 
@@ -118,6 +129,7 @@ function decideOverlayApply(input) {
     reason: "initial",
     stopRunning: false,
     urlArg,
+    output,
   };
 }
 

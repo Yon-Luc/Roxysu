@@ -861,6 +861,7 @@ export async function patchSettings(body: {
   scoresGamemodeFilter?: string;
   osuDataPath?: string | null;
   overlayHostUrl?: string | null;
+  overlayOutput?: string | null;
   overlayEnabled?: boolean;
   tosuEnabled?: boolean;
   tosuHost?: string;

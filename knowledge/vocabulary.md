@@ -565,7 +565,8 @@ A user-built mania chart made by concatenating several same-key-count maps from 
 
 Standalone Wayland host (`apps/overlay-rs`) that draws the `/overlay` HUD page
 above fullscreen osu!lazer via wlr-layer-shell (overlay layer, always
-click-through). wlroots-family compositors only; data comes exclusively from
+click-through). Follow-focus uses `zwlr_foreign_toplevel_manager_v1` or, on
+KWin, read-only Plasma window management. Data comes exclusively from
 client-app HTTP (`GET /api/overlay`).
 
 **Not:** the `/overlay` page alone (the OBS browser-source HUD), **Now selected**

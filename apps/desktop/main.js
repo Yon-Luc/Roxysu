@@ -30,6 +30,8 @@ let realmRespawnTimer = null;
 let overlayChild = null;
 /** Arg token the running overlay child was spawned with (--url=…). */
 let overlayAppliedUrlArg = null;
+/** @type {string | null} */
+let overlayAppliedOutput = null;
 /** Timestamp of the last overlay host spawn (liveness respawn rate limit). */
 let overlaySpawnedAt = 0;
 /** Overlay host setting poll timer. @type {NodeJS.Timeout | null} */
@@ -498,8 +500,9 @@ function resolveOverlayBin(paths) {
 /**
  * @param {ReturnType<typeof resolveDesktopPaths>} paths
  * @param {string} urlArg Single `--url=…` token (host pre-splits argv on '=').
+ * @param {string | null} output Monitor connector or model, or null to follow osu!.
  */
-function spawnOverlayHost(paths, urlArg) {
+function spawnOverlayHost(paths, urlArg, output) {
   if (process.platform !== "linux") return;
   if (!process.env.WAYLAND_DISPLAY) {
     desktopLog("overlay host skipped — no Wayland session");
@@ -511,13 +514,16 @@ function spawnOverlayHost(paths, urlArg) {
     return;
   }
   const { fd } = openChildLogFd(paths.dataDir, "overlay");
-  desktopLog(`spawn overlay bin=${bin} ${urlArg}`);
+  const args = [urlArg, "--watchdog-max-age-sec=0"];
+  if (output) args.push(`--output=${output}`);
+  desktopLog(`spawn overlay bin=${bin} ${args.join(" ")}`);
   overlayAppliedUrlArg = urlArg;
+  overlayAppliedOutput = output ?? null;
   // Do not set WEBKIT_DISABLE_DMABUF_RENDERER. On a transparent WebKitGTK
   // surface that fallback fills the whole window with grey on each HUD update.
   // Age cap is off: a 30-minute exit plus this respawn is a full HUD refresh
   // over the playfield. FD and RSS caps still exit 75 so a real leak recovers.
-  overlayChild = spawn(bin, [urlArg, "--watchdog-max-age-sec=0"], {
+  overlayChild = spawn(bin, args, {
     stdio: ["ignore", fd, fd],
     windowsHide: true,
     shell: false,
@@ -550,7 +556,7 @@ function stopChild(child, label) {
 
 /**
  * Read the In-game overlay host settings from the client app settings store
- * (`overlay.enabled` + `overlay.hostUrl`). Resolves null when unreachable
+ * (`overlay.enabled` + `overlay.hostUrl` + `overlay.output`). Resolves null when unreachable
  * (fetch failed — keep current state).
  */
 function fetchOverlaySettings() {
@@ -569,7 +575,11 @@ function fetchOverlaySettings() {
               typeof overlay.hostUrl === "string" && overlay.hostUrl.trim()
                 ? overlay.hostUrl.trim()
                 : null;
-            resolve({ enabled: overlay.enabled !== false, hostUrl });
+            const output =
+              typeof overlay.output === "string" && overlay.output.trim()
+                ? overlay.output.trim()
+                : null;
+            resolve({ enabled: overlay.enabled !== false, hostUrl, output });
           } catch {
             resolve(null);
           }
@@ -615,6 +625,7 @@ function watchOverlayHostSetting(paths) {
       hasChild: overlayChild !== null,
       childExited: overlayChild !== null && !childIsAlive(overlayChild),
       appliedUrlArg: overlayAppliedUrlArg,
+      appliedOutput: overlayAppliedOutput,
       spawnedAt: overlaySpawnedAt,
       now: Date.now(),
       respawnGapMs: OVERLAY_RESPAWN_GAP_MS,
@@ -633,6 +644,7 @@ function watchOverlayHostSetting(paths) {
       stopChild(overlayChild, "overlay");
       overlayChild = null;
       overlayAppliedUrlArg = null;
+      overlayAppliedOutput = null;
       return;
     }
     if (decision.action === "spawn") {
@@ -642,12 +654,14 @@ function watchOverlayHostSetting(paths) {
         );
       } else if (decision.reason === "url-changed") {
         desktopLog("overlay url changed — restarting host");
+      } else if (decision.reason === "output-changed") {
+        desktopLog("overlay monitor changed — restarting host");
       }
       // Host pre-splits argv on '=', so the URL rides in one --url=… token
-      // (decision.urlArg).
+      // (decision.urlArg) and the monitor in one --output=… token.
       if (decision.stopRunning) stopChild(overlayChild, "overlay");
       overlayChild = null;
-      spawnOverlayHost(paths, decision.urlArg);
+      spawnOverlayHost(paths, decision.urlArg, decision.output ?? null);
     }
   };
 

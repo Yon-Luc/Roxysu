@@ -2,6 +2,7 @@ import { settings } from "@roxysu/db/schema";
 import {
   JOBS_ONBOARDING_COMPLETED_KEY,
   OVERLAY_HOST_ENABLED_KEY,
+  OVERLAY_HOST_OUTPUT_KEY,
   OVERLAY_HOST_URL_KEY,
   RECOMMEND_FLN_RATIO_THRESHOLD_KEY,
   RECOMMEND_FOCUS_SETTINGS_KEY,
@@ -69,7 +70,7 @@ import {
   validateOsuDataPath,
 } from "../shared/osu-paths";
 import { assertSafeExecutablePath } from "../executablePath";
-import { parseOverlayHostUrl } from "../overlayUrl";
+import { parseOverlayHostUrl, parseOverlayOutput } from "../overlayUrl";
 import { HOST_MAX, PATH_MAX, URL_MAX } from "../requestLimits";
 import {
   DEFAULT_TOSU_HOST,
@@ -113,6 +114,15 @@ async function readOverlayHostUrl(db: Db): Promise<string | null> {
   return row?.value?.trim() ? row.value.trim() : null;
 }
 
+async function readOverlayHostOutput(db: Db): Promise<string | null> {
+  const [row] = await db
+    .select()
+    .from(settings)
+    .where(eq(settings.key, OVERLAY_HOST_OUTPUT_KEY))
+    .limit(1);
+  return row?.value?.trim() ? row.value.trim() : null;
+}
+
 async function readOverlayHostEnabled(db: Db): Promise<boolean> {
   const [row] = await db
     .select()
@@ -134,6 +144,7 @@ async function buildSettingsResponse(db: Db) {
   const maniaRatingExecutables = await readAllExecutablePaths(db);
   const overlayHostUrl = await readOverlayHostUrl(db);
   const overlayHostEnabled = await readOverlayHostEnabled(db);
+  const overlayHostOutput = await readOverlayHostOutput(db);
   const [
     scoresUsername,
     scoresGamemode,
@@ -176,6 +187,7 @@ async function buildSettingsResponse(db: Db) {
     overlay: {
       enabled: overlayHostEnabled,
       hostUrl: overlayHostUrl,
+      output: overlayHostOutput,
     },
     tosu: {
       enabled: tosu.enabled,
@@ -424,6 +436,22 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
         );
       }
 
+      if (body.overlayOutput !== undefined) {
+        const trimmed = body.overlayOutput?.trim() ?? "";
+        if (!trimmed) {
+          await db
+            .delete(settings)
+            .where(eq(settings.key, OVERLAY_HOST_OUTPUT_KEY));
+        } else {
+          const parsed = parseOverlayOutput(trimmed);
+          if (!parsed.ok) {
+            set.status = 400;
+            return { error: parsed.error };
+          }
+          await upsertSetting(db, OVERLAY_HOST_OUTPUT_KEY, parsed.output);
+        }
+      }
+
       if (body.overlayHostUrl !== undefined) {
         const trimmed = body.overlayHostUrl?.trim() ?? "";
         if (!trimmed) {
@@ -588,6 +616,11 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
          * reset to the default (#/overlay?bg=clear).
          */
         overlayHostUrl: t.Optional(t.Union([t.String({ maxLength: URL_MAX }), t.Null()])),
+        /**
+         * Monitor connector or model for the overlay host (`--output`).
+         * Null or "" follows the osu! window.
+         */
+        overlayOutput: t.Optional(t.Union([t.String({ maxLength: 128 }), t.Null()])),
         /** Enable/disable the desktop in-game overlay host (Wayland). */
         overlayEnabled: t.Optional(t.Boolean()),
         tosuEnabled: t.Optional(t.Boolean()),

@@ -4,6 +4,7 @@ confidence: verified
 touches:
   - apps/server/public/features/now-selected
   - apps/server/public/components/BeatmapPreviewEmbed.tsx
+  - apps/server/public/components/wheelSeek.ts
   - apps/server/public/components/mania-analysis
   - apps/server/src/tosu/live.ts
   - apps/server/src/tosu/analyze.ts
@@ -29,7 +30,7 @@ While song-selecting or playing, open **Now selected** (optionally `#/now-select
 
 1. **tosu live** is the selection source — not scores. Realm extraction remains authoritative for plays.
 2. The Current session **Now selected** panel stays as a compact hub; this page is the rich companion.
-3. Preview auto-starts when the map is matched in the local mirror and in-game play is not active (configurable). Pause — the user Pause control, or pause while `play.active` — freezes the playfield clock and the audio so game audio is not doubled. While that hold is set, tosu time must not move or seek the preview. Playback resumes from the frozen time. The hold clears only once local time and tosu time are already within ~2s; a new map starts the hold clear.
+3. Preview auto-starts when the map is matched in the local mirror and in-game play is not active (configurable). Pause — the user Pause control, pause while `play.active`, or the first wheel tick while a fresh tosu sample is driving the clock — freezes the playfield clock and the audio so game audio is not doubled. While that hold is set, tosu time must not move or seek the preview. Further wheel ticks seek while the hold stays set. Playback resumes from the frozen time. The hold clears only once local time and tosu time are already within ~2s; a new map starts the hold clear.
 4. While the preview is playing and not held, position syncs with tosu `beatmap.time.live`: while tosu samples are fresh (≤1.5s old), `BeatmapPreviewEmbed` drives its playfield clock from the live time (interpolated at the tosu rate); small transport-latency offsets are ignored — the clock keeps gliding — and clock + audio hard-resync only when drift exceeds ~2s; otherwise it falls back to independent playback from the preview point.
 5. The embed volume slider writes `volume` on the shared preview prefs store (`rx-beatmap-preview`). Changing maps remounts the embed and reloads that value, so a volume the user set stays. The slider is shown for every ruleset.
 6. Chart shape bars, density, and hotspots use the same `ManiaPatternDetail` path as the practice profile (unrated chart). The shape widget lists chart-shape families for the key count (`shapeComposition`), sorted by share descending; its heading reads "Patterns". Density and hotspots still label each time window with the dominant skill.

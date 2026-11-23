@@ -2,6 +2,12 @@
 //!
 //! C: case-insensitive substring of `--match-app-id` against `app_id`;
 //! `title` is consulted only when `app_id` is empty.
+//!
+//! `resource_name` is not a haystack. A non-empty app id that does not
+//! contain the needle does not match, even when the title is `osu!`.
+//! That keeps a browser tab titled osu! from showing the HUD. Change this
+//! only after `--list-windows` on Plasma shows the osu! window's real
+//! `app_id` would miss.
 
 use std::str::FromStr;
 
@@ -101,6 +107,15 @@ mod tests {
         let p = MatchPolicy::new("osu", MatchMode::Contains);
         assert!(p.matches("osu!", "Firefox"));
         // Non-empty app_id that does not match → false even if title matches.
+        assert!(!p.matches("firefox", "osu!lazer"));
+    }
+
+    #[test]
+    fn non_osu_app_id_does_not_match_osu_title() {
+        // Deliberate until a Plasma `--list-windows` dump shows osu! itself
+        // using a generic app id such as `dotnet`. Do not match any field.
+        let p = MatchPolicy::new("osu", MatchMode::Contains);
+        assert!(!p.matches("dotnet", "osu!"));
         assert!(!p.matches("firefox", "osu!lazer"));
     }
 

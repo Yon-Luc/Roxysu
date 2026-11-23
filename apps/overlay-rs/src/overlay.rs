@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use gdk4::prelude::*;
-use gtk4::prelude::*;
 use gtk4::gio;
+use gtk4::prelude::*;
 use gtk4::{Application, ApplicationWindow};
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 use std::cell::{Cell, RefCell};
@@ -15,7 +15,10 @@ use webkit6::{LoadEvent, UserContentManager, WebView};
 use crate::click_through::{apply_click_through, ClickThroughMethod};
 use crate::config::Config;
 use crate::diagnostics;
-use crate::focus::{self, FocusCommand, FocusEvent};
+use crate::focus::{
+    self, visibility_after_unavailable, FocusCommand, FocusEvent, FocusHandle, OutputHint,
+    OutputRect,
+};
 use crate::present::should_map_overlay;
 use crate::reload::{ReloadMachine, ReloadTrigger, ScheduleResult};
 
@@ -107,9 +110,7 @@ impl OverlayHost {
         if !content.register_script_message_handler("roxysuOverlayReady", None) {
             warn!("failed to register roxysuOverlayReady; HUD will use the ready fallback");
         }
-        let webview = WebView::builder()
-            .user_content_manager(&content)
-            .build();
+        let webview = WebView::builder().user_content_manager(&content).build();
         let transparent = gdk4::RGBA::new(0.0, 0.0, 0.0, 0.0);
         webview.set_background_color(&transparent);
         window.set_child(Some(&webview));
@@ -156,10 +157,9 @@ impl OverlayHost {
         });
         {
             let gate = Rc::clone(&gate);
-            content.connect_script_message_received(
-                Some("roxysuOverlayReady"),
-                move |_, _| on_page_ready(&gate),
-            );
+            content.connect_script_message_received(Some("roxysuOverlayReady"), move |_, _| {
+                on_page_ready(&gate)
+            });
         }
         wire_reload(&webview, &config.url, Rc::clone(&gate));
         webview.load_uri(&config.url);
@@ -183,7 +183,7 @@ impl OverlayHost {
         })
     }
 
-    pub fn present_initial(self) -> Result<()> {
+    pub fn present_initial(self, focus_slot: &Rc<RefCell<Option<FocusHandle>>>) -> Result<()> {
         if self.config.list_windows {
             let (tx, rx) = mpsc::channel::<FocusEvent>();
             let policy = self.config.match_policy();
@@ -211,7 +211,8 @@ impl OverlayHost {
         }
 
         if self.config.follow_focus {
-            self.start_focus_tracking()?;
+            let handle = self.start_focus_tracking()?;
+            *focus_slot.borrow_mut() = Some(handle);
             info!(
                 match_app_id = %self.config.match_app_id,
                 "follow-focus enabled; waiting for matching activation"
@@ -262,18 +263,9 @@ impl OverlayHost {
         Ok(())
     }
 
-    fn start_focus_tracking(&self) -> Result<()> {
+    fn start_focus_tracking(&self) -> Result<FocusHandle> {
         let (tx, rx) = async_channel::unbounded::<FocusCommand>();
-
-        let policy = self.config.match_policy();
-        std::thread::Builder::new()
-            .name("overlay-focus".into())
-            .spawn(move || {
-                if let Err(err) = focus::run_focus_loop(policy, tx) {
-                    eprintln!("roxysu-overlay-rs: focus thread exited: {err:#}");
-                }
-            })
-            .context("spawn focus thread")?;
+        let handle = focus::spawn_focus_loop(self.config.match_policy(), tx)?;
 
         let window = self.window.clone();
         let last = Rc::new(RefCell::new(None::<bool>));
@@ -283,13 +275,20 @@ impl OverlayHost {
         let anchor = self.config.anchor;
         let hysteresis = self.config.hide_hysteresis_ms;
         let gate = Rc::clone(&self.gate);
+        let lock_output = self.config.output.is_some();
+        let pinned = Rc::new(RefCell::new(None::<String>));
 
         glib::spawn_future_local(async move {
             while let Ok(cmd) = rx.recv().await {
                 match cmd {
-                    FocusCommand::Show => {
+                    FocusCommand::Show { output } => {
                         // Cancel any pending hysteretic hide.
                         hide_epoch.set(hide_epoch.get().wrapping_add(1));
+                        if !lock_output {
+                            if let Some(hint) = output.as_ref() {
+                                pin_overlay(&window, hint, &pinned);
+                            }
+                        }
                         let was_shown = *last.borrow() == Some(true);
                         if !was_shown {
                             info!("focus: show");
@@ -340,23 +339,23 @@ impl OverlayHost {
                     FocusCommand::Disconnected => {
                         warn!("focus tracking disconnected; leaving visibility unchanged");
                     }
-                    FocusCommand::Unavailable => {
+                    FocusCommand::Unavailable { reason } => {
                         warn!(
-                            "foreign-toplevel unavailable; falling back to always-visible \
-                             (same as --follow-focus false)"
+                            %reason,
+                            "focus protocol unavailable; staying unmapped \
+                             (--follow-focus=false forces an always-visible layer)"
                         );
-                        hide_epoch.set(hide_epoch.get().wrapping_add(1));
-                        if *last.borrow() != Some(true) {
-                            gate.wants_visible.set(true);
+                        let next = visibility_after_unavailable(gate.wants_visible.get());
+                        if next != gate.wants_visible.get() {
+                            gate.wants_visible.set(next);
                             sync_gate(&gate);
-                            *last.borrow_mut() = Some(true);
                         }
                     }
                 }
             }
         });
 
-        Ok(())
+        Ok(handle)
     }
 }
 
@@ -396,12 +395,7 @@ fn wire_reload(webview: &WebView, url: &str, gate: Rc<PageGate>) {
                 error = %error,
                 "webkit: load failed (likely HUD/server unreachable; not a web-process crash)"
             );
-            schedule_reload(
-                &machine,
-                ReloadTrigger::LoadFailed,
-                &url,
-                &webview_weak,
-            );
+            schedule_reload(&machine, ReloadTrigger::LoadFailed, &url, &webview_weak);
             // true = handled (suppress default error page if any)
             true
         });
@@ -413,7 +407,10 @@ fn wire_reload(webview: &WebView, url: &str, gate: Rc<PageGate>) {
         let webview_weak = webview.downgrade();
         let gate = Rc::clone(&gate);
         webview.connect_web_process_terminated(move |_, reason| {
-            warn!(?reason, "webkit: web process terminated (crash/kill; distinct from HUD load-fail)");
+            warn!(
+                ?reason,
+                "webkit: web process terminated (crash/kill; distinct from HUD load-fail)"
+            );
             on_navigation_started(&gate);
             schedule_reload(
                 &machine,
@@ -502,8 +499,7 @@ fn arm_reveal(gate: &Rc<PageGate>) {
     let gate_cb = Rc::clone(gate);
     let id = glib::timeout_add_local(REVEAL_DELAY, move || {
         gate_cb.reveal_fallback.borrow_mut().take();
-        if *gate_cb.shown.borrow() && gate_cb.page_ready.get() && gate_cb.wants_visible.get()
-        {
+        if *gate_cb.shown.borrow() && gate_cb.page_ready.get() && gate_cb.wants_visible.get() {
             gate_cb.window.set_opacity(gate_cb.opacity);
             info!("overlay revealed");
         }
@@ -528,12 +524,7 @@ fn sync_gate(gate: &Rc<PageGate>) {
             gate.window.set_visible(true);
             gate.window.present();
             *gate.shown.borrow_mut() = true;
-            diagnostics::on_show(
-                &gate.webview,
-                &gate.window,
-                gate.anchor,
-                gate.diagnostics,
-            );
+            diagnostics::on_show(&gate.webview, &gate.window, gate.anchor, gate.diagnostics);
         }
         arm_reveal(gate);
     } else if shown {
@@ -544,6 +535,76 @@ fn sync_gate(gate: &Rc<PageGate>) {
         gate.window.set_visible(false);
         *gate.shown.borrow_mut() = false;
     }
+}
+
+/// Explicit `--output` wins. Otherwise pin to the matched window, and skip
+/// a repeat `set_monitor` so KWin does not recreate the layer surface.
+fn pin_overlay(window: &ApplicationWindow, hint: &OutputHint, pinned: &RefCell<Option<String>>) {
+    let display = gtk4::prelude::WidgetExt::display(window);
+    let Some(monitor) = monitor_for_hint(&display, hint) else {
+        warn!(?hint, "osu! output not found among Gdk monitors");
+        return;
+    };
+    let key = monitor_key(&monitor);
+    if pinned.borrow().as_deref() == Some(key.as_str()) {
+        return;
+    }
+    window.set_monitor(Some(&monitor));
+    *pinned.borrow_mut() = Some(key.clone());
+    info!(output = %key, "pinned overlay to osu! output");
+}
+
+fn monitor_for_hint(display: &gdk4::Display, hint: &OutputHint) -> Option<gdk4::Monitor> {
+    match hint {
+        OutputHint::Name(name) => find_monitor_by_name(display, name),
+        OutputHint::Rect(rect) => find_monitor_for_rect(display, rect),
+    }
+}
+
+fn monitor_key(monitor: &gdk4::Monitor) -> String {
+    let connector = monitor.connector().unwrap_or_default();
+    if !connector.is_empty() {
+        return connector.to_string();
+    }
+    monitor.model().unwrap_or_default().to_string()
+}
+
+fn find_monitor_for_rect(display: &gdk4::Display, rect: &OutputRect) -> Option<gdk4::Monitor> {
+    let cx = rect.x.saturating_add(rect.width / 2);
+    let cy = rect.y.saturating_add(rect.height / 2);
+    let monitors = display.monitors();
+    let n = monitors.n_items();
+    let mut best: Option<(gdk4::Monitor, i64)> = None;
+    for i in 0..n {
+        let Some(monitor) = monitors
+            .item(i)
+            .and_then(|o| o.downcast::<gdk4::Monitor>().ok())
+        else {
+            continue;
+        };
+        let g = monitor.geometry();
+        if cx >= g.x() && cy >= g.y() && cx < g.x() + g.width() && cy < g.y() + g.height() {
+            return Some(monitor);
+        }
+        let area = overlap_area(
+            (rect.x, rect.y, rect.width, rect.height),
+            (g.x(), g.y(), g.width(), g.height()),
+        );
+        if area > 0 && best.as_ref().map(|(_, prev)| area > *prev).unwrap_or(true) {
+            best = Some((monitor, area));
+        }
+    }
+    best.map(|(monitor, _)| monitor)
+}
+
+fn overlap_area(a: (i32, i32, i32, i32), b: (i32, i32, i32, i32)) -> i64 {
+    let x1 = a.0.max(b.0);
+    let y1 = a.1.max(b.1);
+    let x2 = (a.0.saturating_add(a.2)).min(b.0.saturating_add(b.2));
+    let y2 = (a.1.saturating_add(a.3)).min(b.1.saturating_add(b.3));
+    let w = (x2 - x1).max(0) as i64;
+    let h = (y2 - y1).max(0) as i64;
+    w.saturating_mul(h)
 }
 
 fn find_monitor_by_name(display: &gdk4::Display, name: &str) -> Option<gdk4::Monitor> {

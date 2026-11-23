@@ -3,4 +3,8 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 cargo build
-exec ./target/debug/roxysu-overlay-rs --output="${ROXYSU_OVERLAY_OUTPUT:-DP-4}" "$@"
+args=()
+if [[ -n "${ROXYSU_OVERLAY_OUTPUT:-}" ]]; then
+  args+=(--output="$ROXYSU_OVERLAY_OUTPUT")
+fi
+exec ./target/debug/roxysu-overlay-rs "${args[@]}" "$@"

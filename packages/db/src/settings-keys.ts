@@ -82,6 +82,13 @@ export const OVERLAY_HOST_URL_KEY = "overlay.host_url";
 export const OVERLAY_HOST_ENABLED_KEY = "overlay.host_enabled";
 
 /**
+ * Optional monitor connector or model for the in-game overlay host
+ * (`--output`). Missing/empty → follow the matched window's output.
+ * The desktop shell restarts the host when this changes.
+ */
+export const OVERLAY_HOST_OUTPUT_KEY = "overlay.host_output";
+
+/**
   * Rice→LN classification boundary (ln_ratio, 0–1). Default 0.2 (20%).
   * Used for recommend axes, skill estimates, stats mix, and `axis:` filters —
   * not for Sunny dan RC/LN label table selection.

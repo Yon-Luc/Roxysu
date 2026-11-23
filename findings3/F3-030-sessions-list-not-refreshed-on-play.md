@@ -4,7 +4,7 @@ feature: sessions
 kind: correctness
 severity: medium
 confidence: verified
-status: proposed
+status: fixed
 ---
 
 # A new play never refreshes the Sessions list, only the current-session detail
@@ -36,3 +36,7 @@ session detail keys stay cached. Alternatively give the list its own prefix.
 - `apps/server/public/features/sessions/SessionsPage.tsx:31-34` - list key
 - `apps/server/public/features/sessions/SessionsPage.tsx:125-137` - counts rendered from it
 - `apps/server/public/features/sessions/SessionDetailPage.tsx:43-51` - detail key that does tick
+
+## Status
+
+Fixed 2026-11-23. `onScoreImported` invalidates list keys (`["sessions", tzOffset, day]`, `all`, `day`) and leaves closed-session detail (`["sessions", id, limit]`) cached.

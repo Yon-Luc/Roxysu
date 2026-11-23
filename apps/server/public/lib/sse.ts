@@ -108,6 +108,19 @@ export function connectLiveUpdates(queryClient: QueryClient): () => void {
       exact: true,
       refetchType: "active",
     });
+    // The list keys are ["sessions", tzOffset, day], ["sessions", "all", ...]
+    // and ["sessions", "day", ...]. Exact ["sessions"] misses them, so a live
+    // play never updated the list. Closed-session detail is
+    // ["sessions", id, limit] (number, number) and stays cached.
+    void queryClient.invalidateQueries({
+      predicate: (query) => {
+        const key = query.queryKey;
+        if (key[0] !== "sessions") return false;
+        if (key[1] === "all" || key[1] === "day") return true;
+        return typeof key[1] === "number" && typeof key[2] === "string";
+      },
+      refetchType: "active",
+    });
     void queryClient.invalidateQueries({
       queryKey: ["practice"],
       refetchType: "none",

@@ -13,9 +13,10 @@ was read in full; a finding that depends on timing is marked `inferred` in that 
 
 ## Status
 
-31 notes are `status: proposed`. Eleven are `status: fixed` (2026-11-23): F3-001, F3-005, F3-006, F3-007, F3-008, F3-011, F3-015,
-F3-010, F3-033, F3-038 and F3-043, each verified by the full server suite (1023 tests) and,
-where it applies, the realm-reader suite (51 tests).
+28 notes are `status: proposed`. Thirteen are `status: fixed` and one is `status: partial`
+(2026-11-23). Fixed: F3-001, F3-005, F3-006, F3-007, F3-008, F3-010, F3-011, F3-014,
+F3-015, F3-030, F3-033, F3-038, F3-043. Partial: F3-023 (ingest is rate-limited; content
+dedupe is not, because chart+time is not a unique play).
 
 ## Counts
 

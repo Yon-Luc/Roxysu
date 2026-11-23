@@ -17,6 +17,8 @@ import {
   tableCompletion,
   type BmsInbound,
 } from "../services/bms";
+import { clientIp } from "../services/clientIp";
+import { allowRateLimit } from "../services/rateLimit";
 import {
   bmsFeed,
   bmsGlobalStats,
@@ -102,7 +104,14 @@ export const bmsRoutes = new Elysia()
   )
   .post(
     "/api/bms/scores/batch",
-    async ({ user, body, set }) => {
+    async ({ user, body, set, request, server }) => {
+      const ip = clientIp(request, server);
+      if (
+        !allowRateLimit(`bms-ingest:${user.sub}`, { limit: 20, windowMs: 60_000 }) ||
+        !allowRateLimit(`bms-ingest-ip:${ip}`, { limit: 40, windowMs: 60_000 })
+      ) {
+        return status(429, { message: "Too many score uploads" });
+      }
       const outcome = await ingestBmsBatch(
         db,
         user.sub,

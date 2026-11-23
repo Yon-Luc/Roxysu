@@ -4,7 +4,7 @@ feature: online-score-pull
 kind: correctness
 severity: low
 confidence: verified
-status: proposed
+status: fixed
 ---
 
 # The online score pull's write child has no timeout, unlike score transfer's
@@ -36,3 +36,7 @@ and reject so `runCommit`'s `finally` releases the lease.
 - `apps/server/src/online-scores/pull.ts:485-492` - commit lease
 - `apps/server/src/score-transfer/transfer.ts:46`, `:541-558`, `:580-599` - the bounded equivalent
 - `apps/server/src/shared/realmWriteLock.ts:97-124` - pause and 409 behaviour
+
+## Status
+
+Fixed 2026-11-23. `runWriteCli` uses the same 45 s `armProcessTimeout` as score transfer. A timeout kills the child and returns `ok: false`, so `runCommit`'s `finally` releases the Realm write lease.

@@ -12,6 +12,7 @@ import {
 import { defaultDbPath } from "@roxysu/db/path";
 import type { Db } from "@roxysu/db/types";
 import { resolveScoresUsernames } from "../analytics/scoreUsername";
+import { armProcessTimeout } from "../score-transfer/transfer";
 import { HubTimeoutError, hubFetch, readHubJson } from "../hubFetch";
 import { resolveHubBaseUrl } from "../hubUrl";
 import {
@@ -415,6 +416,8 @@ function parseCliResult(stdout: string): WriteResult {
   return parsed;
 }
 
+const WRITE_CLI_TIMEOUT_MS = 45_000;
+
 function runWriteCli(payloadPath: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   return new Promise((resolve, reject) => {
     const child = spawn(
@@ -428,6 +431,20 @@ function runWriteCli(payloadPath: string): Promise<{ stdout: string; stderr: str
     );
     let stdout = "";
     let stderr = "";
+    let settled = false;
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      clear();
+      fn();
+    };
+    const clear = armProcessTimeout(
+      () => {
+        child.kill("SIGKILL");
+      },
+      WRITE_CLI_TIMEOUT_MS,
+      () => finish(() => reject(new Error("Score write timed out"))),
+    );
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
@@ -436,9 +453,9 @@ function runWriteCli(payloadPath: string): Promise<{ stdout: string; stderr: str
     child.stderr.on("data", (chunk: string) => {
       stderr += chunk;
     });
-    child.on("error", reject);
+    child.on("error", (err) => finish(() => reject(err)));
     child.on("close", (code) => {
-      resolve({ stdout, stderr, exitCode: code ?? 1 });
+      finish(() => resolve({ stdout, stderr, exitCode: code ?? 1 }));
     });
   });
 }
@@ -517,7 +534,18 @@ async function writeToRealm(db: Db, payload: WritePayload): Promise<WriteResult>
     const payloadPath = path.join(tempDir, "payload.json");
     try {
       writeFileSync(payloadPath, JSON.stringify(payload));
-      const { stdout, stderr, exitCode } = await runWriteCli(payloadPath);
+      let stdout = "";
+      let stderr = "";
+      let exitCode = 1;
+      try {
+        ({ stdout, stderr, exitCode } = await runWriteCli(payloadPath));
+      } catch (err) {
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : "Score write failed",
+          code: "other",
+        };
+      }
       if (exitCode !== 0 && !stdout.includes("RESULT ")) {
         return {
           ok: false,

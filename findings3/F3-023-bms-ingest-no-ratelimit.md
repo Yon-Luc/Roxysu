@@ -4,7 +4,7 @@ feature: bms
 kind: security
 severity: medium
 confidence: verified
-status: proposed
+status: partial
 ---
 
 # BMS ingest has no rate limit, and dedupe is keyed on a client-chosen id
@@ -39,3 +39,7 @@ cannot re-insert the same play.
 - `apps/hub/src/services/bms.ts:176-203` - dedupe scoped to installation id
 - `apps/hub/src/services/bms.ts:310-315` - batch cap only
 - `apps/hub/src/services/bmsCommunity.ts:220-267` - public reads of those rows
+
+## Status
+
+Partial 2026-11-23. The batch route is limited to 20/min per user and 40/min per IP. Content dedupe was not added: chart + time is not a unique play, and a user can submit two different scores on one chart at the same timestamp. Dedupe still keys on the client-chosen installation id.

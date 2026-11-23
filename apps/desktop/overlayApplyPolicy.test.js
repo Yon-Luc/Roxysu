@@ -11,6 +11,7 @@ const {
   childIsAlive,
   decideOverlayApply,
   overlayRespawnGapMs,
+  overlayHostStatusWrite,
   overlaySettingsPollMs,
 } = require("./overlayApplyPolicy.js");
 
@@ -499,6 +500,47 @@ describe("decideOverlayApply: crash-loop backoff and park (DD-10)", () => {
       exited({ respawnFailures: OVERLAY_MAX_RESPAWNS, settings: { enabled: false, hostUrl: null } }),
     );
     expect(d).toMatchObject({ action: "stop", reason: "disabled", respawnFailures: 0 });
+  });
+});
+
+describe("overlayHostStatusWrite", () => {
+  test("a disable with no child still clears a park", () => {
+    expect(
+      overlayHostStatusWrite("unsupported-session", {
+        action: "noop",
+        reason: "disabled",
+      }),
+    ).toEqual({ next: null, write: "running" });
+    expect(
+      overlayHostStatusWrite("respawn-exhausted", {
+        action: "noop",
+        reason: "disabled",
+      }),
+    ).toEqual({ next: null, write: "running" });
+  });
+
+  test("a failed poll does not clear a park", () => {
+    expect(
+      overlayHostStatusWrite("crash-loop", {
+        action: "noop",
+        reason: "poll-failed",
+      }),
+    ).toEqual({ next: "crash-loop", write: null });
+  });
+
+  test("parking writes once per reason", () => {
+    expect(
+      overlayHostStatusWrite(null, {
+        action: "noop",
+        reason: "unsupported-session",
+      }),
+    ).toEqual({ next: "unsupported-session", write: "unsupported" });
+    expect(
+      overlayHostStatusWrite("unsupported-session", {
+        action: "noop",
+        reason: "unsupported-session",
+      }),
+    ).toEqual({ next: "unsupported-session", write: null });
   });
 });
 

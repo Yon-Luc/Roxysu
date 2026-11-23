@@ -39,6 +39,35 @@ function overlaySettingsPollMs(enabled) {
 }
 
 /**
+ * What to write to overlay-host-status.json after one apply decision.
+ * A disable un-parks even when there is no child to stop (action "noop").
+ * A failed poll does not clear a park.
+ * @param {string | null} loggedParkReason
+ * @param {{ action?: string, reason?: string }} decision
+ * @returns {{ next: string | null, write: "unsupported" | "crash-loop" | "running" | null }}
+ */
+function overlayHostStatusWrite(loggedParkReason, decision) {
+  const reason = decision?.reason;
+  if (reason === "unsupported-session" || reason === "respawn-exhausted") {
+    if (loggedParkReason === reason) return { next: loggedParkReason, write: null };
+    return {
+      next: reason,
+      write: reason === "unsupported-session" ? "unsupported" : "crash-loop",
+    };
+  }
+  const unpark =
+    loggedParkReason != null &&
+    (decision?.action !== "noop" ||
+      reason === "disabled" ||
+      reason === "restart-requested" ||
+      reason === "url-changed" ||
+      reason === "output-changed" ||
+      reason === "initial");
+  if (unpark) return { next: null, write: "running" };
+  return { next: loggedParkReason ?? null, write: null };
+}
+
+/**
  * Gap before the next liveness respawn after `failures` quick deaths:
  * base, 2×, 4×, … capped at OVERLAY_MAX_RESPAWN_GAP_MS.
  * @param {number} baseGapMs
@@ -242,5 +271,6 @@ module.exports = {
   childIsAlive,
   decideOverlayApply,
   overlayRespawnGapMs,
+  overlayHostStatusWrite,
   overlaySettingsPollMs,
 };

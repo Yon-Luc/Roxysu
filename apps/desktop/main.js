@@ -26,6 +26,7 @@ const {
   OVERLAY_MAX_RESPAWNS,
   childIsAlive,
   decideOverlayApply,
+  overlayHostStatusWrite,
   overlaySettingsPollMs,
 } = require("./overlayApplyPolicy");
 const { createApplyGate, executeOverlayDecision } = require("./overlayApplyLoop");
@@ -41,7 +42,7 @@ const { splashLang, splashStatus } = require("./splashLocale");
 const { toImageBuffer } = require("./clipboardImage");
 const { stopChild: stopChildProcess } = require("./stopChild");
 const { probePortOwner, waitForServer } = require("./waitForServer");
-const { createOnceGuard } = require("./startupOnce");
+const { createStartupJoin } = require("./startupOnce");
 const { FATAL_LOG_TAIL_BYTES, buildFatalReport } = require("./fatalReport");
 const {
   DEFAULT_MAX_LOG_BYTES,
@@ -137,10 +138,10 @@ let desktopLogSizeCheckedAt = 0;
 /** @type {AbortController | null} */
 let startupAbort = null;
 /**
- * DD-12: loadURL → realm → overlay → updater runs once. A boot crash's
- * respawn must not do that path a second time.
+ * DD-12: loadURL → realm → overlay → updater runs once. A caller that arrives
+ * while that work is still in flight shares it and must not also reload.
  */
-const finishStartupOnce = createOnceGuard();
+const finishStartupJoin = createStartupJoin();
 
 /** Durations use a monotonic clock so suspend / NTP cannot trip them (DD-25). */
 function monoNow() {
@@ -1137,7 +1138,17 @@ async function finishStartup(paths, sharedEnv) {
     desktopLog("finishStartup skipped — server child is not alive");
     return false;
   }
-  if (!finishStartupOnce.run(() => {})) return false;
+  // Join an in-flight startup instead of returning false. A false here makes
+  // the respawn path reload while this function is still in loadURL.
+  return finishStartupJoin.start(() => runFinishStartup(paths, sharedEnv));
+}
+
+/**
+ * @param {ReturnType<typeof resolveDesktopPaths>} paths
+ * @param {NodeJS.ProcessEnv} sharedEnv
+ * @returns {Promise<boolean>}
+ */
+async function runFinishStartup(paths, sharedEnv) {
   if (serverHealthyAt === 0) serverHealthyAt = monoNow();
   await setSplashStatus(splashStatus(app.getLocale(), "opening"));
   try {
@@ -1509,23 +1520,17 @@ function watchOverlayHostSetting(paths) {
       lastKnownEnabled = decision.lastKnownEnabled;
       respawnFailures = decision.respawnFailures;
 
-      if (decision.reason === "unsupported-session" || decision.reason === "respawn-exhausted") {
-        if (loggedParkReason !== decision.reason) {
-          loggedParkReason = decision.reason;
-          const reason =
-            decision.reason === "unsupported-session" ? "unsupported" : "crash-loop";
-          writeOverlayHostStatus(paths.dataDir, { state: "parked", reason });
-          desktopLog(
-            decision.reason === "unsupported-session"
-              ? "overlay parked: this session cannot host it (exit 78: no Wayland or no wlr-layer-shell). Change an overlay setting or press Restart to try again."
-              : `overlay parked after ${respawnFailures} quick crashes. Change an overlay setting or press Restart to try again.`,
-          );
-        }
-      } else if (decision.action !== "noop") {
-        if (loggedParkReason) {
-          writeOverlayHostStatus(paths.dataDir, { state: "running", reason: null });
-        }
-        loggedParkReason = null;
+      const statusWrite = overlayHostStatusWrite(loggedParkReason, decision);
+      loggedParkReason = statusWrite.next;
+      if (statusWrite.write === "unsupported" || statusWrite.write === "crash-loop") {
+        writeOverlayHostStatus(paths.dataDir, { state: "parked", reason: statusWrite.write });
+        desktopLog(
+          statusWrite.write === "unsupported"
+            ? "overlay parked: this session cannot host it (exit 78: no Wayland or no wlr-layer-shell). Change an overlay setting or press Restart to try again."
+            : `overlay parked after ${respawnFailures} quick crashes. Change an overlay setting or press Restart to try again.`,
+        );
+      } else if (statusWrite.write === "running") {
+        writeOverlayHostStatus(paths.dataDir, { state: "running", reason: null });
       }
 
       if (decision.action === "stop") {
@@ -1737,11 +1742,23 @@ if (!gotLock) {
   app.on("second-instance", () => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     if (mainWindow.isMinimized()) mainWindow.restore();
-    // Wayland and Plasma often ignore focus alone. show + flashFrame at
-    // least flags the existing window (DD-20). userData is not moved.
+    // Flash before focus. flashFrame(true) after focus never clears on
+    // Windows, because the flash stops only when the window becomes focused.
     mainWindow.show();
-    mainWindow.focus();
     mainWindow.flashFrame(true);
+    mainWindow.focus();
+    let flashStopped = false;
+    const stopFlash = () => {
+      if (flashStopped) return;
+      flashStopped = true;
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.flashFrame(false);
+    };
+    // Already focused: a flash started after focus never clears itself.
+    // Not focused yet: stop on focus, and after 5 s if focus never arrives.
+    if (mainWindow.isFocused()) stopFlash();
+    else mainWindow.once("focus", stopFlash);
+    const flashTimer = setTimeout(stopFlash, 5_000);
+    flashTimer.unref?.();
   });
 
   // Stable Windows taskbar grouping / icon association.

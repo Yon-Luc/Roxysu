@@ -66,12 +66,13 @@ export function comparePbRank(a: PbRankKey, b: PbRankKey): number {
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
-/** Top two scores per beatmap after PB ranking. */
+/** Top two scores per beatmap after PB ranking. Failed/quits are not rankable. */
 export function topTwoByBeatmap(
   rows: RankableScore[],
 ): Map<string, [RankableScore, RankableScore | null]> {
   const grouped = new Map<string, RankableScore[]>();
   for (const row of rows) {
+    if (row.rank === -1) continue;
     const list = grouped.get(row.beatmapId);
     if (list) list.push(row);
     else grouped.set(row.beatmapId, [row]);
@@ -162,6 +163,7 @@ export async function loadPbCompareForBeatmaps(
         mods: row.mods,
         rulesetShortName: row.rulesetShortName,
         curve: curves.get(row.beatmapId),
+        rank: row.rank,
       }),
       maxCombo: row.maxCombo,
       mods: row.mods,

@@ -66,3 +66,47 @@ describe("resolveScorePp", () => {
     ).toBeNull();
   });
 });
+
+describe("resolveScorePp grade gate", () => {
+  const fullCurve = { ppByAccuracy: { "100": 400 }, ppSs: 400 };
+
+  test("does not estimate PP for a failed play", () => {
+    expect(
+      resolveScorePp({
+        pp: null,
+        accuracy: 1,
+        mods: "[]",
+        rulesetShortName: "mania",
+        curve: fullCurve,
+        rank: -1,
+      }),
+    ).toBeNull();
+  });
+
+  test("still prefers a stored PP on a failed play", () => {
+    // Defensive: if lazer ever persisted a PP, the real value wins over the gate.
+    expect(
+      resolveScorePp({
+        pp: 42,
+        accuracy: 0.9,
+        mods: "[]",
+        rulesetShortName: "mania",
+        curve: fullCurve,
+        rank: -1,
+      }),
+    ).toBe(42);
+  });
+
+  test("estimates normally for a graded play", () => {
+    expect(
+      resolveScorePp({
+        pp: null,
+        accuracy: 1,
+        mods: "[]",
+        rulesetShortName: "mania",
+        curve: fullCurve,
+        rank: 0,
+      }),
+    ).toBe(400);
+  });
+});

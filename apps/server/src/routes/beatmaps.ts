@@ -101,6 +101,7 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
           accuracy: scores.accuracy,
           mods: scores.mods,
           rulesetShortName: scores.rulesetShortName,
+          rank: scores.rank,
         })
         .from(scores)
         .where(scoreScope);
@@ -205,6 +206,7 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
             accuracy: scores.accuracy,
             mods: scores.mods,
             rulesetShortName: scores.rulesetShortName,
+            rank: scores.rank,
           })
           .from(scores)
           .where(scoreScope),
@@ -230,6 +232,7 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
         accuracy: number;
         mods: string | null;
         rulesetShortName: string | null;
+        rank: number | null;
       }) =>
         resolveScorePp({
           ...score,

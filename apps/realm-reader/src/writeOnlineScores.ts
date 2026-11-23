@@ -276,6 +276,13 @@ export function runOnlineScoreWrite(
       ["id"],
     );
     const scoreIds = scoreRows.map((row) => row.id);
+    const scoreBeatmapIds = [
+      ...new Set(
+        scoreRows
+          .map((row) => row.beatmapId)
+          .filter((id): id is string => id != null),
+      ),
+    ];
     const last = db
       .select({
         watermarkPlayedAt: imports.watermarkPlayedAt,
@@ -290,7 +297,7 @@ export function runOnlineScoreWrite(
     const now = new Date();
     db.insert(imports)
       .values({
-        kind: "incremental",
+        kind: "writeback",
         status: "success",
         startedAt: now,
         finishedAt: now,
@@ -301,6 +308,10 @@ export function runOnlineScoreWrite(
           scoreIds.length > FULL_ANALYTICS_ID_THRESHOLD
             ? null
             : JSON.stringify(scoreIds),
+        changedBeatmapIds:
+          scoreBeatmapIds.length > FULL_ANALYTICS_ID_THRESHOLD
+            ? null
+            : JSON.stringify(scoreBeatmapIds),
         watermarkPlayedAt: last?.watermarkPlayedAt ?? null,
         watermarkLastLocalUpdate: last?.watermarkLastLocalUpdate ?? null,
       })

@@ -90,6 +90,8 @@ export function seedScore(
     accuracy?: number;
     pp?: number | null;
     mods?: string | null;
+    /** Realm `Score.Rank`; `-1` marks a failed or quit play. */
+    rank?: number;
   },
 ): void {
   db.insert(scores)
@@ -102,6 +104,7 @@ export function seedScore(
       accuracy: partial.accuracy ?? 0.95,
       pp: partial.pp ?? null,
       mods: partial.mods ?? "[]",
+      rank: partial.rank ?? 0,
       playedAt: new Date(partial.playedAt),
       userUsername: "tester",
     })

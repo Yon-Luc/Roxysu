@@ -299,3 +299,43 @@ describe("comfort recency weight", () => {
     expect(profile.rc).toBeCloseTo(5.5256175, 6);
   });
 });
+
+describe("comfort with no weighted evidence", () => {
+  test("plays below 80% accuracy contribute nothing", () => {
+    // Every rated play is a map the player cannot clear. Averaging their star
+    // rating would report comfort at a level they have never reached, and
+    // Deficit/Skillset would recommend around it.
+    const plays = [7, 7.5, 8, 8.5, 9, 9.5].map((reworkStar, i) =>
+      play({
+        beatmapId: `over-${i}`,
+        playedAt: 1000 + i,
+        accuracy: 0.75,
+        reworkStar,
+      }),
+    );
+    const profile = estimateSevenKSkillFromPlays(plays);
+    expect(profile.overall).toBe(0);
+    expect(profile.rc).toBe(0);
+    expect(profile.samplePlays).toBe(6);
+  });
+
+  test("sub-80% plays do not drag the comfort of graded plays", () => {
+    const graded = [5, 5.1, 5.2, 5.3, 5.4].map((reworkStar, i) =>
+      play({
+        beatmapId: `clear-${i}`,
+        playedAt: 2000 + i,
+        accuracy: 0.95,
+        reworkStar,
+      }),
+    );
+    const failed = play({
+      beatmapId: "overreach",
+      playedAt: 1000,
+      accuracy: 0.6,
+      reworkStar: 9,
+    });
+    const withFail = estimateSevenKSkillFromPlays([...graded, failed]);
+    const without = estimateSevenKSkillFromPlays(graded);
+    expect(withFail.overall).toBeCloseTo(without.overall, 10);
+  });
+});

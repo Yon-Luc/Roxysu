@@ -1,7 +1,8 @@
 
 import type { Db } from "@roxysu/db/types";
 import { STALE_RUNNING_MS } from "@roxysu/db/stale-imports";
-import { beatmaps, imports, mastery, scores } from "@roxysu/db/schema";
+import { extractionImportOnly } from "@roxysu/db/import-kind";
+import { beatmaps, imports, mastery, scoreMetrics, scores } from "@roxysu/db/schema";
 import {
   and,
   count,
@@ -51,6 +52,22 @@ function playedAtMs(value: Date | number | null | undefined): number | null {
 }
 
 function latestImport(db: Db): ImportGateRow | null {
+  // A live cycle blocks the pipeline even when a write-back row landed on top of
+  // it with a higher id. A write-back records a manual Realm write, not
+  // extraction state, so it must never stand in for the cycle.
+  const running = db
+    .select({
+      status: imports.status,
+      startedAt: imports.startedAt,
+      progressAt: imports.progressAt,
+    })
+    .from(imports)
+    .where(eq(imports.status, "running"))
+    .orderBy(desc(imports.id))
+    .limit(1)
+    .get();
+  if (running) return running;
+
   return (
     db
       .select({
@@ -59,6 +76,7 @@ function latestImport(db: Db): ImportGateRow | null {
         progressAt: imports.progressAt,
       })
       .from(imports)
+      .where(extractionImportOnly)
       .orderBy(desc(imports.id))
       .limit(1)
       .get() ?? null
@@ -105,7 +123,7 @@ function importNeedsForcedFull(db: Db): boolean {
   const lastSuccess = db
     .select({ watermarkPlayedAt: imports.watermarkPlayedAt })
     .from(imports)
-    .where(eq(imports.status, "success"))
+    .where(and(eq(imports.status, "success"), extractionImportOnly))
     .orderBy(desc(imports.id))
     .limit(1)
     .get();
@@ -191,7 +209,10 @@ export async function waitForIdleImport(
   return { waited };
 }
 
-function needsFullRebuild(delta: AnalyticsDelta | null): boolean {
+export function needsFullRebuild(
+  db: Db,
+  delta: AnalyticsDelta | null,
+): boolean {
   if (!delta) return true;
   // Bootstrap / large full sync stores null ID lists.
   if (delta.scoreIds == null || delta.beatmapIds == null) return true;
@@ -203,6 +224,18 @@ function needsFullRebuild(delta: AnalyticsDelta | null): boolean {
   ) {
     return true;
   }
+  // Rows written before PB ranking required a graded play. A `rank = -1` score
+  // marked PB means `is_pb`, mastery `best_*` and the PP they ranked by came
+  // from an estimate a failed play must never receive. One full rebuild repairs
+  // them, after which this probe stops matching.
+  const stalePb = db
+    .select({ scoreId: scoreMetrics.scoreId })
+    .from(scoreMetrics)
+    .innerJoin(scores, eq(scores.id, scoreMetrics.scoreId))
+    .where(and(eq(scoreMetrics.isPb, true), eq(scores.rank, -1)))
+    .limit(1)
+    .get();
+  if (stalePb) return true;
   return false;
 }
 
@@ -268,7 +301,7 @@ export async function runAnalyticsPipeline(
         forceFull || forceFromStale
           ? null
           : loadAnalyticsDelta(db, targetImportId);
-      const full = forceFull || forceFromStale || needsFullRebuild(delta);
+      const full = forceFull || forceFromStale || needsFullRebuild(db, delta);
 
       console.log(
         `[analytics] pipeline start (${full ? "full" : "delta"}${

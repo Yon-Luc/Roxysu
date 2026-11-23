@@ -117,6 +117,7 @@ async function sessionDetailPayload(
         mods: s.mods,
         rulesetShortName: s.rulesetShortName,
         curve: s.beatmapId ? curves.get(s.beatmapId) : undefined,
+        rank: s.rank,
       });
       const rawCompare =
         s.beatmapId != null
@@ -137,6 +138,7 @@ async function sessionDetailPayload(
               mods: rawCompare.mods,
               rulesetShortName: s.rulesetShortName,
               curve: s.beatmapId ? curves.get(s.beatmapId) : undefined,
+              rank: rawCompare.rank,
             }),
             maxCombo: rawCompare.maxCombo,
             mods: rawCompare.mods,

@@ -35,6 +35,7 @@ Optional WebSocket integration with **tosu** for live in-progress map state (ove
 10. The 15 s probe loop only refreshes warnings. It publishes `tosu.updated` (`full`) only when the warning list changed; beatmap, play and analysis changes publish themselves.
 11. An in-flight HTTP probe must not spawn tosu or rewrite warnings after live is stopped or reloaded disabled. `startTosuAdapter` and `stopTosuAdapter` bump `probeEpoch` before any await; `refreshProbeAndMaybeSpawn` bails after the probe if that epoch moved, settings are disabled, or the db is gone.
 12. `tosu.host` is a host and optional port. A path, query, or userinfo is rejected on save, and a stored value that fails that check is not used (the adapter falls back to `127.0.0.1:24050`). The live `.osu` fetch stops at 20 MiB. Auto-start only spawns an absolute path to a regular file.
+13. An exec failure is asynchronous: `spawn()` returns, then the child emits `'error'` on the next tick. That event must always have a listener — an unhandled `'error'` on a `ChildProcess` is an `uncaughtException`, and neither entry point installs one. `spawnTosu` attaches it before returning and reports through `SpawnTosuOptions.onError`; `refreshProbeAndMaybeSpawn` records the failure in the spawn gate and surfaces the warning, guarded by the probe epoch so a stale error cannot re-arm a stopped adapter. **Enforced by:** `spawnTosu()` in `apps/server/src/tosu/spawn.ts`.
 
 ## Important symbols
 

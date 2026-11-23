@@ -151,7 +151,24 @@ async function refreshProbeAndMaybeSpawn(opts: {
       const now = Date.now();
       const decision = decideSpawn(spawnGate, now, deps.isPidAlive);
       if (decision.spawn) {
-        const result = deps.spawnTosu(executablePath);
+        const epochAtSpawn = epoch;
+        let syncFailureRecorded = false;
+        const result = deps.spawnTosu(executablePath, {
+          onError: (warning) => {
+            // The exec failed after the sync return. Record it so the spawn
+            // gate backs off instead of retrying every probe tick, and surface
+            // the reason the user needs to act on.
+            if (epochAtSpawn !== probeEpoch) return;
+            // A synchronous failure was already counted below; recording it
+            // again would burn two of the three attempts on one spawn.
+            if (!syncFailureRecorded) {
+              recordSpawn(spawnGate, Date.now(), null);
+            }
+            warnings = uniqueWarnings([...warnings, warning]);
+            emit(true);
+          },
+        });
+        syncFailureRecorded = !result.ok;
         recordSpawn(spawnGate, now, result.ok ? result.pid : null);
         nextWarnings.push(
           result.ok

@@ -6,9 +6,10 @@ import {
   overlayHostStatusPath,
   parseOverlayHostStatus,
   readOverlayHostStatus,
+  type OverlayHostStatus,
 } from "./hostStatus";
 
-const ABSENT = { state: "absent", reason: null, at: null };
+const ABSENT: OverlayHostStatus = { state: "absent", reason: null, at: null };
 
 describe("parseOverlayHostStatus", () => {
   test("accepts parked/unsupported", () => {
@@ -140,7 +141,7 @@ describe("readOverlayHostStatus", () => {
 
   test("a temp dir with a valid file returns that status", async () => {
     const dir = mkdtempSync(path.join(tmpdir(), "roxysu-host-status-"));
-    const status = {
+    const status: OverlayHostStatus = {
       state: "parked",
       reason: "unsupported",
       at: 1730000000000,

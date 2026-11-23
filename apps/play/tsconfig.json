@@ -11,8 +11,7 @@
     "types": ["bun-types"],
     "paths": {
       "@/*": ["./src/*"]
-    },
-    "baseUrl": "."
+    }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"]
 }

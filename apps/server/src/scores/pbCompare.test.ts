@@ -98,3 +98,23 @@ describe("topTwoByBeatmap / pickPbCompare", () => {
     ).toBeNull();
   });
 });
+
+describe("topTwoByBeatmap grade gate", () => {
+  it("ignores failed plays so pbCompare never points at one", () => {
+    const top = topTwoByBeatmap([
+      score({ id: "clear", pp: 220, accuracy: 0.95, rank: 3 }),
+      score({ id: "quit", pp: null, accuracy: 1, rank: -1 }),
+    ]);
+    const [first, second] = top.get("map-a")!;
+    expect(first.id).toBe("clear");
+    expect(second).toBeNull();
+  });
+
+  it("leaves a map with only failed plays without a ranking", () => {
+    const top = topTwoByBeatmap([
+      score({ id: "fail-1", pp: null, accuracy: 0.9, rank: -1 }),
+      score({ id: "fail-2", pp: null, accuracy: 0.99, rank: -1 }),
+    ]);
+    expect(top.has("map-a")).toBe(false);
+  });
+});

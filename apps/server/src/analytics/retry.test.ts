@@ -108,3 +108,53 @@ describe("session pbCompare agrees with is_pb", () => {
     expect(await pbIds()).toEqual([first.id]);
   });
 });
+
+describe("runRetryEngine with failed plays", () => {
+  test("a failed play never becomes the PB, even at higher accuracy", async () => {
+    seedBeatmap(db, "map-f", CURVE);
+    seedScore(db, {
+      id: "clear",
+      beatmapId: "map-f",
+      playedAt: 1_000,
+      accuracy: 0.95,
+      pp: 220,
+      rank: 3,
+    });
+    // Quit early at 100%: the old code estimated a full-combo PP for this and
+    // ranked it above the clear.
+    seedScore(db, {
+      id: "quit",
+      beatmapId: "map-f",
+      playedAt: 2_000,
+      accuracy: 1,
+      pp: null,
+      rank: -1,
+    });
+
+    await runRetryEngine(db);
+    expect(await pbIds()).toEqual(["clear"]);
+  });
+
+  test("a map with only failed plays has no PB", async () => {
+    seedBeatmap(db, "map-all-fail", CURVE);
+    seedScore(db, {
+      id: "fail-1",
+      beatmapId: "map-all-fail",
+      playedAt: 1_000,
+      accuracy: 0.9,
+      pp: null,
+      rank: -1,
+    });
+    seedScore(db, {
+      id: "fail-2",
+      beatmapId: "map-all-fail",
+      playedAt: 2_000,
+      accuracy: 0.99,
+      pp: null,
+      rank: -1,
+    });
+
+    await runRetryEngine(db);
+    expect(await pbIds()).toEqual([]);
+  });
+});

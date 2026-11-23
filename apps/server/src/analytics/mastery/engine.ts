@@ -48,6 +48,7 @@ export async function runMasteryEngine(
       statistics: scores.statistics,
       mods: scores.mods,
       rulesetShortName: scores.rulesetShortName,
+      rank: scores.rank,
       playedAt: scores.playedAt,
     })
     .from(scores)
@@ -88,12 +89,17 @@ export async function runMasteryEngine(
   const byBeatmap = new Map<string, Agg>();
   for (const row of scoreRows) {
     if (!row.beatmapId) continue;
+    // A failed or quit play still counts as practice, but it must not set the
+    // "best" accuracy, PP, score or miss count: those describe a completed
+    // attempt. `resolveScorePp` also refuses to estimate PP for it.
+    const graded = row.rank !== -1;
     const pp = resolveScorePp({
       pp: row.pp,
       accuracy: row.accuracy,
       mods: row.mods,
       rulesetShortName: row.rulesetShortName,
       curve: curves.get(row.beatmapId),
+      rank: row.rank,
     });
     let agg = byBeatmap.get(row.beatmapId);
     if (!agg) {
@@ -108,17 +114,21 @@ export async function runMasteryEngine(
       byBeatmap.set(row.beatmapId, agg);
     }
     agg.playCount += 1;
-    if (agg.bestAccuracy == null || row.accuracy > agg.bestAccuracy) {
+    if (graded && (agg.bestAccuracy == null || row.accuracy > agg.bestAccuracy)) {
       agg.bestAccuracy = row.accuracy;
     }
     if (pp != null && (agg.bestPp == null || pp > agg.bestPp)) {
       agg.bestPp = pp;
     }
-    if (agg.bestScore == null || row.totalScore > agg.bestScore) {
+    if (graded && (agg.bestScore == null || row.totalScore > agg.bestScore)) {
       agg.bestScore = row.totalScore;
     }
     const misses = parseScoreStatistics(row.statistics)?.miss;
-    if (misses != null && (agg.bestMisses == null || misses < agg.bestMisses)) {
+    if (
+      graded &&
+      misses != null &&
+      (agg.bestMisses == null || misses < agg.bestMisses)
+    ) {
       agg.bestMisses = misses;
     }
     const played = new Date(toMs(row.playedAt));

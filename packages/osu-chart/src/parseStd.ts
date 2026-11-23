@@ -573,8 +573,13 @@ function computeSliderTicks(
     const spanStart = startMs + s * spanDurationMs;
     for (let k = 1; k <= count; k += 1) {
       const tickOffset = k * interval;
+      // The ball runs the path backwards on odd spans, so a tick at the same
+      // local offset sits at the mirrored path position. Consumers compare the
+      // cursor against `pathPointAt(path, frac)` at `tMs`; without the mirror
+      // every reverse-span tick is judged against the wrong end of the slider.
+      const local = tickOffset / spanDurationMs;
       ticks.push({
-        frac: tickOffset / spanDurationMs,
+        frac: s % 2 === 0 ? local : 1 - local,
         tMs: spanStart + tickOffset,
       });
     }

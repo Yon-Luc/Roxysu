@@ -93,8 +93,7 @@ describe("parseQuery", () => {
     expect(parseQuery("reworkstars>7")).toEqual({
       type: "term",
       term: { type: "reworkstars", op: ">", value: 7 },
-    });
-    expect(parseQuery("pattern:jack")).toEqual({
+    });    expect(parseQuery("pattern:jack")).toEqual({
       type: "term",
       term: { type: "pattern", value: "jack", prefix: false },
     });
@@ -233,7 +232,7 @@ describe("compileQuery", () => {
     });
     expect(parseQuery("od:8")).toEqual({
       type: "term",
-      term: { type: "od", min: 8, max: 8 },
+      term: { type: "od", op: ">=", value: 8 },
     });
     expect(parseQuery("hp<6")).toEqual({
       type: "term",
@@ -250,7 +249,7 @@ describe("compileQuery", () => {
         },
         right: { type: "term", term: { type: "od", op: "<=", value: 8 } },
       },
-      right: { type: "term", term: { type: "hp", min: 5, max: 5 } },
+      right: { type: "term", term: { type: "hp", op: ">=", value: 5 } },
     });
   });
 
@@ -423,5 +422,59 @@ describe("compileQuery", () => {
       type: "term",
       term: { type: "axis", value: "fln" },
     });
+  });
+});
+
+describe("bare numeric shorthand", () => {
+  test("a bare number after a continuous field is a lower bound", () => {
+    expect(parseQuery("acc:98")).toEqual({
+      type: "term",
+      term: { type: "acc", op: ">=", value: 98 },
+    });
+    expect(parseQuery("stars:5")).toEqual({
+      type: "term",
+      term: { type: "stars", op: ">=", value: 5 },
+    });
+    expect(parseQuery("ln:20")).toEqual({
+      type: "term",
+      term: { type: "ln", op: ">=", value: 20 },
+    });
+    expect(parseQuery("reworkstars:6.5")).toEqual({
+      type: "term",
+      term: { type: "reworkstars", op: ">=", value: 6.5 },
+    });
+    expect(parseQuery("score:990000")).toEqual({
+      type: "term",
+      term: { type: "score", op: ">=", value: 990000 },
+    });
+  });
+
+  test("discrete integer fields keep exact equality", () => {
+    expect(parseQuery("key:7")).toEqual({
+      type: "term",
+      term: { type: "key", op: "=", value: 7 },
+    });
+    expect(parseQuery("misses:0")).toEqual({
+      type: "term",
+      term: { type: "misses", op: "=", value: 0 },
+    });
+  });
+
+  test("ranges and comparisons are unchanged", () => {
+    expect(parseQuery("acc:90..93")).toEqual({
+      type: "term",
+      term: { type: "acc", min: 90, max: 93 },
+    });
+    expect(parseQuery("stars>5")).toEqual({
+      type: "term",
+      term: { type: "stars", op: ">", value: 5 },
+    });
+  });
+
+  test("bare lower bound compiles to >= rather than an exact range", () => {
+    const compiled = compileQuery(parseQuery("acc:98"));
+    expect(compiled.sql).toContain("m.best_accuracy >= ?");
+    expect(compiled.sql).not.toContain("BETWEEN");
+    expect(compiled.params).toEqual([0.98]);
   });
 });

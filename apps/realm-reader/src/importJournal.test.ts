@@ -206,3 +206,65 @@ describe("import journal commit phase (F-009)", () => {
     expect(wm.maxLastLocalUpdate?.getTime()).toBe(new Date(2026, 1, 1).getTime());
   });
 });
+
+describe("write-back import rows", () => {
+  let dir: string;
+  let db: Db;
+
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(tmpdir(), "roxysu-journal-wb-"));
+    db = ensureDb(path.join(dir, "data.sqlite"));
+  });
+
+  afterEach(() => {
+    closeDb(db);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  const writeback = (opts: {
+    changedScoreIds?: string | null;
+    watermark?: Date | null;
+  }) => {
+    const now = new Date(2026, 2, 5);
+    db.insert(imports)
+      .values({
+        kind: "writeback",
+        status: "success",
+        startedAt: now,
+        finishedAt: now,
+        realmSchemaVersion: 1,
+        changedScoreIds: opts.changedScoreIds ?? "[]",
+        changedBeatmapIds: "[]",
+        watermarkPlayedAt: opts.watermark ?? null,
+        watermarkLastLocalUpdate: null,
+      })
+      .run();
+  };
+
+  test("does not count as a successful extraction", () => {
+    expect(hasSuccessfulImport(db)).toBe(false);
+    writeback({});
+    // A manual Realm write must not make the next cycle look incremental.
+    expect(hasSuccessfulImport(db)).toBe(false);
+    expect(getWatermarks(db)).toEqual(NO_WATERMARK);
+  });
+
+  test("does not supply a watermark even when it carries one", () => {
+    writeback({ watermark: new Date(2026, 2, 1) });
+    expect(getWatermarks(db)).toEqual(NO_WATERMARK);
+  });
+
+  test("a real cycle after a write-back still supplies the cursor", () => {
+    writeback({});
+    const cycle = claimImport(db, "full");
+    const playedAt = new Date(2026, 2, 2);
+    commitImport(db, cycle.id, () => ({
+      counts: ZERO_COUNTS,
+      watermarks: { maxPlayedAt: playedAt, maxLastLocalUpdate: null },
+      result: undefined,
+    }));
+
+    expect(hasSuccessfulImport(db)).toBe(true);
+    expect(getWatermarks(db).maxPlayedAt?.getTime()).toBe(playedAt.getTime());
+  });
+});

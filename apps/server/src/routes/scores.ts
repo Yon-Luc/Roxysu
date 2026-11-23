@@ -116,6 +116,7 @@ export const scoreRoutes = new Elysia({ prefix: "/scores" })
           mods: score.mods,
           rulesetShortName: score.rulesetShortName,
           curve: score.beatmapId ? curves.get(score.beatmapId) : undefined,
+          rank: score.rank,
         }),
         rank: score.rank,
         totalScore: score.totalScore,

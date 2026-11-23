@@ -162,7 +162,13 @@ export const scores = sqliteTable(
 export const imports = sqliteTable("imports", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   kind: text("kind", {
-    enum: ["full", "incremental", "reconcile"],
+    /**
+     * `writeback` is a manual Realm write (online score pull / score transfer),
+     * not an extraction cycle. It records the score ids analytics must refresh
+     * but never represents extraction state: the import gate, the watermarks and
+     * the sync UI all ignore it.
+     */
+    enum: ["full", "incremental", "reconcile", "writeback"],
   }).notNull(),
   status: text("status", {
     enum: ["running", "success", "failed", "locked"],

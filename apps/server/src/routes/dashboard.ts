@@ -3,6 +3,7 @@ import { Elysia, t } from "elysia";
 import { and, count, desc, eq } from "drizzle-orm";
 
 import { dbPlugin } from "../db-runtime";
+import { extractionImportOnly } from "@roxysu/db/import-kind";
 import { toIso } from "../shared/serialize";
 import { clampTzOffset } from "../shared/localDay";
 import { getCurrentSession } from "../analytics/session";
@@ -93,7 +94,7 @@ export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
       loadManiaPpCurves(db, recentBeatmapIds),
       db.select({ n: count() }).from(beatmaps).where(beatmapScope),
       db.select({ n: count() }).from(scores).where(scoreScope),
-      db.select().from(imports).orderBy(desc(imports.id)).limit(1),
+      db.select().from(imports).where(extractionImportOnly).orderBy(desc(imports.id)).limit(1),
       getCurrentSession(db),
       getWeeklyActivity(db, 12),
       getPracticeSnapshot(db, clampTzOffset(query.tzOffset)),
@@ -131,6 +132,7 @@ export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
           mods: s.mods,
           rulesetShortName: s.rulesetShortName,
           curve: s.beatmapId ? curves.get(s.beatmapId) : undefined,
+          rank: s.rank,
         }),
         maxCombo: s.maxCombo,
         mods: s.mods,

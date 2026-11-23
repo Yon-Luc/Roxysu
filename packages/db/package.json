@@ -12,6 +12,7 @@
     "./client.bun": "./src/client.bun.ts",
     "./settings-keys": "./src/settings-keys.ts",
     "./stale-imports": "./src/failStaleRunningImports.ts",
+    "./import-kind": "./src/importKind.ts",
     "./bms": "./src/bmsInterpret.ts",
     "./score-statistics": "./src/scoreStatistics.ts",
     "./bms-tables": "./src/bmsTables.ts",

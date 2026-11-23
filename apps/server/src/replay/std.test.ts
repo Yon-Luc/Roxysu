@@ -90,6 +90,44 @@ SliderTickRate:2
       expect(slider.ticks[3]!.tMs).toBeLessThan(slider.endMs);
     }
   });
+
+  test("mirrors tick position on reverse spans", () => {
+    const chart = parseStdChart(`osu file format v14
+
+[General]
+StackLeniency: 0.7
+Mode: 0
+
+[Difficulty]
+CircleSize:4
+OverallDifficulty:6
+ApproachRate:7
+SliderMultiplier:1.4
+SliderTickRate:2
+
+[TimingPoints]
+0,500,4,2,0,100,1,0
+
+[HitObjects]
+128,96,1500,2,0,L|256:96,2,300`);
+
+    const slider = chart.hitObjects.find((o) => o.type === "slider");
+    expect(slider).toBeDefined();
+    if (slider && slider.type === "slider") {
+      // Two spans: the ball runs the path backwards on the second one, so a
+      // tick at the same local offset sits at the mirrored path position.
+      expect(slider.ticks.length).toBe(8);
+      const forward = slider.ticks.slice(0, 4).map((t) => t.frac);
+      const reverse = slider.ticks.slice(4).map((t) => t.frac);
+      reverse.forEach((frac, i) => {
+        expect(frac).toBeCloseTo(1 - forward[i]!, 5);
+      });
+      // The reverse span advances in time while its path fraction climbs back.
+      expect(slider.ticks[4]!.tMs).toBeCloseTo(2821.4, 0);
+      expect(slider.ticks[7]!.tMs).toBeCloseTo(3571.4, 0);
+      expect(slider.ticks[7]!.frac).toBeCloseTo(0.0667, 3);
+    }
+  });
 });
 
 describe("std helpers", () => {

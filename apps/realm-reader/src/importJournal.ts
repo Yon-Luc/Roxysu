@@ -19,6 +19,7 @@ import {
   sql,
   type Db,
 } from "@roxysu/db/client.node";
+import { extractionImportOnly } from "@roxysu/db/import-kind";
 import { withBusyRetry } from "./upsert";
 
 export type SyncKind = "full" | "incremental" | "reconcile";
@@ -88,7 +89,7 @@ export function hasSuccessfulImport(db: Db): boolean {
   const row = db
     .select({ id: imports.id })
     .from(imports)
-    .where(eq(imports.status, "success"))
+    .where(and(eq(imports.status, "success"), extractionImportOnly))
     .orderBy(desc(imports.id))
     .limit(1)
     .get();
@@ -130,7 +131,7 @@ export function getWatermarks(db: Db): ExtractionWatermarks {
       watermarkLastLocalUpdate: imports.watermarkLastLocalUpdate,
     })
     .from(imports)
-    .where(eq(imports.status, "success"))
+    .where(and(eq(imports.status, "success"), extractionImportOnly))
     .orderBy(desc(imports.id))
     .limit(1)
     .get();

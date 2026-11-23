@@ -1,6 +1,7 @@
 import { Zip, ZipPassThrough } from "fflate";
 import {
   buildMarathonDebugReport,
+  fuseManiaCharts,
   type MarathonDebugReport,
 } from "@roxysu/osu-chart";
 import { localBeatmapAudioUrl, localBeatmapCoverUrl } from "./osuUrls";

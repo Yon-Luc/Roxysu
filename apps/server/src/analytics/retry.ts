@@ -66,6 +66,7 @@ export async function runRetryEngine(
       pp: scores.pp,
       mods: scores.mods,
       rulesetShortName: scores.rulesetShortName,
+      rank: scores.rank,
       playedAt: scores.playedAt,
     })
     .from(scores)
@@ -122,7 +123,7 @@ export async function runRetryEngine(
       prevBeatmapId = row.beatmapId;
     }
 
-    if (row.beatmapId) {
+    if (row.beatmapId && row.rank !== -1) {
       const candidate: PbRankKey = {
         id: row.id,
         accuracy: row.accuracy,
@@ -132,6 +133,7 @@ export async function runRetryEngine(
           mods: row.mods,
           rulesetShortName: row.rulesetShortName,
           curve: curves.get(row.beatmapId),
+          rank: row.rank,
         }),
         playedAt: row.playedAt,
       };

@@ -25,6 +25,7 @@ A transaction around a streaming full extraction would hold the SQLite write loc
 ## Consequences
 
 - Never write `success` (or the incremental watermark) outside `commitImport`, and never move work that must be atomic with it (deletes whose ids feed `changed*Ids`, one-shot flags that imply a null analytics delta) out of the commit transaction.
+- A manual Realm write (online score pull, score transfer) records its touched score ids in an `imports` row with `kind: "writeback"`. That row is an analytics delta source only. It is not an extraction cycle: every reader that means extraction state — `hasSuccessfulImport`, `getWatermarks`, `latestImport`, the SSE sync state, the dashboard card, `GET /system` — filters it out with `extractionImportOnly`. `latestImport` also prefers any `running` row over a higher-id write-back row, so a live cycle cannot be masked. **Enforced by:** `packages/db/src/importKind.ts`.
 - Keep the commit phase short: no Realm reads, no per-row mapping; only SQLite statements over already collected ids.
 - New logic that needs tests under Bun belongs in the Realm-free modules (`importJournal.ts`, `reconcileCore.ts`, `deltaCore.ts`); `sync.ts` stays a thin Realm adapter because importing `realm` crashes Bun.
 - Incremental extraction is no longer one transaction: a crash mid-delta leaves some delta rows written without a new cursor; the next cycle re-imports the same delta.

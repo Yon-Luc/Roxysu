@@ -21,8 +21,18 @@ export function resolveScorePp(input: {
   mods?: string | null;
   rulesetShortName?: string | null;
   curve?: ManiaPpCurve | null;
+  /**
+   * Realm `Score.Rank`. `-1` means the play failed or was quit, so no PP was
+   * awarded. The curve estimate models a completed play, so estimating for an
+   * ungraded row fabricates a full-combo PP, which then outranks real PBs.
+   * Omit it only where the caller genuinely has no grade.
+   */
+  rank?: number | null;
 }): number | null {
   if (input.pp != null && Number.isFinite(input.pp)) return input.pp;
+
+  // A failed play never has a PP. Do not invent one from its accuracy.
+  if (input.rank === -1) return null;
 
   const ruleset = (input.rulesetShortName ?? "").toLowerCase();
   if (ruleset && ruleset !== "mania") return null;

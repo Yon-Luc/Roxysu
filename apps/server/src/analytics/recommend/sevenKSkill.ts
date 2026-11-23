@@ -131,9 +131,11 @@ function weightedMean(
 ): number {
   if (points.length === 0) return 0;
   const totalWeight = points.reduce((s, p) => s + p.weight, 0);
-  if (totalWeight <= 0) {
-    return points.reduce((s, p) => s + p.value, 0) / points.length;
-  }
+  // A point with weight 0 was deliberately excluded (e.g. a play below 80%
+  // accuracy). Averaging it in would treat "no evidence" as evidence: a player
+  // whose rated plays are all maps they cannot clear would get a comfort level
+  // equal to the average star of those maps, and recommendations would target it.
+  if (totalWeight <= 0) return 0;
   return points.reduce((s, p) => s + p.value * p.weight, 0) / totalWeight;
 }
 

@@ -6,6 +6,7 @@ touches:
   - apps/server/public/features/practice/PracticeProfilePage.tsx
   - apps/server/public/lib/ratingDisplay.ts
   - apps/server/src/routes/practice.ts
+  - apps/server/src/query-language/parse.ts
   - apps/server/src/query-language
   - apps/server/src/query-language/scoreConjunction.ts
 ---
@@ -29,7 +30,7 @@ The searchable practice catalog — same query language powers collections and g
 1. Soft-deleted / `delete_pending` **sets** and scores are excluded from product queries; hidden difficulties are excluded via `hidden`.
 2. Query language fields include mode, mapper, title/artist/diff, stars, `ar:` (`approach_rate`), `cs:` (`circle_size`), `od:` (`overall_difficulty`), `hp:` (`drain_rate`), key, ln, `dan:` / `rework:` / `reworkstars:`, mods, acc, misses, score, pp, retry, mastery, played. `sunny:`, `daniel:`, `danstars`, and `sunnystars` are removed.
 3. `ar:` / `cs:` / `od:` / `hp:` do not imply a ruleset. `cs:` is circle size on any ruleset, not mania key count (`key:`) and not `pattern:cs` (chart shape chordstream). Download search rejects these four fields.
-4. Boolean `AND` / `OR` / `NOT`, ranges, comparisons, and `^` prefix text matches are supported.
+4. Boolean `AND` / `OR` / `NOT`, ranges, comparisons, and `^` prefix text matches are supported. A bare number after a continuous field is a lower bound: `acc:98` means at least 98%, `stars:5` at least 5 stars, `reworkstars:6.5` at least 6.5. `key:` and `misses:` keep exact equality, because they are discrete integers where an exact value is the obvious reading. **Enforced by:** `parseRangeOrBare()` in `apps/server/src/query-language/parse.ts`.
 5. Practice/search HTTP handlers read persisted rework dan / pattern rows only. They do not compute missing ratings on the request path. Unrated maps have null labels and miss `dan:` / `rework:` / `pattern:` until the Settings jobs fill the stores. `pattern:speed` and `pattern:jack` match the dominant skill. `pattern:technical` matches the technical skill. `pattern:jumpstream`, `pattern:chordstream`, `pattern:chordjack`, `pattern:bracket`, `pattern:handstream`, `pattern:stream`, `pattern:trill`, `pattern:jumptrill`, `pattern:anchor`, `pattern:shield`, and `pattern:tech` match chart shape. Chart-shape families are keymode-scoped (`shapesForKeyCount`): jumpstream and handstream only label 4K maps, bracket only non-4K, so `key=7 pattern:jumpstream` matches nothing once rows are relabeled. `pattern:delay` matches stream. `pattern:tech` is the mixed chart shape, not the technical skill. A row with a skill and a null shape still matches skill queries; shape queries miss it until the pattern job fills `shape_pattern`.
 6. `dan:` is an alias of `rework:`: both match `algorithm = 'mania-difficulty'` labels via `expandReworkDanMatch` on `dr_r`. `axis:` uses rework `ln_ratio` (`dr_r`).
 7. Rating display modes are `osu` | `rework` only. Stored prefs `dan` / `sunny` migrate to `rework`. **Enforced by:** `parseMode` / `primaryDanSource` / `formatPrimaryRating` in `apps/server/public/lib/ratingDisplay.ts`.

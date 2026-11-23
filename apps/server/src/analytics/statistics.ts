@@ -60,9 +60,10 @@ function bump(
   b.playCount += 1;
   b.totalPp += pp;
   // Same gate as the request-path aggregates (`streamManiaPass`): a play
-  // without a grade (Realm rank = -1) counts toward play counts and PP
-  // volume, but contributes nothing to accuracy sums, so a rage-quit
-  // cannot drag the day's or week's average.
+  // without a grade (Realm rank = -1) counts toward the play count, but adds
+  // nothing to the accuracy sum and, because `resolveScorePp` refuses to
+  // estimate for it, nothing to the PP total either. A rage-quit therefore
+  // cannot drag a day's average or inflate its PP volume.
   if (graded) {
     b.accSum += accuracy;
     b.accCount += 1;
@@ -77,6 +78,7 @@ function effectivePp(
     mods: string | null;
     rulesetShortName: string | null;
     beatmapId: string | null;
+    rank: number;
   },
   curves: Map<string, ManiaPpCurve>,
 ): number {
@@ -87,6 +89,7 @@ function effectivePp(
       mods: row.mods,
       rulesetShortName: row.rulesetShortName,
       curve: row.beatmapId ? curves.get(row.beatmapId) : undefined,
+      rank: row.rank,
     }) ?? 0
   );
 }

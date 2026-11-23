@@ -1,6 +1,7 @@
 import type { Db } from "@roxysu/db/types";
 import { imports, scores, settings } from "@roxysu/db/schema";
 import { SYNC_SCHEMA_OUTDATED_KEY } from "@roxysu/db/settings-keys";
+import { extractionImportOnly } from "@roxysu/db/import-kind";
 import { Elysia } from "elysia";
 import { desc, eq, max } from "drizzle-orm";
 
@@ -43,6 +44,7 @@ async function readState(db: Db): Promise<PollState> {
       changedScoreIds: imports.changedScoreIds,
     })
     .from(imports)
+    .where(extractionImportOnly)
     .orderBy(desc(imports.id))
     .limit(1);
 

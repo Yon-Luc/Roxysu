@@ -396,6 +396,7 @@ function streamManiaPass(
         mods: row.mods,
         rulesetShortName: row.rulesetShortName,
         curve: row.beatmapId ? curves.get(row.beatmapId) : undefined,
+        rank: row.rank,
       }) ?? 0;
 
     const ms = Number(row.playedAt ?? 0);

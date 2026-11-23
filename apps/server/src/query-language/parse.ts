@@ -102,6 +102,27 @@ function parseRange(
   return null;
 }
 
+/**
+ * A bare number after a field is a lower bound, not an exact value: `acc:98` means
+ * "at least 98%" and `stars:5` means "at least 5 stars". Only discrete integer
+ * fields opt into equality (`key:7`, `misses:0`), where an exact value is the
+ * obvious reading.
+ */
+function parseRangeOrBare(
+  rest: string,
+  field: string,
+  bare: "gte" | "eq",
+): { min?: number; max?: number; op?: ComparisonOp; value?: number } {
+  const plain = rest.match(/^(-?\d+(?:\.\d+)?)$/);
+  if (plain) {
+    const value = Number(plain[1]);
+    return bare === "eq" ? { op: "=", value } : { op: ">=", value };
+  }
+  const range = parseRange(rest);
+  if (!range) throw new QueryParseError(`Invalid ${field} value: ${rest}`);
+  return range;
+}
+
 function parsePlayed(rest: string): number | null {
   const m = rest.match(/^last(\d+)d$/i);
   if (!m) return null;
@@ -245,83 +266,42 @@ function parseFieldTerm(raw: string): FieldTerm {
       return { type: "mods", value };
     case "stars":
     case "star": {
-      const r = parseRange(value);
-      if (!r) throw new QueryParseError(`Invalid stars value: ${value}`);
-      return { type: "stars", ...r };
+      return { type: "stars", ...parseRangeOrBare(value, "stars", "gte") };
     }
     case "ar":
     case "approachrate": {
-      const r = parseRange(value);
-      if (!r) throw new QueryParseError(`Invalid ar value: ${value}`);
-      return { type: "ar", ...r };
+      return { type: "ar", ...parseRangeOrBare(value, "ar", "gte") };
     }
     case "cs":
     case "circlesize": {
-      const r = parseRange(value);
-      if (!r) throw new QueryParseError(`Invalid cs value: ${value}`);
-      return { type: "cs", ...r };
+      return { type: "cs", ...parseRangeOrBare(value, "cs", "gte") };
     }
     case "od":
     case "overalldifficulty": {
-      const r = parseRange(value);
-      if (!r) throw new QueryParseError(`Invalid od value: ${value}`);
-      return { type: "od", ...r };
+      return { type: "od", ...parseRangeOrBare(value, "od", "gte") };
     }
     case "hp":
     case "drainrate": {
-      const r = parseRange(value);
-      if (!r) throw new QueryParseError(`Invalid hp value: ${value}`);
-      return { type: "hp", ...r };
+      return { type: "hp", ...parseRangeOrBare(value, "hp", "gte") };
     }
     case "key":
     case "keys": {
-      const r = parseRange(value);
-      if (!r) throw new QueryParseError(`Invalid key value: ${value}`);
-      return { type: "key", ...r };
+      return { type: "key", ...parseRangeOrBare(value, "key", "eq") };
     }
     case "ln":
     case "lns": {
-      const r = parseRange(value);
-      if (!r) throw new QueryParseError(`Invalid ln value: ${value}`);
-      return { type: "ln", ...r };
+      return { type: "ln", ...parseRangeOrBare(value, "ln", "gte") };
     }
     case "acc":
     case "accuracy": {
-      const r = parseRange(value);
-      if (r?.min != null && r?.max != null) {
-        return { type: "acc", min: r.min, max: r.max };
-      }
-      if (value.match(/^\d/)) {
-        return { type: "acc", op: ">=", value: Number(value) };
-      }
-      const cmp = parseComparison(value);
-      if (!cmp) throw new QueryParseError(`Invalid acc value: ${value}`);
-      return { type: "acc", ...cmp };
+      return { type: "acc", ...parseRangeOrBare(value, "acc", "gte") };
     }
     case "miss":
     case "misses": {
-      const r = parseRange(value);
-      if (r?.min != null && r?.max != null) {
-        return { type: "misses", min: r.min, max: r.max };
-      }
-      if (value.match(/^\d/)) {
-        return { type: "misses", op: "=", value: Number(value) };
-      }
-      const cmp = parseComparison(value);
-      if (!cmp) throw new QueryParseError(`Invalid misses value: ${value}`);
-      return { type: "misses", ...cmp };
+      return { type: "misses", ...parseRangeOrBare(value, "misses", "eq") };
     }
     case "score": {
-      const r = parseRange(value);
-      if (r?.min != null && r?.max != null) {
-        return { type: "score", min: r.min, max: r.max };
-      }
-      if (value.match(/^\d/)) {
-        return { type: "score", op: ">=", value: Number(value) };
-      }
-      const cmp = parseComparison(value);
-      if (!cmp) throw new QueryParseError(`Invalid score value: ${value}`);
-      return { type: "score", ...cmp };
+      return { type: "score", ...parseRangeOrBare(value, "score", "gte") };
     }
     case "retry": {
       if (value.match(/^\d/)) return { type: "retry", op: ">=", value: Number(value) };
@@ -359,9 +339,10 @@ function parseFieldTerm(raw: string): FieldTerm {
       return { type: "rework", value, prefix };
     }
     case "reworkstars": {
-      const r = parseRange(value);
-      if (!r) throw new QueryParseError(`Invalid reworkstars value: ${value}`);
-      return { type: "reworkstars", ...r };
+      return {
+        type: "reworkstars",
+        ...parseRangeOrBare(value, "reworkstars", "gte"),
+      };
     }
     case "pattern":
     case "dominant":

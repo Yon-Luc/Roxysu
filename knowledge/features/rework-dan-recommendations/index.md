@@ -64,7 +64,10 @@ Product writes use `algorithm = 'mania-difficulty'` (rework dan). Legacy Sunny/D
    instead of inheriting overall skill. Comfort skill picks the top N plays
    by rework star, then weights that window by play time: the newest play
    carries the full recency weight (`RECENCY_DECAY` per older play). The
-   weight is not applied to the hardest-first selection order.
+   weight is not applied to the hardest-first selection order. A play under 80% accuracy carries weight 0, and a window whose points are all weight 0
+    contributes 0 rather than the plain average of those stars — a player who
+    has only failed maps above their level must not get a comfort level at
+    their average.
    **Enforced by:** `readFocusSettingsSync` / `estimateSevenKSkillFromPlays` /
    `recommendPush|Accuracy|Consistency|Deficit` in
    `apps/server/src/analytics/recommend/focusSettings.ts` + `sevenKSkill.ts` +

@@ -8,6 +8,7 @@ import {
   SYNC_UI_FOCUSED_KEY,
 } from "@roxysu/db/settings-keys";
 import { dbPlugin } from "../db-runtime";
+import { extractionImportOnly } from "@roxysu/db/import-kind";
 import {
   beginHubOAuthHandoff,
   hubHandoffIdFor,
@@ -198,6 +199,7 @@ export const systemRoutes = new Elysia({ prefix: "/system" })
     const [lastImport] = await db
       .select()
       .from(imports)
+      .where(extractionImportOnly)
       .orderBy(desc(imports.id))
       .limit(1);
     const [focusRow] = await db

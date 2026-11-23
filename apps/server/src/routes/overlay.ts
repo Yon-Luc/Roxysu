@@ -126,6 +126,7 @@ type OverlayScoreRow = {
   pp: number | null;
   mods: string | null;
   rulesetShortName: string | null;
+  rank: number | null;
   playedAt: Date | number | null;
   isPb?: boolean | null;
   title: string | null;
@@ -151,6 +152,7 @@ function serializeOverlayScore(
       mods: s.mods,
       rulesetShortName: s.rulesetShortName,
       curve: s.beatmapId ? curves.get(s.beatmapId) : undefined,
+      rank: s.rank,
     }),
     mods: s.mods,
     playedAt: toIso(s.playedAt),
@@ -195,6 +197,7 @@ async function listRecentOverlayScores(
       pp: scores.pp,
       mods: scores.mods,
       rulesetShortName: scores.rulesetShortName,
+      rank: scores.rank,
       playedAt: scores.playedAt,
       title: beatmaps.title,
       artist: beatmaps.artist,

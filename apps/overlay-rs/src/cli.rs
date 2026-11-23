@@ -9,6 +9,7 @@ use crate::config::{
     Anchor, Config, DiagnosticFlags, GskRenderer, DEFAULT_MARGIN, DEFAULT_MATCH_APP_ID,
     DEFAULT_OPACITY, DEFAULT_URL, DEFAULT_WATCHDOG_BREACH_SAMPLES, DEFAULT_WATCHDOG_INTERVAL_SEC,
     DEFAULT_WATCHDOG_MAX_AGE_SEC, DEFAULT_WATCHDOG_MAX_FDS, DEFAULT_WATCHDOG_MAX_RSS_MB,
+    DEFAULT_WATCHDOG_MAX_STALL_SEC,
 };
 use crate::focus::MatchMode;
 
@@ -120,6 +121,13 @@ pub struct Cli {
     #[arg(long, default_value_t = DEFAULT_WATCHDOG_MAX_AGE_SEC)]
     pub watchdog_max_age_sec: u64,
 
+    /// Exit for respawn when the GTK main loop has not turned for this many
+    /// seconds on `--watchdog-breach-samples` consecutive scans (`0` = off).
+    /// A hidden overlay still turns its main loop, so this never fires just
+    /// because osu! is unfocused.
+    #[arg(long, default_value_t = DEFAULT_WATCHDOG_MAX_STALL_SEC)]
+    pub watchdog_max_stall_sec: u64,
+
     /// Max open FDs among descendants (host excluded).
     #[arg(long, default_value_t = DEFAULT_WATCHDOG_MAX_FDS)]
     pub watchdog_max_fds: u64,
@@ -193,6 +201,7 @@ impl Cli {
             watchdog: self.watchdog,
             watchdog_interval_sec: self.watchdog_interval_sec,
             watchdog_max_age_sec: self.watchdog_max_age_sec,
+            watchdog_max_stall_sec: self.watchdog_max_stall_sec,
             watchdog_max_fds: self.watchdog_max_fds,
             watchdog_max_rss_mb: self.watchdog_max_rss_mb,
             watchdog_max_cgroup_mb: self.watchdog_max_cgroup_mb,
@@ -364,5 +373,25 @@ mod tests {
         assert!(!cfg.watchdog);
         assert!(cfg.watchdog_thresholds().max_age_sec.is_none());
         assert_eq!(cfg.watchdog_breach_samples, 5);
+    }
+
+    #[test]
+    fn watchdog_stall_default_disable_and_floor() {
+        let cfg = Cli::try_parse_from(["roxysu-overlay-rs"])
+            .unwrap()
+            .into_config()
+            .unwrap();
+        assert_eq!(cfg.watchdog_thresholds().max_stall_sec, Some(30));
+
+        let off = Cli::try_parse_from(["roxysu-overlay-rs", "--watchdog-max-stall-sec=0"])
+            .unwrap()
+            .into_config()
+            .unwrap();
+        assert!(off.watchdog_thresholds().max_stall_sec.is_none());
+
+        let too_small = Cli::try_parse_from(["roxysu-overlay-rs", "--watchdog-max-stall-sec=2"])
+            .unwrap()
+            .into_config();
+        assert!(too_small.is_err());
     }
 }

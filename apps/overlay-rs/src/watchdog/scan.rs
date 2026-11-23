@@ -6,10 +6,12 @@ use crate::telemetry::cgroup;
 use crate::telemetry::procfs::read_fd_count;
 use crate::telemetry::tree::{collect_tree, ProcRole};
 
+use super::heartbeat::Heartbeat;
 use super::policy::Measurement;
 
-pub fn measure(root_pid: i32, started: Instant) -> Measurement {
+pub fn measure(root_pid: i32, started: Instant, heartbeat: Option<&Heartbeat>) -> Measurement {
     let age_sec = started.elapsed().as_secs();
+    let main_loop_stall_sec = heartbeat.map(|hb| hb.stall().as_secs());
     let procs = collect_tree(root_pid);
 
     let mut descendant_rss_kib = 0u64;
@@ -33,6 +35,7 @@ pub fn measure(root_pid: i32, started: Instant) -> Measurement {
 
     Measurement {
         age_sec,
+        main_loop_stall_sec,
         max_descendant_fds,
         descendant_rss_mb: descendant_rss_kib / 1024,
         tree_rss_mb: tree_rss_kib / 1024,

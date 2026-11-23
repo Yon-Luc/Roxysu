@@ -33,6 +33,16 @@ const REPIN_DELAY: Duration = Duration::from_millis(30);
 const REVEAL_DELAY: Duration = Duration::from_millis(50);
 /// If the page never posts ready (script error), still show the HUD.
 const READY_FALLBACK: Duration = Duration::from_millis(1500);
+/// D-NEW-1: the host pings the web process with a trivial script this often.
+/// `evaluate_javascript` runs on the web process main thread, not on a
+/// frame callback, so it is answered while the surface is unmapped too: a
+/// hidden HUD (osu! unfocused) is never mistaken for a hang.
+const WEB_PROBE_INTERVAL: Duration = Duration::from_secs(5);
+/// A ping with no reply for this long means the web process is hung (not
+/// crashed: a crash already fires `web-process-terminated`). The host then
+/// terminates it, which runs the normal D1 WebView recreate. The margin
+/// covers a long but finite script tick.
+const WEB_PROBE_TIMEOUT: Duration = Duration::from_secs(20);
 
 const PAGE_READY_JS: &str = r#"(function(){
   try {
@@ -593,6 +603,8 @@ fn wire_reload(webview: &WebView, host: &Rc<WebViewHost>) {
         });
     }
 
+    wire_hang_probe(webview);
+
     {
         let machine = Rc::clone(&machine);
         let url = host.url.clone();
@@ -613,6 +625,45 @@ fn wire_reload(webview: &WebView, host: &Rc<WebViewHost>) {
             );
         });
     }
+}
+
+/// D-NEW-1: a hung (not crashed) web process leaves a frozen HUD that no
+/// WebKit signal reports, because WebKit only checks responsiveness around
+/// input, and this surface is click-through. Ping it with a trivial script;
+/// if a ping stays unanswered for [`WEB_PROBE_TIMEOUT`], terminate the
+/// process so `web-process-terminated` recreates the view. The timer holds
+/// only a weak reference and stops once this WebView is replaced.
+fn wire_hang_probe(webview: &WebView) {
+    let outstanding: Rc<Cell<Option<Instant>>> = Rc::new(Cell::new(None));
+    let webview_weak = webview.downgrade();
+    glib::timeout_add_local(WEB_PROBE_INTERVAL, move || {
+        let Some(webview) = webview_weak.upgrade() else {
+            return glib::ControlFlow::Break;
+        };
+        if let Some(sent) = outstanding.get() {
+            if sent.elapsed() >= WEB_PROBE_TIMEOUT {
+                warn!(
+                    unanswered_ms = sent.elapsed().as_millis() as u64,
+                    "webkit: web process did not answer a ping; terminating it to recreate the view"
+                );
+                outstanding.set(None);
+                webview.terminate_web_process();
+            }
+            return glib::ControlFlow::Continue;
+        }
+        outstanding.set(Some(Instant::now()));
+        let reply = Rc::clone(&outstanding);
+        // Any reply counts, including an error (e.g. mid-navigation): only
+        // silence means the process is stuck.
+        webview.evaluate_javascript(
+            "0",
+            None,
+            Some("roxysu-overlay-probe"),
+            None::<&gio::Cancellable>,
+            move |_| reply.set(None),
+        );
+        glib::ControlFlow::Continue
+    });
 }
 
 fn schedule_reload(

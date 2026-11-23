@@ -28,6 +28,12 @@ pub const DEFAULT_WATCHDOG_MAX_FDS: u64 = 450;
 pub const DEFAULT_WATCHDOG_MAX_RSS_MB: u64 = 4200;
 pub const DEFAULT_WATCHDOG_INTERVAL_SEC: u64 = 20;
 pub const DEFAULT_WATCHDOG_BREACH_SAMPLES: u32 = 3;
+/// D-NEW-1: a main-loop heartbeat older than this counts as a stall sample.
+/// With the default 20 s scan and 3 samples, the host exits ~70 s into a
+/// real hang; short hitches (a slow WebKit call) never accumulate that long.
+pub const DEFAULT_WATCHDOG_MAX_STALL_SEC: u64 = 30;
+/// Smallest non-zero stall cap: well above the 1 s heartbeat period.
+pub const MIN_WATCHDOG_MAX_STALL_SEC: u64 = 5;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Anchor {
@@ -162,6 +168,8 @@ pub struct Config {
     pub watchdog_interval_sec: u64,
     /// 0 disables the age cap (prefer systemd/desktop Restart for longevity).
     pub watchdog_max_age_sec: u64,
+    /// Main-loop stall cap in seconds (D-NEW-1). 0 disables the check.
+    pub watchdog_max_stall_sec: u64,
     pub watchdog_max_fds: u64,
     pub watchdog_max_rss_mb: u64,
     /// Optional cgroup memory.current cap in MiB (`None` = unused).
@@ -200,6 +208,7 @@ impl Default for Config {
             watchdog: true,
             watchdog_interval_sec: DEFAULT_WATCHDOG_INTERVAL_SEC,
             watchdog_max_age_sec: DEFAULT_WATCHDOG_MAX_AGE_SEC,
+            watchdog_max_stall_sec: DEFAULT_WATCHDOG_MAX_STALL_SEC,
             watchdog_max_fds: DEFAULT_WATCHDOG_MAX_FDS,
             watchdog_max_rss_mb: DEFAULT_WATCHDOG_MAX_RSS_MB,
             watchdog_max_cgroup_mb: None,
@@ -243,6 +252,14 @@ impl Config {
         // max_age_sec == 0 means disabled (Phase 6).
         if self.watchdog_interval_sec == 0 {
             bail!("--watchdog-interval-sec must be > 0");
+        }
+        if self.watchdog_max_stall_sec != 0
+            && self.watchdog_max_stall_sec < MIN_WATCHDOG_MAX_STALL_SEC
+        {
+            bail!(
+                "--watchdog-max-stall-sec must be 0 (off) or >= {MIN_WATCHDOG_MAX_STALL_SEC} (got {})",
+                self.watchdog_max_stall_sec
+            );
         }
         if self.watchdog_max_fds == 0 {
             bail!("--watchdog-max-fds must be > 0");
@@ -290,6 +307,7 @@ impl Config {
     pub fn watchdog_thresholds(&self) -> crate::watchdog::Thresholds {
         crate::watchdog::Thresholds {
             max_age_sec: (self.watchdog_max_age_sec > 0).then_some(self.watchdog_max_age_sec),
+            max_stall_sec: (self.watchdog_max_stall_sec > 0).then_some(self.watchdog_max_stall_sec),
             max_fds: self.watchdog_max_fds,
             max_rss_mb: self.watchdog_max_rss_mb,
             max_cgroup_mb: self.watchdog_max_cgroup_mb,

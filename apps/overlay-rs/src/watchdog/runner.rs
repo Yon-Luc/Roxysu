@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 
 use tracing::{error, info, warn};
 
+use super::heartbeat::Heartbeat;
 use super::policy::{evaluate, BreachWindow, Thresholds};
 use super::scan::measure;
 
@@ -38,7 +39,12 @@ impl Drop for WatchdogHandle {
     }
 }
 
-pub fn start(interval_sec: u64, thresholds: Thresholds) -> WatchdogHandle {
+/// `heartbeat` is stamped by the GTK main loop; `None` skips the stall check.
+pub fn start(
+    interval_sec: u64,
+    thresholds: Thresholds,
+    heartbeat: Option<Heartbeat>,
+) -> WatchdogHandle {
     let stop = Arc::new(AtomicBool::new(false));
     let stop_thread = Arc::clone(&stop);
     let root = std::process::id() as i32;
@@ -50,6 +56,7 @@ pub fn start(interval_sec: u64, thresholds: Thresholds) -> WatchdogHandle {
             info!(
                 interval_sec,
                 max_age_sec = ?thresholds.max_age_sec,
+                max_stall_sec = ?thresholds.max_stall_sec,
                 max_fds = thresholds.max_fds,
                 max_rss_mb = thresholds.max_rss_mb,
                 max_cgroup_mb = ?thresholds.max_cgroup_mb,
@@ -61,12 +68,13 @@ pub fn start(interval_sec: u64, thresholds: Thresholds) -> WatchdogHandle {
                 if stop_thread.load(Ordering::SeqCst) {
                     break;
                 }
-                let m = measure(root, started);
+                let m = measure(root, started, heartbeat.as_ref());
                 let hit = evaluate(&m, &thresholds);
                 if let Some(reason) = hit {
                     warn!(
                         reason = reason.as_str(),
                         age_sec = m.age_sec,
+                        main_loop_stall_sec = ?m.main_loop_stall_sec,
                         max_descendant_fds = m.max_descendant_fds,
                         descendant_rss_mb = m.descendant_rss_mb,
                         tree_rss_mb = m.tree_rss_mb,
@@ -80,6 +88,7 @@ pub fn start(interval_sec: u64, thresholds: Thresholds) -> WatchdogHandle {
                     error!(
                         reason = reason.as_str(),
                         age_sec = m.age_sec,
+                        main_loop_stall_sec = ?m.main_loop_stall_sec,
                         max_descendant_fds = m.max_descendant_fds,
                         descendant_rss_mb = m.descendant_rss_mb,
                         tree_rss_mb = m.tree_rss_mb,
@@ -90,10 +99,12 @@ pub fn start(interval_sec: u64, thresholds: Thresholds) -> WatchdogHandle {
                     );
                     eprintln!(
                         "roxysu-overlay-rs: watchdog: {} exceeded \
-                         (age={}s descendant_rss={}MB tree_rss={}MB max_fds={} cgroup_mb={:?}) \
+                         (age={}s main_loop_stall={}s descendant_rss={}MB tree_rss={}MB max_fds={} cgroup_mb={:?}) \
                          — exiting with code {WATCHDOG_EXIT_CODE} for respawn",
                         reason.as_str(),
                         m.age_sec,
+                        m.main_loop_stall_sec
+                            .map_or_else(|| "n/a".to_string(), |s| s.to_string()),
                         m.descendant_rss_mb,
                         m.tree_rss_mb,
                         m.max_descendant_fds,

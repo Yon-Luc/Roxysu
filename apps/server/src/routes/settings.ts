@@ -16,7 +16,7 @@ import { eq } from "drizzle-orm";
 import { APP_VERSION } from "../appVersion";
 import {
   buildCalcBundleFileBytes,
-  exportCalcBundleEntries,
+  countCalcBundleEntries,
   getCalcBundleAppliedVersion,
   getCalcBundlePullState,
   pullAndApplyCalcBundle,
@@ -71,6 +71,7 @@ import {
   validateOsuDataPath,
 } from "../shared/osu-paths";
 import { assertSafeExecutablePath } from "../executablePath";
+import { maniaRatingAllowedRoots } from "../mania-rating/allowedRoots";
 import { parseOverlayHostUrl, parseOverlayOutput } from "../overlayUrl";
 import { HOST_MAX, PATH_MAX, URL_MAX } from "../requestLimits";
 import {
@@ -233,6 +234,8 @@ async function buildSettingsResponse(db: Db) {
   };
 }
 
+export { maniaRatingAllowedRoots } from "../mania-rating/allowedRoots";
+
 export const settingsRoutes = new Elysia({ prefix: "/settings" })
   .use(dbPlugin)
   .get("/", async ({ db }) => buildSettingsResponse(db))
@@ -253,7 +256,7 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
     appVersion: APP_VERSION,
     appliedVersion: await getCalcBundleAppliedVersion(db),
     pull: getCalcBundlePullState(),
-    exportCount: (await exportCalcBundleEntries(db)).length,
+    exportCount: await countCalcBundleEntries(db),
   }))
   .post("/calc-bundle/pull", async ({ db }) => pullAndApplyCalcBundle(db))
   .post(
@@ -540,7 +543,14 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
         ) {
           writes.push({ kind: "delete", key: TOSU_EXECUTABLE_PATH_KEY });
         } else {
-          const checked = assertSafeExecutablePath(body.tosuExecutablePath);
+          // H2 residual: tosu is a user-chosen third-party binary, so a hard
+          // allowlist would break the feature. Require a runnable file and
+          // reject the obviously unsafe locations (world-writable, temp).
+          const checked = assertSafeExecutablePath(body.tosuExecutablePath, {
+            requireExecutable: true,
+            rejectWorldWritable: true,
+            rejectTempDir: true,
+          });
           if (!checked.ok) {
             set.status = 400;
             return { error: checked.error };
@@ -567,7 +577,10 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
             maniaPaths.push({ versionId, path: null });
             continue;
           }
-          const checked = assertSafeExecutablePath(execPath);
+          const checked = assertSafeExecutablePath(execPath, {
+            allowedRoots: maniaRatingAllowedRoots(),
+            requireExecutable: true,
+          });
           if (!checked.ok) {
             set.status = 400;
             return { error: checked.error };

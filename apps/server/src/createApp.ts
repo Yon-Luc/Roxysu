@@ -1,7 +1,6 @@
 import { Elysia } from "elysia";
 import { node } from "@elysiajs/node";
-import { existsSync, statSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { dbPlugin } from "./db-runtime";
 import { originGuard } from "./originGuard";
@@ -33,34 +32,92 @@ const MIME_BY_EXT: Record<string, string> = {
   ".woff2": "font/woff2",
 };
 
+/**
+ * The UI loads local scripts/styles only; Google Fonts is the one remote origin.
+ * `index.html` has no inline scripts (the boot shim is served as `/boot.js`), so
+ * `script-src` needs no `'unsafe-inline'`.
+ */
+const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com data:",
+  "img-src 'self' data: blob: https:",
+  "media-src 'self' blob: data:",
+  // The Hub client fetches the Hub directly (default dev `http://localhost:4322`);
+  // skin import and replay export also `fetch()` data/blob URLs.
+  "connect-src 'self' https: http://localhost:* http://127.0.0.1:* blob: data:",
+  "worker-src 'self' blob:",
+  "manifest-src 'self'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "frame-ancestors 'none'",
+].join("; ");
+
+/** Headers added to static HTML/asset responses (not to API JSON). */
+function securityHeaders(): Record<string, string> {
+  return {
+    "Content-Security-Policy": CONTENT_SECURITY_POLICY,
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+  };
+}
+
 function contentTypeFor(filePath: string): string {
   return MIME_BY_EXT[path.extname(filePath).toLowerCase()] ?? "application/octet-stream";
 }
 
-function resolveStaticFile(root: string, urlPathname: string): string | null {
+/**
+ * Map a URL pathname to a file inside `root`, or null when it is malformed or
+ * escapes the root. Async so a slow filesystem does not block the event loop.
+ */
+export async function resolveStaticFile(
+  root: string,
+  urlPathname: string,
+): Promise<string | null> {
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(urlPathname);
+  } catch {
+    // Malformed escape (e.g. a dangling `%`) — let the caller fall back to the SPA.
+    return null;
+  }
   const rootResolved = path.resolve(root);
-  const relative = decodeURIComponent(urlPathname).replace(/^\/+/, "");
+  const relative = decoded.replace(/^\/+/, "");
   if (!relative || relative.includes("\0")) return null;
   const full = path.resolve(rootResolved, relative);
   const rootPrefix = rootResolved.endsWith(path.sep)
     ? rootResolved
     : rootResolved + path.sep;
   if (full !== rootResolved && !full.startsWith(rootPrefix)) return null;
-  if (!existsSync(full) || !statSync(full).isFile()) return null;
+  try {
+    const info = await stat(full);
+    if (!info.isFile()) return null;
+  } catch {
+    return null;
+  }
   return full;
 }
 
 async function readIndexHtml(staticAssetsDir: string): Promise<Response> {
   const html = await readFile(path.join(staticAssetsDir, "index.html"));
   return new Response(html, {
-    headers: { "Content-Type": "text/html;charset=utf-8" },
+    headers: {
+      "Content-Type": "text/html;charset=utf-8",
+      // Same rule as `cacheControlFor`: HTML must revalidate so a UI update is
+      // picked up together with the hashed bundle it references.
+      "Cache-Control": "no-cache",
+      ...securityHeaders(),
+    },
   });
 }
 
 /** Hashed build outputs (index-deadbeef.js) are immutable; HTML must revalidate. */
 function cacheControlFor(filePath: string): string {
   const base = path.basename(filePath);
-  if (base === "index.html" || base.endsWith(".html") || base === "sw.js") {
+  // `boot.js` is the unhashed pre-paint bootstrap: an update must not be served
+  // stale for a day, or the old shim runs against a new bundle.
+  if (base === "index.html" || base.endsWith(".html") || base === "sw.js" || base === "boot.js") {
     return "no-cache";
   }
   // bun build-ui: [name]-[hash].[ext]
@@ -70,14 +127,20 @@ function cacheControlFor(filePath: string): string {
   return "public, max-age=86400";
 }
 
-async function readStaticFile(filePath: string): Promise<Response> {
-  const body = await readFile(filePath);
-  return new Response(body, {
-    headers: {
-      "Content-Type": contentTypeFor(filePath),
-      "Cache-Control": cacheControlFor(filePath),
-    },
-  });
+/** Null when the file vanished between resolution and the read race-free fallback. */
+async function readStaticFile(filePath: string): Promise<Response | null> {
+  try {
+    const body = await readFile(filePath);
+    return new Response(body, {
+      headers: {
+        "Content-Type": contentTypeFor(filePath),
+        "Cache-Control": cacheControlFor(filePath),
+        ...securityHeaders(),
+      },
+    });
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -100,8 +163,11 @@ export async function createApp(options: CreateAppOptions) {
         return "Not Found";
       }
 
-      const filePath = resolveStaticFile(assetsDir, url.pathname);
-      if (filePath) return readStaticFile(filePath);
+      const filePath = await resolveStaticFile(assetsDir, url.pathname);
+      if (filePath) {
+        const file = await readStaticFile(filePath);
+        if (file) return file;
+      }
 
       const accept = request.headers.get("accept") ?? "";
       if (accept.includes("text/html")) return readIndexHtml(assetsDir);

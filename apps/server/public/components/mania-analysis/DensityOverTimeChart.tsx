@@ -30,7 +30,6 @@ export const DensityOverTimeChart = memo(function DensityOverTimeChart({
     () =>
       samples.map((sample) => ({
         ...sample,
-        timeLabel: formatClock(sample.startMs),
         displayPattern: formatPatternLabel(
           sample.dominantPattern ?? "mixed",
           detail?.patterns,
@@ -69,8 +68,11 @@ export const DensityOverTimeChart = memo(function DensityOverTimeChart({
           </defs>
           <CartesianGrid stroke={charts.grid} vertical={false} />
           <XAxis
-            dataKey="timeLabel"
+            dataKey="startMs"
+            type="number"
+            domain={["dataMin", "dataMax"]}
             tick={charts.tick}
+            tickFormatter={(value) => formatClock(Number(value))}
             axisLine={false}
             tickLine={false}
             minTickGap={36}

@@ -157,15 +157,36 @@ function emptyManiaPatternDetail(error: string): ManiaPatternDetail {
   };
 }
 
-function downsampleDensitySamples(
+/**
+ * Reduce the density series to `maxPoints` bins, keeping the loudest sample in
+ * each bin (max NPS, then max chord) instead of an arbitrary index stride, so
+ * a one-second spike survives downsampling. Bin order is preserved.
+ */
+export function downsampleDensitySamples(
   samples: SevenKDensitySample[],
   maxPoints = 120,
 ): SevenKDensitySample[] {
+  if (maxPoints <= 0) return [];
   if (samples.length <= maxPoints) return samples;
-  const step = samples.length / maxPoints;
   const out: SevenKDensitySample[] = [];
-  for (let i = 0; i < maxPoints; i += 1) {
-    out.push(samples[Math.min(samples.length - 1, Math.floor(i * step))]!);
+  for (let bin = 0; bin < maxPoints; bin += 1) {
+    const start = Math.floor((bin * samples.length) / maxPoints);
+    const end = Math.max(
+      start + 1,
+      Math.floor(((bin + 1) * samples.length) / maxPoints),
+    );
+    let best = samples[start]!;
+    for (let i = start + 1; i < end; i += 1) {
+      const sample = samples[i]!;
+      if (
+        sample.notesPerSecond > best.notesPerSecond ||
+        (sample.notesPerSecond === best.notesPerSecond &&
+          sample.peakChordSize > best.peakChordSize)
+      ) {
+        best = sample;
+      }
+    }
+    out.push(best);
   }
   return out;
 }

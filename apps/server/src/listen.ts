@@ -14,7 +14,8 @@ export type ListenSocket = {
 
 /**
  * Port and host for both entry points. Default is IPv4 loopback.
- * `localhost` is not used: on Bun that name can still open every interface.
+ * `localhost` resolves to `127.0.0.1`: on Bun that name can still open every
+ * interface, which would expose the unauthenticated client app API.
  */
 export function resolveListen(env: NodeJS.ProcessEnv = process.env): ListenTarget {
   const rawPort = (env.ROXYSU_PORT ?? env.PORT ?? "").trim();
@@ -23,8 +24,13 @@ export function resolveListen(env: NodeJS.ProcessEnv = process.env): ListenTarge
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error(`Invalid port ${portText} (ROXYSU_PORT)`);
   }
+  const rawHostname = (env.ROXYSU_HOST ?? "").trim();
+  // `localhost` is honoured as the loopback address it means. Bun can resolve
+  // the name to every interface, which would expose the unauthenticated API.
   const hostname =
-    (env.ROXYSU_HOST ?? "").trim() || DEFAULT_LISTEN_HOSTNAME;
+    !rawHostname || rawHostname === "localhost"
+      ? DEFAULT_LISTEN_HOSTNAME
+      : rawHostname;
   return { port, hostname };
 }
 
@@ -34,7 +40,7 @@ export function listenExposureWarning(hostname: string): string | null {
     return `[net] ROXYSU_HOST=${hostname} exposes the unauthenticated API on the network. Do not do this without adding auth.`;
   }
   if (hostname === "localhost") {
-    return "[net] ROXYSU_HOST=localhost is not treated as loopback-only. Bind 127.0.0.1 or ::1.";
+    return "[net] ROXYSU_HOST=localhost is resolved to 127.0.0.1 (loopback only).";
   }
   return null;
 }

@@ -3,7 +3,11 @@
 const http = require("node:http");
 
 /**
- * Poll `/api/system/healthz` until it returns HTTP 200 and JSON `{ ok: true }`.
+ * Poll `/api/system/healthz` until it returns HTTP 200 with JSON
+ * `{ ok: true, service: "roxysu-server" }`. The `service` marker (desktop M4)
+ * makes sure the port belongs to our server: anything else listening there —
+ * an older/stray build, another product, a stub page — must not satisfy the
+ * wait and strand the window on a stranger's UI.
  * One in-flight probe at a time. Destroying a timed-out request emits `error`;
  * that path must not schedule a second retry. `signal` aborts the wait.
  *
@@ -15,6 +19,8 @@ const http = require("node:http");
  */
 function waitForServer(port, host, timeoutMs = 180_000, options = {}) {
   const healthPath = "/api/system/healthz";
+  /** Marker every Roxysu server healthz response carries (desktop M4). */
+  const HEALTH_SERVICE = "roxysu-server";
   const probeTimeoutMs = options.probeTimeoutMs ?? 1500;
   const retryDelayMs = options.retryDelayMs ?? 250;
   const maxBodyBytes = options.maxBodyBytes ?? 4096;
@@ -96,7 +102,7 @@ function waitForServer(port, host, timeoutMs = 180_000, options = {}) {
             if (res.statusCode === 200) {
               try {
                 const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-                if (body && body.ok === true) {
+                if (body && body.ok === true && body.service === HEALTH_SERVICE) {
                   attemptDone = true;
                   finish();
                   return;

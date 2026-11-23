@@ -357,6 +357,7 @@ in
          apps/desktop/urlPolicy.js \
          apps/desktop/stopChild.js \
          apps/desktop/waitForServer.js \
+         apps/desktop/logRotation.js \
          apps/desktop/splash.html \
          apps/desktop/package.json \
          "$appdir/"

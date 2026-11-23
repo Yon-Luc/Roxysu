@@ -3,6 +3,11 @@
  * Launches RoxysuApp.exe and waits until it exits. No splash UI — Electron owns
  * the first visible window.
  *
+ * Arguments passed to Roxysu.exe (shortcut flags, a file/URL opened with it)
+ * are forwarded verbatim to RoxysuApp.exe: `cmdLine` from wWinMain is already
+ * a Windows command-line tail, quotes included, so appending it preserves
+ * quoting for Electron's own argv parsing (L6).
+ *
  * Must stay alive for the full Electron lifetime: electron-builder portable
  * NSIS ExecWaits on Roxysu.exe, then RMDir's the unpack dir when it returns.
  *
@@ -24,11 +29,32 @@
 static const wchar_t kAppTitle[] = L"Roxysu";
 static PROCESS_INFORMATION gChild = {0};
 
-static int LaunchApp(void) {
+/* Windows caps a command line at 32767 characters. */
+#define CMD_MAX (32768)
+
+/**
+ * Build the child command line: the quoted app path, then the launcher's own
+ * arguments unchanged.
+ * @returns nonzero on success.
+ */
+static int BuildCommandLine(wchar_t *cmd, size_t cmdCount, const wchar_t *appPath,
+                            const wchar_t *args) {
+  int written;
+  if (args && args[0] != L'\0') {
+    written = _snwprintf_s(cmd, cmdCount, _TRUNCATE, L"\"%s\" %s", appPath, args);
+  } else {
+    written = _snwprintf_s(cmd, cmdCount, _TRUNCATE, L"\"%s\"", appPath);
+  }
+  /* _TRUNCATE returns -1 when the result does not fit: refuse rather than
+   * silently hand Electron a mangled command line. */
+  return written >= 0;
+}
+
+static int LaunchApp(const wchar_t *args) {
   wchar_t module[MAX_PATH];
   wchar_t dir[MAX_PATH];
   wchar_t appPath[MAX_PATH];
-  wchar_t cmd[MAX_PATH * 2];
+  wchar_t cmd[CMD_MAX];
   STARTUPINFOW si;
 
   if (!GetModuleFileNameW(NULL, module, MAX_PATH)) return 0;
@@ -41,7 +67,12 @@ static int LaunchApp(void) {
     return 0;
   }
 
-  _snwprintf_s(cmd, MAX_PATH * 2, _TRUNCATE, L"\"%s\"", appPath);
+  if (!BuildCommandLine(cmd, CMD_MAX, appPath, args)) {
+    MessageBoxW(NULL, L"The command line is too long to pass to RoxysuApp.exe.", kAppTitle,
+                MB_OK | MB_ICONERROR);
+    return 0;
+  }
+
   ZeroMemory(&si, sizeof(si));
   si.cb = sizeof(si);
   ZeroMemory(&gChild, sizeof(gChild));
@@ -56,10 +87,9 @@ static int LaunchApp(void) {
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, PWSTR cmdLine, int nShow) {
   (void)hInstance;
   (void)hPrev;
-  (void)cmdLine;
   (void)nShow;
 
-  if (!LaunchApp()) {
+  if (!LaunchApp(cmdLine)) {
     return 1;
   }
 

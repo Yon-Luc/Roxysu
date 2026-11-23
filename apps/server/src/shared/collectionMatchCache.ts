@@ -37,6 +37,10 @@ export function refreshCollectionMatchCount(db: Db, id: number): void {
 
 let _refreshRunning = false;
 let _refreshQueued = false;
+/** Set by stop so a loop already in flight exits at the next collection. */
+let _stopped = false;
+/** Stop handle of the running listener, so shutdown can unsubscribe it. */
+let _activeStop: (() => void) | null = null;
 
 function yieldToEventLoop(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve));
@@ -44,6 +48,7 @@ function yieldToEventLoop(): Promise<void> {
 
 /** Coalesce rapid refresh requests into one background run. */
 export function scheduleRefreshAllMatchCounts(db: Db): void {
+  if (_stopped) return;
   if (_refreshRunning) {
     _refreshQueued = true;
     return;
@@ -77,6 +82,7 @@ export async function refreshAllCollectionMatchCounts(db: Db): Promise<void> {
   if (rows.length === 0) return;
   const ctx = buildQueryContext(db);
   for (let i = 0; i < rows.length; i += 1) {
+    if (_stopped) return;
     const col = rows[i]!;
     try {
       const count = countMatchesPure(db, col.query, ctx);
@@ -104,8 +110,14 @@ function hasUncachedCollections(db: Db): boolean {
 }
 
 /** Wire event listeners and backfill any missing cached counts on startup. */
-export function startCollectionMatchCache(db: Db): void {
-  subscribe((event) => {
+export function startCollectionMatchCache(db: Db): () => void {
+  // A second start (tests, hot restart) must not leave the old listener alive.
+  _activeStop?.();
+  _stopped = false;
+
+  let stopped = false;
+  const unsubscribe = subscribe((event) => {
+    if (stopped) return;
     if (event.type === "sync.finished") {
       invalidateCollectionMd5Cache();
       scheduleRefreshAllMatchCounts(db);
@@ -116,9 +128,27 @@ export function startCollectionMatchCache(db: Db): void {
     }
   });
 
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    unsubscribe();
+    if (_activeStop === stop) _activeStop = null;
+    _stopped = true;
+  };
+  _activeStop = stop;
+
   if (hasUncachedCollections(db)) {
     scheduleRefreshAllMatchCounts(db);
   }
+  return stop;
+}
+
+/** Stop the active cache instance (idempotent); wired into shutdown. */
+export function stopCollectionMatchCache(): void {
+  const stop = _activeStop;
+  _activeStop = null;
+  if (stop) stop();
+  else _stopped = true;
 }
 
 export function readCachedMatchCount(db: Db, id: number): number | null {

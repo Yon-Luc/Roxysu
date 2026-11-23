@@ -11,14 +11,39 @@ import {
 } from "@tanstack/react-router";
 import { useAppDict } from "./lib/i18n";
 import { AppShell } from "./components/AppShell";
-import { PracticeListPage } from "./features/practice/PracticeListPage";
-import { PracticeProfilePage } from "./features/practice/PracticeProfilePage";
-import { SessionsPage } from "./features/sessions/SessionsPage";
-import { SessionDetailPage } from "./features/sessions/SessionDetailPage";
-import { CollectionsPage } from "./features/collections/CollectionsPage";
-import { CollectionResultsPage } from "./features/collections/CollectionResultsPage";
 import { HubCallbackPage } from "./features/hub/HubCallbackPage";
 import { NowSelectedPage } from "./features/now-selected/NowSelectedPage";
+
+const PracticeListPage = lazy(() =>
+  import("./features/practice/PracticeListPage").then((m) => ({
+    default: m.PracticeListPage,
+  })),
+);
+const PracticeProfilePage = lazy(() =>
+  import("./features/practice/PracticeProfilePage").then((m) => ({
+    default: m.PracticeProfilePage,
+  })),
+);
+const SessionsPage = lazy(() =>
+  import("./features/sessions/SessionsPage").then((m) => ({
+    default: m.SessionsPage,
+  })),
+);
+const SessionDetailPage = lazy(() =>
+  import("./features/sessions/SessionDetailPage").then((m) => ({
+    default: m.SessionDetailPage,
+  })),
+);
+const CollectionsPage = lazy(() =>
+  import("./features/collections/CollectionsPage").then((m) => ({
+    default: m.CollectionsPage,
+  })),
+);
+const CollectionResultsPage = lazy(() =>
+  import("./features/collections/CollectionResultsPage").then((m) => ({
+    default: m.CollectionResultsPage,
+  })),
+);
 
 const BmsLocalPage = lazy(() =>
   import("./features/bms/BmsLocalPage").then((m) => ({ default: m.BmsLocalPage })),

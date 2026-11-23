@@ -27,6 +27,7 @@ export function SessionsPage() {
   const { tzOffset, todayKey } = useLocalClock();
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const [dayShowAll, setDayShowAll] = useState(false);
   const { data, isLoading, error } = useQuery({
     queryKey: ["sessions", tzOffset, todayKey],
     queryFn: () => fetchSessions(undefined, tzOffset),
@@ -38,18 +39,24 @@ export function SessionsPage() {
     queryFn: () => fetchSessions(undefined, tzOffset, SHOW_ALL_LIMIT),
     enabled: showAll && selectedDay == null,
   });
+  // UI-N1: the day list asks for the hard max (500) instead of the 100-row
+  // index cap, and `hasMore` still tells the UI when even that is truncated.
   const dayQuery = useQuery({
     queryKey: ["sessions", "day", selectedDay, tzOffset],
-    queryFn: () => fetchSessions(selectedDay!, tzOffset),
+    queryFn: () => fetchSessions(selectedDay!, tzOffset, SHOW_ALL_LIMIT),
     enabled: selectedDay != null,
   });
+  const dayItems = dayQuery.data?.items ?? [];
+  const dayHasMore = dayQuery.data?.hasMore ?? false;
 
   const visibleItems = useMemo(() => {
     if (!data) return [];
-    if (selectedDay) return dayQuery.data?.items ?? [];
+    if (selectedDay) {
+      return dayShowAll ? dayItems : dayItems.slice(0, DEFAULT_VISIBLE);
+    }
     if (showAll) return allData?.items ?? data.items;
     return data.items.slice(0, DEFAULT_VISIBLE);
-  }, [data, allData, dayQuery.data, selectedDay, showAll]);
+  }, [data, allData, dayItems, dayShowAll, selectedDay, showAll]);
 
   if (isLoading) {
     return (
@@ -80,6 +87,7 @@ export function SessionsPage() {
   const handleShowAll = () => {
     if (selectedDay) {
       setSelectedDay(null);
+      setDayShowAll(false);
       setShowAll(false);
       return;
     }
@@ -150,13 +158,26 @@ export function SessionsPage() {
             {listHeading}
           </h2>
           {selectedDay ? (
-            <button
-              type="button"
-              onClick={handleShowAll}
-              className="text-sm font-bold text-muted transition hover:text-accent"
-            >
-              {dict?.session.clearDayFilter ?? "Show all"}
-            </button>
+            <div className="flex items-center gap-3">
+              {dayItems.length > DEFAULT_VISIBLE ? (
+                <button
+                  type="button"
+                  onClick={() => setDayShowAll((v) => !v)}
+                  className="text-sm font-bold text-muted transition hover:text-accent"
+                >
+                  {dayShowAll
+                    ? (dict?.session.showLessSessions ?? "Show less")
+                    : (dict?.session.showAllSessions ?? "Show all")}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={handleShowAll}
+                className="text-sm font-bold text-muted transition hover:text-accent"
+              >
+                {dict?.session.clearDayFilter ?? "All sessions"}
+              </button>
+            </div>
           ) : hasMoreWithoutFilter && !showAll ? (
             <button
               type="button"
@@ -226,6 +247,18 @@ export function SessionsPage() {
             })}
           </ul>
         )}
+        {selectedDay && dayShowAll && dayHasMore ? (
+          <p className="mt-2 text-xs text-faint">
+            {t(dict?.session.dayCapped, { count: dayItems.length }) ||
+              `Showing the first ${dayItems.length} sessions.`}
+          </p>
+        ) : null}
+        {!selectedDay && showAll && allData?.hasMore ? (
+          <p className="mt-2 text-xs text-faint">
+            {t(dict?.session.dayCapped, { count: allData.items.length }) ||
+              `Showing the first ${allData.items.length} sessions.`}
+          </p>
+        ) : null}
       </section>
 
       <SessionActivityCalendar
@@ -239,6 +272,7 @@ export function SessionsPage() {
         locale={locale}
         onSelectDay={(day) => {
           setSelectedDay(day);
+          setDayShowAll(false);
           if (day) setShowAll(false);
         }}
         title={dict?.session.activityCalendar ?? "Activity"}

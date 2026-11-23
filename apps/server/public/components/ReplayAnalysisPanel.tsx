@@ -4,6 +4,7 @@ import {
   computeColumnHeat,
   computeTimingStats,
   FIDELITY_ACC_DELTA,
+  HIST_HALF_RANGE,
   PATTERN_TAG_LABEL,
   summarizePatternTags,
   type MissPatternInfo,
@@ -295,7 +296,13 @@ function TimingHistogram({ timing }: { timing: TimingStats }) {
                       ? JUDGMENT_COLORS.perfect
                       : "rgba(253, 186, 116, 0.9)",
             }}
-            title={`${b.center >= 0 ? "+" : ""}${b.center.toFixed(0)}ms: ${b.count}`}
+            title={
+              b.overflow === "low"
+                ? `< -${HIST_HALF_RANGE}ms: ${b.count}`
+                : b.overflow === "high"
+                  ? `> +${HIST_HALF_RANGE}ms: ${b.count}`
+                  : `${b.center >= 0 ? "+" : ""}${b.center.toFixed(0)}ms: ${b.count}`
+            }
           />
         );
       })}

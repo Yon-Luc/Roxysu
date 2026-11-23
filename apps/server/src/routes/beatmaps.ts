@@ -1,6 +1,6 @@
 import { beatmapSets, beatmaps, mastery, scores } from "@roxysu/db/schema";
 import { Elysia, t } from "elysia";
-import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { and, count, desc, eq, max } from "drizzle-orm";
 
 import { dbPlugin } from "../db-runtime";
@@ -406,7 +406,7 @@ export const beatmapRoutes = new Elysia({ prefix: "/beatmaps" })
 
       let osuText: string;
       try {
-        osuText = readFileSync(filePath, "utf8");
+        osuText = await readFile(filePath, "utf8");
       } catch {
         set.status = 404;
         return { error: "Beatmap file not found in lazer files store" };

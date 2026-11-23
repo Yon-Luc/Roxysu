@@ -13,7 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { and, asc, eq, gt, type SQL } from "drizzle-orm";
+import { and, asc, eq, gt, gte, inArray, lte, type SQL } from "drizzle-orm";
 import { beatmaps, scores } from "@roxysu/db/schema";
 import { defaultDbPath } from "@roxysu/db/path";
 import type { Db } from "@roxysu/db/types";
@@ -22,6 +22,7 @@ import {
   scoresUsernameCondition,
 } from "../analytics/scoreUsername";
 import {
+  FINGERPRINT_MS,
   buildTransferIndex,
   classifyTransferScore,
   type TransferBeatmap,
@@ -125,29 +126,101 @@ function toMs(value: Date | number | null | undefined): number {
   return 0;
 }
 
-async function loadIndex(db: Db) {
-  const scoreRows = await db
-    .select({
-      onlineId: scores.onlineId,
-      legacyOnlineId: scores.legacyOnlineId,
-      beatmapHash: scores.beatmapHash,
-      ruleset: scores.rulesetShortName,
-      playedAt: scores.playedAt,
-      totalScore: scores.totalScore,
-      legacyTotalScore: scores.legacyTotalScore,
-      beatmapOnlineId: beatmaps.onlineId,
-      beatmapMd5: beatmaps.md5Hash,
-      beatmapFileHash: beatmaps.hash,
-    })
-    .from(scores)
-    .leftJoin(beatmaps, eq(scores.beatmapId, beatmaps.id));
-  const mapRows = await db
-    .select({
-      onlineId: beatmaps.onlineId,
-      md5Hash: beatmaps.md5Hash,
-      hash: beatmaps.hash,
-    })
-    .from(beatmaps);
+async function loadIndex(db: Db, fileScores: ScoreTransferRow[]) {
+  const onlineIds = new Set<number>();
+  const legacyIds = new Set<number>();
+  /** Per-ruleset play time span of the transfer, widened by the fingerprint window. */
+  const windows = new Map<string, { min: number; max: number }>();
+  const beatmapOnlineIds = new Set<number>();
+  const beatmapMd5s = new Set<string>();
+  const beatmapHashes = new Set<string>();
+
+  const addIdentity = (set: Set<string>, value: string | null | undefined) => {
+    const trimmed = value?.trim();
+    if (!trimmed) return;
+    // The matcher compares normalized values; stored hashes are lowercase hex.
+    set.add(trimmed.toLowerCase());
+  };
+
+  for (const row of fileScores) {
+    if (row.onlineId > 0) onlineIds.add(row.onlineId);
+    if (row.legacyOnlineId > 0) legacyIds.add(row.legacyOnlineId);
+    if (row.beatmapOnlineId > 0) beatmapOnlineIds.add(row.beatmapOnlineId);
+    addIdentity(beatmapMd5s, row.beatmapMd5);
+    addIdentity(beatmapHashes, row.beatmapHash);
+    if (!row.ruleset) continue;
+    const window = windows.get(row.ruleset);
+    if (window) {
+      window.min = Math.min(window.min, row.playedAt);
+      window.max = Math.max(window.max, row.playedAt);
+    } else {
+      windows.set(row.ruleset, { min: row.playedAt, max: row.playedAt });
+    }
+  }
+
+  if (windows.size === 0 && onlineIds.size === 0 && legacyIds.size === 0) {
+    return buildTransferIndex([], []);
+  }
+
+  const scoreRows: Awaited<ReturnType<typeof selectIndexScores>> = [];
+  const seenScoreIds = new Set<string>();
+  const collectScores = async (where: SQL | undefined) => {
+    const part = await selectIndexScores(db, where);
+    for (const row of part) {
+      if (seenScoreIds.has(row.id)) continue;
+      seenScoreIds.add(row.id);
+      scoreRows.push(row);
+    }
+  };
+
+  // Id hits (`already`) — only the ids this transfer actually carries.
+  for (const chunk of chunked([...onlineIds], INDEX_QUERY_CHUNK)) {
+    await collectScores(inArray(scores.onlineId, chunk));
+  }
+  for (const chunk of chunked([...legacyIds], INDEX_QUERY_CHUNK)) {
+    await collectScores(inArray(scores.legacyOnlineId, chunk));
+  }
+  // Fingerprint hits: same ruleset and within the ±window of an uploaded play.
+  // Any `sameScore` match is necessarily inside this range, so nothing is missed.
+  for (const [ruleset, window] of windows) {
+    await collectScores(
+      and(
+        eq(scores.rulesetShortName, ruleset),
+        gte(scores.playedAt, new Date(window.min - FINGERPRINT_MS)),
+        lte(scores.playedAt, new Date(window.max + FINGERPRINT_MS)),
+      ),
+    );
+  }
+
+  // Only beatmaps referenced by the transfer are needed to classify it. A
+  // transfer that carries the whole library would need thousands of `IN` lists,
+  // so fall back to one bounded scan of the (much smaller) beatmap table.
+  const mapRows: Awaited<ReturnType<typeof selectIndexBeatmaps>> = [];
+  const seenMapIds = new Set<string>();
+  const collectMaps = async (where: SQL | undefined) => {
+    const part = await selectIndexBeatmaps(db, where);
+    for (const row of part) {
+      if (seenMapIds.has(row.id)) continue;
+      seenMapIds.add(row.id);
+      mapRows.push(row);
+    }
+  };
+  const mapIdentities =
+    beatmapOnlineIds.size + beatmapMd5s.size + beatmapHashes.size;
+  if (mapIdentities > MAP_TARGET_LIMIT) {
+    await collectMaps(undefined);
+  } else {
+    for (const chunk of chunked([...beatmapOnlineIds], INDEX_QUERY_CHUNK)) {
+      await collectMaps(inArray(beatmaps.onlineId, chunk));
+    }
+    for (const chunk of chunked([...beatmapMd5s], INDEX_QUERY_CHUNK)) {
+      await collectMaps(inArray(beatmaps.md5Hash, chunk));
+    }
+    for (const chunk of chunked([...beatmapHashes], INDEX_QUERY_CHUNK)) {
+      await collectMaps(inArray(beatmaps.hash, chunk));
+    }
+  }
+
   const fingers: TransferFinger[] = scoreRows.map((row) => ({
     onlineId: row.onlineId,
     legacyOnlineId: row.legacyOnlineId,
@@ -163,6 +236,49 @@ async function loadIndex(db: Db) {
     row.hash ? [{ onlineId: row.onlineId, md5Hash: row.md5Hash, hash: row.hash }] : [],
   );
   return buildTransferIndex(fingers, maps);
+}
+
+/** Rows per `IN (…)` list; stays well under SQLite's bind-variable limit. */
+const INDEX_QUERY_CHUNK = 500;
+/** Above this many beatmap identities, one full beatmap scan beats many lists. */
+const MAP_TARGET_LIMIT = 2_000;
+
+function chunked<T>(values: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < values.length; i += size) out.push(values.slice(i, i + size));
+  return out;
+}
+
+function selectIndexScores(db: Db, where: SQL | undefined) {
+  return db
+    .select({
+      id: scores.id,
+      onlineId: scores.onlineId,
+      legacyOnlineId: scores.legacyOnlineId,
+      beatmapHash: scores.beatmapHash,
+      ruleset: scores.rulesetShortName,
+      playedAt: scores.playedAt,
+      totalScore: scores.totalScore,
+      legacyTotalScore: scores.legacyTotalScore,
+      beatmapOnlineId: beatmaps.onlineId,
+      beatmapMd5: beatmaps.md5Hash,
+      beatmapFileHash: beatmaps.hash,
+    })
+    .from(scores)
+    .leftJoin(beatmaps, eq(scores.beatmapId, beatmaps.id))
+    .where(where);
+}
+
+function selectIndexBeatmaps(db: Db, where: SQL | undefined) {
+  return db
+    .select({
+      id: beatmaps.id,
+      onlineId: beatmaps.onlineId,
+      md5Hash: beatmaps.md5Hash,
+      hash: beatmaps.hash,
+    })
+    .from(beatmaps)
+    .where(where);
 }
 
 function fingerOf(row: ScoreTransferRow): TransferFinger {
@@ -360,7 +476,7 @@ export async function previewScoreTransfer(
   if (!file) return { error: "Could not store the score file" };
   mkdirSync(path.dirname(file), { recursive: true });
   writeFileSync(file, bytes);
-  const index = await loadIndex(db);
+  const index = await loadIndex(db, parsed.file.scores);
   return { ...summarize(parsed.file, parsed.invalid, index), uploadId };
 }
 
@@ -526,7 +642,7 @@ async function runCommit(
   }
   const parsed = parseScoreTransferFile(raw);
   if ("error" in parsed) return { ok: false, error: parsed.error, code: "other" };
-  const index = await loadIndex(db);
+  const index = await loadIndex(db, parsed.file.scores);
   const payload = toWritePayload(addableRows(parsed.file, index));
   if (payload.rows.length === 0) {
     return { ok: false, error: "No scores waiting to add.", code: "other" };

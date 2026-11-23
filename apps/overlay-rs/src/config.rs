@@ -11,8 +11,14 @@ use crate::focus::{MatchMode, MatchPolicy};
 pub const DEFAULT_URL: &str =
     "http://127.0.0.1:4321/#/overlay?bg=clear&limit=25&profile=Classic";
 pub const DEFAULT_MATCH_APP_ID: &str = "osu";
-pub const DEFAULT_WIDTH: i32 = 1920;
-pub const DEFAULT_HEIGHT: i32 = 1090;
+/// Surface size when no monitor is known yet (L2). The HUD is sized to the
+/// pinned output as soon as one is selected; this is only the pre-pin
+/// request so GTK has a sane allocation.
+pub const FALLBACK_WIDTH: i32 = 1280;
+pub const FALLBACK_HEIGHT: i32 = 720;
+/// Never request a HUD smaller than this when the output is large enough.
+pub const MIN_HUD_WIDTH: i32 = 320;
+pub const MIN_HUD_HEIGHT: i32 = 240;
 pub const DEFAULT_OPACITY: f64 = 1.0;
 pub const DEFAULT_MARGIN: i32 = 0;
 
@@ -133,8 +139,10 @@ pub struct Config {
     pub url: String,
     pub anchor: Anchor,
     pub margin: i32,
-    pub width: i32,
-    pub height: i32,
+    /// Explicit HUD width override. `None` sizes to the pinned output (L2).
+    pub width: Option<i32>,
+    /// Explicit HUD height override. `None` sizes to the pinned output (L2).
+    pub height: Option<i32>,
     pub opacity: f64,
     /// Compositor default when `None` (not "cursor output" — C help was wrong).
     pub output: Option<String>,
@@ -176,8 +184,8 @@ impl Default for Config {
             url: DEFAULT_URL.to_string(),
             anchor: Anchor::TopRight,
             margin: DEFAULT_MARGIN,
-            width: DEFAULT_WIDTH,
-            height: DEFAULT_HEIGHT,
+            width: None,
+            height: None,
             opacity: DEFAULT_OPACITY,
             output: None,
             follow_focus: true,
@@ -207,11 +215,15 @@ impl Default for Config {
 impl Config {
     pub fn validate(&self) -> Result<()> {
         validate_url(&self.url)?;
-        if self.width <= 0 {
-            bail!("--width must be a positive integer (got {})", self.width);
+        if let Some(width) = self.width {
+            if width <= 0 {
+                bail!("--width must be a positive integer (got {width})");
+            }
         }
-        if self.height <= 0 {
-            bail!("--height must be a positive integer (got {})", self.height);
+        if let Some(height) = self.height {
+            if height <= 0 {
+                bail!("--height must be a positive integer (got {height})");
+            }
         }
         if !(self.opacity > 0.0 && self.opacity <= 1.0) {
             bail!(
@@ -270,6 +282,11 @@ impl Config {
         MatchPolicy::new(self.match_app_id.clone(), self.match_mode)
     }
 
+    /// See [`compute_surface_size`].
+    pub fn surface_size(&self, output: Option<(i32, i32)>) -> (i32, i32) {
+        compute_surface_size(output, self.width, self.height)
+    }
+
     pub fn watchdog_thresholds(&self) -> crate::watchdog::Thresholds {
         crate::watchdog::Thresholds {
             max_age_sec: (self.watchdog_max_age_sec > 0).then_some(self.watchdog_max_age_sec),
@@ -279,6 +296,34 @@ impl Config {
             breach_samples: self.watchdog_breach_samples,
         }
     }
+}
+
+/// Requested HUD surface size for a monitor of `output` logical pixels
+/// (`None` when no monitor is known yet).
+///
+/// Explicit `--width`/`--height` still win but are clamped to the output, so
+/// the old 1920×1090 default can never request a surface larger than a
+/// smaller monitor (L2). A request below [`MIN_HUD_WIDTH`] /
+/// [`MIN_HUD_HEIGHT`] is lifted to the usable minimum, but never past the
+/// output itself.
+pub fn compute_surface_size(
+    output: Option<(i32, i32)>,
+    width: Option<i32>,
+    height: Option<i32>,
+) -> (i32, i32) {
+    let (out_w, out_h) = output.unwrap_or((FALLBACK_WIDTH, FALLBACK_HEIGHT));
+    let out_w = out_w.max(1);
+    let out_h = out_h.max(1);
+    (
+        clamp_hud(width.unwrap_or(out_w), out_w, MIN_HUD_WIDTH),
+        clamp_hud(height.unwrap_or(out_h), out_h, MIN_HUD_HEIGHT),
+    )
+}
+
+/// Clamp a requested HUD dimension into `[min, output]` without panicking
+/// when the output itself is smaller than the usable minimum.
+fn clamp_hud(requested: i32, output: i32, min: i32) -> i32 {
+    requested.clamp(min.min(output), output)
 }
 
 pub fn validate_url(url: &str) -> Result<()> {
@@ -323,12 +368,12 @@ mod tests {
     #[test]
     fn rejects_invalid_dimensions_opacity_margin() {
         let mut cfg = Config::default();
-        cfg.width = 0;
+        cfg.width = Some(0);
         assert!(cfg.validate().is_err());
-        cfg.width = DEFAULT_WIDTH;
-        cfg.height = -1;
+        cfg.width = None;
+        cfg.height = Some(-1);
         assert!(cfg.validate().is_err());
-        cfg.height = DEFAULT_HEIGHT;
+        cfg.height = None;
         cfg.opacity = 0.0;
         assert!(cfg.validate().is_err());
         cfg.opacity = 1.5;
@@ -336,6 +381,43 @@ mod tests {
         cfg.opacity = 1.0;
         cfg.margin = -2;
         assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn default_surface_size_follows_the_output() {
+        let cfg = Config::default();
+        // No monitor known yet: the fallback keeps GTK sane, not 1920x1090.
+        assert_eq!(cfg.surface_size(None), (FALLBACK_WIDTH, FALLBACK_HEIGHT));
+        // Known monitor: full output size.
+        assert_eq!(cfg.surface_size(Some((2560, 1440))), (2560, 1440));
+    }
+
+    #[test]
+    fn explicit_surface_size_is_clamped_to_the_output() {
+        let mut cfg = Config::default();
+        cfg.width = Some(1920);
+        cfg.height = Some(1090);
+        // The old hard default must not exceed a smaller monitor.
+        assert_eq!(cfg.surface_size(Some((1280, 720))), (1280, 720));
+        // A larger monitor keeps the explicit size.
+        assert_eq!(cfg.surface_size(Some((2560, 1440))), (1920, 1090));
+        // Mixed: only the explicit dimension is clamped.
+        cfg.width = Some(800);
+        cfg.height = Some(5000);
+        assert_eq!(cfg.surface_size(Some((1280, 720))), (800, 720));
+    }
+
+    #[test]
+    fn tiny_requests_are_lifted_to_a_usable_hud_size() {
+        let mut cfg = Config::default();
+        cfg.width = Some(10);
+        cfg.height = Some(10);
+        assert_eq!(
+            cfg.surface_size(Some((1920, 1080))),
+            (MIN_HUD_WIDTH, MIN_HUD_HEIGHT)
+        );
+        // An output below the usable minimum is used as-is (never exceed it).
+        assert_eq!(cfg.surface_size(Some((200, 150))), (200, 150));
     }
 
     #[test]

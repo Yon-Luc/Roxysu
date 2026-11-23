@@ -32,6 +32,13 @@ describe("resolveListen", () => {
     expect(resolveListen({ ROXYSU_HOST: "0.0.0.0" }).hostname).toBe("0.0.0.0");
   });
 
+  test("resolves localhost to loopback instead of binding every interface", () => {
+    expect(resolveListen({ ROXYSU_HOST: "localhost" }).hostname).toBe("127.0.0.1");
+    expect(resolveListen({ ROXYSU_HOST: "  localhost  " }).hostname).toBe(
+      "127.0.0.1",
+    );
+  });
+
   test("rejects a port that is not an integer in range", () => {
     expect(() => resolveListen({ ROXYSU_PORT: "nope" })).toThrow(/ROXYSU_PORT/);
     expect(() => resolveListen({ ROXYSU_PORT: "0" })).toThrow(/ROXYSU_PORT/);

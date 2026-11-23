@@ -67,6 +67,23 @@ describe("computeTimingStats", () => {
     expect(stats.earlyPct).toBe(50);
     expect(stats.latePct).toBe(50);
   });
+
+  test("keeps out-of-range timing errors in overflow bins", () => {
+    const stats = computeTimingStats([
+      { noteIndex: 0, tMs: 0, result: "great", errorMs: -150 },
+      { noteIndex: 1, tMs: 0, result: "great", errorMs: 150 },
+      { noteIndex: 2, tMs: 0, result: "perfect", errorMs: 0 },
+    ]);
+    const low = stats.bins.find((b) => b.overflow === "low");
+    const high = stats.bins.find((b) => b.overflow === "high");
+    expect(low?.count).toBe(1);
+    expect(high?.count).toBe(1);
+    // Nothing is clamped into the edge bins.
+    expect(stats.bins[1]!.count).toBe(0);
+    expect(stats.bins[stats.bins.length - 2]!.count).toBe(0);
+    // Every measured error lands in exactly one bin.
+    expect(stats.bins.reduce((n, b) => n + b.count, 0)).toBe(3);
+  });
 });
 
 describe("computeColumnHeat", () => {
@@ -124,6 +141,28 @@ describe("computeColumnHeat", () => {
       2,
     );
     expect(heat.every((c) => c.intensity === 0)).toBe(true);
+  });
+
+  test("counts LN-tail misses on the hold note's column", () => {
+    const heat = computeColumnHeat(
+      [
+        { column: 0, startMs: 0, endMs: 1000 },
+        { column: 1, startMs: 0, endMs: 0 },
+      ],
+      [
+        {
+          noteIndex: 0,
+          tMs: 1000,
+          result: "miss",
+          errorMs: null,
+          isTail: true,
+        },
+      ],
+      2,
+    );
+    expect(heat[0]!.missCount).toBe(1);
+    expect(heat[0]!.intensity).toBe(1);
+    expect(heat[1]!.missCount).toBe(0);
   });
 });
 

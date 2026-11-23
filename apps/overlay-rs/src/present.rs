@@ -3,6 +3,10 @@
 //! Mapping before the HUD has a transparent frame paints WebKit's opaque grey
 //! clear across the whole window and hides the playfield. Focus intent alone
 //! is not enough.
+//!
+//! Placement is a third gate, applied before `wants_visible` is set: while
+//! following osu!, the host does not set `wants_visible` until an output hint
+//! resolved to a monitor (D1). Once a hint arrives the normal map path runs.
 
 /// Map only when focus (or the always-visible fallback) wants the surface
 /// and the page has signaled a transparent frame.

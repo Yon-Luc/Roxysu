@@ -24,6 +24,12 @@ import {
   warnIfListenExposed,
 } from "./listen";
 
+// A rejected background task must not take the local server down mid-session;
+// log it so the cause is visible, and keep serving.
+process.on("unhandledRejection", (reason) => {
+  console.error("[roxysu] unhandled rejection", reason);
+});
+
 if (clearStuckRealmReaderPause(db)) {
   console.log(
     "[sync] cleared stuck sync.realm_reader_paused — realm-reader can resume",

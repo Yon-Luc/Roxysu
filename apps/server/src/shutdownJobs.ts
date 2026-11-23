@@ -9,6 +9,7 @@ import {
 } from "./map-analysis";
 import { getManiaRatingJobStatus, stopManiaRatingBackfill } from "./mania-rating";
 import { stopMirrorBatchJob } from "./mirrors";
+import { stopCollectionMatchCache } from "./shared/collectionMatchCache";
 
 export type ShutdownJobsDeps = {
   shutdownAnalytics: (opts: { timeoutMs: number }) => Promise<boolean>;
@@ -39,6 +40,9 @@ function defaultDeps(db: Db): ShutdownJobsDeps {
       () => stopPatternAnalysisBackfill(db),
       () => stopManiaRatingBackfill(db),
       () => stopMirrorBatchJob(),
+      // Unsubscribes the smart-collection listener and stops the refresh loop
+      // before the DB closes under it (both Bun and Node entries reach this).
+      () => stopCollectionMatchCache(),
     ],
     asyncJobStatuses: [
       () => getManiaRatingJobStatus(),

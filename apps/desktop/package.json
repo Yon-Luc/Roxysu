@@ -49,6 +49,7 @@
       "urlPolicy.js",
       "stopChild.js",
       "waitForServer.js",
+      "logRotation.js",
       "splash.html"
     ],
     "extraResources": [

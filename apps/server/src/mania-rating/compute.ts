@@ -19,6 +19,7 @@ import {
   usesImportedRating,
   usesInProcessCalculator,
 } from "./registry";
+import { maniaRatingAllowedRoots } from "./allowedRoots";
 import { readExecutablePath } from "./settings";
 import { toIso as toIsoNullable } from "../shared/serialize";
 import {
@@ -178,12 +179,26 @@ function runInProcessCalculator(beatmapPath: string): CliOutput {
   };
 }
 
+let cachedCalculatorRoots: string[] | null = null;
+
+/** The calculator allowlist is env-derived and fixed for the process. */
+function calculatorRoots(): string[] {
+  cachedCalculatorRoots ??= maniaRatingAllowedRoots();
+  return cachedCalculatorRoots;
+}
+
 async function runCalculator(
   executablePath: string,
   beatmapPath: string,
   versionId: string,
 ): Promise<CliOutput> {
-  const checked = assertSafeExecutablePath(executablePath);
+  // Enforce the same allowlist at spawn time, not only on PATCH: a path stored
+  // before the allowlist existed must not keep running an arbitrary binary.
+  // Resolved once per process: this runs for every beatmap in a backfill.
+  const checked = assertSafeExecutablePath(executablePath, {
+    allowedRoots: calculatorRoots(),
+    requireExecutable: true,
+  });
   if (!checked.ok) throw new Error(checked.error);
   const executable = checked.path;
   const args = [

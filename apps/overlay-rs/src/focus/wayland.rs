@@ -26,10 +26,17 @@ use wayland_protocols_wlr::foreign_toplevel::v1::client::{
 };
 
 use super::matching::MatchPolicy;
+use super::queue::FocusSender;
 use super::reducer::{FocusReducer, ToplevelEvent, ToplevelId, VisibilityCommand};
 use super::FocusCommand;
 
 const PUMP_TIMEOUT_MS: i32 = 500;
+
+/// N1: after a fresh grant write KWin may need a moment to advertise the
+/// privileged global. Both the live loop and `--list-windows` retry this many
+/// times at this interval before falling back to the slow ladder / giving up.
+const GRANT_FAST_RETRIES: u32 = 5;
+const GRANT_FAST_RETRY_DELAY: Duration = Duration::from_millis(200);
 
 const WLR_BACKEND: &str = "zwlr_foreign_toplevel_manager_v1";
 const PLASMA_BACKEND: &str = "org_kde_plasma_window_management";
@@ -65,7 +72,7 @@ impl Drop for FocusHandle {
 
 pub(super) struct Session {
     pub(super) reducer: FocusReducer,
-    cmd_tx: Option<async_channel::Sender<FocusCommand>>,
+    cmd_tx: Option<FocusSender>,
     dump_tx: Option<mpsc::Sender<FocusEvent>>,
     list_only: bool,
     finished: bool,
@@ -136,11 +143,7 @@ impl PlasmaTracking {
 }
 
 impl Session {
-    fn live(
-        policy: MatchPolicy,
-        cmd_tx: async_channel::Sender<FocusCommand>,
-        stop: Arc<AtomicBool>,
-    ) -> Self {
+    fn live(policy: MatchPolicy, cmd_tx: FocusSender, stop: Arc<AtomicBool>) -> Self {
         Self {
             reducer: FocusReducer::new(policy),
             cmd_tx: Some(cmd_tx),
@@ -194,9 +197,8 @@ impl Session {
             VisibilityCommand::Show { output } => FocusCommand::Show { output },
             VisibilityCommand::Hide => FocusCommand::Hide,
         };
-        if tx.send_blocking(out).is_err() {
-            warn!("focus command channel closed");
-        }
+        // L3: bounded + coalescing; never blocks the Wayland thread.
+        tx.post(out);
     }
 
     pub(super) fn flush_batch(&mut self) {
@@ -263,7 +265,7 @@ impl Session {
 
 pub fn spawn_focus_loop(
     policy: MatchPolicy,
-    cmd_tx: async_channel::Sender<FocusCommand>,
+    cmd_tx: FocusSender,
     grant_fresh: bool,
 ) -> Result<FocusHandle> {
     let stop = Arc::new(AtomicBool::new(false));
@@ -282,9 +284,34 @@ pub fn spawn_focus_loop(
     })
 }
 
-pub fn run_list_windows(tx: mpsc::Sender<FocusEvent>, policy: MatchPolicy) -> Result<()> {
-    let mut session = Session::list(policy, tx);
-    run_once(&mut session)
+/// One-shot toplevel dump for `--list-windows`.
+///
+/// N1 residual: a first-run Plasma dump used to be a single `run_once` and
+/// could miss the privileged global while KWin's service cache picked up the
+/// fresh grant. After a fresh write, retry the whole connect five times at
+/// 200 ms (the live loop's policy) before reporting the failure.
+pub fn run_list_windows(
+    tx: mpsc::Sender<FocusEvent>,
+    policy: MatchPolicy,
+    grant_fresh: bool,
+) -> Result<()> {
+    let mut fast_retries = u32::from(grant_fresh) * GRANT_FAST_RETRIES;
+    loop {
+        let mut session = Session::list(policy.clone(), tx.clone());
+        match run_once(&mut session) {
+            Ok(()) => return Ok(()),
+            Err(err) if fast_retries > 0 => {
+                fast_retries -= 1;
+                warn!(
+                    error = %err,
+                    remaining = fast_retries,
+                    "list-windows connect failed after a fresh grant; retrying fast"
+                );
+                thread::sleep(GRANT_FAST_RETRY_DELAY);
+            }
+            Err(err) => return Err(err),
+        }
+    }
 }
 
 /// Reconnect forever. The first failure to find a backend emits
@@ -292,7 +319,7 @@ pub fn run_list_windows(tx: mpsc::Sender<FocusEvent>, policy: MatchPolicy) -> Re
 /// emits [`FocusCommand::Disconnected`].
 fn run_focus_loop(
     policy: MatchPolicy,
-    cmd_tx: async_channel::Sender<FocusCommand>,
+    cmd_tx: FocusSender,
     stop: Arc<AtomicBool>,
     grant_fresh: bool,
 ) -> Result<()> {
@@ -303,7 +330,7 @@ fn run_focus_loop(
     // service cache may still be picking the entry up), so the first binds
     // retry quickly before settling into the 1 s → 30 s ladder. The
     // overlay stays unmapped either way (fail-closed is unchanged).
-    let mut fast_retries = u32::from(grant_fresh) * 5;
+    let mut fast_retries = u32::from(grant_fresh) * GRANT_FAST_RETRIES;
 
     while !stop.load(Ordering::Relaxed) {
         let mut session = Session::live(policy.clone(), cmd_tx.clone(), Arc::clone(&stop));
@@ -319,7 +346,7 @@ fn run_focus_loop(
                 backoff = Duration::from_secs(1);
                 fast_retries = 0;
                 warn!("focus session ended; reconnecting");
-                let _ = cmd_tx.send_blocking(FocusCommand::Disconnected);
+                cmd_tx.post(FocusCommand::Disconnected);
                 backoff
             }
             Err(err) if entered || had_session => {
@@ -328,20 +355,20 @@ fn run_focus_loop(
                 backoff = Duration::from_secs(1);
                 fast_retries = 0;
                 warn!(error = %err, "focus session failed; reconnecting");
-                let _ = cmd_tx.send_blocking(FocusCommand::Disconnected);
+                cmd_tx.post(FocusCommand::Disconnected);
                 backoff
             }
             Err(err) => {
                 if !announced {
                     let reason = format!("{err:#}");
-                    let _ = cmd_tx.send_blocking(FocusCommand::Unavailable { reason });
+                    cmd_tx.post(FocusCommand::Unavailable { reason });
                     announced = true;
                 } else {
                     warn!(error = %err, "focus session still unavailable; retrying");
                 }
                 if fast_retries > 0 {
                     fast_retries -= 1;
-                    Duration::from_millis(200)
+                    GRANT_FAST_RETRY_DELAY
                 } else {
                     let wait = backoff;
                     backoff = backoff.saturating_mul(2).min(Duration::from_secs(30));
@@ -454,7 +481,9 @@ fn bind_outputs(globals: &GlobalList, qh: &QueueHandle<Session>, session: &mut S
 }
 
 /// Bind a late-advertised `wl_output` (hot-plug) using the same version
-/// policy as [`bind_outputs`].
+/// policy as [`bind_outputs`]. A duplicate `Global` for a name we already
+/// hold is ignored (defensive; `registry_queue_init` should not replay the
+/// initial list).
 fn bind_late_output(
     registry: &wl_registry::WlRegistry,
     name: u32,
@@ -462,6 +491,9 @@ fn bind_late_output(
     qh: &QueueHandle<Session>,
     session: &mut Session,
 ) {
+    if session.output_globals.contains_key(&name) {
+        return;
+    }
     let version = if version >= 4 { 4 } else { version.max(1) };
     let output: WlOutput = registry.bind(name, version, qh, ());
     session
@@ -584,9 +616,19 @@ impl Dispatch<wl_registry::WlRegistry, GlobalListContents> for Session {
                 session
                     .pending_outputs
                     .retain(|(_, oid)| *oid != proxy_id);
-                session
+                // N4 residual: send the v3+ destructor before dropping the
+                // proxy. `destroy` is the pre-v3 request and is a protocol
+                // error on a v3+ object, so guard on the bound version.
+                if let Some(pos) = session
                     .outputs
-                    .retain(|output| output.id().protocol_id() != proxy_id);
+                    .iter()
+                    .position(|output| output.id().protocol_id() == proxy_id)
+                {
+                    let output = session.outputs.remove(pos);
+                    if output.version() >= 3 {
+                        output.release();
+                    }
+                }
             }
             _ => {}
         }

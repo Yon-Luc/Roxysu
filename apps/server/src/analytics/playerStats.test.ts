@@ -17,7 +17,7 @@ import {
 import { classifyMapAxis } from "./recommend/axis";
 import { mapperGroupKey } from "./mapperUsername";
 import { classifyScoreGrade } from "../query-language/scoreGrade";
-import { getPlayerStats } from "./playerStats";
+import { getPlayerStats, fillIdleWeeks } from "./playerStats";
 import {
   createStatsFixtureDb,
   seedStatsFixture,
@@ -443,5 +443,51 @@ describe("stats mania aggregates match a plain reference (F-021)", () => {
       expect(row).toHaveProperty("flnMaps");
       expect(row).toHaveProperty("avgStar");
     }
+  });
+});
+
+describe("fillIdleWeeks", () => {
+  test("extends an idle tail through the current Monday week", () => {
+    // Mon 2026-11-23 is the current week; last play was Mon 2026-11-02.
+    const now = Date.UTC(2026, 10, 23, 12);
+    const weeks = fillIdleWeeks(
+      [
+        {
+          weekStart: "2026-11-02",
+          playCount: 12,
+          totalPp: 120,
+          avgAccuracy: 0.98,
+        },
+      ],
+      now,
+    );
+    expect(weeks.map((w) => w.weekStart)).toEqual([
+      "2026-11-02",
+      "2026-11-09",
+      "2026-11-16",
+      "2026-11-23",
+    ]);
+    expect(weeks[0]!.playCount).toBe(12);
+    for (const idle of weeks.slice(1)) {
+      expect(idle.playCount).toBe(0);
+      expect(idle.avgAccuracy).toBeNull();
+    }
+  });
+
+  test("a fresh play this week does not duplicate the current week", () => {
+    const now = Date.UTC(2026, 10, 23, 12);
+    const weeks = fillIdleWeeks(
+      [
+        {
+          weekStart: "2026-11-23",
+          playCount: 3,
+          totalPp: 30,
+          avgAccuracy: 1,
+        },
+      ],
+      now,
+    );
+    expect(weeks).toHaveLength(1);
+    expect(weeks[0]!.playCount).toBe(3);
   });
 });

@@ -17,6 +17,7 @@ const { parseOverlayHostUrl, parseOverlayOutput } = require("./overlayUrlGuard")
 const { appOrigin, isAppUrl, canOpenExternal, senderIsApp } = require("./urlPolicy");
 const { stopChild: stopChildProcess } = require("./stopChild");
 const { waitForServer } = require("./waitForServer");
+const { DEFAULT_MAX_LOG_BYTES, fileSizeOrZero, rotateIfLarger, shouldRotate } = require("./logRotation");
 
 // Stable userData folder: %APPDATA%\Roxysu (Windows) / XDG or Application Support.
 app.setName("Roxysu");
@@ -45,8 +46,15 @@ let overlayAppliedRestartAt = null;
 let overlaySpawnedAt = 0;
 /** Overlay host setting poll timer. @type {NodeJS.Timeout | null} */
 let overlayPollTimer = null;
-/** Timestamp of the last server spawn (respawn policy stable-uptime check). */
+/** Timestamp of the last server spawn (used for exit diagnostics). */
 let serverSpawnedAt = 0;
+/**
+ * Timestamp the running server child was last observed healthy (D-NEW-2), or 0
+ * when it never passed its health probe. The respawn policy measures a run's
+ * "uptime" from here, so a child that stays alive but never serves healthz
+ * cannot look stable. Reset on every spawn and every exit.
+ */
+let serverHealthyAt = 0;
 /** Consecutive short-lived server runs (respawnPolicy input). */
 let serverRespawnFailures = 0;
 /** Pending server respawn timer. @type {NodeJS.Timeout | null} */
@@ -66,6 +74,14 @@ const APP_ORIGIN = appOrigin(HOST, PORT);
 const WINDOW_READY_MARKER = "electron-window-ready";
 /** Caps a session-share PNG before nativeImage decode. */
 const MAX_CLIPBOARD_IMAGE_BYTES = 15 * 1024 * 1024;
+/**
+ * L4: every shell/child log is capped at `DEFAULT_MAX_LOG_BYTES` (10 MiB) with
+ * a single `.1` backup, so a wedged child that spams stderr cannot fill the
+ * user's disk. desktop.log is stat'ed at most this often, not on every line.
+ */
+const DESKTOP_LOG_SIZE_CHECK_MS = 30_000;
+/** Last time desktop.log's size was checked for rotation. */
+let desktopLogSizeCheckedAt = 0;
 /** Aborted when shutdown starts so a splash wait cannot finish into a dead window. */
 /** @type {AbortController | null} */
 let startupAbort = null;
@@ -92,6 +108,25 @@ function earlyDataDir() {
 }
 
 /**
+ * Rotate desktop.log once it passes the cap (L4). Throttled: the file is
+ * stat'ed at most every DESKTOP_LOG_SIZE_CHECK_MS, so the hot logging path
+ * stays a single append. Never throws.
+ * @param {string} logPath
+ */
+function maybeRotateDesktopLog(logPath) {
+  const now = Date.now();
+  if (now - desktopLogSizeCheckedAt < DESKTOP_LOG_SIZE_CHECK_MS) return;
+  desktopLogSizeCheckedAt = now;
+  try {
+    rotateIfLarger(logPath, DEFAULT_MAX_LOG_BYTES, {
+      onError: (err) => console.error(`[roxysu-desktop] desktop.log rotate failed: ${err}`),
+    });
+  } catch {
+    // ignore — logging must never block startup
+  }
+}
+
+/**
  * @param {string} message
  */
 function desktopLog(message) {
@@ -102,6 +137,7 @@ function desktopLog(message) {
       fs.mkdirSync(logDir, { recursive: true });
       desktopLogPath = path.join(logDir, "desktop.log");
     }
+    maybeRotateDesktopLog(desktopLogPath);
     fs.appendFileSync(desktopLogPath, line);
   } catch {
     // ignore — logging must never block startup
@@ -126,14 +162,37 @@ function signalWindowReady(dataDir) {
 }
 
 /**
+ * Open (or reuse) the append fd for a child log and write the start banner.
+ *
+ * L4: child logs share a long-lived fd for the whole session and get no
+ * per-write size check, so the file is capped whenever a child (re)starts:
+ * an over-cap log is closed, renamed to `<label>.log.1`, and reopened. The fd
+ * is closed *before* the rename so the live file cannot keep writing into the
+ * backup (and Windows refuses to rename an open file).
+ *
  * @param {string} dataDir
  * @param {string} label
  */
 function openChildLogFd(dataDir, label) {
   const logPath = path.join(dataDir, "logs", `${label}.log`);
+  fs.mkdirSync(path.dirname(logPath), { recursive: true });
+  if (shouldRotate(fileSizeOrZero(logPath), DEFAULT_MAX_LOG_BYTES)) {
+    const cached = childLogFdByLabel.get(label);
+    if (cached != null) {
+      try {
+        fs.closeSync(cached);
+      } catch {
+        // already closed
+      }
+      childLogFdByLabel.delete(label);
+    }
+    rotateIfLarger(logPath, DEFAULT_MAX_LOG_BYTES, {
+      onError: (err) =>
+        console.error(`[roxysu-desktop] ${label}.log rotate failed: ${err}`),
+    });
+  }
   let fd = childLogFdByLabel.get(label);
   if (fd == null) {
-    fs.mkdirSync(path.dirname(logPath), { recursive: true });
     fd = fs.openSync(logPath, "a");
     childLogFdByLabel.set(label, fd);
     desktopLog(`${label} log: ${logPath}`);
@@ -353,6 +412,10 @@ function createSplashWindow(paths) {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
+      // L3: the preload only needs contextBridge + ipcRenderer, both available
+      // in a sandboxed renderer. Sandboxing adds OS-level containment for a
+      // window that renders remote-ish content (cover art, hub pages).
+      sandbox: true,
     },
   });
 
@@ -379,6 +442,32 @@ function createSplashWindow(paths) {
 
   // Marker even if HTML fails — dark chrome is still a visible window for older stubs.
   signalWindowReady(paths.dataDir);
+}
+
+/**
+ * L5: the shell has no menu of its own, but macOS gives every app a menu bar
+ * and needs standard roles for ⌘Q, copy/paste and window management. Build a
+ * minimal standard menu there; Windows/Linux keep no application menu.
+ * @returns {Electron.Menu | null}
+ */
+function buildApplicationMenu() {
+  if (process.platform !== "darwin") return null;
+  return Menu.buildFromTemplate([
+    {
+      label: app.name,
+      submenu: [
+        { role: "about" },
+        { type: "separator" },
+        { role: "hide" },
+        { role: "hideOthers" },
+        { role: "unhide" },
+        { type: "separator" },
+        { role: "quit" },
+      ],
+    },
+    { role: "editMenu" },
+    { role: "windowMenu" },
+  ]);
 }
 
 /** One start at a time so a slow extract cannot spawn two readers. */
@@ -525,12 +614,22 @@ function spawnServer(paths, sharedEnv) {
     "server",
   );
   serverSpawnedAt = Date.now();
+  // D-NEW-2: a fresh run is not healthy until its health probe passes. A
+  // stale timestamp here would make a never-healthy child look stable.
+  serverHealthyAt = 0;
   child.on("exit", (code, signal) => {
     if (shuttingDown) return;
     // A replaced/stopped child (not the current one) must not trigger respawn.
     if (child !== serverChild) return;
-    desktopLog(`server exited code=${code} signal=${signal}`);
+    desktopLog(
+      `server exited code=${code} signal=${signal} after ${Date.now() - serverSpawnedAt}ms ` +
+        `(healthy=${serverHealthyAt ? `${Date.now() - serverHealthyAt}ms` : "never"})`,
+    );
+    // Read the health stamp *before* clearing it: the policy must see how long
+    // this run was actually serving healthz. spawnServer clears it again for
+    // the next run.
     scheduleServerRespawn(paths, sharedEnv);
+    serverHealthyAt = 0;
   });
   watchChildError(child, "server", () => {
     if (shuttingDown) return;
@@ -543,8 +642,9 @@ function spawnServer(paths, sharedEnv) {
 /**
  * Respawn the server child after an unexpected exit with the same
  * exponential backoff as the realm-reader (respawnPolicy.js). A run that
- * stayed up at least `stableUptimeMs` resets the counter, so a single crash
- * on a long-lived session restarts after 2 s; a server that dies at boot
+ * stayed healthy for at least `stableUptimeMs` resets the counter, so a single
+ * crash on a long-lived session restarts after 2 s; a server that dies at boot
+ * — or that stays alive but never passes `/api/system/healthz` (D-NEW-2) —
  * gives up after `maxAttempts` instead of spinning forever.
  * @param {ReturnType<typeof resolveDesktopPaths>} paths
  * @param {NodeJS.ProcessEnv} sharedEnv
@@ -553,7 +653,11 @@ function scheduleServerRespawn(paths, sharedEnv) {
   if (shuttingDown || serverRespawnTimer) return;
   const decision = decideRespawn({
     failures: serverRespawnFailures,
-    uptimeMs: Date.now() - serverSpawnedAt,
+    // Uptime counts from the last successful health probe, not from spawn:
+    // a process that never served healthz has 0 healthy uptime no matter how
+    // long it stayed alive.
+    healthyAt: serverHealthyAt || null,
+    now: Date.now(),
   });
   serverRespawnFailures = decision.failures;
   if (decision.action === "give-up") {
@@ -589,7 +693,10 @@ async function respawnServer(paths, sharedEnv) {
   serverChild = spawnServer(paths, sharedEnv);
   startupAbort = new AbortController();
   try {
-    await waitForServer(PORT, HOST, 180_000, { signal: startupAbort.signal });
+    // Shorter than the first boot: the previous run already had its restart
+    // window, so a respawned child that cannot answer healthz within a minute
+    // is counted as a failed run instead of holding the loop open for 3 min.
+    await waitForServer(PORT, HOST, 60_000, { signal: startupAbort.signal });
   } catch (err) {
     if (shuttingDown) return;
     desktopLog(`respawn waitForServer failed: ${err}`);
@@ -599,6 +706,8 @@ async function respawnServer(paths, sharedEnv) {
     return;
   }
   if (shuttingDown || waitId !== serverWaitId) return;
+  // D-NEW-2: the run only counts as stable from here, not from spawn.
+  serverHealthyAt = Date.now();
   desktopLog("server respawn ok — reloading window");
   try {
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -629,6 +738,46 @@ function resolveOverlayBin(paths) {
   return candidates.find((candidate) => fs.existsSync(candidate)) || null;
 }
 
+const OVERLAY_URL_DEFAULT = `--url=http://${HOST}:${PORT}/#/overlay?bg=clear`;
+const OVERLAY_SETTINGS_POLL_MS = 4000;
+const OVERLAY_RESPAWN_GAP_MS = 15000;
+/**
+ * D-NEW-1: long automatic age backstop for the overlay host. The host used to
+ * run with the age cap disabled (`--watchdog-max-age-sec=0`) so a HUD refresh
+ * would not interrupt play; that is fine for a session, not for a host left
+ * running for days with a leak the FD/RSS caps miss. Six hours is long enough
+ * to be invisible in practice and short enough to bound a slow leak, and the
+ * host is respawned by the settings poll (the HUD reloads once).
+ * Override: ROXYSU_OVERLAY_MAX_AGE_SEC (0 disables the cap explicitly).
+ */
+const DEFAULT_OVERLAY_MAX_AGE_SEC = 6 * 60 * 60;
+
+/**
+ * Parse the overlay age cap from an env-style string. Anything that is not a
+ * plain non-negative integer falls back to the default (never a crash: this
+ * value only feeds argv).
+ * @param {string | undefined} raw
+ * @returns {number}
+ */
+function parseOverlayMaxAgeSec(raw) {
+  const text = typeof raw === "string" ? raw.trim() : "";
+  if (!text) return DEFAULT_OVERLAY_MAX_AGE_SEC;
+  if (!/^\d+$/.test(text)) {
+    desktopLog(
+      `overlay max age rejected (not a non-negative integer): ${JSON.stringify(text.slice(0, 32))} — using ${DEFAULT_OVERLAY_MAX_AGE_SEC}s`,
+    );
+    return DEFAULT_OVERLAY_MAX_AGE_SEC;
+  }
+  const value = Number(text);
+  if (!Number.isSafeInteger(value)) {
+    desktopLog(
+      `overlay max age rejected (out of range): ${text.slice(0, 32)} — using ${DEFAULT_OVERLAY_MAX_AGE_SEC}s`,
+    );
+    return DEFAULT_OVERLAY_MAX_AGE_SEC;
+  }
+  return value;
+}
+
 /**
  * @param {ReturnType<typeof resolveDesktopPaths>} paths
  * @param {string} urlArg Single `--url=…` token (clap keeps `=` inside the value).
@@ -646,15 +795,18 @@ function spawnOverlayHost(paths, urlArg, output) {
     return;
   }
   const { fd } = openChildLogFd(paths.dataDir, "overlay");
-  const args = [urlArg, "--watchdog-max-age-sec=0"];
+  const maxAgeSec = parseOverlayMaxAgeSec(process.env.ROXYSU_OVERLAY_MAX_AGE_SEC);
+  const args = [urlArg, `--watchdog-max-age-sec=${maxAgeSec}`];
   if (output) args.push(`--output=${output}`);
-  desktopLog(`spawn overlay bin=${bin} ${args.join(" ")}`);
+  desktopLog(
+    `spawn overlay maxAgeSec=${maxAgeSec} bin=${bin} ${args.join(" ")}`,
+  );
   overlayAppliedUrlArg = urlArg;
   overlayAppliedOutput = output ?? null;
   // Do not set WEBKIT_DISABLE_DMABUF_RENDERER. On a transparent WebKitGTK
   // surface that fallback fills the whole window with grey on each HUD update.
-  // Age cap is off: a 30-minute exit plus this respawn is a full HUD refresh
-  // over the playfield. FD and RSS caps still exit 75 so a real leak recovers.
+  // The FD and RSS caps still exit 75 so a real leak recovers; the age cap is
+  // now a long backstop (D-NEW-1) instead of off forever.
   overlayChild = spawn(bin, args, {
     stdio: ["ignore", fd, fd],
     windowsHide: true,
@@ -670,10 +822,6 @@ function spawnOverlayHost(paths, urlArg, output) {
   // Poll respawns off exitCode !== null. A second schedule would double-spawn.
   watchChildError(child, "overlay", () => {});
 }
-
-const OVERLAY_URL_DEFAULT = `--url=http://${HOST}:${PORT}/#/overlay?bg=clear`;
-const OVERLAY_SETTINGS_POLL_MS = 4000;
-const OVERLAY_RESPAWN_GAP_MS = 15000;
 
 /**
  * SIGTERM, then SIGKILL, then give up so Quit cannot wait forever.
@@ -834,6 +982,11 @@ function watchOverlayHostSetting(paths) {
         overlayAppliedUrlArg = null;
         overlayAppliedOutput = null;
       }
+    } catch (err) {
+      // D2 residual: an unexpected throw from spawn/desktopLog/stop must not
+      // become an unhandled rejection. Log it, keep the last known state, and
+      // let the next poll (or the coalesced re-run below) try again.
+      desktopLog(`overlay apply failed: ${err}`);
     } finally {
       if (applyGate.end() && !shuttingDown) {
         void apply();
@@ -1012,7 +1165,7 @@ if (!gotLock) {
     desktopLog(`nodeBin=${paths.nodeBin || "(none)"}`);
     desktopLog(`realmArchive=${paths.realmArchive || "(none)"}`);
 
-    Menu.setApplicationMenu(null);
+    Menu.setApplicationMenu(buildApplicationMenu());
 
     createSplashWindow(paths);
     void setSplashStatus("Starting");
@@ -1070,6 +1223,8 @@ if (!gotLock) {
     if (shuttingDown) return;
 
     desktopLog("waitForServer ok");
+    // D-NEW-2: health reached — this run may now reset the respawn counter.
+    if (serverHealthyAt === 0) serverHealthyAt = Date.now();
     await setSplashStatus("Opening Home");
     try {
       await maybeClearHttpCache(paths);

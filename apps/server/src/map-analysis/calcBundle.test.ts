@@ -17,6 +17,7 @@ import { and, eq } from "drizzle-orm";
 import {
   applyCalcBundle,
   buildCalcBundleFileBytes,
+  countCalcBundleEntries,
   dropCalcBundleLeftovers,
   exportCalcBundleEntries,
   getCalcBundleAppliedVersion,
@@ -883,5 +884,61 @@ describe("calc bundle version bump drop boot", () => {
     expect(
       events.filter((event) => event.type === "calc-bundle.applied").length,
     ).toBe(0);
+  });
+});
+
+describe("countCalcBundleEntries", () => {
+  test("matches exportCalcBundleEntries length for a seeded mirror", async () => {
+    // Seed rows the export must skip so the shared predicate is exercised:
+    // failed dan row, a pattern row without a dominant skill, and a pattern
+    // row whose stored hash does not match its beatmap.
+    await db.delete(beatmapDanRatings);
+    await db.delete(beatmapPatternAnalysis);
+    await db.insert(beatmapDanRatings).values([
+      {
+        beatmapId: MAP_A,
+        algorithm: REWORK_ALGORITHM,
+        beatmapHash: HASH_A,
+        sunnyStar: 5,
+        columnCount: 4,
+        estDiff: "Regular 1 mid",
+        error: null,
+        updatedAt: new Date(),
+      },
+      {
+        beatmapId: MAP_B,
+        algorithm: REWORK_ALGORITHM,
+        beatmapHash: HASH_B,
+        sunnyStar: null,
+        columnCount: 4,
+        estDiff: null,
+        error: "Boom",
+        updatedAt: new Date(),
+      },
+    ]);
+    await db.insert(beatmapPatternAnalysis).values([
+      {
+        beatmapId: MAP_A,
+        algorithm: PATTERN_ALGORITHM,
+        beatmapHash: HASH_A,
+        columnCount: 4,
+        dominantPattern: "stream",
+        error: null,
+        updatedAt: new Date(),
+      },
+      {
+        beatmapId: MAP_B,
+        algorithm: PATTERN_ALGORITHM,
+        beatmapHash: HASH_A,
+        columnCount: 4,
+        dominantPattern: "jack",
+        error: null,
+        updatedAt: new Date(),
+      },
+    ]);
+
+    const exported = await exportCalcBundleEntries(db);
+    expect(exported.length).toBe(2);
+    expect(await countCalcBundleEntries(db)).toBe(exported.length);
   });
 });

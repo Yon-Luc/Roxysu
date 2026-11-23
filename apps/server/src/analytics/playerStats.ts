@@ -856,21 +856,28 @@ function getKeymodeProgression(
 }
 
 /**
- * Insert idle Monday-start weeks between the first and last played week with
- * zero plays — same rule as the Home weekly activity chart: a rest week reads
- * as an empty bar, not as a missing slot squeezed out of the axis.
+ * Insert idle Monday-start weeks from the first played week through the
+ * current week with zero plays — same rule as the Home weekly activity chart:
+ * a rest week reads as an empty bar, not as a missing slot squeezed out of the
+ * axis, and a player who stopped three weeks ago still sees those empty weeks
+ * up to today.
  */
-function fillIdleWeeks(
+export function fillIdleWeeks(
   weeks: Array<{
     weekStart: string;
     playCount: number;
     totalPp: number;
     avgAccuracy: number | null;
   }>,
+  now = Date.now(),
 ) {
-  if (weeks.length < 2) return weeks;
+  if (weeks.length === 0) return weeks;
   const byWeek = new Map(weeks.map((week) => [week.weekStart, week]));
-  const end = weeks[weeks.length - 1]!.weekStart;
+  const lastPlayed = weeks[weeks.length - 1]!.weekStart;
+  const currentWeek = weekStartKey(new Date(now));
+  // Future-dated rows (clock skew) keep their own tail; otherwise extend the
+  // series through the calendar week in progress.
+  const end = currentWeek > lastPlayed ? currentWeek : lastPlayed;
   const out: typeof weeks = [];
   let cursor = weeks[0]!.weekStart;
   while (cursor <= end) {

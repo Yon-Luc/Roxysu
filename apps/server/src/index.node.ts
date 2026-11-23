@@ -29,6 +29,12 @@ import {
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+// A rejected background task must not take the local server down mid-session;
+// log it so the cause is visible, and keep serving.
+process.on("unhandledRejection", (reason) => {
+  console.error("[roxysu] unhandled rejection", reason);
+});
+
 async function main() {
   const here = path.dirname(fileURLToPath(import.meta.url));
   const defaultStaticDir = path.resolve(here, "../dist/public");

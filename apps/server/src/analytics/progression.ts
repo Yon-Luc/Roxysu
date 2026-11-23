@@ -64,7 +64,14 @@ function addUtcDays(day: string, delta: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** Last `weeks` UTC calendar weeks, including weeks with no plays. */
+/**
+ * Last `weeks` UTC calendar weeks, including weeks with no plays.
+ *
+ * L-M4: these stored rows keep whatever accuracy formula produced them. After
+ * an accuracy-formula change, an untouched week reads the old formula until a
+ * full statistics rebuild runs — incremental score/import refreshes only
+ * rewrite the partitions they touch. No automatic migration is intended.
+ */
 export async function getWeeklyActivity(db: Db, weeks = 12) {
   const count = Math.max(1, weeks);
   const thisWeek = utcWeekStartKey(new Date());

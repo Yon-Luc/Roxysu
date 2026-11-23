@@ -64,6 +64,28 @@ export function clampSessionListLimit(raw: unknown): number {
   return Math.min(Math.floor(n), MAX_SESSION_LIST_LIMIT);
 }
 
+/**
+ * UI-N1: a calendar-day drill-down must not inherit the 100-row index cap —
+ * one busy day would silently drop the rest. The day list pages up to the same
+ * hard max as an explicit `?limit=`, and `hasMore` still reports truncation.
+ */
+export function clampSessionDayLimit(raw: unknown): number {
+  if (raw == null || raw === "") return MAX_SESSION_LIST_LIMIT;
+  const n = typeof raw === "number" ? raw : Number(raw);
+  // An unparsable day limit still gets the day cap, never the index cap.
+  if (!Number.isFinite(n) || n < 1) return MAX_SESSION_LIST_LIMIT;
+  return Math.min(Math.floor(n), MAX_SESSION_LIST_LIMIT);
+}
+
+/** One page plus the `hasMore` flag, same shape as the score-detail route. */
+function pageWithHasMore<T>(rows: T[], limit: number) {
+  const hasMore = rows.length > limit;
+  return {
+    items: hasMore ? rows.slice(0, limit) : rows,
+    hasMore,
+  };
+}
+
 async function sessionDetailPayload(
   db: Parameters<typeof listSessionScores>[0],
   session: NonNullable<Awaited<ReturnType<typeof getSessionById>>>,
@@ -165,23 +187,36 @@ export const sessionRoutes = new Elysia({ prefix: "/sessions" })
       const tzOffset = clampTzOffset(query.tzOffset);
       // S-NEW-1: both branches pass a limit — never the unbounded
       // `listSessions(db)` / `listSessionsOnUtcDay(db, day, undefined, …)`.
-      const limit = clampSessionListLimit(query.limit);
+      // Fetch one extra row to report `hasMore` without a count query.
+      const limit = day
+        ? clampSessionDayLimit(query.limit)
+        : clampSessionListLimit(query.limit);
+      const fetchLimit = Math.min(limit + 1, MAX_SESSION_LIST_LIMIT + 1);
       if (day) {
-        const items = await listSessionsOnUtcDay(db, day, limit, tzOffset);
+        const rows = await listSessionsOnUtcDay(
+          db,
+          day,
+          fetchLimit,
+          tzOffset,
+        );
+        const { items, hasMore } = pageWithHasMore(rows, limit);
         return {
           current: null,
           items: items.map(serializeSession),
+          hasMore,
           activity: [],
         };
       }
-      const [items, current, activity] = await Promise.all([
-        listSessions(db, limit),
+      const [rows, current, activity] = await Promise.all([
+        listSessions(db, fetchLimit),
         getCurrentSession(db),
         getCalendarActivity(db, 371, tzOffset),
       ]);
+      const { items, hasMore } = pageWithHasMore(rows, limit);
       return {
         current: current ? serializeSession(current) : null,
         items: items.map(serializeSession),
+        hasMore,
         activity,
       };
     },

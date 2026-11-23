@@ -67,9 +67,14 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
    cannot show half-arrived fields — and is not a match haystack
    (a browser tab titled osu! must not match). On Show, if `--output` is unset,
    pin the layer surface to that window's output (`wl_output` name, or Plasma
-   geometry against a `GdkMonitor`). Outputs advertised after connect are
-   bound when the registry announces them, and a removed output's name is
-   dropped from every toplevel. Plasma window proxies are destroyed on
+   geometry against a `GdkMonitor`). The host does not set `wants_visible`
+   before a hint resolves to a monitor (fail-closed placement; a previous
+   known pin still counts), and an output change on a live surface is
+   unmap → `set_monitor` → remap after a short delay, never `set_monitor` on a
+   mapped surface. Outputs advertised after connect are
+   bound when the registry announces them (duplicate globals ignored), a
+   removed output's name is dropped from every toplevel, and its `wl_output`
+   proxy is `release()`d on v3+ before it is dropped. Plasma window proxies are destroyed on
    `Unmapped` and their internal ids released (KWin reuses ids after an
    osu! restart); wlr handles are destroyed on `Closed`. An explicit
    `--output` wins and is not
@@ -80,7 +85,7 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
    leave visibility unchanged
    and reconnect. `--follow-focus=false` is the always-visible path. The focus
    thread stops and joins on GTK shutdown.
-8. **Self-heal**: `web-process-terminated` reloads after 1 s; `load-failed`
+8. **Self-heal**: `web-process-terminated` recreates the `WebView` (fresh widget and content manager, then reload) after the reload delay, because `load_uri` on the poisoned widget kept its renderer/DMA-BUF state; `load-failed`
    (HUD/server) retries at 3 s / 15 s after >5 failures via a **single-slot**
    reload state machine (no stacked timers). Distinct log lines for load-fail
    vs web-process crash. `--webkit-no-dmabuf` / `--gsk-renderer` remain for
@@ -97,15 +102,20 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
     WebKit already redraws on HUD content change. `--debug` also reports real
     frame-clock paint counts.
 11. Focus tracking runs off the GTK thread and posts Show/Hide to the main
-    context over a channel.
+    context over a bounded, coalescing queue (`focus/queue.rs`: one wake slot +
+    the newest command). The producer never blocks; if the main loop is busy,
+    only the latest visibility state matters.
 12. **Desktop bundling**: `nix/overlay-rs.nix` builds the host; packages symlink
     `bin/roxysu-overlay` into `resources/overlay/roxysu-overlay`. Electron
     (`spawnOverlayHost`) uses that path, then local
     `apps/overlay-rs/target/{release,debug}/roxysu-overlay-rs`. Override:
     `ROXYSU_OVERLAY_BIN`. Linux + Wayland only.
 13. **CLI**: clap accepts `--url=VALUE` and `--url VALUE` with `=` inside
-    values. Electron still passes `--url=http://…?bg=clear` and
-    `--watchdog-max-age-sec=0`.
+    values. Electron passes `--url=http://…?bg=clear` and a long
+    `--watchdog-max-age-sec` backstop (default 21600 s; `ROXYSU_OVERLAY_MAX_AGE_SEC`
+    overrides, `0` disables). `--width`/`--height` are optional: omitted, the
+    surface request follows the pinned output's geometry (fallback 1280×720
+    before a monitor is known) and is clamped to the output.
 14. **Host settings**: `overlay.host_url`, enable toggle `overlay.host_enabled`,
     optional monitor `overlay.host_output` (connector or model), and a
     monotonic restart nonce `overlay.host_restart` written by the settings
@@ -130,9 +140,11 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
     descendant FDs / optional age / optional cgroup. Requires
     `--watchdog-breach-samples` consecutive breaches (default 3), then exits
     **75** (not 0) so `Restart=on-failure` / desktop respawn work. Age cap
-    disable with `--watchdog-max-age-sec 0`. The desktop shell passes that:
-    the binary default (1800s) plus desktop respawn was a clockwork HUD
-    refresh over the playfield. FD and RSS caps still recover a leak.
+    disable with `--watchdog-max-age-sec 0`. The desktop shell passes a long
+    backstop (default 21600 s = 6 h) instead of the old `0`: the binary
+    default (1800s) plus desktop respawn was a clockwork HUD refresh over the
+    playfield, while a fully disabled cap let a slow leak run for days. FD and
+    RSS caps still recover a leak sooner.
     Observation-only telemetry via `--telemetry-interval-sec` /
     `--telemetry-csv`.
 16. **Surface-contract logs** (info level, always on): surface size and
@@ -140,10 +152,12 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
     GTK sees it), surface enter/leave monitor (connector, model, geometry,
     scale), every pin (from/to key, mapped at the time, target geometry and
     scale), and web-process death with the surface state it died in. These
-    lines are the D1 diagnosis set: the drift/noise behaviour fixes
-    (unmap-before-pin, size-to-output, WebView recreate) are gated on
-    real-session captures of them, and match-policy loosening is gated on a
-    settled `--list-windows` dump.
+    lines are the D1 diagnosis set. The behaviour fixes (do not map without a
+    placement hint, unmap-before-pin, size-to-output, WebView recreate after a
+    web-process crash) are implemented but still need a real Plasma/niri
+    soak; match-policy loosening remains gated on a settled `--list-windows`
+    dump. `--list-windows` reuses the post-grant fast retries so the first-run
+    dump is reliable.
 
 ## Security rules
 

@@ -147,24 +147,67 @@ function formatSse(event: AppEvent): string {
   return `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`;
 }
 
+/** Upper bound on concurrent `/api/events` streams held by this process. */
+export const MAX_SSE_CLIENTS = 64;
+
+let activeSseClients = 0;
+
+export type SseSlot = { release: () => void };
+
+/**
+ * Reserve one subscriber slot. Returns null when the cap is reached; the caller
+ * must not subscribe then. `release` is idempotent so cleanup can run from the
+ * abort handler, the stream `cancel`, and a failed enqueue without
+ * double-decrementing.
+ */
+export function acquireSseSlot(max = MAX_SSE_CLIENTS): SseSlot | null {
+  if (activeSseClients >= max) return null;
+  activeSseClients += 1;
+  let released = false;
+  return {
+    release() {
+      if (released) return;
+      released = true;
+      activeSseClients = Math.max(0, activeSseClients - 1);
+    },
+  };
+}
+
+/** Live subscriber count (tests / diagnostics). */
+export function activeSseClientCount(): number {
+  return activeSseClients;
+}
+
 export const sseRoutes = new Elysia({ prefix: "/api" }).get(
   "/events",
-  ({ request }) => {
+  ({ request, set }) => {
+    const slot = acquireSseSlot();
+    if (!slot) {
+      set.headers["cache-control"] = "no-store";
+      set.status = 429;
+      return {
+        error: "Too many live event streams",
+        maxSubscribers: MAX_SSE_CLIENTS,
+      };
+    }
+
     const encoder = new TextEncoder();
     let unsubscribe: (() => void) | null = null;
     let heartbeat: ReturnType<typeof setInterval> | null = null;
 
+    // Idempotent: abort, cancel, and a failed enqueue can all race here.
+    const cleanup = () => {
+      if (heartbeat != null) {
+        clearInterval(heartbeat);
+        heartbeat = null;
+      }
+      unsubscribe?.();
+      unsubscribe = null;
+      slot.release();
+    };
+
     const stream = new ReadableStream({
       start(controller) {
-        const cleanup = () => {
-          if (heartbeat != null) {
-            clearInterval(heartbeat);
-            heartbeat = null;
-          }
-          unsubscribe?.();
-          unsubscribe = null;
-        };
-
         const send = (event: AppEvent) => {
           try {
             controller.enqueue(encoder.encode(formatSse(event)));
@@ -173,11 +216,16 @@ export const sseRoutes = new Elysia({ prefix: "/api" }).get(
           }
         };
 
-        controller.enqueue(
-          encoder.encode(
-            `event: connected\ndata: ${JSON.stringify({ ok: true, schemaOutdated: currentSchemaOutdated() })}\n\n`,
-          ),
-        );
+        try {
+          controller.enqueue(
+            encoder.encode(
+              `event: connected\ndata: ${JSON.stringify({ ok: true, schemaOutdated: currentSchemaOutdated() })}\n\n`,
+            ),
+          );
+        } catch (err) {
+          cleanup();
+          throw err;
+        }
 
         unsubscribe = subscribe(send);
         heartbeat = setInterval(() => {
@@ -198,12 +246,7 @@ export const sseRoutes = new Elysia({ prefix: "/api" }).get(
         });
       },
       cancel() {
-        if (heartbeat != null) {
-          clearInterval(heartbeat);
-          heartbeat = null;
-        }
-        unsubscribe?.();
-        unsubscribe = null;
+        cleanup();
       },
     });
 

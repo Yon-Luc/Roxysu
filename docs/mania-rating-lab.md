@@ -78,6 +78,16 @@ OSU_GAME_PATH=~/dev/osu-enissay dotnet publish -c Release \
 
 Settings path stays the same: `~/roxysu-calc/enissay-accuracy-change/mania-rating-calc`.
 
+`PATCH /api/settings` only accepts calculator paths inside these roots:
+
+- `ROXYSU_CALCULATOR_ROOTS` (path-list override, `:`-separated on POSIX / `;` on Windows)
+- `$ROXYSU_DATA_DIR/calculators` and `$ROXYSU_DATA_DIR/mania-rating`
+- `$ROXYSU_RESOURCES/tools` and `$ROXYSU_RESOURCES/calculators`
+- `~/roxysu-calc`
+- a dev checkout's `<repo>/dist` and `<repo>/tools/mania-rating-calc`
+
+A build kept elsewhere is rejected with “Executable path is not inside an allowed directory”; move or republish it under one of those roots, or set `ROXYSU_CALCULATOR_ROOTS` for the server process. The calculator must also be executable.
+
 ### Parallel backfill
 
 By default the backfill job runs **4 calculator processes at once**. Override with:

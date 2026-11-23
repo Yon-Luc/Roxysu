@@ -30,13 +30,59 @@ function close(server) {
 const fast = { probeTimeoutMs: 40, retryDelayMs: 15, maxBodyBytes: 64 };
 
 describe("waitForServer", () => {
-  test("resolves on HTTP 200 { ok: true }", async () => {
+  test("resolves on HTTP 200 { ok: true, service: 'roxysu-server' }", async () => {
+    const { server, port } = await listen((_req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: true, service: "roxysu-server" }));
+    });
+    try {
+      await waitForServer(port, "127.0.0.1", 500, fast);
+    } finally {
+      await close(server);
+    }
+  });
+
+  test("does not accept { ok: true } without the service marker", async () => {
     const { server, port } = await listen((_req, res) => {
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ ok: true }));
     });
     try {
-      await waitForServer(port, "127.0.0.1", 500, fast);
+      await expect(waitForServer(port, "127.0.0.1", 80, fast)).rejects.toThrow(
+        /Timed out/,
+      );
+    } finally {
+      await close(server);
+    }
+  });
+
+  test("does not accept a different service marker", async () => {
+    let probes = 0;
+    const { server, port } = await listen((_req, res) => {
+      probes += 1;
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: true, service: "some-other-server" }));
+    });
+    try {
+      await expect(waitForServer(port, "127.0.0.1", 120, fast)).rejects.toThrow(
+        /Timed out/,
+      );
+      // Kept polling instead of accepting the first 200.
+      expect(probes).toBeGreaterThan(1);
+    } finally {
+      await close(server);
+    }
+  });
+
+  test("does not accept { ok: false, service: 'roxysu-server' }", async () => {
+    const { server, port } = await listen((_req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: false, service: "roxysu-server" }));
+    });
+    try {
+      await expect(waitForServer(port, "127.0.0.1", 80, fast)).rejects.toThrow(
+        /Timed out/,
+      );
     } finally {
       await close(server);
     }

@@ -35,6 +35,7 @@ import {
   COLLECTION_BATCH_MAX,
   selectNewCollectionRows,
 } from "../shared/collectionBatch";
+import { QUERY_MAX } from "../requestLimits";
 import {
   buildCollectionExportZip,
   isOszBuildError,
@@ -429,8 +430,8 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
     },
     {
       body: t.Object({
-        name: t.String({ minLength: 1 }),
-        query: t.String({ minLength: 1 }),
+        name: t.String({ minLength: 1, maxLength: 200 }),
+        query: t.String({ minLength: 1, maxLength: QUERY_MAX }),
       }),
     },
   )
@@ -495,7 +496,7 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
         items: t.Array(
           t.Object({
             name: t.String({ minLength: 1, maxLength: 200 }),
-            query: t.String({ minLength: 1, maxLength: 2000 }),
+            query: t.String({ minLength: 1, maxLength: QUERY_MAX }),
           }),
           { minItems: 1, maxItems: COLLECTION_BATCH_MAX },
         ),
@@ -604,8 +605,10 @@ export const collectionRoutes = new Elysia({ prefix: "/collections" })
         {
           params: t.Object({ id: t.String() }),
           body: t.Object({
-            name: t.Optional(t.String({ minLength: 1 })),
-            query: t.Optional(t.String({ minLength: 1 })),
+            name: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
+            query: t.Optional(
+              t.String({ minLength: 1, maxLength: QUERY_MAX }),
+            ),
           }),
         },
       )

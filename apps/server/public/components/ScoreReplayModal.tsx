@@ -1808,9 +1808,13 @@ export function ScoreReplayModal({
                         here · {formatActionCodes(actionKeybinds.playPause)}{" "}
                         play · {formatActionCodes(actionKeybinds.seekBack)}{" "}
                         {formatActionCodes(actionKeybinds.seekForward)} skip ·
-                        {t(dict?.common.wheelSeekHint, {
-                          seconds: SKIP_MS / 1000,
-                        })}{" "}
+                        {t(
+                          dict?.common.wheelSeekHint ??
+                            "wheel seek · shift {{seconds}}s",
+                          {
+                            seconds: SKIP_MS / 1000,
+                          },
+                        )}{" "}
                         ·{" "}
                         {formatActionCodes(actionKeybinds.stop)} stop ·{" "}
                         {formatActionCodes(actionKeybinds.fullscreen)}{" "}

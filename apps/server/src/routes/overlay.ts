@@ -29,6 +29,83 @@ import {
 export const DEFAULT_OVERLAY_LIMIT = 8;
 export const MAX_OVERLAY_LIMIT = 25;
 
+/** Serialized profile cap (elements + free-form options). */
+export const MAX_OVERLAY_PROFILE_BODY = 64 * 1024;
+/** Bounds for one published overlay skin snapshot. */
+export const MAX_OVERLAY_SKIN_SPRITES = 256;
+export const MAX_OVERLAY_SKIN_KEY = 128;
+export const MAX_OVERLAY_SPRITE_CHARS = 8_000_000;
+export const MAX_OVERLAY_SKIN_BODY = 32 * 1024 * 1024;
+
+/** Overlay element fields are clamped later; the schema only bounds the wire shape. */
+const overlayProfileNumber = t.Optional(
+  t.Union([t.Number(), t.String({ maxLength: 32 })]),
+);
+
+const overlayProfileBodySchema = t.Object({
+  id: t.Optional(t.String({ maxLength: 64 })),
+  name: t.Optional(t.String({ maxLength: 200 })),
+  width: overlayProfileNumber,
+  height: overlayProfileNumber,
+  bg: t.Optional(t.String({ maxLength: 16 })),
+  elements: t.Optional(
+    t.Array(
+      t.Object({
+        instanceId: t.Optional(t.String({ maxLength: 64 })),
+        type: t.Optional(t.String({ maxLength: 32 })),
+        x: overlayProfileNumber,
+        y: overlayProfileNumber,
+        scale: overlayProfileNumber,
+        options: t.Optional(
+          t.Union([
+            t.Record(t.String({ maxLength: 128 }), t.Unknown(), {
+              maxProperties: 64,
+            }),
+            t.Null(),
+          ]),
+        ),
+        trigger: t.Optional(
+          t.Union([
+            t.Object({
+              field: t.Optional(t.String({ maxLength: 32 })),
+              op: t.Optional(t.String({ maxLength: 16 })),
+              value: t.Optional(
+                t.Union([t.Boolean(), t.String({ maxLength: 64 })]),
+              ),
+              action: t.Optional(t.String({ maxLength: 16 })),
+            }),
+            t.Null(),
+          ]),
+        ),
+      }),
+      { maxItems: 32 },
+    ),
+  ),
+});
+
+const overlaySkinsBodySchema = t.Object({
+  mania: t.Optional(t.Unknown()),
+  std: t.Optional(t.Unknown()),
+  taiko: t.Optional(t.Unknown()),
+  catch: t.Optional(t.Unknown()),
+  sprites: t.Optional(
+    t.Record(
+      t.String({ maxLength: 512 }),
+      t.String({ maxLength: MAX_OVERLAY_SKIN_BODY }),
+      // The handler returns 413 for the product-level cap; this only stops
+      // absurd maps from reaching it.
+      { maxProperties: 1024 },
+    ),
+  ),
+});
+
+function jsonError(status: number, error: string): Response {
+  return new Response(JSON.stringify({ error }), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
 export function clampOverlayLimit(raw: unknown): number {
   const n = typeof raw === "number" ? raw : Number(raw);
   if (!Number.isFinite(n) || n < 1) return DEFAULT_OVERLAY_LIMIT;
@@ -194,12 +271,14 @@ export const overlayRoutes = new Elysia({ prefix: "/overlay" })
   .put(
     "/profiles/:id",
     async ({ db, params, body }) => {
+      // Free-form element options make a field-level cap impractical; bound
+      // the whole serialized profile before it reaches the settings store.
+      if (JSON.stringify(body).length > MAX_OVERLAY_PROFILE_BODY) {
+        return jsonError(413, "overlay profile is too large");
+      }
       const incoming = sanitizeOverlayProfile({ ...body, id: params.id });
       if (!incoming) {
-        return new Response(JSON.stringify({ error: "invalid profile" }), {
-          status: 400,
-          headers: { "content-type": "application/json" },
-        });
+        return jsonError(400, "invalid profile");
       }
       const profiles = await readOverlayProfiles(db);
       const idx = profiles.findIndex((p) => p.id === incoming.id);
@@ -208,7 +287,7 @@ export const overlayRoutes = new Elysia({ prefix: "/overlay" })
       await writeOverlayProfiles(db, profiles);
       return { profile: incoming };
     },
-    { body: t.Any() },
+    { body: overlayProfileBodySchema },
   )
   .delete(
     "/profiles/:id",
@@ -236,21 +315,39 @@ export const overlayRoutes = new Elysia({ prefix: "/overlay" })
   .put(
     "/skins",
     async ({ db, body }) => {
-      const raw = body as Record<string, unknown>;
+      const raw = body as {
+        mania?: unknown;
+        std?: unknown;
+        taiko?: unknown;
+        catch?: unknown;
+        sprites?: Record<string, string>;
+      };
+      const spriteEntries = raw.sprites ? Object.entries(raw.sprites) : [];
+      if (spriteEntries.length > MAX_OVERLAY_SKIN_SPRITES) {
+        return jsonError(
+          413,
+          `at most ${MAX_OVERLAY_SKIN_SPRITES} sprites can be published`,
+        );
+      }
       const sprites: Record<string, string> = {};
-      if (raw.sprites != null && typeof raw.sprites === "object") {
-        for (const [key, value] of Object.entries(raw.sprites)) {
-          // Imported .osk blobs are stored without a MIME type, so exported
-          // data URLs may read "data:application/octet-stream;base64,…" —
-          // accept any base64 data URL, not just image/*.
-          if (
-            typeof value === "string" &&
-            value.startsWith("data:") &&
-            value.includes(";base64,") &&
-            value.length <= 8_000_000
-          ) {
-            sprites[key.slice(0, 128)] = value;
+      let totalChars = 0;
+      for (const [key, value] of spriteEntries) {
+        // Imported .osk blobs are stored without a MIME type, so exported
+        // data URLs may read "data:application/octet-stream;base64,…" —
+        // accept any base64 data URL, not just image/*.
+        if (
+          typeof value === "string" &&
+          value.startsWith("data:") &&
+          value.includes(";base64,")
+        ) {
+          if (value.length > MAX_OVERLAY_SPRITE_CHARS) {
+            return jsonError(413, `sprite ${key.slice(0, 64)} is too large`);
           }
+          totalChars += value.length;
+          if (totalChars > MAX_OVERLAY_SKIN_BODY) {
+            return jsonError(413, "overlay skin snapshot is too large");
+          }
+          sprites[key.slice(0, MAX_OVERLAY_SKIN_KEY)] = value;
         }
       }
       const snapshot = {
@@ -262,13 +359,16 @@ export const overlayRoutes = new Elysia({ prefix: "/overlay" })
         sprites,
       };
       const value = JSON.stringify(snapshot);
+      if (value.length > MAX_OVERLAY_SKIN_BODY) {
+        return jsonError(413, "overlay skin snapshot is too large");
+      }
       await db
         .insert(settings)
         .values({ key: OVERLAY_SKINS_KEY, value })
         .onConflictDoUpdate({ target: settings.key, set: { value } });
       return { ok: true };
     },
-    { body: t.Any() },
+    { body: overlaySkinsBodySchema },
   )
   .delete("/skins", async ({ db }) => {
     await db.delete(settings).where(eq(settings.key, OVERLAY_SKINS_KEY));

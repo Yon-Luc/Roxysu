@@ -39,7 +39,7 @@ export type TimingStats = {
   earlyPct: number;
   latePct: number;
   /** Histogram bins of errorMs (negative = early). */
-  bins: { center: number; count: number }[];
+  bins: { center: number; count: number; overflow?: "low" | "high" }[];
   binWidth: number;
 };
 
@@ -58,7 +58,7 @@ const CHORD_EPS_MS = 8;
 const STREAM_WINDOW_MS = 200;
 const STREAM_MIN_NOTES = 4;
 const HIST_BIN_MS = 5;
-const HIST_HALF_RANGE = 100;
+export const HIST_HALF_RANGE = 100;
 
 function isHold(note: ChartNote): boolean {
   return note.endMs > note.startMs + HOLD_EPS_MS;
@@ -192,10 +192,24 @@ export function computeTimingStats(judgments: JudgmentLike[]): TimingStats {
 
   const binWidth = HIST_BIN_MS;
   const binCount = Math.floor((HIST_HALF_RANGE * 2) / binWidth);
-  const bins = Array.from({ length: binCount }, (_, i) => ({
-    center: -HIST_HALF_RANGE + binWidth / 2 + i * binWidth,
+  const bins: TimingStats["bins"] = Array.from(
+    { length: binCount },
+    (_, i) => ({
+      center: -HIST_HALF_RANGE + binWidth / 2 + i * binWidth,
+      count: 0,
+    }),
+  );
+  // UI-L6: keep the tails instead of clamping them into the edge bins.
+  bins.unshift({
+    center: -HIST_HALF_RANGE - binWidth / 2,
     count: 0,
-  }));
+    overflow: "low",
+  });
+  bins.push({
+    center: HIST_HALF_RANGE + binWidth / 2,
+    count: 0,
+    overflow: "high",
+  });
 
   if (errors.length === 0) {
     return {
@@ -216,12 +230,23 @@ export function computeTimingStats(judgments: JudgmentLike[]): TimingStats {
     sum += e;
     if (e < 0) early += 1;
     else if (e > 0) late += 1;
+    if (e < -HIST_HALF_RANGE) {
+      bins[0]!.count += 1;
+      continue;
+    }
+    if (e > HIST_HALF_RANGE) {
+      bins[bins.length - 1]!.count += 1;
+      continue;
+    }
+    // In-range values keep the historical edge-bin behavior (an exact +100
+    // lands in the last normal bin, not the overflow bin); +1 skips the
+    // low-overflow slot.
     const clamped = Math.min(
       HIST_HALF_RANGE - 0.001,
       Math.max(-HIST_HALF_RANGE, e),
     );
-    const idx = Math.floor((clamped + HIST_HALF_RANGE) / binWidth);
-    if (idx >= 0 && idx < bins.length) bins[idx]!.count += 1;
+    const idx = Math.floor((clamped + HIST_HALF_RANGE) / binWidth) + 1;
+    if (idx >= 1 && idx < bins.length - 1) bins[idx]!.count += 1;
   }
 
   const mean = sum / errors.length;
@@ -265,7 +290,9 @@ export function computeColumnHeat(
     const note = notes[j.noteIndex];
     if (!note) continue;
     const c = Math.min(cols - 1, Math.max(0, note.column));
-    if (j.result === "miss" && !j.isTail) {
+    // UI-L6: LN-tail misses count too — they belong to the hold note's column
+    // and were previously dropped, leaving held-lane chokes untinted.
+    if (j.result === "miss") {
       missCount[c]! += 1;
     }
     if (j.errorMs != null && j.result !== "miss") {

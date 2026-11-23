@@ -68,9 +68,11 @@ html = html.replace(
 writeFileSync(path.join(outDir, "index.html"), html);
 
 // Static assets referenced by index.html / PWA (not emitted by the JS bundle).
+// `boot.js` is the pre-paint bootstrap script index.html loads with a blocking
+// <script src="./boot.js"> tag (L2), so it must land next to the built
+// index.html or the language/overlay/theme bootstrap silently stops running.
 for (const rel of [
-  "roxy.png",
-  "roxyctb.png",
+  "boot.js",
   "manifest.webmanifest",
   "icons",
   "sw.js",

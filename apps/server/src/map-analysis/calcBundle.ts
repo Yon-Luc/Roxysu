@@ -131,6 +131,34 @@ export async function setCalcBundleAppliedVersion(
 }
 
 /**
+ * Export predicate for rework dan rows. Hash equality implies a non-null hash;
+ * the explicit non-empty check matches the `if (!row.beatmapHash) continue`
+ * guard in the iterator so counting and streaming see the same rows.
+ */
+function danExportPredicate() {
+  return and(
+    eq(beatmapDanRatings.algorithm, REWORK_ALGORITHM),
+    isNotNull(beatmaps.hash),
+    sql`${beatmaps.hash} <> ''`,
+    isNull(beatmapDanRatings.error),
+    isNotNull(beatmapDanRatings.estDiff),
+    sql`${beatmapDanRatings.beatmapHash} = ${beatmaps.hash}`,
+  );
+}
+
+/** Export predicate for dominant-skill / chart-shape rows. */
+function patternExportPredicate() {
+  return and(
+    eq(beatmapPatternAnalysis.algorithm, PATTERN_ALGORITHM),
+    isNotNull(beatmaps.hash),
+    sql`${beatmaps.hash} <> ''`,
+    isNull(beatmapPatternAnalysis.error),
+    isNotNull(beatmapPatternAnalysis.dominantPattern),
+    sql`${beatmapPatternAnalysis.beatmapHash} = ${beatmaps.hash}`,
+  );
+}
+
+/**
  * Stream successful local rows for release/Hub export (dan rows first, then
  * pattern rows; queries are single-pass, so pagination needs no ORDER BY).
  */
@@ -149,15 +177,7 @@ export async function* iterateCalcBundleEntries(
     })
     .from(beatmapDanRatings)
     .innerJoin(beatmaps, eq(beatmaps.id, beatmapDanRatings.beatmapId))
-    .where(
-      and(
-        eq(beatmapDanRatings.algorithm, REWORK_ALGORITHM),
-        isNotNull(beatmaps.hash),
-        isNull(beatmapDanRatings.error),
-        isNotNull(beatmapDanRatings.estDiff),
-        sql`${beatmapDanRatings.beatmapHash} = ${beatmaps.hash}`,
-      ),
-    );
+    .where(danExportPredicate());
 
   const patternRows = await db
     .select({
@@ -180,15 +200,7 @@ export async function* iterateCalcBundleEntries(
     })
     .from(beatmapPatternAnalysis)
     .innerJoin(beatmaps, eq(beatmaps.id, beatmapPatternAnalysis.beatmapId))
-    .where(
-      and(
-        eq(beatmapPatternAnalysis.algorithm, PATTERN_ALGORITHM),
-        isNotNull(beatmaps.hash),
-        isNull(beatmapPatternAnalysis.error),
-        isNotNull(beatmapPatternAnalysis.dominantPattern),
-        sql`${beatmapPatternAnalysis.beatmapHash} = ${beatmaps.hash}`,
-      ),
-    );
+    .where(patternExportPredicate());
 
   for (const row of danRows) {
     if (!row.beatmapHash) continue;
@@ -234,6 +246,27 @@ export async function exportCalcBundleEntries(
     out.push(entry);
   }
   return out;
+}
+
+/**
+ * Number of exportable rows without materializing them. Uses the same
+ * predicates as `iterateCalcBundleEntries`, so it always equals
+ * `exportCalcBundleEntries(db).length`.
+ */
+export async function countCalcBundleEntries(db: Db): Promise<number> {
+  const dan = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(beatmapDanRatings)
+    .innerJoin(beatmaps, eq(beatmaps.id, beatmapDanRatings.beatmapId))
+    .where(danExportPredicate())
+    .get();
+  const pattern = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(beatmapPatternAnalysis)
+    .innerJoin(beatmaps, eq(beatmaps.id, beatmapPatternAnalysis.beatmapId))
+    .where(patternExportPredicate())
+    .get();
+  return Number(dan?.n ?? 0) + Number(pattern?.n ?? 0);
 }
 
 /**

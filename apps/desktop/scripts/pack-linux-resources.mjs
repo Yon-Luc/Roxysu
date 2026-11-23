@@ -103,6 +103,7 @@ const appFiles = [
   "urlPolicy.js",
   "stopChild.js",
   "waitForServer.js",
+  "logRotation.js",
   "splash.html",
   "package.json",
 ];

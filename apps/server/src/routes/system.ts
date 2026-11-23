@@ -74,7 +74,8 @@ function readSchemaOutdated(
 }
 
 export const systemRoutes = new Elysia({ prefix: "/system" })
-  .get("/healthz", () => ({ ok: true }))
+  // Desktop `waitForServer` requires `service === "roxysu-server"`.
+  .get("/healthz", () => ({ ok: true, service: "roxysu-server" }))
   // -------------------------------------------------------------------------
   // Hub OAuth handoff (Electron system-browser flow)
   // 1) POST /begin → { handoff, verifier, challenge }; verifier goes only to the

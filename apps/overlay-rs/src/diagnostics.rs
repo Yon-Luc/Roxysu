@@ -61,9 +61,12 @@ pub fn reassert_placement(window: &ApplicationWindow, anchor: Anchor) {
 }
 
 /// Install W1 (damage tick) and/or W4 (paint counter + optional debug report).
+///
+/// `webview` is the live slot, not a snapshot: a web-process crash replaces
+/// the widget (D1) and these timers must keep targeting the current one.
 pub fn install_timers(
     window: &ApplicationWindow,
-    webview: &WebView,
+    webview: Rc<RefCell<WebView>>,
     flags: DiagnosticFlags,
     debug: bool,
     mapped: Rc<RefCell<bool>>,
@@ -72,7 +75,7 @@ pub fn install_timers(
     if flags.damage_tick {
         info!("diag W1: damage_tick enabled (300ms opacity flip)");
         let window = window.clone();
-        let webview = webview.clone();
+        let webview = Rc::clone(&webview);
         let mapped = Rc::clone(&mapped);
         let shown = Rc::clone(&shown);
         let flip = Rc::new(Cell::new(false));
@@ -81,6 +84,7 @@ pub fn install_timers(
                 return glib::ControlFlow::Continue;
             }
             flip.set(!flip.get());
+            let webview = webview.borrow();
             webview.set_opacity(if flip.get() { 1.0 } else { 0.999 });
             webview.queue_draw();
             if let Some(surface) = window.surface() {
@@ -96,7 +100,9 @@ pub fn install_timers(
         info!("diag W4: paint_counter tick callback enabled");
         let tick_count = Rc::new(Cell::new(0u32));
         let count_cb = Rc::clone(&tick_count);
-        webview.add_tick_callback(move |_, _| {
+        // Attach to the window rather than the WebView: the frame clock
+        // belongs to the surface, so the counter survives a WebView recreate.
+        window.add_tick_callback(move |_, _| {
             count_cb.set(count_cb.get().saturating_add(1));
             glib::ControlFlow::Continue
         });

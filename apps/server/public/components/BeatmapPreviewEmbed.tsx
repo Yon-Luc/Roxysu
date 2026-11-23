@@ -762,7 +762,9 @@ export function BeatmapPreviewEmbed({
             +5s
           </button>
           <span className="text-[11px] text-on-media-muted">
-            {t(dict?.common.wheelSeekHint, { seconds: SKIP_MS / 1000 })}
+            {t(dict?.common.wheelSeekHint ?? "wheel seek · shift {{seconds}}s", {
+              seconds: SKIP_MS / 1000,
+            })}
           </span>
           {isMania ? (
             <label className="ml-auto flex min-w-[8rem] items-center gap-2 text-[11px] text-on-media-muted">

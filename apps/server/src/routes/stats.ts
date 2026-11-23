@@ -5,7 +5,6 @@ import {
   getPlayedKeyModes,
   getPlayerStats,
   parseGranularity,
-  parseSkillKeyCount,
   parseSkillTopPlays,
   type StatsGranularity,
 } from "../analytics/playerStats";
@@ -25,12 +24,27 @@ import {
   type SkillBandAxis,
 } from "../analytics/skillBandPlays";
 
+/**
+ * Like `parseSkillKeyCount`, but keeps an omitted / empty / invalid key count
+ * as `undefined` so `getPlayerStats` can resolve the player's preferred
+ * keymode. Pre-defaulting to 7 here would make the fallback unreachable (and
+ * cache the 7K payload under the wrong key).
+ */
+function parseOptionalSkillKeyCount(raw: unknown): number | undefined {
+  if (raw === undefined || raw === null || raw === "") return undefined;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return undefined;
+  const rounded = Math.round(n);
+  if (rounded < 1 || rounded > 18) return undefined;
+  return rounded;
+}
+
 async function buildStatsResponse(
   db: Db,
   opts: {
     granularity: StatsGranularity;
     skillTopPlays: number;
-    keyCount: number;
+    keyCount?: number;
   },
 ) {
   const data = await getPlayerStats(db, opts);
@@ -69,7 +83,11 @@ export const statsRoutes = new Elysia({ prefix: "/stats" })
         band: query.band,
         axis,
         topPlays: parseSkillTopPlays(query.topPlays),
-        keyCount: parseSkillKeyCount(query.keyCount),
+        // Omitted keyCount: follow the same preferred-key fallback as
+        // `GET /stats`, so the Patterns panel does not start on 7K and jump.
+        keyCount:
+          parseOptionalSkillKeyCount(query.keyCount) ??
+          getPlayedKeyModes(db).preferredKeyCount,
         shape: query.shape?.trim() || undefined,
       });
       return {
@@ -111,26 +129,36 @@ export const statsRoutes = new Elysia({ prefix: "/stats" })
     async ({ db, query }) => {
       const granularity = parseGranularity(query.granularity);
       const skillTopPlays = parseSkillTopPlays(query.skillTopPlays);
-      const keyCount = parseSkillKeyCount(query.keyCount);
+      const keyCount = parseOptionalSkillKeyCount(query.keyCount);
       const usernames = resolveScoresUsernamesSync(db);
       const gamemode = resolveScoresGamemodeSync(db);
-      const cacheKey = playerStatsCacheKey({
+      const cacheParts = {
         granularity,
         skillTopPlays,
-        keyCount,
         username: scoresUsernameCacheKey(usernames),
         gamemode: scoresGamemodeCacheKey(gamemode),
-      });
-
-      const cached = getCachedPlayerStats<StatsResponse>(cacheKey);
-      if (cached) return cached;
+      };
+      // An omitted keyCount is resolved inside getPlayerStats, so only an
+      // explicit key can be used for the lookup. The built payload is cached
+      // under its resolved keyCount below, which covers the native key too.
+      if (keyCount != null) {
+        const cached = getCachedPlayerStats<StatsResponse>(
+          playerStatsCacheKey({ ...cacheParts, keyCount }),
+        );
+        if (cached) return cached;
+      }
 
       const payload = await buildStatsResponse(db, {
         granularity,
         skillTopPlays,
         keyCount,
       });
-      setCachedPlayerStats(cacheKey, payload);
+      // Cache under the resolved keymode (payload.keyCount), never the 7K
+      // pre-default, so a later explicit ?keyCount=<preferred> hits this entry.
+      setCachedPlayerStats(
+        playerStatsCacheKey({ ...cacheParts, keyCount: payload.keyCount }),
+        payload,
+      );
       return payload;
     },
     {

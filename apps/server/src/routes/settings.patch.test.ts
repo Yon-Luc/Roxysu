@@ -1,12 +1,17 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import {
+  chmodSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Elysia } from "elysia";
 import { closeDb, ensureDb } from "@roxysu/db/client.bun";
 import type { Db } from "@roxysu/db/types";
 import { bindDb } from "../db-runtime";
-import { settingsRoutes } from "./settings";
+import { maniaRatingAllowedRoots, settingsRoutes } from "./settings";
 
 let db: Db;
 let tmpDir: string;
@@ -96,6 +101,92 @@ describe("PATCH /settings atomicity (S-NEW-2)", () => {
     const res = await patch({ overlayOutput: null });
     expect(res.status).toBe(200);
     expect((await getOverlay()).output).toBeNull();
+  });
+});
+
+describe("maniaRatingAllowedRoots", () => {
+  test("includes the app data dir, env roots, and documented dev targets", () => {
+    const roots = maniaRatingAllowedRoots(
+      {
+        ROXYSU_DATA_DIR: "/data/roxysu",
+        ROXYSU_RESOURCES: "/opt/roxysu/resources",
+        ROXYSU_CALCULATOR_ROOTS: ["/opt/calculators", "/srv/calc"].join(
+          path.delimiter,
+        ),
+        HOME: "/home/player",
+      } as NodeJS.ProcessEnv,
+      path.resolve(process.cwd(), "../.."),
+    );
+    expect(roots).toContain(path.resolve("/data/roxysu/calculators"));
+    expect(roots).toContain(path.resolve("/data/roxysu/mania-rating"));
+    expect(roots).toContain(path.resolve("/opt/roxysu/resources/tools"));
+    expect(roots).toContain(path.resolve("/opt/calculators"));
+    expect(roots).toContain(path.resolve("/srv/calc"));
+    expect(roots).toContain(path.resolve("/home/player/roxysu-calc"));
+    expect(roots).toContain(path.resolve(process.cwd(), "../../dist"));
+  });
+});
+
+describe("PATCH /settings executable path hardening (H2)", () => {
+  test("rejects a mania-rating binary outside the allowed roots", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "roxysu-mania-exec-"));
+    const binary = path.join(dir, "mania-rating-calc");
+    writeFileSync(binary, "");
+    chmodSync(binary, 0o755);
+    try {
+      const res = await patch({
+        maniaRatingExecutables: {
+          "enissay-accuracy-change": binary,
+        },
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe(
+        "Executable path is not inside an allowed directory",
+      );
+      const settings = await app.handle(
+        new Request("http://localhost/api/settings/"),
+      );
+      const payload = await settings.json();
+      const version = payload.maniaRating.versions.find(
+        (v: { id: string }) => v.id === "enissay-accuracy-change",
+      );
+      expect(version.executablePath).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects a tosu binary in a temporary directory", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "roxysu-tosu-exec-"));
+    const binary = path.join(dir, "tosu");
+    writeFileSync(binary, "");
+    chmodSync(binary, 0o755);
+    try {
+      const res = await patch({ tosuExecutablePath: binary });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe(
+        "Executable must not live in a temporary directory",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects a tosu binary without an execute bit", async () => {
+    if (process.platform === "win32") return;
+    const dir = mkdtempSync(path.join(process.cwd(), ".tosu-exec-test-"));
+    const binary = path.join(dir, "tosu");
+    writeFileSync(binary, "");
+    chmodSync(binary, 0o644);
+    try {
+      const res = await patch({ tosuExecutablePath: binary });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe(
+        "Executable is not runnable (missing execute permission)",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

@@ -98,6 +98,14 @@ export type StatisticsEngineOptions = {
   mapperOnlineIds?: number[];
 };
 
+/**
+ * Rebuilds the derived `daily_stats` / `weekly_stats` / `mapper_stats`
+ * partitions. A full run (no options) is required after an accuracy-formula
+ * change: incremental runs only recompute the days/weeks/mappers touched by
+ * the given scores, so untouched stored rows keep the old formula until the
+ * next full rebuild. There is deliberately no automatic migration for this —
+ * the payload shape is unchanged and a forced full rebuild is expensive.
+ */
 export async function runStatisticsEngine(
   db: Db,
   options?: StatisticsEngineOptions,

@@ -1,13 +1,14 @@
-//! Clap CLI surface. Preserves C option names/defaults; validates via [`Config`].
+//! Clap CLI surface. Preserves the C option names; validates via [`Config`].
+//! `--width`/`--height` no longer default to 1920×1090 — they follow the
+//! pinned output (L2) unless set explicitly.
 
 use anyhow::Result;
 use clap::Parser;
 
 use crate::config::{
-    Anchor, Config, DiagnosticFlags, GskRenderer, DEFAULT_HEIGHT, DEFAULT_MARGIN,
-    DEFAULT_MATCH_APP_ID, DEFAULT_OPACITY, DEFAULT_URL, DEFAULT_WATCHDOG_BREACH_SAMPLES,
-    DEFAULT_WATCHDOG_INTERVAL_SEC, DEFAULT_WATCHDOG_MAX_AGE_SEC, DEFAULT_WATCHDOG_MAX_FDS,
-    DEFAULT_WATCHDOG_MAX_RSS_MB, DEFAULT_WIDTH,
+    Anchor, Config, DiagnosticFlags, GskRenderer, DEFAULT_MARGIN, DEFAULT_MATCH_APP_ID,
+    DEFAULT_OPACITY, DEFAULT_URL, DEFAULT_WATCHDOG_BREACH_SAMPLES, DEFAULT_WATCHDOG_INTERVAL_SEC,
+    DEFAULT_WATCHDOG_MAX_AGE_SEC, DEFAULT_WATCHDOG_MAX_FDS, DEFAULT_WATCHDOG_MAX_RSS_MB,
 };
 use crate::focus::MatchMode;
 
@@ -33,13 +34,13 @@ pub struct Cli {
     #[arg(long, default_value_t = DEFAULT_MARGIN)]
     pub margin: i32,
 
-    /// Window width in pixels.
-    #[arg(long, default_value_t = DEFAULT_WIDTH)]
-    pub width: i32,
+    /// HUD width in pixels. Omitted: the pinned output's width (clamped to it).
+    #[arg(long)]
+    pub width: Option<i32>,
 
-    /// Window height in pixels.
-    #[arg(long, default_value_t = DEFAULT_HEIGHT)]
-    pub height: i32,
+    /// HUD height in pixels. Omitted: the pinned output's height (clamped to it).
+    #[arg(long)]
+    pub height: Option<i32>,
 
     /// Window opacity in (0.0, 1.0].
     #[arg(long, default_value_t = DEFAULT_OPACITY)]
@@ -289,6 +290,26 @@ mod tests {
             Some("/tmp/overlay-telem.csv")
         );
         assert_eq!(cfg.telemetry_phase, "gameplay");
+    }
+
+    #[test]
+    fn size_defaults_follow_the_output_and_overrides_parse() {
+        let cfg = Cli::try_parse_from(["roxysu-overlay-rs"])
+            .unwrap()
+            .into_config()
+            .unwrap();
+        // L2: no hard 1920x1090 default anymore.
+        assert_eq!(cfg.width, None);
+        assert_eq!(cfg.height, None);
+        assert_eq!(cfg.surface_size(None).0, crate::config::FALLBACK_WIDTH);
+
+        let cfg = Cli::try_parse_from(["roxysu-overlay-rs", "--width=1280", "--height", "720"])
+            .unwrap()
+            .into_config()
+            .unwrap();
+        assert_eq!(cfg.width, Some(1280));
+        assert_eq!(cfg.height, Some(720));
+        assert_eq!(cfg.surface_size(Some((2560, 1440))), (1280, 720));
     }
 
     #[test]

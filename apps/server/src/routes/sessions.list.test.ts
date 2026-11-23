@@ -16,6 +16,9 @@ let app: { handle: (req: Request) => Response | Promise<Response> };
 const SEED = 120;
 /** UTC day every seeded session falls on. */
 const DAY = "2026-11-01";
+/** Older UTC day with more sessions than the hard list max. */
+const BULK_DAY = "2026-10-01";
+const BULK_SEED = 510;
 
 beforeAll(() => {
   tmpDir = mkdtempSync(path.join(tmpdir(), "roxysu-sessions-list-"));
@@ -31,6 +34,17 @@ beforeAll(() => {
     scoreCount: 3,
     rulesetShortName: "mania",
   }));
+  // A second, older day past the 500-row hard cap proves `hasMore` is
+  // reported instead of silently truncating.
+  const bulkBase = Date.UTC(2026, 9, 1, 12, 0, 0);
+  rows.push(
+    ...Array.from({ length: BULK_SEED }, (_, i) => ({
+      startedAt: new Date(bulkBase - i * 60_000),
+      endedAt: new Date(bulkBase - i * 60_000 + 30_000),
+      scoreCount: 3,
+      rulesetShortName: "mania",
+    })),
+  );
   db.insert(sessions).values(rows).run();
 });
 
@@ -50,32 +64,43 @@ async function get(query: string) {
   return { status: res.status, body: (await res.json()) as any };
 }
 
-describe("GET /api/sessions list caps (S-NEW-1)", () => {
+describe("GET /api/sessions list caps (S-NEW-1 / UI-N1)", () => {
   test("no query returns the default cap, not every session", async () => {
     const { status, body } = await get("");
     expect(status).toBe(200);
     expect(body.items.length).toBe(100);
-    expect(body.items.length).toBeLessThan(SEED);
+    expect(body.items.length).toBeLessThan(SEED + BULK_SEED);
+    expect(body.hasMore).toBe(true);
   });
 
-  test("?limit=5 returns 5", async () => {
+  test("?limit=5 returns 5 and reports more", async () => {
     const { body } = await get("?limit=5");
     expect(body.items.length).toBe(5);
+    expect(body.hasMore).toBe(true);
   });
 
-  test("?limit=99999 clamps at the hard max and can exceed the default", async () => {
+  test("?limit=99999 clamps at the hard max and reports more", async () => {
     const { body } = await get("?limit=99999");
-    expect(body.items.length).toBe(SEED);
+    expect(body.items.length).toBe(500);
+    expect(body.hasMore).toBe(true);
   });
 
-  test("?day= respects the default cap", async () => {
+  test("?day= defaults to the hard max instead of the 100-row index cap", async () => {
     const { body } = await get(`?day=${DAY}`);
-    expect(body.items.length).toBe(100);
+    expect(body.items.length).toBe(SEED);
+    expect(body.hasMore).toBe(false);
+  });
+
+  test("?day= returns 500 and hasMore for a day past the cap", async () => {
+    const { body } = await get(`?day=${BULK_DAY}`);
+    expect(body.items.length).toBe(500);
+    expect(body.hasMore).toBe(true);
   });
 
   test("?day= with an explicit limit respects it", async () => {
     const { body } = await get(`?day=${DAY}&limit=5`);
     expect(body.items.length).toBe(5);
+    expect(body.hasMore).toBe(true);
   });
 
   test("items are newest first", async () => {

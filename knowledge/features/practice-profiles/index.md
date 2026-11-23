@@ -32,7 +32,7 @@ Per-beatmap deep dive: cover, core stats, recent scores with judgment detail, se
 
 ## Implementation
 
-Mania `GET /api/beatmaps/:id` reads the `.osu` file once for pattern detail. Density samples are two-pointer windows downsampled to about 120 points. Recent scores are a slim 50-row select that includes parsed `judgments`; sessions on the map are capped. Timing analysis is no longer computed for this endpoint.
+Mania `GET /api/beatmaps/:id` reads the `.osu` file once for pattern detail. Density samples are two-pointer windows downsampled to about 120 points with a peak-preserving bin (max NPS, then max chord) rather than an index stride; the chart uses numeric millisecond X values. Recent scores are a slim 50-row select that includes parsed `judgments`; sessions on the map are capped. Timing analysis is no longer computed for this endpoint.
 
 ## Important symbols
 

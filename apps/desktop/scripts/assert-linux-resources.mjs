@@ -52,6 +52,7 @@ try {
     "urlPolicy.js",
     "stopChild.js",
     "waitForServer.js",
+    "logRotation.js",
     "package.json",
     "resources/splash.html",
     "resources/public/index.html",

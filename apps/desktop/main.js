@@ -6,7 +6,13 @@ const http = require("node:http");
 const fs = require("node:fs");
 const { resolveDesktopPaths, ensureParentDir, ensureRealmExtracted } = require("./paths");
 const { startAutoUpdate } = require("./auto-update");
-const { classifyServerExit, decideRespawn } = require("./respawnPolicy");
+const { DEFAULT_RESPAWN_CONFIG, classifyServerExit, decideRespawn } = require("./respawnPolicy");
+const {
+  SERVER_STATE_CHANNEL,
+  decideRendererGone,
+  reloadActionFor,
+  serverStateForRespawn,
+} = require("./windowRecovery");
 const {
   OVERLAY_MAX_RESPAWNS,
   childIsAlive,
@@ -504,6 +510,8 @@ function createSplashWindow(paths) {
     desktopLog(`splash did-fail-load code=${code} desc=${desc} url=${url}`);
   });
 
+  attachRendererRecovery(mainWindow);
+
   void mainWindow
     .loadFile(splashPath)
     .then(() => {
@@ -517,6 +525,103 @@ function createSplashWindow(paths) {
 
   // Marker even if HTML fails — dark chrome is still a visible window for older stubs.
   signalWindowReady(paths.dataDir);
+}
+
+let rendererCrashes = 0;
+let rendererLastCrashAt = 0;
+let unresponsivePromptOpen = false;
+
+/**
+ * DD-7: a renderer crash or OOM used to leave a dead window until restart,
+ * with nothing logged. Reload (keeping the route) up to 3 times per minute,
+ * then end with the fatal dialog. A hung renderer gets a Wait / Reload prompt.
+ * @param {BrowserWindow} win
+ */
+function attachRendererRecovery(win) {
+  win.webContents.on("render-process-gone", (_e, details) => {
+    desktopLog(`renderer gone reason=${details.reason} exitCode=${details.exitCode}`);
+    if (shuttingDown) return;
+    const now = Date.now();
+    const decision = decideRendererGone({
+      reason: details.reason,
+      crashes: rendererCrashes,
+      lastCrashAt: rendererLastCrashAt,
+      now,
+    });
+    if (decision.action === "ignore") return;
+    rendererCrashes = decision.crashes;
+    rendererLastCrashAt = now;
+    if (decision.action === "fatal") {
+      void failFatal("renderer-crash-loop", { error: details.reason });
+      return;
+    }
+    setTimeout(() => {
+      if (shuttingDown || win.isDestroyed()) return;
+      desktopLog(`renderer reload after crash #${rendererCrashes}`);
+      void reloadKeepingRoute().catch((err) => desktopLog(`renderer reload failed: ${err}`));
+    }, 1000);
+  });
+
+  win.on("unresponsive", () => {
+    desktopLog("renderer unresponsive");
+    if (unresponsivePromptOpen || shuttingDown || win.isDestroyed()) return;
+    unresponsivePromptOpen = true;
+    void dialog
+      .showMessageBox(win, {
+        type: "warning",
+        title: "Roxysu",
+        message: "Roxysu is not responding",
+        detail: "The page may still be working. Reload it if it stays frozen.",
+        buttons: ["Wait", "Reload"],
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true,
+      })
+      .then(({ response }) => {
+        desktopLog(`unresponsive prompt answer=${response === 1 ? "reload" : "wait"}`);
+        if (response !== 1 || win.isDestroyed()) return;
+        // A hung renderer cannot process a reload; crash it first. The
+        // render-process-gone handler above then reloads it.
+        win.webContents.forcefullyCrashRenderer();
+      })
+      .catch((err) => desktopLog(`unresponsive prompt failed: ${err}`))
+      .finally(() => {
+        unresponsivePromptOpen = false;
+      });
+  });
+
+  win.on("responsive", () => desktopLog("renderer responsive again"));
+}
+
+/**
+ * DD-6: tell the app page (only an app-origin page; the preload exposes it as
+ * roxysuDesktop.onServerState) that the local server is down / back.
+ * @param {import("./windowRecovery").ServerState} payload
+ */
+function sendServerState(payload) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const wc = mainWindow.webContents;
+  if (!isAppUrl(wc.getURL(), APP_ORIGIN)) return;
+  try {
+    wc.send(SERVER_STATE_CHANNEL, payload);
+  } catch (err) {
+    desktopLog(`server-state send failed: ${err}`);
+  }
+}
+
+/**
+ * DD-6: after a server respawn (or a renderer crash) reload the page in
+ * place when it is the app, so #/route survives; otherwise load the root.
+ */
+async function reloadKeepingRoute() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const wc = mainWindow.webContents;
+  if (reloadActionFor(wc.getURL(), APP_ORIGIN) === "reload") {
+    desktopLog("reload in place (route kept)");
+    wc.reload();
+    return;
+  }
+  await loadAppIntoWindow();
 }
 
 /**
@@ -750,6 +855,7 @@ function scheduleServerRespawn(paths, sharedEnv) {
   }
   desktopLog(`server respawn #${decision.failures} in ${decision.delayMs}ms`);
   void setSplashStatus("Server stopped — restarting");
+  sendServerState(serverStateForRespawn(decision, DEFAULT_RESPAWN_CONFIG.maxAttempts));
   serverRespawnTimer = setTimeout(() => {
     serverRespawnTimer = null;
     if (shuttingDown) return;
@@ -874,10 +980,9 @@ async function respawnServer(paths, sharedEnv) {
   // D-NEW-2: the run only counts as stable from here, not from spawn.
   serverHealthyAt = Date.now();
   desktopLog("server respawn ok — reloading window");
+  sendServerState({ state: "up" });
   try {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      await loadAppIntoWindow();
-    }
+    await reloadKeepingRoute();
   } catch (err) {
     desktopLog(`reload after server respawn failed: ${err}`);
   }

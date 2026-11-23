@@ -1579,5 +1579,9 @@
       "release": "Release",
       "variety": "Variété"
     }
+  },
+  "desktop": {
+    "serverRestarting": "Le serveur local s’est arrêté — redémarrage (tentative {{attempt}} sur {{max}})…",
+    "serverBack": "Le serveur local est de retour — rechargement…"
   }
 }

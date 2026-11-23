@@ -1,3 +1,8 @@
+/** Local server state pushed by the desktop shell (DD-6). */
+export type DesktopServerState =
+  | { state: "restarting"; attempt: number; maxAttempts: number; delayMs: number }
+  | { state: "up" };
+
 /** Electron shell marker from `apps/desktop/preload.js`. */
 export type RoxysuDesktopBridge = {
   platform: string;
@@ -10,6 +15,8 @@ export type RoxysuDesktopBridge = {
   openExternal?: (url: string) => Promise<void>;
   /** Write a PNG (or other image bytes) to the system clipboard. */
   writeClipboardImage?: (pngBytes: Uint8Array) => Promise<void>;
+  /** Subscribe to local server state; returns an unsubscribe function. */
+  onServerState?: (callback: (state: DesktopServerState) => void) => () => void;
 };
 
 declare global {

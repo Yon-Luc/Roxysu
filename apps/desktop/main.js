@@ -468,6 +468,8 @@ function ipcSenderIsApp(event) {
  * for the same hashed URLs (e.g. empty MIME → correct MIME). Do NOT clear every
  * launch — that makes Windows .exe startups feel extremely slow.
  * Bump CACHE_EPOCH when a future fix needs another forced wipe.
+ * The token is the epoch only (DD-15): hashed asset URLs already change
+ * per build, so a version bump must not wipe the cache.
  */
 const CACHE_EPOCH = "mime-fix-1";
 
@@ -476,7 +478,7 @@ const CACHE_EPOCH = "mime-fix-1";
  */
 async function maybeClearHttpCache(paths) {
   const markerPath = path.join(paths.dataDir, "http-cache-epoch");
-  const token = `${app.getVersion()}:${CACHE_EPOCH}`;
+  const token = CACHE_EPOCH;
   try {
     if (fs.existsSync(markerPath) && fs.readFileSync(markerPath, "utf8") === token) {
       return;
@@ -557,6 +559,8 @@ function createSplashWindow(paths) {
       // in a sandboxed renderer. Sandboxing adds OS-level containment for a
       // window that renders remote-ish content (cover art, hub pages).
       sandbox: true,
+      // Session and collection names are not prose (DD-16).
+      spellcheck: false,
     },
   });
 
@@ -1158,6 +1162,10 @@ async function runFinishStartup(paths, sharedEnv) {
   } catch (err) {
     if (shuttingDown) return true;
     desktopLog(`loadAppIntoWindow failed: ${err}`);
+    // The child exit handler may not have scheduled the respawn yet. The
+    // HTTP error often arrives before the exit event.
+    await new Promise((resolve) => setImmediate(resolve));
+    if (shuttingDown) return true;
     // Cache wipe can outlast a boot crash. A respawn owns recovery; ending
     // the session here would throw away the server it just brought back.
     if (serverRespawnTimer || serverWaitId !== startupWaitId) {
@@ -1431,13 +1439,22 @@ const OVERLAY_HOST_STATUS_FILE = "overlay-host-status.json";
  * @param {{ state: "parked" | "running", reason: "unsupported" | "crash-loop" | null }} status
  */
 function writeOverlayHostStatus(dataDir, status) {
+  const file = path.join(dataDir, OVERLAY_HOST_STATUS_FILE);
+  const tmp = `${file}.${process.pid}.tmp`;
   try {
+    // Rename into place so a Settings poll cannot read a half-written file.
     fs.writeFileSync(
-      path.join(dataDir, OVERLAY_HOST_STATUS_FILE),
+      tmp,
       JSON.stringify({ state: status.state, reason: status.reason, at: Date.now() }),
     );
+    fs.renameSync(tmp, file);
   } catch (err) {
     desktopLog(`overlay host status write failed: ${err}`);
+    try {
+      fs.unlinkSync(tmp);
+    } catch {
+      // already gone
+    }
   }
 }
 

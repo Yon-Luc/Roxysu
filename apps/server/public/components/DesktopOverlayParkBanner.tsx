@@ -29,12 +29,13 @@ export function DesktopOverlayParkBanner() {
         : null;
   if (!text) return null;
   return (
-    <div
+    <a
+      href="#/settings?section=in-game-overlay"
       role="status"
       aria-live="polite"
       className="fixed left-1/2 top-14 z-[100] -translate-x-1/2 rounded-lg border border-line bg-elevated px-4 py-2 text-sm font-medium text-ink shadow-lg"
     >
       {text}
-    </div>
+    </a>
   );
 }

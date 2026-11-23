@@ -301,7 +301,16 @@ impl Config {
 
     /// See [`compute_surface_size`].
     pub fn surface_size(&self, output: Option<(i32, i32)>) -> (i32, i32) {
-        compute_surface_size(output, self.width, self.height)
+        self.size_request().for_output(output)
+    }
+
+    /// The parts of the config that decide the HUD surface size.
+    pub fn size_request(&self) -> SizeRequest {
+        SizeRequest {
+            width: self.width,
+            height: self.height,
+            margin: self.margin,
+        }
     }
 
     pub fn watchdog_thresholds(&self) -> crate::watchdog::Thresholds {
@@ -316,20 +325,49 @@ impl Config {
     }
 }
 
+/// Explicit size overrides plus the anchor margin (D1/L2 sizing input).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SizeRequest {
+    pub width: Option<i32>,
+    pub height: Option<i32>,
+    pub margin: i32,
+}
+
+impl SizeRequest {
+    /// See [`compute_surface_size`].
+    pub fn for_output(&self, output: Option<(i32, i32)>) -> (i32, i32) {
+        compute_surface_size(output, self.width, self.height, self.margin)
+    }
+}
+
 /// Requested HUD surface size for a monitor of `output` logical pixels
 /// (`None` when no monitor is known yet).
 ///
-/// Explicit `--width`/`--height` still win but are clamped to the output, so
-/// the old 1920×1090 default can never request a surface larger than a
-/// smaller monitor (L2). A request below [`MIN_HUD_WIDTH`] /
+/// The surface is anchored to one corner (one horizontal and one vertical
+/// edge), so the compositor uses this size as-is rather than stretching it
+/// between opposite edges. The anchored margin is therefore taken off the
+/// output once per axis: a full-output request plus a margin would push the
+/// far edge past the monitor (D1: a surface larger than its output is one
+/// of the drift/shear triggers).
+///
+/// Explicit `--width`/`--height` still win but are clamped to that usable
+/// area, so the old 1920×1090 default can never request a surface larger
+/// than a smaller monitor (L2). A request below [`MIN_HUD_WIDTH`] /
 /// [`MIN_HUD_HEIGHT`] is lifted to the usable minimum, but never past the
-/// output itself.
+/// usable area itself.
 pub fn compute_surface_size(
     output: Option<(i32, i32)>,
     width: Option<i32>,
     height: Option<i32>,
+    margin: i32,
 ) -> (i32, i32) {
-    let (out_w, out_h) = output.unwrap_or((FALLBACK_WIDTH, FALLBACK_HEIGHT));
+    let (out_w, out_h) = match output {
+        Some((w, h)) => {
+            let margin = margin.max(0);
+            (w.saturating_sub(margin), h.saturating_sub(margin))
+        }
+        None => (FALLBACK_WIDTH, FALLBACK_HEIGHT),
+    };
     let out_w = out_w.max(1);
     let out_h = out_h.max(1);
     (
@@ -436,6 +474,25 @@ mod tests {
         );
         // An output below the usable minimum is used as-is (never exceed it).
         assert_eq!(cfg.surface_size(Some((200, 150))), (200, 150));
+    }
+
+    #[test]
+    fn anchored_margin_is_taken_off_the_output() {
+        let mut cfg = Config::default();
+        cfg.margin = 24;
+        // Follows the output, minus the one anchored margin per axis.
+        assert_eq!(cfg.surface_size(Some((1920, 1080))), (1896, 1056));
+        // Explicit sizes are clamped to the usable area, not the raw output.
+        cfg.width = Some(1920);
+        cfg.height = Some(400);
+        assert_eq!(cfg.surface_size(Some((1920, 1080))), (1896, 400));
+        // The pre-pin fallback is not an output, so no margin is taken off.
+        cfg.width = None;
+        cfg.height = None;
+        assert_eq!(cfg.surface_size(None), (FALLBACK_WIDTH, FALLBACK_HEIGHT));
+        // A margin larger than the output never yields a non-positive size.
+        cfg.margin = 5000;
+        assert_eq!(cfg.surface_size(Some((1920, 1080))), (1, 1));
     }
 
     #[test]

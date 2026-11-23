@@ -352,7 +352,7 @@ impl OverlayHost {
         let lock_output = self.config.output.is_some();
         let pinned = Rc::new(RefCell::new(None::<String>));
         let mapped = Rc::clone(&self.mapped);
-        let size_override = (self.config.width, self.config.height);
+        let size_request = self.config.size_request();
 
         glib::spawn_future_local(async move {
             while let Some(cmd) = rx.recv().await {
@@ -384,7 +384,7 @@ impl OverlayHost {
                                                 show_epoch,
                                                 monitor,
                                                 key,
-                                                size_override,
+                                                size_request,
                                             );
                                             *last.borrow_mut() = Some(true);
                                             continue;
@@ -394,7 +394,7 @@ impl OverlayHost {
                                             &monitor,
                                             &key,
                                             &pinned,
-                                            size_override,
+                                            size_request,
                                             *mapped.borrow(),
                                         );
                                     }
@@ -889,7 +889,7 @@ fn apply_pin(
     monitor: &gdk4::Monitor,
     key: &str,
     pinned: &RefCell<Option<String>>,
-    size_override: (Option<i32>, Option<i32>),
+    size_request: crate::config::SizeRequest,
     mapped: bool,
 ) {
     let from = pinned.borrow().clone();
@@ -910,7 +910,7 @@ fn apply_pin(
         monitor_scale = monitor.scale(),
         "pinned overlay to osu! output"
     );
-    size_to_monitor(window, monitor, size_override);
+    size_to_monitor(window, monitor, size_request);
 }
 
 /// D1(b): an output change on a live surface becomes unmap → `set_monitor`
@@ -926,7 +926,7 @@ fn unmap_then_repin(
     show_epoch: u64,
     monitor: gdk4::Monitor,
     key: String,
-    size_override: (Option<i32>, Option<i32>),
+    size_request: crate::config::SizeRequest,
 ) {
     info!(output = %key, "unmapping overlay before repinning to a new output");
     gate.wants_visible.set(false);
@@ -939,7 +939,7 @@ fn unmap_then_repin(
         if epoch.get() != show_epoch {
             return; // a newer Show/Hide superseded this move
         }
-        apply_pin(&gate.window, &monitor, &key, &pinned, size_override, false);
+        apply_pin(&gate.window, &monitor, &key, &pinned, size_request, false);
         gate.wants_visible.set(true);
         sync_gate(&gate);
     });
@@ -950,23 +950,18 @@ fn monitor_size(monitor: &gdk4::Monitor) -> (i32, i32) {
     (geometry.width(), geometry.height())
 }
 
-/// Size the layer-surface request to the pinned monitor when no explicit
-/// `--width`/`--height` was given (L2). All four edges are anchored, so the
-/// compositor's configure remains authoritative; this only sets the size the
-/// surface starts from, clamped so it can never exceed the output.
+/// Size the layer-surface request to the pinned monitor (L2). The surface is
+/// anchored to a single corner, so the compositor uses this size as-is; it
+/// is computed from the output minus the anchored margin, and an explicit
+/// `--width`/`--height` is clamped to the same area, so a repin onto a
+/// smaller monitor can never leave a surface larger than its output (D1).
+/// Called while the surface is unmapped; the next map uses it.
 fn size_to_monitor(
     window: &ApplicationWindow,
     monitor: &gdk4::Monitor,
-    size_override: (Option<i32>, Option<i32>),
+    size_request: crate::config::SizeRequest,
 ) {
-    if size_override.0.is_some() && size_override.1.is_some() {
-        return;
-    }
-    let (width, height) = crate::config::compute_surface_size(
-        Some(monitor_size(monitor)),
-        size_override.0,
-        size_override.1,
-    );
+    let (width, height) = size_request.for_output(Some(monitor_size(monitor)));
     window.set_default_size(width, height);
     info!(width, height, "sized overlay request to the pinned output");
 }

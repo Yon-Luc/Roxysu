@@ -120,8 +120,11 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
     values. Electron passes `--url=http://…?bg=clear` and a long
     `--watchdog-max-age-sec` backstop (default 21600 s; `ROXYSU_OVERLAY_MAX_AGE_SEC`
     overrides, `0` disables). `--width`/`--height` are optional: omitted, the
-    surface request follows the pinned output's geometry (fallback 1280×720
-    before a monitor is known) and is clamped to the output.
+    surface request follows the pinned output's geometry minus the anchored
+    `--margin` (fallback 1280×720 before a monitor is known). The surface is
+    anchored to one corner, so the compositor uses that size as-is; explicit
+    sizes are clamped to the same area on every pin, including a repin to a
+    smaller monitor.
 14. **Host settings**: `overlay.host_url`, enable toggle `overlay.host_enabled`,
     optional monitor `overlay.host_output` (connector or model), and a
     monotonic restart nonce `overlay.host_restart` written by the settings

@@ -7,6 +7,7 @@ const { resolveDesktopPaths, ensureParentDir, ensureRealmExtracted } = require("
 const { startAutoUpdate } = require("./auto-update");
 const { decideRespawn } = require("./respawnPolicy");
 const { decideOverlayApply, childIsAlive } = require("./overlayApplyPolicy");
+const { createApplyGate, executeOverlayDecision } = require("./overlayApplyLoop");
 const { appOrigin, isAppUrl, canOpenExternal, senderIsApp } = require("./urlPolicy");
 const { stopChild: stopChildProcess } = require("./stopChild");
 const { waitForServer } = require("./waitForServer");
@@ -610,58 +611,75 @@ function watchOverlayHostSetting(paths) {
   let consecutiveFailures = 0;
   /** Last successfully read enable toggle; null until the first read. */
   let lastKnownEnabled = null;
+  /** D2: one poll run in flight; a call mid-flight coalesces into one re-run. */
+  const applyGate = createApplyGate();
 
   const apply = async () => {
     if (shuttingDown) return;
-    const settings = await fetchOverlaySettings();
-    if (shuttingDown) return;
+    if (!applyGate.begin()) return;
+    try {
+      const settings = await fetchOverlaySettings();
+      if (shuttingDown) return;
 
-    // Decision logic lives in overlayApplyPolicy.js (pure, unit-tested):
-    // F-038 gap only for an unchanged URL. Repeated poll failures stop a
-    // live host after the cap, whether or not the last known toggle was off.
-    const decision = decideOverlayApply({
-      settings,
-      defaultUrlArg: OVERLAY_URL_DEFAULT,
-      hasChild: overlayChild !== null,
-      childExited: overlayChild !== null && !childIsAlive(overlayChild),
-      appliedUrlArg: overlayAppliedUrlArg,
-      appliedOutput: overlayAppliedOutput,
-      spawnedAt: overlaySpawnedAt,
-      now: Date.now(),
-      respawnGapMs: OVERLAY_RESPAWN_GAP_MS,
-      consecutiveFailures,
-      lastKnownEnabled,
-    });
-    consecutiveFailures = decision.consecutiveFailures;
-    lastKnownEnabled = decision.lastKnownEnabled;
+      // Decision logic lives in overlayApplyPolicy.js (pure, unit-tested):
+      // F-038 gap only for an unchanged URL. Repeated poll failures stop a
+      // live host after the cap, whether or not the last known toggle was off.
+      const decision = decideOverlayApply({
+        settings,
+        defaultUrlArg: OVERLAY_URL_DEFAULT,
+        hasChild: overlayChild !== null,
+        childExited: overlayChild !== null && !childIsAlive(overlayChild),
+        appliedUrlArg: overlayAppliedUrlArg,
+        appliedOutput: overlayAppliedOutput,
+        spawnedAt: overlaySpawnedAt,
+        now: Date.now(),
+        respawnGapMs: OVERLAY_RESPAWN_GAP_MS,
+        consecutiveFailures,
+        lastKnownEnabled,
+      });
+      consecutiveFailures = decision.consecutiveFailures;
+      lastKnownEnabled = decision.lastKnownEnabled;
 
-    if (decision.action === "stop") {
-      desktopLog(
-        decision.reason === "disabled"
-          ? "overlay disabled by setting — stopping host"
-          : `overlay settings unreachable (${consecutiveFailures} polls) — stopping host`,
-      );
-      stopChild(overlayChild, "overlay");
-      overlayChild = null;
-      overlayAppliedUrlArg = null;
-      overlayAppliedOutput = null;
-      return;
-    }
-    if (decision.action === "spawn") {
-      if (decision.reason === "liveness-respawn") {
+      if (decision.action === "stop") {
         desktopLog(
-          `overlay liveness respawn (previous exit code=${overlayChild?.exitCode})`,
+          decision.reason === "disabled"
+            ? "overlay disabled by setting — stopping host"
+            : `overlay settings unreachable (${consecutiveFailures} polls) — stopping host`,
         );
-      } else if (decision.reason === "url-changed") {
-        desktopLog("overlay url changed — restarting host");
-      } else if (decision.reason === "output-changed") {
-        desktopLog("overlay monitor changed — restarting host");
+      } else if (decision.action === "spawn") {
+        if (decision.reason === "liveness-respawn") {
+          desktopLog(
+            `overlay liveness respawn (previous exit code=${overlayChild?.exitCode})`,
+          );
+        } else if (decision.reason === "url-changed") {
+          desktopLog("overlay url changed — restarting host");
+        } else if (decision.reason === "output-changed") {
+          desktopLog("overlay monitor changed — restarting host");
+        }
       }
-      // Host pre-splits argv on '=', so the URL rides in one --url=… token
-      // (decision.urlArg) and the monitor in one --output=… token.
-      if (decision.stopRunning) stopChild(overlayChild, "overlay");
-      overlayChild = null;
-      spawnOverlayHost(paths, decision.urlArg, decision.output ?? null);
+      // D2: the old host must be fully stopped (SIGTERM, SIGKILL, deadline)
+      // before a replacement spawns, so a URL/monitor restart can never
+      // overlap two layer-shell hosts. Sequencing lives in
+      // overlayApplyLoop.js (pure, unit-tested).
+      await executeOverlayDecision(decision, {
+        stop: () => stopChild(overlayChild, "overlay"),
+        spawn: (urlArg, output) => {
+          if (shuttingDown) return;
+          // Host pre-splits argv on '=', so the URL rides in one --url=… token
+          // (decision.urlArg) and the monitor in one --output=… token.
+          overlayChild = null;
+          spawnOverlayHost(paths, urlArg, output);
+        },
+      });
+      if (decision.action === "stop") {
+        overlayChild = null;
+        overlayAppliedUrlArg = null;
+        overlayAppliedOutput = null;
+      }
+    } finally {
+      if (applyGate.end() && !shuttingDown) {
+        void apply();
+      }
     }
   };
 

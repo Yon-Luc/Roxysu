@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, dialog, ipcMain, shell, clipboard, nativeImage } = require("electron");
+const { app, BrowserWindow, Menu, dialog, ipcMain, screen, shell, clipboard, nativeImage } = require("electron");
 const { spawn } = require("node:child_process");
 const { randomUUID } = require("node:crypto");
 const path = require("node:path");
@@ -13,6 +13,14 @@ const {
   reloadActionFor,
   serverStateForRespawn,
 } = require("./windowRecovery");
+const {
+  MIN_WINDOW_HEIGHT,
+  MIN_WINDOW_WIDTH,
+  clampZoomLevel,
+  sanitizeWindowState,
+  serializeWindowState,
+} = require("./windowState");
+const { ZOOM_STEP, shortcutFor } = require("./shellShortcuts");
 const {
   OVERLAY_MAX_RESPAWNS,
   childIsAlive,
@@ -482,9 +490,17 @@ function createSplashWindow(paths) {
   if (icon) desktopLog(`app icon=${icon}`);
   else desktopLog("app icon missing — using Electron default");
 
+  // DD-8: restore size / position / maximized / zoom from the last session.
+  const windowState = loadWindowState();
+  windowZoomLevel = windowState.zoomLevel;
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
+    width: windowState.width,
+    height: windowState.height,
+    ...(windowState.x !== undefined && windowState.y !== undefined
+      ? { x: windowState.x, y: windowState.y }
+      : {}),
+    minWidth: MIN_WINDOW_WIDTH,
+    minHeight: MIN_WINDOW_HEIGHT,
     title: "Roxysu",
     show: true,
     backgroundColor: "#12141a",
@@ -501,6 +517,9 @@ function createSplashWindow(paths) {
   });
 
   attachWindowGuards(mainWindow);
+  if (windowState.maximized) mainWindow.maximize();
+  trackWindowState(mainWindow);
+  attachShellShortcuts(mainWindow);
 
   mainWindow.on("closed", () => {
     mainWindow = null;
@@ -525,6 +544,120 @@ function createSplashWindow(paths) {
 
   // Marker even if HTML fails — dark chrome is still a visible window for older stubs.
   signalWindowReady(paths.dataDir);
+}
+
+/** DD-9: page zoom (Chromium level), persisted with the window state. */
+let windowZoomLevel = 0;
+/** Debounced window-state save for the current window (set by trackWindowState). */
+let scheduleWindowStateSave = () => {};
+
+function windowStatePath() {
+  return path.join(app.getPath("userData"), "window-state.json");
+}
+
+/** @returns {import("./windowState").WindowState} */
+function loadWindowState() {
+  let raw = null;
+  try {
+    raw = JSON.parse(fs.readFileSync(windowStatePath(), "utf8"));
+  } catch {
+    // first run or unreadable file → defaults
+  }
+  let displays = [];
+  try {
+    displays = screen.getAllDisplays();
+  } catch {
+    // screen unavailable → size limits only
+  }
+  return sanitizeWindowState(raw, displays);
+}
+
+/**
+ * DD-8: save bounds (normal, i.e. un-maximized), maximized and zoom, debounced
+ * on move/resize and synchronously on close.
+ * @param {BrowserWindow} win
+ */
+function trackWindowState(win) {
+  /** @type {NodeJS.Timeout | null} */
+  let timer = null;
+  const write = (sync) => {
+    if (win.isDestroyed()) return;
+    const body = JSON.stringify(
+      serializeWindowState(win.getNormalBounds(), win.isMaximized(), windowZoomLevel),
+    );
+    try {
+      if (sync) {
+        fs.writeFileSync(windowStatePath(), body);
+      } else {
+        fs.writeFile(windowStatePath(), body, () => {});
+      }
+    } catch (err) {
+      desktopLog(`window state save failed: ${err}`);
+    }
+  };
+  const schedule = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      write(false);
+    }, 500);
+  };
+  scheduleWindowStateSave = schedule;
+  for (const event of ["resize", "move", "maximize", "unmaximize"]) {
+    win.on(/** @type {any} */ (event), schedule);
+  }
+  win.on("close", () => {
+    if (timer) clearTimeout(timer);
+    timer = null;
+    write(true);
+  });
+  // Zoom is per page load; re-apply the saved level on every app page.
+  win.webContents.on("did-finish-load", () => {
+    if (win.isDestroyed()) return;
+    if (isAppUrl(win.webContents.getURL(), APP_ORIGIN)) {
+      win.webContents.setZoomLevel(windowZoomLevel);
+    }
+  });
+}
+
+/**
+ * DD-9: Ctrl/Cmd +, −, 0 zoom; Ctrl+R / F5 reload; F11 fullscreen; F12
+ * dev tools in dev builds. Windows/Linux have no menu to provide them.
+ * @param {BrowserWindow} win
+ */
+function attachShellShortcuts(win) {
+  win.webContents.on("before-input-event", (event, input) => {
+    const action = shortcutFor(input, { allowDevTools: !app.isPackaged });
+    if (!action) return;
+    event.preventDefault();
+    const wc = win.webContents;
+    const setZoom = (level) => {
+      windowZoomLevel = clampZoomLevel(level);
+      wc.setZoomLevel(windowZoomLevel);
+      scheduleWindowStateSave();
+    };
+    switch (action) {
+      case "zoom-in":
+        setZoom(windowZoomLevel + ZOOM_STEP);
+        break;
+      case "zoom-out":
+        setZoom(windowZoomLevel - ZOOM_STEP);
+        break;
+      case "zoom-reset":
+        setZoom(0);
+        break;
+      case "reload":
+        wc.reload();
+        break;
+      case "fullscreen":
+        win.setFullScreen(!win.isFullScreen());
+        break;
+      case "devtools":
+        wc.toggleDevTools();
+        break;
+    }
+    desktopLog(`shortcut ${action}${action.startsWith("zoom") ? ` level=${windowZoomLevel}` : ""}`);
+  });
 }
 
 let rendererCrashes = 0;

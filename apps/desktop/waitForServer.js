@@ -2,6 +2,30 @@
 
 const http = require("node:http");
 
+const HEALTHZ_FAST_DELAY_MS = 50;
+const HEALTHZ_SLOW_DELAY_MS = 250;
+const HEALTHZ_FAST_WINDOW_MS = 5_000;
+
+/**
+ * @param {number} elapsedMs monotonic elapsed time
+ * @param {number} [override] explicit retryDelayMs from options
+ */
+function healthzRetryDelayMs(elapsedMs, override) {
+  if (typeof override === "number") return override;
+  return elapsedMs < HEALTHZ_FAST_WINDOW_MS ? HEALTHZ_FAST_DELAY_MS : HEALTHZ_SLOW_DELAY_MS;
+}
+
+/**
+ * @param {unknown} body Parsed healthz JSON.
+ * @param {string | null} expectInstance
+ */
+function isOwnHealthPayload(body, expectInstance) {
+  if (!body || typeof body !== "object") return false;
+  const b = /** @type {{ ok?: unknown, service?: unknown, instance?: unknown }} */ (body);
+  if (b.ok !== true || b.service !== "roxysu-server") return false;
+  return expectInstance == null || b.instance === expectInstance;
+}
+
 /**
  * Poll `/api/system/healthz` until it returns HTTP 200 with JSON
  * `{ ok: true, service: "roxysu-server" }`. The `service` marker (desktop M4)
@@ -14,32 +38,26 @@ const http = require("node:http");
  * crashed session, a dev server — is then rejected instead of adopted.
  * One in-flight probe at a time. Destroying a timed-out request emits `error`;
  * that path must not schedule a second retry. `signal` aborts the wait.
+ * The deadline uses a monotonic clock (`options.now`, default `performance.now`)
+ * so a suspend or NTP step cannot trip it (DD-25). Retries are 50 ms for the
+ * first 5 s of elapsed monotonic time, then 250 ms, unless `retryDelayMs` is
+ * set (DD-13). Rejection errors carry `waitId`.
  *
  * @param {number} port
  * @param {string} host
  * @param {number} [timeoutMs]
- * @param {{ signal?: AbortSignal, expectInstance?: string | null, probeTimeoutMs?: number, retryDelayMs?: number, maxBodyBytes?: number }} [options]
+ * @param {{ signal?: AbortSignal, expectInstance?: string | null, probeTimeoutMs?: number, retryDelayMs?: number, maxBodyBytes?: number, now?: () => number, waitId?: string | number | null }} [options]
  * @returns {Promise<void>}
  */
-/**
- * @param {unknown} body Parsed healthz JSON.
- * @param {string | null} expectInstance
- */
-function isOwnHealthPayload(body, expectInstance) {
-  if (!body || typeof body !== "object") return false;
-  const b = /** @type {{ ok?: unknown, service?: unknown, instance?: unknown }} */ (body);
-  if (b.ok !== true || b.service !== "roxysu-server") return false;
-  return expectInstance == null || b.instance === expectInstance;
-}
-
 function waitForServer(port, host, timeoutMs = 180_000, options = {}) {
   const healthPath = "/api/system/healthz";
   const probeTimeoutMs = options.probeTimeoutMs ?? 1500;
-  const retryDelayMs = options.retryDelayMs ?? 250;
   const maxBodyBytes = options.maxBodyBytes ?? 4096;
   const signal = options.signal;
   const expectInstance = options.expectInstance ?? null;
-  const started = Date.now();
+  const now = options.now ?? (() => performance.now());
+  const waitId = options.waitId ?? null;
+  const started = now();
 
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -62,13 +80,19 @@ function waitForServer(port, host, timeoutMs = 180_000, options = {}) {
       else resolve(undefined);
     };
 
+    const rejection = (message) => {
+      const err = new Error(message);
+      err.waitId = waitId;
+      return err;
+    };
+
     const onAbort = () => {
-      finish(new Error("waitForServer aborted"));
+      finish(rejection("waitForServer aborted"));
     };
 
     if (signal) {
       if (signal.aborted) {
-        finish(new Error("waitForServer aborted"));
+        finish(rejection("waitForServer aborted"));
         return;
       }
       signal.addEventListener("abort", onAbort, { once: true });
@@ -76,15 +100,16 @@ function waitForServer(port, host, timeoutMs = 180_000, options = {}) {
 
     const retry = () => {
       if (settled) return;
-      if (Date.now() - started > timeoutMs) {
+      const elapsed = now() - started;
+      if (elapsed > timeoutMs) {
         finish(
-          new Error(
+          rejection(
             `Timed out waiting for Roxysu at http://${host}:${port}${healthPath}`,
           ),
         );
         return;
       }
-      timer = setTimeout(tryOnce, retryDelayMs);
+      timer = setTimeout(tryOnce, healthzRetryDelayMs(elapsed, options.retryDelayMs));
     };
 
     const tryOnce = () => {
@@ -191,4 +216,12 @@ function probePortOwner(port, host, options = {}) {
   });
 }
 
-module.exports = { isOwnHealthPayload, probePortOwner, waitForServer };
+module.exports = {
+  HEALTHZ_FAST_DELAY_MS,
+  HEALTHZ_FAST_WINDOW_MS,
+  HEALTHZ_SLOW_DELAY_MS,
+  healthzRetryDelayMs,
+  isOwnHealthPayload,
+  probePortOwner,
+  waitForServer,
+};

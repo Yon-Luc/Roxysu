@@ -53,6 +53,7 @@ try {
     "urlPolicy.js",
     "stopChild.js",
     "waitForServer.js",
+    "startupOnce.js",
     "logRotation.js",
     "shellShortcuts.js",
     "windowState.js",

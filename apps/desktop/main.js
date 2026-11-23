@@ -38,6 +38,7 @@ const { splashLang, splashStatus } = require("./splashLocale");
 const { toImageBuffer } = require("./clipboardImage");
 const { stopChild: stopChildProcess } = require("./stopChild");
 const { probePortOwner, waitForServer } = require("./waitForServer");
+const { createOnceGuard } = require("./startupOnce");
 const { FATAL_LOG_TAIL_BYTES, buildFatalReport } = require("./fatalReport");
 const {
   DEFAULT_MAX_LOG_BYTES,
@@ -127,9 +128,30 @@ const WINDOW_READY_MARKER = "electron-window-ready";
 const DESKTOP_LOG_SIZE_CHECK_MS = 30_000;
 /** Last time desktop.log's size was checked for rotation. */
 let desktopLogSizeCheckedAt = 0;
-/** Aborted when shutdown starts so a splash wait cannot finish into a dead window. */
+/** Aborted when shutdown starts, or when a newer wait replaces it (DD-12). */
 /** @type {AbortController | null} */
 let startupAbort = null;
+/**
+ * DD-12: loadURL → realm → overlay → updater runs once. A boot crash's
+ * respawn must not do that path a second time.
+ */
+const finishStartupOnce = createOnceGuard();
+
+/** Durations use a monotonic clock so suspend / NTP cannot trip them (DD-25). */
+function monoNow() {
+  return performance.now();
+}
+
+/**
+ * Abort the previous health wait before arming a new one, so a boot crash
+ * cannot leave two continuations racing into loadURL (DD-12).
+ * @returns {AbortSignal}
+ */
+function replaceStartupAbort() {
+  if (startupAbort) startupAbort.abort();
+  startupAbort = new AbortController();
+  return startupAbort.signal;
+}
 
 /**
  * Resolve a writable log dir before whenReady (userData may still work via env/name).
@@ -844,7 +866,7 @@ async function startRealmReader(paths, sharedEnv) {
     realmNodeArgs,
   );
   const child = realmChild;
-  realmSpawnedAt = Date.now();
+  realmSpawnedAt = monoNow();
   child.on("exit", (code, signal) => {
     if (shuttingDown) return;
     // A replaced/stopped child (not the current one) must not trigger respawn.
@@ -870,7 +892,7 @@ function scheduleRealmRespawn(paths, sharedEnv) {
   if (shuttingDown || realmRespawnTimer) return;
   const decision = decideRespawn({
     failures: realmRespawnFailures,
-    uptimeMs: Date.now() - realmSpawnedAt,
+    uptimeMs: monoNow() - realmSpawnedAt,
   });
   realmRespawnFailures = decision.failures;
   if (decision.action === "give-up") {
@@ -926,7 +948,7 @@ function spawnServer(paths, sharedEnv) {
     },
     "server",
   );
-  serverSpawnedAt = Date.now();
+  serverSpawnedAt = monoNow();
   // D-NEW-2: a fresh run is not healthy until its health probe passes. A
   // stale timestamp here would make a never-healthy child look stable.
   serverHealthyAt = 0;
@@ -935,8 +957,8 @@ function spawnServer(paths, sharedEnv) {
     // A replaced/stopped child (not the current one) must not trigger respawn.
     if (child !== serverChild) return;
     desktopLog(
-      `server exited code=${code} signal=${signal} after ${Date.now() - serverSpawnedAt}ms ` +
-        `(healthy=${serverHealthyAt ? `${Date.now() - serverHealthyAt}ms` : "never"})`,
+      `server exited code=${code} signal=${signal} after ${Math.round(monoNow() - serverSpawnedAt)}ms ` +
+        `(healthy=${serverHealthyAt ? `${Math.round(monoNow() - serverHealthyAt)}ms` : "never"})`,
     );
     // DD-2: a server that cannot bind its port never will — respawning only
     // loops (and used to adopt whatever else answered healthz). Fail now.
@@ -976,7 +998,7 @@ function scheduleServerRespawn(paths, sharedEnv) {
     // a process that never served healthz has 0 healthy uptime no matter how
     // long it stayed alive.
     healthyAt: serverHealthyAt || null,
-    now: Date.now(),
+    now: monoNow(),
   });
   serverRespawnFailures = decision.failures;
   if (decision.action === "give-up") {
@@ -1082,9 +1104,73 @@ async function failFatal(reason, extra = {}) {
 }
 
 /**
+ * First successful health continuation: load the UI, then start the
+ * realm-reader, the overlay host, and the updater. A boot-crash respawn
+ * must not run this a second time (DD-12).
+ * @param {ReturnType<typeof resolveDesktopPaths>} paths
+ * @param {NodeJS.ProcessEnv} sharedEnv
+ * @returns {Promise<boolean>} true when this call performed startup
+ */
+async function finishStartup(paths, sharedEnv) {
+  if (shuttingDown) return false;
+  if (!childIsAlive(serverChild)) {
+    desktopLog("finishStartup skipped — server child is not alive");
+    return false;
+  }
+  if (!finishStartupOnce.run(() => {})) return false;
+  if (serverHealthyAt === 0) serverHealthyAt = monoNow();
+  await setSplashStatus(splashStatus(app.getLocale(), "opening"));
+  try {
+    await maybeClearHttpCache(paths);
+    await loadAppIntoWindow();
+  } catch (err) {
+    if (shuttingDown) return true;
+    desktopLog(`loadAppIntoWindow failed: ${err}`);
+    await failFatal("load-failed", { error: String(err?.message ?? err) });
+    return true;
+  }
+  if (shuttingDown) return true;
+  desktopLog("ready");
+
+  // Defer Realm until the UI is up. Extract is async so the first packaged
+  // launch does not freeze the window while tar runs.
+  void spawnRealmReader(paths, sharedEnv)
+    .then((result) => {
+      if (result === "failed") scheduleRealmRespawn(paths, sharedEnv);
+    })
+    .catch((err) => {
+      desktopLog(`realm-reader start failed: ${err}`);
+      scheduleRealmRespawn(paths, sharedEnv);
+    });
+
+  // Optional Wayland in-game overlay host (bundled on NixOS packages):
+  // spawns from the overlay.host_enabled / overlay.host_url settings and
+  // restarts/stops on changes.
+  watchOverlayHostSetting(paths);
+
+  // NSIS installs only — check after UI is up so startup is not blocked.
+  // DD-11: children must release node.exe and native addons before NSIS replaces them.
+  startAutoUpdate({ log: desktopLog, beforeInstall: shutdown });
+
+  app.on("activate", () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      void (async () => {
+        try {
+          createSplashWindow(paths);
+          await loadAppIntoWindow();
+        } catch (err) {
+          desktopLog(`activate load failed: ${err}`);
+        }
+      })();
+    }
+  });
+  return true;
+}
+
+/**
  * Bring the server back after a respawn delay: spawn, wait for health, and
- * reload the app into the window. A stale attempt bails when a newer one
- * (or shutdown) started while it waited.
+ * either finish the first startup or reload the window. A stale attempt bails
+ * when a newer one (or shutdown) started while it waited.
  * @param {ReturnType<typeof resolveDesktopPaths>} paths
  * @param {NodeJS.ProcessEnv} sharedEnv
  */
@@ -1092,17 +1178,18 @@ async function respawnServer(paths, sharedEnv) {
   if (shuttingDown || childIsAlive(serverChild)) return;
   const waitId = ++serverWaitId;
   serverChild = spawnServer(paths, sharedEnv);
-  startupAbort = new AbortController();
+  const signal = replaceStartupAbort();
   try {
     // Shorter than the first boot: the previous run already had its restart
     // window, so a respawned child that cannot answer healthz within a minute
     // is counted as a failed run instead of holding the loop open for 3 min.
     await waitForServer(PORT, HOST, 60_000, {
-      signal: startupAbort.signal,
+      signal,
       expectInstance: INSTANCE_TOKEN,
+      waitId,
     });
   } catch (err) {
-    if (shuttingDown) return;
+    if (shuttingDown || waitId !== serverWaitId) return;
     desktopLog(`respawn waitForServer failed: ${err}`);
     // A live but never-healthy child must not wedge the loop: stop it so its
     // exit event drives the next policy round. A dead child already did.
@@ -1110,8 +1197,13 @@ async function respawnServer(paths, sharedEnv) {
     return;
   }
   if (shuttingDown || waitId !== serverWaitId) return;
+  if (!childIsAlive(serverChild)) {
+    desktopLog("respawn health ok but server child is dead — not marking healthy");
+    return;
+  }
   // D-NEW-2: the run only counts as stable from here, not from spawn.
-  serverHealthyAt = Date.now();
+  serverHealthyAt = monoNow();
+  if (await finishStartup(paths, sharedEnv)) return;
   desktopLog("server respawn ok — reloading window");
   sendServerState({ state: "up" });
   try {
@@ -1222,10 +1314,10 @@ function spawnOverlayHost(paths, urlArg, output) {
     windowsHide: true,
     shell: false,
   }));
-  overlaySpawnedAt = Date.now();
+  overlaySpawnedAt = monoNow();
   const child = overlayChild;
   child.on("exit", (code, signal) => {
-    if (child === overlayChild) overlayExitedAt = Date.now();
+    if (child === overlayChild) overlayExitedAt = monoNow();
     if (!shuttingDown) {
       desktopLog(`overlay exited code=${code} signal=${signal}`);
     }
@@ -1349,7 +1441,7 @@ function watchOverlayHostSetting(paths) {
         appliedOutput: overlayAppliedOutput,
         appliedRestartAt: overlayAppliedRestartAt,
         spawnedAt: overlaySpawnedAt,
-        now: Date.now(),
+        now: monoNow(),
         respawnGapMs: OVERLAY_RESPAWN_GAP_MS,
         consecutiveFailures,
         lastKnownEnabled,
@@ -1647,70 +1739,33 @@ if (!gotLock) {
 
     void setSplashStatus(splashStatus(app.getLocale(), "waiting"));
     desktopLog("waitForServer start");
-    startupAbort = new AbortController();
+    const waitId = ++serverWaitId;
+    const signal = replaceStartupAbort();
 
     try {
       await waitForServer(PORT, HOST, 180_000, {
-        signal: startupAbort.signal,
+        signal,
         expectInstance: INSTANCE_TOKEN,
+        waitId,
       });
     } catch (err) {
-      if (shuttingDown) return;
+      // A respawn replaces this wait. That abort is not a health timeout.
+      if (shuttingDown || waitId !== serverWaitId) return;
       desktopLog(`waitForServer failed: ${err}`);
       desktopLog(`see logs under ${path.join(paths.dataDir, "logs")}`);
       await failFatal("health-timeout", { error: String(err?.message ?? err) });
       return;
     }
-    if (shuttingDown) return;
+    if (shuttingDown || waitId !== serverWaitId) return;
+    if (!childIsAlive(serverChild)) {
+      desktopLog("waitForServer ok but server child is dead — waiting for respawn");
+      return;
+    }
 
     desktopLog("waitForServer ok");
     // D-NEW-2: health reached — this run may now reset the respawn counter.
-    if (serverHealthyAt === 0) serverHealthyAt = Date.now();
-    await setSplashStatus(splashStatus(app.getLocale(), "opening"));
-    try {
-      await maybeClearHttpCache(paths);
-      await loadAppIntoWindow();
-    } catch (err) {
-      if (shuttingDown) return;
-      desktopLog(`loadAppIntoWindow failed: ${err}`);
-      await failFatal("load-failed", { error: String(err?.message ?? err) });
-      return;
-    }
-    if (shuttingDown) return;
-    desktopLog("ready");
-
-    // Defer Realm until the UI is up. Extract is async so the first packaged
-    // launch does not freeze the window while tar runs.
-    void spawnRealmReader(paths, sharedEnv)
-      .then((result) => {
-        if (result === "failed") scheduleRealmRespawn(paths, sharedEnv);
-      })
-      .catch((err) => {
-        desktopLog(`realm-reader start failed: ${err}`);
-        scheduleRealmRespawn(paths, sharedEnv);
-      });
-
-    // Optional Wayland in-game overlay host (bundled on NixOS packages):
-    // spawns from the overlay.host_enabled / overlay.host_url settings and
-    // restarts/stops on changes.
-    watchOverlayHostSetting(paths);
-
-    // NSIS installs only — check after UI is up so startup is not blocked.
-    // DD-11: children must release node.exe and native addons before NSIS replaces them.
-    startAutoUpdate({ log: desktopLog, beforeInstall: shutdown });
-
-    app.on("activate", () => {
-      if (BrowserWindow.getAllWindows().length === 0) {
-        void (async () => {
-          try {
-            createSplashWindow(paths);
-            await loadAppIntoWindow();
-          } catch (err) {
-            desktopLog(`activate load failed: ${err}`);
-          }
-        })();
-      }
-    });
+    serverHealthyAt = monoNow();
+    await finishStartup(paths, sharedEnv);
   }).catch(async (err) => {
     desktopLog(`whenReady failed: ${err}`);
     if (shuttingDown) return;

@@ -35,6 +35,7 @@ const {
 const { parseOverlayHostUrl, parseOverlayOutput } = require("./overlayUrlGuard");
 const { appOrigin, isAppUrl, canOpenExternal, senderIsApp, redactUrlForLog } = require("./urlPolicy");
 const { splashLang, splashStatus } = require("./splashLocale");
+const { toImageBuffer } = require("./clipboardImage");
 const { stopChild: stopChildProcess } = require("./stopChild");
 const { probePortOwner, waitForServer } = require("./waitForServer");
 const { FATAL_LOG_TAIL_BYTES, buildFatalReport } = require("./fatalReport");
@@ -117,8 +118,7 @@ const APP_ORIGIN = appOrigin(HOST, PORT);
  */
 const INSTANCE_TOKEN = randomUUID();
 const WINDOW_READY_MARKER = "electron-window-ready";
-/** Caps a session-share PNG before nativeImage decode. */
-const MAX_CLIPBOARD_IMAGE_BYTES = 15 * 1024 * 1024;
+/** Caps a session-share PNG before nativeImage decode. Checked in clipboardImage.js. */
 /**
  * L4: every shell/child log is capped at `DEFAULT_MAX_LOG_BYTES` (10 MiB) with
  * a single `.1` backup, so a wedged child that spams stderr cannot fill the
@@ -1550,15 +1550,9 @@ ipcMain.handle("roxysu:write-clipboard-image", async (event, bytes) => {
   if (!ipcSenderIsApp(event)) {
     throw new Error("Invalid sender");
   }
-  if (bytes == null) {
-    throw new Error("Invalid image");
-  }
-  const buf = Buffer.isBuffer(bytes)
-    ? bytes
-    : Buffer.from(bytes instanceof ArrayBuffer ? bytes : new Uint8Array(bytes));
-  if (buf.length === 0 || buf.length > MAX_CLIPBOARD_IMAGE_BYTES) {
-    throw new Error("Invalid image");
-  }
+  // Cap is checked before any copy. Array-likes are rejected so a huge
+  // length cannot allocate before the check (DD-17).
+  const buf = toImageBuffer(bytes);
   const image = nativeImage.createFromBuffer(buf);
   if (image.isEmpty()) {
     throw new Error("Invalid image");

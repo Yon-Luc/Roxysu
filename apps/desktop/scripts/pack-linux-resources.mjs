@@ -108,6 +108,7 @@ const appFiles = [
   "windowState.js",
   "windowRecovery.js",
   "fatalReport.js",
+  "clipboardImage.js",
   "splash.html",
   "splashLocale.js",
   "package.json",

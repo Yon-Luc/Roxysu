@@ -46,19 +46,35 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
    before connect the host writes
    `~/.local/share/applications/dev.roxysu.overlay.desktop` whose `Exec` is the
    canonical overlay binary and whose `X-KDE-Wayland-Interfaces` lists that
-   protocol, then runs `kbuildsycoca6` when the file changed. The Nix package
-   also installs that desktop file for the store path. The host does not send
+   protocol, then runs `kbuildsycoca6` (or `kbuildsycoca5`; also searched in
+   `/run/current-system/sw/bin`, `~/.nix-profile/bin`,
+   `/etc/profiles/per-user/$USER/bin`, `/usr/bin` — a packaged shell has a
+   minimal PATH) when the file changed. The Nix package also installs that
+   desktop file for the store path, and the Electron wrapper prefixes
+   `kdePackages.kservice` onto PATH so the spawned host can find
+   `kbuildsycoca6`. A grant written this run makes the first binds retry
+   quickly (5 × 200 ms) before the normal ladder, because KWin's service
+   cache may not have picked the entry up yet; a grant that never appears
+   stays fail-closed. The host does not send
    close, move, resize, or state-change requests. Show while a matched window
    is activated and not minimized. Match policy is unchanged: `contains` on
    `app_id` (default needle `osu`); title is used only when `app_id` is empty.
-   `resource_name` is printed by `--list-windows` and is not a match haystack
+   `resource_name` is printed by `--list-windows` — which waits for every
+   adopted Plasma window's `InitialState` (or a quiet wlr batch) so the dump
+   cannot show half-arrived fields — and is not a match haystack
    (a browser tab titled osu! must not match). On Show, if `--output` is unset,
    pin the layer surface to that window's output (`wl_output` name, or Plasma
-   geometry against a `GdkMonitor`). An explicit `--output` wins and is not
+   geometry against a `GdkMonitor`). Outputs advertised after connect are
+   bound when the registry announces them, and a removed output's name is
+   dropped from every toplevel. Plasma window proxies are destroyed on
+   `Unmapped` and their internal ids released (KWin reuses ids after an
+   osu! restart); wlr handles are destroyed on `Closed`. An explicit
+   `--output` wins and is not
    overridden. `--match-mode exact` remains. Visibility is evaluated once per
    dispatch batch; Hide uses short hysteresis (`--hide-hysteresis-ms`, default
    80). First-connect failure stays unmapped, logs the reason, and retries
-   with backoff (1 s doubling to 30 s). Later drops leave visibility unchanged
+   (quickly after a fresh grant write, then 1 s doubling to 30 s). Later drops
+   leave visibility unchanged
    and reconnect. `--follow-focus=false` is the always-visible path. The focus
    thread stops and joins on GTK shutdown.
 8. **Self-heal**: `web-process-terminated` reloads after 1 s; `load-failed`
@@ -103,11 +119,23 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
     refresh over the playfield. FD and RSS caps still recover a leak.
     Observation-only telemetry via `--telemetry-interval-sec` /
     `--telemetry-csv`.
+16. **Surface-contract logs** (info level, always on): surface size and
+    widget scale at map, `GdkSurface::layout` (the layer-shell configure as
+    GTK sees it), surface enter/leave monitor (connector, model, geometry,
+    scale), every pin (from/to key, mapped at the time, target geometry and
+    scale), and web-process death with the surface state it died in. These
+    lines are the D1 diagnosis set: the drift/noise behaviour fixes
+    (unmap-before-pin, size-to-output, WebView recreate) are gated on
+    real-session captures of them, and match-policy loosening is gated on a
+    settled `--list-windows` dump.
 
 ## Security rules
 
 1. The Plasma window-management connection is observe-only. It does not send
-   `close`, `set_state`, move, resize, or virtual-desktop requests.
+   `close`, `set_state`, move, resize, or virtual-desktop requests. The
+   `destroy` sent on `Unmapped` releases the client's own
+   `org_kde_plasma_window` resource (protocol object teardown), not a
+   window-management request.
    **Enforced by:** `apps/overlay-rs/src/focus/plasma.rs` — status: verified
    **Unauthorized result:** those requests are not implemented.
 

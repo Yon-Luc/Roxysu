@@ -19,7 +19,13 @@ const { appOrigin, isAppUrl, canOpenExternal, senderIsApp } = require("./urlPoli
 const { stopChild: stopChildProcess } = require("./stopChild");
 const { probePortOwner, waitForServer } = require("./waitForServer");
 const { FATAL_LOG_TAIL_BYTES, buildFatalReport } = require("./fatalReport");
-const { DEFAULT_MAX_LOG_BYTES, fileSizeOrZero, rotateIfLarger, shouldRotate } = require("./logRotation");
+const {
+  DEFAULT_MAX_LOG_BYTES,
+  copyTruncateIfLarger,
+  fileSizeOrZero,
+  rotateIfLarger,
+  shouldRotate,
+} = require("./logRotation");
 
 // Stable userData folder: %APPDATA%\Roxysu (Windows) / XDG or Application Support.
 app.setName("Roxysu");
@@ -65,6 +71,15 @@ let serverRespawnTimer = null;
 let serverWaitId = 0;
 /** @type {Map<string, number>} */
 const childLogFdByLabel = new Map();
+/** Log path for each open child log fd (DD-5 in-session cap). @type {Map<string, string>} */
+const childLogPathByLabel = new Map();
+/**
+ * DD-5: child logs share a long-lived fd with the child, so they are also
+ * size-checked on a timer while the child runs (not only on respawn).
+ */
+const CHILD_LOG_SIZE_CHECK_MS = 15_000;
+/** @type {NodeJS.Timeout | null} */
+let childLogCapTimer = null;
 let shuttingDown = false;
 /** @type {string | null} */
 let desktopLogPath = null;
@@ -194,6 +209,7 @@ function openChildLogFd(dataDir, label) {
         // already closed
       }
       childLogFdByLabel.delete(label);
+      childLogPathByLabel.delete(label);
     }
     rotateIfLarger(logPath, DEFAULT_MAX_LOG_BYTES, {
       onError: (err) =>
@@ -204,10 +220,40 @@ function openChildLogFd(dataDir, label) {
   if (fd == null) {
     fd = fs.openSync(logPath, "a");
     childLogFdByLabel.set(label, fd);
+    childLogPathByLabel.set(label, logPath);
+    startChildLogCap();
     desktopLog(`${label} log: ${logPath}`);
   }
   fs.writeSync(fd, `\n--- ${new Date().toISOString()} starting ${label} ---\n`);
   return { logPath, fd };
+}
+
+/**
+ * DD-5: cap every open child log while its child keeps writing. Copy-truncate
+ * (see logRotation.js) because the child holds the same append-mode fd.
+ */
+function capChildLogsNow() {
+  for (const [label, fd] of childLogFdByLabel) {
+    const logPath = childLogPathByLabel.get(label);
+    if (!logPath) continue;
+    const rotated = copyTruncateIfLarger(fd, logPath, DEFAULT_MAX_LOG_BYTES, {
+      onError: (err) => desktopLog(`${label}.log in-session rotate failed: ${err}`),
+    });
+    if (rotated) {
+      try {
+        fs.writeSync(fd, `--- ${new Date().toISOString()} ${label}.log rotated (size cap) ---\n`);
+      } catch {
+        // fd closed under us
+      }
+      desktopLog(`${label}.log rotated in-session (over ${DEFAULT_MAX_LOG_BYTES} bytes)`);
+    }
+  }
+}
+
+function startChildLogCap() {
+  if (childLogCapTimer) return;
+  childLogCapTimer = setInterval(capChildLogsNow, CHILD_LOG_SIZE_CHECK_MS);
+  childLogCapTimer.unref();
 }
 
 /**
@@ -1154,6 +1200,11 @@ function closeChildLogs() {
     }
   }
   childLogFdByLabel.clear();
+  childLogPathByLabel.clear();
+  if (childLogCapTimer) {
+    clearInterval(childLogCapTimer);
+    childLogCapTimer = null;
+  }
 }
 
 /** @type {Promise<void> | null} */

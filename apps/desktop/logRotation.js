@@ -76,6 +76,53 @@ function rotateIfLarger(filePath, maxBytes = DEFAULT_MAX_LOG_BYTES, options = {}
 }
 
 /**
+ * In-session cap for a log whose fd is shared with a running child (DD-5).
+ *
+ * The child keeps writing through the same open file description, so the file
+ * cannot be renamed away (the child would follow it). Instead: copy the live
+ * file to `<path>.1` (replacing the old backup) and truncate the shared fd to
+ * zero. The fd was opened with "a" (O_APPEND), so the child's next write lands
+ * at the new end of file instead of leaving a sparse hole.
+ *
+ * Lines written between the copy and the truncate are lost (milliseconds).
+ * Never throws.
+ *
+ * @param {number} fd Append-mode fd shared with the child.
+ * @param {string} filePath Path of the same file.
+ * @param {number} [maxBytes]
+ * @param {{
+ *   fstat?: (fd: number) => { size: number },
+ *   copyFile?: (from: string, to: string) => void,
+ *   unlink?: (p: string) => void,
+ *   ftruncate?: (fd: number, len: number) => void,
+ *   onError?: (err: unknown) => void,
+ * }} [options] fs seams for tests.
+ * @returns {boolean} True when the log was rotated.
+ */
+function copyTruncateIfLarger(fd, filePath, maxBytes = DEFAULT_MAX_LOG_BYTES, options = {}) {
+  const fstat = options.fstat ?? ((f) => fs.fstatSync(f));
+  const copyFile = options.copyFile ?? ((from, to) => fs.copyFileSync(from, to));
+  const unlink = options.unlink ?? ((p) => fs.unlinkSync(p));
+  const ftruncate = options.ftruncate ?? ((f, len) => fs.ftruncateSync(f, len));
+  const onError = options.onError ?? (() => {});
+  try {
+    if (!shouldRotate(fstat(fd).size, maxBytes)) return false;
+    const backupPath = `${filePath}.1`;
+    try {
+      unlink(backupPath);
+    } catch {
+      // no previous backup
+    }
+    copyFile(filePath, backupPath);
+    ftruncate(fd, 0);
+    return true;
+  } catch (err) {
+    onError(err);
+    return false;
+  }
+}
+
+/**
  * Size of `filePath` in bytes, or 0 when it does not exist / cannot be read.
  * @param {string} filePath
  * @returns {number}
@@ -90,6 +137,7 @@ function fileSizeOrZero(filePath) {
 
 module.exports = {
   DEFAULT_MAX_LOG_BYTES,
+  copyTruncateIfLarger,
   fileSizeOrZero,
   rotateIfLarger,
   shouldRotate,

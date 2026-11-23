@@ -7,6 +7,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const {
   DEFAULT_MAX_LOG_BYTES,
+  copyTruncateIfLarger,
   fileSizeOrZero,
   rotateIfLarger,
   shouldRotate,
@@ -128,5 +129,69 @@ describe("fileSizeOrZero", () => {
   test("returns 0 for a missing file", () => {
     const dir = tempDir();
     expect(fileSizeOrZero(path.join(dir, "missing.log"))).toBe(0);
+  });
+});
+
+describe("copyTruncateIfLarger (DD-5 in-session cap)", () => {
+  test("a shared append fd keeps writing at the start after the cap", () => {
+    const dir = tempDir();
+    const logPath = path.join(dir, "server.log");
+    const fd = fs.openSync(logPath, "a");
+    try {
+      fs.writeSync(fd, "x".repeat(200));
+      expect(copyTruncateIfLarger(fd, logPath, 100)).toBe(true);
+      expect(fs.readFileSync(`${logPath}.1`, "utf8")).toBe("x".repeat(200));
+      expect(fs.statSync(logPath).size).toBe(0);
+      // O_APPEND: the next write lands at offset 0, not after a sparse hole.
+      fs.writeSync(fd, "after\n");
+      expect(fs.readFileSync(logPath, "utf8")).toBe("after\n");
+    } finally {
+      fs.closeSync(fd);
+    }
+  });
+
+  test("at or under the cap nothing happens", () => {
+    const dir = tempDir();
+    const logPath = path.join(dir, "server.log");
+    const fd = fs.openSync(logPath, "a");
+    try {
+      fs.writeSync(fd, "x".repeat(100));
+      expect(copyTruncateIfLarger(fd, logPath, 100)).toBe(false);
+      expect(fs.existsSync(`${logPath}.1`)).toBe(false);
+      expect(fs.statSync(logPath).size).toBe(100);
+    } finally {
+      fs.closeSync(fd);
+    }
+  });
+
+  test("replaces an older backup", () => {
+    const dir = tempDir();
+    const logPath = path.join(dir, "server.log");
+    fs.writeFileSync(`${logPath}.1`, "old backup");
+    const fd = fs.openSync(logPath, "a");
+    try {
+      fs.writeSync(fd, "new".repeat(50));
+      expect(copyTruncateIfLarger(fd, logPath, 10)).toBe(true);
+      expect(fs.readFileSync(`${logPath}.1`, "utf8")).toBe("new".repeat(50));
+    } finally {
+      fs.closeSync(fd);
+    }
+  });
+
+  test("errors are reported, never thrown", () => {
+    const errors = [];
+    const rotated = copyTruncateIfLarger(3, "/nope/server.log", 10, {
+      fstat: () => ({ size: 100 }),
+      unlink: () => {},
+      copyFile: () => {
+        throw new Error("EACCES");
+      },
+      ftruncate: () => {
+        throw new Error("must not truncate after a failed copy");
+      },
+      onError: (err) => errors.push(String(err)),
+    });
+    expect(rotated).toBe(false);
+    expect(errors).toEqual(["Error: EACCES"]);
   });
 });

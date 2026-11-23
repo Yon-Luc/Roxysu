@@ -249,17 +249,32 @@ function compileTerm(
       return "dr_r.sunny_star IS NOT NULL";
     }
     case "pattern": {
-      const pattern = likePattern(term.value, term.prefix);
-      const primaryPat = push(pattern);
-      const secondaryPat = push(pattern);
+      // Shape and skill labels are a closed vocabulary, and several are
+      // prefixes of each other (`stream` / `jumpstream`, `trill` / `jumptrill`).
+      // Substring matching makes `pattern:stream` return every sibling. Exact
+      // equality unless the user asked for a prefix with `^`.
       const [primaryCol, secondaryCol] = isShapeLabel(term.value)
         ? ["pa.shape_pattern", "pa.secondary_shape"]
         : ["pa.dominant_pattern", "pa.secondary_pattern"];
+      if (term.prefix) {
+        const pattern = likePattern(term.value, true);
+        const primaryPat = push(pattern);
+        const secondaryPat = push(pattern);
+        return `(
+          ${primaryCol} IS NOT NULL
+          AND (
+            lower(${primaryCol}) LIKE lower(${primaryPat}) ESCAPE '\\'
+            OR lower(COALESCE(${secondaryCol}, '')) LIKE lower(${secondaryPat}) ESCAPE '\\'
+          )
+        )`;
+      }
+      const primaryEq = push(term.value.toLowerCase());
+      const secondaryEq = push(term.value.toLowerCase());
       return `(
         ${primaryCol} IS NOT NULL
         AND (
-          lower(${primaryCol}) LIKE lower(${primaryPat}) ESCAPE '\\'
-          OR lower(COALESCE(${secondaryCol}, '')) LIKE lower(${secondaryPat}) ESCAPE '\\'
+          lower(${primaryCol}) = ${primaryEq}
+          OR lower(COALESCE(${secondaryCol}, '')) = ${secondaryEq}
         )
       )`;
     }

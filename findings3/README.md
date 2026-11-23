@@ -13,7 +13,7 @@ was read in full; a finding that depends on timing is marked `inferred` in that 
 
 ## Status
 
-35 notes are `status: proposed`. Seven are `status: fixed` (2026-11-23): F3-001, F3-005, F3-015,
+31 notes are `status: proposed`. Eleven are `status: fixed` (2026-11-23): F3-001, F3-005, F3-006, F3-007, F3-008, F3-011, F3-015,
 F3-010, F3-033, F3-038 and F3-043, each verified by the full server suite (1023 tests) and,
 where it applies, the realm-reader suite (51 tests).
 

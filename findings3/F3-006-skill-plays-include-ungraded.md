@@ -4,7 +4,7 @@ feature: analytics
 kind: correctness
 severity: medium
 confidence: verified
-status: proposed
+status: fixed
 ---
 
 # `/stats/skill-plays` lists ungraded plays the rest of Stats excludes
@@ -39,3 +39,7 @@ predicate - this is the same class as F3-008 and F3-011.
 - `apps/server/src/analytics/playerStats.ts:434` - graded filter in the main pass
 - `apps/server/src/analytics/recommend/sevenKSkill.ts:206-225` - `bestPlayPerMap`
 - `apps/server/public/features/stats/components/SkillBandPlaysPanel.tsx:184` - consumer
+
+## Status
+
+Fixed 2026-11-23. `loadEnrichedSevenKPlays` adds `AND s.rank != -1`, matching `streamManiaPass`.

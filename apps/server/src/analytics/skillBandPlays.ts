@@ -204,6 +204,7 @@ function loadEnrichedSevenKPlays(
       LEFT JOIN beatmap_pattern_analysis pa
         ON pa.beatmap_id = b.id AND pa.algorithm = ?
       WHERE s.delete_pending = 0
+        AND s.rank != -1
         ${user.sql}
         ${mode.sql}
         AND b.hidden = 0

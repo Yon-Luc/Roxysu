@@ -670,6 +670,44 @@ export async function listSessionsOnUtcDay(
   }));
 }
 
+/**
+ * Rewrite `sessions.score_count` from `score_metrics` where they disagree.
+ *
+ * The column is a snapshot written only when the session engine rebuilds the
+ * row. Orphan deletes remove metrics without touching it, and an empty import
+ * delta skips the engine, so the list, the dashboard and the overlay keep
+ * showing a count the score list cannot match. One grouped scan, then an
+ * update per mismatch.
+ */
+export function healSessionScoreCounts(db: Db): number {
+  const grouped = db.$client
+    .query(
+      `
+      SELECT session_id AS sessionId, COUNT(*) AS n
+      FROM score_metrics
+      WHERE session_id IS NOT NULL
+      GROUP BY session_id
+    `,
+    )
+    .all() as Array<{ sessionId: number; n: number }>;
+  const byId = new Map(grouped.map((row) => [row.sessionId, Number(row.n)]));
+  const rows = db
+    .select({ id: sessions.id, scoreCount: sessions.scoreCount })
+    .from(sessions)
+    .all();
+  let healed = 0;
+  for (const row of rows) {
+    const actual = byId.get(row.id) ?? 0;
+    if (row.scoreCount === actual) continue;
+    db.update(sessions)
+      .set({ scoreCount: actual })
+      .where(eq(sessions.id, row.id))
+      .run();
+    healed += 1;
+  }
+  return healed;
+}
+
 /** Newest first. Omit `limit` to return every session. */
 export async function listSessions(db: Db, limit?: number) {
   const query = db.select().from(sessions).orderBy(desc(sessions.startedAt));

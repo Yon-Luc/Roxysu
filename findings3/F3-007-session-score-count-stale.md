@@ -4,7 +4,7 @@ feature: analytics
 kind: correctness
 severity: medium
 confidence: verified
-status: proposed
+status: fixed
 ---
 
 # One session reports two different play counts
@@ -44,3 +44,7 @@ rewrite the mismatches. Either way, pick one source of truth.
 - `apps/server/src/analytics/practiceSnapshot.ts:90` - reads the snapshot
 - `apps/realm-reader/src/reconcileCore.ts:127-130` - deletes metrics without decrementing
 - `apps/server/src/analytics/pipeline.ts:289-290` - empty-delta skip
+
+## Status
+
+Fixed 2026-11-23. `healSessionScoreCounts` rewrites `sessions.score_count` from `COUNT(score_metrics)` where they disagree. The analytics pipeline calls it on every run, including an empty delta that skips the session engine. Test: `healSessionScoreCounts` in `session.test.ts`.

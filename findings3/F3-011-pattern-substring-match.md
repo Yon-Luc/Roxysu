@@ -4,7 +4,7 @@ feature: query-language
 kind: correctness
 severity: medium
 confidence: verified
-status: proposed
+status: fixed
 ---
 
 # `pattern:stream` and `pattern:trill` match their sibling shapes as substrings
@@ -36,3 +36,7 @@ same for the skill columns.
 - `apps/server/src/query-language/compile.ts:28-31`, `:251-265` - `likePattern` on shape columns
 - `apps/server/src/query-language/patternSummary.ts:86-90`, `:214-244`, `:339-346` - exact match
 - `packages/mania-difficulty/src/shape.ts:50-83` - the closed label set
+
+## Status
+
+Fixed 2026-11-23. `compileTerm` case `pattern` matches the closed label with `=` unless the user typed `^`, which keeps prefix `LIKE`. `pattern:stream` no longer returns jumpstream, handstream or chordstream. Tests in `parse.test.ts`.

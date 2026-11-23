@@ -16,7 +16,7 @@ import {
 } from "drizzle-orm";
 import { subscribe, publish, type AppEvent } from "../shared/events";
 import { runRetryEngine } from "./retry";
-import { runSessionEngine } from "./session";
+import { healSessionScoreCounts, runSessionEngine } from "./session";
 import { runMasteryEngine } from "./mastery/engine";
 import { runStatisticsEngine } from "./statistics";
 import { deriveBmsScores } from "../bms/derive";
@@ -374,6 +374,11 @@ export async function runAnalyticsPipeline(
           }
         }
       }
+
+      // Orphan deletes drop score_metrics without rewriting sessions.score_count,
+      // and an empty delta skips the session engine. Heal before the UI refresh
+      // so the list and the score list agree.
+      healSessionScoreCounts(db);
 
       publish({ type: "dashboard.updated" });
       console.log("[analytics] pipeline done");

@@ -2,7 +2,11 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { eq } from "drizzle-orm";
 import { closeDb } from "@roxysu/db/client.bun";
 import { scoreMetrics, scores, sessions } from "@roxysu/db/schema";
-import { runSessionEngine, tryRepairSessionDelta } from "./session";
+import {
+  healSessionScoreCounts,
+  runSessionEngine,
+  tryRepairSessionDelta,
+} from "./session";
 import { createAnalyticsTestDb, seedScore } from "./analyticsTestDb";
 import type { Db } from "../db-runtime";
 
@@ -273,5 +277,29 @@ describe("runSessionEngine full rebuild", () => {
     await runSessionEngine(db);
     expect(await db.select().from(sessions)).toHaveLength(0);
     expect((await db.select().from(scoreMetrics))[0]?.sessionId ?? null).toBeNull();
+  });
+});
+
+describe("healSessionScoreCounts", () => {
+  test("rewrites a snapshot that no longer matches its metrics", async () => {
+    const db = freshDb();
+    seed(db, [
+      { id: "a", at: NOW - 2 * HOUR },
+      { id: "b", at: NOW - 2 * HOUR + MIN },
+    ]);
+    await runSessionEngine(db);
+    const [session] = await db.select().from(sessions);
+    expect(session?.scoreCount).toBe(2);
+
+    await db.delete(scoreMetrics).where(eq(scoreMetrics.scoreId, "b"));
+    await db
+      .update(sessions)
+      .set({ scoreCount: 33 })
+      .where(eq(sessions.id, session!.id));
+
+    expect(healSessionScoreCounts(db)).toBe(1);
+    const [healed] = await db.select().from(sessions);
+    expect(healed?.scoreCount).toBe(1);
+    expect(healSessionScoreCounts(db)).toBe(0);
   });
 });

@@ -1,6 +1,6 @@
 import type { Db } from "@roxysu/db/types";
 import { dailyStats, scores, weeklyStats } from "@roxysu/db/schema";
-import { and, desc, eq, gte } from "drizzle-orm";
+import { and, desc, eq, gte, isNotNull } from "drizzle-orm";
 import { localDayKey } from "../shared/localDay";
 import { scoresGamemodeCondition, resolveScoresGamemodeSync } from "./scoreGamemode";
 import { resolveScoresUsernamesSync, scoresUsernameCondition } from "./scoreUsername";
@@ -138,6 +138,7 @@ export async function getCalendarActivity(
     .where(
       and(
         eq(scores.deletePending, false),
+        isNotNull(scores.beatmapId),
         gte(scores.playedAt, since),
         scoresUsernameCondition(resolveScoresUsernamesSync(db)),
         scoresGamemodeCondition(resolveScoresGamemodeSync(db)),

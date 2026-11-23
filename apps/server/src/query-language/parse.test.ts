@@ -316,7 +316,15 @@ describe("compileQuery", () => {
     const compiled = compileQuery(ast);
     expect(compiled.sql).toContain("pa.shape_pattern");
     expect(compiled.sql).toContain("pa.secondary_shape");
-    expect(compiled.params).toEqual(["%jumpstream%", "%jumpstream%"]);
+    expect(compiled.params).toEqual(["jumpstream", "jumpstream"]);
+    expect(compiled.sql).toContain("lower(pa.shape_pattern) = ?");
+    expect(compiled.sql).not.toContain("LIKE");
+  });
+
+  test("a prefix pattern keeps substring matching", () => {
+    const compiled = compileQuery(parseQuery("pattern:^stream"));
+    expect(compiled.sql).toContain("LIKE");
+    expect(compiled.params).toEqual(["stream%", "stream%"]);
     expect((compiled.sql.match(/\?/g) ?? []).length).toBe(compiled.params.length);
   });
 
@@ -327,8 +335,8 @@ describe("compileQuery", () => {
     expect(compiled.params).toEqual([
       "mania",
       7,
-      "%chordstream%",
-      "%chordstream%",
+      "chordstream",
+      "chordstream",
     ]);
   });
 
@@ -338,7 +346,7 @@ describe("compileQuery", () => {
     expect(compiled.sql).toContain("dr_r.ln_ratio");
     expect(compiled.sql).toContain("pa.dominant_pattern");
     expect((compiled.sql.match(/\?/g) ?? []).length).toBe(compiled.params.length);
-    expect(compiled.params).toEqual(["mania", 7, 0.2, "%jack%", "%jack%"]);
+    expect(compiled.params).toEqual(["mania", 7, 0.2, "jack", "jack"]);
   });
 
   test("compiles axis ln against rework ln_ratio", () => {

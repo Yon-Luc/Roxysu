@@ -45,7 +45,7 @@ Live sessions keep the **Current session** label in headings; the generated name
 ## Business rules
 
 1. A new session starts when the gap between scores exceeds **30 minutes** (`SESSION_GAP_MS`).
-2. Current session hub refreshes as new plays land via SSE.
+2. Current session hub refreshes as new plays land via SSE. `sessions.score_count` is a snapshot the session engine writes; orphan deletes drop `score_metrics` without rewriting it. Every analytics run calls `healSessionScoreCounts` before `dashboard.updated`, including an empty import delta that skips the engine, so the list count matches the score list.
 3. Every session row has a **display name** generated from its `id` via `@roxysu/session-names`. New names skip any display name already used in the local mirror (case-insensitive).
 4. Display names are persisted in `sessions.name` at creation; existing rows without a name are backfilled on the next session-engine run. Already-named rows are not regenerated.
 5. The UI shows the display name for closed sessions; open sessions use **Current session** as the primary label and show the name as secondary text. Numeric `#id` is not shown.

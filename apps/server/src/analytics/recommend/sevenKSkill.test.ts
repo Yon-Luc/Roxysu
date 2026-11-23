@@ -280,3 +280,22 @@ describe("utc week helpers", () => {
     expect(utcDayKey(end)).toBe("2024-06-16");
   });
 });
+
+describe("comfort recency weight", () => {
+  test("recent plays weigh more than old ones, not hardest-first", () => {
+    // Five graded plays whose difficulty rises with time (an improving
+    // player). `topRatedPlays` orders them hardest-first; the recency decay
+    // must still follow play time so the newest play carries the full
+    // weight. Equal accuracy keeps the accuracy factor out of the ratio.
+    const stars = [5, 5.25, 5.5, 5.75, 6];
+    const plays = stars.map((reworkStar, i) =>
+      play({ beatmapId: `m${i}`, playedAt: 1000 + i, reworkStar }),
+    );
+    const profile = estimateSevenKSkillFromPlays(plays);
+    // Newest (★6) weighted 1, oldest (★5) weighted 0.95^4:
+    // (6·1 + 5.75·0.95 + 5.5·0.9025 + 5.25·0.857375 + 5·0.81450625) / Σ.
+    // The pre-fix value (hardest play decayed hardest) was ≈5.4744.
+    expect(profile.overall).toBeCloseTo(5.5256175, 6);
+    expect(profile.rc).toBeCloseTo(5.5256175, 6);
+  });
+});

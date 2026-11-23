@@ -13,6 +13,7 @@ touches:
   - apps/server/public/components/PageTitle.tsx
   - apps/server/src/scores/parseStatistics.ts
   - apps/server/public/features/sessions
+  - apps/server/public/components/CommandPalette.tsx
   - apps/server/public/features/sessions/SessionShareCard.tsx
   - apps/server/public/features/sessions/sessionShareHighlights.ts
   - apps/server/public/lib/sessionShareImage.ts
@@ -55,8 +56,8 @@ Live sessions keep the **Current session** label in headings; the generated name
 10. Session score rows whose beatmap was removed from the game (`beatmapId` null after Realm orphan cleanup) display as “Beatmap deleted” / “Removed from the game”, not Untitled/Unknown.
 11. The Current session **Now selected** panel shows ephemeral tosu `analysis.rework` (Rework dan).
 12. Sessions list page keeps the current-session CTA at the top, then recent sessions (default **7**), then a GitHub-style activity calendar (~53 weeks). Days are the player's local calendar date. The week starts on Monday when `Intl.Locale` week info says so, and every weekday row is labelled. The grid recomputes "today" on a one-minute timer and when the tab becomes visible. The CTA uses the same panel as Home. The calendar says that a day click filters the list above.
-13. `GET /api/sessions` returns `{ current, items, activity }` where `activity` is `{ day, playCount }[]`. With `tzOffset=0` (or omitted) those days are UTC `daily_stats`. Any other `tzOffset` (`Date#getTimezoneOffset` minutes) recounts recent scores onto that local date (`getCalendarActivity`).
-14. Clicking a calendar day loads every session whose `startedAt` falls on that local day (`GET /api/sessions?day=YYYY-MM-DD&tzOffset=`). The same `localDayKey` helper builds the grid, the list day stats, and the query range. Clicking the day again or **Show all** clears the filter. With no day selected, the page shows the latest 7 sessions and **Show all** lists every session. The calendar grid itself stays about 53 weeks.
+13. `GET /api/sessions` returns `{ current, items, activity }` where `activity` is `{ day, playCount }[]`. With `tzOffset=0` (or omitted) those days are UTC `daily_stats`. Any other `tzOffset` (`Date#getTimezoneOffset` minutes) recounts recent scores onto that local date (`getCalendarActivity`). The session list is capped: `?limit=` (default 100, hard max 500, invalid values fall back to the default) applies to both the plain list and the `day` filter — the HTTP handler never requests every session, so a long-lived library does not serialize the full table on every page visit or command-palette warm-up. The command palette passes an explicit cap.
+14. Clicking a calendar day loads the sessions whose `startedAt` falls on that local day (`GET /api/sessions?day=YYYY-MM-DD&tzOffset=`, capped by the same list limit). The same `localDayKey` helper builds the grid, the list day stats, and the query range. Clicking the day again or **Show all** clears the filter. With no day selected, the page shows the latest 7 sessions; **Show all** refetches with an explicit capped limit (500) rather than assuming the initial payload was unbounded — a library larger than the cap needs paging (documented follow-up). The calendar grid itself stays about 53 weeks.
 15. Session detail score lists use shared `ScoreCard` (`variant="beatmap"`) with map cover, judgments, and PB comparison. A submitted score (`online_id` > 0) shows **Share link**, which copies `https://osu.ppy.sh/scores/{onlineId}`. Unsubmitted scores (`-1` or `0`) do not.
 16. Each session score may include `judgments` (from `scores.statistics`) and `pbCompare`:
     - when `isPb` — previous best on that beatmap (`kind: "previous"`), if one exists
@@ -75,7 +76,7 @@ Live sessions keep the **Current session** label in headings; the generated name
 - `apps/server/src/analytics/session.ts` — `SESSION_GAP_MS`, `runSessionEngine()` (global gap algorithm; session/metrics writes in one sync transaction callback via `reconcileBuckets()` — required by better-sqlite3 on desktop; name backfill skipped when every name is already capitalized), `tryRepairSessionDelta()` (windowed delta repair)
 - `apps/server/src/analytics/retry.ts` — `runRetryEngine()` assigns `is_pb` via `comparePbRank` on resolved PP
 - `apps/server/src/analytics/progression.ts:getDailyActivity()` — per-day play counts for the list calendar
-- `apps/server/src/routes/sessions.ts` — `serializeSession()` includes `name`; score window via `limit`; list includes `activity`; detail attaches `judgments` + `pbCompare`
+- `apps/server/src/routes/sessions.ts` — `serializeSession()` includes `name`; score window via `limit`; list capped via `clampSessionListLimit` (default 100 / hard max 500, `?limit=` clamped); list includes `activity`; detail attaches `judgments` + `pbCompare`
 - `apps/server/src/scores/pbCompare.ts` — `comparePbRank()` (shared PB ranking) and batched top-2 lookup for session compare; PP resolved with `resolveScorePp`
 - `apps/server/src/routes/overlay.ts` — slim OBS payload
 - `packages/session-names/src/generate.ts` — `generateSessionName(sessionId, taken)`, `capitalizeSessionName()`

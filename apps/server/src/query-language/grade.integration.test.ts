@@ -5,12 +5,19 @@ import path from "node:path";
 import { beatmapSets, beatmaps, closeDb, ensureDb } from "@roxysu/db/client.bun";
 import type { Db } from "@roxysu/db/types";
 import { searchBeatmaps } from "./execute";
-import { classifyScoreGrade, PERFECT_TOTAL_SCORE } from "./scoreGrade";
+import {
+  classifyScoreGrade,
+  DISALLOWED_MOD_ACRONYMS,
+  PERFECT_TOTAL_SCORE,
+} from "./scoreGrade";
+import { STATS_ALLOWED_MODS } from "../replay/mods";
 
 const SET_ID = "00000000-0000-0000-0000-000000000010";
 const MAP_A = "00000000-0000-0000-0000-000000000011";
 const MAP_B = "00000000-0000-0000-0000-000000000012";
 const MAP_C = "00000000-0000-0000-0000-000000000013";
+const MAP_D = "00000000-0000-0000-0000-000000000014";
+const MAP_E = "00000000-0000-0000-0000-000000000015";
 
 let db: Db;
 let tmpDir: string;
@@ -20,6 +27,7 @@ function insertScore(
   beatmapId: string,
   totalScore: number,
   rank: number,
+  mods = "[]",
 ) {
   db.$client
     .query(
@@ -39,7 +47,7 @@ function insertScore(
       totalScore,
       0.99,
       rank,
-      "[]",
+      mods,
       Date.now(),
     );
 }
@@ -104,6 +112,36 @@ beforeAll(() => {
         artist: "Artist",
         hidden: false,
       },
+      {
+        id: MAP_D,
+        onlineId: 104,
+        setId: SET_ID,
+        difficultyName: "D",
+        rulesetShortName: "mania",
+        status: 2,
+        length: 60,
+        bpm: 180,
+        starRating: 5,
+        circleSize: 7,
+        title: "Map D",
+        artist: "Artist",
+        hidden: false,
+      },
+      {
+        id: MAP_E,
+        onlineId: 105,
+        setId: SET_ID,
+        difficultyName: "E",
+        rulesetShortName: "mania",
+        status: 2,
+        length: 60,
+        bpm: 180,
+        starRating: 5,
+        circleSize: 7,
+        title: "Map E",
+        artist: "Artist",
+        hidden: false,
+      },
     ])
     .run();
 
@@ -114,6 +152,16 @@ beforeAll(() => {
   insertScore("score-b-s", MAP_B, 990_000, 5);
   // X: all Marvelous (1M), even though rank is also X-grade.
   insertScore("score-c-x", MAP_C, PERFECT_TOTAL_SCORE, 6);
+  // Classic + Mirror counts as nomod (same policy as isNomodOrMirrorOnly).
+  insertScore(
+    "score-d-cl",
+    MAP_D,
+    980_000,
+    6,
+    '[{"acronym":"CL"},{"acronym":"MR"}]',
+  );
+  // Rate mods stay excluded from nomod grade buckets.
+  insertScore("score-e-dt", MAP_E, 980_000, 6, '[{"acronym":"DT"}]');
 });
 
 afterAll(() => {
@@ -137,8 +185,19 @@ describe("grade query integration", () => {
       page: 1,
       pageSize: 24,
     });
-    expect(result.total).toBe(1);
-    expect(result.items[0]?.id).toBe(MAP_A);
+    // MAP_A (nomod) and MAP_D (Classic + Mirror — nomod-equivalent).
+    expect(result.total).toBe(2);
+    expect(result.items.map((i) => i.id).sort()).toEqual([MAP_A, MAP_D].sort());
+  });
+
+  test("Classic + Mirror scores count as nomod for grade buckets", () => {
+    const result = searchBeatmaps(db, "key=7 grade:SS", {
+      page: 1,
+      pageSize: 24,
+    });
+    expect(result.items.map((i) => i.id)).toContain(MAP_D);
+    // The DT score must stay excluded.
+    expect(result.items.map((i) => i.id)).not.toContain(MAP_E);
   });
 
   test("grade:X matches only 1,000,000 scores", () => {
@@ -157,5 +216,19 @@ describe("grade query integration", () => {
     });
     expect(result.total).toBe(2);
     expect(result.items.map((i) => i.id).sort()).toEqual([MAP_A, MAP_B].sort());
+  });
+});
+
+describe("nomod mod policy agreement", () => {
+  test("SQL disallowed mods and JS allowed mods stay disjoint", () => {
+    // `nomodOrMirrorOnlySql` (grade buckets) and `isNomodOrMirrorOnly`
+    // (skill / PP candidates) must implement the same policy: nothing is
+    // allowed in JS while banned in SQL, or the reverse.
+    for (const acronym of STATS_ALLOWED_MODS) {
+      expect(DISALLOWED_MOD_ACRONYMS).not.toContain(acronym);
+    }
+    expect(STATS_ALLOWED_MODS.has("CL")).toBe(true);
+    expect(STATS_ALLOWED_MODS.has("MR")).toBe(true);
+    expect(DISALLOWED_MOD_ACRONYMS).toContain("DT");
   });
 });

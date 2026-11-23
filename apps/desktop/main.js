@@ -8,6 +8,12 @@ const { startAutoUpdate } = require("./auto-update");
 const { decideRespawn } = require("./respawnPolicy");
 const { decideOverlayApply, childIsAlive } = require("./overlayApplyPolicy");
 const { createApplyGate, executeOverlayDecision } = require("./overlayApplyLoop");
+const {
+  MAX_OVERLAY_SETTINGS_BYTES,
+  parseOverlaySettingsResponse,
+  readCappedBody,
+} = require("./overlaySettings");
+const { parseOverlayHostUrl, parseOverlayOutput } = require("./overlayUrlGuard");
 const { appOrigin, isAppUrl, canOpenExternal, senderIsApp } = require("./urlPolicy");
 const { stopChild: stopChildProcess } = require("./stopChild");
 const { waitForServer } = require("./waitForServer");
@@ -33,10 +39,20 @@ let overlayChild = null;
 let overlayAppliedUrlArg = null;
 /** @type {string | null} */
 let overlayAppliedOutput = null;
+/** Restart nonce the running overlay child was spawned under. */
+let overlayAppliedRestartAt = null;
 /** Timestamp of the last overlay host spawn (liveness respawn rate limit). */
 let overlaySpawnedAt = 0;
 /** Overlay host setting poll timer. @type {NodeJS.Timeout | null} */
 let overlayPollTimer = null;
+/** Timestamp of the last server spawn (respawn policy stable-uptime check). */
+let serverSpawnedAt = 0;
+/** Consecutive short-lived server runs (respawnPolicy input). */
+let serverRespawnFailures = 0;
+/** Pending server respawn timer. @type {NodeJS.Timeout | null} */
+let serverRespawnTimer = null;
+/** Bumped per server respawn attempt so a stale waitForServer continuation bails. */
+let serverWaitId = 0;
 /** @type {Map<string, number>} */
 const childLogFdByLabel = new Map();
 let shuttingDown = false;
@@ -479,6 +495,121 @@ function scheduleRealmRespawn(paths, sharedEnv) {
 }
 
 /**
+ * Spawn the client-app server child and attach its respawn-aware handlers
+ * (desktop M8). An unexpected exit no longer tears down the whole desktop
+ * session with it — it goes through the respawn policy, and only an
+ * exhausted budget ends the app. The realm-reader and the In-game overlay
+ * host keep running: the overlay stops itself after its poll-failure cap
+ * and comes back once the server answers settings polls again.
+ * @param {ReturnType<typeof resolveDesktopPaths>} paths
+ * @param {NodeJS.ProcessEnv} sharedEnv
+ * @returns {import("node:child_process").ChildProcess}
+ */
+function spawnServer(paths, sharedEnv) {
+  desktopLog("spawn server");
+  const child = spawnNodeEntry(
+    paths,
+    paths.serverEntry,
+    paths.serverDir,
+    // Backfill jobs force a collection between maps to keep note graphs from
+    // accumulating (jobYield.ts). Node only exposes `global.gc` with
+    // --expose-gc; via NODE_OPTIONS it reaches both the packaged binary and
+    // dev `tsx`, which drops positional node args. Scoped to this child —
+    // Electron itself must not get the flag.
+    {
+      ...sharedEnv,
+      NODE_OPTIONS: [process.env.NODE_OPTIONS, "--expose-gc"]
+        .filter(Boolean)
+        .join(" "),
+    },
+    "server",
+  );
+  serverSpawnedAt = Date.now();
+  child.on("exit", (code, signal) => {
+    if (shuttingDown) return;
+    // A replaced/stopped child (not the current one) must not trigger respawn.
+    if (child !== serverChild) return;
+    desktopLog(`server exited code=${code} signal=${signal}`);
+    scheduleServerRespawn(paths, sharedEnv);
+  });
+  watchChildError(child, "server", () => {
+    if (shuttingDown) return;
+    if (child !== serverChild) return;
+    scheduleServerRespawn(paths, sharedEnv);
+  });
+  return child;
+}
+
+/**
+ * Respawn the server child after an unexpected exit with the same
+ * exponential backoff as the realm-reader (respawnPolicy.js). A run that
+ * stayed up at least `stableUptimeMs` resets the counter, so a single crash
+ * on a long-lived session restarts after 2 s; a server that dies at boot
+ * gives up after `maxAttempts` instead of spinning forever.
+ * @param {ReturnType<typeof resolveDesktopPaths>} paths
+ * @param {NodeJS.ProcessEnv} sharedEnv
+ */
+function scheduleServerRespawn(paths, sharedEnv) {
+  if (shuttingDown || serverRespawnTimer) return;
+  const decision = decideRespawn({
+    failures: serverRespawnFailures,
+    uptimeMs: Date.now() - serverSpawnedAt,
+  });
+  serverRespawnFailures = decision.failures;
+  if (decision.action === "give-up") {
+    desktopLog(
+      `server respawn giving up after ${decision.failures - 1} consecutive short-lived runs — restart Roxysu to retry`,
+    );
+    void (async () => {
+      await setSplashStatus("Server stopped — see logs", { animateDots: false });
+      await shutdown();
+      app.exit(1);
+    })();
+    return;
+  }
+  desktopLog(`server respawn #${decision.failures} in ${decision.delayMs}ms`);
+  void setSplashStatus("Server stopped — restarting");
+  serverRespawnTimer = setTimeout(() => {
+    serverRespawnTimer = null;
+    if (shuttingDown) return;
+    void respawnServer(paths, sharedEnv);
+  }, decision.delayMs);
+}
+
+/**
+ * Bring the server back after a respawn delay: spawn, wait for health, and
+ * reload the app into the window. A stale attempt bails when a newer one
+ * (or shutdown) started while it waited.
+ * @param {ReturnType<typeof resolveDesktopPaths>} paths
+ * @param {NodeJS.ProcessEnv} sharedEnv
+ */
+async function respawnServer(paths, sharedEnv) {
+  if (shuttingDown || childIsAlive(serverChild)) return;
+  const waitId = ++serverWaitId;
+  serverChild = spawnServer(paths, sharedEnv);
+  startupAbort = new AbortController();
+  try {
+    await waitForServer(PORT, HOST, 180_000, { signal: startupAbort.signal });
+  } catch (err) {
+    if (shuttingDown) return;
+    desktopLog(`respawn waitForServer failed: ${err}`);
+    // A live but never-healthy child must not wedge the loop: stop it so its
+    // exit event drives the next policy round. A dead child already did.
+    if (childIsAlive(serverChild)) void stopChild(serverChild, "server");
+    return;
+  }
+  if (shuttingDown || waitId !== serverWaitId) return;
+  desktopLog("server respawn ok — reloading window");
+  try {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      await loadAppIntoWindow();
+    }
+  } catch (err) {
+    desktopLog(`reload after server respawn failed: ${err}`);
+  }
+}
+
+/**
  * Optional In-game overlay host (Wayland wlr-layer-shell). Bundled by the Nix
  * packages into resources/overlay (Rust `roxysu-overlay` → `roxysu-overlay-rs`).
  * Dev prefers a local cargo build. HTTP-only consumer of GET /api/overlay —
@@ -500,7 +631,7 @@ function resolveOverlayBin(paths) {
 
 /**
  * @param {ReturnType<typeof resolveDesktopPaths>} paths
- * @param {string} urlArg Single `--url=…` token (host pre-splits argv on '=').
+ * @param {string} urlArg Single `--url=…` token (clap keeps `=` inside the value).
  * @param {string | null} output Monitor connector or model, or null to follow osu!.
  */
 function spawnOverlayHost(paths, urlArg, output) {
@@ -557,33 +688,22 @@ function stopChild(child, label) {
 
 /**
  * Read the In-game overlay host settings from the client app settings store
- * (`overlay.enabled` + `overlay.hostUrl` + `overlay.output`). Resolves null when unreachable
- * (fetch failed — keep current state).
+ * (`overlay.enabled` + `overlay.hostUrl` + `overlay.output` + restart nonce).
+ * Resolves null when unreachable (fetch failed — keep current state) or when
+ * the response is not a trustworthy settings document — a non-200 error
+ * body must count as a failed poll, not as "enabled with the default HUD
+ * URL", which could respawn a host the user just disabled (F-066).
  */
 function fetchOverlaySettings() {
   return new Promise((resolve) => {
     const req = http.get(
       { host: HOST, port: PORT, path: "/api/settings", timeout: 2000 },
       (res) => {
-        let raw = "";
-        res.on("data", (chunk) => {
-          raw += chunk;
-        });
-        res.on("end", () => {
-          try {
-            const overlay = JSON.parse(raw)?.overlay ?? {};
-            const hostUrl =
-              typeof overlay.hostUrl === "string" && overlay.hostUrl.trim()
-                ? overlay.hostUrl.trim()
-                : null;
-            const output =
-              typeof overlay.output === "string" && overlay.output.trim()
-                ? overlay.output.trim()
-                : null;
-            resolve({ enabled: overlay.enabled !== false, hostUrl, output });
-          } catch {
-            resolve(null);
-          }
+        // Cap the body so a wedged stream cannot grow the main-process heap.
+        void readCappedBody(res, MAX_OVERLAY_SETTINGS_BYTES).then((body) => {
+          resolve(
+            body.ok ? parseOverlaySettingsResponse(res.statusCode, body.text) : null,
+          );
         });
       },
     );
@@ -593,6 +713,39 @@ function fetchOverlaySettings() {
       resolve(null);
     });
   });
+}
+
+/**
+ * Defense in depth (L7): PATCH /settings validates overlay.host_url and
+ * overlay.host_output, but the shell execs the host — re-check the values
+ * read from GET /api/settings before they reach argv. A value that reached
+ * the settings table without PATCH (manual edit, older import, a future
+ * writer) must not point the WebKit view at an arbitrary origin or pin a
+ * nonsense monitor. A rejected URL falls back to the default HUD URL; a
+ * rejected monitor follows the osu! window; both are logged.
+ */
+function guardOverlaySettings(settings) {
+  if (!settings) return settings;
+  let hostUrl = settings.hostUrl ?? null;
+  if (hostUrl != null && !parseOverlayHostUrl(hostUrl).ok) {
+    desktopLog(
+      `overlay hostUrl rejected — using default (${hostUrl.slice(0, 64)})`,
+    );
+    hostUrl = null;
+  }
+  let output = settings.output ?? null;
+  if (output != null && !parseOverlayOutput(output).ok) {
+    desktopLog(
+      `overlay output rejected — following osu! (${JSON.stringify(output.slice(0, 64))})`,
+    );
+    output = null;
+  }
+  return {
+    enabled: settings.enabled,
+    hostUrl,
+    output,
+    restartAt: settings.restartAt ?? null,
+  };
 }
 
 /**
@@ -618,7 +771,7 @@ function watchOverlayHostSetting(paths) {
     if (shuttingDown) return;
     if (!applyGate.begin()) return;
     try {
-      const settings = await fetchOverlaySettings();
+      const settings = guardOverlaySettings(await fetchOverlaySettings());
       if (shuttingDown) return;
 
       // Decision logic lives in overlayApplyPolicy.js (pure, unit-tested):
@@ -631,6 +784,7 @@ function watchOverlayHostSetting(paths) {
         childExited: overlayChild !== null && !childIsAlive(overlayChild),
         appliedUrlArg: overlayAppliedUrlArg,
         appliedOutput: overlayAppliedOutput,
+        appliedRestartAt: overlayAppliedRestartAt,
         spawnedAt: overlaySpawnedAt,
         now: Date.now(),
         respawnGapMs: OVERLAY_RESPAWN_GAP_MS,
@@ -655,6 +809,8 @@ function watchOverlayHostSetting(paths) {
           desktopLog("overlay url changed — restarting host");
         } else if (decision.reason === "output-changed") {
           desktopLog("overlay monitor changed — restarting host");
+        } else if (decision.reason === "restart-requested") {
+          desktopLog("overlay restart requested — restarting host");
         }
       }
       // D2: the old host must be fully stopped (SIGTERM, SIGKILL, deadline)
@@ -665,10 +821,12 @@ function watchOverlayHostSetting(paths) {
         stop: () => stopChild(overlayChild, "overlay"),
         spawn: (urlArg, output) => {
           if (shuttingDown) return;
-          // Host pre-splits argv on '=', so the URL rides in one --url=… token
-          // (decision.urlArg) and the monitor in one --output=… token.
+          // clap parses `--url=VALUE` / `--output=VALUE` as one argv token
+          // and keeps `=` inside a value, so the URL and monitor each ride
+          // in a single token (overlayApplyPolicy composes them).
           overlayChild = null;
           spawnOverlayHost(paths, urlArg, output);
+          overlayAppliedRestartAt = decision.restartAt ?? null;
         },
       });
       if (decision.action === "stop") {
@@ -753,6 +911,12 @@ function shutdown() {
     clearTimeout(realmRespawnTimer);
     realmRespawnTimer = null;
   }
+  if (serverRespawnTimer) {
+    clearTimeout(serverRespawnTimer);
+    serverRespawnTimer = null;
+  }
+  // Invalidate any in-flight respawn waitForServer continuation.
+  serverWaitId += 1;
   const stops = [
     stopChild(overlayChild, "overlay"),
     stopChild(realmChild, "realm-reader"),
@@ -884,35 +1048,9 @@ if (!gotLock) {
         process.env.HUB_URL?.trim() || "https://roxysu-api.yonx.app",
     };
 
-    desktopLog("spawn server");
-    serverChild = spawnNodeEntry(
-      paths,
-      paths.serverEntry,
-      paths.serverDir,
-      // Backfill jobs force a collection between maps to keep note graphs from
-      // accumulating (jobYield.ts). Node only exposes `global.gc` with
-      // --expose-gc; via NODE_OPTIONS it reaches both the packaged binary and
-      // dev `tsx`, which drops positional node args. Scoped to this child —
-      // Electron itself must not get the flag.
-      {
-        ...sharedEnv,
-        NODE_OPTIONS: [process.env.NODE_OPTIONS, "--expose-gc"]
-          .filter(Boolean)
-          .join(" "),
-      },
-      "server",
-    );
-    serverChild.on("exit", (code, signal) => {
-      if (!shuttingDown) {
-        desktopLog(`server exited code=${code} signal=${signal}`);
-        void shutdown().then(() => app.exit(code ?? 1));
-      }
-    });
-    watchChildError(serverChild, "server", () => {
-      if (!shuttingDown) {
-        void shutdown().then(() => app.exit(1));
-      }
-    });
+    // M8: an unexpected server exit respawns with backoff instead of
+    // quitting the whole desktop session (see spawnServer).
+    serverChild = spawnServer(paths, sharedEnv);
 
     void setSplashStatus("Waiting for server");
     desktopLog("waitForServer start");

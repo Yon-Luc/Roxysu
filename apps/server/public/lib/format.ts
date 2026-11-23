@@ -16,7 +16,8 @@ export function formatAccuracy(value: number | null | undefined): string {
 
 export function formatPp(value: number | null | undefined): string {
   if (value == null) return "—";
-  return `${value.toFixed(0)}pp`;
+  // Small PP values still differ meaningfully in the second decimal.
+  return `${value < 10 ? value.toFixed(2) : value.toFixed(1)}pp`;
 }
 
 export function formatScore(value: number | null | undefined): string {

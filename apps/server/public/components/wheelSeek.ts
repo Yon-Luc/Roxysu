@@ -2,6 +2,8 @@ import { SKIP_MS } from "./previewPrefs";
 
 /** Pixels in one typical mouse notch (Chromium deltaMode 0). */
 const NOTCH_PX = 100;
+/** Firefox line-mode lines per typical mouse notch (deltaMode 1). */
+const LINES_PER_NOTCH = 3;
 /** Time moved by one notch without Shift. */
 export const WHEEL_SEEK_MS = 250;
 
@@ -19,12 +21,13 @@ export type WheelSeekInput = {
 
 /**
  * Wheel-down (positive deltaY) seeks later. One pixel-notch is {@link WHEEL_SEEK_MS};
- * Shift uses {@link SKIP_MS}. Line mode counts one line as one notch so Firefox
- * matches a Chromium notch. Page mode is four notches.
+ * Shift uses {@link SKIP_MS}. Firefox line mode reports about 3 lines per
+ * mouse notch, so one notch there also seeks one step. Page mode is four
+ * notches.
  */
 export function wheelSeekDeltaMs(e: WheelSeekInput): number {
   let notches: number;
-  if (e.deltaMode === DOM_DELTA_LINE) notches = e.deltaY;
+  if (e.deltaMode === DOM_DELTA_LINE) notches = e.deltaY / LINES_PER_NOTCH;
   else if (e.deltaMode === DOM_DELTA_PAGE) notches = e.deltaY * 4;
   else notches = e.deltaY / NOTCH_PX;
   return notches * (e.shiftKey ? SKIP_MS : WHEEL_SEEK_MS);

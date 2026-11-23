@@ -81,7 +81,7 @@ Only the active tab’s panels mount. Jump chips and Command Palette deep-links 
 
 - `apps/server/src/analytics/mastery/*`
 - `apps/server/src/analytics/recommend/axisThresholds.ts` — read/validate thresholds
-- `apps/server/src/routes/settings.ts`
+- `apps/server/src/routes/settings.ts` — `PATCH /settings` validates every present field first, then persists all planned writes in one transaction (a 400 on any field leaves the settings store unchanged); threshold/focus changes invalidate the player stats cache after the commit
 - `apps/server/public/features/settings/*`
 - `apps/server/public/features/settings/JobsBatchChrome.tsx`
 - `apps/server/public/features/settings/JobsOnboardingModal.tsx`

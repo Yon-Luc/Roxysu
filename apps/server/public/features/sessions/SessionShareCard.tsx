@@ -2,7 +2,7 @@ import { BeatmapCover } from "../../components/BeatmapCover";
 import { ModBadges } from "../../components/ModBadges";
 import type { ScoreJudgmentsView } from "../../components/ScoreCard";
 import { formatAccuracy, formatPp } from "../../lib/format";
-import roxyIcon from "../../roxy.png";
+import roxyIcon from "../../icons/icon-192.png";
 import { formatSessionDuration } from "./sessionShareHighlights";
 
 export type SessionSharePbCompare = {

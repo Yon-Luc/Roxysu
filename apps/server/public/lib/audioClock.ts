@@ -6,23 +6,46 @@
  * samples the media time when it changes and interpolates with performance.now()
  * between samples, while staying locked to playbackRate / pause / seek.
  *
- * A seek (`set` to a new position) locks out raw samples that have not arrived
- * at that position yet, so a stale `currentTime` cannot pull the playfield
- * backward and then forward. While playing, a sample that merely lags the
- * interpolator does not rewind it either. Pausing freezes the interpolated
- * time, and resuming continues from that frozen time once the media pointer
- * actually moves — a lagging sample never becomes the drawn position.
+ * A seek (`set` to a new position) locks out raw samples until one lands near
+ * the target (short grace after arrival, {@link SEEK_LOCK_MAX_MS} ceiling when
+ * nothing has arrived yet), so a stale `currentTime` cannot pull the playfield
+ * backward and then forward — even when the element takes a while to land.
+ * While playing, a sample that lags the interpolator by less than one coarse
+ * step is clock granularity and is ignored; a persistent larger lag is closed
+ * gradually (slewed) instead of sitting until it exceeds the snap threshold.
+ * Pausing freezes the interpolated time and arms a short lock so a lagging
+ * paused sample cannot snap the frozen position, and resuming continues from
+ * that frozen time once the media pointer actually moves — a lagging sample
+ * never becomes the drawn position.
  */
 /** A media sample this far from the interpolator is treated as a real discontinuity. */
 const SEEK_SNAP_MS = 250;
 /** Resume holds the frozen position at most this long before advancing again. */
 const RESUME_HOLD_MS = 250;
-/** How long a `set()` keeps rejecting samples that are still at the old time. */
+/**
+ * Grace after a seek sample has arrived near the target: a stale timeupdate
+ * from before the seek is still rejected, but the lock no longer outlives a
+ * landed seek.
+ */
 const SEEK_LOCK_MS = 400;
+/**
+ * Ceiling a `set()` seek lock can run without any sample near the target.
+ * A seek that lands slowly (large file, long jump, cold cache) must not have
+ * its still-old `currentTime` treated as a real discontinuity after 400ms.
+ * Shared with the React seek guards — import this instead of re-hard-coding.
+ */
+export const SEEK_LOCK_MAX_MS = 1500;
 /** A sample this close to the seek target has arrived (about one audio frame). */
 const SEEK_ARRIVE_MS = 50;
 /** Smaller than this, `set()` is a rebase and does not arm a seek lock. */
 const SEEK_LOCK_EPSILON_MS = 0.5;
+/**
+ * Lag within one coarse media step (currentTime often ticks 20–50ms) is clock
+ * granularity, not drift — ignore it exactly like a repeated sample.
+ */
+const COARSE_TICK_MS = 60;
+/** Share of a persistent lag (between one coarse step and the snap threshold) a single sample closes. */
+const LAG_SLEW = 0.25;
 
 export class AudioClock {
   private mediaMs = 0;
@@ -51,6 +74,7 @@ export class AudioClock {
   ): void {
     const now = opts?.now ?? performance.now();
     const prev = this.nowMs(now);
+    const wasPlaying = this.playing;
     this.mediaMs = mediaMs;
     this.samplePerfMs = now;
     this.lastRawMediaMs = mediaMs;
@@ -61,6 +85,13 @@ export class AudioClock {
     // must not start a lock. A real jump does, so rAF can keep sampling the
     // pre-seek currentTime without rewinding the notes.
     if (Math.abs(mediaMs - prev) > SEEK_LOCK_EPSILON_MS) {
+      this.seekTarget = mediaMs;
+      this.seekLockUntil = now + SEEK_LOCK_MAX_MS;
+    } else if (opts?.playing === false && wasPlaying) {
+      // Pause-freeze at the interpolated position: while the element still
+      // reports a lagging time (live sync can leave it seconds behind), the
+      // frozen position is the position to hold — reject such samples for a
+      // short grace instead of snapping back to them.
       this.seekTarget = mediaMs;
       this.seekLockUntil = now + SEEK_LOCK_MS;
     }
@@ -96,6 +127,11 @@ export class AudioClock {
         this.holding = false;
         this.mediaMs = this.nowMs(now);
         this.samplePerfMs = now;
+        // The frozen position is protected like a seek target for a short
+        // grace: a paused sample seconds behind (live-sync hold) must not
+        // snap the playfield back while the freeze settles.
+        this.seekTarget = this.mediaMs;
+        this.seekLockUntil = now + SEEK_LOCK_MS;
       }
       this.playing = opts.playing;
     }
@@ -103,13 +139,15 @@ export class AudioClock {
     if (!Number.isFinite(rawMediaMs)) return;
 
     // In-flight seek: the element is still reporting the pre-seek time (or a
-    // timeupdate queued before the seek). Ignore it for the whole lock, even
-    // after one sample has already landed on the target.
-    if (
-      now < this.seekLockUntil &&
-      Math.abs(rawMediaMs - this.seekTarget) > SEEK_ARRIVE_MS
-    ) {
-      return;
+    // timeupdate queued before the seek). Ignore it until a sample has
+    // arrived near the target, then keep only a short grace — a late stale
+    // timeupdate is still rejected, but the lock no longer outlives a seek
+    // that landed. With no arrival at all the lock ends at the ceiling.
+    if (now < this.seekLockUntil) {
+      if (Math.abs(rawMediaMs - this.seekTarget) > SEEK_ARRIVE_MS) {
+        return;
+      }
+      this.seekLockUntil = Math.min(this.seekLockUntil, now + SEEK_LOCK_MS);
     }
 
     if (!this.playing) {
@@ -145,11 +183,18 @@ export class AudioClock {
     const predicted = this.mediaMs + (now - this.samplePerfMs) * this.rate;
     const delta = rawMediaMs - predicted;
     this.lastRawMediaMs = rawMediaMs;
-    if (Math.abs(delta) > SEEK_SNAP_MS || delta > 0) {
+    if (delta > 0 || Math.abs(delta) > SEEK_SNAP_MS) {
       // Real discontinuity, or the media clock is a little ahead of us.
       // A sample merely behind the interpolator is the coarse clock lagging;
       // snapping to it is the back-and-forth on the playfield.
       this.mediaMs = rawMediaMs;
+      this.samplePerfMs = now;
+    } else if (delta < -COARSE_TICK_MS) {
+      // Persistent lag larger than one coarse step but under the snap
+      // threshold: close a fraction of the gap per sample so drift cannot
+      // accumulate until it jumps as a 250ms discontinuity. The correction
+      // is a few tens of ms per step — far below a visible snap.
+      this.mediaMs = predicted + delta * LAG_SLEW;
       this.samplePerfMs = now;
     }
   }

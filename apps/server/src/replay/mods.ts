@@ -2,6 +2,7 @@ export {
   parseScoreMods,
   toHitWindowOptions,
   isNomodOrMirrorOnly,
+  STATS_ALLOWED_MODS,
   adjustOverallDifficulty,
   scaleManiaHitWindows,
   formatModAcronym,

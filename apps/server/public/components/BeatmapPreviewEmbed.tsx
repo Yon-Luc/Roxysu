@@ -11,6 +11,7 @@ import {
   AudioClock,
   createUiTimePublisher,
   sampleAudioClock,
+  SEEK_LOCK_MAX_MS,
 } from "../lib/audioClock";
 import { clamp, formatClock } from "../lib/format";
 import { localBeatmapAudioUrl, localBeatmapCoverUrl, osuBeatmapCoverUrl } from "../lib/osuUrls";
@@ -39,7 +40,7 @@ import {
   SKIP_MS,
 } from "./previewPrefs";
 import { bindWheelSeek } from "./wheelSeek";
-import { useAppDict } from "../lib/i18n";
+import { t, useAppDict } from "../lib/i18n";
 import { parseScoreMods } from "@server/replay/mods";
 
 export const PREVIEW_EMBED_HEIGHT_MIN = 18;
@@ -223,7 +224,7 @@ export function BeatmapPreviewEmbed({
     const max = Math.max(audioMax, knownMax);
     const next = max > 0 ? clamp(ms, 0, max) : Math.max(0, ms);
     desiredMsRef.current = next;
-    seekGuardUntilRef.current = performance.now() + 400;
+    seekGuardUntilRef.current = performance.now() + SEEK_LOCK_MAX_MS;
     try {
       audio.currentTime = next / 1000;
     } catch {
@@ -237,7 +238,10 @@ export function BeatmapPreviewEmbed({
     stdHitsounds.onSeek(next);
   }
   seekByRef.current = (deltaMs) => {
-    seekTo(mapTimeMs() + deltaMs);
+    // Seek from the clock's own position: `mapTimeMs()` would re-observe the
+    // audio element, which during a live-sync hold still reports the lagging
+    // pre-freeze position instead of the frozen tosu time.
+    seekTo(clockRef.current.nowMs() + deltaMs);
   };
 
   const holdAndFreeze = useCallback(() => {
@@ -245,8 +249,20 @@ export function BeatmapPreviewEmbed({
     liveSyncSampleRef.current = null;
     const frozen = clockRef.current.nowMs();
     clockRef.current.set(frozen, { playing: false, rate: 1 });
+    desiredMsRef.current = frozen;
+    seekGuardUntilRef.current = performance.now() + SEEK_LOCK_MAX_MS;
     publishUiTimeRef.current(frozen, true);
-    audioRef.current?.pause();
+    const audio = audioRef.current;
+    if (!audio) return;
+    try {
+      // Rebase the element to the frozen time as well, so no later observe
+      // (pause event, timeupdate, rAF sampler) can pull the frozen position
+      // back to the lagging live-sync position the element still had.
+      audio.currentTime = frozen / 1000;
+    } catch {
+      // InvalidStateError before metadata — the pause lock still holds.
+    }
+    audio.pause();
   }, []);
 
   useEffect(() => {
@@ -352,7 +368,7 @@ export function BeatmapPreviewEmbed({
       const atMs = (audio!.currentTime || 0) * 1000;
       if (atMs > 250) return;
       desiredMsRef.current = pt;
-      seekGuardUntilRef.current = performance.now() + 400;
+      seekGuardUntilRef.current = performance.now() + SEEK_LOCK_MAX_MS;
       try {
         audio!.currentTime = pt / 1000;
       } catch {
@@ -375,6 +391,10 @@ export function BeatmapPreviewEmbed({
     }
 
     function syncClockFromAudio(forceUi = false) {
+      // A live-sync hold froze the clock; the element still reports the
+      // lagging pre-freeze position and must not move it. Paused holds only —
+      // an explicit resume goes through the clock's own resume-hold path.
+      if (holdSyncRef.current && audio!.paused) return;
       if (syncSampleFresh(liveSyncSampleRef.current)) return;
       const ms = (audio!.currentTime || 0) * 1000;
       const desired = desiredMsRef.current;
@@ -538,7 +558,7 @@ export function BeatmapPreviewEmbed({
     const atMs = (audio.currentTime || 0) * 1000;
     if (Math.abs(atMs - syncTimeMs) <= SYNC_RESYNC_MS) return;
     desiredMsRef.current = syncTimeMs;
-    seekGuardUntilRef.current = now + 400;
+    seekGuardUntilRef.current = now + SEEK_LOCK_MAX_MS;
     try {
       audio.currentTime = syncTimeMs / 1000;
     } catch {
@@ -729,7 +749,7 @@ export function BeatmapPreviewEmbed({
             type="button"
             className="rx-btn !px-3 !py-1 text-xs"
             disabled={!audioUrl}
-            onClick={() => seekTo(Math.max(0, mapTimeMs() - SKIP_MS))}
+            onClick={() => seekTo(Math.max(0, clockRef.current.nowMs() - SKIP_MS))}
           >
             −5s
           </button>
@@ -737,10 +757,13 @@ export function BeatmapPreviewEmbed({
             type="button"
             className="rx-btn !px-3 !py-1 text-xs"
             disabled={!audioUrl}
-            onClick={() => seekTo(mapTimeMs() + SKIP_MS)}
+            onClick={() => seekTo(clockRef.current.nowMs() + SKIP_MS)}
           >
             +5s
           </button>
+          <span className="text-[11px] text-on-media-muted">
+            {t(dict?.common.wheelSeekHint, { seconds: SKIP_MS / 1000 })}
+          </span>
           {isMania ? (
             <label className="ml-auto flex min-w-[8rem] items-center gap-2 text-[11px] text-on-media-muted">
               <span className="shrink-0">

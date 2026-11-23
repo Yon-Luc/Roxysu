@@ -1,9 +1,10 @@
 import { beatmapSets, beatmaps, imports, scores } from "@roxysu/db/schema";
-import { Elysia } from "elysia";
+import { Elysia, t } from "elysia";
 import { and, count, desc, eq } from "drizzle-orm";
 
 import { dbPlugin } from "../db-runtime";
 import { toIso } from "../shared/serialize";
+import { clampTzOffset } from "../shared/localDay";
 import { getCurrentSession } from "../analytics/session";
 import {
   resolveScoresGamemode,
@@ -33,7 +34,7 @@ import {
 
 export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
   .use(dbPlugin)
-  .get("/", async ({ db }) => {
+  .get("/", async ({ db, query }) => {
     const [usernames, gamemode] = await Promise.all([
       resolveScoresUsernames(db),
       resolveScoresGamemode(db),
@@ -95,7 +96,7 @@ export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
       db.select().from(imports).orderBy(desc(imports.id)).limit(1),
       getCurrentSession(db),
       getWeeklyActivity(db, 12),
-      getPracticeSnapshot(db),
+      getPracticeSnapshot(db, clampTzOffset(query.tzOffset)),
     ]);
 
     // Modded plays show their rework difficulty variant labels when computed.
@@ -181,4 +182,9 @@ export const dashboardRoutes = new Elysia({ prefix: "/dashboard" })
           }
         : null,
     };
+  }, {
+    query: t.Object({
+      /** Browser `Date#getTimezoneOffset` minutes — snapshot days are local. */
+      tzOffset: t.Optional(t.Union([t.Number(), t.String()])),
+    }),
   });

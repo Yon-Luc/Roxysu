@@ -17,6 +17,7 @@ import {
   useHubJwt,
   useHubUrl,
 } from "../../lib/hub";
+import { useAppDict } from "../../lib/i18n";
 import { pushToast } from "../../lib/toasts";
 import { HubLoginButton } from "./HubLoginButton";
 
@@ -24,6 +25,7 @@ export function HubAdminCalcBundlesPage() {
   const hubUrl = useHubUrl();
   const jwt = useHubJwt();
   const queryClient = useQueryClient();
+  const { dict } = useAppDict();
   const [version, setVersion] = useState(APP_VERSION);
   const [label, setLabel] = useState("");
 
@@ -212,7 +214,7 @@ export function HubAdminCalcBundlesPage() {
                           : ""}
                       </p>
                       <p className="text-xs text-faint">
-                        {formatRelativeTime(b.uploadedAt)}
+                        {formatRelativeTime(b.uploadedAt, dict?.common)}
                       </p>
                     </div>
                     <button

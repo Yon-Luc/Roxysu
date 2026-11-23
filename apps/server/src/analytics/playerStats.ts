@@ -841,16 +841,53 @@ function getKeymodeProgression(
     }));
   const accuracyTrend = fillIdleAccuracyDays(playedDays);
 
-  const weeklyActivity = [...weekly.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([weekStart, b]) => ({
-      weekStart,
-      playCount: b.playCount,
-      totalPp: b.totalPp,
-      avgAccuracy: b.accCount > 0 ? b.accSum / b.accCount : null,
-    }));
+  const weeklyActivity = fillIdleWeeks(
+    [...weekly.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([weekStart, b]) => ({
+        weekStart,
+        playCount: b.playCount,
+        totalPp: b.totalPp,
+        avgAccuracy: b.accCount > 0 ? b.accSum / b.accCount : null,
+      })),
+  );
 
   return { ppTrend, accuracyTrend, weeklyActivity };
+}
+
+/**
+ * Insert idle Monday-start weeks between the first and last played week with
+ * zero plays — same rule as the Home weekly activity chart: a rest week reads
+ * as an empty bar, not as a missing slot squeezed out of the axis.
+ */
+function fillIdleWeeks(
+  weeks: Array<{
+    weekStart: string;
+    playCount: number;
+    totalPp: number;
+    avgAccuracy: number | null;
+  }>,
+) {
+  if (weeks.length < 2) return weeks;
+  const byWeek = new Map(weeks.map((week) => [week.weekStart, week]));
+  const end = weeks[weeks.length - 1]!.weekStart;
+  const out: typeof weeks = [];
+  let cursor = weeks[0]!.weekStart;
+  while (cursor <= end) {
+    out.push(
+      byWeek.get(cursor) ?? {
+        weekStart: cursor,
+        playCount: 0,
+        totalPp: 0,
+        avgAccuracy: null,
+      },
+    );
+    if (cursor === end) break;
+    const next = addUtcDays(cursor, 7);
+    if (next <= cursor) break;
+    cursor = next;
+  }
+  return out;
 }
 
 function fillIdleAccuracyDays(
@@ -884,12 +921,17 @@ function fillIdleAccuracyDays(
 export async function getPlayerStats(db: Db, query: PlayerStatsQuery = {}) {
   const granularity = parseGranularity(query.granularity);
   const skillTopPlays = parseSkillTopPlays(query.skillTopPlays);
-  const keyCount = parseSkillKeyCount(query.keyCount ?? DEFAULT_SKILL_KEY_COUNT);
 
   // Resolve the score scope (username + gamemode) once for every query below.
   const scope = scoreScopeFilter(db);
   const { keyCounts: availableKeyCounts, preferredKeyCount } =
     listPlayedKeyModes(db, scope);
+  // No explicit keyCount: resolve the player's most-played mania key so the
+  // first Stats paint is already the right keymode. 7 is only the fallback
+  // when nothing was ever played.
+  const keyCount = parseSkillKeyCount(
+    query.keyCount ?? preferredKeyCount ?? DEFAULT_SKILL_KEY_COUNT,
+  );
   const curves = loadManiaPpCurvesSync(db);
   const pass = streamManiaPass(db, scope, keyCount, curves);
   const variantOf = loadDanVariantLookup(db, pass.candidates);

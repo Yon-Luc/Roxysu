@@ -37,6 +37,7 @@ import {
   formatDuration,
   historyBandValue,
   isSkillEvolutionBand,
+  nextSkillFocus,
   skillAxisLabel,
   skillBandMaps,
   skillBandValue,
@@ -156,17 +157,30 @@ export function StatsPage({
     setFocusBand(null);
   }, [skillAxis, granularity, keyCount]);
 
+  // First visit with no chosen keymode: omit keyCount so the server resolves
+  // the player's most-played mania key — the first paint is already the
+  // right keymode instead of a 7K payload that jumps when preferredKeyCount
+  // arrives. Once the correction effect adopts the preferred key (or the
+  // player picks one), requests carry the explicit key again.
+  const correctedDefaultKey = useRef(false);
+  const defaultKeyPending =
+    statsKeyCountSource() === "default" && !correctedDefaultKey.current;
+  const requestedKeyCount = defaultKeyPending ? undefined : keyCount;
+
   const { data, isLoading, error } = useQuery({
-    queryKey: ["stats", granularity, skillTopPlays, keyCount],
+    queryKey: ["stats", granularity, skillTopPlays, requestedKeyCount ?? null],
     queryFn: () =>
-      fetchStats({ granularity, skillTopPlays, keyCount }),
+      fetchStats({
+        granularity,
+        skillTopPlays,
+        keyCount: requestedKeyCount,
+      }),
     // Stats only change after a sync completes; SSE sync.finished invalidates
     // this. Explicit staleTime prevents unnecessary refetches on tab focus.
     staleTime: 5 * 60_000,
     placeholderData: keepPreviousData,
   });
 
-  const correctedDefaultKey = useRef(false);
   useEffect(() => {
     if (correctedDefaultKey.current) return;
     if (statsKeyCountSource() !== "default") return;
@@ -213,7 +227,9 @@ export function StatsPage({
     [chartHistory, focusBand],
   );
   const toggleSkillFocus = (band: SkillEvolutionBand) => {
-    setFocusBand((prev) => (prev === band ? null : band));
+    // An all-null band is never isolated (empty chart); clicks on it are
+    // ignored so the other lines stay visible.
+    setFocusBand((prev) => nextSkillFocus(prev, band, chartHistory));
   };
 
   const axisToggle = (
@@ -686,6 +702,10 @@ export function StatsPage({
                   <Tooltip
                     contentStyle={charts.tooltip}
                     labelFormatter={formatChartDay}
+                    formatter={(value) => [
+                      Number(value).toLocaleString(),
+                      dict?.dashboard.plays ?? "plays",
+                    ]}
                   />
                   <Bar
                     dataKey="playCount"

@@ -49,6 +49,21 @@ export function clampSessionScoreLimit(raw: unknown): number {
   return Math.min(Math.floor(n), MAX_SESSION_SCORE_LIMIT);
 }
 
+/**
+ * S-NEW-1: the sessions list handler never defaults to "every session".
+ * Without a cap, a long-lived library serialized the full table on every
+ * page visit and command-palette warm-up. The default restores the
+ * pre-regression behavior; `?limit=` can raise it up to the hard max.
+ */
+export const DEFAULT_SESSION_LIST_LIMIT = 100;
+export const MAX_SESSION_LIST_LIMIT = 500;
+
+export function clampSessionListLimit(raw: unknown): number {
+  const n = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isFinite(n) || n < 1) return DEFAULT_SESSION_LIST_LIMIT;
+  return Math.min(Math.floor(n), MAX_SESSION_LIST_LIMIT);
+}
+
 async function sessionDetailPayload(
   db: Parameters<typeof listSessionScores>[0],
   session: NonNullable<Awaited<ReturnType<typeof getSessionById>>>,
@@ -148,8 +163,11 @@ export const sessionRoutes = new Elysia({ prefix: "/sessions" })
     async ({ db, query }) => {
       const day = query.day?.trim();
       const tzOffset = clampTzOffset(query.tzOffset);
+      // S-NEW-1: both branches pass a limit — never the unbounded
+      // `listSessions(db)` / `listSessionsOnUtcDay(db, day, undefined, …)`.
+      const limit = clampSessionListLimit(query.limit);
       if (day) {
-        const items = await listSessionsOnUtcDay(db, day, undefined, tzOffset);
+        const items = await listSessionsOnUtcDay(db, day, limit, tzOffset);
         return {
           current: null,
           items: items.map(serializeSession),
@@ -157,7 +175,7 @@ export const sessionRoutes = new Elysia({ prefix: "/sessions" })
         };
       }
       const [items, current, activity] = await Promise.all([
-        listSessions(db),
+        listSessions(db, limit),
         getCurrentSession(db),
         getCalendarActivity(db, 371, tzOffset),
       ]);
@@ -171,6 +189,7 @@ export const sessionRoutes = new Elysia({ prefix: "/sessions" })
       query: t.Object({
         day: t.Optional(t.String()),
         tzOffset: t.Optional(t.Union([t.Number(), t.String()])),
+        limit: t.Optional(t.Union([t.Number(), t.String()])),
       }),
     },
   )

@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-11-28
+last_verified: 2026-11-23
 confidence: verified
 touches:
   - packages/mania-difficulty
@@ -61,7 +61,10 @@ Product writes use `algorithm = 'mania-difficulty'` (rework dan). Legacy Sunny/D
    90–95% band targeting 100% ±8% of that band’s skill; Accuracy 99%+;
    Consistency 96–99%; Deficit at weak-axis comfort skill ±10%.
    An axis with no plays keeps comfort 0 and is skipped by `weakestAxis`
-   instead of inheriting overall skill.
+   instead of inheriting overall skill. Comfort skill picks the top N plays
+   by rework star, then weights that window by play time: the newest play
+   carries the full recency weight (`RECENCY_DECAY` per older play). The
+   weight is not applied to the hardest-first selection order.
    **Enforced by:** `readFocusSettingsSync` / `estimateSevenKSkillFromPlays` /
    `recommendPush|Accuracy|Consistency|Deficit` in
    `apps/server/src/analytics/recommend/focusSettings.ts` + `sevenKSkill.ts` +

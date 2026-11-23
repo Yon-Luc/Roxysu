@@ -129,11 +129,32 @@ function finiteBandValues(
   return values;
 }
 
+/** Keep the min/max strokes inside the plot box instead of on its edge. */
+const DOMAIN_PAD_FRACTION = 0.05;
+const DOMAIN_PAD_MIN = 0.05;
+
 function domainFromValues(values: readonly number[]): [number, number] {
   const min = Math.min(...values);
   const max = Math.max(...values);
   if (min === max) return [min, min + 1];
-  return [min, max];
+  const pad = Math.max((max - min) * DOMAIN_PAD_FRACTION, DOMAIN_PAD_MIN);
+  // Skills are non-negative: never pad the floor below zero.
+  return [Math.max(0, min - pad), max + pad];
+}
+
+/**
+ * Focus toggle for Skill evolution. A band with no finite points is never
+ * isolated: focusing it would hide every other line and leave the chart
+ * empty (its domain falls back to the combined range of lines that are no
+ * longer drawn), so such a click is ignored.
+ */
+export function nextSkillFocus(
+  current: SkillEvolutionBand | null,
+  clicked: SkillEvolutionBand,
+  points: readonly SkillEvolutionPoint[],
+): SkillEvolutionBand | null {
+  if (finiteBandValues(points, [clicked]).length === 0) return current;
+  return current === clicked ? null : clicked;
 }
 
 /** Y-axis extent for Skill evolution. Floor is the lowest plotted skill level. */

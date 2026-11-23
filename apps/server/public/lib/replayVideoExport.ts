@@ -92,7 +92,7 @@ import {
   FIELD_WIDTH_MAX,
   FIELD_WIDTH_MIN,
 } from "../components/previewPrefs";
-import roxyIconUrl from "../roxy.png";
+import roxyIconUrl from "../icons/icon-192.png";
 
 export const REPLAY_VIDEO_WIDTH = 1920;
 export const REPLAY_VIDEO_HEIGHT = 1080;

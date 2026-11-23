@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-11
+last_verified: 2026-11-23
 confidence: verified
 touches:
   - apps/server/public/components/BeatmapPreviewModal.tsx
@@ -184,13 +184,20 @@ Playfield = the visual layer for that ruleset (notefield, 512×384, or taiko lan
 
 5e. **Wheel seek** on the beatmap preview, score rewatch, and embedded preview
     playfield moves the playhead. Wheel down seeks later. One typical mouse
-    notch is 250ms; Shift is 5s (the same step as skip, `SKIP_MS`). Trackpad
-    deltas scale with `deltaY`. Deltas in one frame are one seek. Play mode
-    ignores the wheel. Ctrl/Meta is left to the browser. Events whose target
-    is inside `aside`, `input`, `textarea`, `select`, `button`, or `a` are
-    ignored, so the rewatch analysis list and the sliders keep their own
-    wheel behavior. On the embed, a fresh tosu sample driving the clock makes
-    the first wheel tick take the pause hold before seeking.
+    notch is 250ms — in Chromium pixel mode (100 px) and in Firefox line
+    mode (3 lines per notch). Shift is 5s (the same step as skip, `SKIP_MS`;
+    the shortcut-line copy formats its seconds from `SKIP_MS` via the
+    `common.wheelSeekHint` dictionary key, present in all four locales).
+    Trackpad deltas scale with `deltaY`; page mode is four notches. Deltas
+    in one frame are one seek. Play mode ignores the wheel. Ctrl/Meta is
+    left to the browser. Events whose target is inside `aside`, `input`,
+    `textarea`, `select`, `button`, or `a` are ignored, so the rewatch
+    analysis list and the sliders keep their own wheel behavior. On the
+    embed, a fresh tosu sample driving the clock makes the first wheel tick
+    take the pause hold before seeking — the hold also rebases the audio
+    element to the frozen time and guards the audio-event sync path, so the
+    element's lagging pre-freeze position cannot snap the frozen clock (see
+    now-selected rule 3). The embed control bar shows the wheel hint.
     **Source:** `components/wheelSeek.ts:wheelSeekDeltaMs`,
     `BeatmapPreviewModal.tsx`, `ScoreReplayModal.tsx`,
     `BeatmapPreviewEmbed.tsx` — status: verified by `wheelSeek.test.ts`.
@@ -268,9 +275,13 @@ Playfield = the visual layer for that ruleset (notefield, 512×384, or taiko lan
    `ManiaHitWindows` (default DifficultyRange, Classic, Classic convert, and
    Classic+ScoreV2 back on the default curve), including `floor(width * rate) + 0.5`,
    EZ (OD × 0.5), and HR (OD × 1.4, cap 10). Score rewatch and its live judge
-   pass the score's CL / SV2 / V2 / DT / HT / EZ / HR mods. Preview practice
-   stays nomod. Errors are compared unrounded.
+   pass the score's CL / SV2 / V2 / DT / HT / EZ / HR mods plus the chart's
+   convert flag (`toHitWindowOptions(mods, { convert })`: a standard-mode
+   beatmap played as mania uses the Classic convert curve; today both rewatch
+   and preview reject converted charts, so the flag arrives as false until
+   that gate lifts). Preview practice stays nomod. Errors are compared unrounded.
    **Source:** `packages/mania-judge/src/windows.ts`, `simulate.ts`,
+   `packages/mania-judge/src/mods.ts:toHitWindowOptions`,
    `ScoreReplayModal.tsx` — status: verified by `windows.test.ts`
 
 10. Preview and rewatch match the pattern-conversion mods **Invert (IN)** and
@@ -437,18 +448,25 @@ Realm skin extract (full / reconcile):
 - Scrubber / clock labels use `createUiTimePublisher` (~10 Hz, force on
   seek / play / pause / ended) so media `timeupdate` does not re-render the
   whole modal every tick. Authoritative time stays on `AudioClock`. `set()`
-  to a new position arms a seek lock (~400 ms). Until it ends, raw samples
-  more than ~50 ms from that target are ignored, including a stale
-  `currentTime` the playfield sampler reads on the next frame and a late
-  `timeupdate` after one sample has already arrived. Rebasing with
-  `set(current presentation time)` does not arm or extend the lock. While
-  playing, a sample behind the interpolator does not rewind it; a sample a
-  little ahead catches up. A jump larger than ~250 ms snaps only once the
-  lock has expired. Pause freezes the interpolated time. Resume holds that
-  frozen time until `currentTime` moves (or `RESUME_HOLD_MS`, ~250 ms), then
-  interpolates forward from it — a sample that is still behind is not
-  adopted. Smaller backward dips do not reset the rewatch HUD scan
-  (`REWIND_SCAN_TOLERANCE_MS` in `ScoreReplayModal.tsx`).
+  to a new position arms a seek lock that rejects raw samples until one
+  lands within ~50 ms of the target (a short ~400 ms grace after arrival
+  still rejects a late stale timeupdate), with a ~1.5 s ceiling
+  (`SEEK_LOCK_MAX_MS`, shared with the React `seekGuardUntilRef` guards in
+  the embed and both modals) when no sample has arrived yet — a slow seek
+  (long jump, cold cache) is not treated as a real discontinuity. Rebasing
+  with `set(current presentation time)` does not arm or extend the lock.
+  While playing, a sample behind the interpolator within one coarse media
+  step (~60 ms) is clock granularity and is ignored; a persistent lag
+  between that and the ~250 ms snap threshold closes a quarter of the
+  remaining gap per sample (slew) so drift cannot accumulate into a
+  visible jump; a sample ahead always catches up. Pausing freezes the
+  interpolated time and arms a short lock so a lagging paused sample
+  (live sync can leave the element seconds behind the frozen clock) cannot
+  snap the playfield back. Resume holds that frozen time until
+  `currentTime` moves (or `RESUME_HOLD_MS`, ~250 ms), then interpolates
+  forward from it — a sample that is still behind is not adopted. Smaller
+  backward dips do not reset the rewatch HUD scan (`REWIND_SCAN_TOLERANCE_MS`
+  in `ScoreReplayModal.tsx`).
 - Score rewatch HUD ticks incrementally through judgments and calls `setHud`
   only when combo / accuracy / last result change (counts ride the same update).
   Paused + unchanged time   skips the scan. Combo, accuracy, and running counts are draggable playfield

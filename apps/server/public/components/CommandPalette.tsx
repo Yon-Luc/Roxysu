@@ -289,7 +289,9 @@ export function CommandPalette({
 
   const { data: sessionsData } = useQuery({
     queryKey: ["sessions"],
-    queryFn: () => fetchSessions(),
+    // S-NEW-1: explicit cap — the palette only filters a short list, it
+    // must not warm an unbounded sessions payload.
+    queryFn: () => fetchSessions(undefined, undefined, 100),
     enabled: open,
     staleTime: 60_000,
   });

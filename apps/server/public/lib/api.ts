@@ -43,8 +43,11 @@ export async function fetchSystemStatus() {
   return unwrap(await api.api.system.status.get(), "/api/system/status");
 }
 
-export async function fetchDashboard() {
-  return unwrap(await api.api.dashboard.get(), "/api/dashboard");
+export async function fetchDashboard(tzOffsetMinutes?: number) {
+  return unwrap(
+    await api.api.dashboard.get({ query: { tzOffset: tzOffsetMinutes } }),
+    "/api/dashboard",
+  );
 }
 
 export async function fetchOverlay(limit?: number, profile?: string) {
@@ -320,12 +323,17 @@ export async function fetchScoreReplay(id: string) {
   );
 }
 
-export async function fetchSessions(day?: string, tzOffsetMinutes?: number) {
+export async function fetchSessions(
+  day?: string,
+  tzOffsetMinutes?: number,
+  limit?: number,
+) {
   return unwrap(
     await api.api.sessions.get({
       query: {
         day,
         tzOffset: tzOffsetMinutes,
+        limit,
       },
     }),
     "/api/sessions",
@@ -863,6 +871,7 @@ export async function patchSettings(body: {
   overlayHostUrl?: string | null;
   overlayOutput?: string | null;
   overlayEnabled?: boolean;
+  overlayRestartHost?: boolean;
   tosuEnabled?: boolean;
   tosuHost?: string;
   tosuExecutablePath?: string | null;

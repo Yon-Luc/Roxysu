@@ -677,15 +677,26 @@ export function estimateSevenKSkillFromPlays(
     });
   }
 
-  const total = withRework.length;
+  // The recency weight must follow play time, not chart difficulty.
+  // `topRatedPlays` picks the top N by rework star (hardest first); weighting
+  // that order by "recency" gave the hardest play of the window the smallest
+  // weight. Sort the window newest-first so recent plays weigh more, and keep
+  // the hardest-first order only as a deterministic tie-break.
+  const byRecency = [...withRework].sort(
+    (a, b) =>
+      b.playedAt - a.playedAt ||
+      b.reworkStar! - a.reworkStar! ||
+      a.beatmapId.localeCompare(b.beatmapId),
+  );
   const rcPoints: Array<{ value: number; weight: number }> = [];
   const lnPoints: Array<{ value: number; weight: number }> = [];
   const flnPoints: Array<{ value: number; weight: number }> = [];
   const allPoints: Array<{ value: number; weight: number }> = [];
 
-  for (let i = 0; i < withRework.length; i++) {
-    const play = withRework[i]!;
-    const recencyWeight = Math.pow(RECENCY_DECAY, total - i - 1);
+  for (let i = 0; i < byRecency.length; i++) {
+    const play = byRecency[i]!;
+    // Newest play (i = 0) carries the full weight; older plays decay.
+    const recencyWeight = Math.pow(RECENCY_DECAY, i);
     const combined = recencyWeight * accuracyWeight(play.accuracy);
     const point = { value: play.reworkStar!, weight: combined };
     allPoints.push(point);

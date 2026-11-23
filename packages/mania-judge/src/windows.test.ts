@@ -1,5 +1,21 @@
 import { describe, expect, test } from "bun:test";
 import { judgeError, maniaHitWindows } from "./windows";
+import { parseScoreMods, toHitWindowOptions } from "./mods";
+
+describe("toHitWindowOptions", () => {
+  test("convert is threaded separately from score mods", () => {
+    const mods = parseScoreMods('[{"acronym":"CL"}]');
+    // Convert is a beatmap fact, not a mod: omitted it stays off.
+    expect(toHitWindowOptions(mods).convert).toBe(false);
+    // Passed through, a Classic converted chart uses the convert curve.
+    expect(
+      toHitWindowOptions(mods, { convert: true }).convert,
+    ).toBe(true);
+    expect(
+      maniaHitWindows(4, toHitWindowOptions(mods, { convert: true })).great,
+    ).toBe(maniaHitWindows(4, { classic: true, convert: true }).great);
+  });
+});
 
 describe("maniaHitWindows", () => {
   test("default lazer windows at OD 0, 5, 8, 10", () => {

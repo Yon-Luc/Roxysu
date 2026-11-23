@@ -44,13 +44,29 @@ type Bucket = {
   playCount: number;
   totalPp: number;
   accSum: number;
+  /** Graded plays only — fails/quits contribute nothing to accuracy. */
+  accCount: number;
 };
 
-function bump(map: Map<string, Bucket>, key: string, accuracy: number, pp: number) {
-  const b = map.get(key) ?? { playCount: 0, totalPp: 0, accSum: 0 };
+function bump(
+  map: Map<string, Bucket>,
+  key: string,
+  accuracy: number,
+  pp: number,
+  graded: boolean,
+) {
+  const b =
+    map.get(key) ?? { playCount: 0, totalPp: 0, accSum: 0, accCount: 0 };
   b.playCount += 1;
   b.totalPp += pp;
-  b.accSum += accuracy;
+  // Same gate as the request-path aggregates (`streamManiaPass`): a play
+  // without a grade (Realm rank = -1) counts toward play counts and PP
+  // volume, but contributes nothing to accuracy sums, so a rage-quit
+  // cannot drag the day's or week's average.
+  if (graded) {
+    b.accSum += accuracy;
+    b.accCount += 1;
+  }
   map.set(key, b);
 }
 
@@ -111,6 +127,7 @@ export async function runStatisticsEngine(
     .select({
       accuracy: scores.accuracy,
       pp: scores.pp,
+      rank: scores.rank,
       playedAt: scores.playedAt,
       mods: scores.mods,
       beatmapId: scores.beatmapId,
@@ -137,12 +154,13 @@ export async function runStatisticsEngine(
   for (const row of rows) {
     const played = new Date(toMs(row.playedAt));
     const pp = effectivePp(row, curves);
-    bump(daily, dayKey(played), row.accuracy, pp);
-    bump(weekly, weekStartKey(played), row.accuracy, pp);
+    const graded = row.rank !== -1;
+    bump(daily, dayKey(played), row.accuracy, pp, graded);
+    bump(weekly, weekStartKey(played), row.accuracy, pp, graded);
 
     if (row.mapperOnlineId != null && row.mapperOnlineId > 0) {
       const m = mappers.get(row.mapperOnlineId) ?? createMapperAgg();
-      bumpMapperAgg(m, row.accuracy, pp, row.mapperUsername);
+      bumpMapperAgg(m, row.accuracy, pp, row.mapperUsername, graded);
       mappers.set(row.mapperOnlineId, m);
     }
   }
@@ -222,6 +240,7 @@ async function rebuildPartitionsForScores(db: Db, scoreIds: string[]) {
     .select({
       accuracy: scores.accuracy,
       pp: scores.pp,
+      rank: scores.rank,
       playedAt: scores.playedAt,
       mods: scores.mods,
       beatmapId: scores.beatmapId,
@@ -251,9 +270,12 @@ async function rebuildPartitionsForScores(db: Db, scoreIds: string[]) {
     const dKey = dayKey(played);
     const wKey = weekStartKey(played);
     const pp = effectivePp(row, curves);
+    const graded = row.rank !== -1;
 
-    if (dayKeys.has(dKey)) bump(daily, dKey, row.accuracy, pp);
-    if (weekKeys.has(wKey)) bump(weekly, wKey, row.accuracy, pp);
+    if (dayKeys.has(dKey))
+      bump(daily, dKey, row.accuracy, pp, graded);
+    if (weekKeys.has(wKey))
+      bump(weekly, wKey, row.accuracy, pp, graded);
 
     if (
       row.mapperOnlineId != null &&
@@ -261,7 +283,7 @@ async function rebuildPartitionsForScores(db: Db, scoreIds: string[]) {
       mapperIds.has(row.mapperOnlineId)
     ) {
       const m = mappers.get(row.mapperOnlineId) ?? createMapperAgg();
-      bumpMapperAgg(m, row.accuracy, pp, row.mapperUsername);
+      bumpMapperAgg(m, row.accuracy, pp, row.mapperUsername, graded);
       mappers.set(row.mapperOnlineId, m);
     }
   }
@@ -287,6 +309,7 @@ async function rebuildMapperPartitions(db: Db, mapperOnlineIds: number[]) {
     .select({
       accuracy: scores.accuracy,
       pp: scores.pp,
+      rank: scores.rank,
       mods: scores.mods,
       beatmapId: scores.beatmapId,
       rulesetShortName: scores.rulesetShortName,
@@ -315,6 +338,7 @@ async function rebuildMapperPartitions(db: Db, mapperOnlineIds: number[]) {
       row.accuracy,
       effectivePp(row, curves),
       row.mapperUsername,
+      row.rank !== -1,
     );
     mappers.set(row.mapperOnlineId, m);
   }
@@ -336,20 +360,20 @@ async function insertStatPartitions(
     day,
     playCount: b.playCount,
     totalPp: b.totalPp,
-    avgAccuracy: b.playCount > 0 ? b.accSum / b.playCount : null,
+    avgAccuracy: b.accCount > 0 ? b.accSum / b.accCount : null,
   }));
   const weeklyRows = [...weekly.entries()].map(([weekStart, b]) => ({
     weekStart,
     playCount: b.playCount,
     totalPp: b.totalPp,
-    avgAccuracy: b.playCount > 0 ? b.accSum / b.playCount : null,
+    avgAccuracy: b.accCount > 0 ? b.accSum / b.accCount : null,
   }));
   const mapperRows = [...mappers.entries()].map(([mapperOnlineId, b]) => ({
     mapperOnlineId,
     mapperUsername: dominantMapperUsername(b.usernameCounts),
     playCount: b.playCount,
     totalPp: b.totalPp,
-    avgAccuracy: b.playCount > 0 ? b.accSum / b.playCount : null,
+    avgAccuracy: b.accCount > 0 ? b.accSum / b.accCount : null,
   }));
 
   const BATCH = 500;

@@ -36,11 +36,14 @@ export function normalizeScoreGrade(raw: string): ScoreGrade | null {
   return GRADE_ALIASES[key] ?? null;
 }
 
-/** Gameplay mods excluded from stats rank buckets (NM / Mirror only). */
-const DISALLOWED_MOD_ACRONYMS = [
+/**
+ * Gameplay mods excluded from stats rank buckets. Mirror and Classic stay
+ * allowed — `isNomodOrMirrorOnly` (mania-judge) treats Classic as nomod for
+ * lazer-default players, and SQL must agree with that JS policy.
+ */
+export const DISALLOWED_MOD_ACRONYMS = [
   "AT",
   "AP",
-  "CL",
   "DC",
   "DT",
   "EZ",

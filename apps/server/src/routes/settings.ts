@@ -3,6 +3,7 @@ import {
   JOBS_ONBOARDING_COMPLETED_KEY,
   OVERLAY_HOST_ENABLED_KEY,
   OVERLAY_HOST_OUTPUT_KEY,
+  OVERLAY_HOST_RESTART_KEY,
   OVERLAY_HOST_URL_KEY,
   RECOMMEND_FLN_RATIO_THRESHOLD_KEY,
   RECOMMEND_FOCUS_SETTINGS_KEY,
@@ -56,8 +57,8 @@ import {
 import {
   getManiaRatingJobState,
   listVersions,
+  executableSettingKey,
   readAllExecutablePaths,
-  setExecutablePath,
 } from "../mania-rating";
 import {
   SYNC_PAUSE_WHEN_UNFOCUSED_KEY,
@@ -77,11 +78,9 @@ import {
   TOSU_ENABLED_KEY,
   TOSU_EXECUTABLE_PATH_KEY,
   TOSU_HOST_KEY,
-  deleteSetting,
   normalizeTosuHost,
   readTosuSettings,
   restartTosuAdapter,
-  upsertSetting,
 } from "../tosu";
 import {
   DEFAULT_AXIS_THRESHOLDS,
@@ -132,6 +131,18 @@ async function readOverlayHostEnabled(db: Db): Promise<boolean> {
   return row?.value !== "0";
 }
 
+/** Last restart nonce (Unix ms) written by the UI's restart-overlay action. */
+async function readOverlayHostRestart(db: Db): Promise<number | null> {
+  const [row] = await db
+    .select()
+    .from(settings)
+    .where(eq(settings.key, OVERLAY_HOST_RESTART_KEY))
+    .limit(1);
+  if (row?.value == null) return null;
+  const n = Number(row.value);
+  return Number.isFinite(n) ? n : null;
+}
+
 async function buildSettingsResponse(db: Db) {
   const [pauseRow] = await db
     .select()
@@ -145,6 +156,7 @@ async function buildSettingsResponse(db: Db) {
   const overlayHostUrl = await readOverlayHostUrl(db);
   const overlayHostEnabled = await readOverlayHostEnabled(db);
   const overlayHostOutput = await readOverlayHostOutput(db);
+  const overlayHostRestart = await readOverlayHostRestart(db);
   const [
     scoresUsername,
     scoresGamemode,
@@ -188,6 +200,7 @@ async function buildSettingsResponse(db: Db) {
       enabled: overlayHostEnabled,
       hostUrl: overlayHostUrl,
       output: overlayHostOutput,
+      restartAt: overlayHostRestart,
     },
     tosu: {
       enabled: tosu.enabled,
@@ -352,10 +365,30 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
   .patch(
     "/",
     async ({ db, body, set }) => {
+      // S-NEW-2: validate every present field first, then persist all of
+      // them in one transaction. The old write-as-you-go handler could
+      // commit earlier fields and still 400 on a later one, leaving the
+      // settings store half-changed (e.g. a combined body that enabled the
+      // overlay but failed on a bad monitor name).
+      /**
+       * Planned settings writes, applied atomically below.
+       * @type {Array<{ kind: "upsert", key: string, value: string } | { kind: "delete", key: string }>}
+       */
+      const writes: Array<
+        | { kind: "upsert"; key: string; value: string }
+        | { kind: "delete"; key: string }
+      > = [];
+      /** Mania rating executable paths, applied in the same transaction. */
+      const maniaPaths: Array<{ versionId: string; path: string | null }> = [];
       let tosuChanged = false;
       let scoresFilterChanged = false;
       let axisThresholdsChanged = false;
       let focusSettingsChanged = false;
+      /** Cached osu! data-dir override action, applied after the commit. */
+      let osuPathCacheAction:
+        | { kind: "clear" }
+        | { kind: "set"; path: string }
+        | undefined;
 
       if (body.scoresUsernameFilter !== undefined) {
         const next = normalizeScoresUsernameFilterInput(
@@ -363,9 +396,12 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
         );
         const prev = await readScoresUsernameFilter(db);
         const nextSerialized = serializeScoresUsernameFilter(next);
-        const prevSerialized = serializeScoresUsernameFilter(prev);
-        if (nextSerialized !== prevSerialized) {
-          await upsertSetting(db, SCORES_USERNAME_FILTER_KEY, nextSerialized);
+        if (nextSerialized !== serializeScoresUsernameFilter(prev)) {
+          writes.push({
+            kind: "upsert",
+            key: SCORES_USERNAME_FILTER_KEY,
+            value: nextSerialized,
+          });
           scoresFilterChanged = true;
         }
       }
@@ -376,100 +412,114 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
         );
         const prev = await readScoresGamemodeFilter(db);
         const nextSerialized = serializeScoresGamemodeFilter(next);
-        const prevSerialized = serializeScoresGamemodeFilter(prev);
-        if (nextSerialized !== prevSerialized) {
-          await upsertSetting(db, SCORES_GAMEMODE_FILTER_KEY, nextSerialized);
+        if (nextSerialized !== serializeScoresGamemodeFilter(prev)) {
+          writes.push({
+            kind: "upsert",
+            key: SCORES_GAMEMODE_FILTER_KEY,
+            value: nextSerialized,
+          });
           scoresFilterChanged = true;
         }
       }
 
       if (body.pauseWhenUnfocused !== undefined) {
-        const value = body.pauseWhenUnfocused ? "1" : "0";
-        await db
-          .insert(settings)
-          .values({ key: SYNC_PAUSE_WHEN_UNFOCUSED_KEY, value })
-          .onConflictDoUpdate({
-            target: settings.key,
-            set: { value },
-          });
-
+        writes.push({
+          kind: "upsert",
+          key: SYNC_PAUSE_WHEN_UNFOCUSED_KEY,
+          value: body.pauseWhenUnfocused ? "1" : "0",
+        });
         if (!body.pauseWhenUnfocused) {
           // Clear any stuck pause so realm-reader resumes immediately.
-          await db
-            .insert(settings)
-            .values({ key: SYNC_UI_FOCUSED_KEY, value: "1" })
-            .onConflictDoUpdate({
-              target: settings.key,
-              set: { value: "1" },
-            });
+          writes.push({
+            kind: "upsert",
+            key: SYNC_UI_FOCUSED_KEY,
+            value: "1",
+          });
         }
       }
 
       if (body.osuDataPath !== undefined) {
         if (body.osuDataPath === null || body.osuDataPath.trim() === "") {
-          await db
-            .delete(settings)
-            .where(eq(settings.key, OSU_DATA_PATH_SETTING_KEY));
-          setCachedOsuDataOverride(null);
+          writes.push({ kind: "delete", key: OSU_DATA_PATH_SETTING_KEY });
+          osuPathCacheAction = { kind: "clear" };
         } else {
           const validated = validateOsuDataPath(body.osuDataPath);
           if (!validated.ok) {
             set.status = 400;
             return { error: validated.error };
           }
-          await db
-            .insert(settings)
-            .values({ key: OSU_DATA_PATH_SETTING_KEY, value: validated.path })
-            .onConflictDoUpdate({
-              target: settings.key,
-              set: { value: validated.path },
-            });
-          setCachedOsuDataOverride(validated.path);
+          writes.push({
+            kind: "upsert",
+            key: OSU_DATA_PATH_SETTING_KEY,
+            value: validated.path,
+          });
+          osuPathCacheAction = { kind: "set", path: validated.path };
         }
       }
 
       if (body.overlayEnabled !== undefined) {
-        await upsertSetting(
-          db,
-          OVERLAY_HOST_ENABLED_KEY,
-          body.overlayEnabled ? "1" : "0",
-        );
+        writes.push({
+          kind: "upsert",
+          key: OVERLAY_HOST_ENABLED_KEY,
+          value: body.overlayEnabled ? "1" : "0",
+        });
       }
 
       if (body.overlayOutput !== undefined) {
         const trimmed = body.overlayOutput?.trim() ?? "";
         if (!trimmed) {
-          await db
-            .delete(settings)
-            .where(eq(settings.key, OVERLAY_HOST_OUTPUT_KEY));
+          writes.push({ kind: "delete", key: OVERLAY_HOST_OUTPUT_KEY });
         } else {
           const parsed = parseOverlayOutput(trimmed);
           if (!parsed.ok) {
             set.status = 400;
             return { error: parsed.error };
           }
-          await upsertSetting(db, OVERLAY_HOST_OUTPUT_KEY, parsed.output);
+          writes.push({
+            kind: "upsert",
+            key: OVERLAY_HOST_OUTPUT_KEY,
+            value: parsed.output,
+          });
         }
       }
 
       if (body.overlayHostUrl !== undefined) {
         const trimmed = body.overlayHostUrl?.trim() ?? "";
         if (!trimmed) {
-          await db
-            .delete(settings)
-            .where(eq(settings.key, OVERLAY_HOST_URL_KEY));
+          writes.push({ kind: "delete", key: OVERLAY_HOST_URL_KEY });
         } else {
           const parsed = parseOverlayHostUrl(trimmed);
           if (!parsed.ok) {
             set.status = 400;
             return { error: parsed.error };
           }
-          await upsertSetting(db, OVERLAY_HOST_URL_KEY, parsed.url);
+          writes.push({
+            kind: "upsert",
+            key: OVERLAY_HOST_URL_KEY,
+            value: parsed.url,
+          });
         }
       }
 
+      if (body.overlayRestartHost) {
+        // D-NEW-1: bump past any previous nonce and past now, so rapid
+        // clicks each restart exactly once. The shell records the nonce it
+        // spawned under and ignores one it already applied.
+        const prev = await readOverlayHostRestart(db);
+        const next = Math.max(Date.now(), (prev ?? 0) + 1);
+        writes.push({
+          kind: "upsert",
+          key: OVERLAY_HOST_RESTART_KEY,
+          value: String(next),
+        });
+      }
+
       if (body.tosuEnabled !== undefined) {
-        await upsertSetting(db, TOSU_ENABLED_KEY, body.tosuEnabled ? "1" : "0");
+        writes.push({
+          kind: "upsert",
+          key: TOSU_ENABLED_KEY,
+          value: body.tosuEnabled ? "1" : "0",
+        });
         tosuChanged = true;
       }
 
@@ -479,7 +529,7 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
           set.status = 400;
           return { error: host.error };
         }
-        await upsertSetting(db, TOSU_HOST_KEY, host.host);
+        writes.push({ kind: "upsert", key: TOSU_HOST_KEY, value: host.host });
         tosuChanged = true;
       }
 
@@ -488,24 +538,23 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
           body.tosuExecutablePath === null ||
           body.tosuExecutablePath.trim() === ""
         ) {
-          await deleteSetting(db, TOSU_EXECUTABLE_PATH_KEY);
+          writes.push({ kind: "delete", key: TOSU_EXECUTABLE_PATH_KEY });
         } else {
           const checked = assertSafeExecutablePath(body.tosuExecutablePath);
           if (!checked.ok) {
             set.status = 400;
             return { error: checked.error };
           }
-          await upsertSetting(db, TOSU_EXECUTABLE_PATH_KEY, checked.path);
+          writes.push({
+            kind: "upsert",
+            key: TOSU_EXECUTABLE_PATH_KEY,
+            value: checked.path,
+          });
         }
         tosuChanged = true;
       }
 
-      if (tosuChanged) {
-        await restartTosuAdapter(db);
-      }
-
       if (body.maniaRatingExecutables) {
-        const maniaPaths: Array<{ versionId: string; path: string | null }> = [];
         for (const [versionId, execPath] of Object.entries(
           body.maniaRatingExecutables,
         )) {
@@ -524,9 +573,6 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
             return { error: checked.error };
           }
           maniaPaths.push({ versionId, path: checked.path });
-        }
-        for (const item of maniaPaths) {
-          await setExecutablePath(db, item.versionId, item.path);
         }
       }
 
@@ -548,21 +594,20 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
           set.status = 400;
           return { error: validated.error };
         }
-        const prev = current;
         if (
-          validated.thresholds.ln !== prev.ln ||
-          validated.thresholds.fln !== prev.fln
+          validated.thresholds.ln !== current.ln ||
+          validated.thresholds.fln !== current.fln
         ) {
-          await upsertSetting(
-            db,
-            RECOMMEND_LN_RATIO_THRESHOLD_KEY,
-            serializeAxisThreshold(validated.thresholds.ln),
-          );
-          await upsertSetting(
-            db,
-            RECOMMEND_FLN_RATIO_THRESHOLD_KEY,
-            serializeAxisThreshold(validated.thresholds.fln),
-          );
+          writes.push({
+            kind: "upsert",
+            key: RECOMMEND_LN_RATIO_THRESHOLD_KEY,
+            value: serializeAxisThreshold(validated.thresholds.ln),
+          });
+          writes.push({
+            kind: "upsert",
+            key: RECOMMEND_FLN_RATIO_THRESHOLD_KEY,
+            value: serializeAxisThreshold(validated.thresholds.fln),
+          });
           axisThresholdsChanged = true;
         }
       }
@@ -576,9 +621,55 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
         const prev = await readFocusSettings(db);
         const nextJson = serializeFocusSettings(validated.settings);
         if (nextJson !== serializeFocusSettings(prev)) {
-          await upsertSetting(db, RECOMMEND_FOCUS_SETTINGS_KEY, nextJson);
+          writes.push({
+            kind: "upsert",
+            key: RECOMMEND_FOCUS_SETTINGS_KEY,
+            value: nextJson,
+          });
           focusSettingsChanged = true;
         }
+      }
+
+      // Apply: every planned write lands in one transaction, or none does.
+      db.transaction((tx) => {
+        for (const write of writes) {
+          if (write.kind === "upsert") {
+            tx.insert(settings)
+              .values({ key: write.key, value: write.value })
+              .onConflictDoUpdate({
+                target: settings.key,
+                set: { value: write.value },
+              })
+              .run();
+          } else {
+            tx.delete(settings).where(eq(settings.key, write.key)).run();
+          }
+        }
+        for (const item of maniaPaths) {
+          const key = executableSettingKey(item.versionId);
+          if (item.path == null) {
+            tx.delete(settings).where(eq(settings.key, key)).run();
+          } else {
+            tx.insert(settings)
+              .values({ key, value: item.path })
+              .onConflictDoUpdate({
+                target: settings.key,
+                set: { value: item.path },
+              })
+              .run();
+          }
+        }
+      });
+
+      // In-process caches and side effects only after the store is consistent.
+      if (osuPathCacheAction?.kind === "set") {
+        setCachedOsuDataOverride(osuPathCacheAction.path);
+      } else if (osuPathCacheAction?.kind === "clear") {
+        setCachedOsuDataOverride(null);
+      }
+
+      if (tosuChanged) {
+        await restartTosuAdapter(db);
       }
 
       if (scoresFilterChanged) {
@@ -623,6 +714,11 @@ export const settingsRoutes = new Elysia({ prefix: "/settings" })
         overlayOutput: t.Optional(t.Union([t.String({ maxLength: 128 }), t.Null()])),
         /** Enable/disable the desktop in-game overlay host (Wayland). */
         overlayEnabled: t.Optional(t.Boolean()),
+        /**
+         * Restart the desktop in-game overlay host now (bumps the
+         * `overlay.host_restart` nonce; no other setting changes).
+         */
+        overlayRestartHost: t.Optional(t.Boolean()),
         tosuEnabled: t.Optional(t.Boolean()),
         tosuHost: t.Optional(t.String({ maxLength: HOST_MAX })),
         /** Absolute path to tosu binary, or null/"" to clear. */

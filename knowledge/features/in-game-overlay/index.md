@@ -9,6 +9,9 @@ touches:
   - nix/package.nix
   - apps/desktop/main.js
   - apps/desktop/overlayApplyPolicy.js
+  - apps/desktop/overlayApplyLoop.js
+  - apps/desktop/overlaySettings.js
+  - apps/desktop/overlayUrlGuard.js
   - apps/server/src/routes/settings.ts
   - apps/server/public/features/settings/sections/OverlayHostSection.tsx
   - packages/db/src/settings-keys.ts
@@ -104,12 +107,25 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
     values. Electron still passes `--url=http://…?bg=clear` and
     `--watchdog-max-age-sec=0`.
 14. **Host settings**: `overlay.host_url`, enable toggle `overlay.host_enabled`,
-    and optional monitor `overlay.host_output` (connector or model). Electron
-    polls settings (~4s), stop/spawn/restart, liveness respawn with
-    `OVERLAY_RESPAWN_GAP_MS`. A saved output is passed as one `--output=`
-    argument; empty means follow the matched window. A URL or monitor change
-    restarts immediately. Decision logic:
-    `apps/desktop/overlayApplyPolicy.js:decideOverlayApply()`.
+    optional monitor `overlay.host_output` (connector or model), and a
+    monotonic restart nonce `overlay.host_restart` written by the settings
+    UI's **Restart overlay** button. Electron polls settings (~4s) — one
+    run in flight, mid-flight ticks coalesce
+    (`apps/desktop/overlayApplyLoop.js`) — then stop/spawn/restart,
+    liveness respawn with `OVERLAY_RESPAWN_GAP_MS`. A saved output is
+    passed as one `--output=` argument; empty means follow the matched
+    window. A URL or monitor change, or an unapplied restart nonce,
+    restarts immediately; the shell records the nonce it spawned under, so
+    one click restarts exactly once. Decision logic:
+    `apps/desktop/overlayApplyPolicy.js:decideOverlayApply()`. A settings
+    poll is only trusted for HTTP 200 with an `overlay` object and a
+    boolean `enabled`, body capped at 64 KiB
+    (`apps/desktop/overlaySettings.js`) — a non-200 error document counts
+    as a failed poll (feeding the 5-failure stop rule), never as "enabled
+    with the default HUD URL". The shell re-validates `hostUrl`/`output`
+    before argv (`apps/desktop/overlayUrlGuard.js`, mirroring the PATCH
+    parsers): a rejected URL falls back to the default HUD URL, a rejected
+    monitor follows the matched window.
 15. **Resource watchdog** (default on): off GTK thread; descendant RSS / max
     descendant FDs / optional age / optional cgroup. Requires
     `--watchdog-breach-samples` consecutive breaches (default 3), then exits

@@ -351,6 +351,9 @@ in
          apps/desktop/paths.js \
          apps/desktop/respawnPolicy.js \
          apps/desktop/overlayApplyPolicy.js \
+         apps/desktop/overlayApplyLoop.js \
+         apps/desktop/overlaySettings.js \
+         apps/desktop/overlayUrlGuard.js \
          apps/desktop/urlPolicy.js \
          apps/desktop/stopChild.js \
          apps/desktop/waitForServer.js \

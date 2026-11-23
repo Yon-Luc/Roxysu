@@ -140,7 +140,7 @@ export function danVariantKey(
 }
 
 /** Mods allowed when aggregating stats / skill (NM, Mirror, or Classic only). */
-const STATS_ALLOWED_MODS = new Set(["MR", "CL"]);
+export const STATS_ALLOWED_MODS = new Set(["MR", "CL"]);
 
 /**
  * True for nomod scores and Mirror-only / Classic-only scores
@@ -155,14 +155,22 @@ export function isNomodOrMirrorOnly(mods: string | null | undefined): boolean {
   );
 }
 
-/** Hit-window options for a parsed score. Convert is not a mod. */
-export function toHitWindowOptions(mods: ModAcronyms): ManiaHitWindowOptions {
+/**
+ * Hit-window options for a parsed score. Convert is not a mod: it describes a
+ * standard-mode beatmap played as mania, so callers that know the beatmap's
+ * original mode pass it separately (`classic` then uses the convert curve).
+ */
+export function toHitWindowOptions(
+  mods: ModAcronyms,
+  opts?: { convert?: boolean },
+): ManiaHitWindowOptions {
   return {
     classic: mods.classic,
     scoreV2: mods.scoreV2,
     rate: mods.rate,
     easy: mods.easy,
     hardRock: mods.hardRock,
+    convert: opts?.convert === true,
   };
 }
 

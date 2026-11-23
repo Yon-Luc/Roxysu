@@ -14,9 +14,10 @@ import {
   AudioClock,
   createUiTimePublisher,
   sampleAudioClock,
+  SEEK_LOCK_MAX_MS,
 } from "../lib/audioClock";
 import { clamp, formatAccuracy, formatClock } from "../lib/format";
-import { useAppDict } from "../lib/i18n";
+import { t, useAppDict } from "../lib/i18n";
 import { useStdSkin } from "../lib/stdSkin";
 import { useImportedStdSprites } from "../lib/stdSkinImport";
 import { useImportedCatchSprites } from "../lib/catchSkinImport";
@@ -433,13 +434,24 @@ export function ScoreReplayModal({
     return null;
   }
 
+  /** A standard-mode beatmap played as mania uses the Classic convert curve. */
+  function convertedChart(replay: NonNullable<typeof dataRef.current>): boolean {
+    if (!isLoadedScoreReplay(replay)) return false;
+    return (
+      replay.score.rulesetShortName === "mania" &&
+      replay.beatmap.rulesetShortName !== "mania"
+    );
+  }
+
   function ensureLivePlay(): LiveManiaPlay | null {
     const replay = dataRef.current;
     if (!isLoadedScoreReplay(replay) || replay.beatmap.columnCount <= 0) {
       return null;
     }
     const od = replay.beatmap.overallDifficulty ?? 0;
-    const hitWindows = toHitWindowOptions(parseScoreMods(replay.score.mods));
+    const hitWindows = toHitWindowOptions(parseScoreMods(replay.score.mods), {
+      convert: convertedChart(replay),
+    });
     const existing = livePlayRef.current;
     if (
       existing &&
@@ -515,7 +527,7 @@ export function ScoreReplayModal({
     const max = Math.max(audioMax, knownMax);
     const next = max > 0 ? clamp(ms, 0, max) : Math.max(0, ms);
     desiredMsRef.current = next;
-    seekGuardUntilRef.current = performance.now() + 400;
+    seekGuardUntilRef.current = performance.now() + SEEK_LOCK_MAX_MS;
     try {
       audio.currentTime = next / 1000;
     } catch {
@@ -1416,7 +1428,9 @@ export function ScoreReplayModal({
                       }
                       windows={maniaHitWindows(
                         replayData.beatmap.overallDifficulty ?? 0,
-                        toHitWindowOptions(parseScoreMods(replayData.score.mods)),
+                        toHitWindowOptions(parseScoreMods(replayData.score.mods), {
+                          convert: convertedChart(replayData),
+                        }),
                       )}
                       showTiming={isPlay}
                       judgments={
@@ -1794,7 +1808,10 @@ export function ScoreReplayModal({
                         here · {formatActionCodes(actionKeybinds.playPause)}{" "}
                         play · {formatActionCodes(actionKeybinds.seekBack)}{" "}
                         {formatActionCodes(actionKeybinds.seekForward)} skip ·
-                        wheel seek · shift 5s ·{" "}
+                        {t(dict?.common.wheelSeekHint, {
+                          seconds: SKIP_MS / 1000,
+                        })}{" "}
+                        ·{" "}
                         {formatActionCodes(actionKeybinds.stop)} stop ·{" "}
                         {formatActionCodes(actionKeybinds.fullscreen)}{" "}
                         fullscreen ·{" "}

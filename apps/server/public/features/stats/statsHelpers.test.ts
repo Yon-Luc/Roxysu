@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { PlayerStats } from "../../lib/api";
-import { historyBandValue, skillEvolutionDomain } from "./statsHelpers";
+import { historyBandValue, nextSkillFocus, skillEvolutionDomain } from "./statsHelpers";
 
 type Point = NonNullable<PlayerStats["skillHistory"]>[number];
 
@@ -60,7 +60,7 @@ describe("historyBandValue", () => {
 });
 
 describe("skillEvolutionDomain", () => {
-  test("the floor is the lowest band, not zero", () => {
+  test("the floor pads just below the lowest band, not to zero", () => {
     expect(
       skillEvolutionDomain(
         [
@@ -69,7 +69,8 @@ describe("skillEvolutionDomain", () => {
         ],
         null,
       ),
-    ).toEqual([1, 6]);
+    // pad = max((6-1)*0.05, 0.05) = 0.25
+    ).toEqual([0.75, 6.25]);
   });
 
   test("null gaps are skipped", () => {
@@ -81,7 +82,8 @@ describe("skillEvolutionDomain", () => {
         ],
         null,
       ),
-    ).toEqual([2, 5]);
+    // pad = max((5-2)*0.05, 0.05) = 0.15
+    ).toEqual([1.85, 5.15]);
   });
 
   test("a focused band uses only its own low and high", () => {
@@ -93,7 +95,8 @@ describe("skillEvolutionDomain", () => {
         ],
         "accuracy",
       ),
-    ).toEqual([1, 1.4]);
+    // pad clamps to the 0.05 minimum on a narrow range
+    ).toEqual([0.95, 1.45]);
   });
 
   test("a flat series keeps that floor and lifts the ceiling by 1", () => {
@@ -108,13 +111,26 @@ describe("skillEvolutionDomain", () => {
     ).toEqual([1, 2]);
   });
 
+  test("padding never pushes the floor below zero", () => {
+    expect(
+      skillEvolutionDomain(
+        [
+          { push: 0.02, accuracy: null, consistency: null },
+          { push: 0.03, accuracy: null, consistency: null },
+        ],
+        null,
+      ),
+    ).toEqual([0, 0.08]);
+  });
+
   test("a focused band with no points falls back to the combined range", () => {
     expect(
       skillEvolutionDomain(
         [{ push: 3, accuracy: null, consistency: 5 }],
         "accuracy",
       ),
-    ).toEqual([3, 5]);
+    // pad = max((5-3)*0.05, 0.05) = 0.1
+    ).toEqual([2.9, 5.1]);
   });
 
   test("an empty series is [0, 1]", () => {
@@ -124,5 +140,28 @@ describe("skillEvolutionDomain", () => {
         null,
       ),
     ).toEqual([0, 1]);
+  });
+});
+
+describe("nextSkillFocus", () => {
+  test("focuses a band with finite points and toggles it off again", () => {
+    const points = [
+      { push: 4, accuracy: 1, consistency: 3 },
+      { push: null, accuracy: 2, consistency: 5 },
+    ];
+    expect(nextSkillFocus(null, "push", points)).toBe("push");
+    expect(nextSkillFocus("push", "push", points)).toBe(null);
+    expect(nextSkillFocus("push", "accuracy", points)).toBe("accuracy");
+  });
+
+  test("a band with no finite points is never isolated", () => {
+    const points = [
+      { push: 3, accuracy: null, consistency: 5 },
+      { push: 4, accuracy: null, consistency: 6 },
+    ];
+    // Clicking the all-null accuracy band is ignored — the other lines stay
+    // visible instead of hiding everything behind an empty focus.
+    expect(nextSkillFocus(null, "accuracy", points)).toBe(null);
+    expect(nextSkillFocus("push", "accuracy", points)).toBe("push");
   });
 });

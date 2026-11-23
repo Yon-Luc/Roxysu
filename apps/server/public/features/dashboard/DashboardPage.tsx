@@ -34,15 +34,17 @@ import {
 } from "../../lib/ratingDisplay";
 import { useChartStyles } from "../../lib/chartStyles";
 import { formatDuration } from "../stats/statsHelpers";
+import { useLocalClock } from "../sessions/SessionActivityCalendar";
 import roxyIcon from "../../icons/icon-192.png";
 
 export function DashboardPage() {
   const ratingMode = useRatingDisplayMode();
   const charts = useChartStyles();
   const { dict } = useAppDict();
+  const { tzOffset, todayKey } = useLocalClock();
   const { data, isLoading, error } = useQuery({
-    queryKey: ["dashboard"],
-    queryFn: fetchDashboard,
+    queryKey: ["dashboard", tzOffset, todayKey],
+    queryFn: () => fetchDashboard(tzOffset),
   });
 
   if (isLoading) {
@@ -157,15 +159,15 @@ export function DashboardPage() {
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Stat
-              label={dict?.dashboard.playsToday ?? "Plays today (UTC)"}
+              label={dict?.dashboard.playsToday ?? "Plays today"}
               value={snapshot.playsToday.toLocaleString()}
             />
             <Stat
-              label={dict?.dashboard.playsLast7Days ?? "Last 7 days (UTC)"}
+              label={dict?.dashboard.playsLast7Days ?? "Last 7 days"}
               value={snapshot.playsLast7Days.toLocaleString()}
             />
             <Stat
-              label={dict?.dashboard.activeDayStreak ?? "Active-day streak (UTC)"}
+              label={dict?.dashboard.activeDayStreak ?? "Active-day streak"}
               value={snapshot.activeDayStreak.toLocaleString()}
             />
             {lastClosed ? (
@@ -232,6 +234,10 @@ export function DashboardPage() {
                 <Tooltip
                   contentStyle={charts.tooltip}
                   labelFormatter={formatChartDay}
+                  formatter={(value) => [
+                    Number(value).toLocaleString(),
+                    dict?.dashboard.plays ?? "plays",
+                  ]}
                 />
                 <Bar dataKey="playCount" fill={charts.chart} radius={[4, 4, 0, 0]} />
               </BarChart>

@@ -12,9 +12,10 @@ import {
   AudioClock,
   createUiTimePublisher,
   sampleAudioClock,
+  SEEK_LOCK_MAX_MS,
 } from "../lib/audioClock";
 import { clamp, formatClock } from "../lib/format";
-import { useAppDict } from "../lib/i18n";
+import { t, useAppDict } from "../lib/i18n";
 import { useStdSkin } from "../lib/stdSkin";
 import { useImportedStdSprites } from "../lib/stdSkinImport";
 import { useImportedCatchSprites } from "../lib/catchSkinImport";
@@ -350,7 +351,7 @@ export function BeatmapPreviewModal({
     const max = Math.max(audioMax, knownMax);
     const next = max > 0 ? clamp(ms, 0, max) : Math.max(0, ms);
     desiredMsRef.current = next;
-    seekGuardUntilRef.current = performance.now() + 400;
+    seekGuardUntilRef.current = performance.now() + SEEK_LOCK_MAX_MS;
     try {
       audio.currentTime = next / 1000;
     } catch {
@@ -678,7 +679,7 @@ export function BeatmapPreviewModal({
       if (modeRef.current === "play") {
         const start = playStartMsRef.current;
         desiredMsRef.current = start;
-        seekGuardUntilRef.current = performance.now() + 400;
+        seekGuardUntilRef.current = performance.now() + SEEK_LOCK_MAX_MS;
         try {
           audio!.currentTime = start / 1000;
         } catch {
@@ -698,7 +699,7 @@ export function BeatmapPreviewModal({
       const atMs = (audio!.currentTime || 0) * 1000;
       if (atMs > 250) return;
       desiredMsRef.current = pt;
-      seekGuardUntilRef.current = performance.now() + 400;
+      seekGuardUntilRef.current = performance.now() + SEEK_LOCK_MAX_MS;
       try {
         audio!.currentTime = pt / 1000;
       } catch {
@@ -1519,7 +1520,10 @@ export function BeatmapPreviewModal({
                       here · {formatActionCodes(actionKeybinds.playPause)} play
                       · {formatActionCodes(actionKeybinds.seekBack)}{" "}
                       {formatActionCodes(actionKeybinds.seekForward)} skip ·
-                      wheel seek · shift 5s ·{" "}
+                      {t(dict?.common.wheelSeekHint, {
+                        seconds: SKIP_MS / 1000,
+                      })}{" "}
+                      ·{" "}
                       {formatActionCodes(actionKeybinds.goStart)} start ·{" "}
                       {formatActionCodes(actionKeybinds.previewPoint)} preview
                       · {formatActionCodes(actionKeybinds.fullscreen)}{" "}

@@ -9,6 +9,17 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1.0">
 		<meta name="theme-color" content="#121212">
 		<script>
+			// Match the persisted locale before first paint so the initial
+			// lang attribute is not always English (React also corrects it on
+			// mount). Mirrors lib/language.ts: localStorage "roxysu:language".
+			try {
+				var savedLang = localStorage.getItem("roxysu:language");
+				if (savedLang === "en" || savedLang === "es" || savedLang === "fr" || savedLang === "pt") {
+					document.documentElement.lang = savedLang;
+				}
+			} catch (e) {}
+		</script>
+		<script>
 			try {
 				var hashPath = (location.hash || "").replace(/^#/, "").split("?")[0];
 				if (hashPath === "/overlay") {

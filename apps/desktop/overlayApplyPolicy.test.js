@@ -275,3 +275,141 @@ describe("decideOverlayApply: F-066 poll failures", () => {
     expect(d.consecutiveFailures).toBe(0);
   });
 });
+
+describe("decideOverlayApply: monitor cleared back to follow-osu!", () => {
+  test("clearing an applied monitor is an output change", () => {
+    const d = decideOverlayApply(
+      input({
+        settings: { enabled: true, hostUrl: null, output: null },
+        hasChild: true,
+        appliedUrlArg: DEFAULT_ARG,
+        appliedOutput: "DP-4",
+      }),
+    );
+    expect(d).toMatchObject({
+      action: "spawn",
+      reason: "output-changed",
+      stopRunning: true,
+      output: null,
+      urlArg: DEFAULT_ARG,
+    });
+  });
+});
+
+describe("decideOverlayApply: restart nonce (D-NEW-1)", () => {
+  test("a fresh nonce restarts a running host even when up to date", () => {
+    const d = decideOverlayApply(
+      input({
+        settings: { enabled: true, hostUrl: null, restartAt: 1234 },
+        hasChild: true,
+        appliedUrlArg: DEFAULT_ARG,
+        appliedRestartAt: 1000,
+      }),
+    );
+    expect(d).toMatchObject({
+      action: "spawn",
+      reason: "restart-requested",
+      stopRunning: true,
+      restartAt: 1234,
+    });
+  });
+
+  test("a fresh nonce bypasses the respawn gap on an exited child", () => {
+    const d = decideOverlayApply(
+      input({
+        settings: { enabled: true, hostUrl: null, restartAt: 1234 },
+        hasChild: true,
+        childExited: true,
+        appliedUrlArg: DEFAULT_ARG,
+        appliedRestartAt: 1000,
+        spawnedAt: 1_000_000 - 1000,
+      }),
+    );
+    expect(d).toMatchObject({
+      action: "spawn",
+      reason: "restart-requested",
+      stopRunning: false,
+      restartAt: 1234,
+    });
+  });
+
+  test("an already-applied nonce stays up to date", () => {
+    const d = decideOverlayApply(
+      input({
+        settings: { enabled: true, hostUrl: null, restartAt: 1234 },
+        hasChild: true,
+        appliedUrlArg: DEFAULT_ARG,
+        appliedRestartAt: 1234,
+      }),
+    );
+    expect(d).toMatchObject({ action: "noop", reason: "up-to-date" });
+  });
+
+  test("no nonce yet means no restart request", () => {
+    const d = decideOverlayApply(
+      input({
+        settings: { enabled: true, hostUrl: null },
+        hasChild: true,
+        appliedUrlArg: DEFAULT_ARG,
+        appliedRestartAt: null,
+      }),
+    );
+    expect(d).toMatchObject({ action: "noop", reason: "up-to-date" });
+  });
+
+  test("a nonce without a child falls through to the initial spawn", () => {
+    const d = decideOverlayApply(
+      input({
+        settings: { enabled: true, hostUrl: null, restartAt: 1234 },
+        hasChild: false,
+        appliedRestartAt: null,
+      }),
+    );
+    expect(d).toMatchObject({
+      action: "spawn",
+      reason: "initial",
+      stopRunning: false,
+      restartAt: 1234,
+    });
+  });
+
+  test("a restart request outranks an unchanged url on an exited child inside the gap", () => {
+    const d = decideOverlayApply(
+      input({
+        settings: { enabled: true, hostUrl: null, restartAt: 1234 },
+        hasChild: true,
+        childExited: true,
+        appliedUrlArg: DEFAULT_ARG,
+        appliedRestartAt: 1000,
+        spawnedAt: 1_000_000 - 1000,
+      }),
+    );
+    expect(d.reason).toBe("restart-requested");
+  });
+
+  test("spawn decisions carry the current nonce so it stays applied", () => {
+    const d = decideOverlayApply(
+      input({
+        settings: { enabled: true, hostUrl: "http://new/#/overlay", restartAt: 1234 },
+        hasChild: true,
+        appliedUrlArg: "--url=http://old/#/overlay",
+        appliedRestartAt: 1234,
+      }),
+    );
+    expect(d).toMatchObject({
+      action: "spawn",
+      reason: "url-changed",
+      restartAt: 1234,
+    });
+  });
+
+  test("disabled ignores a restart nonce", () => {
+    const d = decideOverlayApply(
+      input({
+        settings: { enabled: false, hostUrl: null, restartAt: 1234 },
+        hasChild: true,
+      }),
+    );
+    expect(d).toMatchObject({ action: "stop", reason: "disabled" });
+  });
+});

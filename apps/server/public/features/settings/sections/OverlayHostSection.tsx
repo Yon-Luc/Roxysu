@@ -26,6 +26,7 @@ export function OverlayHostSection({ data }: { data: SettingsPayload }) {
       overlayHostUrl?: string | null;
       overlayEnabled?: boolean;
       overlayOutput?: string | null;
+      overlayRestartHost?: boolean;
     }) => patchSettings(body),
     onSuccess: (next) => {
       if ("error" in next) return;
@@ -147,6 +148,21 @@ export function OverlayHostSection({ data }: { data: SettingsPayload }) {
           onClick={() => urlMut.mutate({ overlayOutput: null })}
         >
           {dict?.settings.overlayOutputClear ?? "Follow osu!"}
+        </button>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          className="rx-btn"
+          disabled={urlMut.isPending || !enabled}
+          onClick={() => urlMut.mutate({ overlayRestartHost: true })}
+          title={
+            dict?.settings.overlayRestartDesc ??
+            "Use this if the HUD has stopped responding while osu! is running."
+          }
+        >
+          {dict?.settings.overlayRestart ?? "Restart overlay"}
         </button>
       </div>
 

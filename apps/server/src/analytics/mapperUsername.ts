@@ -25,11 +25,19 @@ export type MapperAgg = {
   playCount: number;
   totalPp: number;
   accSum: number;
+  /** Graded plays only — fails/quits contribute nothing to accuracy. */
+  accCount: number;
   usernameCounts: Map<string, number>;
 };
 
 export function createMapperAgg(): MapperAgg {
-  return { playCount: 0, totalPp: 0, accSum: 0, usernameCounts: new Map() };
+  return {
+    playCount: 0,
+    totalPp: 0,
+    accSum: 0,
+    accCount: 0,
+    usernameCounts: new Map(),
+  };
 }
 
 export function bumpMapperAgg(
@@ -37,10 +45,17 @@ export function bumpMapperAgg(
   accuracy: number,
   pp: number,
   mapperUsername: string | null | undefined,
+  graded = true,
 ): void {
   agg.playCount += 1;
   agg.totalPp += pp;
-  agg.accSum += accuracy;
+  // Same gate as the request-path aggregates: a play without a grade
+  // (failed / quit) counts toward play counts and PP volume but must not
+  // dilute the accuracy average.
+  if (graded) {
+    agg.accSum += accuracy;
+    agg.accCount += 1;
+  }
   const name = mapperUsername?.trim();
   if (name) {
     agg.usernameCounts.set(name, (agg.usernameCounts.get(name) ?? 0) + 1);

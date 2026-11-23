@@ -18,6 +18,8 @@ import {
 } from "./SessionActivityCalendar";
 
 const DEFAULT_VISIBLE = 7;
+/** S-NEW-1: Show all refetches with an explicit capped limit (server max). */
+const SHOW_ALL_LIMIT = 500;
 
 export function SessionsPage() {
   const { dict } = useAppDict();
@@ -29,6 +31,13 @@ export function SessionsPage() {
     queryKey: ["sessions", tzOffset, todayKey],
     queryFn: () => fetchSessions(undefined, tzOffset),
   });
+  // The default query only pulls the server's list cap; Show all fetches a
+  // larger capped page instead of assuming the initial payload was unbounded.
+  const { data: allData, isLoading: allLoading } = useQuery({
+    queryKey: ["sessions", "all", tzOffset, todayKey],
+    queryFn: () => fetchSessions(undefined, tzOffset, SHOW_ALL_LIMIT),
+    enabled: showAll && selectedDay == null,
+  });
   const dayQuery = useQuery({
     queryKey: ["sessions", "day", selectedDay, tzOffset],
     queryFn: () => fetchSessions(selectedDay!, tzOffset),
@@ -38,9 +47,9 @@ export function SessionsPage() {
   const visibleItems = useMemo(() => {
     if (!data) return [];
     if (selectedDay) return dayQuery.data?.items ?? [];
-    if (showAll) return data.items;
+    if (showAll) return allData?.items ?? data.items;
     return data.items.slice(0, DEFAULT_VISIBLE);
-  }, [data, dayQuery.data, selectedDay, showAll]);
+  }, [data, allData, dayQuery.data, selectedDay, showAll]);
 
   if (isLoading) {
     return (

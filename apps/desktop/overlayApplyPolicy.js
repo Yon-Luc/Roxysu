@@ -25,13 +25,15 @@ function childIsAlive(child) {
 
 /**
  * @typedef {object} OverlayApplyInput
- * @property {{ enabled: boolean, hostUrl: string | null, output?: string | null } | null} settings
- *   Null when the settings poll failed (HTTP error or timeout).
+ * @property {{ enabled: boolean, hostUrl: string | null, output?: string | null, restartAt?: number | null } | null} settings
+ *   Null when the settings poll failed (HTTP error, non-200, or a document
+ *   without a valid `overlay` object).
  * @property {string} defaultUrlArg `--url=…` token used when hostUrl is null.
  * @property {boolean} hasChild A host child object exists.
  * @property {boolean} childExited The child object exists and has exited.
  * @property {string | null} appliedUrlArg Token the child was last spawned with.
  * @property {string | null} [appliedOutput] Monitor override the child was last spawned with.
+ * @property {number | null} [appliedRestartAt] Restart nonce the child was last spawned under.
  * @property {number} spawnedAt Timestamp (ms) of the last spawn.
  * @property {number} now Timestamp (ms).
  * @property {number} respawnGapMs Liveness respawn rate limit.
@@ -47,6 +49,7 @@ function childIsAlive(child) {
  * @property {boolean} [stopRunning] For `spawn`: SIGTERM the live child first.
  * @property {string} [urlArg] For `spawn`: the `--url=…` token to use.
  * @property {string | null} [output] For `spawn`: monitor override, or null to follow the window.
+ * @property {number | null} [restartAt] For `spawn`: restart nonce to record as applied.
  * @property {number} consecutiveFailures
  * @property {boolean | null} lastKnownEnabled
  */
@@ -90,12 +93,33 @@ function decideOverlayApply(input) {
     typeof input.settings.output === "string" && input.settings.output.trim()
       ? input.settings.output.trim()
       : null;
+  const restartAt =
+    typeof input.settings.restartAt === "number" &&
+    Number.isFinite(input.settings.restartAt)
+      ? input.settings.restartAt
+      : null;
+  // D-NEW-1: a restart nonce from the settings UI is an explicit user edit.
+  // It restarts immediately (bypasses the F-038 gap) and outranks "up to
+  // date", so a visually dead host can be replaced with one click.
+  const restartRequested =
+    restartAt !== null && restartAt !== (input.appliedRestartAt ?? null);
   const urlUnchanged = urlArg === input.appliedUrlArg;
   const outputUnchanged = output === (input.appliedOutput ?? null);
   const unchanged = urlUnchanged && outputUnchanged;
   const changeReason = !urlUnchanged ? "url-changed" : "output-changed";
 
   if (input.hasChild && !input.childExited) {
+    if (restartRequested) {
+      return {
+        ...base,
+        action: "spawn",
+        reason: "restart-requested",
+        stopRunning: true,
+        urlArg,
+        output,
+        restartAt,
+      };
+    }
     if (unchanged) return { ...base, action: "noop", reason: "up-to-date" };
     return {
       ...base,
@@ -104,22 +128,29 @@ function decideOverlayApply(input) {
       stopRunning: true,
       urlArg,
       output,
+      restartAt,
     };
   }
 
   if (input.hasChild && input.childExited) {
     // F-038: the crash-loop gap only rate-limits a plain liveness respawn. A
-    // changed URL or monitor is an explicit user edit and applies immediately.
-    if (unchanged && input.now - input.spawnedAt < input.respawnGapMs) {
+    // changed URL or monitor is an explicit user edit and applies immediately,
+    // and so is a restart request.
+    if (!restartRequested && unchanged && input.now - input.spawnedAt < input.respawnGapMs) {
       return { ...base, action: "noop", reason: "respawn-gap" };
     }
     return {
       ...base,
       action: "spawn",
-      reason: unchanged ? "liveness-respawn" : changeReason,
+      reason: restartRequested
+        ? "restart-requested"
+        : unchanged
+          ? "liveness-respawn"
+          : changeReason,
       stopRunning: false,
       urlArg,
       output,
+      restartAt,
     };
   }
 
@@ -130,6 +161,7 @@ function decideOverlayApply(input) {
     stopRunning: false,
     urlArg,
     output,
+    restartAt,
   };
 }
 

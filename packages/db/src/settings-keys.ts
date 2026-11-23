@@ -89,6 +89,16 @@ export const OVERLAY_HOST_ENABLED_KEY = "overlay.host_enabled";
 export const OVERLAY_HOST_OUTPUT_KEY = "overlay.host_output";
 
 /**
+ * Monotonic restart nonce for the in-game overlay host (Unix ms as a
+ * string, bumped past any previous value). Written by the settings UI's
+ * "restart overlay" action; the desktop shell's settings poll sees an
+ * unapplied nonce and stops + respawns the host — a recovery path for a
+ * visually dead HUD that no watchdog exit can cover. The shell records the
+ * nonce it spawned under, so one click restarts exactly once.
+ */
+export const OVERLAY_HOST_RESTART_KEY = "overlay.host_restart";
+
+/**
   * Rice→LN classification boundary (ln_ratio, 0–1). Default 0.2 (20%).
   * Used for recommend axes, skill estimates, stats mix, and `axis:` filters —
   * not for Sunny dan RC/LN label table selection.

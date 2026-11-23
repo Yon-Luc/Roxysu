@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-11
+last_verified: 2026-11-23
 confidence: verified
 touches:
   - apps/overlay-rs/
@@ -13,6 +13,9 @@ touches:
   - apps/desktop/overlaySettings.js
   - apps/desktop/overlayUrlGuard.js
   - apps/server/src/routes/settings.ts
+  - apps/server/src/routes/overlay.ts
+  - apps/server/src/overlay/hostStatus.ts
+  - apps/server/src/overlay/hostConfig.ts
   - apps/server/public/features/settings/sections/OverlayHostSection.tsx
   - packages/db/src/settings-keys.ts
 ---
@@ -128,7 +131,8 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
 14. **Host settings**: `overlay.host_url`, enable toggle `overlay.host_enabled`,
     optional monitor `overlay.host_output` (connector or model), and a
     monotonic restart nonce `overlay.host_restart` written by the settings
-    UI's **Restart overlay** button. Electron polls settings (~4s) — one
+    UI's **Restart overlay** button. Electron polls `GET /api/overlay/host-config`
+    (4 s, or 10 s while the host is known disabled; ETag / 304) — one
     run in flight, mid-flight ticks coalesce
     (`apps/desktop/overlayApplyLoop.js`) — then stop/spawn/restart,
     liveness respawn starting at `OVERLAY_RESPAWN_GAP_MS` (15 s) and
@@ -136,6 +140,8 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
     and exit **78** (`apps/overlay-rs/src/lifecycle.rs`
     `UNSUPPORTED_EXIT_CODE`: no Wayland or no wlr-layer-shell) parks it at
     once. The toggle, a URL/monitor change or the restart nonce un-park it.
+    A park writes `overlay-host-status.json` (`unsupported` or `crash-loop`);
+    Settings reads `GET /api/overlay/host-status` and shows that line.
     The desktop spawns the host with a stdin pipe and
     `--exit-on-stdin-eof`, so it exits when Electron dies. A saved output is
     passed as one `--output=` argument; empty means follow the matched

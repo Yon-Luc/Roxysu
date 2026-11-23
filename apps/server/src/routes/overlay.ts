@@ -1,6 +1,7 @@
 import { beatmapSets, beatmaps, scores, settings } from "@roxysu/db/schema";
 import { Elysia, t } from "elysia";
 import { and, desc, eq } from "drizzle-orm";
+import { defaultDataDir } from "@roxysu/db/path";
 import { OVERLAY_SKINS_KEY } from "@roxysu/db/settings-keys";
 
 import { dbPlugin } from "../db-runtime";
@@ -20,6 +21,12 @@ import {
   resolveScorePp,
   type ManiaPpCurve,
 } from "../mania-rating/estimateScorePp";
+import {
+  overlayHostConfigEtag,
+  overlayHostConfigNotModified,
+  readOverlayHostConfig,
+} from "../overlay/hostConfig";
+import { readOverlayHostStatus } from "../overlay/hostStatus";
 import {
   readOverlayProfiles,
   sanitizeOverlayProfile,
@@ -404,4 +411,17 @@ export const overlayRoutes = new Elysia({ prefix: "/overlay" })
       });
     },
     { params: t.Object({ id: t.String() }) },
-  );
+  )
+  .get("/host-status", () => readOverlayHostStatus(defaultDataDir()))
+  .get("/host-config", async ({ db, request, set }) => {
+    const body = await readOverlayHostConfig(db);
+    const etag = overlayHostConfigEtag(body);
+    set.headers["etag"] = etag;
+    set.headers["cache-control"] = "no-cache";
+    if (
+      overlayHostConfigNotModified(request.headers.get("if-none-match"), etag)
+    ) {
+      return new Response(null, { status: 304, headers: { etag } });
+    }
+    return body;
+  });

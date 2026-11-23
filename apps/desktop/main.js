@@ -25,11 +25,12 @@ const {
   OVERLAY_MAX_RESPAWNS,
   childIsAlive,
   decideOverlayApply,
+  overlaySettingsPollMs,
 } = require("./overlayApplyPolicy");
 const { createApplyGate, executeOverlayDecision } = require("./overlayApplyLoop");
 const {
   MAX_OVERLAY_SETTINGS_BYTES,
-  parseOverlaySettingsResponse,
+  parseOverlayHostConfigResponse,
   readCappedBody,
 } = require("./overlaySettings");
 const { parseOverlayHostUrl, parseOverlayOutput } = require("./overlayUrlGuard");
@@ -77,6 +78,8 @@ let overlaySpawnedAt = 0;
 let overlayExitedAt = 0;
 /** Overlay host setting poll timer. @type {NodeJS.Timeout | null} */
 let overlayPollTimer = null;
+/** Delay the current overlay poll timer was armed with. */
+let overlayPollDelay = 0;
 /** Timestamp of the last server spawn (used for exit diagnostics). */
 let serverSpawnedAt = 0;
 /**
@@ -1234,7 +1237,6 @@ function resolveOverlayBin(paths) {
 }
 
 const OVERLAY_URL_DEFAULT = `--url=http://${HOST}:${PORT}/#/overlay?bg=clear`;
-const OVERLAY_SETTINGS_POLL_MS = 4000;
 const OVERLAY_RESPAWN_GAP_MS = 15000;
 /**
  * D-NEW-1: long automatic age backstop for the overlay host. The host used to
@@ -1337,24 +1339,38 @@ function stopChild(child, label) {
   return stopChildProcess(child, label, { log: desktopLog });
 }
 
+/** Last host-config ETag, so a disabled overlay does not re-download the body. */
+let overlayConfigEtag = null;
+/** Last good host-config. A 304 reuses it instead of counting as a failed poll. */
+let overlayConfigCache = null;
+
 /**
- * Read the In-game overlay host settings from the client app settings store
- * (`overlay.enabled` + `overlay.hostUrl` + `overlay.output` + restart nonce).
- * Resolves null when unreachable (fetch failed — keep current state) or when
- * the response is not a trustworthy settings document — a non-200 error
- * body must count as a failed poll, not as "enabled with the default HUD
- * URL", which could respawn a host the user just disabled (F-066).
+ * Read the In-game overlay host config (`GET /api/overlay/host-config`).
+ * Resolves null when unreachable or the body is not a trustworthy config —
+ * a non-200 error body must count as a failed poll, not as "enabled with
+ * the default HUD URL" (F-066). A 304 reuses the last good config (DD-14).
  */
 function fetchOverlaySettings() {
   return new Promise((resolve) => {
+    const headers = overlayConfigEtag
+      ? { "if-none-match": overlayConfigEtag }
+      : undefined;
     const req = http.get(
-      { host: HOST, port: PORT, path: "/api/settings", timeout: 2000 },
+      { host: HOST, port: PORT, path: "/api/overlay/host-config", timeout: 2000, headers },
       (res) => {
-        // Cap the body so a wedged stream cannot grow the main-process heap.
+        const etag = res.headers.etag;
+        if (typeof etag === "string" && etag) overlayConfigEtag = etag;
+        if (res.statusCode === 304) {
+          res.resume();
+          resolve(overlayConfigCache);
+          return;
+        }
         void readCappedBody(res, MAX_OVERLAY_SETTINGS_BYTES).then((body) => {
-          resolve(
-            body.ok ? parseOverlaySettingsResponse(res.statusCode, body.text) : null,
-          );
+          const parsed = body.ok
+            ? parseOverlayHostConfigResponse(res.statusCode ?? 0, body.text)
+            : null;
+          if (parsed) overlayConfigCache = parsed;
+          resolve(parsed);
         });
       },
     );
@@ -1364,6 +1380,25 @@ function fetchOverlaySettings() {
       resolve(null);
     });
   });
+}
+
+const OVERLAY_HOST_STATUS_FILE = "overlay-host-status.json";
+
+/**
+ * Tell Settings whether the overlay host is parked. `at` is a wall-clock
+ * stamp, not a duration. The server treats a missing or invalid file as absent.
+ * @param {string} dataDir
+ * @param {{ state: "parked" | "running", reason: "unsupported" | "crash-loop" | null }} status
+ */
+function writeOverlayHostStatus(dataDir, status) {
+  try {
+    fs.writeFileSync(
+      path.join(dataDir, OVERLAY_HOST_STATUS_FILE),
+      JSON.stringify({ state: status.state, reason: status.reason, at: Date.now() }),
+    );
+  } catch (err) {
+    desktopLog(`overlay host status write failed: ${err}`);
+  }
 }
 
 /**
@@ -1459,6 +1494,9 @@ function watchOverlayHostSetting(paths) {
       if (decision.reason === "unsupported-session" || decision.reason === "respawn-exhausted") {
         if (loggedParkReason !== decision.reason) {
           loggedParkReason = decision.reason;
+          const reason =
+            decision.reason === "unsupported-session" ? "unsupported" : "crash-loop";
+          writeOverlayHostStatus(paths.dataDir, { state: "parked", reason });
           desktopLog(
             decision.reason === "unsupported-session"
               ? "overlay parked: this session cannot host it (exit 78: no Wayland or no wlr-layer-shell). Change an overlay setting or press Restart to try again."
@@ -1466,6 +1504,9 @@ function watchOverlayHostSetting(paths) {
           );
         }
       } else if (decision.action !== "noop") {
+        if (loggedParkReason) {
+          writeOverlayHostStatus(paths.dataDir, { state: "running", reason: null });
+        }
         loggedParkReason = null;
       }
 
@@ -1521,9 +1562,26 @@ function watchOverlayHostSetting(paths) {
     }
   };
 
-  void apply();
-  overlayPollTimer = setInterval(() => void apply(), OVERLAY_SETTINGS_POLL_MS);
-  overlayPollTimer.unref();
+  // A leftover parked file from the previous process must not keep the
+  // Settings line up until this session actually parks.
+  writeOverlayHostStatus(paths.dataDir, { state: "running", reason: null });
+
+  const tick = () => {
+    void apply().finally(() => {
+      if (!shuttingDown) armOverlayPoll(lastKnownEnabled);
+    });
+  };
+  const armOverlayPoll = (enabled) => {
+    const delay = overlaySettingsPollMs(enabled);
+    if (overlayPollTimer && overlayPollDelay === delay) return;
+    if (overlayPollTimer) clearInterval(overlayPollTimer);
+    overlayPollDelay = delay;
+    overlayPollTimer = setInterval(tick, delay);
+    overlayPollTimer.unref();
+  };
+
+  void tick();
+  armOverlayPoll(null);
 }
 
 /**

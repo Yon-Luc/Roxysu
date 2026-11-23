@@ -505,6 +505,8 @@
     "overlayOutputSave": "Enregistrer l'écran",
     "overlayOutputClear": "Suivre osu!",
     "overlayRestart": "Redémarrer l'overlay",
+    "overlayParkedUnsupported": "Overlay indisponible sur ce bureau (pas de layer-shell)",
+    "overlayParkedCrashes": "Overlay arrêté après des plantages répétés — Redémarrer",
     "overlayRestartDesc": "À utiliser si le HUD ne répond plus pendant que osu! tourne.",
     "appearance": "Apparence",
     "appearanceDesc": "Choisissez une interface claire ou sombre. Système suit la préférence de votre OS.",

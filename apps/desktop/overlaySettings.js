@@ -54,6 +54,26 @@ function parseOverlaySettingsResponse(statusCode, raw) {
 }
 
 /**
+ * Parse `GET /api/overlay/host-config` (flat `{enabled, hostUrl, output, restartAt}`).
+ * Same trust rules as the settings document: non-200 or a missing boolean
+ * `enabled` is a failed poll. A 304 is not a body — the caller keeps the
+ * last good config.
+ * @param {number} statusCode
+ * @param {string} raw
+ * @returns {{ enabled: boolean, hostUrl: string | null, output: string | null, restartAt: number | null } | null}
+ */
+function parseOverlayHostConfigResponse(statusCode, raw) {
+  if (statusCode !== 200) return null;
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  return parseOverlaySettingsResponse(200, JSON.stringify({ overlay: parsed }));
+}
+
+/**
  * Read an HTTP response body with a byte cap, destroying the response past
  * the cap so a wedged stream cannot grow the main-process heap. Mirrors the
  * server's readCappedText pattern.
@@ -95,5 +115,6 @@ function readCappedBody(res, maxBytes) {
 module.exports = {
   MAX_OVERLAY_SETTINGS_BYTES,
   parseOverlaySettingsResponse,
+  parseOverlayHostConfigResponse,
   readCappedBody,
 };

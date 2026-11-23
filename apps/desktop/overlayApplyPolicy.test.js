@@ -11,6 +11,7 @@ const {
   childIsAlive,
   decideOverlayApply,
   overlayRespawnGapMs,
+  overlaySettingsPollMs,
 } = require("./overlayApplyPolicy.js");
 
 const DEFAULT_ARG = "--url=http://127.0.0.1:3000/#/overlay?bg=clear";
@@ -498,5 +499,20 @@ describe("decideOverlayApply: crash-loop backoff and park (DD-10)", () => {
       exited({ respawnFailures: OVERLAY_MAX_RESPAWNS, settings: { enabled: false, hostUrl: null } }),
     );
     expect(d).toMatchObject({ action: "stop", reason: "disabled", respawnFailures: 0 });
+  });
+});
+
+describe("overlaySettingsPollMs (DD-14)", () => {
+  test("false → 10000", () => {
+    expect(overlaySettingsPollMs(false)).toBe(10000);
+  });
+
+  test("true → 4000", () => {
+    expect(overlaySettingsPollMs(true)).toBe(4000);
+  });
+
+  test("null / undefined → 4000", () => {
+    expect(overlaySettingsPollMs(null)).toBe(4000);
+    expect(overlaySettingsPollMs(undefined)).toBe(4000);
   });
 });

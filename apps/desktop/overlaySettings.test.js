@@ -5,12 +5,39 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const {
   MAX_OVERLAY_SETTINGS_BYTES,
+  parseOverlayHostConfigResponse,
   parseOverlaySettingsResponse,
   readCappedBody,
 } = require("./overlaySettings.js");
 
 const VALID = JSON.stringify({
   overlay: { enabled: true, hostUrl: null, output: null },
+});
+
+describe("parseOverlayHostConfigResponse", () => {
+  test("a flat host-config body parses like the settings overlay object", () => {
+    expect(
+      parseOverlayHostConfigResponse(
+        200,
+        JSON.stringify({
+          enabled: false,
+          hostUrl: "http://127.0.0.1:4321/#/overlay",
+          output: null,
+          restartAt: 9,
+        }),
+      ),
+    ).toEqual({
+      enabled: false,
+      hostUrl: "http://127.0.0.1:4321/#/overlay",
+      output: null,
+      restartAt: 9,
+    });
+  });
+
+  test("a non-200 is a failed poll", () => {
+    expect(parseOverlayHostConfigResponse(304, "")).toBeNull();
+    expect(parseOverlayHostConfigResponse(500, "{}")).toBeNull();
+  });
 });
 
 describe("parseOverlaySettingsResponse", () => {

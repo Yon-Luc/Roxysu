@@ -498,6 +498,16 @@ export async function fetchSettings() {
   return unwrap(await api.api.settings.get(), "/api/settings");
 }
 
+export type OverlayHostStatus =
+  import("@server/overlay/hostStatus").OverlayHostStatus;
+
+export async function fetchOverlayHostStatus() {
+  return unwrap(
+    await api.api.overlay["host-status"].get(),
+    "/api/overlay/host-status",
+  );
+}
+
 export type RealmSkinListItem = {
   id: string;
   name: string;

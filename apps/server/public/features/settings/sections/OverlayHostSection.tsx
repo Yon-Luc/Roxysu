@@ -1,6 +1,10 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { patchSettings, type SettingsPayload } from "../../../lib/api";
+import {
+  fetchOverlayHostStatus,
+  patchSettings,
+  type SettingsPayload,
+} from "../../../lib/api";
 import { pageSectionDomId } from "../../../lib/pageSections";
 import { useAppDict } from "../../../lib/i18n";
 
@@ -39,6 +43,17 @@ export function OverlayHostSection({ data }: { data: SettingsPayload }) {
   const dirty = (draft.trim() || null) !== (hostUrl ?? null);
   const outputDirty = (outputDraft.trim() || null) !== (output ?? null);
 
+  const hostStatus = useQuery({
+    queryKey: ["overlay-host-status"],
+    queryFn: fetchOverlayHostStatus,
+    refetchInterval: 10_000,
+  });
+  const status = hostStatus.isError ? undefined : hostStatus.data;
+  const parkedUnsupported =
+    status?.state === "parked" && status.reason === "unsupported";
+  const parkedCrashes =
+    status?.state === "parked" && status.reason === "crash-loop";
+
   return (
     <section
       id={pageSectionDomId("in-game-overlay")}
@@ -51,6 +66,13 @@ export function OverlayHostSection({ data }: { data: SettingsPayload }) {
         {dict?.settings.overlayHostDesc ??
           "URL loaded by the desktop app's in-game overlay host. Include ?profile=<name> to pick a saved layout from the overlay editor. Saving restarts the overlay within a few seconds."}
       </p>
+
+      {parkedUnsupported ? (
+        <p className="mt-4 text-sm text-warning">
+          {dict?.settings.overlayParkedUnsupported ??
+            "Overlay unavailable on this desktop (no layer-shell)"}
+        </p>
+      ) : null}
 
       <label className="mt-4 flex cursor-pointer gap-3 rounded-xl bg-elevated/50 px-4 py-3">
         <input
@@ -150,6 +172,13 @@ export function OverlayHostSection({ data }: { data: SettingsPayload }) {
           {dict?.settings.overlayOutputClear ?? "Follow osu!"}
         </button>
       </div>
+
+      {parkedCrashes ? (
+        <p className="mt-4 text-sm text-warning">
+          {dict?.settings.overlayParkedCrashes ??
+            "Overlay stopped after repeated crashes — Restart"}
+        </p>
+      ) : null}
 
       <div className="mt-4 flex flex-wrap gap-2">
         <button

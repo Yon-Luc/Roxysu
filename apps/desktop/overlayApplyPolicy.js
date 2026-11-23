@@ -29,6 +29,15 @@ const OVERLAY_MAX_RESPAWN_GAP_MS = 5 * 60_000;
  */
 const OVERLAY_EXIT_UNSUPPORTED = 78;
 
+const OVERLAY_SETTINGS_POLL_MS = 4000;
+const OVERLAY_SETTINGS_POLL_DISABLED_MS = 10_000;
+/** 10s while the host is known disabled; 4s otherwise (unknown or enabled). */
+function overlaySettingsPollMs(enabled) {
+  return enabled === false
+    ? OVERLAY_SETTINGS_POLL_DISABLED_MS
+    : OVERLAY_SETTINGS_POLL_MS;
+}
+
 /**
  * Gap before the next liveness respawn after `failures` quick deaths:
  * base, 2×, 4×, … capped at OVERLAY_MAX_RESPAWN_GAP_MS.
@@ -227,8 +236,11 @@ module.exports = {
   OVERLAY_MAX_POLL_FAILURES,
   OVERLAY_MAX_RESPAWNS,
   OVERLAY_MAX_RESPAWN_GAP_MS,
+  OVERLAY_SETTINGS_POLL_DISABLED_MS,
+  OVERLAY_SETTINGS_POLL_MS,
   OVERLAY_STABLE_UPTIME_MS,
   childIsAlive,
   decideOverlayApply,
   overlayRespawnGapMs,
+  overlaySettingsPollMs,
 };

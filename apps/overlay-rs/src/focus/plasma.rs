@@ -87,6 +87,12 @@ impl Dispatch<OrgKdePlasmaWindow, ()> for Session {
                 });
             }
             Event::Unmapped => {
+                // N2: destroy releases OUR org_kde_plasma_window resource
+                // (a client-side teardown, not a window-management
+                // request), and the tracking link is dropped so a reused
+                // internal id can adopt the next window.
+                window.destroy();
+                session.plasma_tracking.release(id.0);
                 session.plasma_windows.remove(&id.0);
                 session.plasma_pending_initial.remove(&id.0);
                 session.reducer.apply(ToplevelEvent::Closed(id));
@@ -109,7 +115,9 @@ impl Session {
         internal_id: u32,
         uuid: Option<String>,
     ) {
-        if !self.seen_plasma.insert(internal_id) {
+        // N2: guard before get_window so a duplicate Window event for a
+        // window we already hold does not create a second proxy.
+        if !self.plasma_tracking.try_adopt(internal_id) {
             return;
         }
         let window = if manager.version() >= 12 {
@@ -122,6 +130,7 @@ impl Session {
             manager.get_window(internal_id, qh, ())
         };
         let id = ToplevelId(window.id().protocol_id());
+        self.plasma_tracking.link(id.0, internal_id);
         self.plasma_windows.insert(id.0, window);
         self.plasma_pending_initial.insert(id.0);
         self.reducer.apply(ToplevelEvent::Added(id));

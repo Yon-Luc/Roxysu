@@ -84,13 +84,54 @@ pub(super) struct Session {
     #[allow(dead_code)]
     pub(super) plasma_manager: Option<OrgKdePlasmaWindowManagement>,
     pub(super) plasma_windows: HashMap<u32, OrgKdePlasmaWindow>,
-    pub(super) seen_plasma: HashSet<u32>,
+    /// Plasma window bookkeeping (N2): seen internal ids, and the
+    /// proxy→internal link needed to forget an id on Unmapped.
+    pub(super) plasma_tracking: PlasmaTracking,
+    /// wlr toplevel handles, so `Closed` can destroy them (N2).
+    pub(super) wlr_handles: HashMap<u32, ZwlrForeignToplevelHandleV1>,
     /// Plasma window proxies adopted whose `InitialState` (the protocol's
     /// "static properties have been sent" marker) has not arrived yet.
     /// `--list-windows` waits on it so the dump cannot print
     /// half-described windows (N3).
     pub(super) plasma_pending_initial: HashSet<u32>,
     backend: &'static str,
+}
+
+/// Plasma window bookkeeping (N2), extracted for tests.
+///
+/// KWin advertises windows by internal id (`Window` / `WindowWithUuid`) and
+/// may REUSE an id after its window is gone — osu! quit and restarted, for
+/// example. The client tracks the adopted window by its own proxy id, so
+/// `Unmapped` needs the stored link to forget the internal id again.
+/// Without that, a reused id made the next `Window` event a silent no-op
+/// and follow-focus died until the host restarted.
+#[derive(Default)]
+pub(super) struct PlasmaTracking {
+    /// Internal ids already adopted (guards a duplicate `get_window`).
+    seen: HashSet<u32>,
+    /// Proxy id -> internal id.
+    internal_ids: HashMap<u32, u32>,
+}
+
+impl PlasmaTracking {
+    /// Marks the internal id seen; false when it was already adopted.
+    pub(super) fn try_adopt(&mut self, internal_id: u32) -> bool {
+        self.seen.insert(internal_id)
+    }
+
+    /// Links the created window proxy to its internal id for `Unmapped`.
+    pub(super) fn link(&mut self, proxy_id: u32, internal_id: u32) {
+        self.internal_ids.insert(proxy_id, internal_id);
+    }
+
+    /// Forgets the internal id so a reused id adopts a fresh window.
+    pub(super) fn release(&mut self, proxy_id: u32) -> Option<u32> {
+        let internal = self.internal_ids.remove(&proxy_id);
+        if let Some(internal) = internal {
+            self.seen.remove(&internal);
+        }
+        internal
+    }
 }
 
 impl Session {
@@ -113,7 +154,8 @@ impl Session {
             wlr_manager: None,
             plasma_manager: None,
             plasma_windows: HashMap::new(),
-            seen_plasma: HashSet::new(),
+            plasma_tracking: PlasmaTracking::default(),
+            wlr_handles: HashMap::new(),
             plasma_pending_initial: HashSet::new(),
             backend: "none",
         }
@@ -134,7 +176,8 @@ impl Session {
             wlr_manager: None,
             plasma_manager: None,
             plasma_windows: HashMap::new(),
-            seen_plasma: HashSet::new(),
+            plasma_tracking: PlasmaTracking::default(),
+            wlr_handles: HashMap::new(),
             plasma_pending_initial: HashSet::new(),
             backend: "none",
         }
@@ -531,6 +574,8 @@ impl Dispatch<ZwlrForeignToplevelManagerV1, ()> for Session {
         match event {
             Event::Toplevel { toplevel } => {
                 let id = ToplevelId(toplevel.id().protocol_id());
+                // Kept so Closed can destroy the handle (N2).
+                session.wlr_handles.insert(id.0, toplevel);
                 session.reducer.apply(ToplevelEvent::Added(id));
             }
             Event::Finished => {
@@ -590,6 +635,11 @@ impl Dispatch<ZwlrForeignToplevelHandleV1, ()> for Session {
             }
             Event::Done => {}
             Event::Closed => {
+                // N2: destroy is the handle's destructor. Without the
+                // request the compositor keeps the resource (and the
+                // object id) alive until the connection closes.
+                handle.destroy();
+                session.wlr_handles.remove(&id.0);
                 session.reducer.apply(ToplevelEvent::Closed(id));
             }
             _ => {}
@@ -651,6 +701,43 @@ mod tests {
         // The toplevel arrived in this batch — not quiet yet.
         assert!(!session.list_settled(false));
         assert!(session.list_settled(true));
+    }
+
+    #[test]
+    fn plasma_internal_id_can_be_readopted_after_unmap() {
+        // N2: osu! quits and restarts; KWin may reuse the internal id for
+        // the new window. A stale seen entry silently dropped follow-focus
+        // until the host restarted.
+        let mut tracking = PlasmaTracking::default();
+        assert!(tracking.try_adopt(5));
+        tracking.link(10, 5);
+        // A duplicate Window event for the same window is still a no-op.
+        assert!(!tracking.try_adopt(5));
+        assert_eq!(tracking.release(10), Some(5));
+        // The new window with the reused id adopts cleanly.
+        assert!(tracking.try_adopt(5));
+        tracking.link(11, 5);
+        assert_eq!(tracking.release(11), Some(5));
+    }
+
+    #[test]
+    fn plasma_release_without_a_link_is_none() {
+        let mut tracking = PlasmaTracking::default();
+        assert_eq!(tracking.release(99), None);
+    }
+
+    #[test]
+    fn plasma_distinct_windows_track_independently() {
+        let mut tracking = PlasmaTracking::default();
+        assert!(tracking.try_adopt(5));
+        tracking.link(10, 5);
+        assert!(tracking.try_adopt(6));
+        tracking.link(11, 6);
+        assert_eq!(tracking.release(10), Some(5));
+        // 6 is still tracked; its Unmapped must not disturb a reused 5.
+        assert!(!tracking.try_adopt(6));
+        assert_eq!(tracking.release(11), Some(6));
+        assert!(tracking.try_adopt(6));
     }
 }
 

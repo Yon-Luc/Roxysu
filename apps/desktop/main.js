@@ -1,11 +1,12 @@
 const { app, BrowserWindow, Menu, ipcMain, shell, clipboard, nativeImage } = require("electron");
 const { spawn } = require("node:child_process");
+const { randomUUID } = require("node:crypto");
 const path = require("node:path");
 const http = require("node:http");
 const fs = require("node:fs");
 const { resolveDesktopPaths, ensureParentDir, ensureRealmExtracted } = require("./paths");
 const { startAutoUpdate } = require("./auto-update");
-const { decideRespawn } = require("./respawnPolicy");
+const { classifyServerExit, decideRespawn } = require("./respawnPolicy");
 const { decideOverlayApply, childIsAlive } = require("./overlayApplyPolicy");
 const { createApplyGate, executeOverlayDecision } = require("./overlayApplyLoop");
 const {
@@ -71,6 +72,13 @@ const processStartedAt = Date.now();
 const PORT = Number(process.env.ROXYSU_PORT ?? 4321);
 const HOST = process.env.ROXYSU_HOST ?? "127.0.0.1";
 const APP_ORIGIN = appOrigin(HOST, PORT);
+/**
+ * DD-2: per-launch token handed to the server child (ROXYSU_INSTANCE_TOKEN)
+ * and echoed by its /api/system/healthz. waitForServer only accepts a server
+ * carrying it, so a stale orphan or a dev server on the same port is never
+ * adopted as this launch's child.
+ */
+const INSTANCE_TOKEN = randomUUID();
 const WINDOW_READY_MARKER = "electron-window-ready";
 /** Caps a session-share PNG before nativeImage decode. */
 const MAX_CLIPBOARD_IMAGE_BYTES = 15 * 1024 * 1024;
@@ -242,44 +250,58 @@ function spawnNodeEntry(paths, entry, cwd, extraEnv, label, nodeArgs = []) {
   const libraryPath = process.env.ROXYSU_LIBRARY_PATH?.trim();
   if (libraryPath) env.LD_LIBRARY_PATH = libraryPath;
   if (env.NODE_OPTIONS) desktopLog(`${label} NODE_OPTIONS=${env.NODE_OPTIONS}`);
+  // DD-1: stdin is a pipe the child watches (attachParentLifeline). When this
+  // process exits for any reason the OS closes it and the child shuts down
+  // instead of surviving as an orphan on the port / local mirror.
+  env.ROXYSU_PARENT_LIFELINE = "1";
 
   if (paths.isPackaged || entry.endsWith(".js")) {
     const { fd } = openChildLogFd(paths.dataDir, label);
     const nodeBin = paths.nodeBin;
     if (nodeBin && fs.existsSync(nodeBin)) {
       desktopLog(`spawn ${label} via nodeBin=${nodeBin}`);
-      return spawn(nodeBin, [...nodeArgs, entry], {
+      return withLifeline(spawn(nodeBin, [...nodeArgs, entry], {
         cwd,
         env,
-        stdio: ["ignore", fd, fd],
+        stdio: ["pipe", fd, fd],
         windowsHide: true,
         shell: false,
-      });
+      }));
     }
     // Fallback: Electron as Node (dev packs / missing bundled node).
     desktopLog(`spawn ${label} via ELECTRON_RUN_AS_NODE exec=${process.execPath}`);
-    return spawn(process.execPath, [...nodeArgs, entry], {
+    return withLifeline(spawn(process.execPath, [...nodeArgs, entry], {
       cwd,
       env: {
         ...env,
         ELECTRON_RUN_AS_NODE: "1",
       },
-      stdio: ["ignore", fd, fd],
+      stdio: ["pipe", fd, fd],
       windowsHide: true,
       shell: false,
-    });
+    }));
   }
 
   const tsxBin = resolveTsx(paths.repoRoot, paths.serverDir, paths.realmDir);
   const cmd = tsxBin === "npx" ? "npx" : tsxBin;
   const cmdArgs = tsxBin === "npx" ? ["tsx", entry] : [entry];
-  return spawn(cmd, cmdArgs, {
+  return withLifeline(spawn(cmd, cmdArgs, {
     cwd,
     env,
-    stdio: "inherit",
+    stdio: ["pipe", "inherit", "inherit"],
     windowsHide: true,
     shell: process.platform === "win32",
-  });
+  }));
+}
+
+/**
+ * DD-1: keep the lifeline pipe quiet. Writing is never done, but closing it
+ * on a child that already exited can raise EPIPE on the stream.
+ * @param {import("node:child_process").ChildProcess} child
+ */
+function withLifeline(child) {
+  child.stdin?.on("error", () => {});
+  return child;
 }
 
 /**
@@ -625,6 +647,12 @@ function spawnServer(paths, sharedEnv) {
       `server exited code=${code} signal=${signal} after ${Date.now() - serverSpawnedAt}ms ` +
         `(healthy=${serverHealthyAt ? `${Date.now() - serverHealthyAt}ms` : "never"})`,
     );
+    // DD-2: a server that cannot bind its port never will — respawning only
+    // loops (and used to adopt whatever else answered healthz). Fail now.
+    if (classifyServerExit(code) === "addr-in-use") {
+      void serverFatal("port-in-use");
+      return;
+    }
     // Read the health stamp *before* clearing it: the policy must see how long
     // this run was actually serving healthz. spawnServer clears it again for
     // the next run.
@@ -664,11 +692,7 @@ function scheduleServerRespawn(paths, sharedEnv) {
     desktopLog(
       `server respawn giving up after ${decision.failures - 1} consecutive short-lived runs — restart Roxysu to retry`,
     );
-    void (async () => {
-      await setSplashStatus("Server stopped — see logs", { animateDots: false });
-      await shutdown();
-      app.exit(1);
-    })();
+    void serverFatal("respawn-exhausted");
     return;
   }
   desktopLog(`server respawn #${decision.failures} in ${decision.delayMs}ms`);
@@ -678,6 +702,23 @@ function scheduleServerRespawn(paths, sharedEnv) {
     if (shuttingDown) return;
     void respawnServer(paths, sharedEnv);
   }, decision.delayMs);
+}
+
+/**
+ * End the session after an unrecoverable server failure.
+ * @param {"port-in-use" | "respawn-exhausted"} reason
+ */
+async function serverFatal(reason) {
+  if (shuttingDown) return;
+  desktopLog(`server fatal: ${reason}`);
+  await setSplashStatus(
+    reason === "port-in-use"
+      ? `Port ${PORT} is already in use — see logs`
+      : "Server stopped — see logs",
+    { animateDots: false },
+  );
+  await shutdown();
+  app.exit(1);
 }
 
 /**
@@ -696,7 +737,10 @@ async function respawnServer(paths, sharedEnv) {
     // Shorter than the first boot: the previous run already had its restart
     // window, so a respawned child that cannot answer healthz within a minute
     // is counted as a failed run instead of holding the loop open for 3 min.
-    await waitForServer(PORT, HOST, 60_000, { signal: startupAbort.signal });
+    await waitForServer(PORT, HOST, 60_000, {
+      signal: startupAbort.signal,
+      expectInstance: INSTANCE_TOKEN,
+    });
   } catch (err) {
     if (shuttingDown) return;
     desktopLog(`respawn waitForServer failed: ${err}`);
@@ -1190,6 +1234,7 @@ if (!gotLock) {
         : {}),
       ROXYSU_PORT: String(PORT),
       ROXYSU_HOST: HOST,
+      ROXYSU_INSTANCE_TOKEN: INSTANCE_TOKEN,
       ROXYSU_STATIC_DIR: paths.staticDir,
       ROXYSU_DATA_DIR: paths.dataDir,
       DB_PATH: paths.dbPath,
@@ -1210,7 +1255,10 @@ if (!gotLock) {
     startupAbort = new AbortController();
 
     try {
-      await waitForServer(PORT, HOST, 180_000, { signal: startupAbort.signal });
+      await waitForServer(PORT, HOST, 180_000, {
+        signal: startupAbort.signal,
+        expectInstance: INSTANCE_TOKEN,
+      });
     } catch (err) {
       if (shuttingDown) return;
       desktopLog(`waitForServer failed: ${err}`);

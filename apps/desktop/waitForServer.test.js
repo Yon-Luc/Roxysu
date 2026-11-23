@@ -3,7 +3,7 @@ import http from "node:http";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { waitForServer } = require("./waitForServer.js");
+const { isOwnHealthPayload, waitForServer } = require("./waitForServer.js");
 
 /**
  * @param {(req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse) => void} onRequest
@@ -164,5 +164,44 @@ describe("waitForServer", () => {
     } finally {
       await close(server);
     }
+  });
+
+  test("DD-2: rejects another Roxysu server whose instance token differs", async () => {
+    const { server, port } = await listen((_req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: true, service: "roxysu-server", instance: "stale", pid: 1 }));
+    });
+    try {
+      await expect(
+        waitForServer(port, "127.0.0.1", 80, { ...fast, expectInstance: "mine" }),
+      ).rejects.toThrow(/Timed out/);
+    } finally {
+      await close(server);
+    }
+  });
+
+  test("DD-2: accepts the server carrying this launch's instance token", async () => {
+    const { server, port } = await listen((_req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: true, service: "roxysu-server", instance: "mine", pid: 1 }));
+    });
+    try {
+      await waitForServer(port, "127.0.0.1", 500, { ...fast, expectInstance: "mine" });
+    } finally {
+      await close(server);
+    }
+  });
+});
+
+describe("isOwnHealthPayload", () => {
+  test("older servers without an instance field are rejected when a token is expected", () => {
+    expect(isOwnHealthPayload({ ok: true, service: "roxysu-server" }, "mine")).toBe(false);
+    expect(isOwnHealthPayload({ ok: true, service: "roxysu-server" }, null)).toBe(true);
+  });
+
+  test("non-objects and wrong markers are rejected", () => {
+    expect(isOwnHealthPayload(null, null)).toBe(false);
+    expect(isOwnHealthPayload("ok", null)).toBe(false);
+    expect(isOwnHealthPayload({ ok: true, service: "other", instance: "mine" }, "mine")).toBe(false);
   });
 });

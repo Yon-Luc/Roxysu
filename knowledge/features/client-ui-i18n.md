@@ -29,7 +29,10 @@ chosen per-browser via `apps/server/public/lib/language.ts`.
 
 `nav, common, sync, dashboard, stats, practice, settings, skin, command,
 session, collection, nowSelected, marathon, media, overlay, ratingLab,
-download, hub, maniaParity`
+download, hub, maniaParity, desktop`
+
+`desktop` holds the Electron-only server restart banner strings
+(`serverRestarting`, `serverBack`) used by `components/DesktopServerBanner.tsx`.
 
 `common` includes relative-time templates (`justNow`, `minutesAgo`,
 `hoursAgo`, `daysAgo`) consumed by `formatRelativeTime(iso, dict?.common)`.

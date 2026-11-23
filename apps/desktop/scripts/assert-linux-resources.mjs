@@ -57,6 +57,7 @@ try {
     "windowState.js",
     "windowRecovery.js",
     "fatalReport.js",
+    "splashLocale.js",
     "package.json",
     "resources/splash.html",
     "resources/public/index.html",

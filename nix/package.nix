@@ -363,6 +363,7 @@ in
          apps/desktop/windowRecovery.js \
          apps/desktop/fatalReport.js \
          apps/desktop/splash.html \
+         apps/desktop/splashLocale.js \
          apps/desktop/package.json \
          "$appdir/"
 

@@ -34,6 +34,7 @@ const {
 } = require("./overlaySettings");
 const { parseOverlayHostUrl, parseOverlayOutput } = require("./overlayUrlGuard");
 const { appOrigin, isAppUrl, canOpenExternal, senderIsApp, redactUrlForLog } = require("./urlPolicy");
+const { splashLang, splashStatus } = require("./splashLocale");
 const { stopChild: stopChildProcess } = require("./stopChild");
 const { probePortOwner, waitForServer } = require("./waitForServer");
 const { FATAL_LOG_TAIL_BYTES, buildFatalReport } = require("./fatalReport");
@@ -535,14 +536,13 @@ function createSplashWindow(paths) {
     .loadFile(splashPath)
     .then(() => {
       desktopLog("splash loadFile ok");
-      signalWindowReady(paths.dataDir);
     })
     .catch((err) => {
       desktopLog(`splash loadFile failed: ${err}`);
-      signalWindowReady(paths.dataDir);
     });
 
-  // Marker even if HTML fails — dark chrome is still a visible window for older stubs.
+  // Once per start. Dark chrome is already a visible window for older stubs,
+  // including when the HTML fails to load.
   signalWindowReady(paths.dataDir);
 }
 
@@ -987,7 +987,7 @@ function scheduleServerRespawn(paths, sharedEnv) {
     return;
   }
   desktopLog(`server respawn #${decision.failures} in ${decision.delayMs}ms`);
-  void setSplashStatus("Server stopped — restarting");
+  void setSplashStatus(splashStatus(app.getLocale(), "restarting"));
   sendServerState(serverStateForRespawn(decision, DEFAULT_RESPAWN_CONFIG.maxAttempts));
   serverRespawnTimer = setTimeout(() => {
     serverRespawnTimer = null;
@@ -1442,9 +1442,11 @@ async function setSplashStatus(text, opts = {}) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   const animateDots = opts.animateDots !== false;
   const safe = JSON.stringify(text);
+  const lang = JSON.stringify(splashLang(app.getLocale()));
   try {
     await mainWindow.webContents.executeJavaScript(
       `(() => {
+        document.documentElement.lang = ${lang};
         const el = document.getElementById("status");
         if (!el) return;
         el.classList.toggle("dots", ${animateDots ? "true" : "false"});
@@ -1611,7 +1613,7 @@ if (!gotLock) {
     Menu.setApplicationMenu(buildApplicationMenu());
 
     createSplashWindow(paths);
-    void setSplashStatus("Starting");
+    void setSplashStatus(splashStatus(app.getLocale(), "starting"));
 
     // Shipped calc bundle file (release artifact staged by after-pack/Nix).
     // Packaged boots apply it locally instead of pulling the Hub.
@@ -1649,7 +1651,7 @@ if (!gotLock) {
     // quitting the whole desktop session (see spawnServer).
     serverChild = spawnServer(paths, sharedEnv);
 
-    void setSplashStatus("Waiting for server");
+    void setSplashStatus(splashStatus(app.getLocale(), "waiting"));
     desktopLog("waitForServer start");
     startupAbort = new AbortController();
 
@@ -1670,7 +1672,7 @@ if (!gotLock) {
     desktopLog("waitForServer ok");
     // D-NEW-2: health reached — this run may now reset the respawn counter.
     if (serverHealthyAt === 0) serverHealthyAt = Date.now();
-    await setSplashStatus("Opening Home");
+    await setSplashStatus(splashStatus(app.getLocale(), "opening"));
     try {
       await maybeClearHttpCache(paths);
       await loadAppIntoWindow();

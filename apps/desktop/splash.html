@@ -33,6 +33,11 @@
         user-select: none;
         -webkit-app-region: drag;
       }
+      button,
+      a,
+      input {
+        -webkit-app-region: no-drag;
+      }
       main {
         display: flex;
         flex-direction: column;
@@ -91,7 +96,24 @@
     <main>
       <div class="spinner" aria-hidden="true"></div>
       <h1>Roxysu</h1>
-      <p id="status" class="dots">Starting</p>
+      <p id="status" class="dots" role="status" aria-live="polite">Starting</p>
     </main>
+    <script>
+      // First paint, before the shell overwrites #status. Same four languages
+      // as splashLocale.js. The shell then sets <html lang> from app.getLocale().
+      (function () {
+        var table = {
+          en: "Starting",
+          fr: "Démarrage",
+          es: "Iniciando",
+          pt: "Iniciando",
+        };
+        var tag = (navigator.language || "en").toLowerCase().split("-")[0];
+        var lang = table[tag] ? tag : "en";
+        document.documentElement.lang = lang;
+        var el = document.getElementById("status");
+        if (el) el.textContent = table[lang];
+      })();
+    </script>
   </body>
 </html>

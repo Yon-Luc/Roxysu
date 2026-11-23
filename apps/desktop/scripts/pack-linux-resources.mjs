@@ -109,6 +109,7 @@ const appFiles = [
   "windowRecovery.js",
   "fatalReport.js",
   "splash.html",
+  "splashLocale.js",
   "package.json",
 ];
 for (const name of appFiles) {

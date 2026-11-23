@@ -54,7 +54,8 @@
       "windowState.js",
       "windowRecovery.js",
       "fatalReport.js",
-      "splash.html"
+      "splash.html",
+      "splashLocale.js"
     ],
     "extraResources": [
       {

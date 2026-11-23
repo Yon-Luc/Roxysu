@@ -46,9 +46,32 @@ function senderIsApp(frameUrl, origin) {
   return typeof frameUrl === "string" && frameUrl.length > 0 && isAppUrl(frameUrl, origin);
 }
 
+/**
+ * Origin + pathname only. Drops userinfo, search, and hash so tokens and
+ * search terms never land in desktop.log. Unparseable input becomes
+ * "[invalid-url]". file: URLs become `file:` + pathname (origin is "null").
+ * @param {unknown} url
+ * @returns {string}
+ */
+function redactUrlForLog(url) {
+  if (typeof url !== "string" || url.trim() === "") {
+    return "[invalid-url]";
+  }
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === "file:") {
+      return `file:${parsed.pathname}`;
+    }
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return "[invalid-url]";
+  }
+}
+
 module.exports = {
   appOrigin,
   isAppUrl,
   canOpenExternal,
   senderIsApp,
+  redactUrlForLog,
 };

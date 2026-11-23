@@ -33,7 +33,7 @@ const {
   readCappedBody,
 } = require("./overlaySettings");
 const { parseOverlayHostUrl, parseOverlayOutput } = require("./overlayUrlGuard");
-const { appOrigin, isAppUrl, canOpenExternal, senderIsApp } = require("./urlPolicy");
+const { appOrigin, isAppUrl, canOpenExternal, senderIsApp, redactUrlForLog } = require("./urlPolicy");
 const { stopChild: stopChildProcess } = require("./stopChild");
 const { probePortOwner, waitForServer } = require("./waitForServer");
 const { FATAL_LOG_TAIL_BYTES, buildFatalReport } = require("./fatalReport");
@@ -377,7 +377,7 @@ function withLifeline(child) {
  */
 function openExternalSafe(url) {
   if (!canOpenExternal(url)) return;
-  desktopLog(`openExternal (navigation) ${url}`);
+  desktopLog(`openExternal (navigation) ${redactUrlForLog(url)}`);
   void shell.openExternal(url).catch((err) => {
     desktopLog(`openExternal failed: ${err}`);
   });
@@ -526,7 +526,7 @@ function createSplashWindow(paths) {
   });
 
   mainWindow.webContents.on("did-fail-load", (_e, code, desc, url) => {
-    desktopLog(`splash did-fail-load code=${code} desc=${desc} url=${url}`);
+    desktopLog(`splash did-fail-load code=${code} desc=${desc} url=${redactUrlForLog(url)}`);
   });
 
   attachRendererRecovery(mainWindow);
@@ -1203,8 +1203,13 @@ function spawnOverlayHost(paths, urlArg, output) {
   // with the shell if it dies, instead of leaving an orphaned HUD on screen.
   const args = [urlArg, `--watchdog-max-age-sec=${maxAgeSec}`, "--exit-on-stdin-eof"];
   if (output) args.push(`--output=${output}`);
+  const loggedArgs = args.map((arg) =>
+    arg.startsWith("--url=")
+      ? `--url=${redactUrlForLog(arg.slice("--url=".length))}`
+      : arg,
+  );
   desktopLog(
-    `spawn overlay maxAgeSec=${maxAgeSec} bin=${bin} ${args.join(" ")}`,
+    `spawn overlay maxAgeSec=${maxAgeSec} bin=${bin} ${loggedArgs.join(" ")}`,
   );
   overlayAppliedUrlArg = urlArg;
   overlayAppliedOutput = output ?? null;
@@ -1283,7 +1288,7 @@ function guardOverlaySettings(settings) {
   let hostUrl = settings.hostUrl ?? null;
   if (hostUrl != null && !parseOverlayHostUrl(hostUrl).ok) {
     desktopLog(
-      `overlay hostUrl rejected — using default (${hostUrl.slice(0, 64)})`,
+      `overlay hostUrl rejected — using default (${redactUrlForLog(hostUrl)})`,
     );
     hostUrl = null;
   }
@@ -1456,7 +1461,7 @@ async function loadAppIntoWindow() {
     throw new Error("Main window missing when loading app");
   }
   const url = `http://${HOST}:${PORT}/`;
-  desktopLog(`loadURL ${url}`);
+  desktopLog(`loadURL ${redactUrlForLog(url)}`);
   await mainWindow.loadURL(url);
 }
 
@@ -1535,7 +1540,7 @@ ipcMain.handle("roxysu:open-external", async (event, url) => {
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw new Error("Only http(s) URLs are allowed");
   }
-  desktopLog(`openExternal ${parsed.origin}${parsed.pathname}`);
+  desktopLog(`openExternal ${redactUrlForLog(parsed.toString())}`);
   await shell.openExternal(parsed.toString());
 });
 

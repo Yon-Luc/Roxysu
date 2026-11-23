@@ -55,14 +55,18 @@ function overlayHostStatusWrite(loggedParkReason, decision) {
       write: reason === "unsupported-session" ? "unsupported" : "crash-loop",
     };
   }
+  // Only a user intent or a real spawn clears a park. A poll-failures
+  // "stop" is not one: the exited host is still a child, and five missed
+  // polls must not erase the Settings line.
   const unpark =
     loggedParkReason != null &&
-    (decision?.action !== "noop" ||
-      reason === "disabled" ||
+    (reason === "disabled" ||
       reason === "restart-requested" ||
       reason === "url-changed" ||
       reason === "output-changed" ||
-      reason === "initial");
+      reason === "initial" ||
+      reason === "liveness-respawn" ||
+      reason === "up-to-date");
   if (unpark) return { next: null, write: "running" };
   return { next: loggedParkReason ?? null, write: null };
 }

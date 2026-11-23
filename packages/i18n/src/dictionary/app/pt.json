@@ -1584,6 +1584,8 @@
   },
   "desktop": {
     "serverRestarting": "O servidor local parou — reiniciando (tentativa {{attempt}} de {{max}})…",
-    "serverBack": "O servidor local voltou — recarregando…"
+    "serverBack": "O servidor local voltou — recarregando…",
+    "overlayParkedUnsupported": "Overlay indisponível neste desktop (sem layer-shell)",
+    "overlayParkedCrashes": "Overlay parado após falhas repetidas — Reiniciar"
   }
 }

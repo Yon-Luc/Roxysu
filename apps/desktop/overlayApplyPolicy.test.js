@@ -528,6 +528,15 @@ describe("overlayHostStatusWrite", () => {
     ).toEqual({ next: "crash-loop", write: null });
   });
 
+  test("stopping after missed polls does not clear a park", () => {
+    expect(
+      overlayHostStatusWrite("unsupported-session", {
+        action: "stop",
+        reason: "poll-failures",
+      }),
+    ).toEqual({ next: "unsupported-session", write: null });
+  });
+
   test("parking writes once per reason", () => {
     expect(
       overlayHostStatusWrite(null, {

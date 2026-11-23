@@ -1149,6 +1149,7 @@ async function finishStartup(paths, sharedEnv) {
  * @returns {Promise<boolean>}
  */
 async function runFinishStartup(paths, sharedEnv) {
+  const startupWaitId = serverWaitId;
   if (serverHealthyAt === 0) serverHealthyAt = monoNow();
   await setSplashStatus(splashStatus(app.getLocale(), "opening"));
   try {
@@ -1157,6 +1158,12 @@ async function runFinishStartup(paths, sharedEnv) {
   } catch (err) {
     if (shuttingDown) return true;
     desktopLog(`loadAppIntoWindow failed: ${err}`);
+    // Cache wipe can outlast a boot crash. A respawn owns recovery; ending
+    // the session here would throw away the server it just brought back.
+    if (serverRespawnTimer || serverWaitId !== startupWaitId) {
+      desktopLog("loadURL failed during server recovery — respawn will reload");
+      return false;
+    }
     await failFatal("load-failed", { error: String(err?.message ?? err) });
     return true;
   }
@@ -1388,9 +1395,10 @@ function fetchOverlaySettings() {
       { host: HOST, port: PORT, path: "/api/overlay/host-config", timeout: 2000, headers },
       (res) => {
         const etag = res.headers.etag;
-        if (typeof etag === "string" && etag) overlayConfigEtag = etag;
         if (res.statusCode === 304) {
           res.resume();
+          // A 304 with no cached body must not pin this etag forever.
+          if (!overlayConfigCache) overlayConfigEtag = null;
           resolve(overlayConfigCache);
           return;
         }
@@ -1398,7 +1406,10 @@ function fetchOverlaySettings() {
           const parsed = body.ok
             ? parseOverlayHostConfigResponse(res.statusCode ?? 0, body.text)
             : null;
-          if (parsed) overlayConfigCache = parsed;
+          if (parsed) {
+            overlayConfigCache = parsed;
+            if (typeof etag === "string" && etag) overlayConfigEtag = etag;
+          }
           resolve(parsed);
         });
       },
@@ -1471,9 +1482,16 @@ function guardOverlaySettings(settings) {
  * decisions/no-ipc-between-processes).
  * @param {ReturnType<typeof resolveDesktopPaths>} paths
  */
+function overlayHostWatchWillRun(paths) {
+  return (
+    process.platform === "linux" &&
+    Boolean(process.env.WAYLAND_DISPLAY) &&
+    Boolean(resolveOverlayBin(paths))
+  );
+}
+
 function watchOverlayHostSetting(paths) {
-  if (process.platform !== "linux" || !process.env.WAYLAND_DISPLAY) return;
-  if (!resolveOverlayBin(paths)) return;
+  if (!overlayHostWatchWillRun(paths)) return;
 
   /** Consecutive failed settings polls (F-066). */
   let consecutiveFailures = 0;
@@ -1734,31 +1752,42 @@ ipcMain.handle("roxysu:write-clipboard-image", async (event, bytes) => {
   desktopLog(`writeClipboardImage bytes=${buf.length}`);
 });
 
+/** A second launch arrived before the window existed. Shown once it does. */
+let revealWhenWindowExists = false;
+
+function revealMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    revealWhenWindowExists = true;
+    return;
+  }
+  revealWhenWindowExists = false;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  // Flash before focus. flashFrame(true) after focus never clears on
+  // Windows, because the flash stops only when the window becomes focused.
+  mainWindow.show();
+  mainWindow.flashFrame(true);
+  mainWindow.focus();
+  let flashStopped = false;
+  const stopFlash = () => {
+    if (flashStopped) return;
+    flashStopped = true;
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.flashFrame(false);
+  };
+  // Already focused: a flash started after focus never clears itself.
+  // Not focused yet: stop on focus, and after 5 s if focus never arrives.
+  if (mainWindow.isFocused()) stopFlash();
+  else mainWindow.once("focus", stopFlash);
+  const flashTimer = setTimeout(stopFlash, 5_000);
+  flashTimer.unref?.();
+}
+
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   desktopLog("second_instance_lock_failed — quitting");
   app.quit();
 } else {
   app.on("second-instance", () => {
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    // Flash before focus. flashFrame(true) after focus never clears on
-    // Windows, because the flash stops only when the window becomes focused.
-    mainWindow.show();
-    mainWindow.flashFrame(true);
-    mainWindow.focus();
-    let flashStopped = false;
-    const stopFlash = () => {
-      if (flashStopped) return;
-      flashStopped = true;
-      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.flashFrame(false);
-    };
-    // Already focused: a flash started after focus never clears itself.
-    // Not focused yet: stop on focus, and after 5 s if focus never arrives.
-    if (mainWindow.isFocused()) stopFlash();
-    else mainWindow.once("focus", stopFlash);
-    const flashTimer = setTimeout(stopFlash, 5_000);
-    flashTimer.unref?.();
+    revealMainWindow();
   });
 
   // Stable Windows taskbar grouping / icon association.
@@ -1795,7 +1824,13 @@ if (!gotLock) {
     Menu.setApplicationMenu(buildApplicationMenu());
 
     createSplashWindow(paths);
+    if (revealWhenWindowExists) revealMainWindow();
     void setSplashStatus(splashStatus(app.getLocale(), "starting"));
+    // A previous Wayland session may have parked the overlay. This launch
+    // will not run the watcher, so clear that file or Settings stays wrong.
+    if (!overlayHostWatchWillRun(paths)) {
+      writeOverlayHostStatus(paths.dataDir, { state: "running", reason: null });
+    }
 
     // Shipped calc bundle file (release artifact staged by after-pack/Nix).
     // Packaged boots apply it locally instead of pulling the Hub.

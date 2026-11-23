@@ -88,9 +88,14 @@ impl Dispatch<OrgKdePlasmaWindow, ()> for Session {
             }
             Event::Unmapped => {
                 session.plasma_windows.remove(&id.0);
+                session.plasma_pending_initial.remove(&id.0);
                 session.reducer.apply(ToplevelEvent::Closed(id));
             }
-            Event::InitialState => {}
+            Event::InitialState => {
+                // Protocol: all static properties have been sent for this
+                // window. `--list-windows` waits on it (N3).
+                session.plasma_pending_initial.remove(&id.0);
+            }
             _ => {}
         }
     }
@@ -118,6 +123,7 @@ impl Session {
         };
         let id = ToplevelId(window.id().protocol_id());
         self.plasma_windows.insert(id.0, window);
+        self.plasma_pending_initial.insert(id.0);
         self.reducer.apply(ToplevelEvent::Added(id));
     }
 }

@@ -31,6 +31,9 @@ use super::FocusCommand;
 
 const PUMP_TIMEOUT_MS: i32 = 500;
 
+const WLR_BACKEND: &str = "zwlr_foreign_toplevel_manager_v1";
+const PLASMA_BACKEND: &str = "org_kde_plasma_window_management";
+
 #[derive(Debug)]
 pub enum FocusEvent {
     Dump(Vec<String>),
@@ -82,6 +85,11 @@ pub(super) struct Session {
     pub(super) plasma_manager: Option<OrgKdePlasmaWindowManagement>,
     pub(super) plasma_windows: HashMap<u32, OrgKdePlasmaWindow>,
     pub(super) seen_plasma: HashSet<u32>,
+    /// Plasma window proxies adopted whose `InitialState` (the protocol's
+    /// "static properties have been sent" marker) has not arrived yet.
+    /// `--list-windows` waits on it so the dump cannot print
+    /// half-described windows (N3).
+    pub(super) plasma_pending_initial: HashSet<u32>,
     backend: &'static str,
 }
 
@@ -106,6 +114,7 @@ impl Session {
             plasma_manager: None,
             plasma_windows: HashMap::new(),
             seen_plasma: HashSet::new(),
+            plasma_pending_initial: HashSet::new(),
             backend: "none",
         }
     }
@@ -126,6 +135,7 @@ impl Session {
             plasma_manager: None,
             plasma_windows: HashMap::new(),
             seen_plasma: HashSet::new(),
+            plasma_pending_initial: HashSet::new(),
             backend: "none",
         }
     }
@@ -186,6 +196,22 @@ impl Session {
             self.reducer
                 .apply(ToplevelEvent::OutputLeave { id: toplevel, name });
         }
+    }
+
+    /// `--list-windows` completeness (N3). Breaking on the first `Added`
+    /// toplevel dumps half-described windows on Plasma — `Window` /
+    /// `get_window` fill the toplevel map in the first roundtrip while
+    /// `AppIdChanged` / `TitleChanged` / `ResourceNameChanged` /
+    /// `InitialState` land in later ones. Plasma settles once every adopted
+    /// window has sent `InitialState`; wlr settles on a quiet batch.
+    pub(super) fn list_settled(&self, batch_was_quiet: bool) -> bool {
+        if self.reducer.toplevels().is_empty() {
+            return false;
+        }
+        if self.backend == PLASMA_BACKEND {
+            return self.plasma_pending_initial.is_empty();
+        }
+        batch_was_quiet
     }
 }
 
@@ -294,15 +320,29 @@ fn run_once(session: &mut Session) -> Result<()> {
 
     bind_backend(&globals, &qh, session)?;
 
-    for _ in 0..8 {
+    if session.list_only {
+        // Settle instead of breaking on the first toplevel (N3). Cap bounds
+        // the wait on a slow or busy compositor; the recv timeout in
+        // overlay.rs bounds the whole dump.
+        for _ in 0..16 {
+            queue.roundtrip(session).context("wayland roundtrip")?;
+            let batch_was_quiet = !session.reducer.is_dirty();
+            session.flush_batch();
+            if session.list_settled(batch_was_quiet) {
+                break;
+            }
+        }
+        if session.reducer.toplevels().is_empty() {
+            warn!("no toplevels advertised before the roundtrip cap; dumping what is known");
+        } else if !session.plasma_pending_initial.is_empty() {
+            warn!(
+                pending = session.plasma_pending_initial.len(),
+                "dump may be incomplete: Plasma windows without InitialState"
+            );
+        }
+    } else {
         queue.roundtrip(session).context("wayland roundtrip")?;
         session.flush_batch();
-        if session.list_only && !session.reducer.toplevels().is_empty() {
-            break;
-        }
-        if !session.list_only {
-            break;
-        }
     }
 
     if session.list_only {
@@ -357,7 +397,7 @@ fn bind_backend(
 ) -> Result<()> {
     match globals.bind::<ZwlrForeignToplevelManagerV1, _, _>(qh, 1..=3, ()) {
         Ok(manager) => {
-            session.backend = "zwlr_foreign_toplevel_manager_v1";
+            session.backend = WLR_BACKEND;
             session.wlr_manager = Some(manager);
             return Ok(());
         }
@@ -367,7 +407,7 @@ fn bind_backend(
 
     match globals.bind::<OrgKdePlasmaWindowManagement, _, _>(qh, 7..=18, ()) {
         Ok(manager) => {
-            session.backend = "org_kde_plasma_window_management";
+            session.backend = PLASMA_BACKEND;
             session.plasma_manager = Some(manager);
             Ok(())
         }
@@ -542,3 +582,61 @@ impl Dispatch<ZwlrForeignToplevelHandleV1, ()> for Session {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::focus::matching::MatchMode;
+
+    fn list_session() -> Session {
+        let (tx, _rx) = mpsc::channel();
+        Session::list(MatchPolicy::new("osu", MatchMode::Contains), tx)
+    }
+
+    #[test]
+    fn list_never_settles_without_toplevels() {
+        let mut session = list_session();
+        session.backend = PLASMA_BACKEND;
+        session.plasma_pending_initial.clear();
+        assert!(!session.list_settled(true));
+    }
+
+    #[test]
+    fn plasma_list_settles_only_after_initial_state() {
+        let mut session = list_session();
+        session.backend = PLASMA_BACKEND;
+        session.reducer.apply(ToplevelEvent::Added(ToplevelId(10)));
+        session.plasma_pending_initial.insert(10);
+        // Properties still in flight — a dump here would print empty
+        // app_id/title fields.
+        assert!(!session.list_settled(true));
+        session.plasma_pending_initial.remove(&10);
+        assert!(session.list_settled(true));
+    }
+
+    #[test]
+    fn plasma_window_unmapped_after_adopt_keeps_the_dump_settleable() {
+        let mut session = list_session();
+        session.backend = PLASMA_BACKEND;
+        session.reducer.apply(ToplevelEvent::Added(ToplevelId(10)));
+        session.plasma_pending_initial.insert(10);
+        // Unmapped during the dump: the window leaves the reducer and the
+        // pending set, so a straggler cannot block settling forever.
+        session.plasma_pending_initial.remove(&10);
+        session.reducer.apply(ToplevelEvent::Closed(ToplevelId(10)));
+        assert!(!session.list_settled(true)); // no toplevels left
+        session.reducer.apply(ToplevelEvent::Added(ToplevelId(11)));
+        assert!(session.list_settled(true));
+    }
+
+    #[test]
+    fn wlr_list_settles_on_a_quiet_batch_only() {
+        let mut session = list_session();
+        session.backend = WLR_BACKEND;
+        session.reducer.apply(ToplevelEvent::Added(ToplevelId(1)));
+        // The toplevel arrived in this batch — not quiet yet.
+        assert!(!session.list_settled(false));
+        assert!(session.list_settled(true));
+    }
+}
+

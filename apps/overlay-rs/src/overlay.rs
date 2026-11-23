@@ -202,7 +202,7 @@ impl OverlayHost {
                         eprintln!("  {line}");
                     }
                 }
-                Err(_) => warn!("timed out waiting for foreign-toplevel dump"),
+                Err(_) => warn!("timed out waiting for the toplevel dump"),
             }
             if let Some(app) = self.window.application() {
                 app.quit();

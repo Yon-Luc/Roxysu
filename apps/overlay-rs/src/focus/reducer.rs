@@ -122,6 +122,12 @@ impl FocusReducer {
         &self.toplevels
     }
 
+    /// True when events since the last `end_batch` would change evaluation.
+    /// `--list-windows` uses a quiet batch as its wlr settle condition.
+    pub fn is_dirty(&self) -> bool {
+        self.dirty
+    }
+
     pub fn apply(&mut self, event: ToplevelEvent) {
         match event {
             ToplevelEvent::Added(id) => {

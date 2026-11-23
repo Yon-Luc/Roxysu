@@ -75,8 +75,9 @@ pub(super) struct Session {
     stop: Option<Arc<AtomicBool>>,
     output_names: HashMap<u32, String>,
     /// Bound output proxies. Names are copied into `output_names`.
-    #[allow(dead_code)]
     outputs: Vec<WlOutput>,
+    /// Global name -> bound output proxy id (N4 hot-unplug bookkeeping).
+    output_globals: HashMap<u32, u32>,
     pending_outputs: Vec<(ToplevelId, u32)>,
     /// Kept alive so the bound globals are not destroyed with the last proxy.
     #[allow(dead_code)]
@@ -150,6 +151,7 @@ impl Session {
             stop: Some(stop),
             output_names: HashMap::new(),
             outputs: Vec::new(),
+            output_globals: HashMap::new(),
             pending_outputs: Vec::new(),
             wlr_manager: None,
             plasma_manager: None,
@@ -172,6 +174,7 @@ impl Session {
             stop: None,
             output_names: HashMap::new(),
             outputs: Vec::new(),
+            output_globals: HashMap::new(),
             pending_outputs: Vec::new(),
             wlr_manager: None,
             plasma_manager: None,
@@ -443,8 +446,28 @@ fn bind_outputs(globals: &GlobalList, qh: &QueueHandle<Session>, session: &mut S
             global.version.max(1)
         };
         let output: WlOutput = registry.bind(global.name, version, qh, ());
+        session
+            .output_globals
+            .insert(global.name, output.id().protocol_id());
         session.outputs.push(output);
     }
+}
+
+/// Bind a late-advertised `wl_output` (hot-plug) using the same version
+/// policy as [`bind_outputs`].
+fn bind_late_output(
+    registry: &wl_registry::WlRegistry,
+    name: u32,
+    version: u32,
+    qh: &QueueHandle<Session>,
+    session: &mut Session,
+) {
+    let version = if version >= 4 { 4 } else { version.max(1) };
+    let output: WlOutput = registry.bind(name, version, qh, ());
+    session
+        .output_globals
+        .insert(name, output.id().protocol_id());
+    session.outputs.push(output);
 }
 
 fn bind_backend(
@@ -529,13 +552,44 @@ fn pump(queue: &mut EventQueue<Session>, session: &mut Session) -> Result<()> {
 
 impl Dispatch<wl_registry::WlRegistry, GlobalListContents> for Session {
     fn event(
-        _: &mut Self,
-        _: &wl_registry::WlRegistry,
-        _: wl_registry::Event,
+        session: &mut Self,
+        registry: &wl_registry::WlRegistry,
+        event: wl_registry::Event,
         _: &GlobalListContents,
         _: &Connection,
-        _: &QueueHandle<Self>,
+        qh: &QueueHandle<Self>,
     ) {
+        // N4: the initial enumeration is absorbed by registry_queue_init;
+        // anything arriving here is a live global add/remove. Outputs
+        // were previously bound only at connect, so a plugged-in monitor
+        // never got a name and OutputEnter for it sat in pending_outputs
+        // forever (niri pinning died on hot-plug).
+        match event {
+            wl_registry::Event::Global {
+                name,
+                interface,
+                version,
+            } => {
+                if interface == "wl_output" {
+                    bind_late_output(registry, name, version, qh, session);
+                }
+            }
+            wl_registry::Event::GlobalRemove { name } => {
+                let Some(proxy_id) = session.output_globals.remove(&name) else {
+                    return;
+                };
+                if let Some(gone) = session.output_names.remove(&proxy_id) {
+                    session.reducer.apply(ToplevelEvent::OutputGone(gone));
+                }
+                session
+                    .pending_outputs
+                    .retain(|(_, oid)| *oid != proxy_id);
+                session
+                    .outputs
+                    .retain(|output| output.id().protocol_id() != proxy_id);
+            }
+            _ => {}
+        }
     }
 }
 

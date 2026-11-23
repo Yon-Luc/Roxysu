@@ -79,6 +79,9 @@ pub enum ToplevelEvent {
         id: ToplevelId,
         name: String,
     },
+    /// The output with this name is gone (hot-unplug). Applies leave
+    /// semantics to every toplevel that had entered it (N4).
+    OutputGone(String),
     Bounds {
         id: ToplevelId,
         rect: OutputRect,
@@ -185,6 +188,19 @@ impl FocusReducer {
                     if tl.output_names.len() != before {
                         self.dirty = true;
                     }
+                }
+            }
+            ToplevelEvent::OutputGone(name) => {
+                let mut changed = false;
+                for tl in self.toplevels.values_mut() {
+                    let before = tl.output_names.len();
+                    tl.output_names.retain(|existing| existing != &name);
+                    if tl.output_names.len() != before {
+                        changed = true;
+                    }
+                }
+                if changed {
+                    self.dirty = true;
                 }
             }
             ToplevelEvent::Bounds { id, rect } => {
@@ -467,6 +483,94 @@ mod tests {
             r.end_batch(),
             Some(VisibilityCommand::Show { output: None })
         );
+    }
+
+    #[test]
+    fn output_gone_removes_the_name_from_every_toplevel() {
+        let mut r = reducer();
+        r.apply(ToplevelEvent::Added(ToplevelId(1)));
+        r.apply(ToplevelEvent::AppId {
+            id: ToplevelId(1),
+            app_id: "osu!".into(),
+        });
+        r.apply(state(1, true, false));
+        r.apply(ToplevelEvent::OutputEnter {
+            id: ToplevelId(1),
+            name: "DP-1".into(),
+        });
+        assert_eq!(
+            r.end_batch(),
+            Some(VisibilityCommand::Show {
+                output: Some(OutputHint::Name("DP-1".into()))
+            })
+        );
+
+        // Hot-unplug (N4): the name leaves all toplevels; visibility is
+        // unchanged so the batch only re-evaluates the hint to None.
+        r.apply(ToplevelEvent::OutputGone("DP-1".into()));
+        assert_eq!(
+            r.end_batch(),
+            Some(VisibilityCommand::Show { output: None })
+        );
+        assert!(r
+            .toplevels()
+            .get(&ToplevelId(1))
+            .unwrap()
+            .output_names
+            .is_empty());
+    }
+
+    #[test]
+    fn output_gone_keeps_other_names() {
+        let mut r = reducer();
+        r.apply(ToplevelEvent::Added(ToplevelId(1)));
+        r.apply(ToplevelEvent::AppId {
+            id: ToplevelId(1),
+            app_id: "osu!".into(),
+        });
+        r.apply(state(1, true, false));
+        // Last-entered wins the hint, so enter DP-2 before DP-1.
+        r.apply(ToplevelEvent::OutputEnter {
+            id: ToplevelId(1),
+            name: "DP-2".into(),
+        });
+        r.apply(ToplevelEvent::OutputEnter {
+            id: ToplevelId(1),
+            name: "DP-1".into(),
+        });
+        assert_eq!(
+            r.end_batch(),
+            Some(VisibilityCommand::Show {
+                output: Some(OutputHint::Name("DP-1".into()))
+            })
+        );
+
+        // Hot-unplug of the hinted output falls back to the remaining name.
+        r.apply(ToplevelEvent::OutputGone("DP-1".into()));
+        assert_eq!(
+            r.end_batch(),
+            Some(VisibilityCommand::Show {
+                output: Some(OutputHint::Name("DP-2".into()))
+            })
+        );
+    }
+
+    #[test]
+    fn output_gone_for_an_unknown_name_changes_nothing() {
+        let mut r = reducer();
+        r.apply(ToplevelEvent::Added(ToplevelId(1)));
+        r.apply(ToplevelEvent::AppId {
+            id: ToplevelId(1),
+            app_id: "osu!".into(),
+        });
+        r.apply(state(1, true, false));
+        r.apply(ToplevelEvent::OutputEnter {
+            id: ToplevelId(1),
+            name: "DP-1".into(),
+        });
+        r.end_batch();
+        r.apply(ToplevelEvent::OutputGone("DP-9".into()));
+        assert_eq!(r.end_batch(), None);
     }
 
     #[test]

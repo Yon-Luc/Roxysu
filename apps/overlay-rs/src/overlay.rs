@@ -122,10 +122,20 @@ impl OverlayHost {
         {
             let mapped = Rc::clone(&mapped);
             let click_method = Rc::clone(&click_method);
+            let surface_log_handlers = Rc::new(RefCell::new(SurfaceLogHandlers::default()));
             let window_weak = window.downgrade();
             window.connect_map(move |_| {
                 *mapped.borrow_mut() = true;
                 if let Some(window) = window_weak.upgrade() {
+                    // D1 diagnosis: the negotiated surface size at the
+                    // moment of mapping; the pin and layout logs carry the
+                    // monitor and configure sides of the contract.
+                    info!(
+                        size = %format!("{}x{}", window.width(), window.height()),
+                        scale = window.scale_factor(),
+                        "overlay surface mapped"
+                    );
+                    wire_surface_logs(&window, &surface_log_handlers);
                     match apply_click_through(&window) {
                         Ok(method) => {
                             info!(?method, "click-through applied on map");
@@ -142,6 +152,12 @@ impl OverlayHost {
                 *mapped.borrow_mut() = false;
             });
         }
+
+        // D1 diagnosis (logging only, no behaviour change): the widget-level
+        // scale factor, and per-surface logs wired on every map below.
+        window.connect_scale_factor_notify(|window| {
+            info!(scale = window.scale_factor(), "window scale factor changed");
+        });
 
         let gate = Rc::new(PageGate {
             window: window.clone(),
@@ -277,6 +293,7 @@ impl OverlayHost {
         let gate = Rc::clone(&self.gate);
         let lock_output = self.config.output.is_some();
         let pinned = Rc::new(RefCell::new(None::<String>));
+        let mapped = Rc::clone(&self.mapped);
 
         glib::spawn_future_local(async move {
             while let Ok(cmd) = rx.recv().await {
@@ -286,7 +303,7 @@ impl OverlayHost {
                         hide_epoch.set(hide_epoch.get().wrapping_add(1));
                         if !lock_output {
                             if let Some(hint) = output.as_ref() {
-                                pin_overlay(&window, hint, &pinned);
+                                pin_overlay(&window, hint, &pinned, *mapped.borrow());
                             }
                         }
                         let was_shown = *last.borrow() == Some(true);
@@ -409,6 +426,8 @@ fn wire_reload(webview: &WebView, url: &str, gate: Rc<PageGate>) {
         webview.connect_web_process_terminated(move |_, reason| {
             warn!(
                 ?reason,
+                shown = *gate.shown.borrow(),
+                window_visible = gate.window.is_visible(),
                 "webkit: web process terminated (crash/kill; distinct from HUD load-fail)"
             );
             on_navigation_started(&gate);
@@ -537,9 +556,69 @@ fn sync_gate(gate: &Rc<PageGate>) {
     }
 }
 
+/// D1 diagnosis (logging only, no behaviour change).
+///
+/// The layer-shell configure reaches GTK as `GdkSurface::layout`, and a
+/// monitor move as `enter-monitor` / `leave-monitor`. GTK may hand the
+/// window a fresh surface across map cycles, so re-wire on every map and
+/// drop the previous handlers first.
+#[derive(Default)]
+struct SurfaceLogHandlers {
+    layout: Option<glib::SignalHandlerId>,
+    enter_monitor: Option<glib::SignalHandlerId>,
+    leave_monitor: Option<glib::SignalHandlerId>,
+}
+
+fn wire_surface_logs(window: &ApplicationWindow, handlers: &RefCell<SurfaceLogHandlers>) {
+    let Some(surface) = gtk4::prelude::NativeExt::surface(window) else {
+        return;
+    };
+    let mut slot = handlers.borrow_mut();
+    if let Some(id) = slot.layout.take() {
+        surface.disconnect(id);
+    }
+    slot.layout = Some(surface.connect_layout(|_, width, height| {
+        info!(width, height, "surface layout (layer-shell configure)");
+    }));
+    if let Some(id) = slot.enter_monitor.take() {
+        surface.disconnect(id);
+    }
+    slot.enter_monitor = Some(surface.connect_enter_monitor(|_, monitor| {
+        info!(monitor = %monitor_label(&monitor), "surface entered monitor");
+    }));
+    if let Some(id) = slot.leave_monitor.take() {
+        surface.disconnect(id);
+    }
+    slot.leave_monitor = Some(surface.connect_leave_monitor(|_, monitor| {
+        info!(monitor = %monitor_label(&monitor), "surface left monitor");
+    }));
+}
+
+/// Connector / model / geometry / scale for the surface monitor logs.
+fn monitor_label(monitor: &gdk4::Monitor) -> String {
+    let geometry = monitor.geometry();
+    format!(
+        "connector='{}' model='{}' {}x{}+{}+{} scale={}",
+        monitor.connector().unwrap_or_default(),
+        monitor.model().unwrap_or_default(),
+        geometry.width(),
+        geometry.height(),
+        geometry.x(),
+        geometry.y(),
+        monitor.scale()
+    )
+}
+
 /// Explicit `--output` wins. Otherwise pin to the matched window, and skip
 /// a repeat `set_monitor` so KWin does not recreate the layer surface.
-fn pin_overlay(window: &ApplicationWindow, hint: &OutputHint, pinned: &RefCell<Option<String>>) {
+/// Logging only: the before/after pin record (including whether the
+/// surface is already mapped) is the D1 diagnosis for surface recreates.
+fn pin_overlay(
+    window: &ApplicationWindow,
+    hint: &OutputHint,
+    pinned: &RefCell<Option<String>>,
+    mapped: bool,
+) {
     let display = gtk4::prelude::WidgetExt::display(window);
     let Some(monitor) = monitor_for_hint(&display, hint) else {
         warn!(?hint, "osu! output not found among Gdk monitors");
@@ -549,9 +628,24 @@ fn pin_overlay(window: &ApplicationWindow, hint: &OutputHint, pinned: &RefCell<O
     if pinned.borrow().as_deref() == Some(key.as_str()) {
         return;
     }
+    let from = pinned.borrow().clone();
+    let geometry = monitor.geometry();
     window.set_monitor(Some(&monitor));
     *pinned.borrow_mut() = Some(key.clone());
-    info!(output = %key, "pinned overlay to osu! output");
+    info!(
+        output = %key,
+        from = ?from,
+        mapped,
+        monitor_geometry = %format!(
+            "{}x{}+{}+{}",
+            geometry.width(),
+            geometry.height(),
+            geometry.x(),
+            geometry.y()
+        ),
+        monitor_scale = monitor.scale(),
+        "pinned overlay to osu! output"
+    );
 }
 
 fn monitor_for_hint(display: &gdk4::Display, hint: &OutputHint) -> Option<gdk4::Monitor> {

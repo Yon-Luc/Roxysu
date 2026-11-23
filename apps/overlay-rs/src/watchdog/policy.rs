@@ -2,11 +2,19 @@
 //!
 //! Age is optional (`max_age_sec = None`). Prefer a user-level service
 //! `Restart=` policy over relying on the age cap for normal operation.
+//!
+//! D-NEW-1: `max_stall_sec` catches a host whose GTK main loop stopped
+//! turning (a visually dead HUD that is still a live process). It is the
+//! main-loop heartbeat age, not a frame counter, so a hidden overlay or an
+//! unfocused osu! never looks stalled.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Thresholds {
     /// `None` disables the age check (preferred for long soaks / systemd Restart).
     pub max_age_sec: Option<u64>,
+    /// Main-loop heartbeat age that counts as a stall (D-NEW-1). `None`
+    /// disables the check.
+    pub max_stall_sec: Option<u64>,
     pub max_fds: u64,
     /// Descendant-only tree RSS in MiB (C-compatible; host excluded).
     pub max_rss_mb: u64,
@@ -19,6 +27,9 @@ pub struct Thresholds {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Measurement {
     pub age_sec: u64,
+    /// Seconds since the GTK main loop last beat (`None` = no heartbeat
+    /// wired, e.g. a unit test or a host without a main loop yet).
+    pub main_loop_stall_sec: Option<u64>,
     /// Max open FDs among host descendants (not the host).
     pub max_descendant_fds: u64,
     pub descendant_rss_mb: u64,
@@ -29,6 +40,7 @@ pub struct Measurement {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BreachReason {
+    MainLoopStall,
     MaxAge,
     DescendantFdCap,
     DescendantRssCap,
@@ -38,6 +50,7 @@ pub enum BreachReason {
 impl BreachReason {
     pub fn as_str(self) -> &'static str {
         match self {
+            Self::MainLoopStall => "main loop stall",
             Self::MaxAge => "max age",
             Self::DescendantFdCap => "descendant fd cap",
             Self::DescendantRssCap => "descendant rss cap",
@@ -48,6 +61,13 @@ impl BreachReason {
 
 /// Evaluate one sample. Does not apply consecutive-sample hysteresis.
 pub fn evaluate(m: &Measurement, t: &Thresholds) -> Option<BreachReason> {
+    // A wedged main loop is the most acute failure: nothing else the host
+    // does (focus, reload, WebView recreate) can run until it turns again.
+    if let (Some(cap), Some(stall)) = (t.max_stall_sec, m.main_loop_stall_sec) {
+        if stall > cap {
+            return Some(BreachReason::MainLoopStall);
+        }
+    }
     if let Some(cap) = t.max_age_sec {
         if m.age_sec > cap {
             return Some(BreachReason::MaxAge);
@@ -117,6 +137,7 @@ mod tests {
     fn thr() -> Thresholds {
         Thresholds {
             max_age_sec: Some(1800),
+            max_stall_sec: Some(30),
             max_fds: 450,
             max_rss_mb: 4200,
             max_cgroup_mb: None,
@@ -127,6 +148,7 @@ mod tests {
     fn ok_meas() -> Measurement {
         Measurement {
             age_sec: 60,
+            main_loop_stall_sec: Some(1),
             max_descendant_fds: 40,
             descendant_rss_mb: 800,
             tree_rss_mb: 850,
@@ -166,6 +188,32 @@ mod tests {
         m.max_descendant_fds = 10;
         m.descendant_rss_mb = 5000;
         assert_eq!(evaluate(&m, &thr()), Some(BreachReason::DescendantRssCap));
+    }
+
+    #[test]
+    fn main_loop_stall_breach_wins() {
+        let mut m = ok_meas();
+        m.main_loop_stall_sec = Some(31);
+        m.age_sec = 2000;
+        assert_eq!(evaluate(&m, &thr()), Some(BreachReason::MainLoopStall));
+    }
+
+    #[test]
+    fn main_loop_stall_at_cap_is_ok() {
+        let mut m = ok_meas();
+        m.main_loop_stall_sec = Some(30);
+        assert_eq!(evaluate(&m, &thr()), None);
+    }
+
+    #[test]
+    fn main_loop_stall_disabled_or_unwired() {
+        let mut t = thr();
+        t.max_stall_sec = None;
+        let mut m = ok_meas();
+        m.main_loop_stall_sec = Some(10_000);
+        assert_eq!(evaluate(&m, &t), None);
+        m.main_loop_stall_sec = None;
+        assert_eq!(evaluate(&m, &thr()), None);
     }
 
     #[test]

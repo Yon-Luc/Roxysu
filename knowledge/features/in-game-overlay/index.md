@@ -88,7 +88,13 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
 8. **Self-heal**: `web-process-terminated` recreates the `WebView` (fresh widget and content manager, then reload) after the reload delay, because `load_uri` on the poisoned widget kept its renderer/DMA-BUF state; `load-failed`
    (HUD/server) retries at 3 s / 15 s after >5 failures via a **single-slot**
    reload state machine (no stacked timers). Distinct log lines for load-fail
-   vs web-process crash. `--webkit-no-dmabuf` / `--gsk-renderer` remain for
+   vs web-process crash. **Hang probe** (D-NEW-1): every 5 s the host pings
+   the web process with a trivial `evaluate_javascript`; a ping unanswered
+   for 20 s terminates the process, which runs the same recreate path (a
+   hung renderer is not a crash and used to leave a frozen HUD; WebKit's own
+   responsiveness check only runs around input, which this click-through
+   surface never gets). The script runs on the web process main thread, not
+   on a frame callback, so an unmapped HUD still answers. `--webkit-no-dmabuf` / `--gsk-renderer` remain for
    A/B when rendering stalls.
 9. Visibility is a hard map/unmap of the layer surface (soft opacity-only hide
    failed historically on Wayland + WebKit). The surface stays unmapped until
@@ -114,8 +120,11 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
     values. Electron passes `--url=http://…?bg=clear` and a long
     `--watchdog-max-age-sec` backstop (default 21600 s; `ROXYSU_OVERLAY_MAX_AGE_SEC`
     overrides, `0` disables). `--width`/`--height` are optional: omitted, the
-    surface request follows the pinned output's geometry (fallback 1280×720
-    before a monitor is known) and is clamped to the output.
+    surface request follows the pinned output's geometry minus the anchored
+    `--margin` (fallback 1280×720 before a monitor is known). The surface is
+    anchored to one corner, so the compositor uses that size as-is; explicit
+    sizes are clamped to the same area on every pin, including a repin to a
+    smaller monitor.
 14. **Host settings**: `overlay.host_url`, enable toggle `overlay.host_enabled`,
     optional monitor `overlay.host_output` (connector or model), and a
     monotonic restart nonce `overlay.host_restart` written by the settings
@@ -144,7 +153,14 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
     backstop (default 21600 s = 6 h) instead of the old `0`: the binary
     default (1800s) plus desktop respawn was a clockwork HUD refresh over the
     playfield, while a fully disabled cap let a slow leak run for days. FD and
-    RSS caps still recover a leak sooner.
+    RSS caps still recover a leak sooner. **Main-loop stall** (D-NEW-1): the
+    GTK main loop stamps a heartbeat every 1 s (`watchdog/heartbeat.rs`); a
+    stamp older than `--watchdog-max-stall-sec` (default 30, `0` disables,
+    minimum 5) is a breach sample, so a wedged host exits 75 after ~70 s with
+    the default 20 s scan × 3 samples and the desktop liveness respawn brings
+    it back. Timeouts keep running while the surface is unmapped, so a hidden
+    HUD (osu! unfocused) never counts as stalled; the monotonic clock skips
+    system suspend.
     Observation-only telemetry via `--telemetry-interval-sec` /
     `--telemetry-csv`.
 16. **Surface-contract logs** (info level, always on): surface size and
@@ -204,7 +220,7 @@ Launch paths:
 - `apps/overlay-rs/src/overlay.rs` — window / WebKit / focus wiring
 - `apps/overlay-rs/src/focus/` — match policy, reducer, wlr + Plasma backends, `.desktop` grant
 - `apps/overlay-rs/src/reload.rs` — single-slot reload SM
-- `apps/overlay-rs/src/watchdog/` — resource policy + exit 75
+- `apps/overlay-rs/src/watchdog/` — resource + main-loop stall policy, heartbeat, exit 75
 - `nix/overlay-rs.nix` — derivation (`nix build .#roxysu-overlay`)
 - `apps/server/public/features/overlay/OverlayPage.tsx` — rendered HUD page
 - `apps/server/src/routes/overlay.ts` — `/api/overlay`

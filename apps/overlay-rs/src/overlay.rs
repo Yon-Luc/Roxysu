@@ -33,6 +33,16 @@ const REPIN_DELAY: Duration = Duration::from_millis(30);
 const REVEAL_DELAY: Duration = Duration::from_millis(50);
 /// If the page never posts ready (script error), still show the HUD.
 const READY_FALLBACK: Duration = Duration::from_millis(1500);
+/// D-NEW-1: the host pings the web process with a trivial script this often.
+/// `evaluate_javascript` runs on the web process main thread, not on a
+/// frame callback, so it is answered while the surface is unmapped too: a
+/// hidden HUD (osu! unfocused) is never mistaken for a hang.
+const WEB_PROBE_INTERVAL: Duration = Duration::from_secs(5);
+/// A ping with no reply for this long means the web process is hung (not
+/// crashed: a crash already fires `web-process-terminated`). The host then
+/// terminates it, which runs the normal D1 WebView recreate. The margin
+/// covers a long but finite script tick.
+const WEB_PROBE_TIMEOUT: Duration = Duration::from_secs(20);
 
 const PAGE_READY_JS: &str = r#"(function(){
   try {
@@ -342,7 +352,7 @@ impl OverlayHost {
         let lock_output = self.config.output.is_some();
         let pinned = Rc::new(RefCell::new(None::<String>));
         let mapped = Rc::clone(&self.mapped);
-        let size_override = (self.config.width, self.config.height);
+        let size_request = self.config.size_request();
 
         glib::spawn_future_local(async move {
             while let Some(cmd) = rx.recv().await {
@@ -374,7 +384,7 @@ impl OverlayHost {
                                                 show_epoch,
                                                 monitor,
                                                 key,
-                                                size_override,
+                                                size_request,
                                             );
                                             *last.borrow_mut() = Some(true);
                                             continue;
@@ -384,7 +394,7 @@ impl OverlayHost {
                                             &monitor,
                                             &key,
                                             &pinned,
-                                            size_override,
+                                            size_request,
                                             *mapped.borrow(),
                                         );
                                     }
@@ -593,6 +603,8 @@ fn wire_reload(webview: &WebView, host: &Rc<WebViewHost>) {
         });
     }
 
+    wire_hang_probe(webview);
+
     {
         let machine = Rc::clone(&machine);
         let url = host.url.clone();
@@ -613,6 +625,45 @@ fn wire_reload(webview: &WebView, host: &Rc<WebViewHost>) {
             );
         });
     }
+}
+
+/// D-NEW-1: a hung (not crashed) web process leaves a frozen HUD that no
+/// WebKit signal reports, because WebKit only checks responsiveness around
+/// input, and this surface is click-through. Ping it with a trivial script;
+/// if a ping stays unanswered for [`WEB_PROBE_TIMEOUT`], terminate the
+/// process so `web-process-terminated` recreates the view. The timer holds
+/// only a weak reference and stops once this WebView is replaced.
+fn wire_hang_probe(webview: &WebView) {
+    let outstanding: Rc<Cell<Option<Instant>>> = Rc::new(Cell::new(None));
+    let webview_weak = webview.downgrade();
+    glib::timeout_add_local(WEB_PROBE_INTERVAL, move || {
+        let Some(webview) = webview_weak.upgrade() else {
+            return glib::ControlFlow::Break;
+        };
+        if let Some(sent) = outstanding.get() {
+            if sent.elapsed() >= WEB_PROBE_TIMEOUT {
+                warn!(
+                    unanswered_ms = sent.elapsed().as_millis() as u64,
+                    "webkit: web process did not answer a ping; terminating it to recreate the view"
+                );
+                outstanding.set(None);
+                webview.terminate_web_process();
+            }
+            return glib::ControlFlow::Continue;
+        }
+        outstanding.set(Some(Instant::now()));
+        let reply = Rc::clone(&outstanding);
+        // Any reply counts, including an error (e.g. mid-navigation): only
+        // silence means the process is stuck.
+        webview.evaluate_javascript(
+            "0",
+            None,
+            Some("roxysu-overlay-probe"),
+            None::<&gio::Cancellable>,
+            move |_| reply.set(None),
+        );
+        glib::ControlFlow::Continue
+    });
 }
 
 fn schedule_reload(
@@ -838,7 +889,7 @@ fn apply_pin(
     monitor: &gdk4::Monitor,
     key: &str,
     pinned: &RefCell<Option<String>>,
-    size_override: (Option<i32>, Option<i32>),
+    size_request: crate::config::SizeRequest,
     mapped: bool,
 ) {
     let from = pinned.borrow().clone();
@@ -859,7 +910,7 @@ fn apply_pin(
         monitor_scale = monitor.scale(),
         "pinned overlay to osu! output"
     );
-    size_to_monitor(window, monitor, size_override);
+    size_to_monitor(window, monitor, size_request);
 }
 
 /// D1(b): an output change on a live surface becomes unmap → `set_monitor`
@@ -875,7 +926,7 @@ fn unmap_then_repin(
     show_epoch: u64,
     monitor: gdk4::Monitor,
     key: String,
-    size_override: (Option<i32>, Option<i32>),
+    size_request: crate::config::SizeRequest,
 ) {
     info!(output = %key, "unmapping overlay before repinning to a new output");
     gate.wants_visible.set(false);
@@ -888,7 +939,7 @@ fn unmap_then_repin(
         if epoch.get() != show_epoch {
             return; // a newer Show/Hide superseded this move
         }
-        apply_pin(&gate.window, &monitor, &key, &pinned, size_override, false);
+        apply_pin(&gate.window, &monitor, &key, &pinned, size_request, false);
         gate.wants_visible.set(true);
         sync_gate(&gate);
     });
@@ -899,23 +950,18 @@ fn monitor_size(monitor: &gdk4::Monitor) -> (i32, i32) {
     (geometry.width(), geometry.height())
 }
 
-/// Size the layer-surface request to the pinned monitor when no explicit
-/// `--width`/`--height` was given (L2). All four edges are anchored, so the
-/// compositor's configure remains authoritative; this only sets the size the
-/// surface starts from, clamped so it can never exceed the output.
+/// Size the layer-surface request to the pinned monitor (L2). The surface is
+/// anchored to a single corner, so the compositor uses this size as-is; it
+/// is computed from the output minus the anchored margin, and an explicit
+/// `--width`/`--height` is clamped to the same area, so a repin onto a
+/// smaller monitor can never leave a surface larger than its output (D1).
+/// Called while the surface is unmapped; the next map uses it.
 fn size_to_monitor(
     window: &ApplicationWindow,
     monitor: &gdk4::Monitor,
-    size_override: (Option<i32>, Option<i32>),
+    size_request: crate::config::SizeRequest,
 ) {
-    if size_override.0.is_some() && size_override.1.is_some() {
-        return;
-    }
-    let (width, height) = crate::config::compute_surface_size(
-        Some(monitor_size(monitor)),
-        size_override.0,
-        size_override.1,
-    );
+    let (width, height) = size_request.for_output(Some(monitor_size(monitor)));
     window.set_default_size(width, height);
     info!(width, height, "sized overlay request to the pinned output");
 }

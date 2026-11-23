@@ -151,9 +151,24 @@ fn run_app(
     }
 
     if config.watchdog {
+        let thresholds = config.watchdog_thresholds();
+        // D-NEW-1: stamp from the GTK main loop so the watchdog thread can
+        // tell a wedged host (visually dead, still alive) from a healthy one.
+        // Timeouts keep running while the overlay is unmapped, so a hidden
+        // HUD is never mistaken for a hang.
+        let heartbeat = thresholds.max_stall_sec.map(|_| {
+            let heartbeat = watchdog::Heartbeat::new();
+            let beat = heartbeat.clone();
+            glib::timeout_add_local(watchdog::HEARTBEAT_PERIOD, move || {
+                beat.beat();
+                glib::ControlFlow::Continue
+            });
+            heartbeat
+        });
         *watchdog_h.borrow_mut() = Some(watchdog::start(
             config.watchdog_interval_sec,
-            config.watchdog_thresholds(),
+            thresholds,
+            heartbeat,
         ));
     }
 

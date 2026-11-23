@@ -1,5 +1,6 @@
 const { app, BrowserWindow, Menu, dialog, ipcMain, screen, shell, clipboard, nativeImage } = require("electron");
 const { spawn } = require("node:child_process");
+const { EventEmitter } = require("node:events");
 const { randomUUID } = require("node:crypto");
 const path = require("node:path");
 const http = require("node:http");
@@ -34,6 +35,7 @@ const {
   readCappedBody,
 } = require("./overlaySettings");
 const { parseOverlayHostUrl, parseOverlayOutput } = require("./overlayUrlGuard");
+const { overlayEnv } = require("./overlayEnv");
 const { appOrigin, isAppUrl, canOpenExternal, senderIsApp, redactUrlForLog } = require("./urlPolicy");
 const { splashLang, splashStatus } = require("./splashLocale");
 const { toImageBuffer } = require("./clipboardImage");
@@ -336,6 +338,21 @@ function resolveTsx(repoRoot, serverDir, realmDir) {
  * @param {string[]} [nodeArgs] optional Node CLI args prepended to the entry
  */
 function spawnNodeEntry(paths, entry, cwd, extraEnv, label, nodeArgs = []) {
+  if (cwd && !fs.existsSync(cwd)) {
+    // A missing cwd makes Node report `spawn …/electron ENOENT`, which looks
+    // like the runtime binary is gone. Say what is actually missing (DD-23).
+    desktopLog(`cwd missing: ${cwd}`);
+    const stub = new EventEmitter();
+    stub.stdin = null;
+    stub.exitCode = null;
+    stub.signalCode = null;
+    process.nextTick(() => {
+      stub.exitCode = 1;
+      stub.emit("error", new Error(`cwd missing: ${cwd}`));
+      stub.emit("exit", 1, null);
+    });
+    return stub;
+  }
   const env = { ...process.env, ...extraEnv };
   // Nix wrappers put Chromium libs on LD_LIBRARY_PATH. Node and its .node
   // addons must see only libstdc++, zlib, openssl, and icu. Unset on dev
@@ -1312,6 +1329,7 @@ function spawnOverlayHost(paths, urlArg, output) {
   // The FD and RSS caps still exit 75 so a real leak recovers; the age cap is
   // now a long backstop (D-NEW-1) instead of off forever.
   overlayChild = withLifeline(spawn(bin, args, {
+    env: overlayEnv(process.env),
     stdio: ["pipe", fd, fd],
     windowsHide: true,
     shell: false,
@@ -1717,10 +1735,13 @@ if (!gotLock) {
   app.quit();
 } else {
   app.on("second-instance", () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-    }
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    // Wayland and Plasma often ignore focus alone. show + flashFrame at
+    // least flags the existing window (DD-20). userData is not moved.
+    mainWindow.show();
+    mainWindow.focus();
+    mainWindow.flashFrame(true);
   });
 
   // Stable Windows taskbar grouping / icon association.

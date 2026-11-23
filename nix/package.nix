@@ -355,6 +355,7 @@ in
          apps/desktop/overlayApplyLoop.js \
          apps/desktop/overlaySettings.js \
          apps/desktop/overlayUrlGuard.js \
+         apps/desktop/overlayEnv.js \
          apps/desktop/urlPolicy.js \
          apps/desktop/stopChild.js \
          apps/desktop/waitForServer.js \

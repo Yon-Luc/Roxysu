@@ -101,6 +101,7 @@ const appFiles = [
   "overlayApplyLoop.js",
   "overlaySettings.js",
   "overlayUrlGuard.js",
+  "overlayEnv.js",
   "urlPolicy.js",
   "stopChild.js",
   "waitForServer.js",

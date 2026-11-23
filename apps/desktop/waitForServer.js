@@ -139,4 +139,56 @@ function waitForServer(port, host, timeoutMs = 180_000, options = {}) {
   });
 }
 
-module.exports = { isOwnHealthPayload, waitForServer };
+/**
+ * One healthz probe to say who holds the port when our own server failed
+ * (DD-3 dialog wording). Never throws.
+ * @param {number} port
+ * @param {string} host
+ * @param {{ expectInstance?: string | null, timeoutMs?: number }} [options]
+ * @returns {Promise<{ kind: "none" } | { kind: "roxysu", pid: number | null } | { kind: "other" } | { kind: "self" }>}
+ */
+function probePortOwner(port, host, options = {}) {
+  const timeoutMs = options.timeoutMs ?? 1500;
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (value) => {
+      if (done) return;
+      done = true;
+      resolve(value);
+    };
+    const req = http.get(
+      { host, port, path: "/api/system/healthz", timeout: timeoutMs },
+      (res) => {
+        let text = "";
+        res.setEncoding("utf8");
+        res.on("data", (chunk) => {
+          text += chunk;
+          if (text.length > 4096) res.destroy();
+        });
+        res.on("close", () => {
+          try {
+            const body = JSON.parse(text);
+            if (body && body.ok === true && body.service === "roxysu-server") {
+              if (options.expectInstance != null && body.instance === options.expectInstance) {
+                finish({ kind: "self" });
+                return;
+              }
+              finish({ kind: "roxysu", pid: Number.isInteger(body.pid) ? body.pid : null });
+              return;
+            }
+          } catch {
+            // not a Roxysu payload
+          }
+          finish({ kind: "other" });
+        });
+      },
+    );
+    req.on("error", () => finish({ kind: "none" }));
+    req.on("timeout", () => {
+      req.destroy();
+      finish({ kind: "other" });
+    });
+  });
+}
+
+module.exports = { isOwnHealthPayload, probePortOwner, waitForServer };

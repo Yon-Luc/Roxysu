@@ -50,6 +50,7 @@
       "stopChild.js",
       "waitForServer.js",
       "logRotation.js",
+      "fatalReport.js",
       "splash.html"
     ],
     "extraResources": [

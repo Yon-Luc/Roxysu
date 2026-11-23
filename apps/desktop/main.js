@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain, shell, clipboard, nativeImage } = require("electron");
+const { app, BrowserWindow, Menu, dialog, ipcMain, shell, clipboard, nativeImage } = require("electron");
 const { spawn } = require("node:child_process");
 const { randomUUID } = require("node:crypto");
 const path = require("node:path");
@@ -17,7 +17,8 @@ const {
 const { parseOverlayHostUrl, parseOverlayOutput } = require("./overlayUrlGuard");
 const { appOrigin, isAppUrl, canOpenExternal, senderIsApp } = require("./urlPolicy");
 const { stopChild: stopChildProcess } = require("./stopChild");
-const { waitForServer } = require("./waitForServer");
+const { probePortOwner, waitForServer } = require("./waitForServer");
+const { FATAL_LOG_TAIL_BYTES, buildFatalReport } = require("./fatalReport");
 const { DEFAULT_MAX_LOG_BYTES, fileSizeOrZero, rotateIfLarger, shouldRotate } = require("./logRotation");
 
 // Stable userData folder: %APPDATA%\Roxysu (Windows) / XDG or Application Support.
@@ -650,7 +651,7 @@ function spawnServer(paths, sharedEnv) {
     // DD-2: a server that cannot bind its port never will — respawning only
     // loops (and used to adopt whatever else answered healthz). Fail now.
     if (classifyServerExit(code) === "addr-in-use") {
-      void serverFatal("port-in-use");
+      void failFatal("port-in-use");
       return;
     }
     // Read the health stamp *before* clearing it: the policy must see how long
@@ -692,7 +693,7 @@ function scheduleServerRespawn(paths, sharedEnv) {
     desktopLog(
       `server respawn giving up after ${decision.failures - 1} consecutive short-lived runs — restart Roxysu to retry`,
     );
-    void serverFatal("respawn-exhausted");
+    void failFatal("respawn-exhausted");
     return;
   }
   desktopLog(`server respawn #${decision.failures} in ${decision.delayMs}ms`);
@@ -705,19 +706,87 @@ function scheduleServerRespawn(paths, sharedEnv) {
 }
 
 /**
- * End the session after an unrecoverable server failure.
- * @param {"port-in-use" | "respawn-exhausted"} reason
+ * Last bytes of a log file, or "" when missing. Never throws.
+ * @param {string} logPath
  */
-async function serverFatal(reason) {
-  if (shuttingDown) return;
-  desktopLog(`server fatal: ${reason}`);
-  await setSplashStatus(
-    reason === "port-in-use"
-      ? `Port ${PORT} is already in use — see logs`
-      : "Server stopped — see logs",
-    { animateDots: false },
-  );
-  await shutdown();
+function readLogTail(logPath) {
+  try {
+    const fd = fs.openSync(logPath, "r");
+    try {
+      const size = fs.fstatSync(fd).size;
+      const length = Math.min(size, FATAL_LOG_TAIL_BYTES);
+      const buf = Buffer.alloc(length);
+      fs.readSync(fd, buf, 0, length, size - length);
+      return buf.toString("utf8");
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return "";
+  }
+}
+
+let fatalShown = false;
+
+/**
+ * End the session after an unrecoverable failure (DD-3). Shows a dialog with
+ * the reason, who holds the port, the last server.log lines and the logs
+ * path, with Open logs folder / Retry / Quit — instead of a splash message
+ * that disappeared with the window a few milliseconds later.
+ * @param {import("./fatalReport").FatalReason} reason
+ * @param {{ error?: string }} [extra]
+ */
+async function failFatal(reason, extra = {}) {
+  if (fatalShown) return;
+  fatalShown = true;
+  desktopLog(`fatal: ${reason}${extra.error ? ` — ${extra.error}` : ""}`);
+  const logsDir = path.join(earlyDataDir(), "logs");
+  /** @type {import("./fatalReport").PortOwner | null} */
+  let portOwner = null;
+  if (reason === "port-in-use" || reason === "health-timeout" || reason === "respawn-exhausted") {
+    const owner = await probePortOwner(PORT, HOST, { expectInstance: INSTANCE_TOKEN });
+    if (owner.kind === "roxysu" || owner.kind === "other") portOwner = owner;
+  }
+  const { message, detail } = buildFatalReport({
+    reason,
+    port: PORT,
+    portOwner,
+    logTail: readLogTail(path.join(logsDir, "server.log")),
+    logsDir,
+    error: extra.error,
+  });
+  await setSplashStatus(message, { animateDots: false });
+  desktopLog(`fatal dialog: ${message}${portOwner ? ` owner=${JSON.stringify(portOwner)}` : ""}`);
+  let response = 2;
+  try {
+    const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+    const options = {
+      type: /** @type {const} */ ("error"),
+      title: "Roxysu",
+      message,
+      detail,
+      buttons: ["Open logs folder", "Retry", "Quit"],
+      defaultId: 2,
+      cancelId: 2,
+      noLink: true,
+    };
+    ({ response } = parent
+      ? await dialog.showMessageBox(parent, options)
+      : await dialog.showMessageBox(options));
+  } catch (err) {
+    desktopLog(`fatal dialog failed: ${err}`);
+  }
+  desktopLog(`fatal dialog answer=${["open-logs", "retry", "quit"][response] ?? response}`);
+  if (response === 0) {
+    const openErr = await shell.openPath(logsDir);
+    if (openErr) desktopLog(`open logs folder failed: ${openErr}`);
+  }
+  try {
+    await shutdown();
+  } catch (err) {
+    desktopLog(`shutdown failed: ${err}`);
+  }
+  if (response === 1) app.relaunch();
   app.exit(1);
 }
 
@@ -1201,7 +1270,10 @@ if (!gotLock) {
         `missing UI build at ${paths.staticDir}` +
           (paths.isPackaged ? "" : " — run: bun run --cwd apps/server build:ui"),
       );
-      app.exit(1);
+      await failFatal("ui-missing", {
+        error: `missing ${path.join(paths.staticDir, "index.html")}` +
+          (paths.isPackaged ? "" : " — run: bun run --cwd apps/server build:ui"),
+      });
       return;
     }
 
@@ -1265,9 +1337,7 @@ if (!gotLock) {
       if (shuttingDown) return;
       desktopLog(`waitForServer failed: ${err}`);
       desktopLog(`see logs under ${path.join(paths.dataDir, "logs")}`);
-      await setSplashStatus("Failed to start — see logs", { animateDots: false });
-      await shutdown();
-      app.exit(1);
+      await failFatal("health-timeout", { error: String(err?.message ?? err) });
       return;
     }
     if (shuttingDown) return;
@@ -1282,9 +1352,7 @@ if (!gotLock) {
     } catch (err) {
       if (shuttingDown) return;
       desktopLog(`loadAppIntoWindow failed: ${err}`);
-      await setSplashStatus("Failed to open Home — see logs", { animateDots: false });
-      await shutdown();
-      app.exit(1);
+      await failFatal("load-failed", { error: String(err?.message ?? err) });
       return;
     }
     if (shuttingDown) return;

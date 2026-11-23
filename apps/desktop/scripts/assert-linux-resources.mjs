@@ -53,6 +53,7 @@ try {
     "stopChild.js",
     "waitForServer.js",
     "logRotation.js",
+    "fatalReport.js",
     "package.json",
     "resources/splash.html",
     "resources/public/index.html",

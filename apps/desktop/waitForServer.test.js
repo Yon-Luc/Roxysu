@@ -3,7 +3,7 @@ import http from "node:http";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { isOwnHealthPayload, waitForServer } = require("./waitForServer.js");
+const { isOwnHealthPayload, probePortOwner, waitForServer } = require("./waitForServer.js");
 
 /**
  * @param {(req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse) => void} onRequest
@@ -203,5 +203,38 @@ describe("isOwnHealthPayload", () => {
     expect(isOwnHealthPayload(null, null)).toBe(false);
     expect(isOwnHealthPayload("ok", null)).toBe(false);
     expect(isOwnHealthPayload({ ok: true, service: "other", instance: "mine" }, "mine")).toBe(false);
+  });
+});
+
+describe("probePortOwner (DD-3)", () => {
+  test("a Roxysu server from another launch reports its pid", async () => {
+    const { server, port } = await listen((_req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: true, service: "roxysu-server", instance: "old", pid: 4242 }));
+    });
+    try {
+      expect(await probePortOwner(port, "127.0.0.1", { expectInstance: "new" })).toEqual({ kind: "roxysu", pid: 4242 });
+      expect(await probePortOwner(port, "127.0.0.1", { expectInstance: "old" })).toEqual({ kind: "self" });
+    } finally {
+      await close(server);
+    }
+  });
+
+  test("any other HTTP answer is a foreign program", async () => {
+    const { server, port } = await listen((_req, res) => {
+      res.writeHead(404);
+      res.end("<h1>nope</h1>");
+    });
+    try {
+      expect(await probePortOwner(port, "127.0.0.1")).toEqual({ kind: "other" });
+    } finally {
+      await close(server);
+    }
+  });
+
+  test("nothing listening", async () => {
+    const { server, port } = await listen(() => {});
+    await close(server);
+    expect(await probePortOwner(port, "127.0.0.1")).toEqual({ kind: "none" });
   });
 });

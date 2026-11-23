@@ -5,6 +5,7 @@ mod click_through;
 mod config;
 mod diagnostics;
 mod focus;
+mod lifecycle;
 mod overlay;
 mod present;
 mod reload;
@@ -35,6 +36,15 @@ fn main() -> Result<()> {
 
     // W7 must be set before GTK/WebKit initialize.
     config.apply_process_env();
+
+    // DD-1: the desktop shell passes a stdin pipe; EOF means it is gone, so
+    // take the layer surface down with it instead of lingering as an orphan.
+    if config.exit_on_stdin_eof {
+        lifecycle::watch_stdin_eof(std::io::stdin(), || {
+            eprintln!("roxysu-overlay-rs: parent closed stdin — exiting");
+            std::process::exit(0);
+        });
+    }
 
     let filter = if config.debug {
         EnvFilter::from_default_env().add_directive("debug".parse()?)
@@ -83,7 +93,9 @@ fn main() -> Result<()> {
 
         if let Err(err) = run_app(app, config.clone(), &sampler, &watchdog_h, &focus_h) {
             eprintln!("roxysu-overlay-rs: {err:#}");
-            std::process::exit(1);
+            // 78 = this session can never host the overlay (DD-10); the
+            // desktop parks the host instead of respawning it.
+            std::process::exit(lifecycle::exit_code_for(&err));
         }
     });
 
@@ -104,18 +116,19 @@ fn run_app(
 ) -> Result<()> {
     if std::env::var_os("WAYLAND_DISPLAY").is_none() && std::env::var_os("WAYLAND_SOCKET").is_none()
     {
-        bail!(
+        return Err(anyhow::Error::new(lifecycle::Unsupported(format!(
             "no Wayland display detected.\n\
              This host is wlroots-Wayland only; on X11 use the HUD as an OBS browser source:\n  {}",
             config.url
-        );
+        ))));
     }
 
     if !layer_shell_supported() {
-        bail!(
+        return Err(anyhow::Error::new(lifecycle::Unsupported(
             "compositor does not support zwlr_layer_shell_v1.\n\
              Use a layer-shell compositor (Hyprland, sway, niri, river, KDE)."
-        );
+                .to_string(),
+        )));
     }
 
     // N1: installing the grant is not enough — the focus loop must know the

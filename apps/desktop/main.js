@@ -840,7 +840,9 @@ function spawnOverlayHost(paths, urlArg, output) {
   }
   const { fd } = openChildLogFd(paths.dataDir, "overlay");
   const maxAgeSec = parseOverlayMaxAgeSec(process.env.ROXYSU_OVERLAY_MAX_AGE_SEC);
-  const args = [urlArg, `--watchdog-max-age-sec=${maxAgeSec}`];
+  // DD-1: --exit-on-stdin-eof + a stdin pipe take the layer surface down
+  // with the shell if it dies, instead of leaving an orphaned HUD on screen.
+  const args = [urlArg, `--watchdog-max-age-sec=${maxAgeSec}`, "--exit-on-stdin-eof"];
   if (output) args.push(`--output=${output}`);
   desktopLog(
     `spawn overlay maxAgeSec=${maxAgeSec} bin=${bin} ${args.join(" ")}`,
@@ -851,11 +853,11 @@ function spawnOverlayHost(paths, urlArg, output) {
   // surface that fallback fills the whole window with grey on each HUD update.
   // The FD and RSS caps still exit 75 so a real leak recovers; the age cap is
   // now a long backstop (D-NEW-1) instead of off forever.
-  overlayChild = spawn(bin, args, {
-    stdio: ["ignore", fd, fd],
+  overlayChild = withLifeline(spawn(bin, args, {
+    stdio: ["pipe", fd, fd],
     windowsHide: true,
     shell: false,
-  });
+  }));
   overlaySpawnedAt = Date.now();
   const child = overlayChild;
   child.on("exit", (code, signal) => {

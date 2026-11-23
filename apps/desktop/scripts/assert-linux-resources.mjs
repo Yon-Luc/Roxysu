@@ -42,6 +42,7 @@ try {
   const root = path.join(tmp, "roxysu");
   const checks = [
     "main.js",
+    "autoUpdatePolicy.js",
     "preload.js",
     "paths.js",
     "respawnPolicy.js",

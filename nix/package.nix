@@ -347,6 +347,7 @@ in
       # Keep in sync with apps/desktop electron-builder "files" (minus builder-only bits).
       cp apps/desktop/main.js \
          apps/desktop/auto-update.js \
+         apps/desktop/autoUpdatePolicy.js \
          apps/desktop/preload.js \
          apps/desktop/paths.js \
          apps/desktop/respawnPolicy.js \

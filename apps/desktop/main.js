@@ -1696,7 +1696,8 @@ if (!gotLock) {
     watchOverlayHostSetting(paths);
 
     // NSIS installs only — check after UI is up so startup is not blocked.
-    startAutoUpdate({ log: desktopLog });
+    // DD-11: children must release node.exe and native addons before NSIS replaces them.
+    startAutoUpdate({ log: desktopLog, beforeInstall: shutdown });
 
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) {

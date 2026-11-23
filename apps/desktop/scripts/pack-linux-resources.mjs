@@ -93,6 +93,7 @@ mkdirSync(path.join(bundleRoot, "resources"), { recursive: true });
 const appFiles = [
   "main.js",
   "auto-update.js",
+  "autoUpdatePolicy.js",
   "preload.js",
   "paths.js",
   "respawnPolicy.js",

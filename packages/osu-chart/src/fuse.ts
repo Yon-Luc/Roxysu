@@ -104,6 +104,174 @@ export function scaleInheritedBeatLength(
   return -100 / fusedSv;
 }
 
+export type MarathonSegmentDebug = {
+  index: number;
+  startMs: number;
+  durationMs: number;
+  pauseAfterMs: number;
+  notesKept: number;
+  notesDropped: number;
+  holdsTruncated: number;
+  timingKept: number;
+  timingDropped: number;
+  startBpm: number;
+  /** 1 means osu! inherited SV `-100`. */
+  startSv: number;
+  svCount: number;
+};
+
+export type MarathonDebugReport = {
+  ok: boolean;
+  error: string | null;
+  keyCount: number | null;
+  pauseMs: number;
+  totalDurationMs: number;
+  segments: MarathonSegmentDebug[];
+  mismatches: FuseTimingMismatch[];
+};
+
+/**
+ * Per-song offsets, clipped notes, and starting SV for a marathon fuse.
+ * Does not throw: a bad source becomes `ok: false` with `error` set.
+ * Clip rules match `fuseManiaCharts`.
+ */
+export function buildMarathonDebugReport(
+  sources: FuseManiaSource[],
+  pauseMs: number,
+): MarathonDebugReport {
+  const pause = Math.max(0, pauseMs);
+  const empty: MarathonDebugReport = {
+    ok: false,
+    error: null,
+    keyCount: null,
+    pauseMs: pause,
+    totalDurationMs: 0,
+    segments: [],
+    mismatches: [],
+  };
+  if (sources.length < 2) {
+    return { ...empty, error: "Need at least two maps to fuse" };
+  }
+
+  const parsed: Array<{
+    chart: ReturnType<typeof parseOsuChart>;
+    durationMs: number;
+    timing: TimingPointRow[];
+  }> = [];
+  for (let i = 0; i < sources.length; i += 1) {
+    const source = sources[i]!;
+    const chart = parseOsuChart(source.osuText);
+    if (chart.status === "NotMania" || chart.gameMode !== "3") {
+      return { ...empty, error: `Map ${i + 1} is not mania` };
+    }
+    if (chart.status === "Fail" || chart.columnCount <= 0) {
+      return { ...empty, error: `Map ${i + 1} failed to parse` };
+    }
+    const durationMs = source.audioDurationMs;
+    if (!Number.isFinite(durationMs) || durationMs <= 0) {
+      return { ...empty, error: `Map ${i + 1} has no audio duration` };
+    }
+    parsed.push({
+      chart,
+      durationMs: Math.max(0, durationMs),
+      timing: parseTimingPointRows(source.osuText),
+    });
+  }
+
+  const keyCount = parsed[0]!.chart.columnCount;
+  for (let i = 1; i < parsed.length; i += 1) {
+    if (parsed[i]!.chart.columnCount !== keyCount) {
+      return {
+        ...empty,
+        keyCount,
+        error: `Mixed key counts: ${keyCount}K and ${parsed[i]!.chart.columnCount}K`,
+      };
+    }
+  }
+
+  const segments: MarathonSegmentDebug[] = [];
+  let offset = 0;
+  for (let i = 0; i < parsed.length; i += 1) {
+    const item = parsed[i]!;
+    let notesKept = 0;
+    let notesDropped = 0;
+    let holdsTruncated = 0;
+    for (const note of item.chart.notes) {
+      const localStart = Math.max(0, note.startMs);
+      if (localStart >= item.durationMs) {
+        notesDropped += 1;
+        continue;
+      }
+      notesKept += 1;
+      const localEnd = Math.max(localStart, Math.max(0, note.endMs));
+      if (localEnd > localStart && localEnd > item.durationMs) holdsTruncated += 1;
+    }
+    let timingKept = 0;
+    let timingDropped = 0;
+    let svCount = 0;
+    for (const row of item.timing) {
+      const localTime = Math.max(0, row.timeMs);
+      if (localTime >= item.durationMs) {
+        timingDropped += 1;
+        continue;
+      }
+      timingKept += 1;
+      if (row.uninherited === false) svCount += 1;
+    }
+    const start = startingTiming(item.timing);
+    const pauseAfterMs = i < parsed.length - 1 ? pause : 0;
+    segments.push({
+      index: i,
+      startMs: offset,
+      durationMs: item.durationMs,
+      pauseAfterMs,
+      notesKept,
+      notesDropped,
+      holdsTruncated,
+      timingKept,
+      timingDropped,
+      startBpm: beatLengthToBpm(start.bpm.beatLength),
+      startSv: inheritedSvMultiplier(start.sv.beatLength),
+      svCount,
+    });
+    offset += item.durationMs + pauseAfterMs;
+  }
+
+  let mismatches: FuseTimingMismatch[] = [];
+  let error: string | null = null;
+  try {
+    const fused = fuseManiaCharts(sources, {
+      pauseMs: pause,
+      metadata: {
+        title: "debug",
+        artist: "debug",
+        creator: "Roxysu",
+        version: "debug",
+        audioFilename: "audio.wav",
+      },
+    });
+    mismatches = checkFusedMatchesOriginals(sources, fused).mismatches;
+  } catch (err) {
+    error = err instanceof Error ? err.message : String(err);
+  }
+
+  return {
+    ok: error == null && mismatches.length === 0,
+    error,
+    keyCount,
+    pauseMs: pause,
+    totalDurationMs: offset,
+    segments,
+    mismatches,
+  };
+}
+
+function inheritedSvMultiplier(beatLength: number): number {
+  if (!(beatLength < 0)) return 1;
+  const sv = -100 / beatLength;
+  return sv > 0 ? sv : 1;
+}
+
 export function fuseManiaCharts(
   sources: FuseManiaSource[],
   options: FuseManiaOptions,

@@ -1,5 +1,8 @@
 import { Zip, ZipPassThrough } from "fflate";
-import { fuseManiaCharts } from "@roxysu/osu-chart";
+import {
+  buildMarathonDebugReport,
+  type MarathonDebugReport,
+} from "@roxysu/osu-chart";
 import { localBeatmapAudioUrl, localBeatmapCoverUrl } from "./osuUrls";
 
 const TARGET_RATE = 44100;
@@ -229,6 +232,40 @@ export function sanitizeMarathonFilename(name: string): string {
     .slice(0, 180);
   const safe = base.length > 0 ? base : "marathon";
   return safe.toLowerCase().endsWith(".osz") ? safe : `${safe}.osz`;
+}
+
+export type { MarathonDebugReport };
+
+/**
+ * Decode each track the same way export does, then report offsets, clipped
+ * notes, and starting SV. Does not pack an .osz or open osu!.
+ */
+export async function inspectMarathon(args: {
+  sources: MarathonSourceInput[];
+  pauseMs: number;
+  signal?: AbortSignal;
+  onProgress?: (p: MarathonExportProgress) => void;
+}): Promise<MarathonDebugReport> {
+  const { sources, pauseMs, signal, onProgress } = args;
+  if (sources.length < 2) {
+    return buildMarathonDebugReport([], pauseMs);
+  }
+  const durationsMs: number[] = [];
+  for (let i = 0; i < sources.length; i += 1) {
+    throwIfAborted(signal);
+    onProgress?.({ phase: "audio", index: i, total: sources.length });
+    const url = localBeatmapAudioUrl(sources[i]!.audioFileHash);
+    if (!url) throw new Error(`Audio missing for map ${i + 1}`);
+    const [left] = toStereo44100(await decodeAudio(url, signal));
+    durationsMs.push(Math.round((left.length / TARGET_RATE) * 1000));
+  }
+  return buildMarathonDebugReport(
+    sources.map((source, i) => ({
+      osuText: source.osuText,
+      audioDurationMs: durationsMs[i]!,
+    })),
+    pauseMs,
+  );
 }
 
 export async function generateMarathonOsz(args: {

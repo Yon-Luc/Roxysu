@@ -14,7 +14,9 @@ import {
 } from "../../lib/api";
 import {
   generateMarathonOsz,
+  inspectMarathon,
   partitionByKeyCount,
+  type MarathonDebugReport,
   type MarathonExportProgress,
 } from "../../lib/marathonExport";
 import { useAppDict, t } from "../../lib/i18n";
@@ -53,6 +55,14 @@ function parseKeyParam(raw: unknown): 4 | 7 | null {
   return n === 4 || n === 7 ? n : null;
 }
 
+function formatDebugMs(ms: number): string {
+  const abs = Math.max(0, Math.round(ms));
+  const minutes = Math.floor(abs / 60_000);
+  const seconds = Math.floor((abs % 60_000) / 1000);
+  const millis = abs % 1000;
+  return `${minutes}:${String(seconds).padStart(2, "0")}.${String(millis).padStart(3, "0")}`;
+}
+
 function progressLabel(
   p: MarathonExportProgress,
   dict: ReturnType<typeof useAppDict>["dict"],
@@ -70,6 +80,93 @@ function progressLabel(
   if (p.phase === "pack") return dict?.marathon.progressPack ?? "Packing map…";
   if (p.phase === "import") return dict?.marathon.progressImport ?? "Opening in osu!…";
   return dict?.marathon.progressDone ?? "Done";
+}
+
+function MarathonDebugPanel({
+  report,
+  tracks,
+}: {
+  report: MarathonDebugReport;
+  tracks: MarathonSource[];
+}) {
+  const { dict } = useAppDict();
+  const ready = tracks.filter(
+    (track) => track.osuText && track.audioFileHash && !track.error,
+  );
+  return (
+    <div className="mt-4 overflow-x-auto rounded-xl border border-line">
+      <div className="border-b border-line px-3 py-2 text-sm">
+        <span className="font-semibold text-ink">
+          {dict?.marathon.debugTitle ?? "Timing check"}
+        </span>
+        <span className={`ml-2 ${report.ok ? "text-muted" : "text-danger"}`}>
+          {report.ok
+            ? (dict?.marathon.debugOk ?? "Fuse matches the source charts")
+            : (report.error ??
+              report.mismatches[0]?.message ??
+              dict?.marathon.debugFail ??
+              "Fuse check failed")}
+        </span>
+      </div>
+      <table className="w-full min-w-[40rem] text-left text-sm">
+        <thead className="text-xs uppercase tracking-wide text-faint">
+          <tr>
+            <th className="px-3 py-2 font-semibold">#</th>
+            <th className="px-3 py-2 font-semibold">
+              {dict?.marathon.debugMap ?? "Map"}
+            </th>
+            <th className="px-3 py-2 font-semibold">
+              {dict?.marathon.debugStart ?? "Start"}
+            </th>
+            <th className="px-3 py-2 font-semibold">
+              {dict?.marathon.debugAudio ?? "Audio"}
+            </th>
+            <th className="px-3 py-2 font-semibold">
+              {dict?.marathon.debugNotes ?? "Notes"}
+            </th>
+            <th className="px-3 py-2 font-semibold">
+              {dict?.marathon.debugDropped ?? "Dropped"}
+            </th>
+            <th className="px-3 py-2 font-semibold">
+              {dict?.marathon.debugCut ?? "LN cut"}
+            </th>
+            <th className="px-3 py-2 font-semibold">BPM</th>
+            <th className="px-3 py-2 font-semibold">SV</th>
+          </tr>
+        </thead>
+        <tbody>
+          {report.segments.map((segment) => {
+            const track = ready[segment.index];
+            const label = track
+              ? `${track.artist ?? "?"} — ${track.title ?? "?"}`
+              : `#${segment.index + 1}`;
+            return (
+              <tr key={segment.index} className="border-t border-line">
+                <td className="px-3 py-2 text-muted">{segment.index + 1}</td>
+                <td className="px-3 py-2 text-ink">{label}</td>
+                <td className="px-3 py-2 font-mono text-muted">
+                  {formatDebugMs(segment.startMs)}
+                </td>
+                <td className="px-3 py-2 font-mono text-muted">
+                  {formatDebugMs(segment.durationMs)}
+                </td>
+                <td className="px-3 py-2">{segment.notesKept}</td>
+                <td className="px-3 py-2">{segment.notesDropped}</td>
+                <td className="px-3 py-2">{segment.holdsTruncated}</td>
+                <td className="px-3 py-2 font-mono">
+                  {segment.startBpm.toFixed(1)}
+                </td>
+                <td className="px-3 py-2 font-mono">
+                  {segment.startSv.toFixed(2)}×
+                  {segment.svCount > 0 ? ` (${segment.svCount})` : ""}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 export function MarathonPage() {
@@ -94,6 +191,7 @@ export function MarathonPage() {
   const [recCount, setRecCount] = useState(4);
   const [recDan, setRecDan] = useState("");
   const [progress, setProgress] = useState<MarathonExportProgress | null>(null);
+  const [debug, setDebug] = useState<MarathonDebugReport | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const keyCount = tracks.find((t) => t.keyCount != null)?.keyCount ?? null;
@@ -279,6 +377,48 @@ export function MarathonPage() {
     },
   });
 
+  const inspect = useMutation({
+    mutationFn: async () => {
+      const ready = tracks.filter(
+        (track) => track.osuText && track.audioFileHash && !track.error,
+      );
+      if (ready.length < 2) {
+        throw new Error(
+          dict?.marathon.needTwo ?? "Add at least two playable mania maps",
+        );
+      }
+      const controller = new AbortController();
+      abortRef.current = controller;
+      try {
+        return await inspectMarathon({
+          sources: ready.map((track) => ({
+            osuText: track.osuText!,
+            audioFileHash: track.audioFileHash!,
+            backgroundFileHash: track.backgroundFileHash,
+          })),
+          pauseMs,
+          signal: controller.signal,
+          onProgress: setProgress,
+        });
+      } finally {
+        if (abortRef.current === controller) abortRef.current = null;
+      }
+    },
+    onSuccess: (report) => {
+      setDebug(report);
+      setProgress(null);
+    },
+    onError: (err: Error) => {
+      setProgress(null);
+      if (err.name === "AbortError") return;
+      pushToast({
+        title: dict?.marathon.inspectFailed ?? "Inspect failed",
+        detail: err.message,
+        tone: "error",
+      });
+    },
+  });
+
   const generate = useMutation({
     mutationFn: async () => {
       const ready = tracks.filter(
@@ -348,9 +488,11 @@ export function MarathonPage() {
       ? searchResults.data.items
       : [];
 
-  const canGenerate =
-    tracks.filter((t) => t.osuText && t.audioFileHash && !t.error).length >= 2 &&
-    !generate.isPending;
+  const readyCount = tracks.filter(
+    (track) => track.osuText && track.audioFileHash && !track.error,
+  ).length;
+  const busy = generate.isPending || inspect.isPending;
+  const canGenerate = readyCount >= 2 && !busy;
 
   return (
     <div className="space-y-6">
@@ -414,7 +556,17 @@ export function MarathonPage() {
             ? (dict?.marathon.generating ?? "Generating…")
             : (dict?.marathon.generate ?? "Generate and open in osu!")}
         </button>
-        {generate.isPending ? (
+        <button
+          type="button"
+          className="rx-btn ml-2"
+          disabled={!canGenerate}
+          onClick={() => inspect.mutate()}
+        >
+          {inspect.isPending
+            ? (dict?.marathon.inspecting ?? "Inspecting…")
+            : (dict?.marathon.inspect ?? "Inspect timing")}
+        </button>
+        {busy ? (
           <button
             type="button"
             className="rx-btn ml-2"
@@ -427,6 +579,7 @@ export function MarathonPage() {
         {progress ? (
           <p className="text-sm text-muted">{progressLabel(progress, dict)}</p>
         ) : null}
+        {debug ? <MarathonDebugPanel report={debug} tracks={tracks} /> : null}
       </section>
 
       <section className="rx-panel space-y-3 p-4">

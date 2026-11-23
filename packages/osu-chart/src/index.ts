@@ -9,6 +9,7 @@ export type {
 } from "./write";
 export {
   beatLengthToBpm,
+  buildMarathonDebugReport,
   checkFusedMatchesOriginals,
   fuseManiaCharts,
   parseHpDrainRate,
@@ -18,6 +19,8 @@ export {
 } from "./fuse";
 export type {
   FuseManiaOptions,
+  MarathonDebugReport,
+  MarathonSegmentDebug,
   FuseManiaResult,
   FuseManiaSource,
   FuseTimingMismatch,

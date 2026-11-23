@@ -1120,7 +1120,19 @@
     "progressCollage": "Building collage…",
     "progressPack": "Packing map…",
     "progressImport": "Opening in osu!…",
-    "progressDone": "Done"
+    "progressDone": "Done",
+    "inspect": "Inspect timing",
+    "inspecting": "Inspecting…",
+    "inspectFailed": "Inspect failed",
+    "debugTitle": "Timing check",
+    "debugOk": "Fuse matches the source charts",
+    "debugFail": "Fuse check failed",
+    "debugMap": "Map",
+    "debugStart": "Start",
+    "debugAudio": "Audio",
+    "debugNotes": "Notes",
+    "debugDropped": "Dropped",
+    "debugCut": "LN cut"
   },
   "media": {
     "add_image": "add image",

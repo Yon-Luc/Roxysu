@@ -1120,7 +1120,19 @@
     "progressCollage": "Création du collage…",
     "progressPack": "Empaquetage…",
     "progressImport": "Ouverture dans osu!…",
-    "progressDone": "Terminé"
+    "progressDone": "Terminé",
+    "inspect": "Vérifier le timing",
+    "inspecting": "Vérification…",
+    "inspectFailed": "Vérification échouée",
+    "debugTitle": "Contrôle du timing",
+    "debugOk": "La fusion correspond aux charts sources",
+    "debugFail": "Le contrôle de fusion a échoué",
+    "debugMap": "Map",
+    "debugStart": "Début",
+    "debugAudio": "Audio",
+    "debugNotes": "Notes",
+    "debugDropped": "Ignorées",
+    "debugCut": "LN coupées"
   },
   "media": {
     "add_image": "ajouter une image",

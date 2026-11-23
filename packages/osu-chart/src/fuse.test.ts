@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  buildMarathonDebugReport,
   checkFusedMatchesOriginals,
   fuseManiaCharts,
   parseTimingPointRows,
@@ -391,5 +392,70 @@ describe("fuseManiaCharts", () => {
     expect(rows[1]!.uninherited).toBe(false);
     expect(rows[1]!.beatLength).toBe(-80);
     expect(rows[1]!.volume).toBe(80);
+  });
+});
+
+describe("buildMarathonDebugReport", () => {
+  test("reports offsets, clipped notes, truncated holds, and starting SV", () => {
+    const a = maniaOsu({
+      version: "1",
+      cs: 4,
+      notes: [
+        "64,192,100,1,0,0:0:0:0:",
+        "64,192,900,128,0,1500:0:0:0:0:",
+        "128,192,2000,1,0,0:0:0:0:",
+      ],
+      timing: ["0,500,4,2,0,100,1,0", "0,-50,4,2,0,100,0,0", "4000,-80,4,2,0,100,0,0"],
+    });
+    const b = maniaOsu({
+      version: "2",
+      cs: 4,
+      notes: ["192,192,50,1,0,0:0:0:0:"],
+      timing: ["0,400,4,2,0,100,1,0"],
+    });
+    const report = buildMarathonDebugReport(
+      [
+        { osuText: a, audioDurationMs: 1000 },
+        { osuText: b, audioDurationMs: 800 },
+      ],
+      200,
+    );
+    expect(report.ok).toBe(true);
+    expect(report.keyCount).toBe(4);
+    expect(report.totalDurationMs).toBe(2000);
+    expect(report.segments[0]).toMatchObject({
+      startMs: 0,
+      durationMs: 1000,
+      pauseAfterMs: 200,
+      notesKept: 2,
+      notesDropped: 1,
+      holdsTruncated: 1,
+      timingDropped: 1,
+      startBpm: 120,
+      startSv: 2,
+    });
+    expect(report.segments[1]).toMatchObject({
+      startMs: 1200,
+      durationMs: 800,
+      pauseAfterMs: 0,
+      notesKept: 1,
+      notesDropped: 0,
+      startBpm: 150,
+      startSv: 1,
+    });
+  });
+
+  test("mixed key counts are a report error, not a throw", () => {
+    const four = maniaOsu({ version: "4k", cs: 4, notes: ["36,192,100,1,0,0:0:0:0:"] });
+    const seven = maniaOsu({ version: "7k", cs: 7, notes: ["36,192,100,1,0,0:0:0:0:"] });
+    const report = buildMarathonDebugReport(
+      [
+        { osuText: four, audioDurationMs: 500 },
+        { osuText: seven, audioDurationMs: 500 },
+      ],
+      0,
+    );
+    expect(report.ok).toBe(false);
+    expect(report.error).toMatch(/Mixed key counts/);
   });
 });

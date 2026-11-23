@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-10
+last_verified: 2026-11-23
 confidence: verified
 touches:
   - packages/osu-chart/src/fuse.ts
@@ -32,6 +32,7 @@ A **Map marathon** is one new unsubmitted mania difficulty: songs play back-to-b
 6. 4K/7K recommend can fill the track list (`GET /api/practice/recommend`), optionally filtered to a dan tier (`dan:"Regular 9"`, `dan:"Gamma"`, …). Sessions recommend can send its current list to `/marathon`.
 7. Audio is built track by track: each source is decoded, resampled to 44.1 kHz stereo, encoded to 16-bit PCM and released before the next decode (`mixTracksToWav` returns those chunks). The export packs them as one uncompressed WAV (zip method 0: header, then each chunk) and does not assemble a second WAV buffer. Total audio (including pauses) is capped at 60 minutes and fails with an explicit error; silent output also fails. The output format and per-song timing offsets are unchanged.
 8. Generation is cancellable from the page (Cancel button, `AbortController` passed as `signal`) until the packed `.osz` is sent to `open-in-osu`; the signal is checked between tracks, and an abort raises no error toast.
+9. **Inspect timing** decodes each track the same way export does (44.1 kHz stereo frame count) and shows a per-song report without packing or opening osu!: start offset, audio length, notes kept, notes dropped past the audio, holds cut at the audio end, starting BPM, and starting SV (`1.00×` is inherited `-100`). `buildMarathonDebugReport` does not throw; a bad source sets `ok: false`. The page stays hidden in nav until the export itself is trusted.
 
 ## Main flows
 

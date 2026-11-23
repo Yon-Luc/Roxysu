@@ -1120,7 +1120,19 @@
     "progressCollage": "Creando collage…",
     "progressPack": "Empaquetando mapa…",
     "progressImport": "Abriendo en osu!…",
-    "progressDone": "Listo"
+    "progressDone": "Listo",
+    "inspect": "Revisar el timing",
+    "inspecting": "Revisando…",
+    "inspectFailed": "La revisión falló",
+    "debugTitle": "Control de timing",
+    "debugOk": "La fusión coincide con los charts de origen",
+    "debugFail": "El control de fusión falló",
+    "debugMap": "Mapa",
+    "debugStart": "Inicio",
+    "debugAudio": "Audio",
+    "debugNotes": "Notas",
+    "debugDropped": "Descartadas",
+    "debugCut": "LN cortadas"
   },
   "media": {
     "add_image": "añadir imagen",

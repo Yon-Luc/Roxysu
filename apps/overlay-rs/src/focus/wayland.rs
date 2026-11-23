@@ -218,13 +218,14 @@ impl Session {
 pub fn spawn_focus_loop(
     policy: MatchPolicy,
     cmd_tx: async_channel::Sender<FocusCommand>,
+    grant_fresh: bool,
 ) -> Result<FocusHandle> {
     let stop = Arc::new(AtomicBool::new(false));
     let stop_thread = Arc::clone(&stop);
     let join = thread::Builder::new()
         .name("overlay-focus".into())
         .spawn(move || {
-            if let Err(err) = run_focus_loop(policy, cmd_tx, stop_thread) {
+            if let Err(err) = run_focus_loop(policy, cmd_tx, stop_thread, grant_fresh) {
                 eprintln!("roxysu-overlay-rs: focus thread exited: {err:#}");
             }
         })
@@ -247,10 +248,16 @@ fn run_focus_loop(
     policy: MatchPolicy,
     cmd_tx: async_channel::Sender<FocusCommand>,
     stop: Arc<AtomicBool>,
+    grant_fresh: bool,
 ) -> Result<()> {
     let mut had_session = false;
     let mut announced = false;
     let mut backoff = Duration::from_secs(1);
+    // N1: a grant written moments ago may not be visible to KWin yet (its
+    // service cache may still be picking the entry up), so the first binds
+    // retry quickly before settling into the 1 s → 30 s ladder. The
+    // overlay stays unmapped either way (fail-closed is unchanged).
+    let mut fast_retries = u32::from(grant_fresh) * 5;
 
     while !stop.load(Ordering::Relaxed) {
         let mut session = Session::live(policy.clone(), cmd_tx.clone(), Arc::clone(&stop));
@@ -264,6 +271,7 @@ fn run_focus_loop(
                 had_session = true;
                 announced = false;
                 backoff = Duration::from_secs(1);
+                fast_retries = 0;
                 warn!("focus session ended; reconnecting");
                 let _ = cmd_tx.send_blocking(FocusCommand::Disconnected);
                 backoff
@@ -272,6 +280,7 @@ fn run_focus_loop(
                 had_session = true;
                 announced = false;
                 backoff = Duration::from_secs(1);
+                fast_retries = 0;
                 warn!(error = %err, "focus session failed; reconnecting");
                 let _ = cmd_tx.send_blocking(FocusCommand::Disconnected);
                 backoff
@@ -284,9 +293,14 @@ fn run_focus_loop(
                 } else {
                     warn!(error = %err, "focus session still unavailable; retrying");
                 }
-                let wait = backoff;
-                backoff = backoff.saturating_mul(2).min(Duration::from_secs(30));
-                wait
+                if fast_retries > 0 {
+                    fast_retries -= 1;
+                    Duration::from_millis(200)
+                } else {
+                    let wait = backoff;
+                    backoff = backoff.saturating_mul(2).min(Duration::from_secs(30));
+                    wait
+                }
             }
         };
         sleep_backoff(wait, &stop);

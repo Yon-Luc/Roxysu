@@ -16,6 +16,9 @@
   openssl,
   icu,
   cacert,
+  # Provides kbuildsycoca6 for the overlay host's KWin grant refresh (N1):
+  # the host inherits this wrapper's PATH when the desktop shell spawns it.
+  kdePackages,
   # Set after first build: nix build .#roxysu 2>&1 | … got: sha256-…
   bunDepsHash ? "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
   # In-game overlay host derivation (nix/overlay-rs.nix); null skips bundling.
@@ -390,7 +393,7 @@ in
         --set ROXYSU_LIBRARY_PATH "${lib.makeLibraryPath nativeLibs}" \
         --set-default HUB_URL "https://roxysu-api.yonx.app" \
         --prefix LD_LIBRARY_PATH : "${lib.makeLibraryPath nativeLibs}" \
-        --prefix PATH : "${lib.makeBinPath [nodejs]}"
+        --prefix PATH : "${lib.makeBinPath [nodejs kdePackages.kservice]}"
 
       runHook postInstall
     '';

@@ -199,7 +199,11 @@ impl OverlayHost {
         })
     }
 
-    pub fn present_initial(self, focus_slot: &Rc<RefCell<Option<FocusHandle>>>) -> Result<()> {
+    pub fn present_initial(
+        self,
+        focus_slot: &Rc<RefCell<Option<FocusHandle>>>,
+        grant_fresh: bool,
+    ) -> Result<()> {
         if self.config.list_windows {
             let (tx, rx) = mpsc::channel::<FocusEvent>();
             let policy = self.config.match_policy();
@@ -227,7 +231,7 @@ impl OverlayHost {
         }
 
         if self.config.follow_focus {
-            let handle = self.start_focus_tracking()?;
+            let handle = self.start_focus_tracking(grant_fresh)?;
             *focus_slot.borrow_mut() = Some(handle);
             info!(
                 match_app_id = %self.config.match_app_id,
@@ -279,9 +283,9 @@ impl OverlayHost {
         Ok(())
     }
 
-    fn start_focus_tracking(&self) -> Result<FocusHandle> {
+    fn start_focus_tracking(&self, grant_fresh: bool) -> Result<FocusHandle> {
         let (tx, rx) = async_channel::unbounded::<FocusCommand>();
-        let handle = focus::spawn_focus_loop(self.config.match_policy(), tx)?;
+        let handle = focus::spawn_focus_loop(self.config.match_policy(), tx, grant_fresh)?;
 
         let window = self.window.clone();
         let last = Rc::new(RefCell::new(None::<bool>));

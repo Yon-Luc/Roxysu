@@ -11,7 +11,7 @@ mod plasma;
 mod reducer;
 mod wayland;
 
-pub use grant::install_plasma_grant;
+pub use grant::{install_plasma_grant, GrantOutcome};
 pub use matching::{MatchMode, MatchPolicy};
 pub use reducer::{OutputHint, OutputRect};
 pub use wayland::{run_list_windows, spawn_focus_loop, FocusEvent, FocusHandle};

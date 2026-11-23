@@ -118,9 +118,14 @@ fn run_app(
         );
     }
 
-    if config.follow_focus || config.list_windows {
-        focus::install_plasma_grant();
-    }
+    // N1: installing the grant is not enough — the focus loop must know the
+    // file was just written, so its first bind retries quickly while KWin's
+    // service cache picks the entry up.
+    let grant = if config.follow_focus || config.list_windows {
+        focus::install_plasma_grant()
+    } else {
+        focus::GrantOutcome::NotAttempted
+    };
 
     let display = gdk4::Display::default().context("no GDK display")?;
     let css = CssProvider::new();
@@ -134,7 +139,7 @@ fn run_app(
     );
 
     let host = OverlayHost::new(app, config.clone())?;
-    host.present_initial(focus_h)?;
+    host.present_initial(focus_h, grant.wrote_fresh())?;
 
     if config.telemetry_interval_sec > 0 {
         let csv = config.telemetry_csv.as_ref().map(PathBuf::from);

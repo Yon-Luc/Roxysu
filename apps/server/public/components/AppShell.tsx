@@ -38,6 +38,7 @@ import { useDevParityVisible } from "../lib/devParity";
 import { formatAppVersionLabel } from "../lib/appVersion";
 import { isDesktopShell } from "../lib/desktop";
 import { useAppDict } from "../lib/i18n";
+import { DesktopServerBanner } from "./DesktopServerBanner";
 import { CommandPalette, useCommandPaletteShortcut } from "./CommandPalette";
 import { SchemaOutdatedDialog } from "./SchemaOutdatedDialog";
 import { LanguageSwitcher } from "./LanguageSwitcher";
@@ -464,6 +465,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         {syncChip()}
       </header>
       ) : null}
+
+      <DesktopServerBanner />
 
       <main
         className={`relative min-h-screen p-0 transition-[margin] duration-200 ease-out md:p-2 ${

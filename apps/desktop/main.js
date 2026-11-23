@@ -1,12 +1,31 @@
-const { app, BrowserWindow, Menu, ipcMain, shell, clipboard, nativeImage } = require("electron");
+const { app, BrowserWindow, Menu, dialog, ipcMain, screen, shell, clipboard, nativeImage } = require("electron");
 const { spawn } = require("node:child_process");
+const { randomUUID } = require("node:crypto");
 const path = require("node:path");
 const http = require("node:http");
 const fs = require("node:fs");
 const { resolveDesktopPaths, ensureParentDir, ensureRealmExtracted } = require("./paths");
 const { startAutoUpdate } = require("./auto-update");
-const { decideRespawn } = require("./respawnPolicy");
-const { decideOverlayApply, childIsAlive } = require("./overlayApplyPolicy");
+const { DEFAULT_RESPAWN_CONFIG, classifyServerExit, decideRespawn } = require("./respawnPolicy");
+const {
+  SERVER_STATE_CHANNEL,
+  decideRendererGone,
+  reloadActionFor,
+  serverStateForRespawn,
+} = require("./windowRecovery");
+const {
+  MIN_WINDOW_HEIGHT,
+  MIN_WINDOW_WIDTH,
+  clampZoomLevel,
+  sanitizeWindowState,
+  serializeWindowState,
+} = require("./windowState");
+const { ZOOM_STEP, shortcutFor } = require("./shellShortcuts");
+const {
+  OVERLAY_MAX_RESPAWNS,
+  childIsAlive,
+  decideOverlayApply,
+} = require("./overlayApplyPolicy");
 const { createApplyGate, executeOverlayDecision } = require("./overlayApplyLoop");
 const {
   MAX_OVERLAY_SETTINGS_BYTES,
@@ -16,8 +35,15 @@ const {
 const { parseOverlayHostUrl, parseOverlayOutput } = require("./overlayUrlGuard");
 const { appOrigin, isAppUrl, canOpenExternal, senderIsApp } = require("./urlPolicy");
 const { stopChild: stopChildProcess } = require("./stopChild");
-const { waitForServer } = require("./waitForServer");
-const { DEFAULT_MAX_LOG_BYTES, fileSizeOrZero, rotateIfLarger, shouldRotate } = require("./logRotation");
+const { probePortOwner, waitForServer } = require("./waitForServer");
+const { FATAL_LOG_TAIL_BYTES, buildFatalReport } = require("./fatalReport");
+const {
+  DEFAULT_MAX_LOG_BYTES,
+  copyTruncateIfLarger,
+  fileSizeOrZero,
+  rotateIfLarger,
+  shouldRotate,
+} = require("./logRotation");
 
 // Stable userData folder: %APPDATA%\Roxysu (Windows) / XDG or Application Support.
 app.setName("Roxysu");
@@ -44,6 +70,8 @@ let overlayAppliedOutput = null;
 let overlayAppliedRestartAt = null;
 /** Timestamp of the last overlay host spawn (liveness respawn rate limit). */
 let overlaySpawnedAt = 0;
+/** When the current overlay child exited (ms), for the DD-10 uptime check. */
+let overlayExitedAt = 0;
 /** Overlay host setting poll timer. @type {NodeJS.Timeout | null} */
 let overlayPollTimer = null;
 /** Timestamp of the last server spawn (used for exit diagnostics). */
@@ -63,6 +91,15 @@ let serverRespawnTimer = null;
 let serverWaitId = 0;
 /** @type {Map<string, number>} */
 const childLogFdByLabel = new Map();
+/** Log path for each open child log fd (DD-5 in-session cap). @type {Map<string, string>} */
+const childLogPathByLabel = new Map();
+/**
+ * DD-5: child logs share a long-lived fd with the child, so they are also
+ * size-checked on a timer while the child runs (not only on respawn).
+ */
+const CHILD_LOG_SIZE_CHECK_MS = 15_000;
+/** @type {NodeJS.Timeout | null} */
+let childLogCapTimer = null;
 let shuttingDown = false;
 /** @type {string | null} */
 let desktopLogPath = null;
@@ -71,6 +108,13 @@ const processStartedAt = Date.now();
 const PORT = Number(process.env.ROXYSU_PORT ?? 4321);
 const HOST = process.env.ROXYSU_HOST ?? "127.0.0.1";
 const APP_ORIGIN = appOrigin(HOST, PORT);
+/**
+ * DD-2: per-launch token handed to the server child (ROXYSU_INSTANCE_TOKEN)
+ * and echoed by its /api/system/healthz. waitForServer only accepts a server
+ * carrying it, so a stale orphan or a dev server on the same port is never
+ * adopted as this launch's child.
+ */
+const INSTANCE_TOKEN = randomUUID();
 const WINDOW_READY_MARKER = "electron-window-ready";
 /** Caps a session-share PNG before nativeImage decode. */
 const MAX_CLIPBOARD_IMAGE_BYTES = 15 * 1024 * 1024;
@@ -185,6 +229,7 @@ function openChildLogFd(dataDir, label) {
         // already closed
       }
       childLogFdByLabel.delete(label);
+      childLogPathByLabel.delete(label);
     }
     rotateIfLarger(logPath, DEFAULT_MAX_LOG_BYTES, {
       onError: (err) =>
@@ -195,10 +240,40 @@ function openChildLogFd(dataDir, label) {
   if (fd == null) {
     fd = fs.openSync(logPath, "a");
     childLogFdByLabel.set(label, fd);
+    childLogPathByLabel.set(label, logPath);
+    startChildLogCap();
     desktopLog(`${label} log: ${logPath}`);
   }
   fs.writeSync(fd, `\n--- ${new Date().toISOString()} starting ${label} ---\n`);
   return { logPath, fd };
+}
+
+/**
+ * DD-5: cap every open child log while its child keeps writing. Copy-truncate
+ * (see logRotation.js) because the child holds the same append-mode fd.
+ */
+function capChildLogsNow() {
+  for (const [label, fd] of childLogFdByLabel) {
+    const logPath = childLogPathByLabel.get(label);
+    if (!logPath) continue;
+    const rotated = copyTruncateIfLarger(fd, logPath, DEFAULT_MAX_LOG_BYTES, {
+      onError: (err) => desktopLog(`${label}.log in-session rotate failed: ${err}`),
+    });
+    if (rotated) {
+      try {
+        fs.writeSync(fd, `--- ${new Date().toISOString()} ${label}.log rotated (size cap) ---\n`);
+      } catch {
+        // fd closed under us
+      }
+      desktopLog(`${label}.log rotated in-session (over ${DEFAULT_MAX_LOG_BYTES} bytes)`);
+    }
+  }
+}
+
+function startChildLogCap() {
+  if (childLogCapTimer) return;
+  childLogCapTimer = setInterval(capChildLogsNow, CHILD_LOG_SIZE_CHECK_MS);
+  childLogCapTimer.unref();
 }
 
 /**
@@ -242,44 +317,58 @@ function spawnNodeEntry(paths, entry, cwd, extraEnv, label, nodeArgs = []) {
   const libraryPath = process.env.ROXYSU_LIBRARY_PATH?.trim();
   if (libraryPath) env.LD_LIBRARY_PATH = libraryPath;
   if (env.NODE_OPTIONS) desktopLog(`${label} NODE_OPTIONS=${env.NODE_OPTIONS}`);
+  // DD-1: stdin is a pipe the child watches (attachParentLifeline). When this
+  // process exits for any reason the OS closes it and the child shuts down
+  // instead of surviving as an orphan on the port / local mirror.
+  env.ROXYSU_PARENT_LIFELINE = "1";
 
   if (paths.isPackaged || entry.endsWith(".js")) {
     const { fd } = openChildLogFd(paths.dataDir, label);
     const nodeBin = paths.nodeBin;
     if (nodeBin && fs.existsSync(nodeBin)) {
       desktopLog(`spawn ${label} via nodeBin=${nodeBin}`);
-      return spawn(nodeBin, [...nodeArgs, entry], {
+      return withLifeline(spawn(nodeBin, [...nodeArgs, entry], {
         cwd,
         env,
-        stdio: ["ignore", fd, fd],
+        stdio: ["pipe", fd, fd],
         windowsHide: true,
         shell: false,
-      });
+      }));
     }
     // Fallback: Electron as Node (dev packs / missing bundled node).
     desktopLog(`spawn ${label} via ELECTRON_RUN_AS_NODE exec=${process.execPath}`);
-    return spawn(process.execPath, [...nodeArgs, entry], {
+    return withLifeline(spawn(process.execPath, [...nodeArgs, entry], {
       cwd,
       env: {
         ...env,
         ELECTRON_RUN_AS_NODE: "1",
       },
-      stdio: ["ignore", fd, fd],
+      stdio: ["pipe", fd, fd],
       windowsHide: true,
       shell: false,
-    });
+    }));
   }
 
   const tsxBin = resolveTsx(paths.repoRoot, paths.serverDir, paths.realmDir);
   const cmd = tsxBin === "npx" ? "npx" : tsxBin;
   const cmdArgs = tsxBin === "npx" ? ["tsx", entry] : [entry];
-  return spawn(cmd, cmdArgs, {
+  return withLifeline(spawn(cmd, cmdArgs, {
     cwd,
     env,
-    stdio: "inherit",
+    stdio: ["pipe", "inherit", "inherit"],
     windowsHide: true,
     shell: process.platform === "win32",
-  });
+  }));
+}
+
+/**
+ * DD-1: keep the lifeline pipe quiet. Writing is never done, but closing it
+ * on a child that already exited can raise EPIPE on the stream.
+ * @param {import("node:child_process").ChildProcess} child
+ */
+function withLifeline(child) {
+  child.stdin?.on("error", () => {});
+  return child;
 }
 
 /**
@@ -401,9 +490,17 @@ function createSplashWindow(paths) {
   if (icon) desktopLog(`app icon=${icon}`);
   else desktopLog("app icon missing — using Electron default");
 
+  // DD-8: restore size / position / maximized / zoom from the last session.
+  const windowState = loadWindowState();
+  windowZoomLevel = windowState.zoomLevel;
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
+    width: windowState.width,
+    height: windowState.height,
+    ...(windowState.x !== undefined && windowState.y !== undefined
+      ? { x: windowState.x, y: windowState.y }
+      : {}),
+    minWidth: MIN_WINDOW_WIDTH,
+    minHeight: MIN_WINDOW_HEIGHT,
     title: "Roxysu",
     show: true,
     backgroundColor: "#12141a",
@@ -420,6 +517,9 @@ function createSplashWindow(paths) {
   });
 
   attachWindowGuards(mainWindow);
+  if (windowState.maximized) mainWindow.maximize();
+  trackWindowState(mainWindow);
+  attachShellShortcuts(mainWindow);
 
   mainWindow.on("closed", () => {
     mainWindow = null;
@@ -428,6 +528,8 @@ function createSplashWindow(paths) {
   mainWindow.webContents.on("did-fail-load", (_e, code, desc, url) => {
     desktopLog(`splash did-fail-load code=${code} desc=${desc} url=${url}`);
   });
+
+  attachRendererRecovery(mainWindow);
 
   void mainWindow
     .loadFile(splashPath)
@@ -442,6 +544,217 @@ function createSplashWindow(paths) {
 
   // Marker even if HTML fails — dark chrome is still a visible window for older stubs.
   signalWindowReady(paths.dataDir);
+}
+
+/** DD-9: page zoom (Chromium level), persisted with the window state. */
+let windowZoomLevel = 0;
+/** Debounced window-state save for the current window (set by trackWindowState). */
+let scheduleWindowStateSave = () => {};
+
+function windowStatePath() {
+  return path.join(app.getPath("userData"), "window-state.json");
+}
+
+/** @returns {import("./windowState").WindowState} */
+function loadWindowState() {
+  let raw = null;
+  try {
+    raw = JSON.parse(fs.readFileSync(windowStatePath(), "utf8"));
+  } catch {
+    // first run or unreadable file → defaults
+  }
+  let displays = [];
+  try {
+    displays = screen.getAllDisplays();
+  } catch {
+    // screen unavailable → size limits only
+  }
+  return sanitizeWindowState(raw, displays);
+}
+
+/**
+ * DD-8: save bounds (normal, i.e. un-maximized), maximized and zoom, debounced
+ * on move/resize and synchronously on close.
+ * @param {BrowserWindow} win
+ */
+function trackWindowState(win) {
+  /** @type {NodeJS.Timeout | null} */
+  let timer = null;
+  const write = (sync) => {
+    if (win.isDestroyed()) return;
+    const body = JSON.stringify(
+      serializeWindowState(win.getNormalBounds(), win.isMaximized(), windowZoomLevel),
+    );
+    try {
+      if (sync) {
+        fs.writeFileSync(windowStatePath(), body);
+      } else {
+        fs.writeFile(windowStatePath(), body, () => {});
+      }
+    } catch (err) {
+      desktopLog(`window state save failed: ${err}`);
+    }
+  };
+  const schedule = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      write(false);
+    }, 500);
+  };
+  scheduleWindowStateSave = schedule;
+  for (const event of ["resize", "move", "maximize", "unmaximize"]) {
+    win.on(/** @type {any} */ (event), schedule);
+  }
+  win.on("close", () => {
+    if (timer) clearTimeout(timer);
+    timer = null;
+    write(true);
+  });
+  // Zoom is per page load; re-apply the saved level on every app page.
+  win.webContents.on("did-finish-load", () => {
+    if (win.isDestroyed()) return;
+    if (isAppUrl(win.webContents.getURL(), APP_ORIGIN)) {
+      win.webContents.setZoomLevel(windowZoomLevel);
+    }
+  });
+}
+
+/**
+ * DD-9: Ctrl/Cmd +, −, 0 zoom; Ctrl+R / F5 reload; F11 fullscreen; F12
+ * dev tools in dev builds. Windows/Linux have no menu to provide them.
+ * @param {BrowserWindow} win
+ */
+function attachShellShortcuts(win) {
+  win.webContents.on("before-input-event", (event, input) => {
+    const action = shortcutFor(input, { allowDevTools: !app.isPackaged });
+    if (!action) return;
+    event.preventDefault();
+    const wc = win.webContents;
+    const setZoom = (level) => {
+      windowZoomLevel = clampZoomLevel(level);
+      wc.setZoomLevel(windowZoomLevel);
+      scheduleWindowStateSave();
+    };
+    switch (action) {
+      case "zoom-in":
+        setZoom(windowZoomLevel + ZOOM_STEP);
+        break;
+      case "zoom-out":
+        setZoom(windowZoomLevel - ZOOM_STEP);
+        break;
+      case "zoom-reset":
+        setZoom(0);
+        break;
+      case "reload":
+        wc.reload();
+        break;
+      case "fullscreen":
+        win.setFullScreen(!win.isFullScreen());
+        break;
+      case "devtools":
+        wc.toggleDevTools();
+        break;
+    }
+    desktopLog(`shortcut ${action}${action.startsWith("zoom") ? ` level=${windowZoomLevel}` : ""}`);
+  });
+}
+
+let rendererCrashes = 0;
+let rendererLastCrashAt = 0;
+let unresponsivePromptOpen = false;
+
+/**
+ * DD-7: a renderer crash or OOM used to leave a dead window until restart,
+ * with nothing logged. Reload (keeping the route) up to 3 times per minute,
+ * then end with the fatal dialog. A hung renderer gets a Wait / Reload prompt.
+ * @param {BrowserWindow} win
+ */
+function attachRendererRecovery(win) {
+  win.webContents.on("render-process-gone", (_e, details) => {
+    desktopLog(`renderer gone reason=${details.reason} exitCode=${details.exitCode}`);
+    if (shuttingDown) return;
+    const now = Date.now();
+    const decision = decideRendererGone({
+      reason: details.reason,
+      crashes: rendererCrashes,
+      lastCrashAt: rendererLastCrashAt,
+      now,
+    });
+    if (decision.action === "ignore") return;
+    rendererCrashes = decision.crashes;
+    rendererLastCrashAt = now;
+    if (decision.action === "fatal") {
+      void failFatal("renderer-crash-loop", { error: details.reason });
+      return;
+    }
+    setTimeout(() => {
+      if (shuttingDown || win.isDestroyed()) return;
+      desktopLog(`renderer reload after crash #${rendererCrashes}`);
+      void reloadKeepingRoute().catch((err) => desktopLog(`renderer reload failed: ${err}`));
+    }, 1000);
+  });
+
+  win.on("unresponsive", () => {
+    desktopLog("renderer unresponsive");
+    if (unresponsivePromptOpen || shuttingDown || win.isDestroyed()) return;
+    unresponsivePromptOpen = true;
+    void dialog
+      .showMessageBox(win, {
+        type: "warning",
+        title: "Roxysu",
+        message: "Roxysu is not responding",
+        detail: "The page may still be working. Reload it if it stays frozen.",
+        buttons: ["Wait", "Reload"],
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true,
+      })
+      .then(({ response }) => {
+        desktopLog(`unresponsive prompt answer=${response === 1 ? "reload" : "wait"}`);
+        if (response !== 1 || win.isDestroyed()) return;
+        // A hung renderer cannot process a reload; crash it first. The
+        // render-process-gone handler above then reloads it.
+        win.webContents.forcefullyCrashRenderer();
+      })
+      .catch((err) => desktopLog(`unresponsive prompt failed: ${err}`))
+      .finally(() => {
+        unresponsivePromptOpen = false;
+      });
+  });
+
+  win.on("responsive", () => desktopLog("renderer responsive again"));
+}
+
+/**
+ * DD-6: tell the app page (only an app-origin page; the preload exposes it as
+ * roxysuDesktop.onServerState) that the local server is down / back.
+ * @param {import("./windowRecovery").ServerState} payload
+ */
+function sendServerState(payload) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const wc = mainWindow.webContents;
+  if (!isAppUrl(wc.getURL(), APP_ORIGIN)) return;
+  try {
+    wc.send(SERVER_STATE_CHANNEL, payload);
+  } catch (err) {
+    desktopLog(`server-state send failed: ${err}`);
+  }
+}
+
+/**
+ * DD-6: after a server respawn (or a renderer crash) reload the page in
+ * place when it is the app, so #/route survives; otherwise load the root.
+ */
+async function reloadKeepingRoute() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const wc = mainWindow.webContents;
+  if (reloadActionFor(wc.getURL(), APP_ORIGIN) === "reload") {
+    desktopLog("reload in place (route kept)");
+    wc.reload();
+    return;
+  }
+  await loadAppIntoWindow();
 }
 
 /**
@@ -625,6 +938,12 @@ function spawnServer(paths, sharedEnv) {
       `server exited code=${code} signal=${signal} after ${Date.now() - serverSpawnedAt}ms ` +
         `(healthy=${serverHealthyAt ? `${Date.now() - serverHealthyAt}ms` : "never"})`,
     );
+    // DD-2: a server that cannot bind its port never will — respawning only
+    // loops (and used to adopt whatever else answered healthz). Fail now.
+    if (classifyServerExit(code) === "addr-in-use") {
+      void failFatal("port-in-use");
+      return;
+    }
     // Read the health stamp *before* clearing it: the policy must see how long
     // this run was actually serving healthz. spawnServer clears it again for
     // the next run.
@@ -664,20 +983,102 @@ function scheduleServerRespawn(paths, sharedEnv) {
     desktopLog(
       `server respawn giving up after ${decision.failures - 1} consecutive short-lived runs — restart Roxysu to retry`,
     );
-    void (async () => {
-      await setSplashStatus("Server stopped — see logs", { animateDots: false });
-      await shutdown();
-      app.exit(1);
-    })();
+    void failFatal("respawn-exhausted");
     return;
   }
   desktopLog(`server respawn #${decision.failures} in ${decision.delayMs}ms`);
   void setSplashStatus("Server stopped — restarting");
+  sendServerState(serverStateForRespawn(decision, DEFAULT_RESPAWN_CONFIG.maxAttempts));
   serverRespawnTimer = setTimeout(() => {
     serverRespawnTimer = null;
     if (shuttingDown) return;
     void respawnServer(paths, sharedEnv);
   }, decision.delayMs);
+}
+
+/**
+ * Last bytes of a log file, or "" when missing. Never throws.
+ * @param {string} logPath
+ */
+function readLogTail(logPath) {
+  try {
+    const fd = fs.openSync(logPath, "r");
+    try {
+      const size = fs.fstatSync(fd).size;
+      const length = Math.min(size, FATAL_LOG_TAIL_BYTES);
+      const buf = Buffer.alloc(length);
+      fs.readSync(fd, buf, 0, length, size - length);
+      return buf.toString("utf8");
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return "";
+  }
+}
+
+let fatalShown = false;
+
+/**
+ * End the session after an unrecoverable failure (DD-3). Shows a dialog with
+ * the reason, who holds the port, the last server.log lines and the logs
+ * path, with Open logs folder / Retry / Quit — instead of a splash message
+ * that disappeared with the window a few milliseconds later.
+ * @param {import("./fatalReport").FatalReason} reason
+ * @param {{ error?: string }} [extra]
+ */
+async function failFatal(reason, extra = {}) {
+  if (fatalShown) return;
+  fatalShown = true;
+  desktopLog(`fatal: ${reason}${extra.error ? ` — ${extra.error}` : ""}`);
+  const logsDir = path.join(earlyDataDir(), "logs");
+  /** @type {import("./fatalReport").PortOwner | null} */
+  let portOwner = null;
+  if (reason === "port-in-use" || reason === "health-timeout" || reason === "respawn-exhausted") {
+    const owner = await probePortOwner(PORT, HOST, { expectInstance: INSTANCE_TOKEN });
+    if (owner.kind === "roxysu" || owner.kind === "other") portOwner = owner;
+  }
+  const { message, detail } = buildFatalReport({
+    reason,
+    port: PORT,
+    portOwner,
+    logTail: readLogTail(path.join(logsDir, "server.log")),
+    logsDir,
+    error: extra.error,
+  });
+  await setSplashStatus(message, { animateDots: false });
+  desktopLog(`fatal dialog: ${message}${portOwner ? ` owner=${JSON.stringify(portOwner)}` : ""}`);
+  let response = 2;
+  try {
+    const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+    const options = {
+      type: /** @type {const} */ ("error"),
+      title: "Roxysu",
+      message,
+      detail,
+      buttons: ["Open logs folder", "Retry", "Quit"],
+      defaultId: 2,
+      cancelId: 2,
+      noLink: true,
+    };
+    ({ response } = parent
+      ? await dialog.showMessageBox(parent, options)
+      : await dialog.showMessageBox(options));
+  } catch (err) {
+    desktopLog(`fatal dialog failed: ${err}`);
+  }
+  desktopLog(`fatal dialog answer=${["open-logs", "retry", "quit"][response] ?? response}`);
+  if (response === 0) {
+    const openErr = await shell.openPath(logsDir);
+    if (openErr) desktopLog(`open logs folder failed: ${openErr}`);
+  }
+  try {
+    await shutdown();
+  } catch (err) {
+    desktopLog(`shutdown failed: ${err}`);
+  }
+  if (response === 1) app.relaunch();
+  app.exit(1);
 }
 
 /**
@@ -696,7 +1097,10 @@ async function respawnServer(paths, sharedEnv) {
     // Shorter than the first boot: the previous run already had its restart
     // window, so a respawned child that cannot answer healthz within a minute
     // is counted as a failed run instead of holding the loop open for 3 min.
-    await waitForServer(PORT, HOST, 60_000, { signal: startupAbort.signal });
+    await waitForServer(PORT, HOST, 60_000, {
+      signal: startupAbort.signal,
+      expectInstance: INSTANCE_TOKEN,
+    });
   } catch (err) {
     if (shuttingDown) return;
     desktopLog(`respawn waitForServer failed: ${err}`);
@@ -709,10 +1113,9 @@ async function respawnServer(paths, sharedEnv) {
   // D-NEW-2: the run only counts as stable from here, not from spawn.
   serverHealthyAt = Date.now();
   desktopLog("server respawn ok — reloading window");
+  sendServerState({ state: "up" });
   try {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      await loadAppIntoWindow();
-    }
+    await reloadKeepingRoute();
   } catch (err) {
     desktopLog(`reload after server respawn failed: ${err}`);
   }
@@ -796,7 +1199,9 @@ function spawnOverlayHost(paths, urlArg, output) {
   }
   const { fd } = openChildLogFd(paths.dataDir, "overlay");
   const maxAgeSec = parseOverlayMaxAgeSec(process.env.ROXYSU_OVERLAY_MAX_AGE_SEC);
-  const args = [urlArg, `--watchdog-max-age-sec=${maxAgeSec}`];
+  // DD-1: --exit-on-stdin-eof + a stdin pipe take the layer surface down
+  // with the shell if it dies, instead of leaving an orphaned HUD on screen.
+  const args = [urlArg, `--watchdog-max-age-sec=${maxAgeSec}`, "--exit-on-stdin-eof"];
   if (output) args.push(`--output=${output}`);
   desktopLog(
     `spawn overlay maxAgeSec=${maxAgeSec} bin=${bin} ${args.join(" ")}`,
@@ -807,14 +1212,15 @@ function spawnOverlayHost(paths, urlArg, output) {
   // surface that fallback fills the whole window with grey on each HUD update.
   // The FD and RSS caps still exit 75 so a real leak recovers; the age cap is
   // now a long backstop (D-NEW-1) instead of off forever.
-  overlayChild = spawn(bin, args, {
-    stdio: ["ignore", fd, fd],
+  overlayChild = withLifeline(spawn(bin, args, {
+    stdio: ["pipe", fd, fd],
     windowsHide: true,
     shell: false,
-  });
+  }));
   overlaySpawnedAt = Date.now();
   const child = overlayChild;
   child.on("exit", (code, signal) => {
+    if (child === overlayChild) overlayExitedAt = Date.now();
     if (!shuttingDown) {
       desktopLog(`overlay exited code=${code} signal=${signal}`);
     }
@@ -912,6 +1318,10 @@ function watchOverlayHostSetting(paths) {
   let consecutiveFailures = 0;
   /** Last successfully read enable toggle; null until the first read. */
   let lastKnownEnabled = null;
+  /** DD-10: quick liveness respawns in a row. */
+  let respawnFailures = 0;
+  /** DD-10: park reason already logged, so a parked host logs once. */
+  let loggedParkReason = null;
   /** D2: one poll run in flight; a call mid-flight coalesces into one re-run. */
   const applyGate = createApplyGate();
 
@@ -938,9 +1348,29 @@ function watchOverlayHostSetting(paths) {
         respawnGapMs: OVERLAY_RESPAWN_GAP_MS,
         consecutiveFailures,
         lastKnownEnabled,
+        respawnFailures,
+        childExitCode: overlayChild?.exitCode ?? null,
+        childUptimeMs:
+          overlayChild && !childIsAlive(overlayChild) && overlayExitedAt >= overlaySpawnedAt
+            ? overlayExitedAt - overlaySpawnedAt
+            : null,
       });
       consecutiveFailures = decision.consecutiveFailures;
       lastKnownEnabled = decision.lastKnownEnabled;
+      respawnFailures = decision.respawnFailures;
+
+      if (decision.reason === "unsupported-session" || decision.reason === "respawn-exhausted") {
+        if (loggedParkReason !== decision.reason) {
+          loggedParkReason = decision.reason;
+          desktopLog(
+            decision.reason === "unsupported-session"
+              ? "overlay parked: this session cannot host it (exit 78: no Wayland or no wlr-layer-shell). Change an overlay setting or press Restart to try again."
+              : `overlay parked after ${respawnFailures} quick crashes. Change an overlay setting or press Restart to try again.`,
+          );
+        }
+      } else if (decision.action !== "noop") {
+        loggedParkReason = null;
+      }
 
       if (decision.action === "stop") {
         desktopLog(
@@ -951,7 +1381,7 @@ function watchOverlayHostSetting(paths) {
       } else if (decision.action === "spawn") {
         if (decision.reason === "liveness-respawn") {
           desktopLog(
-            `overlay liveness respawn (previous exit code=${overlayChild?.exitCode})`,
+            `overlay liveness respawn ${respawnFailures}/${OVERLAY_MAX_RESPAWNS} (previous exit code=${overlayChild?.exitCode})`,
           );
         } else if (decision.reason === "url-changed") {
           desktopLog("overlay url changed — restarting host");
@@ -1039,6 +1469,11 @@ function closeChildLogs() {
     }
   }
   childLogFdByLabel.clear();
+  childLogPathByLabel.clear();
+  if (childLogCapTimer) {
+    clearInterval(childLogCapTimer);
+    childLogCapTimer = null;
+  }
 }
 
 /** @type {Promise<void> | null} */
@@ -1155,7 +1590,10 @@ if (!gotLock) {
         `missing UI build at ${paths.staticDir}` +
           (paths.isPackaged ? "" : " — run: bun run --cwd apps/server build:ui"),
       );
-      app.exit(1);
+      await failFatal("ui-missing", {
+        error: `missing ${path.join(paths.staticDir, "index.html")}` +
+          (paths.isPackaged ? "" : " — run: bun run --cwd apps/server build:ui"),
+      });
       return;
     }
 
@@ -1190,6 +1628,7 @@ if (!gotLock) {
         : {}),
       ROXYSU_PORT: String(PORT),
       ROXYSU_HOST: HOST,
+      ROXYSU_INSTANCE_TOKEN: INSTANCE_TOKEN,
       ROXYSU_STATIC_DIR: paths.staticDir,
       ROXYSU_DATA_DIR: paths.dataDir,
       DB_PATH: paths.dbPath,
@@ -1210,14 +1649,15 @@ if (!gotLock) {
     startupAbort = new AbortController();
 
     try {
-      await waitForServer(PORT, HOST, 180_000, { signal: startupAbort.signal });
+      await waitForServer(PORT, HOST, 180_000, {
+        signal: startupAbort.signal,
+        expectInstance: INSTANCE_TOKEN,
+      });
     } catch (err) {
       if (shuttingDown) return;
       desktopLog(`waitForServer failed: ${err}`);
       desktopLog(`see logs under ${path.join(paths.dataDir, "logs")}`);
-      await setSplashStatus("Failed to start — see logs", { animateDots: false });
-      await shutdown();
-      app.exit(1);
+      await failFatal("health-timeout", { error: String(err?.message ?? err) });
       return;
     }
     if (shuttingDown) return;
@@ -1232,9 +1672,7 @@ if (!gotLock) {
     } catch (err) {
       if (shuttingDown) return;
       desktopLog(`loadAppIntoWindow failed: ${err}`);
-      await setSplashStatus("Failed to open Home — see logs", { animateDots: false });
-      await shutdown();
-      app.exit(1);
+      await failFatal("load-failed", { error: String(err?.message ?? err) });
       return;
     }
     if (shuttingDown) return;

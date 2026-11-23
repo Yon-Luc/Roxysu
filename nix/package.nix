@@ -358,6 +358,10 @@ in
          apps/desktop/stopChild.js \
          apps/desktop/waitForServer.js \
          apps/desktop/logRotation.js \
+         apps/desktop/shellShortcuts.js \
+         apps/desktop/windowState.js \
+         apps/desktop/windowRecovery.js \
+         apps/desktop/fatalReport.js \
          apps/desktop/splash.html \
          apps/desktop/package.json \
          "$appdir/"

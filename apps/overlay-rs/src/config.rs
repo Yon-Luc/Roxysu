@@ -159,6 +159,8 @@ pub struct Config {
     /// Delay before applying Hide so brief focus gaps (alt-tab) do not flicker.
     pub hide_hysteresis_ms: u64,
     pub list_windows: bool,
+    /// Exit when stdin reaches EOF (desktop lifeline, DD-1).
+    pub exit_on_stdin_eof: bool,
     pub debug: bool,
     pub gsk_renderer: Option<GskRenderer>,
     pub webkit_no_dmabuf: bool,
@@ -201,6 +203,7 @@ impl Default for Config {
             match_mode: MatchMode::Contains,
             hide_hysteresis_ms: 80,
             list_windows: false,
+            exit_on_stdin_eof: false,
             debug: false,
             gsk_renderer: None,
             webkit_no_dmabuf: false,

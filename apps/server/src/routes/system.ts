@@ -73,9 +73,23 @@ function readSchemaOutdated(
   }
 }
 
+/** Desktop healthz payload (DD-2). `instance` is null for standalone runs. */
+export function healthzBody(env: Record<string, string | undefined> = process.env) {
+  const token = env.ROXYSU_INSTANCE_TOKEN?.trim();
+  return {
+    ok: true,
+    service: "roxysu-server",
+    instance: token ? token : null,
+    pid: process.pid,
+  };
+}
+
 export const systemRoutes = new Elysia({ prefix: "/system" })
-  // Desktop `waitForServer` requires `service === "roxysu-server"`.
-  .get("/healthz", () => ({ ok: true, service: "roxysu-server" }))
+  // Desktop `waitForServer` requires `service === "roxysu-server"` and, when
+  // it spawned this process, the per-launch `instance` token it passed in
+  // ROXYSU_INSTANCE_TOKEN (DD-2) — so a stale or foreign server on the same
+  // port is never mistaken for its own child.
+  .get("/healthz", () => healthzBody())
   // -------------------------------------------------------------------------
   // Hub OAuth handoff (Electron system-browser flow)
   // 1) POST /begin → { handoff, verifier, challenge }; verifier goes only to the

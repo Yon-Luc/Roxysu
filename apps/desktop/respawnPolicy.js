@@ -70,4 +70,25 @@ function decideRespawn(state, overrides) {
   return { action: "respawn", delayMs, failures };
 }
 
-module.exports = { DEFAULT_RESPAWN_CONFIG, decideRespawn, resolveRespawnUptimeMs };
+/**
+ * Exit code the server uses when its port is already taken (DD-2; mirrors
+ * EXIT_ADDR_IN_USE in apps/server/src/listen.ts). Respawning cannot help.
+ */
+const SERVER_EXIT_ADDR_IN_USE = 98;
+
+/**
+ * Classify a server child exit for the shell (DD-2).
+ * @param {number | null} code
+ * @returns {"addr-in-use" | "crash"}
+ */
+function classifyServerExit(code) {
+  return code === SERVER_EXIT_ADDR_IN_USE ? "addr-in-use" : "crash";
+}
+
+module.exports = {
+  DEFAULT_RESPAWN_CONFIG,
+  SERVER_EXIT_ADDR_IN_USE,
+  classifyServerExit,
+  decideRespawn,
+  resolveRespawnUptimeMs,
+};

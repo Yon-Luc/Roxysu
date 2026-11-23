@@ -71,6 +71,11 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub list_windows: bool,
 
+    /// Exit when stdin reaches EOF. The desktop shell passes a pipe so the host
+    /// never outlives it (DD-1). Leave off when running from a terminal.
+    #[arg(long, default_value_t = false)]
+    pub exit_on_stdin_eof: bool,
+
     /// Print paint/debug stats (and enable W4 paint counter path when wired).
     #[arg(long, default_value_t = false)]
     pub debug: bool,
@@ -188,6 +193,7 @@ impl Cli {
             match_mode: self.match_mode,
             hide_hysteresis_ms: self.hide_hysteresis_ms,
             list_windows: self.list_windows,
+            exit_on_stdin_eof: self.exit_on_stdin_eof,
             debug: self.debug,
             gsk_renderer: self.gsk_renderer,
             webkit_no_dmabuf: self.webkit_no_dmabuf && !self.webkit_dmabuf,
@@ -220,6 +226,17 @@ impl Cli {
 mod tests {
     use super::*;
     use clap::Parser;
+
+    #[test]
+    fn exit_on_stdin_eof_is_opt_in() {
+        let off = Cli::try_parse_from(["roxysu-overlay-rs"]).unwrap().into_config().unwrap();
+        assert!(!off.exit_on_stdin_eof);
+        let on = Cli::try_parse_from(["roxysu-overlay-rs", "--exit-on-stdin-eof"])
+            .unwrap()
+            .into_config()
+            .unwrap();
+        assert!(on.exit_on_stdin_eof);
+    }
 
     #[test]
     fn parses_url_equals_form_with_query_equals() {

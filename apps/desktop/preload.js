@@ -12,4 +12,14 @@ contextBridge.exposeInMainWorld("roxysuDesktop", {
   /** Write PNG (or other image) bytes to the system clipboard. */
   writeClipboardImage: (pngBytes) =>
     ipcRenderer.invoke("roxysu:write-clipboard-image", pngBytes),
+  /**
+   * DD-6: local server state pushed by the shell ({ state: "restarting",
+   * attempt, maxAttempts, delayMs } or { state: "up" }). Returns unsubscribe.
+   */
+  onServerState: (callback) => {
+    if (typeof callback !== "function") return () => {};
+    const listener = (_event, state) => callback(state);
+    ipcRenderer.on("roxysu:server-state", listener);
+    return () => ipcRenderer.removeListener("roxysu:server-state", listener);
+  },
 });

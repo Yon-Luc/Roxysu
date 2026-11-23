@@ -131,7 +131,13 @@ niri, river, KDE). No injection into lazer — a sibling surface on the Wayland
     UI's **Restart overlay** button. Electron polls settings (~4s) — one
     run in flight, mid-flight ticks coalesce
     (`apps/desktop/overlayApplyLoop.js`) — then stop/spawn/restart,
-    liveness respawn with `OVERLAY_RESPAWN_GAP_MS`. A saved output is
+    liveness respawn starting at `OVERLAY_RESPAWN_GAP_MS` (15 s) and
+    doubling to 5 min; after 5 runs shorter than 60 s the host is parked,
+    and exit **78** (`apps/overlay-rs/src/lifecycle.rs`
+    `UNSUPPORTED_EXIT_CODE`: no Wayland or no wlr-layer-shell) parks it at
+    once. The toggle, a URL/monitor change or the restart nonce un-park it.
+    The desktop spawns the host with a stdin pipe and
+    `--exit-on-stdin-eof`, so it exits when Electron dies. A saved output is
     passed as one `--output=` argument; empty means follow the matched
     window. A URL or monitor change, or an unapplied restart nonce,
     restarts immediately; the shell records the nonce it spawned under, so

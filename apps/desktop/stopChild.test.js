@@ -71,3 +71,65 @@ describe("stopChild", () => {
     expect(Date.now() - started).toBeLessThan(400);
   });
 });
+
+describe("stopChild lifeline-first stop (DD-4)", () => {
+  /** @param {string[]} order */
+  function withStdin(child, order) {
+    child.stdin = { end: () => order.push("stdin.end") };
+    const kill = child.kill;
+    child.kill = (signal) => {
+      order.push(signal);
+      return kill(signal);
+    };
+    return child;
+  }
+
+  test("POSIX: stdin is closed before SIGTERM", async () => {
+    const order = [];
+    const child = withStdin(fakeChild(), order);
+    const p = stopChild(child, "server", { graceMs: 1000, killDeadlineMs: 50, platform: "linux" });
+    expect(order).toEqual(["stdin.end", "SIGTERM"]);
+    child.exitCode = 0;
+    child.emit("exit", 0, null);
+    await p;
+  });
+
+  test("Windows: no SIGTERM (it would be TerminateProcess); exit on stdin EOF resolves", async () => {
+    const order = [];
+    const child = withStdin(fakeChild(), order);
+    const p = stopChild(child, "server", { graceMs: 1000, killDeadlineMs: 50, platform: "win32" });
+    expect(order).toEqual(["stdin.end"]);
+    child.exitCode = 0;
+    child.emit("exit", 0, null);
+    await p;
+    expect(order).toEqual(["stdin.end"]);
+  });
+
+  test("Windows: a child that ignores stdin EOF is killed after the grace", async () => {
+    const order = [];
+    const child = withStdin(fakeChild(), order);
+    await stopChild(child, "server", { graceMs: 20, killDeadlineMs: 20, platform: "win32" });
+    expect(order).toEqual(["stdin.end", "SIGKILL"]);
+  });
+
+  test("a throwing stdin.end does not block the stop", async () => {
+    const child = fakeChild();
+    child.stdin = {
+      end: () => {
+        throw new Error("EPIPE");
+      },
+    };
+    const logs = [];
+    const p = stopChild(child, "server", {
+      graceMs: 1000,
+      killDeadlineMs: 50,
+      platform: "linux",
+      log: (m) => logs.push(m),
+    });
+    expect(child.signals).toEqual(["SIGTERM"]);
+    child.exitCode = 0;
+    child.emit("exit", 0, null);
+    await p;
+    expect(logs[0]).toContain("failed to close server stdin");
+  });
+});

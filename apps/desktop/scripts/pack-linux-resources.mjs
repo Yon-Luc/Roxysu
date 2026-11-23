@@ -104,6 +104,10 @@ const appFiles = [
   "stopChild.js",
   "waitForServer.js",
   "logRotation.js",
+  "shellShortcuts.js",
+  "windowState.js",
+  "windowRecovery.js",
+  "fatalReport.js",
   "splash.html",
   "package.json",
 ];

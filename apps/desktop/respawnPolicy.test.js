@@ -4,6 +4,8 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const {
   DEFAULT_RESPAWN_CONFIG,
+  SERVER_EXIT_ADDR_IN_USE,
+  classifyServerExit,
   decideRespawn,
   resolveRespawnUptimeMs,
 } = require("./respawnPolicy.js");
@@ -144,5 +146,18 @@ describe("decideRespawn health-aware uptime (D-NEW-2)", () => {
     });
     expect(last.action).toBe("give-up");
     expect(last.failures).toBe(cfg.maxAttempts + 1);
+  });
+});
+
+describe("classifyServerExit (DD-2)", () => {
+  test("exit code 98 means the port is taken — never respawn", () => {
+    expect(classifyServerExit(98)).toBe("addr-in-use");
+    expect(SERVER_EXIT_ADDR_IN_USE).toBe(98);
+  });
+
+  test("anything else is an ordinary crash", () => {
+    expect(classifyServerExit(1)).toBe("crash");
+    expect(classifyServerExit(0)).toBe("crash");
+    expect(classifyServerExit(null)).toBe("crash");
   });
 });

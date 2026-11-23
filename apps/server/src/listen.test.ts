@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
 import { describe, expect, test } from "bun:test";
 import {
+  EXIT_ADDR_IN_USE,
   addrInUseMessage,
   armNodeListen,
   isAddrInUseError,
@@ -97,7 +98,8 @@ describe("armNodeListen", () => {
     );
     server.emit("error", Object.assign(new Error("in use"), { code: "EADDRINUSE" }));
     expect(started).toBe(false);
-    expect(code).toBe(1);
+    expect(code).toBe(EXIT_ADDR_IN_USE);
+    expect(code).toBe(98);
     expect(lines).toEqual([addrInUseMessage(4321)]);
   });
 

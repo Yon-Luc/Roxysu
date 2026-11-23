@@ -24,6 +24,7 @@ import {
   toSchemaVersionMismatchError,
 } from "./sync";
 import { resolveRealmPathFromDb } from "./osu-paths";
+import { attachParentLifeline } from "./parentLifeline";
 
 export { SYNC_REALM_READER_PAUSED_KEY };
 
@@ -182,6 +183,8 @@ async function waitUntilSyncAllowed(
 async function main() {
   process.on("SIGINT", requestShutdown);
   process.on("SIGTERM", requestShutdown);
+  // Desktop DD-1: stop with the Electron shell instead of outliving it.
+  attachParentLifeline(() => requestShutdown());
 
   const dbPath = defaultDbPath();
 

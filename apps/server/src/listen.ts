@@ -61,6 +61,13 @@ export function listenUrl(target: ListenTarget): string {
   return `http://${host}:${target.port}`;
 }
 
+/**
+ * Exit code for "the port is already in use" (desktop DD-2). Distinct from a
+ * generic failure (1) so the desktop shell reports it instead of respawning a
+ * server that can never bind.
+ */
+export const EXIT_ADDR_IN_USE = 98;
+
 export function addrInUseMessage(port: number): string {
   return `port ${port} is already in use (ROXYSU_PORT)`;
 }
@@ -111,7 +118,7 @@ export function armNodeListen(
       return;
     }
     log(addrInUseMessage(port));
-    exit(1);
+    exit(EXIT_ADDR_IN_USE);
   });
   if (server.listening) {
     start();

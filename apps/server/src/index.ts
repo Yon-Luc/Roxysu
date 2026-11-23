@@ -15,10 +15,12 @@ import { startCollectionMatchCache } from "./shared/collectionMatchCache";
 import { ensureTosuStarted, stopTosuAdapter } from "./tosu";
 import { clearStuckMirrorBatchLocks } from "./mirrors";
 import { shutdownBackgroundWork } from "./shutdownJobs";
+import { attachParentLifeline } from "./parentLifeline";
 import { discardScoreTransferUploads } from "./score-transfer/transfer";
 import {
   addrInUseMessage,
   isAddrInUseError,
+  EXIT_ADDR_IN_USE,
   listenUrl,
   resolveListen,
   warnIfListenExposed,
@@ -30,19 +32,26 @@ process.on("unhandledRejection", (reason) => {
   console.error("[roxysu] unhandled rejection", reason);
 });
 
-if (clearStuckRealmReaderPause(db)) {
-  console.log(
-    "[sync] cleared stuck sync.realm_reader_paused — realm-reader can resume",
-  );
-}
-if (clearStuckMirrorBatchLocks()) {
-  console.log(
-    "[mirrors] cleared stuck download / open-in-osu lock — batches can start again",
-  );
-}
-
 const listen = resolveListen();
 warnIfListenExposed(listen.hostname);
+
+/**
+ * Clear locks a crashed previous run left behind. Only after the socket is
+ * bound (desktop DD-2): a second server that loses the port race must not
+ * clear locks the running server legitimately holds.
+ */
+function clearStuckLocks(): void {
+  if (clearStuckRealmReaderPause(db)) {
+    console.log(
+      "[sync] cleared stuck sync.realm_reader_paused — realm-reader can resume",
+    );
+  }
+  if (clearStuckMirrorBatchLocks()) {
+    console.log(
+      "[mirrors] cleared stuck download / open-in-osu lock — batches can start again",
+    );
+  }
+}
 
 function startBackground(): void {
   // /api/tosu/live awaits the same bootstrap, so the snapshot is not served
@@ -73,10 +82,14 @@ let stopDanVariants: () => void = () => {};
 try {
   app.listen({ port: listen.port, hostname: listen.hostname });
 } catch (err) {
-  if (isAddrInUseError(err)) console.error(addrInUseMessage(listen.port));
-  else console.error("[roxysu] failed to start", err);
+  if (isAddrInUseError(err)) {
+    console.error(addrInUseMessage(listen.port));
+    process.exit(EXIT_ADDR_IN_USE);
+  }
+  console.error("[roxysu] failed to start", err);
   process.exit(1);
 }
+clearStuckLocks();
 startBackground();
 console.log(`🦊 Roxysu running at ${listenUrl(listen)}`);
 
@@ -126,5 +139,7 @@ async function shutdown(signal: string) {
 
 process.on("SIGINT", () => void shutdown("SIGINT"));
 process.on("SIGTERM", () => void shutdown("SIGTERM"));
+// Desktop DD-1: exit with the Electron shell instead of outliving it.
+attachParentLifeline((reason) => void shutdown(reason));
 
 export type { App } from "./app";

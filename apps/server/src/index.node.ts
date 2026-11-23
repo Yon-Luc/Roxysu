@@ -18,6 +18,7 @@ import { startCollectionMatchCache } from "./shared/collectionMatchCache";
 import { guardUpgradeSocketErrors } from "./shared/upgradeSocketGuard";
 import { clearStuckMirrorBatchLocks } from "./mirrors";
 import { shutdownBackgroundWork } from "./shutdownJobs";
+import { attachParentLifeline } from "./parentLifeline";
 import { ensureTosuStarted, stopTosuAdapter } from "./tosu";
 import { discardScoreTransferUploads } from "./score-transfer/transfer";
 import {
@@ -44,17 +45,6 @@ async function main() {
   const listen = resolveListen();
   warnIfListenExposed(listen.hostname);
 
-  if (clearStuckRealmReaderPause(db)) {
-    console.log(
-      "[sync] cleared stuck sync.realm_reader_paused — realm-reader can resume",
-    );
-  }
-  if (clearStuckMirrorBatchLocks()) {
-    console.log(
-      "[mirrors] cleared stuck download / open-in-osu lock — batches can start again",
-    );
-  }
-
   const app = await createApp({
     staticAssetsDir,
   });
@@ -65,6 +55,19 @@ async function main() {
   let stopDanVariants: () => void = () => {};
 
   function onListening(): void {
+    // Desktop DD-2: clear a crashed run's locks only once this process owns
+    // the port. A second server that loses the bind (EADDRINUSE) exits before
+    // this and must not clear locks the running server legitimately holds.
+    if (clearStuckRealmReaderPause(db)) {
+      console.log(
+        "[sync] cleared stuck sync.realm_reader_paused — realm-reader can resume",
+      );
+    }
+    if (clearStuckMirrorBatchLocks()) {
+      console.log(
+        "[mirrors] cleared stuck download / open-in-osu lock — batches can start again",
+      );
+    }
     // /api/tosu/live awaits the same bootstrap, so the snapshot is not served
     // with uninitialized settings.
     void ensureTosuStarted(db);
@@ -142,6 +145,8 @@ async function main() {
 
   process.on("SIGINT", () => void shutdown("SIGINT"));
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
+  // Desktop DD-1: exit with the Electron shell instead of outliving it.
+  attachParentLifeline((reason) => void shutdown(reason));
 }
 
 main().catch((err) => {
